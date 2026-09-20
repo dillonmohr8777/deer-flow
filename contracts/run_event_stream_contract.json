@@ -162,7 +162,14 @@
           "caller": {"type": "string"},
           "usage": {"type": "object"},
           "latency_ms": {"type": ["integer", "null"], "minimum": 0},
-          "llm_call_index": {"type": "integer", "minimum": 1}
+          "llm_call_index": {"type": "integer", "minimum": 1},
+          "provider_attempt_id": {"type": ["string", "null"]},
+          "attempt_status": {"enum": ["success", "error"]},
+          "provider": {"type": ["string", "null"]},
+          "requested_model": {"type": ["string", "null"]},
+          "resolved_model": {"type": ["string", "null"]},
+          "provider_reported_cost": {"type": ["number", "null"], "minimum": 0},
+          "provider_reported_currency": {"type": ["string", "null"]}
         },
         "additionalProperties": true
       }
@@ -181,7 +188,22 @@
         },
         "additionalProperties": true
       },
-      "metadata_schema": {"type": "object", "additionalProperties": true}
+      "metadata_schema": {
+        "type": "object",
+        "properties": {
+          "provider_attempt_id": {"type": ["string", "null"]},
+          "llm_call_index": {"type": ["integer", "null"], "minimum": 1},
+          "attempt_status": {"enum": ["success", "error"]},
+          "caller": {"type": ["string", "null"]},
+          "provider": {"type": ["string", "null"]},
+          "requested_model": {"type": ["string", "null"]},
+          "latency_ms": {"type": ["integer", "null"], "minimum": 0},
+          "error_type": {"type": ["string", "null"]},
+          "provider_reported_cost": {"type": ["number", "null"], "minimum": 0},
+          "provider_reported_currency": {"type": ["string", "null"]}
+        },
+        "additionalProperties": true
+      }
     },
     {
       "event_type": "llm.error",

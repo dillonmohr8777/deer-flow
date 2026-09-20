@@ -7,7 +7,9 @@ metadata:
     {{- include "deer-flow.labels" . | nindent 4 }}
     app.kubernetes.io/component: frontend
 spec:
+  {{- if not .Values.frontend.autoscaling.enabled }}
   replicas: {{ .Values.frontend.replicas }}
+  {{- end }}
   selector:
     matchLabels:
       {{- include "deer-flow.selectorLabels" . | nindent 6 }}

@@ -151,7 +151,21 @@ async function startRunningSubtaskStream() {
         },
         {
           event: "values",
-          data: { messages: [...inputMessages, aiMessage] },
+          data: {
+            messages: [
+              ...inputMessages,
+              aiMessage,
+              {
+                type: "ai",
+                id: "msg-ai-after-running-subtask",
+                content: "Waiting for the delegated result.",
+                additional_kwargs: {},
+                response_metadata: {},
+                tool_calls: [],
+                invalid_tool_calls: [],
+              },
+            ],
+          },
         },
         {
           // A `task_running` step whose last tool call carries a long
@@ -218,6 +232,23 @@ async function startRunningSubtaskStream() {
 }
 
 test.describe("Subtask card", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.route("**/api/console/stats", (route) =>
+      route.fulfill({
+        json: {
+          total_runs: 0,
+          active_runs: 0,
+          failed_runs: 0,
+          total_threads: 0,
+          total_agents: 0,
+          total_tokens: 0,
+          total_cost: null,
+          currency: "USD",
+        },
+      }),
+    );
+  });
+
   test("shows failed after a stopped task thread is reloaded", async ({
     page,
   }) => {
@@ -297,6 +328,7 @@ test.describe("Subtask card", () => {
 
       const title = page.getByTitle(LONG_TASK_PROMPT, { exact: true });
       await expect(title).toBeVisible({ timeout: 15_000 });
+      await expect(page.getByText("Subtask failed")).toHaveCount(0);
 
       // The shimmer must stay one inline text run inside the truncating span:
       // `as="span"` avoids nesting the component's default <p>, and

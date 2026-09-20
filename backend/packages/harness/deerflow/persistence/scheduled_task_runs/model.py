@@ -13,6 +13,7 @@ class ScheduledTaskRunRow(Base):
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     task_id: Mapped[str] = mapped_column(String(64), index=True)
+    organization_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     # NULL identifies legacy history or direct inserts without a parent task.
     occurrence_seq: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     # New occurrences start False; NULL preserves unknown legacy accounting.

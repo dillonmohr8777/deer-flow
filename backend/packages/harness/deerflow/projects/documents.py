@@ -46,6 +46,14 @@ logger = logging.getLogger(__name__)
 _MAX_FILENAME_BYTES = 255
 
 
+def _filesystem_path(path: Path) -> Path:
+    """Use Windows' extended-length form after safe namespace resolution."""
+    if os.name != "nt" or str(path).startswith("\\\\?\\") or len(str(path)) < 248:
+        return path
+    raw = str(path)
+    return Path(f"\\\\?\\UNC\\{raw[2:]}") if raw.startswith("\\\\") else Path(f"\\\\?\\{raw}")
+
+
 class ShelfUploadTooLargeError(Exception):
     """Raised when staged bytes exceed ``uploads.max_file_size`` (mapped to 413)."""
 
@@ -94,7 +102,7 @@ def resolve_document_paths(paths: Paths, *, user_id: str, relpath: str, name: st
     is also used from worker contexts already off the loop.
     """
     namespace = paths.project_document_path(user_id, relpath)
-    return namespace / "original" / name, namespace / "derived" / "converted.md"
+    return _filesystem_path(namespace / "original" / name), _filesystem_path(namespace / "derived" / "converted.md")
 
 
 def _content_intact(paths: Paths, *, user_id: str, row: dict) -> bool:

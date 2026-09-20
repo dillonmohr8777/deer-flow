@@ -8,6 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import aliased
 
+from deerflow.persistence.organizations.resolution import organization_from_owned_parent
 from deerflow.persistence.run import RunRepository
 from deerflow.persistence.run.model import RunRow
 from deerflow.persistence.scheduled_task_runs.model import ScheduledTaskRunRow
@@ -199,6 +200,7 @@ class ScheduledTaskRunRepository:
                 if active_status is not None:
                     await session.rollback()
                     raise ActiveScheduledRunConflict(task_id)
+            row.organization_id = organization_from_owned_parent(task, expected_task_user_id, parent_name="scheduled task")
             if task is not None:
                 row.occurrence_seq = await session.scalar(
                     update(ScheduledTaskRow)

@@ -8,7 +8,7 @@ const compat = new FlatCompat({
 export default tseslint.config(
   {
     ignores: [
-      ".next",
+      ".next*/**",
       "playwright-report",
       "test-results",
       "src/components/ui/**",

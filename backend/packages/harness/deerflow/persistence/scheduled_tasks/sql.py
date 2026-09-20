@@ -7,11 +7,13 @@ from typing import Any
 from sqlalchemy import and_, exists, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from deerflow.persistence.organizations.resolution import organization_from_owned_parent, private_organization_for_user
 from deerflow.persistence.run import RunRepository
 from deerflow.persistence.run.model import RunRow
 from deerflow.persistence.scheduled_task_runs.model import ScheduledTaskRunRow
 from deerflow.persistence.scheduled_task_runs.projection import account_launch, can_project
 from deerflow.persistence.scheduled_tasks.model import ACTIVE_RUN_STATUSES, ONCE_TASK_STATUS_BY_RUN_STATUS, TERMINAL_RUN_STATUSES, ScheduledTaskRow
+from deerflow.persistence.thread_meta.model import ThreadMetaRow
 from deerflow.scheduler.schedules import next_run_at as compute_next_run_at
 from deerflow.utils.time import coerce_iso
 
@@ -118,6 +120,11 @@ class ScheduledTaskRepository:
             updated_at=now,
         )
         async with self._sf() as session:
+            if thread_id is None:
+                row.organization_id = await private_organization_for_user(session, user_id)
+            else:
+                thread = (await session.execute(select(ThreadMetaRow).where(ThreadMetaRow.thread_id == thread_id).with_for_update())).scalar_one_or_none()
+                row.organization_id = organization_from_owned_parent(thread, user_id, parent_name="thread")
             session.add(row)
             await session.commit()
             await session.refresh(row)

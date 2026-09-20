@@ -39,8 +39,10 @@ HOST_LOCAL_PATHS = [
     ".env",
     "backend/.env",
     "frontend/.env",
+    "frontend/.next-command-center-e2e/dev/cache/turbopack/chunk.bin",
     ".deer-flow/integrations/skills/provider/pack/SKILL.md",
     "backend/.deer-flow/data/deerflow.db",
+    "backend/.deer-flow.bak-20260918/data/deerflow.db",
     "backend/.deer-flow/.jwt_secret",
     "backend/.deer-flow/users/some-user/agents/my-agent/config.yaml",
     "backend/sandbox/some-thread/scratch.py",
@@ -71,14 +73,15 @@ def _pattern_matches(pattern: str, path: str) -> bool:
     pattern = pattern.rstrip("/")
     if pattern.startswith("**/"):
         name = pattern[3:]
-        return name in PurePosixPath(path).parts
+        return any(fnmatchcase(part, name) for part in PurePosixPath(path).parts)
     if pattern.endswith("/**"):
         pattern = pattern[:-3].rstrip("/")
     if "/" not in pattern:
         root_name = PurePosixPath(path).parts[0]
         return fnmatchcase(root_name, pattern)
-    prefix = f"{pattern}/"
-    return path == pattern or path.startswith(prefix)
+    pattern_parts = PurePosixPath(pattern).parts
+    path_parts = PurePosixPath(path).parts
+    return len(path_parts) >= len(pattern_parts) and all(fnmatchcase(part, glob) for part, glob in zip(path_parts, pattern_parts))
 
 
 def _is_excluded(patterns: list[str], path: str) -> bool:

@@ -9,6 +9,7 @@ owner filtering works automatically via the sentinel pattern.
 Fine-grained permission checks remain in authz.py decorators.
 """
 
+import logging
 from collections.abc import Callable
 
 from fastapi import HTTPException, Request, Response
@@ -29,6 +30,8 @@ from app.gateway.authz import AuthContext, resolve_route_permissions
 from app.gateway.internal_auth import INTERNAL_AUTH_HEADER_NAME, get_internal_user, is_valid_internal_auth_token
 from app.gateway.request_path import get_request_route_path
 from deerflow.runtime.user_context import reset_current_user, set_current_user
+
+logger = logging.getLogger(__name__)
 
 # Paths that never require authentication.
 _PUBLIC_PATH_PREFIXES: tuple[str, ...] = (
@@ -62,6 +65,17 @@ def _is_public(path: str) -> bool:
     if stripped in _PUBLIC_EXACT_PATHS:
         return True
     return any(path.startswith(prefix) for prefix in _PUBLIC_PATH_PREFIXES)
+
+
+async def _resolve_active_private_organization_id(user_id: str) -> str | None:
+    from deerflow.persistence.engine import get_session_factory
+    from deerflow.persistence.organizations.resolution import active_private_organization_for_user
+
+    session_factory = get_session_factory()
+    if session_factory is None:
+        raise RuntimeError("organization authorization requires a configured database")
+    async with session_factory() as session:
+        return await active_private_organization_for_user(session, user_id)
 
 
 class AuthMiddleware(BaseHTTPMiddleware):
@@ -181,6 +195,16 @@ class AuthMiddleware(BaseHTTPMiddleware):
         # JWT-decode + DB-lookup pipeline a second time per request).
         request.state.user = user
         request.state.auth_source = auth_source
+        organization_id = None
+        if auth_source in {AUTH_SOURCE_SESSION, AUTH_SOURCE_PAT}:
+            try:
+                organization_id = await _resolve_active_private_organization_id(str(user.id))
+            except Exception:
+                logger.exception("Could not resolve organization authorization for authenticated request")
+                return JSONResponse(status_code=503, content={"detail": "Organization authorization is unavailable"})
+            if organization_id is None:
+                return JSONResponse(status_code=403, content={"detail": "Active organization membership required"})
+        request.state.organization_id = organization_id
         permissions = await resolve_route_permissions(
             user,
             is_internal=auth_source == AUTH_SOURCE_INTERNAL,
@@ -191,7 +215,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             # them, and role changes / authorization policy stay authoritative
             # because they were resolved fresh from the owning user above.
             permissions = [permission for permission in permissions if permission in pat_scopes]
-        request.state.auth = AuthContext(user=user, permissions=permissions)
+        request.state.auth = AuthContext(user=user, permissions=permissions, organization_id=organization_id)
         token = set_current_user(user)
         try:
             return await call_next(request)

@@ -227,7 +227,7 @@ class TestChannelConnectionRepository:
             assert "secret-refresh-token" not in (row.encrypted_refresh_token or "")
             assert "B123" not in (row.encrypted_extra_json or "")
 
-        credentials = await repo.get_credentials(connection["id"])
+        credentials = await repo.get_credentials(connection["id"], owner_user_id="alice")
 
         assert credentials is not None
         assert credentials["access_token"] == "xoxb-secret-access-token"
@@ -235,6 +235,8 @@ class TestChannelConnectionRepository:
         assert credentials["token_type"] == "Bearer"
         assert credentials["expires_at"] == expires_at
         assert credentials["extra"] == {"bot_user_id": "B123"}
+
+        assert await repo.get_credentials(connection["id"], owner_user_id="bob") is None
 
     @pytest.mark.anyio
     async def test_get_credentials_returns_none_when_decryption_fails(self, repo, caplog):
@@ -251,7 +253,7 @@ class TestChannelConnectionRepository:
         )
 
         with caplog.at_level(logging.WARNING, logger="deerflow.persistence.channel_connections.sql"):
-            credentials = await wrong_key_repo.get_credentials(connection["id"])
+            credentials = await wrong_key_repo.get_credentials(connection["id"], owner_user_id="alice")
 
         assert credentials is None
         assert any("Unable to decrypt channel connection credentials" in record.message for record in caplog.records)

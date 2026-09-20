@@ -137,8 +137,10 @@ services:
         test -e /proc/net/if_inet6 || sed -i '/^[[:space:]]*listen[[:space:]]\+\[::\]:2026[[:space:]]/d' /etc/nginx/nginx.conf
         exec nginx -g 'daemon off;'
     depends_on:
-      - frontend
-      - gateway
+      frontend:
+        condition: service_started
+      gateway:
+        condition: service_healthy
     networks:
       - deer-flow-dev
     restart: unless-stopped
@@ -202,6 +204,9 @@ services:
       # Preserve the .venv built during Docker image build — mounting the full backend/
       # directory above would otherwise shadow it with the (empty) host directory.
       - gateway-venv:/app/backend/.venv
+      # Keep runtime state (SQLite WAL) on a Linux-native volume. A Windows
+      # bind mount corrupts WAL with "disk I/O error" on PRAGMA journal_mode.
+      - gateway-data:/app/backend/.deer-flow
       # Mount the project directory instead of its mutable config files individually.
       # Host editors commonly replace files on save; a directory bind keeps those
       # replacements visible inside Docker Desktop/WSL containers.
@@ -251,6 +256,12 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; response = urllib.request.urlopen('http://127.0.0.1:8001/health/ready', timeout=5); raise SystemExit(0 if response.status == 200 else 1)"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
     networks:
       - deer-flow-dev
     restart: unless-stopped
@@ -260,6 +271,7 @@ volumes:
   # image build are not shadowed by the host backend/ directory mount.
   gateway-venv:
   gateway-uv-cache:
+  gateway-data:
   redis-data:
 
 networks:

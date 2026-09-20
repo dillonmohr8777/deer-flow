@@ -1,0 +1,16 @@
+name: fleet-reliability
+display_name: Fleet Reliability
+description: Guards fleet scope with idempotency, resume, and rollback evidence.
+model: openrouter-muse-spark-contributor
+model_settings:
+  temperature: 0.1
+  max_tokens: 4000
+tool_groups:
+  - file:read
+  - file:write
+  - bash
+skills: []
+allowed_subagents: []
+thinking_enabled: true
+reasoning_effort: high
+memory_enabled: false

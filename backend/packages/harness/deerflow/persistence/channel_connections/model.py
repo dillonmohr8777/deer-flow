@@ -19,6 +19,7 @@ class ChannelConnectionRow(Base):
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     owner_user_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    organization_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     provider: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="connected")
 
@@ -86,6 +87,7 @@ class ChannelOAuthStateRow(Base):
 
     state_hash: Mapped[str] = mapped_column(String(128), primary_key=True)
     owner_user_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    organization_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     provider: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
     code_verifier_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
     nonce_hash: Mapped[str | None] = mapped_column(String(128), nullable=True)
@@ -108,6 +110,7 @@ class ChannelConversationRow(Base):
         index=True,
     )
     owner_user_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    organization_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     provider: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
     external_conversation_id: Mapped[str] = mapped_column(String(128), nullable=False)
     external_topic_id: Mapped[str] = mapped_column(String(128), nullable=False, default="")

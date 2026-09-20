@@ -551,6 +551,53 @@ class TestLlmCallbacks:
         assert "latency_ms" in llm_resp["metadata"]
         assert llm_resp["metadata"]["latency_ms"] is not None
 
+    @pytest.mark.anyio
+    async def test_provider_attempt_receipt_captures_cost_and_failed_retry(self, journal_setup):
+        j, store = journal_setup
+        first = uuid4()
+        j.on_chat_model_start(
+            {"kwargs": {"model": "anthropic/claude-opus-5"}},
+            [[HumanMessage(content="migrate")]],
+            run_id=first,
+            tags=["subagent:data-migration-engineer"],
+            metadata={"ls_provider": "openrouter", "ls_model_name": "anthropic/claude-opus-5"},
+        )
+        response = _make_llm_response("done", usage={"input_tokens": 10, "output_tokens": 2, "total_tokens": 12})
+        response.llm_output = {"token_usage": {"cost": 0.0123}}
+        j.on_llm_end(response, run_id=first, tags=["subagent:data-migration-engineer"])
+
+        retry = uuid4()
+        j.on_chat_model_start(
+            {"kwargs": {"model": "anthropic/claude-opus-5"}},
+            [[HumanMessage(content="verify")]],
+            run_id=retry,
+            tags=["subagent:independent-verifier"],
+            metadata={"ls_provider": "openrouter", "ls_model_name": "anthropic/claude-opus-5"},
+        )
+        j.on_llm_error(RuntimeError("provider timeout"), run_id=retry, tags=["subagent:independent-verifier"])
+        await j.flush()
+
+        events = await store.list_events("t1", "r1")
+        success = next(event for event in events if event["event_type"] == "llm.ai.response")
+        failure = next(event for event in events if event["event_type"] == "llm.error")
+        assert success["metadata"] | {
+            "provider_attempt_id": str(first),
+            "attempt_status": "success",
+            "caller": "subagent:data-migration-engineer",
+            "provider": "openrouter",
+            "requested_model": "anthropic/claude-opus-5",
+            "provider_reported_cost": 0.0123,
+            "provider_reported_currency": "USD",
+        } == success["metadata"]
+        assert failure["metadata"] | {
+            "provider_attempt_id": str(retry),
+            "attempt_status": "error",
+            "caller": "subagent:independent-verifier",
+            "provider": "openrouter",
+            "requested_model": "anthropic/claude-opus-5",
+            "error_type": "RuntimeError",
+        } == failure["metadata"]
+
 
 class TestLifecycleCallbacks:
     @pytest.mark.anyio

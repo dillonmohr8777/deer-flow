@@ -21,6 +21,8 @@ from deerflow.persistence.channel_connections.model import (
     ChannelCredentialRow,
     ChannelOAuthStateRow,
 )
+from deerflow.persistence.organizations.identity import private_organization_id
+from deerflow.persistence.organizations.resolution import private_organization_for_user
 from deerflow.utils.time import coerce_iso
 
 logger = logging.getLogger(__name__)
@@ -161,6 +163,7 @@ class ChannelConnectionRepository:
         )
 
         async with self.session_factory() as session:
+            organization_id = await private_organization_for_user(session, owner_user_id)
             last_error: IntegrityError | None = None
             for _ in range(_UPSERT_MAX_ATTEMPTS):
                 try:
@@ -173,11 +176,14 @@ class ChannelConnectionRepository:
                         row = ChannelConnectionRow(
                             id=self._new_id(),
                             owner_user_id=owner_user_id,
+                            organization_id=organization_id,
                             provider=provider,
                             external_account_id=external_account_id_value,
                             workspace_id=workspace_id_value,
                         )
                         session.add(row)
+                    elif organization_id is not None:
+                        row.organization_id = organization_id
                     _apply(row)
                     await session.commit()
                     await session.refresh(row)
@@ -254,11 +260,18 @@ class ChannelConnectionRepository:
             row.version = (row.version or 0) + 1
             await session.commit()
 
-    async def get_credentials(self, connection_id: str) -> dict[str, Any] | None:
+    async def get_credentials(self, connection_id: str, *, owner_user_id: str) -> dict[str, Any] | None:
         if self._cipher is None:
             return None
         async with self.session_factory() as session:
-            row = await session.get(ChannelCredentialRow, connection_id)
+            row = await session.scalar(
+                select(ChannelCredentialRow)
+                .join(ChannelConnectionRow, ChannelConnectionRow.id == ChannelCredentialRow.connection_id)
+                .where(
+                    ChannelCredentialRow.connection_id == connection_id,
+                    ChannelConnectionRow.owner_user_id == owner_user_id,
+                )
+            )
             if row is None:
                 return None
             try:
@@ -308,6 +321,7 @@ class ChannelConnectionRepository:
             expires_at=expires_at,
         )
         async with self.session_factory() as session:
+            row.organization_id = await private_organization_for_user(session, owner_user_id)
             session.add(row)
             await session.commit()
 
@@ -370,6 +384,7 @@ class ChannelConnectionRepository:
                 ChannelOAuthStateRow(
                     state_hash=self.hash_state(state),
                     owner_user_id=owner_user_id,
+                    organization_id=await private_organization_for_user(session, owner_user_id),
                     provider=provider,
                     code_verifier_encrypted=self._encrypt_optional_secret(code_verifier),
                     nonce_hash=nonce_hash,
@@ -511,6 +526,13 @@ class ChannelConnectionRepository:
     ) -> None:
         topic_id = external_topic_id or ""
         async with self.session_factory() as session:
+            connection = await session.get(ChannelConnectionRow, connection_id, with_for_update=True)
+            if connection is not None:
+                if connection.owner_user_id != owner_user_id:
+                    raise ValueError("channel connection belongs to a different user")
+                expected_organization_id = private_organization_id(owner_user_id)
+                if connection.organization_id is not None and connection.organization_id != expected_organization_id:
+                    raise ValueError("channel connection has conflicting organization ownership")
             stmt = select(ChannelConversationRow).where(
                 ChannelConversationRow.connection_id == connection_id,
                 ChannelConversationRow.external_conversation_id == external_conversation_id,
@@ -522,6 +544,7 @@ class ChannelConnectionRepository:
                     id=self._new_id(),
                     connection_id=connection_id,
                     owner_user_id=owner_user_id,
+                    organization_id=connection.organization_id if connection is not None else None,
                     provider=provider,
                     external_conversation_id=external_conversation_id,
                     external_topic_id=topic_id,
@@ -532,6 +555,8 @@ class ChannelConnectionRepository:
                 row.thread_id = thread_id
                 row.owner_user_id = owner_user_id
                 row.provider = provider
+                if connection is not None:
+                    row.organization_id = connection.organization_id
             await session.commit()
 
     async def get_thread_id(

@@ -2032,6 +2032,22 @@ A heartfelt thank you goes out to the core authors of `DeerFlow`, whose vision, 
 
 Your unwavering commitment and expertise have been the driving force behind DeerFlow's success. We are honored to have you at the helm of this journey.
 
+## Momentum workspace console (local customization)
+
+The non-static workspace opens `/workspace/command-center`: a Momentum-branded
+overview of specialist definitions, authenticated run history, execution receipts,
+and model usage. A global background-work tray observes pending/running jobs.
+Opening these views does not start a model run. Unknown model costs remain
+unpriced, not zero, and estimates are not provider balances or invoices.
+Authenticated SQL deployments also expose `GET /api/console/usage-ledger` for
+user-scoped successful and failed provider attempts. Provider-reported cost and
+configured estimates are returned as separate fields.
+
+This customization does not establish client isolation or billing readiness.
+Runtime execution and artifact controls remain in the existing DeerFlow services.
+For an independent local preview, set `NEXT_BUILD_DIR=.next-momentum` and run the
+frontend on a separate loopback port with the existing gateway configured.
+
 ## Star History
 
 [![Star History Chart](https://star-history.dera.page/svg?repos=bytedance/deer-flow&type=Date)](https://star-history.dera.page/#bytedance/deer-flow&Date)

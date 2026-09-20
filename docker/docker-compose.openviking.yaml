@@ -15,7 +15,7 @@ services:
     container_name: deer-flow-openviking
     command: ["--without-bot"]
     ports:
-      - "${OPENVIKING_PORT:-1933}:1933"
+      - "${BIND_HOST:-127.0.0.1}:${OPENVIKING_PORT:-1933}:1933"
     volumes:
       - openviking-data:/app/.openviking
     networks:

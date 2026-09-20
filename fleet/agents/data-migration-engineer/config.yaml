@@ -1,0 +1,16 @@
+name: data-migration-engineer
+display_name: Data Migration Engineer
+description: Designs and rehearses checkpointed, reconciled, reversible data migrations.
+model: openrouter-luna
+model_settings:
+  temperature: 0.1
+  max_tokens: 4000
+tool_groups:
+  - file:read
+  - file:write
+  - bash
+skills: []
+allowed_subagents: []
+thinking_enabled: true
+reasoning_effort: high
+memory_enabled: false

@@ -204,3 +204,24 @@ mutation permissions, and cache ownership remain in the existing hooks. Skill di
 metadata; runtime names and full descriptions remain unchanged. Public, custom,
 integration, and legacy sources must stay distinct. Community currently offers
 archive import, not a remote marketplace. Screenshot E2E fixtures are demo data.
+
+## Momentum Command Center
+
+`/workspace/command-center` is the default non-static workspace entry. Reuse the
+authenticated console stats/runs/usage endpoints; cache keys must include the
+current user. Roster connections describe definitions, never live dispatch.
+Preserve unknown costs as unpriced and distinguish estimates from provider credit
+or invoices. The global background tray observes work; it does not start model
+calls. Stop actions require confirmation and the existing run-cancel permission.
+Keep project grouping distinct from verified client tenancy. Stage independently
+with `NEXT_BUILD_DIR=.next-momentum`; do not overwrite a running server's build.
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->

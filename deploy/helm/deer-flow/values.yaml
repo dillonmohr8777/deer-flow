@@ -30,6 +30,18 @@ gateway:
                             # work (cancel/dedup/reconcile). Scheduler multi_instance
                              # recovery is safe only when its config prerequisites are met;
                              # max_concurrent_runs is shared across Pods in that mode.
+  # Disabled until Gateway run ownership is safe across Pods (see README). When
+  # enabled, this HPA controls replicas and the static `replicas` value is ignored.
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 3
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: ""
+  podDisruptionBudget:
+    enabled: false
+    minAvailable: 1
+    maxUnavailable: ""
   # Pod termination grace period (seconds). MUST exceed the Gateway's graceful
   # shutdown work: channel stop (~5s) + memory queue drain
   # (memory.shutdown_flush_timeout_seconds, default 30s) + buffer. K8s defaults
@@ -53,6 +65,16 @@ gateway:
 # -- Frontend (Next.js) deployment.
 frontend:
   replicas: 1
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 3
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: ""
+  podDisruptionBudget:
+    enabled: false
+    minAvailable: 1
+    maxUnavailable: ""
   resources:
     requests:
       cpu: 100m
@@ -64,6 +86,16 @@ frontend:
 # -- nginx reverse-proxy deployment (preserves compose routing).
 nginx:
   replicas: 1
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 3
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: ""
+  podDisruptionBudget:
+    enabled: false
+    minAvailable: 1
+    maxUnavailable: ""
   image:
     repository: nginx
     tag: alpine
@@ -87,6 +119,17 @@ nginx:
 #    this namespace via a ServiceAccount + RBAC.
 provisioner:
   enabled: true
+  replicas: 1
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 3
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: ""
+  podDisruptionBudget:
+    enabled: false
+    minAvailable: 1
+    maxUnavailable: ""
   resources:
     requests:
       cpu: 50m
@@ -221,19 +264,26 @@ skills:
 # -- Provider/channel/search secrets injected as env vars into the gateway.
 #    Reference them from config.yaml as $VAR. Example:
 #      secrets:
-#        OPENAI_API_KEY: "sk-..."
-#        FEISHU_APP_ID: "cli_xxx"
-#        FEISHU_APP_SECRET: "xxx"
-#        GITHUB_TOKEN: "ghp_xxx"
+#        OPENAI_API_KEY: "<provided-key>"
+#        FEISHU_APP_ID: "<provided-id>"
+#        FEISHU_APP_SECRET: "<provided-secret>"
+#        GITHUB_TOKEN: "<provided-token>"
 secrets: {}
 # -- Use an existing Secret instead of creating one from `secrets` above.
 existingSecret: ""
+# -- Use an existing Secret for BETTER_AUTH_SECRET and
+#    DEER_FLOW_INTERNAL_AUTH_TOKEN instead of generating one. Both keys are
+#    required. The Secret name is used by every workload.
+existingAppSecret: ""
 
 # -- Ingress in front of nginx (port 2026). nginx preserves all internal routing.
 ingress:
-  enabled: true
+  # Disabled by default so a new install does not publish a catch-all route.
+  enabled: false
   className: "nginx"
-  host: "deer-flow.example.com"
+  # Leave empty to create a host-agnostic rule; set an explicit DNS name for a
+  # public ingress. No public hostname is assumed by the chart.
+  host: ""
   annotations:
     # Allows a 100 MiB .skill archive plus multipart framing at the outer ingress.
     nginx.ingress.kubernetes.io/proxy-body-size: "101m"
@@ -244,7 +294,7 @@ ingress:
   tls:
     enabled: false
     secretName: ""
-    # hosts: []   # defaults to [ingress.host]
+    hosts: []   # defaults to [ingress.host] when host is set
 
 # -- DeerFlow config.yaml content. Secrets MUST stay as $VAR references — never
 #    inline literal secret values here. The default enables provisioner sandbox.

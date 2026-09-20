@@ -3,6 +3,7 @@ import { Toaster } from "sonner";
 
 import { QueryClientProvider } from "@/components/query-client-provider";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
+import { BackgroundJobs } from "@/components/workspace/command-center/background-jobs";
 import { CommandPalette } from "@/components/workspace/command-palette";
 import { GatewayOfflineBanner } from "@/components/workspace/gateway-offline-banner";
 import { ModelLoadErrorBanner } from "@/components/workspace/model-load-error-banner";
@@ -36,13 +37,14 @@ export async function WorkspaceContent({
       <UserPreferencesBoundary>
         <SidebarProvider className="h-screen" defaultOpen={initialSidebarOpen}>
           <WorkspaceSidebar />
-          <SidebarInset className="min-w-0">
+          <SidebarInset className="min-w-0" style={{ width: "auto" }}>
             <GatewayOfflineBanner gatewayUnavailable={gatewayUnavailable} />
             <ModelLoadErrorBanner gatewayUnavailable={gatewayUnavailable} />
             {children}
           </SidebarInset>
         </SidebarProvider>
         <CommandPalette />
+        <BackgroundJobs />
         <SettingsDialogHost />
         <WorkspaceSettingsDeepLink />
         <Toaster position="top-center" />

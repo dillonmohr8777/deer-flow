@@ -30,6 +30,7 @@ class AgentRow(Base):
     # identity stable if an agent is ever renamed in a future revision.
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     user_id: Mapped[str] = mapped_column(String(64), index=True)
+    organization_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     # Stored lowercase, matching the on-disk layout (Paths.user_agent_dir lowercases).
     name: Mapped[str] = mapped_column(String(128))
     config: Mapped[dict] = mapped_column(JSON, default=dict)

@@ -1,6 +1,7 @@
 "use client";
 
 import { MessageSquarePlus } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -30,7 +31,7 @@ export function WorkspaceHeader({ className }: { className?: string }) {
         {state === "collapsed" ? (
           <div className="group-has-data-[collapsible=icon]/sidebar-wrapper:-translate-y flex w-full cursor-pointer items-center justify-center">
             <div className="text-primary block pt-1 font-serif group-hover/workspace-header:hidden">
-              DF
+              M
             </div>
             <SidebarTrigger className="hidden pl-2 group-hover/workspace-header:block" />
           </div>
@@ -41,9 +42,20 @@ export function WorkspaceHeader({ className }: { className?: string }) {
                 DeerFlow
               </Link>
             ) : (
-              <div className="text-primary ml-2 cursor-default font-serif">
-                DeerFlow
-              </div>
+              <Link
+                href="/workspace/command-center"
+                className="ml-2"
+                aria-label="Momentum Command Center"
+              >
+                <Image
+                  src="/momentum/wordmark.png"
+                  alt="Momentum"
+                  width={800}
+                  height={172}
+                  style={{ width: 145, height: "auto" }}
+                  priority
+                />
+              </Link>
             )}
             <SidebarTrigger />
           </div>

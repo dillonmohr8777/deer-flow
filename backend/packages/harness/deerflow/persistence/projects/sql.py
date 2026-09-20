@@ -25,6 +25,7 @@ from sqlalchemy import delete as sa_delete
 from sqlalchemy import func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from deerflow.persistence.organizations.resolution import organization_from_owned_parent, private_organization_for_user
 from deerflow.persistence.projects.model import ProjectDocumentRow, ProjectRow
 from deerflow.persistence.thread_meta.model import ThreadMetaRow
 from deerflow.runtime.user_context import AUTO, _AutoSentinel, resolve_user_id
@@ -80,6 +81,7 @@ class ProjectRepository:
             updated_at=now,
         )
         async with self._sf() as session:
+            row.organization_id = await private_organization_for_user(session, resolved_user_id)
             session.add(row)
             await session.commit()
             await session.refresh(row)
@@ -258,7 +260,8 @@ class ProjectDocumentRepository:
         resolved_user_id = resolve_user_id(user_id, method_name="ProjectDocumentRepository.insert_active")
         async with self._sf() as session:
             await self._begin_immediate_if_sqlite(session)
-            if await self._lock_active_project(session, project_id, resolved_user_id) is None:
+            project = await self._lock_active_project(session, project_id, resolved_user_id)
+            if project is None:
                 await session.rollback()
                 return None
             dedup_stmt = select(ProjectDocumentRow).where(
@@ -281,6 +284,7 @@ class ProjectDocumentRepository:
                 id=document_id,
                 project_id=project_id,
                 user_id=resolved_user_id,
+                organization_id=organization_from_owned_parent(project, resolved_user_id, parent_name="project"),
                 name=name,
                 stored_relpath=relpath,
                 sha256=sha256,

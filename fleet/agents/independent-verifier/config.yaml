@@ -1,0 +1,15 @@
+name: independent-verifier
+display_name: Independent Verifier
+description: Read-only reviewer that rejects unsupported migration and engineering claims.
+model: openrouter-luna
+model_settings:
+  temperature: 0.1
+  max_tokens: 4000
+tool_groups:
+  - file:read
+  - bash
+skills: []
+allowed_subagents: []
+thinking_enabled: true
+reasoning_effort: high
+memory_enabled: false

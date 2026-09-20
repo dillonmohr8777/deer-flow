@@ -70,6 +70,9 @@ async def _inspect(engine):
 async def test_0024_upgrade_creates_table_and_indexes(tmp_path):
     engine = await _engine(tmp_path)
     try:
+        cfg = _get_alembic_config(engine)
+        await asyncio.to_thread(command.downgrade, cfg, PREVIOUS)
+        await asyncio.to_thread(command.upgrade, cfg, REVISION)
         exists, columns, indexes = await _inspect(engine)
         assert exists
         assert columns == COLUMNS
@@ -104,7 +107,9 @@ async def test_0024_upgrade_is_guarded_against_an_existing_table(tmp_path):
     try:
         cfg = _get_alembic_config(engine)
         # Simulate a database that already carries the table (create_all
-        # bootstrap path): upgrading again must not fail.
+        # bootstrap path) at this historical revision: upgrading again must
+        # not fail.
+        await asyncio.to_thread(command.downgrade, cfg, REVISION)
         await asyncio.to_thread(command.upgrade, cfg, REVISION)
         exists, columns, _ = await _inspect(engine)
         assert exists and columns == COLUMNS

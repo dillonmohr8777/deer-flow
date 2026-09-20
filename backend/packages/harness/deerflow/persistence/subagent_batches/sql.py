@@ -9,7 +9,10 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from deerflow.persistence.organizations.resolution import organization_from_owned_parent
+from deerflow.persistence.run.model import RunRow
 from deerflow.persistence.subagent_batches.model import SubagentBatchItemRow, SubagentBatchRow
+from deerflow.persistence.thread_meta.model import ThreadMetaRow
 from deerflow.subagents.acceptance_checks import AcceptanceVerdict, validate_acceptance_verdict
 from deerflow.subagents.batch_runtime import BatchItemInput
 from deerflow.subagents.report_contract import normalize_acceptance_criteria
@@ -147,6 +150,16 @@ class SubagentBatchRepository:
         ]
         async with self._sf() as session:
             try:
+                thread = (await session.execute(select(ThreadMetaRow).where(ThreadMetaRow.thread_id == thread_id).with_for_update())).scalar_one_or_none()
+                batch.organization_id = organization_from_owned_parent(thread, user_id, parent_name="thread")
+                if run_id is not None:
+                    run = (await session.execute(select(RunRow).where(RunRow.run_id == run_id).with_for_update())).scalar_one_or_none()
+                    if run is not None:
+                        if run.thread_id != thread_id:
+                            raise ValueError("run belongs to a different thread")
+                        run_organization_id = organization_from_owned_parent(run, user_id, parent_name="run")
+                        if batch.organization_id is not None and run_organization_id != batch.organization_id:
+                            raise ValueError("run has conflicting organization ownership")
                 session.add(batch)
                 # The models intentionally do not declare an ORM relationship;
                 # flush the parent explicitly so SQLite's immediate FK check

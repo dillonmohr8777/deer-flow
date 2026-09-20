@@ -76,6 +76,12 @@ through run-event or specialized APIs:
 | `context:memory` | `context` | `record_memory_context()` |
 | `middleware:{tag}` | `middleware` | `record_middleware()` |
 
+Each new LLM attempt stamps `provider_attempt_id`, call index, caller, provider,
+requested model, latency, and terminal attempt status. Successful response
+events also retain the resolved model, token usage, and provider-reported cost
+when the provider supplies one; error events retain the error type. These are
+optional metadata fields for compatibility with older persisted events.
+
 Current middleware tags are `guardrail`, `loop_detection`,
 `safety_termination`, `skill_activation`, `skill_secrets`, `tool_promotion`,
 and `tool_progress`. The pattern is intentionally open so new middleware tags

@@ -34,6 +34,7 @@ from deerflow.persistence.agents.base import (
     parse_agent_config,
 )
 from deerflow.persistence.agents.model import AgentRow
+from deerflow.persistence.organizations.resolution import private_organization_for_user_sync
 from deerflow.runtime.user_context import get_effective_user_id
 
 logger = logging.getLogger(__name__)
@@ -143,17 +144,18 @@ class SqlAgentStore(AgentStore):
     def create(self, name: str, config: dict, soul: str, *, user_id: str | None = None) -> None:
         effective_user = user_id or get_effective_user_id()
         now = datetime.now(UTC)
-        row = AgentRow(
-            id=uuid.uuid4().hex,
-            user_id=effective_user,
-            name=name.lower(),
-            config=_config_document(config),
-            soul=soul or "",
-            created_at=now,
-            updated_at=now,
-        )
         try:
             with self._Session() as session:
+                row = AgentRow(
+                    id=uuid.uuid4().hex,
+                    user_id=effective_user,
+                    organization_id=private_organization_for_user_sync(session, effective_user),
+                    name=name.lower(),
+                    config=_config_document(config),
+                    soul=soul or "",
+                    created_at=now,
+                    updated_at=now,
+                )
                 session.add(row)
                 session.commit()
         except IntegrityError as e:
@@ -177,6 +179,7 @@ class SqlAgentStore(AgentStore):
             row = AgentRow(
                 id=uuid.uuid4().hex,
                 user_id=effective_user,
+                organization_id=private_organization_for_user_sync(session, effective_user),
                 name=name.lower(),
                 config=_config_document(config or {}),
                 soul=soul or "",

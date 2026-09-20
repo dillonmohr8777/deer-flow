@@ -20,6 +20,8 @@ from deerflow.persistence.agents.base import AgentExistsError
 from deerflow.persistence.agents.model import AgentRow
 from deerflow.persistence.agents.sql import SqlAgentStore
 from deerflow.persistence.base import Base
+from deerflow.persistence.organizations.identity import private_organization_id
+from deerflow.persistence.organizations.model import OrganizationRow
 
 
 @pytest.fixture()
@@ -28,7 +30,7 @@ def store(tmp_path):
     url = f"sqlite:///{tmp_path}/agents.db"
     create_engine(url)  # touch the file
     engine = create_engine(url)
-    Base.metadata.create_all(engine, tables=[AgentRow.__table__])
+    Base.metadata.create_all(engine, tables=[OrganizationRow.__table__, AgentRow.__table__])
     engine.dispose()
     return SqlAgentStore(url)
 
@@ -149,6 +151,21 @@ def test_user_isolation(store):
     assert store.get("shared-name", user_id="u2").description == "u2's"
     with pytest.raises(FileNotFoundError):
         store.get("shared-name", user_id="u3")
+
+
+def test_active_private_organization_is_dual_written_without_weakening_user_isolation(store):
+    organization_id = private_organization_id("u1")
+    with store._Session() as session:
+        session.add(OrganizationRow(id=organization_id, slug="personal-u1", name="Private", status="active"))
+        session.commit()
+
+    store.create("org-agent", {"name": "org-agent"}, "private", user_id="u1")
+
+    with store._Session() as session:
+        row = session.query(AgentRow).filter_by(user_id="u1", name="org-agent").one()
+        assert row.organization_id == organization_id
+    with pytest.raises(FileNotFoundError):
+        store.get("org-agent", user_id="u2")
 
 
 def test_delete_reports_outcome(store):

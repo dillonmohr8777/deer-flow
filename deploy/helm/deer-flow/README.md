@@ -91,7 +91,7 @@ If your registry needs auth, create a pull secret:
 kubectl create secret docker-registry regcred \
   --docker-server=ghcr.io \
   --docker-username=youruser \
-  --docker-password=yourtoken \
+  --docker-password="$REGISTRY_TOKEN" \
   -n deer-flow
 ```
 
@@ -109,13 +109,16 @@ image:
 ingress:
   enabled: true
   className: nginx
-  host: deer-flow.example.com
+  host: "" # set your DNS name before enabling the public route
   tls:
     enabled: true
     secretName: deer-flow-tls
 
+# Optional: manage these two app secrets outside Helm. Both keys are required.
+existingAppSecret: deer-flow-app
+
 secrets:
-  OPENAI_API_KEY: sk-...
+  OPENAI_API_KEY: "<provided-key>"
   # add channel tokens, search keys, etc. as needed
 ```
 
@@ -129,6 +132,9 @@ size, streaming, and response-timeout settings for your ingress controller, or
 local skill uploads may fail before DeerFlow completes the installation and
 those requests may time out while Gateway is still working — for
 `/api/runs/wait` the disconnect also cancels the run.
+
+Ingress is disabled by default. Set `ingress.enabled: true` and provide an
+explicit `ingress.host` before exposing the chart through an Ingress controller.
 
 Provide your model config under `config` (keep secrets as `$VAR` references —
 they resolve from the `secrets` map):
@@ -257,11 +263,7 @@ kubectl -n deer-flow exec deploy/deer-flow-provisioner -- curl -s localhost:8002
   postgresql:
     enabled: false
     external:
-      host: mydb.example.com   # or set databaseUrl / existingSecret
-      port: 5432
-      database: deerflow
-      username: deerflow
-      password: changeme
+      existingSecret: deer-flow-postgres # key: database-url
   ```
 - **Graceful shutdown & memory drain.** The gateway pod sets `terminationGracePeriodSeconds` (default 45s, overridable via `gateway.terminationGracePeriodSeconds`) plus an optional `preStop` sleep (`gateway.preStopSleepSeconds`, default 5s). The grace period MUST exceed the Gateway's graceful-shutdown work — channel stop (~5s) plus the memory-queue drain (`memory.shutdown_flush_timeout_seconds`, default 30s) plus a buffer — because the drain runs on a daemon thread and K8s SIGKILLs anything still running at the end of the grace window. K8s defaults to 30s, which SIGKILLs the drain mid-flight and silently re-introduces the memory loss the drain is fixing. **When you raise `memory.shutdown_flush_timeout_seconds`, raise `gateway.terminationGracePeriodSeconds` to match** (channel stop + drain + buffer).
 - **Gateway replicas.** Postgres + the Redis stream bridge together make the
@@ -274,6 +276,11 @@ kubectl -n deer-flow exec deploy/deer-flow-provisioner -- curl -s localhost:8002
   double-submit can create two runs on one thread (checkpoint corruption), a
   cancel can land on a non-owner pod (409), and a crashed pod's runs stay
   `pending`/`running` forever. Stay on 1 replica until that work lands.
+- **Stateless fleet knobs.** Frontend, nginx, and the provisioner expose
+  `replicas`, an opt-in `autoscaling` block (CPU and optional memory targets),
+  and an opt-in `podDisruptionBudget`. HPA requires a cluster metrics API.
+  Gateway has the same fields for future use, but autoscaling remains disabled
+  until the run-ownership limitation above is resolved.
 - **Scheduled task recovery.** If a deployment explicitly enables
   `scheduler.multi_instance: true`, it must use shared Postgres,
   `run_ownership.heartbeat_enabled: true`, and `run_events.backend: db`.

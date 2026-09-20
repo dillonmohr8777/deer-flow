@@ -240,7 +240,9 @@ class SlackChannel(Channel):
 
     async def _get_web_client_for_message(self, msg: OutboundMessage):
         if msg.connection_id and self._connection_repo is not None:
-            credentials = await self._connection_repo.get_credentials(msg.connection_id)
+            if not msg.owner_user_id:
+                return self._web_client
+            credentials = await self._connection_repo.get_credentials(msg.connection_id, owner_user_id=msg.owner_user_id)
             access_token = credentials.get("access_token") if credentials else None
             if not access_token:
                 return self._web_client

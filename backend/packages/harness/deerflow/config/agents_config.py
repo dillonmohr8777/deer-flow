@@ -260,6 +260,7 @@ MANAGED_AGENT_CONFIG_FIELDS: frozenset[str] = frozenset(
         "model_settings",
         "thinking_enabled",
         "reasoning_effort",
+        "memory_enabled",
     }
 )
 

@@ -1,4 +1,8 @@
 **/.env
+# Keep local dotenv backups and environment-specific secret files out of the
+# build context; re-include the checked-in examples below.
+**/.env.*
+!**/.env.example
 Dockerfile
 .dockerignore
 .git
@@ -60,7 +64,7 @@ scripts/
 logs/
 docker/
 skills/
-frontend/.next
+frontend/.next*/
 frontend/node_modules
 backend/.venv
 backend/htmlcov
@@ -72,6 +76,7 @@ backend/.coverage
 # the build outright once the app has created directories owned by the container's
 # root that the build client cannot read.
 **/.deer-flow/
+**/.deer-flow.bak-*/
 backend/sandbox/
 *.md
 !README.md

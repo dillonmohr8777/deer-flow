@@ -102,7 +102,6 @@ async def test_legacy_task_writer_leaves_thread_incarnation_null(tmp_path):
     [
         ("user-1", "matching-owner"),
         (None, "shared-thread"),
-        ("user-2", None),
     ],
 )
 async def test_create_atomically_copies_accessible_thread_incarnation(
@@ -133,6 +132,30 @@ async def test_create_atomically_copies_accessible_thread_incarnation(
         row = await session.get(McpTaskRow, "new-writer")
     assert row is not None
     assert row.thread_incarnation == expected_incarnation
+
+
+@pytest.mark.asyncio
+async def test_create_rejects_thread_owned_by_different_user(tmp_path):
+    repo = await _make_repo(tmp_path)
+    now = datetime.now(UTC)
+    async with repo._sf() as session:
+        session.add(
+            ThreadMetaRow(
+                thread_id="thread-1",
+                incarnation="different-owner",
+                user_id="user-2",
+                metadata_json={},
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        await session.commit()
+
+    with pytest.raises(ValueError, match="thread belongs to a different user"):
+        await _create_working_task(repo, task_id="new-writer", now=now)
+
+    async with repo._sf() as session:
+        assert await session.get(McpTaskRow, "new-writer") is None
 
 
 @pytest.mark.asyncio

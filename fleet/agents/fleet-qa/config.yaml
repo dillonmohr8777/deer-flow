@@ -1,0 +1,15 @@
+name: fleet-qa
+display_name: Fleet QA
+description: Validates fleet catalog JSON and cross-references without editing implementations.
+model: openrouter-muse-spark-contributor
+model_settings:
+  temperature: 0.1
+  max_tokens: 4000
+tool_groups:
+  - file:read
+  - bash
+skills: []
+allowed_subagents: []
+thinking_enabled: true
+reasoning_effort: high
+memory_enabled: false

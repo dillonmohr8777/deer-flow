@@ -88,10 +88,11 @@ def test_slack_send_uses_connection_bot_token_when_connection_id_is_present():
             thread_id="thread-1",
             text="hello",
             connection_id="connection-1",
+            owner_user_id="deerflow-user-1",
         )
         await channel.send(msg)
 
-        repo.get_credentials.assert_awaited_once_with("connection-1")
+        repo.get_credentials.assert_awaited_once_with("connection-1", owner_user_id="deerflow-user-1")
         web_client_factory.assert_called_once_with(token="xoxb-connection-token")
         web_client.chat_postMessage.assert_called_once()
 

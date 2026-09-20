@@ -82,13 +82,15 @@ class AuthContext:
     Attributes:
         user: The authenticated user, or None if anonymous
         permissions: List of permission strings (e.g., "threads:read")
+        organization_id: Active server-resolved private organization for session/PAT callers
     """
 
-    __slots__ = ("user", "permissions")
+    __slots__ = ("user", "permissions", "organization_id")
 
-    def __init__(self, user: User | None = None, permissions: list[str] | None = None):
+    def __init__(self, user: User | None = None, permissions: list[str] | None = None, organization_id: str | None = None):
         self.user = user
         self.permissions = permissions or []
+        self.organization_id = organization_id
 
     @property
     def is_authenticated(self) -> bool:

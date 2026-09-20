@@ -69,3 +69,15 @@ config.yaml.bak
 
 # Monocle agent-observability trace output (local file exporter)
 .monocle/
+
+# Agent outbox (host-writable staging, not committed)
+outbox-host/
+
+# Local operator snapshots and staging
+.agent-stage/
+.env.bak-*
+config.yaml.bak-*
+backend/.deer-flow.bak-*/
+
+# Fleet agent definitions are deployment source, not local app config.
+!fleet/agents/*/config.yaml

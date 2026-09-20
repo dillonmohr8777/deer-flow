@@ -35,6 +35,7 @@ class ProjectRow(Base):
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     user_id: Mapped[str] = mapped_column(String(64), index=True)
+    organization_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     name: Mapped[str] = mapped_column(String(128))
     instructions: Mapped[str] = mapped_column(Text, default="")
     presentation: Mapped[dict] = mapped_column(JSON, default=dict)
@@ -53,6 +54,7 @@ class ProjectDocumentRow(Base):
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     project_id: Mapped[str] = mapped_column(String(64), index=True)
     user_id: Mapped[str] = mapped_column(String(64), index=True)
+    organization_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     name: Mapped[str] = mapped_column(String(255))
     stored_relpath: Mapped[str] = mapped_column(String)
     sha256: Mapped[str] = mapped_column(String(64), index=True)

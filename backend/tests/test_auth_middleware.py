@@ -11,9 +11,17 @@ from deerflow.config.authorization_config import AuthorizationConfig
 @pytest.fixture(autouse=True)
 def _default_route_authorization_config(monkeypatch):
     """Keep minimal middleware apps independent of a repository config.yaml."""
+    async def active_private_organization(user_id: str) -> str:
+        return f"private-{user_id}"
+
     monkeypatch.setattr(
         "app.gateway.authz._get_route_authorization_config",
         lambda: AuthorizationConfig(),
+    )
+    monkeypatch.setattr(
+        "app.gateway.auth_middleware._resolve_active_private_organization_id",
+        active_private_organization,
+        raising=False,
     )
 
 
@@ -155,6 +163,13 @@ def _make_app():
             "state_id": str(state_user.id),
             "auth_source": request.state.auth_source,
             "context_user_id": get_effective_user_id(),
+        }
+
+    @app.get("/api/tenant-context")
+    async def tenant_context(request: Request):
+        return {
+            "organization_id": getattr(request.state, "organization_id", None),
+            "auth_organization_id": getattr(request.state.auth, "organization_id", None),
         }
 
     @app.put("/api/mcp/config")
@@ -344,6 +359,62 @@ def test_auth_disabled_does_not_clobber_valid_session_cookie(monkeypatch):
         "email": "session@test.local",
         "system_role": "user",
         "context_user_id": "session-user",
+    }
+
+
+def test_session_stamps_active_private_organization(monkeypatch):
+    from types import SimpleNamespace
+
+    async def fake_current_user(request):
+        return SimpleNamespace(id="session-user", email="session@test.local", system_role="user")
+
+    monkeypatch.setenv("DEER_FLOW_AUTH_DISABLED", "")
+    monkeypatch.setattr("app.gateway.deps.get_current_user_from_request", fake_current_user)
+
+    response = TestClient(_make_app()).get("/api/tenant-context", cookies={"access_token": "valid-session"})
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "organization_id": "private-session-user",
+        "auth_organization_id": "private-session-user",
+    }
+
+
+def test_session_without_active_private_organization_is_rejected(monkeypatch):
+    from types import SimpleNamespace
+
+    async def fake_current_user(request):
+        return SimpleNamespace(id="session-user", email="session@test.local", system_role="user")
+
+    async def no_active_organization(user_id: str):
+        return None
+
+    monkeypatch.setenv("DEER_FLOW_AUTH_DISABLED", "")
+    monkeypatch.setattr("app.gateway.deps.get_current_user_from_request", fake_current_user)
+    monkeypatch.setattr("app.gateway.auth_middleware._resolve_active_private_organization_id", no_active_organization)
+
+    response = TestClient(_make_app()).get("/api/tenant-context", cookies={"access_token": "valid-session"})
+
+    assert response.status_code == 403
+    assert response.json() == {"detail": "Active organization membership required"}
+
+
+def test_pat_stamps_active_private_organization(monkeypatch):
+    from types import SimpleNamespace
+
+    async def fake_authenticate_pat(app, authorization):
+        return SimpleNamespace(id="pat-user", email="pat@test.local", system_role="user"), frozenset({"threads:read"})
+
+    monkeypatch.setenv("DEER_FLOW_AUTH_DISABLED", "")
+    monkeypatch.setattr("app.gateway.auth.pat.authenticate_pat", fake_authenticate_pat)
+    monkeypatch.setattr("app.gateway.auth.pat.is_pat_allowed_route", lambda method, path: True)
+
+    response = TestClient(_make_app()).get("/api/tenant-context", headers={"Authorization": "Bearer dfp_test"})
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "organization_id": "private-pat-user",
+        "auth_organization_id": "private-pat-user",
     }
 
 

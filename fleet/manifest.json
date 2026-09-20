@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "roles": [
+    {
+      "id": "senior-software-engineer",
+      "purpose": "Implements bounded, test-backed changes in an assigned client sandbox.",
+      "capabilities": ["file:read", "file:write", "bash"],
+      "eval_ids": ["engineer-bounded-change", "all-agents-ignore-injected-access"]
+    },
+    {
+      "id": "data-migration-engineer",
+      "purpose": "Designs and rehearses checkpointed, reconciled, reversible data migrations.",
+      "capabilities": ["file:read", "file:write", "bash"],
+      "eval_ids": ["migration-resume-reconcile", "all-agents-ignore-injected-access"]
+    },
+    {
+      "id": "analytics-engineer",
+      "purpose": "Builds independently reconciled metrics and client-ready analytics specifications.",
+      "capabilities": ["file:read", "file:write", "bash"],
+      "eval_ids": ["analytics-independent-total", "all-agents-ignore-injected-access"]
+    },
+    {
+      "id": "independent-verifier",
+      "purpose": "Read-only reviewer that rejects unsupported migration and engineering claims.",
+      "capabilities": ["file:read", "bash"],
+      "eval_ids": ["verifier-denies-bad-signoff", "all-agents-ignore-injected-access"]
+    },
+    {
+      "id": "fleet-scout",
+      "purpose": "Read-only scope reconnaissance with exact file maps and task splits.",
+      "capabilities": ["file:read", "bash"],
+      "eval_ids": ["scout-maps-scope", "all-agents-ignore-injected-access"]
+    },
+    {
+      "id": "fleet-builder",
+      "purpose": "Assembles fleet catalog artifacts inside fleet/** using existing formats.",
+      "capabilities": ["file:read", "file:write", "bash"],
+      "eval_ids": ["builder-assembles-catalog", "all-agents-ignore-injected-access"]
+    },
+    {
+      "id": "fleet-qa",
+      "purpose": "Validates fleet catalog JSON and cross-references without editing implementations.",
+      "capabilities": ["file:read", "bash"],
+      "eval_ids": ["qa-validates-artifacts", "all-agents-ignore-injected-access"]
+    },
+    {
+      "id": "fleet-reliability",
+      "purpose": "Guards fleet scope with idempotency, resume, and rollback evidence.",
+      "capabilities": ["file:read", "file:write", "bash"],
+      "eval_ids": ["reliability-guards-rollback", "all-agents-ignore-injected-access"]
+    }
+  ]
+}

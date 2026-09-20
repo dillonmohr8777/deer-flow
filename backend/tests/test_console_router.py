@@ -3,9 +3,10 @@
 Covers:
 1. /api/console/stats — headline counters
 2. /api/console/runs — cross-thread listing, thread-title join, pagination, status filter
-3. /api/console/usage — daily zero-filled buckets + per-model breakdown (incl. legacy fallback)
-4. user scoping — rows filtered when the request resolves to a user
-5. 503 when no SQL session factory is available (memory backend)
+3. /api/console/usage-ledger — durable provider attempts and per-attempt cost evidence
+4. /api/console/usage — daily zero-filled buckets + per-model breakdown (incl. legacy fallback)
+5. user scoping — rows filtered when the request resolves to a user
+6. 503 when no SQL session factory is available (memory backend)
 
 Uses a real temp-file SQLite database (NullPool, so seeding in one event loop
 and serving TestClient requests in another never share a connection).
@@ -25,6 +26,7 @@ from sqlalchemy.pool import NullPool
 
 from app.gateway.routers import console
 from deerflow.persistence.base import Base
+from deerflow.persistence.models.run_event import RunEventRow
 from deerflow.persistence.run.model import RunRow
 from deerflow.persistence.thread_meta.model import ThreadMetaRow
 
@@ -54,7 +56,7 @@ class _FrozenDatetime(datetime):
         return cls._frozen if tz is None else cls._frozen.astimezone(tz)
 
 
-def _seed_rows() -> tuple[list[ThreadMetaRow], list[RunRow]]:
+def _seed_rows() -> tuple[list[ThreadMetaRow], list[RunRow], list[RunEventRow]]:
     threads = [
         ThreadMetaRow(thread_id="t1", user_id="user-a", display_name="调研鹿角再生"),
         ThreadMetaRow(thread_id="t2", user_id="user-a", display_name="Card assistant chat"),
@@ -137,7 +139,69 @@ def _seed_rows() -> tuple[list[ThreadMetaRow], list[RunRow]]:
             updated_at=NOW - timedelta(minutes=29),
         ),
     ]
-    return threads, runs
+    events = [
+        RunEventRow(
+            thread_id="t1",
+            run_id="r1",
+            user_id="user-a",
+            event_type="llm.ai.response",
+            category="message",
+            content="{}",
+            event_metadata={
+                "provider_attempt_id": "attempt-r1",
+                "llm_call_index": 1,
+                "attempt_status": "success",
+                "caller": "subagent:data-migration-engineer",
+                "provider": "openrouter",
+                "requested_model": "minimax-m2",
+                "resolved_model": "minimax-m2",
+                "usage": {"input_tokens": 800, "output_tokens": 400, "total_tokens": 1200, "cache_read_tokens": 500},
+                "latency_ms": 420,
+                "provider_reported_cost": 0.014,
+                "provider_reported_currency": "USD",
+            },
+            seq=1,
+            created_at=NOW - timedelta(hours=1),
+        ),
+        RunEventRow(
+            thread_id="t1",
+            run_id="r2",
+            user_id="user-a",
+            event_type="llm.error",
+            category="trace",
+            content="provider timeout",
+            event_metadata={
+                "provider_attempt_id": "attempt-r2",
+                "llm_call_index": 1,
+                "attempt_status": "error",
+                "caller": "subagent:independent-verifier",
+                "provider": "openrouter",
+                "requested_model": "minimax-m2",
+                "latency_ms": 30000,
+                "error_type": "TimeoutError",
+            },
+            seq=2,
+            created_at=NOW - timedelta(seconds=30),
+        ),
+        RunEventRow(
+            thread_id="t3",
+            run_id="r5",
+            user_id="user-b",
+            event_type="llm.ai.response",
+            category="message",
+            content="{}",
+            event_metadata={
+                "provider_attempt_id": "attempt-r5",
+                "attempt_status": "success",
+                "provider": "openrouter",
+                "resolved_model": "qwen",
+                "usage": {"input_tokens": 40, "output_tokens": 30, "total_tokens": 70},
+            },
+            seq=1,
+            created_at=NOW - timedelta(hours=2),
+        ),
+    ]
+    return threads, runs, events
 
 
 @pytest.fixture()
@@ -148,10 +212,11 @@ def session_factory(tmp_path):
     async def _setup() -> None:
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
-        threads, runs = _seed_rows()
+        threads, runs, events = _seed_rows()
         async with sf() as session:
             session.add_all(threads)
             session.add_all(runs)
+            session.add_all(events)
             await session.commit()
 
     asyncio.run(_setup())
@@ -214,6 +279,37 @@ class TestConsoleRuns:
         data = resp.json()
         assert [r["run_id"] for r in data["runs"]] == ["r3"]
         assert data["runs"][0]["error"].startswith("Boom")
+
+
+class TestUsageLedger:
+    def test_attempt_costs_and_failures_are_separate(self, client, monkeypatch):
+        monkeypatch.setattr(console, "get_app_config", lambda: _priced_config())
+        resp = client.get("/api/console/usage-ledger")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert [attempt["provider_attempt_id"] for attempt in data["attempts"]] == ["attempt-r2", "attempt-r1", "attempt-r5"]
+        by_id = {attempt["provider_attempt_id"]: attempt for attempt in data["attempts"]}
+        assert by_id["attempt-r1"] | {
+            "caller": "subagent:data-migration-engineer",
+            "provider": "openrouter",
+            "input_tokens": 800,
+            "output_tokens": 400,
+            "cache_read_tokens": 500,
+            "provider_reported_cost": 0.014,
+            "provider_reported_currency": "USD",
+            "estimated_currency": "CNY",
+        } == by_id["attempt-r1"]
+        assert by_id["attempt-r1"]["estimated_cost"] == pytest.approx(_R1_COST_CACHED)
+        assert by_id["attempt-r2"]["attempt_status"] == "error"
+        assert by_id["attempt-r2"]["error_type"] == "TimeoutError"
+        assert by_id["attempt-r2"]["estimated_cost"] is None
+
+    def test_can_filter_attempts_to_one_run(self, client):
+        resp = client.get("/api/console/usage-ledger", params={"run_id": "r1"})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert [attempt["provider_attempt_id"] for attempt in data["attempts"]] == ["attempt-r1"]
+        assert data["has_more"] is False
 
 
 class TestConsoleUsage:
@@ -379,6 +475,8 @@ class TestUserScoping:
         assert all(r["run_id"] != "r5" for r in runs["runs"])
         usage = client.get("/api/console/usage").json()
         assert "qwen" not in usage["by_model"]
+        ledger = client.get("/api/console/usage-ledger").json()
+        assert all(attempt["provider_attempt_id"] != "attempt-r5" for attempt in ledger["attempts"])
 
 
 class TestNoSqlBackend:
@@ -388,7 +486,7 @@ class TestNoSqlBackend:
         app = make_authed_test_app()
         app.include_router(console.router)
         c = TestClient(app)
-        for path in ("/api/console/stats", "/api/console/runs", "/api/console/usage"):
+        for path in ("/api/console/stats", "/api/console/runs", "/api/console/usage-ledger", "/api/console/usage"):
             resp = c.get(path)
             assert resp.status_code == 503
             assert "SQL database backend" in resp.json()["detail"]

@@ -149,7 +149,10 @@ def pat_env(tmp_path, monkeypatch):
     """Engine + PAT repo + patched user provider; returns (client, repo)."""
     engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path}/pats.db", poolclass=NullPool)
     asyncio.run(_create_tables(engine))
-    repo = PersonalAccessTokenRepository(async_sessionmaker(engine, expire_on_commit=False))
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    repo = PersonalAccessTokenRepository(session_factory)
+    asyncio.run(_seed_private_organizations(session_factory, ["user-1", "user-2", "admin-1"]))
+    monkeypatch.setattr("deerflow.persistence.engine.get_session_factory", lambda: session_factory)
 
     fake_provider = _FakeProvider(_fake_user("user-1"), _fake_user("user-2"), _fake_user("admin-1", system_role="admin"))
     monkeypatch.setattr("app.gateway.deps.get_local_provider", lambda: fake_provider)
@@ -163,6 +166,49 @@ def pat_env(tmp_path, monkeypatch):
 async def _create_tables(engine) -> None:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+
+async def _seed_private_organizations(session_factory, user_ids: list[str]) -> None:
+    from deerflow.persistence.organizations.identity import private_organization_id, private_organization_slug
+    from deerflow.persistence.organizations.model import OrganizationMemberRow, OrganizationRow
+
+    now = datetime.now(UTC)
+    async with session_factory() as session:
+        for user_id in user_ids:
+            organization_id = private_organization_id(user_id)
+            session.add(
+                OrganizationRow(
+                    id=organization_id,
+                    slug=private_organization_slug(user_id),
+                    name="Private organization",
+                    status="active",
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+            session.add(
+                OrganizationMemberRow(
+                    organization_id=organization_id,
+                    user_id=user_id,
+                    role="owner",
+                    status="active",
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+        await session.commit()
+
+
+async def _set_membership_status(engine, user_id: str, status: str) -> None:
+    from deerflow.persistence.organizations.identity import private_organization_id
+    from deerflow.persistence.organizations.model import OrganizationMemberRow
+
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    async with session_factory() as session:
+        membership = await session.get(OrganizationMemberRow, (private_organization_id(user_id), user_id))
+        assert membership is not None
+        membership.status = status
+        await session.commit()
 
 
 @pytest.fixture
@@ -211,6 +257,18 @@ def test_valid_pat_authenticates_without_cookie(client):
     response = client.get("/api/threads/whoami", headers={"Authorization": f"Bearer {created['token']}"})
     assert response.status_code == 200
     assert response.json() == {"user_id": "user-1", "auth_source": AUTH_SOURCE_PAT}
+
+
+def test_pat_owner_with_inactive_organization_membership_is_rejected(client, pat_env):
+    created = _create_pat(client, user_id="user-2")
+    _, _, engine = pat_env
+    asyncio.run(_set_membership_status(engine, "user-2", "inactive"))
+    client.cookies.clear()
+
+    response = client.get("/api/threads/whoami", headers={"Authorization": f"Bearer {created['token']}"})
+
+    assert response.status_code == 403
+    assert response.json() == {"detail": "Active organization membership required"}
 
 
 def test_invalid_bearer_never_falls_back_to_session_cookie(client):

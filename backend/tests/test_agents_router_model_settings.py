@@ -54,6 +54,7 @@ async def test_create_persists_model_settings(_agent_env) -> None:
             model_settings={"temperature": 0.2, "max_tokens": 12000},
             thinking_enabled=True,
             reasoning_effort="high",
+            memory_enabled=False,
             soul="You are a researcher.",
         )
     )
@@ -63,12 +64,14 @@ async def test_create_persists_model_settings(_agent_env) -> None:
     assert resp.model_settings.max_tokens == 12000
     assert resp.thinking_enabled is True
     assert resp.reasoning_effort == "high"
+    assert resp.memory_enabled is False
 
     # Reload through the read path to confirm it round-tripped to disk.
     fetched = await get_agent("researcher")
     assert fetched.model_settings is not None
     assert fetched.model_settings.temperature == 0.2
     assert fetched.reasoning_effort == "high"
+    assert fetched.memory_enabled is False
 
 
 async def test_create_rejects_unknown_model(_agent_env) -> None:
@@ -155,3 +158,13 @@ async def test_allowed_subagents_round_trip_and_explicit_null_clears(_agent_env)
 
     unrestricted = await update_agent("delegator", AgentUpdateRequest(allowed_subagents=None))
     assert unrestricted.allowed_subagents is None
+
+
+async def test_update_memory_enabled_preserves_or_changes_explicitly(_agent_env) -> None:
+    await create_agent_endpoint(AgentCreateRequest(name="stateless", memory_enabled=False))
+
+    preserved = await update_agent("stateless", AgentUpdateRequest(description="updated"))
+    assert preserved.memory_enabled is False
+
+    enabled = await update_agent("stateless", AgentUpdateRequest(memory_enabled=True))
+    assert enabled.memory_enabled is True

@@ -298,6 +298,7 @@ class RunJournal(BaseCallbackHandler):
 
         # Latency tracking
         self._llm_start_times: dict[str, float] = {}  # langchain run_id -> start time
+        self._llm_attempts: dict[str, dict[str, Any]] = {}
 
         # LLM request/response tracking
         self._llm_call_index = 0
@@ -404,6 +405,7 @@ class RunJournal(BaseCallbackHandler):
         *,
         run_id: UUID,
         tags: list[str] | None = None,
+        metadata: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> None:
         """Capture the first user-visible prompt as llm.human.input.
@@ -416,6 +418,7 @@ class RunJournal(BaseCallbackHandler):
         self._llm_start_times[rid] = time.monotonic()
         self._llm_call_index += 1
         self._seen_llm_starts.add(rid)
+        self._remember_llm_attempt(rid, serialized=serialized, metadata=metadata, tags=tags, call_index=self._llm_call_index)
 
         logger.debug(
             "on_chat_model_start %s: tags=%s num_batches=%d message_counts=%s",
@@ -446,7 +449,12 @@ class RunJournal(BaseCallbackHandler):
 
     def on_llm_start(self, serialized: dict, prompts: list[str], *, run_id: UUID, parent_run_id: UUID | None = None, tags: list[str] | None = None, metadata: dict[str, Any] | None = None, **kwargs: Any) -> None:
         # Fallback: on_chat_model_start is preferred. This just tracks latency.
-        self._llm_start_times[str(run_id)] = time.monotonic()
+        rid = str(run_id)
+        self._llm_start_times[rid] = time.monotonic()
+        if rid not in self._seen_llm_starts:
+            self._llm_call_index += 1
+            self._seen_llm_starts.add(rid)
+        self._remember_llm_attempt(rid, serialized=serialized, metadata=metadata, tags=tags, call_index=self._llm_call_index)
 
     def on_llm_end(
         self,
@@ -508,6 +516,12 @@ class RunJournal(BaseCallbackHandler):
                 self._llm_call_index += 1
                 call_index = self._llm_call_index
                 self._seen_llm_starts.add(rid)
+                self._remember_llm_attempt(rid, serialized={}, metadata=None, tags=tags, call_index=call_index)
+            attempt = self._llm_attempts[rid]
+
+            response_metadata = getattr(message, "response_metadata", None) or {}
+            resolved_model = (response_metadata.get("model_name") or response_metadata.get("model")) if isinstance(response_metadata, Mapping) else None
+            provider_cost, provider_currency = self._provider_reported_cost(response, message, attempt.get("provider"))
 
             response_events.append(
                 self._make_event(
@@ -515,10 +529,17 @@ class RunJournal(BaseCallbackHandler):
                     category=LLM_AI_RESPONSE_EVENT.category,
                     content=message.model_dump(),
                     metadata={
-                        "caller": caller,
                         "usage": usage_dict,
                         "latency_ms": latency_ms,
-                        "llm_call_index": call_index,
+                        "llm_call_index": attempt["index"],
+                        "provider_attempt_id": rid,
+                        "attempt_status": "success",
+                        "caller": attempt["caller"],
+                        "provider": attempt.get("provider"),
+                        "requested_model": attempt.get("model"),
+                        "resolved_model": resolved_model,
+                        "provider_reported_cost": provider_cost,
+                        "provider_reported_currency": provider_currency,
                     },
                 )
             )
@@ -546,7 +567,6 @@ class RunJournal(BaseCallbackHandler):
                         self._lead_agent_tokens += total_tk
 
                     # Per-model bucket
-                    response_metadata = getattr(message, "response_metadata", None) or {}
                     per_call_model: str | None = None
                     if isinstance(response_metadata, Mapping):
                         per_call_model = response_metadata.get("model_name") or response_metadata.get("model")
@@ -565,12 +585,30 @@ class RunJournal(BaseCallbackHandler):
         if should_schedule_progress:
             self._schedule_progress_flush()
 
-    def on_llm_error(self, error: BaseException, *, run_id: UUID, **kwargs: Any) -> None:
-        self._llm_start_times.pop(str(run_id), None)
+    def on_llm_error(self, error: BaseException, *, run_id: UUID, tags: list[str] | None = None, **kwargs: Any) -> None:
+        rid = str(run_id)
+        start = self._llm_start_times.pop(rid, None)
+        if rid not in self._seen_llm_starts:
+            self._llm_call_index += 1
+            self._seen_llm_starts.add(rid)
+        self._remember_llm_attempt(rid, serialized={}, metadata=None, tags=tags, call_index=self._llm_call_index)
+        attempt = self._llm_attempts[rid]
         self._put(
             event_type=LLM_ERROR_EVENT.event_type,
             category=LLM_ERROR_EVENT.category,
             content=str(error),
+            metadata={
+                "provider_attempt_id": rid,
+                "llm_call_index": attempt["index"],
+                "attempt_status": "error",
+                "caller": attempt["caller"],
+                "provider": attempt.get("provider"),
+                "requested_model": attempt.get("model"),
+                "latency_ms": int((time.monotonic() - start) * 1000) if start else None,
+                "error_type": type(error).__name__,
+                "provider_reported_cost": None,
+                "provider_reported_currency": None,
+            },
         )
 
     def on_tool_start(self, serialized, input_str, *, run_id, parent_run_id=None, tags=None, metadata=None, inputs=None, **kwargs):
@@ -883,6 +921,45 @@ class RunJournal(BaseCallbackHandler):
         # themselves.
         return "lead_agent"
 
+    def _remember_llm_attempt(
+        self,
+        run_id: str,
+        *,
+        serialized: Mapping[str, Any],
+        metadata: Mapping[str, Any] | None,
+        tags: list[str] | None,
+        call_index: int,
+    ) -> None:
+        if run_id in self._llm_attempts:
+            return
+        raw_kwargs = serialized.get("kwargs") if isinstance(serialized.get("kwargs"), Mapping) else {}
+        provider = (metadata or {}).get("ls_provider") or raw_kwargs.get("model_provider") or raw_kwargs.get("provider")
+        model = (metadata or {}).get("ls_model_name") or raw_kwargs.get("model") or raw_kwargs.get("model_name")
+        self._llm_attempts[run_id] = {
+            "index": call_index,
+            "caller": self._identify_caller(tags),
+            "provider": str(provider) if provider else None,
+            "model": str(model) if model else None,
+        }
+
+    @staticmethod
+    def _provider_reported_cost(response: Any, message: Any, provider: str | None) -> tuple[float | None, str | None]:
+        mappings = [getattr(response, "llm_output", None), getattr(message, "response_metadata", None), getattr(message, "usage_metadata", None)]
+        for mapping in mappings:
+            if not isinstance(mapping, Mapping):
+                continue
+            for candidate in (mapping, mapping.get("token_usage"), mapping.get("usage")):
+                if not isinstance(candidate, Mapping):
+                    continue
+                raw_cost = candidate.get("cost_usd", candidate.get("cost", candidate.get("provider_cost")))
+                if isinstance(raw_cost, bool) or not isinstance(raw_cost, (int, float)) or raw_cost < 0:
+                    continue
+                currency = candidate.get("currency") or mapping.get("currency")
+                if currency is None and provider and provider.lower() == "openrouter":
+                    currency = "USD"
+                return float(raw_cost), str(currency).upper() if currency else None
+        return None, None
+
     def _record_model_usage(
         self,
         model_name: str | None,
@@ -1171,6 +1248,7 @@ class RunJournal(BaseCallbackHandler):
         self._counted_message_llm_run_ids.clear()
         self._llm_response_callers.clear()
         self._llm_start_times.clear()
+        self._llm_attempts.clear()
         self._seen_llm_starts.clear()
         self._current_run_tool_call_names.clear()
         self._persisted_tool_message_identities.clear()

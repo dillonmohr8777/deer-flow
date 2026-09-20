@@ -19,6 +19,7 @@ class McpTaskRow(Base):
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     user_id: Mapped[str] = mapped_column(String(64), index=True)
+    organization_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     thread_id: Mapped[str] = mapped_column(String(64), index=True)
     thread_incarnation: Mapped[str | None] = mapped_column(String(32), nullable=True)
     run_id: Mapped[str | None] = mapped_column(String(64), nullable=True)

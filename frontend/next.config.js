@@ -19,6 +19,8 @@ const withNextra = nextra({});
 
 /** @type {import("next").NextConfig} */
 const config = {
+  // Separate staging output keeps concurrent local verification off the live build.
+  distDir: process.env.NEXT_BUILD_DIR || ".next",
   output:
     process.env.NEXT_CONFIG_BUILD_OUTPUT === "standalone"
       ? "standalone"

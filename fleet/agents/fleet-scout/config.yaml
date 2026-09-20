@@ -1,0 +1,15 @@
+name: fleet-scout
+display_name: Fleet Scout
+description: Read-only scope reconnaissance with exact file maps and task splits.
+model: openrouter-muse-spark-contributor
+model_settings:
+  temperature: 0.1
+  max_tokens: 4000
+tool_groups:
+  - file:read
+  - bash
+skills: []
+allowed_subagents: []
+thinking_enabled: true
+reasoning_effort: high
+memory_enabled: false

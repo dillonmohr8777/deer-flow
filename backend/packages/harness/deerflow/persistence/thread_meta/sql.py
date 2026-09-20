@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm.attributes import flag_modified
 
 from deerflow.persistence.json_compat import json_match
+from deerflow.persistence.organizations.resolution import organization_from_owned_parent, private_organization_for_user
 from deerflow.persistence.thread_meta.base import PROJECT_FILTER_UNSET, THREAD_ARCHIVED_METADATA_KEY, THREAD_PINNED_METADATA_KEY, THREAD_PROJECT_METADATA_KEY, InvalidMetadataFilterError, ThreadMetaStore, _ProjectFilterUnset
 from deerflow.persistence.thread_meta.model import ThreadMetaRow
 from deerflow.runtime.user_context import AUTO, _AutoSentinel, resolve_user_id
@@ -66,8 +67,8 @@ class ThreadMetaRepository(ThreadMetaStore):
                 # its membership-clear and DELETE — either commits first (this
                 # read then finds no row) or waits for this transaction.
                 # RFC v2 §14.14: no dangling ``threads_meta.project_id``.
-                locked = await session.scalar(
-                    select(ProjectRow.id)
+                project = await session.scalar(
+                    select(ProjectRow)
                     .where(
                         ProjectRow.id == project_id,
                         ProjectRow.user_id == resolved_user_id,
@@ -75,13 +76,17 @@ class ThreadMetaRepository(ThreadMetaStore):
                     )
                     .with_for_update()
                 )
-                if locked is None:
+                if project is None:
                     raise ProjectNotAssignableError(project_id)
+                organization_id = organization_from_owned_parent(project, resolved_user_id, parent_name="project")
+            else:
+                organization_id = await private_organization_for_user(session, resolved_user_id)
             row = ThreadMetaRow(
                 thread_id=thread_id,
                 incarnation=uuid.uuid4().hex,
                 assistant_id=assistant_id,
                 user_id=resolved_user_id,
+                organization_id=organization_id,
                 display_name=display_name,
                 status="idle",
                 metadata_json=metadata or {},
@@ -99,15 +104,17 @@ class ThreadMetaRepository(ThreadMetaStore):
             ThreadMetaRow.__tablename__,
             column(ThreadMetaRow.thread_id.key),
             column(ThreadMetaRow.user_id.key),
+            column(ThreadMetaRow.organization_id.key),
         )
         async with self._sf() as session:
+            organization_id = await private_organization_for_user(session, owner)
             result = await session.execute(
                 update(claim_target)
                 .where(
                     claim_target.c.thread_id == thread_id,
                     claim_target.c.user_id.is_(None),
                 )
-                .values(user_id=owner)
+                .values(user_id=owner, organization_id=organization_id)
             )
             await session.commit()
             return result.rowcount > 0
@@ -135,8 +142,8 @@ class ThreadMetaRepository(ThreadMetaStore):
                 # its membership-clear and DELETE — either commits first (this
                 # read then finds no row) or waits for this transaction.
                 # RFC v2 §14.14: no dangling ``threads_meta.project_id``.
-                locked = await session.scalar(
-                    select(ProjectRow.id)
+                project = await session.scalar(
+                    select(ProjectRow)
                     .where(
                         ProjectRow.id == project_id,
                         ProjectRow.user_id == resolved_user_id,
@@ -144,14 +151,18 @@ class ThreadMetaRepository(ThreadMetaStore):
                     )
                     .with_for_update()
                 )
-                if locked is None:
+                if project is None:
                     await session.commit()
                     return False
+                organization_id = organization_from_owned_parent(project, resolved_user_id, parent_name="project")
+            else:
+                organization_id = await private_organization_for_user(session, resolved_user_id)
             stmt = (
                 update(ThreadMetaRow)
                 .where(ThreadMetaRow.thread_id == thread_id)
                 .values(
                     project_id=project_id,
+                    organization_id=organization_id,
                     # Explicit self-assignment: satisfies the column so the
                     # ``onupdate`` hook does not bump recency (pin precedent, G5).
                     updated_at=ThreadMetaRow.__table__.c.updated_at,
@@ -385,6 +396,13 @@ class ThreadMetaRepository(ThreadMetaStore):
             if row is None or (resolved_user_id is not None and row.user_id != resolved_user_id):
                 return
             row.user_id = owner_user_id
+            if row.project_id is None:
+                row.organization_id = await private_organization_for_user(session, owner_user_id)
+            else:
+                from deerflow.persistence.projects.model import ProjectRow
+
+                project = await session.get(ProjectRow, row.project_id, with_for_update=True)
+                row.organization_id = organization_from_owned_parent(project, owner_user_id, parent_name="project")
             row.updated_at = datetime.now(UTC)
             await session.commit()
 

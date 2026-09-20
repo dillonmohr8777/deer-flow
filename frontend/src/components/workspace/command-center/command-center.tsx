@@ -1,0 +1,671 @@
+"use client";
+
+import {
+  ArrowDownToLine,
+  ArrowRight,
+  ArrowUpRight,
+  Bot,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Circle,
+  CircleStop,
+  Clock3,
+  Layers3,
+  Network,
+  Plus,
+  RefreshCw,
+  Search,
+  ShieldCheck,
+  X,
+} from "lucide-react";
+import Image from "next/image";
+import Link from "next/link";
+import { useState } from "react";
+
+import { SidebarTrigger } from "@/components/ui/sidebar";
+import { ThreadSubagentBatches } from "@/components/workspace/thread-subagent-batches";
+import { useAgents } from "@/core/agents";
+import { useAuth } from "@/core/auth/AuthProvider";
+import { hasPermission, PERMISSIONS } from "@/core/auth/permissions";
+import {
+  useCancelConsoleRun,
+  useConsoleRuns,
+  useConsoleStats,
+  useConsoleUsage,
+  type ConsoleRunItem,
+} from "@/core/console";
+import { useSubagents } from "@/core/subagents";
+import { pathOfThread } from "@/core/threads/utils";
+
+import { AgentTopology } from "./agent-topology";
+import {
+  ArtifactLibraryView,
+  ClientSpacesView,
+  WorkflowsView,
+} from "./business-views";
+
+import styles from "./command-center.module.css";
+
+const number = (value: number) => new Intl.NumberFormat("en-US").format(value);
+const active = (status: string) => status === "pending" || status === "running";
+const tabs = [
+  "Mission Control",
+  "Agent Studio",
+  "Jobs",
+  "Workflows",
+  "Client Spaces",
+  "Business Intelligence",
+  "Artifact Library",
+] as const;
+type View = (typeof tabs)[number];
+
+function duration(seconds: number | null) {
+  if (seconds === null) return "Not recorded";
+  return seconds < 60
+    ? `${Math.round(seconds)}s`
+    : `${Math.floor(seconds / 60)}m ${Math.round(seconds % 60)}s`;
+}
+
+function money(value: number | null | undefined, currency?: string | null) {
+  if (value == null || !currency) return "Not priced";
+  try {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency,
+      maximumFractionDigits: 4,
+    }).format(value);
+  } catch {
+    return `${value.toFixed(4)} ${currency}`;
+  }
+}
+
+function Status({ status }: { status: string }) {
+  return (
+    <span className={styles.status} data-status={status}>
+      {status === "success" ? (
+        <Check size={12} />
+      ) : (
+        <Circle size={9} fill="currentColor" />
+      )}
+      {status === "success"
+        ? "Completed"
+        : status.charAt(0).toUpperCase() + status.slice(1)}
+    </span>
+  );
+}
+
+export function CommandCenter() {
+  const { user } = useAuth();
+  const canReadRuns = Boolean(user) && hasPermission(user, "runs:read");
+  const [view, setView] = useState<View>("Mission Control");
+  const [filter, setFilter] = useState("");
+  const [offset, setOffset] = useState(0);
+  const [search, setSearch] = useState("");
+  const [selectedAgentName, setSelectedAgentName] = useState<string | null>(
+    null,
+  );
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+  const [cancelConfirm, setCancelConfirm] = useState(false);
+  const stats = useConsoleStats();
+  const runs = useConsoleRuns({ status: filter || undefined, offset });
+  const usage = useConsoleUsage();
+  const cancel = useCancelConsoleRun();
+  const {
+    subagents,
+    isLoading: agentsLoading,
+    error: agentsError,
+  } = useSubagents();
+  const { agents } = useAgents();
+  const lead =
+    agents.find((agent) => agent.name === "dillon-brain") ?? agents[0];
+  const startPath = lead
+    ? pathOfThread("new", { agent_name: lead.name })
+    : "/workspace/chats/new";
+  const selectedAgent = subagents.find(
+    (agent) => agent.name === selectedAgentName,
+  );
+  const selectedRun = runs.data?.runs.find(
+    (run) => run.run_id === selectedRunId,
+  );
+  const visibleRuns =
+    runs.data?.runs.filter((run) =>
+      `${run.thread_title ?? ""} ${run.model_name ?? ""} ${run.run_id}`
+        .toLowerCase()
+        .includes(search.toLowerCase()),
+    ) ?? [];
+  const displayedAgents = subagents.filter(
+    (agent) => agent.source === "managed",
+  );
+  const roster = displayedAgents.length ? displayedAgents : subagents;
+
+  function openRun(run: ConsoleRunItem) {
+    setSelectedRunId(run.run_id);
+    setCancelConfirm(false);
+    cancel.reset();
+  }
+
+  function runPath(run: ConsoleRunItem) {
+    const agentName = agents.find(
+      (agent) => agent.name === run.assistant_id,
+    )?.name;
+    return pathOfThread(
+      run.thread_id,
+      agentName ? { agent_name: agentName } : undefined,
+    );
+  }
+
+  const refresh = () => {
+    void stats.refetch();
+    void runs.refetch();
+    void usage.refetch();
+  };
+
+  const jobList = !canReadRuns ? (
+    <p className={styles.notice} role="status">
+      Run history is unavailable for this account.
+    </p>
+  ) : (
+    <section className={styles.jobs} aria-labelledby="jobs-heading">
+      <div className={styles.sectionHead}>
+        <div>
+          <h2 id="jobs-heading">
+            {view === "Jobs" ? "Execution history" : "Latest assignments"}
+          </h2>
+          <p>Recorded runs across your conversations.</p>
+        </div>
+        <button
+          className={styles.iconButton}
+          onClick={refresh}
+          aria-label="Refresh work"
+          disabled={runs.isFetching}
+        >
+          <RefreshCw
+            size={17}
+            className={runs.isFetching ? styles.spin : undefined}
+          />
+        </button>
+      </div>
+      <div className={styles.filters}>
+        <label className={styles.search}>
+          <Search size={16} />
+          <input
+            aria-label="Search loaded jobs"
+            placeholder="Search this page"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+          />
+        </label>
+        <select
+          aria-label="Filter jobs by status"
+          value={filter}
+          onChange={(event) => {
+            setFilter(event.target.value);
+            setOffset(0);
+            setSelectedRunId(null);
+          }}
+        >
+          <option value="">All states</option>
+          <option value="running">Running</option>
+          <option value="pending">Pending</option>
+          <option value="success">Completed</option>
+          <option value="error">Error</option>
+          <option value="interrupted">Interrupted</option>
+          <option value="timeout">Timeout</option>
+        </select>
+      </div>
+      {runs.isError ? (
+        <div className={styles.empty} role="alert">
+          <h3>Work history is unavailable</h3>
+          <p>{runs.error.message}</p>
+          <button onClick={() => void runs.refetch()}>Try again</button>
+        </div>
+      ) : runs.isLoading ? (
+        <div className={styles.empty} role="status">
+          Loading your work history…
+        </div>
+      ) : visibleRuns.length === 0 ? (
+        <div className={styles.empty}>
+          <Layers3 size={28} />
+          <h3>
+            {search || filter
+              ? "No matching assignments"
+              : "Your first mission starts here"}
+          </h3>
+          <p>
+            {search || filter
+              ? "Change the filter or search to see more work."
+              : "Start a conversation with your lead agent. Its execution receipt will appear here."}
+          </p>
+          {!search && !filter && (
+            <Link className={styles.textLink} href={startPath}>
+              Start a mission <ArrowRight size={15} />
+            </Link>
+          )}
+        </div>
+      ) : (
+        <div className={styles.jobRows}>
+          {visibleRuns.map((run) => (
+            <button
+              className={styles.jobRow}
+              key={run.run_id}
+              aria-pressed={selectedRunId === run.run_id}
+              onClick={() => openRun(run)}
+            >
+              <span className={styles.jobIcon}>
+                {active(run.status) ? (
+                  <Clock3 size={18} />
+                ) : run.status === "success" ? (
+                  <Check size={18} />
+                ) : (
+                  <CircleStop size={18} />
+                )}
+              </span>
+              <span className={styles.jobName}>
+                <strong>{run.thread_title ?? "Untitled assignment"}</strong>
+                <small>
+                  {run.model_name ?? "Model not recorded"} ·{" "}
+                  {number(run.total_tokens)} tokens
+                </small>
+              </span>
+              <Status status={run.status} />
+              <ChevronRight size={16} />
+            </button>
+          ))}
+        </div>
+      )}
+      <div className={styles.pagination}>
+        <span>Page {Math.floor(offset / 20) + 1} · up to 20 runs</span>
+        <div>
+          <button
+            aria-label="Previous jobs page"
+            disabled={offset === 0 || runs.isFetching}
+            onClick={() => {
+              setOffset(Math.max(0, offset - 20));
+              setSelectedRunId(null);
+            }}
+          >
+            <ChevronLeft size={16} />
+          </button>
+          <button
+            aria-label="Next jobs page"
+            disabled={!runs.data?.has_more || runs.isFetching}
+            onClick={() => {
+              setOffset(offset + 20);
+              setSelectedRunId(null);
+            }}
+          >
+            <ChevronRight size={16} />
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+
+  const team = (
+    <section className={styles.team} aria-labelledby="team-heading">
+      <div className={styles.sectionHead}>
+        <div>
+          <h2 id="team-heading">Your agent team</h2>
+          <p>Specialists, connected by a common mission.</p>
+        </div>
+        <Network size={21} />
+      </div>
+      <AgentTopology
+        leadLabel={lead?.display_name ?? lead?.name ?? "Lead agent"}
+        leadHref={startPath}
+        roster={roster}
+        selectedName={selectedAgentName}
+        loading={agentsLoading}
+        error={Boolean(agentsError)}
+        onSelect={setSelectedAgentName}
+      />
+      {selectedAgent ? (
+        <div className={styles.agentDetail}>
+          <div className={styles.sectionHead}>
+            <h3>{selectedAgent.display_name ?? selectedAgent.name}</h3>
+            <button
+              className={styles.iconButton}
+              aria-label="Close specialist details"
+              onClick={() => setSelectedAgentName(null)}
+            >
+              <X size={16} />
+            </button>
+          </div>
+          <p>{selectedAgent.description}</p>
+          <dl>
+            <div>
+              <dt>Model</dt>
+              <dd>
+                {selectedAgent.model === "inherit"
+                  ? "Inherits lead model"
+                  : selectedAgent.model}
+              </dd>
+            </div>
+            <div>
+              <dt>Execution limits</dt>
+              <dd>
+                {selectedAgent.max_turns} turns ·{" "}
+                {selectedAgent.timeout_seconds}s timeout
+              </dd>
+            </div>
+            <div>
+              <dt>Tools</dt>
+              <dd>{selectedAgent.tools?.join(", ") ?? "Runtime defaults"}</dd>
+            </div>
+          </dl>
+        </div>
+      ) : (
+        <p className={styles.agentHint}>
+          Select a specialist to inspect its role, tools and limits.
+        </p>
+      )}
+    </section>
+  );
+
+  return (
+    <main className={styles.root}>
+      <header className={styles.topbar}>
+        <div className={styles.brand}>
+          <SidebarTrigger />
+          <Image
+            src="/momentum/wordmark.png"
+            alt="Momentum"
+            width={800}
+            height={172}
+            style={{ height: "auto" }}
+            priority
+          />
+          <span>Command Center</span>
+        </div>
+        <span className={styles.account}>Your workspace</span>
+      </header>
+      <div className={styles.content}>
+        <div className={styles.heading}>
+          <div>
+            <h1>{view}</h1>
+            <p>Give your ambition a team. Keep the work in view.</p>
+          </div>
+          <Link className={styles.primary} href={startPath}>
+            <Plus size={17} />
+            Start a mission
+          </Link>
+        </div>
+        <nav className={styles.tabs} aria-label="Command Center views">
+          {tabs.map((tab) => (
+            <button
+              key={tab}
+              aria-current={view === tab ? "page" : undefined}
+              onClick={() => {
+                setView(tab);
+                setSelectedRunId(null);
+              }}
+            >
+              {tab}
+            </button>
+          ))}
+        </nav>
+        {!canReadRuns ? (
+          <p className={styles.notice} role="status">
+            Run history and usage are unavailable for this account.
+          </p>
+        ) : stats.isError ? (
+          <div className={styles.notice} role="alert">
+            Workspace totals could not be loaded.{" "}
+            <button onClick={() => void stats.refetch()}>Retry</button>
+          </div>
+        ) : (
+          <div
+            className={styles.metrics}
+            aria-label="Recorded workspace totals"
+          >
+            {[
+              { label: "Active runs", value: stats.data?.active_runs },
+              { label: "Recorded runs", value: stats.data?.total_runs },
+              { label: "Errors & timeouts", value: stats.data?.failed_runs },
+              { label: "Recorded tokens", value: stats.data?.total_tokens },
+            ].map((metric) => (
+              <div key={metric.label}>
+                <span>{metric.label}</span>
+                <strong>
+                  {stats.isLoading || metric.value === undefined
+                    ? "—"
+                    : number(metric.value)}
+                </strong>
+              </div>
+            ))}
+          </div>
+        )}
+        {view === "Mission Control" ? (
+          <>
+            <div className={styles.overview}>
+              {team}
+              {jobList}
+            </div>
+            <section
+              className={styles.destinations}
+              aria-label="Workspace tools"
+            >
+              <Link href="/workspace/agents">
+                <Bot size={20} />
+                <div>
+                  <strong>Agent workspace</strong>
+                  <span>Configure your lead agents</span>
+                </div>
+                <ArrowUpRight size={17} />
+              </Link>
+              <Link href="/workspace/scheduled-tasks">
+                <Clock3 size={20} />
+                <div>
+                  <strong>Scheduled work</strong>
+                  <span>Inspect schedules and run history</span>
+                </div>
+                <ArrowUpRight size={17} />
+              </Link>
+              <Link href="/workspace/capabilities">
+                <ShieldCheck size={20} />
+                <div>
+                  <strong>Connected capabilities</strong>
+                  <span>Manage skills and integrations</span>
+                </div>
+                <ArrowUpRight size={17} />
+              </Link>
+            </section>
+          </>
+        ) : null}
+        {view === "Agent Studio" ? (
+          <div className={styles.studio}>{team}</div>
+        ) : null}
+        {view === "Jobs" ? jobList : null}
+        {view === "Workflows" ? <WorkflowsView /> : null}
+        {view === "Client Spaces" ? <ClientSpacesView /> : null}
+        {view === "Artifact Library" ? <ArtifactLibraryView /> : null}
+        {view === "Business Intelligence" ? (
+          <section className={styles.usage}>
+            <div className={styles.sectionHead}>
+              <div>
+                <h2>Operational intelligence</h2>
+                <p>Last 14 days · current account only</p>
+              </div>
+              <strong>
+                {money(usage.data?.total_cost, usage.data?.currency)}
+              </strong>
+            </div>
+            {!canReadRuns ? (
+              <p role="status">Usage is unavailable for this account.</p>
+            ) : usage.isError ? (
+              <div className={styles.empty} role="alert">
+                <p>Usage could not be loaded.</p>
+                <button onClick={() => void usage.refetch()}>Try again</button>
+              </div>
+            ) : usage.isLoading ? (
+              <p role="status">Loading usage…</p>
+            ) : (
+              <>
+                <div
+                  className={styles.usageChart}
+                  role="img"
+                  aria-label="Daily token usage for the last 14 days"
+                >
+                  {usage.data?.days.map((day) => (
+                    <div
+                      key={day.date}
+                      title={`${day.date}: ${number(day.total_tokens)} tokens, ${day.runs} runs`}
+                    >
+                      <span>{number(day.total_tokens)}</span>
+                      <i
+                        style={{
+                          height: `${Math.max(2, (day.total_tokens / Math.max(1, ...usage.data.days.map((item) => item.total_tokens))) * 125)}px`,
+                        }}
+                      />
+                      <small>{day.date.slice(5)}</small>
+                    </div>
+                  ))}
+                </div>
+                <div className={styles.tableWrap}>
+                  <table>
+                    <caption>Model usage in this period</caption>
+                    <thead>
+                      <tr>
+                        <th>Model</th>
+                        <th>Tokens</th>
+                        <th>Runs</th>
+                        <th>Estimated cost</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {Object.entries(usage.data?.by_model ?? {}).map(
+                        ([model, item]) => (
+                          <tr key={model}>
+                            <th scope="row">{model}</th>
+                            <td>{number(item.tokens)}</td>
+                            <td>{number(item.runs)}</td>
+                            <td>{money(item.cost, usage.data?.currency)}</td>
+                          </tr>
+                        ),
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+                {Object.keys(usage.data?.by_model ?? {}).length === 0 && (
+                  <p>No model usage was recorded in this period.</p>
+                )}
+                <p className={styles.diagramNote}>
+                  Cost estimates cover priced models only. Unpriced usage is not
+                  free; these figures are not your provider balance or invoice.
+                  Client revenue, margins and billing are not connected.
+                </p>
+              </>
+            )}
+          </section>
+        ) : null}
+        <footer className={styles.footer}>
+          <span>Momentum · Built for the work ahead.</span>
+          <span>Powered by DeerFlow · No model calls from this dashboard</span>
+        </footer>
+      </div>
+      {selectedRun && (
+        <aside
+          className={styles.runDetail}
+          aria-labelledby="run-detail-heading"
+        >
+          <div className={styles.sectionHead}>
+            <h2 id="run-detail-heading">Execution receipt</h2>
+            <button
+              className={styles.iconButton}
+              aria-label="Close execution receipt"
+              onClick={() => setSelectedRunId(null)}
+            >
+              <X size={20} />
+            </button>
+          </div>
+          <Status status={selectedRun.status} />
+          <h3>{selectedRun.thread_title ?? "Untitled assignment"}</h3>
+          <dl>
+            <div>
+              <dt>Model</dt>
+              <dd>{selectedRun.model_name ?? "Not recorded"}</dd>
+            </div>
+            <div>
+              <dt>Duration</dt>
+              <dd>{duration(selectedRun.duration_seconds)}</dd>
+            </div>
+            <div>
+              <dt>Tokens</dt>
+              <dd>{number(selectedRun.total_tokens)}</dd>
+            </div>
+            <div>
+              <dt>Estimated cost</dt>
+              <dd>{money(selectedRun.cost, stats.data?.currency)}</dd>
+            </div>
+            <div>
+              <dt>Run ID</dt>
+              <dd>{selectedRun.run_id}</dd>
+            </div>
+            <div>
+              <dt>Started</dt>
+              <dd>
+                {selectedRun.created_at
+                  ? new Date(selectedRun.created_at).toLocaleString()
+                  : "Not recorded"}
+              </dd>
+            </div>
+          </dl>
+          {selectedRun.error && (
+            <p className={styles.notice} role="alert">
+              {selectedRun.error}
+            </p>
+          )}
+          <Link className={styles.primary} href={runPath(selectedRun)}>
+            Open conversation &amp; artifacts <ArrowRight size={16} />
+          </Link>
+          <div className={styles.batchControls}>
+            <ThreadSubagentBatches threadId={selectedRun.thread_id} />
+          </div>
+          {active(selectedRun.status) &&
+            hasPermission(user, PERMISSIONS.RUNS_CANCEL) && (
+              <div className={styles.cancel}>
+                {cancelConfirm ? (
+                  <>
+                    <p>Stop this run? Completed tool actions will remain.</p>
+                    <button
+                      disabled={cancel.isPending}
+                      onClick={() =>
+                        cancel.mutate(
+                          {
+                            threadId: selectedRun.thread_id,
+                            runId: selectedRun.run_id,
+                          },
+                          { onSuccess: () => setCancelConfirm(false) },
+                        )
+                      }
+                    >
+                      <CircleStop size={16} />
+                      {cancel.isPending ? "Requesting stop…" : "Confirm stop"}
+                    </button>
+                    <button
+                      disabled={cancel.isPending}
+                      onClick={() => setCancelConfirm(false)}
+                    >
+                      Keep running
+                    </button>
+                  </>
+                ) : (
+                  <button onClick={() => setCancelConfirm(true)}>
+                    <CircleStop size={16} />
+                    Stop run
+                  </button>
+                )}
+              </div>
+            )}
+          {cancel.isError && <p role="alert">{cancel.error.message}</p>}
+          <p className={styles.diagramNote}>
+            <ArrowDownToLine size={14} /> Artifact downloads and complete task
+            timelines are available in the conversation. Batch pause/resume
+            appears when supported by the runtime.
+          </p>
+        </aside>
+      )}
+    </main>
+  );
+}

@@ -78,6 +78,7 @@ import { useUpdateSubtask } from "@/core/tasks/context";
 import { resolveSubtaskDescription } from "@/core/tasks/presentation";
 import {
   derivePendingSubtaskStatus,
+  hasSubtaskToolResult,
   parseSubtaskResult,
 } from "@/core/tasks/subtask-result";
 import type { AgentThreadState } from "@/core/threads";
@@ -487,19 +488,22 @@ export function MessageList({
     null,
   );
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
-  const hasActiveAssistantText = useMemo(() => {
-    let lastHumanIndex = -1;
+  const currentTurnStartGroupIndex = useMemo(() => {
     for (let i = groupedMessages.length - 1; i >= 0; i--) {
       if (groupedMessages[i]?.type === "human") {
-        lastHumanIndex = i;
-        break;
+        return i;
       }
     }
-    if (lastHumanIndex === -1) return false;
-    return groupedMessages
-      .slice(lastHumanIndex)
-      .some((g) => g.type === "assistant");
+    return -1;
   }, [groupedMessages]);
+  const hasActiveAssistantText = useMemo(
+    () =>
+      currentTurnStartGroupIndex >= 0 &&
+      groupedMessages
+        .slice(currentTurnStartGroupIndex + 1)
+        .some((group) => group.type === "assistant"),
+    [currentTurnStartGroupIndex, groupedMessages],
+  );
   const updateSubtask = useUpdateSubtask();
   const lastGroupIndex = groupedMessages.length - 1;
   const previousTurnUsageStateRef = useRef<AssistantTurnUsageState | undefined>(
@@ -1101,8 +1105,27 @@ export function MessageList({
             renderGroup={(group, groupIndex) => {
               const turnUsageMessages =
                 turnUsageMessagesByGroupIndex[groupIndex];
+              const hasUnresolvedCurrentSubtask =
+                group.type === "assistant:subagent" &&
+                groupIndex > currentTurnStartGroupIndex &&
+                group.messages.some(
+                  (message) =>
+                    message.type === "ai" &&
+                    message.tool_calls?.some(
+                      (toolCall) =>
+                        toolCall.name === "task" &&
+                        Boolean(toolCall.id) &&
+                        !hasSubtaskToolResult(toolCall.id, group.messages),
+                    ),
+                );
               const groupIsLoading =
-                thread.isLoading && groupIndex === lastGroupIndex;
+                thread.isLoading &&
+                (groupIndex === lastGroupIndex ||
+                  isAssistantMessageGroupStreaming(
+                    group.messages,
+                    streamingMessages,
+                  ) ||
+                  hasUnresolvedCurrentSubtask);
 
               if (group.type === "human" || group.type === "assistant") {
                 return withRunDuration(

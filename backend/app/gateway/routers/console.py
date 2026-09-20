@@ -25,6 +25,7 @@ from app.gateway.deps import get_current_user
 from deerflow.config import get_app_config
 from deerflow.config.agents_config import list_custom_agents
 from deerflow.persistence.engine import get_session_factory
+from deerflow.persistence.models.run_event import RunEventRow
 from deerflow.persistence.run.model import RunRow
 from deerflow.persistence.thread_meta.model import ThreadMetaRow
 
@@ -78,6 +79,39 @@ class ConsoleRunsResponse(BaseModel):
     """Paginated cross-thread run listing, newest first."""
 
     runs: list[ConsoleRunItem]
+    has_more: bool
+
+
+class ConsoleUsageLedgerItem(BaseModel):
+    """One durable provider attempt from the run journal."""
+
+    event_id: int
+    run_id: str
+    thread_id: str
+    organization_id: str | None = None
+    assistant_id: str | None = None
+    provider_attempt_id: str | None = None
+    llm_call_index: int | None = None
+    attempt_status: str
+    caller: str | None = None
+    provider: str | None = None
+    requested_model: str | None = None
+    resolved_model: str | None = None
+    input_tokens: int = 0
+    output_tokens: int = 0
+    total_tokens: int = 0
+    cache_read_tokens: int = 0
+    latency_ms: int | None = None
+    provider_reported_cost: float | None = None
+    provider_reported_currency: str | None = None
+    estimated_cost: float | None = None
+    estimated_currency: str | None = None
+    error_type: str | None = None
+    created_at: datetime | None = None
+
+
+class ConsoleUsageLedgerResponse(BaseModel):
+    attempts: list[ConsoleUsageLedgerItem]
     has_more: bool
 
 
@@ -415,6 +449,80 @@ async def console_runs(
             )
         )
     return ConsoleRunsResponse(runs=items, has_more=has_more)
+
+
+@router.get(
+    "/usage-ledger",
+    response_model=ConsoleUsageLedgerResponse,
+    summary="List Provider Attempts",
+    description="Durable per-attempt usage and cost evidence for the current user's runs, newest first.",
+)
+@require_permission("runs", "read")
+async def console_usage_ledger(
+    request: Request,
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    run_id: str | None = Query(default=None, min_length=1, description="Filter attempts to one run"),
+) -> ConsoleUsageLedgerResponse:
+    sf = _session_factory_or_503()
+    user_id = await get_current_user(request)
+
+    stmt = (
+        select(RunEventRow, RunRow)
+        .join(RunRow, (RunRow.run_id == RunEventRow.run_id) & (RunRow.thread_id == RunEventRow.thread_id))
+        .where(RunRow.operation_kind == "run", RunEventRow.event_type.in_(("llm.ai.response", "llm.error")))
+        .order_by(RunEventRow.created_at.desc(), RunEventRow.id.desc())
+        .limit(limit + 1)
+        .offset(offset)
+    )
+    if user_id:
+        stmt = stmt.where(RunRow.user_id == user_id)
+    if run_id:
+        stmt = stmt.where(RunRow.run_id == run_id)
+
+    async with sf() as session:
+        rows = (await session.execute(stmt)).all()
+
+    pricing = _build_pricing_map()
+    items: list[ConsoleUsageLedgerItem] = []
+    for event, run in rows[:limit]:
+        metadata = event.event_metadata if isinstance(event.event_metadata, dict) else {}
+        usage = metadata.get("usage") if isinstance(metadata.get("usage"), dict) else {}
+        input_tokens = int(usage.get("input_tokens") or 0)
+        output_tokens = int(usage.get("output_tokens") or 0)
+        total_tokens = int(usage.get("total_tokens") or input_tokens + output_tokens)
+        cache_read_tokens = int(usage.get("cache_read_tokens") or 0)
+        model = metadata.get("resolved_model") or metadata.get("requested_model")
+        price = _lookup_pricing(pricing, model)
+        estimated_cost = _token_cost(input_tokens, output_tokens, price, cache_read_tokens) if price and event.event_type == "llm.ai.response" else None
+        items.append(
+            ConsoleUsageLedgerItem(
+                event_id=event.id,
+                run_id=event.run_id,
+                thread_id=event.thread_id,
+                organization_id=run.organization_id,
+                assistant_id=run.assistant_id,
+                provider_attempt_id=metadata.get("provider_attempt_id"),
+                llm_call_index=metadata.get("llm_call_index"),
+                attempt_status=metadata.get("attempt_status") or ("error" if event.event_type == "llm.error" else "success"),
+                caller=metadata.get("caller"),
+                provider=metadata.get("provider"),
+                requested_model=metadata.get("requested_model"),
+                resolved_model=metadata.get("resolved_model"),
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                total_tokens=total_tokens,
+                cache_read_tokens=cache_read_tokens,
+                latency_ms=metadata.get("latency_ms"),
+                provider_reported_cost=metadata.get("provider_reported_cost"),
+                provider_reported_currency=metadata.get("provider_reported_currency"),
+                estimated_cost=round(estimated_cost, 6) if estimated_cost is not None else None,
+                estimated_currency=price.currency if estimated_cost is not None else None,
+                error_type=metadata.get("error_type"),
+                created_at=_as_utc(event.created_at),
+            )
+        )
+    return ConsoleUsageLedgerResponse(attempts=items, has_more=len(rows) > limit)
 
 
 @router.get(

@@ -12,6 +12,9 @@ from sqlalchemy import case, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from deerflow.persistence.feedback.model import FeedbackRow
+from deerflow.persistence.organizations.resolution import organization_from_owned_parent
+from deerflow.persistence.run.model import RunRow
+from deerflow.persistence.thread_meta.model import ThreadMetaRow
 from deerflow.runtime.user_context import AUTO, _AutoSentinel, resolve_user_id
 from deerflow.utils.time import coerce_iso
 
@@ -54,6 +57,15 @@ class FeedbackRepository:
             created_at=datetime.now(UTC),
         )
         async with self._sf() as session:
+            thread = (await session.execute(select(ThreadMetaRow).where(ThreadMetaRow.thread_id == thread_id).with_for_update())).scalar_one_or_none()
+            row.organization_id = organization_from_owned_parent(thread, resolved_user_id, parent_name="thread")
+            run = (await session.execute(select(RunRow).where(RunRow.run_id == run_id).with_for_update())).scalar_one_or_none()
+            if run is not None:
+                if run.thread_id != thread_id:
+                    raise ValueError("run belongs to a different thread")
+                run_organization_id = organization_from_owned_parent(run, resolved_user_id, parent_name="run")
+                if row.organization_id is not None and run_organization_id != row.organization_id:
+                    raise ValueError("run has conflicting organization ownership")
             session.add(row)
             await session.commit()
             await session.refresh(row)
@@ -138,6 +150,15 @@ class FeedbackRepository:
             raise ValueError(f"rating must be +1 or -1, got {rating}")
         resolved_user_id = resolve_user_id(user_id, method_name="FeedbackRepository.upsert")
         async with self._sf() as session:
+            thread = (await session.execute(select(ThreadMetaRow).where(ThreadMetaRow.thread_id == thread_id).with_for_update())).scalar_one_or_none()
+            organization_id = organization_from_owned_parent(thread, resolved_user_id, parent_name="thread")
+            run = (await session.execute(select(RunRow).where(RunRow.run_id == run_id).with_for_update())).scalar_one_or_none()
+            if run is not None:
+                if run.thread_id != thread_id:
+                    raise ValueError("run belongs to a different thread")
+                run_organization_id = organization_from_owned_parent(run, resolved_user_id, parent_name="run")
+                if organization_id is not None and run_organization_id != organization_id:
+                    raise ValueError("run has conflicting organization ownership")
             stmt = select(FeedbackRow).where(
                 FeedbackRow.thread_id == thread_id,
                 FeedbackRow.run_id == run_id,
@@ -149,12 +170,15 @@ class FeedbackRepository:
                 row.rating = rating
                 row.comment = comment
                 row.created_at = datetime.now(UTC)
+                if organization_id is not None:
+                    row.organization_id = organization_id
             else:
                 row = FeedbackRow(
                     feedback_id=str(uuid.uuid4()),
                     run_id=run_id,
                     thread_id=thread_id,
                     user_id=resolved_user_id,
+                    organization_id=organization_id,
                     rating=rating,
                     comment=comment,
                     created_at=datetime.now(UTC),

@@ -11,6 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from deerflow.mcp.tasks import ATTENTION_TASK_STATUSES, POLLABLE_TASK_STATUSES, TERMINAL_TASK_STATUSES
 from deerflow.persistence.mcp_tasks.model import McpTaskRow
+from deerflow.persistence.organizations.resolution import organization_from_owned_parent
+from deerflow.persistence.run.model import RunRow
 from deerflow.persistence.thread_meta.model import ThreadMetaRow
 from deerflow.utils.time import coerce_iso
 
@@ -154,6 +156,16 @@ class McpTaskRepository:
         )
         _record_event_if_changed(row, tracking_degraded=False, now=now)
         async with self._sf() as session:
+            thread = await session.get(ThreadMetaRow, thread_id, with_for_update=session.get_bind().dialect.name != "sqlite")
+            row.organization_id = organization_from_owned_parent(thread, user_id, parent_name="thread")
+            if run_id is not None:
+                run = await session.get(RunRow, run_id, with_for_update=session.get_bind().dialect.name != "sqlite")
+                if run is not None:
+                    if run.thread_id != thread_id:
+                        raise ValueError("run belongs to a different thread")
+                    run_organization_id = organization_from_owned_parent(run, user_id, parent_name="run")
+                    if row.organization_id is not None and run_organization_id != row.organization_id:
+                        raise ValueError("run has conflicting organization ownership")
             matching_thread = select(ThreadMetaRow.incarnation).where(
                 ThreadMetaRow.thread_id == thread_id,
                 or_(ThreadMetaRow.user_id == user_id, ThreadMetaRow.user_id.is_(None)),

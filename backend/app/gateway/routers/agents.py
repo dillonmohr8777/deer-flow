@@ -50,6 +50,7 @@ class AgentResponse(BaseModel):
     model_settings: AgentModelSettings | None = Field(default=None, description="Per-agent sampling overrides (temperature / max_tokens)")
     thinking_enabled: bool | None = Field(default=None, description="Per-agent thinking-mode default (None = runtime default)")
     reasoning_effort: ReasoningEffort | None = Field(default=None, description="Per-agent reasoning-effort default (None = runtime default)")
+    memory_enabled: bool = Field(default=True, description="Whether this agent may use memory")
     soul: str | None = Field(default=None, description="SOUL.md content")
 
 
@@ -72,6 +73,7 @@ class AgentCreateRequest(BaseModel):
     model_settings: AgentModelSettings | None = Field(default=None, description="Per-agent sampling overrides (temperature / max_tokens)")
     thinking_enabled: bool | None = Field(default=None, description="Per-agent thinking-mode default (None = runtime default)")
     reasoning_effort: ReasoningEffort | None = Field(default=None, description="Per-agent reasoning-effort default (None = runtime default)")
+    memory_enabled: bool = Field(default=True, description="Whether this agent may use memory")
     soul: str = Field(default="", description="SOUL.md content — agent personality and behavioral guardrails")
 
 
@@ -87,6 +89,7 @@ class AgentUpdateRequest(BaseModel):
     model_settings: AgentModelSettings | None = Field(default=None, description="Updated per-agent sampling overrides")
     thinking_enabled: bool | None = Field(default=None, description="Updated per-agent thinking-mode default")
     reasoning_effort: ReasoningEffort | None = Field(default=None, description="Updated per-agent reasoning-effort default")
+    memory_enabled: bool = Field(default=True, description="Whether this agent may use memory")
     soul: str | None = Field(default=None, description="Updated SOUL.md content")
 
 
@@ -202,6 +205,7 @@ def _agent_config_to_response(agent_cfg: AgentConfig, include_soul: bool = False
         model_settings=agent_cfg.model_settings,
         thinking_enabled=agent_cfg.thinking_enabled,
         reasoning_effort=agent_cfg.reasoning_effort,
+        memory_enabled=agent_cfg.memory_enabled,
         soul=soul,
     )
 
@@ -343,6 +347,8 @@ async def create_agent_endpoint(request: AgentCreateRequest) -> AgentResponse:
         config_data["skills"] = request.skills
     if request.allowed_subagents is not None:
         config_data["allowed_subagents"] = request.allowed_subagents
+    if not request.memory_enabled:
+        config_data["memory_enabled"] = False
     # model / model_settings / thinking_enabled / reasoning_effort (issue #4336).
     _apply_model_behavior(config_data, request)
 
@@ -422,7 +428,7 @@ async def update_agent(name: str, request: AgentUpdateRequest) -> AgentResponse:
         # Use model_fields_set to distinguish "field omitted" from "explicitly set to null".
         # This is critical for skills where None means "inherit all" (not "don't change").
         fields_set = request.model_fields_set
-        config_changed = bool(fields_set & ({"display_name", "description", "tool_groups", "skills", "allowed_subagents"} | set(_MODEL_BEHAVIOR_FIELDS)))
+        config_changed = bool(fields_set & ({"display_name", "description", "tool_groups", "skills", "allowed_subagents", "memory_enabled"} | set(_MODEL_BEHAVIOR_FIELDS)))
 
         updated: dict | None = None
         if config_changed:
@@ -449,6 +455,8 @@ async def update_agent(name: str, request: AgentUpdateRequest) -> AgentResponse:
             new_allowed_subagents = request.allowed_subagents if "allowed_subagents" in fields_set else agent_cfg.allowed_subagents
             if new_allowed_subagents is not None:
                 updated["allowed_subagents"] = new_allowed_subagents
+
+            updated["memory_enabled"] = request.memory_enabled if "memory_enabled" in fields_set else agent_cfg.memory_enabled
 
             # model / model_settings / thinking_enabled / reasoning_effort:
             # take explicitly-set request fields, else preserve the existing

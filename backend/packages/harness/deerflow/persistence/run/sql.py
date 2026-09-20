@@ -15,7 +15,9 @@ from sqlalchemy import and_, case, delete, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from deerflow.persistence.organizations.resolution import organization_from_owned_parent
 from deerflow.persistence.run.model import RunChangeClockRow, RunRow
+from deerflow.persistence.thread_meta.model import ThreadMetaRow
 from deerflow.runtime.runs.store.base import (
     LeaseRenewal,
     RunIdempotencyConflict,
@@ -156,12 +158,18 @@ class RunRepository(RunStore):
         }
         async with self._sf() as session:
             values["change_seq"] = await self._next_change_seq(session)
+            thread = (await session.execute(select(ThreadMetaRow).where(ThreadMetaRow.thread_id == thread_id).with_for_update())).scalar_one_or_none()
+            organization_id = organization_from_owned_parent(thread, resolved_user_id, parent_name="thread")
             row = await session.get(RunRow, run_id)
             if row is None:
-                session.add(RunRow(run_id=run_id, created_at=created, **values))
+                session.add(RunRow(run_id=run_id, created_at=created, organization_id=organization_id, **values))
             else:
                 for key, value in values.items():
                     setattr(row, key, value)
+                # A legacy parent proves no organization. Do not erase a valid
+                # prior stamp during a status/idempotency update.
+                if organization_id is not None:
+                    row.organization_id = organization_id
             await session.commit()
 
     async def get(

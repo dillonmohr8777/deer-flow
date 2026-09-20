@@ -12,7 +12,7 @@ construct this after ``init_engine_from_config()`` has run.
 
 from __future__ import annotations
 
-from datetime import UTC
+from datetime import UTC, datetime
 from uuid import UUID
 
 from sqlalchemy import func, select
@@ -21,6 +21,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.gateway.auth.models import User
 from app.gateway.auth.repositories.base import UserNotFoundError, UserRepository
+from deerflow.persistence.organizations.identity import private_organization_id, private_organization_slug
+from deerflow.persistence.organizations.model import OrganizationMemberRow, OrganizationRow
 from deerflow.persistence.user.model import OAUTH_IDENTITY_INDEX_NAME, UserRow
 
 # ``email`` is ``mapped_column(unique=True, index=True)``, which SQLAlchemy
@@ -185,6 +187,8 @@ class SQLiteUserRepository(UserRepository):
         """
         user.email = _normalize_email(user.email)
         row = self._user_to_row(user)
+        organization_id = private_organization_id(row.id)
+        now = datetime.now(UTC)
         async with self._sf() as session:
             # The unique constraint is case-sensitive, so it cannot catch a
             # canonical address colliding with a mixed-case legacy row.
@@ -192,6 +196,26 @@ class SQLiteUserRepository(UserRepository):
             if await session.scalar(existing) is not None:
                 raise ValueError(f"Email already registered: {user.email}")
             session.add(row)
+            session.add(
+                OrganizationRow(
+                    id=organization_id,
+                    slug=private_organization_slug(row.id),
+                    name="Private organization",
+                    status="active",
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+            session.add(
+                OrganizationMemberRow(
+                    organization_id=organization_id,
+                    user_id=row.id,
+                    role="owner",
+                    status="active",
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
             try:
                 await session.commit()
             except IntegrityError as exc:
