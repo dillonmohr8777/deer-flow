@@ -110,6 +110,22 @@ def test_run_response_hides_historical_auth_token_without_mutating_record():
     assert record.metadata["auth_token"] == "legacy-secret"
 
 
+def test_run_response_includes_terminal_error_for_owner_receipts():
+    record = RunRecord(
+        run_id="failed-run",
+        thread_id="owned-thread",
+        assistant_id="lead_agent",
+        status=RunStatus.error,
+        on_disconnect=DisconnectMode.cancel,
+        error="provider failed",
+    )
+
+    response = _record_to_response(record)
+
+    assert response.status == "error"
+    assert response.error == "provider failed"
+
+
 def test_run_response_hides_historical_config_metadata_without_mutating_record():
     legacy_config = {
         "metadata": {

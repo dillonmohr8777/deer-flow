@@ -226,6 +226,7 @@ class RunResponse(BaseModel):
     thread_id: str
     assistant_id: str | None = None
     status: str
+    error: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
     kwargs: dict[str, Any] = Field(default_factory=dict)
     multitask_strategy: str = "reject"
@@ -367,6 +368,7 @@ def _record_to_response(record: RunRecord) -> RunResponse:
         thread_id=record.thread_id,
         assistant_id=record.assistant_id,
         status=record.status.value,
+        error=record.error,
         metadata=redact_metadata_secrets(record.metadata),
         kwargs=kwargs,
         multitask_strategy=record.multitask_strategy,
