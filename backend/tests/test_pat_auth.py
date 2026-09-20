@@ -575,6 +575,16 @@ def test_pat_policy_does_not_pre_authorize_unimplemented_methods():
     assert is_pat_allowed_route("GET", "/api/threads") is False
 
 
+def test_pat_policy_allows_only_run_usage_receipts_from_console():
+    from app.gateway.auth.pat import is_pat_allowed_route
+
+    assert is_pat_allowed_route("GET", "/api/console/usage-ledger") is True
+    assert is_pat_allowed_route("POST", "/api/console/usage-ledger") is False
+    assert is_pat_allowed_route("GET", "/api/console/runs") is False
+    assert is_pat_allowed_route("GET", "/api/console/stats") is False
+    assert is_pat_allowed_route("GET", "/api/console/usage") is False
+
+
 def test_pat_runs_policy_admits_exactly_the_mounted_routes():
     """The runs subtree is enumerated, not wildcarded: every GET/POST route
     the thread_runs router actually implements is admitted (derived from the

@@ -114,6 +114,10 @@ _PAT_ROUTE_RULES: tuple[tuple[frozenset[str], re.Pattern[str]], ...] = (
     (frozenset({"GET", "POST"}), re.compile(r"^/api/threads/[^/]+/runs/[^/]+/stream$")),
     (frozenset({"POST"}), re.compile(r"^/api/runs/(stream|wait)$")),
     (frozenset({"GET"}), re.compile(r"^/api/runs/[^/]+/(messages|feedback)$")),
+    # The Relay needs the canonical per-attempt receipt after a run. This
+    # endpoint is read-only, requires runs:read, and filters rows to the PAT
+    # owner's runs; the rest of /api/console remains default-denied.
+    (frozenset({"GET"}), re.compile(r"^/api/console/usage-ledger$")),
 )
 
 _BASE62_ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
