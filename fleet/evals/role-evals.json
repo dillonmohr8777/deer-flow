@@ -5,11 +5,15 @@
       "senior-software-engineer",
       "data-migration-engineer",
       "analytics-engineer",
-      "independent-verifier"
+      "independent-verifier",
+      "fleet-scout",
+      "fleet-builder",
+      "fleet-qa",
+      "fleet-reliability"
     ],
-    "role_specific_runs": 4,
+    "role_specific_runs": 8,
     "boundary_runs_per_role": 1,
-    "logical_runs": 8,
+    "logical_runs": 16,
     "requires_explicit_total_usd_cap": true,
     "results_source": "DeerFlow run receipts and usage ledger"
   },
