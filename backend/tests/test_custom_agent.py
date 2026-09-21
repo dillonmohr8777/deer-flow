@@ -881,10 +881,14 @@ class TestUserProfileAPI:
         assert response.status_code == 200
         assert response.json()["content"] == content
 
-        # File should be written to disk
-        user_md = tmp_path / "USER.md"
-        assert user_md.exists()
-        assert user_md.read_text(encoding="utf-8") == content
+        # Written to the caller's own bucket, never the process-global file.
+        # USER.md is injected into every custom agent, so a shared write would
+        # rewrite every other user's agent persona. The bucket id comes from the
+        # auth context, so assert the property rather than a hardcoded id.
+        written = list((tmp_path / "users").glob("*/USER.md"))
+        assert len(written) == 1, f"expected one per-user profile, found {written}"
+        assert written[0].read_text(encoding="utf-8") == content
+        assert not (tmp_path / "USER.md").exists(), "must not write the shared file"
 
     def test_get_user_profile_after_put(self, agent_client):
         content = "# Profile\n\nI work on data science."
