@@ -197,14 +197,18 @@
     border-color 160ms ease;
 }
 
+/*
+ * Uses the Command Center's primary-button blue (#075bd8), NOT the
+ * --momentum-copy-rule-* tokens, which are divider/rule colours. The rule
+ * token #0b78e3 put this button's label at 4.10:1 against its own background;
+ * the label is 15px bold, which is not WCAG "large text", so 4.10 failed AA.
+ * #075bd8 measures 5.64:1, and the worst point along the whole gradient to
+ * #6a49df is 5.43:1 — passes AA across the entire sweep.
+ */
 .primary {
   color: #f4f8ff;
-  background: linear-gradient(
-    102deg,
-    var(--momentum-copy-rule-from, #0b78e3),
-    var(--momentum-copy-rule-to, #6a49df)
-  );
-  box-shadow: 0 0.75rem 2rem rgb(11 120 227 / 28%);
+  background: linear-gradient(102deg, #075bd8, #6a49df);
+  box-shadow: 0 0.75rem 2rem rgb(7 91 216 / 28%);
 }
 
 .secondary {
