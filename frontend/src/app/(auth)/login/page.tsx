@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTheme } from "next-themes";
@@ -203,17 +204,29 @@ export default function LoginPage() {
 
   return (
     <div className="bg-background relative flex min-h-screen items-center justify-center overflow-x-hidden overflow-y-auto">
+      {/*
+        Momentum front door. The upstream deer-silhouette mask is replaced by a
+        soft radial fade so the grid reads as ambient texture rather than as
+        another product's logo. Auth logic below is untouched.
+      */}
       <FlickeringGrid
-        className="absolute inset-0 z-0 mask-[url(/images/deer.svg)] mask-size-[100vw] mask-center mask-no-repeat md:mask-size-[72vh]"
+        className="absolute inset-0 z-0 [mask-image:radial-gradient(60vh_60vh_at_50%_42%,black,transparent_72%)]"
         squareSize={4}
         gridGap={4}
         color={actualTheme === "dark" ? "white" : "black"}
-        maxOpacity={0.3}
-        flickerChance={0.25}
+        maxOpacity={0.22}
+        flickerChance={0.2}
       />
       <div className="border-border/20 bg-background/5 w-full max-w-md space-y-6 rounded-3xl border p-8 backdrop-blur-sm">
         <div className="text-center">
-          <h1 className="text-foreground font-serif text-3xl">DeerFlow</h1>
+          <Image
+            className="mx-auto h-7 w-auto dark:brightness-0 dark:invert"
+            src="/momentum/wordmark.png"
+            alt="Momentum"
+            width={154}
+            height={28}
+            priority
+          />
           <p className="text-muted-foreground mt-2">
             {isLogin ? t.login.signInTitle : t.login.createAccountTitle}
           </p>

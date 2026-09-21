@@ -6,8 +6,8 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { DEFAULT_LOCALE } from "@/core/i18n/locale";
 
 export const metadata: Metadata = {
-  title: "DeerFlow",
-  description: "A LangChain-based framework for building super agents.",
+  title: "Momentum Workspace",
+  description: "A private workspace where a team of agents takes on real work.",
 };
 
 export default function RootLayout({
