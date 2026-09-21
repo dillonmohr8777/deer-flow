@@ -200,6 +200,7 @@ def test_version_26_config_upgrades_to_checkpoint_channel_mode(tmp_path, caplog)
     assert upgraded["verification"]["judge_model_name"] is None
 
 
+@pytest.mark.skipif(SCRIPT_BASH is None, reason="repo shell-script tests need Git Bash on Windows")
 def test_version_41_config_moves_legacy_ragflow_settings_to_tool(tmp_path):
     """The v46 migration keeps provider settings on the RAGFlow tool entry."""
     import subprocess
@@ -234,7 +235,7 @@ def test_version_41_config_moves_legacy_ragflow_settings_to_tool(tmp_path):
 
     env = {**os.environ, "DEER_FLOW_CONFIG_PATH": str(config_path)}
     result = subprocess.run(
-        ["bash", str(repo_root / "scripts" / "config-upgrade.sh")],
+        [SCRIPT_BASH, str(repo_root / "scripts" / "config-upgrade.sh")],
         env=env,
         capture_output=True,
         text=True,
@@ -254,6 +255,7 @@ def test_version_41_config_moves_legacy_ragflow_settings_to_tool(tmp_path):
     assert tool["api_key"] == "$CURRENT_RAGFLOW_API_KEY"
 
 
+@pytest.mark.skipif(SCRIPT_BASH is None, reason="repo shell-script tests need Git Bash on Windows")
 def test_version_41_tools_only_ragflow_config_enables_knowledge_capability(tmp_path):
     """Tools-only legacy configs must not be disabled by the new capability gate."""
     import subprocess
@@ -282,7 +284,7 @@ def test_version_41_tools_only_ragflow_config_enables_knowledge_capability(tmp_p
 
     env = {**os.environ, "DEER_FLOW_CONFIG_PATH": str(config_path)}
     result = subprocess.run(
-        ["bash", str(repo_root / "scripts" / "config-upgrade.sh")],
+        [SCRIPT_BASH, str(repo_root / "scripts" / "config-upgrade.sh")],
         env=env,
         capture_output=True,
         text=True,
@@ -300,6 +302,7 @@ def test_version_41_tools_only_ragflow_config_enables_knowledge_capability(tmp_p
     assert upgraded["tools"][0]["base_url"] == "http://legacy-ragflow:9380"
 
 
+@pytest.mark.skipif(SCRIPT_BASH is None, reason="repo shell-script tests need Git Bash on Windows")
 def test_version_45_tools_only_ragflow_config_runs_knowledge_migration(tmp_path):
     """The knowledge migration must run for configs at the former base version."""
     import subprocess
@@ -349,6 +352,7 @@ def test_version_45_tools_only_ragflow_config_runs_knowledge_migration(tmp_path)
     assert upgraded["tools"][0]["base_url"] == "http://legacy-ragflow:9380"
 
 
+@pytest.mark.skipif(SCRIPT_BASH is None, reason="repo shell-script tests need Git Bash on Windows")
 def test_version_45_tools_only_lightrag_config_keeps_knowledge_tool_available(tmp_path):
     """Upgrading a configured LightRAG provider must enable the new knowledge gate."""
     import subprocess
@@ -406,6 +410,7 @@ def test_version_45_tools_only_lightrag_config_keeps_knowledge_tool_available(tm
     assert "knowledge_search" in {tool.name for tool in tools}
 
 
+@pytest.mark.skipif(SCRIPT_BASH is None, reason="repo shell-script tests need Git Bash on Windows")
 def test_version_45_lightrag_config_preserves_explicit_disabled_gate(tmp_path):
     """Migration must not override an operator's explicit knowledge gate value."""
     import subprocess

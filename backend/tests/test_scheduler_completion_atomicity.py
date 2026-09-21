@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from app.scheduler.service import ScheduledTaskService
 from deerflow.persistence.base import Base
+from deerflow.persistence.organizations.model import OrganizationRow
 from deerflow.persistence.scheduled_task_runs import ScheduledTaskRunRepository
 from deerflow.persistence.scheduled_task_runs.model import ScheduledTaskRunRow
 from deerflow.persistence.scheduled_tasks import ScheduledTaskRepository
@@ -20,7 +21,12 @@ async def _database(tmp_path):
     engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'completion.db'}")
     try:
         async with engine.begin() as connection:
-            await connection.run_sync(lambda sync: Base.metadata.create_all(sync, tables=[ScheduledTaskRow.__table__, ScheduledTaskRunRow.__table__]))
+            await connection.run_sync(
+                lambda sync: Base.metadata.create_all(
+                    sync,
+                    tables=[OrganizationRow.__table__, ScheduledTaskRow.__table__, ScheduledTaskRunRow.__table__],
+                )
+            )
         yield engine, async_sessionmaker(engine, expire_on_commit=False)
     finally:
         await engine.dispose()

@@ -32,12 +32,12 @@ def test_model_settings_default_to_none() -> None:
     assert cfg.memory_enabled is True
 
 
-def test_custom_agent_can_disable_memory_without_making_it_an_api_managed_field() -> None:
+def test_custom_agent_can_disable_memory_as_an_api_managed_field() -> None:
     cfg = AgentConfig(name="stateless-worker", memory_enabled=False)
 
     assert cfg.memory_enabled is False
-    assert "memory_enabled" not in MANAGED_AGENT_CONFIG_FIELDS
-    assert preserve_non_managed_fields(cfg) == {"memory_enabled": False}
+    assert "memory_enabled" in MANAGED_AGENT_CONFIG_FIELDS
+    assert preserve_non_managed_fields(cfg) == {}
 
 
 def test_model_settings_parse_full_shape() -> None:

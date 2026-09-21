@@ -151,6 +151,11 @@ Array previews coalesce consecutive generated markers only at the end into one o
 
 ### Interaction Ownership
 
+- `core/settings/local.ts::getResolvedMode` owns mode resolution for the main
+  composer and Side Chat. Only the thinking-only mode requires
+  `supports_thinking`; Pro planning and Ultra delegation remain selectable on
+  non-thinking models. Backend model capability checks decide whether provider
+  thinking and reasoning effort can be forwarded.
 - `src/components/workspace/model-picker-content.tsx` owns the compact model
   list, favorite grouping, and the anchored non-modal picker shared by the main
   composer and Side Chat. Each row keeps model selection and its inline

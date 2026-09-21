@@ -8,33 +8,34 @@ set. Do not allow arbitrary Python commands, trust manifest metadata to bypass
 execution policy, or put credentials into tool schemas. Existing admin checks,
 masked edits, atomic configuration writes and MCP cache reloads remain owners.
 
-Memory shutdown resolves hot-reloaded config and the backend, flushes, then
-closes as one `await_drained` operation. Keep config resolution inside the
-best-effort error handler and off the event loop so malformed config edits do
-not abort runtime teardown. Cancellation waits for the owned workers before
-propagating; backend `close()` overrides must be quick or internally bounded
-because close has no host timeout. Budget resolution and close in the pod grace
-period in addition to the configured flush timeout and other shutdown hooks.
-Extension-service teardown follows the same ownership rule: `stop_services()`
-is drained across host cancellation before later runtime resources unwind; each
-service `stop()` remains bounded by its 30-second `asyncio.timeout`, so include
-that bound in pod grace-period budgeting.
+Memory shutdown resolves hot-reloaded config and the backend, then flushes and
+closes in one `await_drained` operation. Resolve config inside the best-effort
+handler and off the event loop; cancellation drains owned workers before
+propagating. Backend `close()` must be quick or internally bounded. Budget its
+configured flush timeout, close, other hooks, and each extension service's
+30-second `stop()` timeout in the pod grace period. Drain `stop_services()`
+across host cancellation before later runtime resources unwind.
 
-`conversation_access.py` binds an opt-in read-only tool to a run request's
-explicit `conversation_references` and effective `runs:read` permission. Never
-derive grants from message contents or checkpoints. The callback travels through
-`RunContext`, not serialized config; the worker owns its context injection and
-terminal cleanup. `conversation_reader.py` shares the existing HTTP transcript
-visibility/pagination logic without a Request dependency; ownership remains a
-caller responsibility. The tool additionally excludes non-text/internal content.
-`RunCreateRequest` also accepts the list as `context.conversation_references`
-(LangGraph SDK clients cannot send top-level extras): a before-validator lifts
-it into the top-level field, so bounds and error locations are shared, and drops
-it from `context`, so `merge_run_context_overrides` never sees it; sending both
-is a 422. `conversation_references_enabled()` is the one "tool is configured"
-predicate, used by admission and by `/api/features`.
+`conversation_access.py` binds its opt-in read-only tool only to explicit
+`conversation_references` plus effective `runs:read`; never derive grants from
+messages or checkpoints. Its callback travels through `RunContext`, not
+serialized config, and the worker owns injection and terminal cleanup.
+`conversation_reader.py` shares HTTP transcript visibility/pagination without a
+Request dependency; callers still own authorization, and non-text/internal
+content stays hidden. `RunCreateRequest` accepts the list at top level or as
+`context.conversation_references` for LangGraph SDK clients: a before-validator
+lifts the context form, shares bounds/errors, and removes it before context
+merging; sending both is 422. `conversation_references_enabled()` is the single
+configured predicate for admission and `/api/features`.
 
-FastAPI listens on port 8001; health: `GET /health` (liveness) and `GET /health/ready` (readiness; concurrently probes the ORM engine behind `database:` plus the effective LangGraph checkpointer/Store backend - the legacy `checkpointer:` section, otherwise derived from `database:`, resolved from the startup config snapshot recorded on `app.state` - beneath a single bounded deadline, with connection-opening probes serialized behind a strict per-process gate, 503 while either is unreachable or the startup backend cannot be resolved, `not_configured` for process-local backends such as `backend=memory`). Set `GATEWAY_ENABLE_DOCS=false` to disable the default `/docs`, `/redoc`, and `/openapi.json` endpoints.
+FastAPI listens on 8001. `GET /health` is liveness; `GET /health/ready`
+concurrently probes the configured ORM engine and effective LangGraph
+checkpointer/Store under one bounded deadline. It resolves the legacy
+`checkpointer:` section or derives it from `database:` using the startup snapshot
+on `app.state`, serializes connection-opening probes behind a per-process gate,
+returns 503 when either backend is unreachable/unresolvable, and reports
+`not_configured` for process-local backends such as memory. Set
+`GATEWAY_ENABLE_DOCS=false` to disable `/docs`, `/redoc`, and `/openapi.json`.
 
 `build_run_config()` resolves the default LangGraph super-step budget from the
 hot-reloaded top-level `recursion_limit` setting. A valid request-level value

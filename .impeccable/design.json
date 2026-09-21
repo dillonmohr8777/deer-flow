@@ -1,38 +1,414 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-09-19T00:00:00-04:00",
+  "generatedAt": "2026-09-20T00:00:00-04:00",
   "title": "Design System: Momentum Command Center",
   "extensions": {
     "colorMeta": {
-      "paper": {"role":"neutral","displayName":"Momentum Paper","canonical":"#fbf8f4","tonalRamp":["#2b2927","#4c4843","#706b64","#918b82","#b2aca3","#cbc5bc","#e0dbd3","#fbf8f4"]},
-      "panel": {"role":"neutral","displayName":"Panel Beige","canonical":"#f0ece5","tonalRamp":["#292724","#4a4641","#6c6760","#8d877e","#aaa49b","#c4beb5","#dbd5cc","#f0ece5"]},
-      "ink": {"role":"neutral","displayName":"Ink","canonical":"#14181b","tonalRamp":["#14181b","#252a2d","#3a4043","#51575a","#6e7477","#8b9193","#adb2b3","#d4d7d7"]},
-      "blue": {"role":"primary","displayName":"Momentum Blue","canonical":"#155e86","tonalRamp":["#082238","#0b3855","#0d4b6d","#155e86","#3a7899","#6895ad","#a0bac8","#d5e2e8"]},
-      "signal": {"role":"primary","displayName":"Signal Orange","canonical":"#e27113","tonalRamp":["#3a1d08","#6c330b","#a64c0c","#e27113","#ed9141","#f3ad6e","#f8c99d","#fbe5cf"]}
+      "canvas": {
+        "role": "neutral",
+        "displayName": "Current Canvas",
+        "canonical": "#f7fbff",
+        "tonalRamp": [
+          "#07172f",
+          "#18324e",
+          "#38536c",
+          "#6d8398",
+          "#a6b7c7",
+          "#d2e3f2",
+          "#edf7ff",
+          "#f7fbff"
+        ]
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "Clear Surface",
+        "canonical": "#ffffff",
+        "tonalRamp": [
+          "#07172f",
+          "#243a52",
+          "#50657b",
+          "#91a4b6",
+          "#c5d3df",
+          "#e5eef6",
+          "#f7fbff",
+          "#ffffff"
+        ]
+      },
+      "surfaceBlue": {
+        "role": "neutral",
+        "displayName": "Ice Surface",
+        "canonical": "#edf7ff",
+        "tonalRamp": [
+          "#07172f",
+          "#38536c",
+          "#6d8398",
+          "#a6b7c7",
+          "#d2e3f2",
+          "#edf7ff",
+          "#f7fbff",
+          "#ffffff"
+        ]
+      },
+      "surfaceViolet": {
+        "role": "neutral",
+        "displayName": "Violet Surface",
+        "canonical": "#f2f0ff",
+        "tonalRamp": [
+          "#24165d",
+          "#41269f",
+          "#5b3bd8",
+          "#7d65e1",
+          "#a494eb",
+          "#c9c0f4",
+          "#e7e2fa",
+          "#f2f0ff"
+        ]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Current Ink",
+        "canonical": "#07172f",
+        "tonalRamp": [
+          "#07172f",
+          "#18324e",
+          "#38536c",
+          "#6d8398",
+          "#a6b7c7",
+          "#d2e3f2",
+          "#edf7ff",
+          "#f7fbff"
+        ]
+      },
+      "muted": {
+        "role": "neutral",
+        "displayName": "Muted Current",
+        "canonical": "#50657b",
+        "tonalRamp": [
+          "#07172f",
+          "#243a52",
+          "#50657b",
+          "#91a4b6",
+          "#c5d3df",
+          "#e5eef6",
+          "#f7fbff",
+          "#ffffff"
+        ]
+      },
+      "line": {
+        "role": "neutral",
+        "displayName": "Current Line",
+        "canonical": "#d2e3f2",
+        "tonalRamp": [
+          "#18324e",
+          "#38536c",
+          "#6d8398",
+          "#91a4b6",
+          "#b8c9d8",
+          "#d2e3f2",
+          "#edf7ff",
+          "#ffffff"
+        ]
+      },
+      "strong": {
+        "role": "neutral",
+        "displayName": "Strong Current Line",
+        "canonical": "#91b7d6",
+        "tonalRamp": [
+          "#18324e",
+          "#38536c",
+          "#50657b",
+          "#6f90ab",
+          "#91b7d6",
+          "#b9d3e8",
+          "#dcecf7",
+          "#f7fbff"
+        ]
+      },
+      "blue": {
+        "role": "primary",
+        "displayName": "Momentum Cobalt",
+        "canonical": "#075bd8",
+        "tonalRamp": [
+          "#031f52",
+          "#06439d",
+          "#075bd8",
+          "#337be2",
+          "#6aa1ea",
+          "#a4c7f2",
+          "#d7e8fb",
+          "#edf7ff"
+        ]
+      },
+      "blueDeep": {
+        "role": "primary",
+        "displayName": "Deep Cobalt",
+        "canonical": "#06439d",
+        "tonalRamp": [
+          "#031f52",
+          "#06439d",
+          "#075bd8",
+          "#337be2",
+          "#6aa1ea",
+          "#a4c7f2",
+          "#d7e8fb",
+          "#edf7ff"
+        ]
+      },
+      "cyan": {
+        "role": "secondary",
+        "displayName": "Current Cyan",
+        "canonical": "#008fc9",
+        "tonalRamp": [
+          "#033445",
+          "#00668e",
+          "#008fc9",
+          "#2caddb",
+          "#70c9e8",
+          "#a8deef",
+          "#d8f1f8",
+          "#eefaff"
+        ]
+      },
+      "cyanText": {
+        "role": "secondary",
+        "displayName": "Readable Cyan",
+        "canonical": "#00668e",
+        "tonalRamp": [
+          "#033445",
+          "#00506f",
+          "#00668e",
+          "#1884aa",
+          "#55a8c4",
+          "#91cada",
+          "#cbe7ef",
+          "#edf8fb"
+        ]
+      },
+      "violet": {
+        "role": "secondary",
+        "displayName": "Intelligence Violet",
+        "canonical": "#5b3bd8",
+        "tonalRamp": [
+          "#24165d",
+          "#41269f",
+          "#5b3bd8",
+          "#7d65e1",
+          "#a494eb",
+          "#c9c0f4",
+          "#e7e2fa",
+          "#f2f0ff"
+        ]
+      },
+      "rose": {
+        "role": "secondary",
+        "displayName": "Conversation Rose",
+        "canonical": "#c73570",
+        "tonalRamp": [
+          "#4a1029",
+          "#81204a",
+          "#c73570",
+          "#d86291",
+          "#e593b2",
+          "#efbdd1",
+          "#f8e3ec",
+          "#fff3f7"
+        ]
+      },
+      "green": {
+        "role": "success",
+        "displayName": "Verified Green",
+        "canonical": "#087d62",
+        "tonalRamp": [
+          "#04392e",
+          "#07634f",
+          "#087d62",
+          "#2b9d82",
+          "#68bca7",
+          "#a8d9ca",
+          "#d9efe8",
+          "#eef8f5"
+        ]
+      },
+      "danger": {
+        "role": "danger",
+        "displayName": "Exception Red",
+        "canonical": "#b4233e",
+        "tonalRamp": [
+          "#4b0c1b",
+          "#7d162b",
+          "#b4233e",
+          "#cf5068",
+          "#df8495",
+          "#edb7c1",
+          "#f7dfe4",
+          "#fff1f3"
+        ]
+      },
+      "focus": {
+        "role": "warning",
+        "displayName": "Focus Cobalt",
+        "canonical": "#003da5",
+        "tonalRamp": [
+          "#001b4d",
+          "#003078",
+          "#003da5",
+          "#075bd8",
+          "#337be2",
+          "#6aa1ea",
+          "#a4c7f2",
+          "#edf7ff"
+        ]
+      }
     },
     "typographyMeta": {
-      "display": {"displayName":"Momentum Display","purpose":"Mission Control display title."},
-      "body": {"displayName":"Momentum UI","purpose":"Readable operational interface copy."}
+      "display": {
+        "displayName": "Momentum Display",
+        "purpose": "Decisive singular page titles."
+      },
+      "headline": {
+        "displayName": "Momentum UI Heavy",
+        "purpose": "Readable section and result hierarchy."
+      },
+      "body": {
+        "displayName": "Momentum UI",
+        "purpose": "Friendly dense operations and generated copy."
+      }
     },
-    "shadows": [],
-    "motion": [
-      {"name":"state-transition","value":"120ms","purpose":"Agent and job hover/selected color transitions."},
-      {"name":"active-pulse","value":"1.8s ease-in-out infinite","purpose":"Running status only; disabled under reduced motion."}
+    "shadows": [
+      {
+        "name": "ambient",
+        "value": "0 18px 50px rgba(7,91,216,.10)",
+        "purpose": "Cool diffuse separation for operational panels."
+      },
+      {
+        "name": "selected",
+        "value": "0 18px 42px rgba(7,91,216,.22)",
+        "purpose": "Selected or live state only."
+      }
     ],
-    "breakpoints": [{"name":"mobile","value":"640px"},{"name":"wide-stack","value":"1100px"}]
+    "motion": [
+      {
+        "name": "control-transition",
+        "value": "160ms cubic-bezier(.2,.8,.2,1)",
+        "purpose": "Hover, focus, and selection transitions."
+      },
+      {
+        "name": "live-current",
+        "value": "1.9s ease-out infinite",
+        "purpose": "Recorded running states only; removed under reduced motion."
+      },
+      {
+        "name": "ambient-drift",
+        "value": "7s cubic-bezier(.22,1,.36,1) infinite alternate",
+        "purpose": "Low-amplitude atmospheric drift; removed under reduced motion."
+      },
+      {
+        "name": "status-pulse",
+        "value": "1.8s ease-in-out infinite",
+        "purpose": "Desktop running-state indicator only; removed on mobile and under reduced motion."
+      },
+      {
+        "name": "fetch-spin",
+        "value": "1s linear infinite",
+        "purpose": "Active data fetch only; removed under reduced motion."
+      }
+    ],
+    "breakpoints": [
+      { "name": "mobile", "value": "640px" },
+      { "name": "wide-stack", "value": "1100px" }
+    ]
   },
   "components": [
-    {"name":"Primary Action","kind":"button","refersTo":"button-primary","description":"Starts a deliberate mission.","html":"<button class=\"ds-btn-primary\">＋ Start a mission</button>","css":".ds-btn-primary{background:#e27113;color:#14181b;border:0;border-radius:8px;padding:12px 17px;font:800 14px 'Momentum UI',sans-serif;transition:background 120ms}.ds-btn-primary:hover{background:#f18c3a}.ds-btn-primary:focus-visible{outline:3px solid #a35309;outline-offset:3px}"},
-    {"name":"Agent Card","kind":"card","refersTo":"card-agent","description":"Selectable specialist roster item.","html":"<button class=\"ds-agent\"><span>BU</span><strong>Dillon Builder</strong><small>• Enabled</small></button>","css":".ds-agent{display:flex;flex-direction:column;gap:9px;text-align:left;padding:14px 10px;border:1px solid #dcd6cc;border-radius:10px;background:transparent;color:#14181b;font:400 14px 'Momentum UI',sans-serif}.ds-agent>span{color:#155e86;font-weight:800;border-bottom:1px solid #8e8578;padding-bottom:4px}.ds-agent small{color:#636465}.ds-agent:hover,.ds-agent[aria-pressed=true]{background:#f0ece5;border-color:#155e86}.ds-agent:focus-visible{outline:3px solid #a35309;outline-offset:3px}"},
-    {"name":"Search Field","kind":"input","refersTo":"input-search","description":"Filters loaded assignments.","html":"<label class=\"ds-search\">⌕<input placeholder=\"Search this page\" /></label>","css":".ds-search{display:flex;align-items:center;gap:9px;border:1px solid #8e8578;border-radius:7px;padding:8px 10px;color:#636465}.ds-search input{border:0;background:transparent;color:#14181b;font:400 13px 'Momentum UI',sans-serif;outline:0}.ds-search:focus-within{outline:3px solid #a35309;outline-offset:3px}"},
-    {"name":"Lead Agent","kind":"custom","description":"Deep anchor for the common mission.","html":"<div class=\"ds-lead\"><span>♙</span><div><strong>Dillon Brain</strong><small>Orchestration &amp; delegation</small></div><b>↗</b></div>","css":".ds-lead{display:flex;align-items:center;gap:16px;padding:20px;border-radius:12px;background:#0e1417;color:#f4f1ec;font-family:'Momentum UI',sans-serif}.ds-lead span{display:grid;place-items:center;width:48px;height:48px;border:1px solid #8a9296;border-radius:50%;color:#3897cc}.ds-lead div{display:flex;flex-direction:column;flex:1}.ds-lead strong{font-size:18px}.ds-lead small{font-size:13px;color:#8a9296}.ds-lead b{color:#e27113;font-size:22px}"}
+    {
+      "name": "Primary Action",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Starts one deliberate mission; cobalt carries the action.",
+      "html": "<button class=\"ds-primary\">Start a mission</button>",
+      "css": ".ds-primary{border:0;border-radius:11px;padding:12px 18px;background:linear-gradient(135deg,#075bd8,#5b3bd8);color:#fff;font:800 13px 'Momentum UI',sans-serif;box-shadow:0 12px 28px rgba(7,91,216,.2);transition:transform 160ms,box-shadow 160ms}.ds-primary:hover{transform:translateY(-1px)}.ds-primary:focus-visible{outline:3px solid #003da5;outline-offset:3px}"
+    },
+    {
+      "name": "Momentum Glyph",
+      "kind": "custom",
+      "description": "Deterministic vector identity built from authored paths, accents, rotation, and a node.",
+      "html": "<svg class=\"ds-glyph\" viewBox=\"0 0 48 48\" role=\"img\" aria-label=\"Builder agent\"><circle cx=\"24\" cy=\"24\" r=\"21\"/><path d=\"M12 29C18 11 29 37 37 17\"/><circle class=\"ds-glyph-node\" cx=\"34\" cy=\"17\" r=\"3\"/></svg>",
+      "css": ".ds-glyph{width:48px;height:48px;fill:none;stroke:#075bd8;stroke-width:2}.ds-glyph circle:first-child{fill:#edf7ff;stroke:#91b7d6}.ds-glyph .ds-glyph-node{fill:#008fc9;stroke:#fff}"
+    },
+    {
+      "name": "Agent Card",
+      "kind": "card",
+      "refersTo": "card-agent",
+      "description": "A specialist identity and its recorded availability or state.",
+      "html": "<button class=\"ds-agent\" aria-pressed=\"false\"><svg viewBox=\"0 0 32 32\" aria-hidden=\"true\"><circle cx=\"16\" cy=\"16\" r=\"13\"/><path d=\"M8 19C12 8 20 24 25 11\"/></svg><span><strong>Momentum Builder</strong><small>Enabled specialist</small></span></button>",
+      "css": ".ds-agent{display:flex;align-items:center;gap:12px;width:100%;padding:14px 12px;border:1px solid #d2e3f2;border-radius:14px;background:rgba(255,255,255,.93);color:#07172f;text-align:left;box-shadow:0 18px 50px rgba(7,91,216,.1);transition:160ms}.ds-agent svg{width:34px;fill:none;stroke:#075bd8}.ds-agent span{display:grid;gap:2px}.ds-agent small{color:#50657b}.ds-agent:hover,.ds-agent[aria-pressed=true]{border-color:#075bd8;background:linear-gradient(135deg,#edf7ff,#f2f0ff)}"
+    },
+    {
+      "name": "Search Field",
+      "kind": "input",
+      "refersTo": "input-search",
+      "description": "Filters only the loaded evidence set.",
+      "html": "<label class=\"ds-search\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><circle cx=\"10\" cy=\"10\" r=\"6\"/><path d=\"m15 15 5 5\"/></svg><input type=\"search\" placeholder=\"Search this page\" /></label>",
+      "css": ".ds-search{display:flex;align-items:center;gap:9px;padding:9px 11px;border:1px solid #91b7d6;border-radius:8px;background:#fff;color:#50657b}.ds-search svg{width:17px;fill:none;stroke:currentColor}.ds-search input{min-width:0;border:0;background:transparent;color:#07172f;font:400 13px 'Momentum UI',sans-serif;outline:0}.ds-search:focus-within{outline:3px solid #003da5;outline-offset:3px}"
+    },
+    {
+      "name": "Generated Copy",
+      "kind": "content",
+      "description": "Semantic spectral hierarchy for long-form model output.",
+      "html": "<article class=\"ds-copy\"><h2>Recommended next move</h2><p>Keep body copy calm and use <strong>color by meaning</strong>.</p><a href=\"#receipt\">Open the receipt</a></article>",
+      "css": ".ds-copy{max-width:72ch;color:#07172f;font:400 15px/1.6 'Momentum UI',sans-serif}.ds-copy h2{color:#075bd8;background:linear-gradient(90deg,#075bd8,#5b3bd8);background-clip:text;-webkit-text-fill-color:transparent}.ds-copy strong{color:#06439d}.ds-copy a{color:#008fc9;text-underline-offset:3px}"
+    },
+    {
+      "name": "Execution Receipt",
+      "kind": "drawer",
+      "description": "Recorded run evidence without invented metrics or unsupported actions.",
+      "html": "<aside class=\"ds-receipt\"><header><strong>Run receipt</strong><span data-status=\"complete\">Complete</span></header><dl><dt>Model</dt><dd>Recorded provider model</dd><dt>Usage</dt><dd>Recorded tokens</dd></dl></aside>",
+      "css": ".ds-receipt{padding:20px;border-left:1px solid #d2e3f2;background:rgba(255,255,255,.96);color:#07172f;box-shadow:-18px 0 50px rgba(7,91,216,.1)}.ds-receipt header{display:flex;justify-content:space-between;gap:16px}.ds-receipt [data-status=complete]{color:#087d62;font-weight:800}.ds-receipt dl{display:grid;grid-template-columns:max-content 1fr;gap:10px 16px}.ds-receipt dt{color:#50657b}.ds-receipt dd{margin:0;font-variant-numeric:tabular-nums}"
+    }
   ],
   "narrative": {
-    "northStar":"The Operational Ledger",
-    "overview":"Momentum is rendered as a paper-and-ink control register: warm paper, crisp rules, compact records, and a single deep lead-agent module. The interface keeps actual assignments and account-scoped run facts in view, using blue for navigation and state and restrained orange for deliberate action. Authentic Momentum branding, Nunito Sans UI text, and Archivo Black headings establish the voice.\n\nThe system is dense but legible. It favors visible source scope, bounded lists, keyboard-accessible controls, and honest loading/error/empty states over decorative metrics or simulated activity.",
-    "keyCharacteristics":["Warm paper canvas with ink typography and ruled dividers.","Deep lead-agent card connected to a compact specialist roster.","Blue state/navigation signal; orange reserved for primary action.","Tonal layering and borders instead of decorative shadows."],
-    "rules":[{"name":"The Evidence-First Rule","body":"Counters and activity represent recorded workspace facts; never style invented progress or revenue as a KPI.","section":"colors"},{"name":"The Register Hierarchy Rule","body":"Use Archivo Black only for the main display title; keep operational labels in Momentum UI with compact numeric alignment.","section":"typography"},{"name":"The Tonal Ledger Rule","body":"Use panel beige and deep ink to establish hierarchy; do not introduce ornamental shadows into this paper register.","section":"elevation"}],
-    "dos":["Do keep the Momentum paper/ink/blue/orange palette and authentic wordmark together.","Do use blue for state, navigation, and operational links; reserve orange for deliberate action.","Do preserve visible loading, error, empty, source-scope, and reduced-motion behavior.","Do keep numbers tabular and records bounded with readable truncation."],
-    "donts":["Don't turn run counters into marketing KPIs or claim data that is unavailable.","Don't add perpetual motion, orbiting diagrams, fake progress, or decorative shadows.","Don't replace the deep lead-agent anchor with a generic card grid.","Don't canonize the unrelated global aurora/golden-text utilities as Command Center language; they are outside this shipped surface."]
+    "northStar": "Momentum Current",
+    "overview": "Momentum is a living blue-white operating surface where language becomes work and work resolves into evidence. White and ice-blue fields carry a controlled current of cobalt, cyan, indigo, and violet. Every agent and conversation receives a deterministic authored vector identity; glow and motion amplify only recorded, selected, focused, or changing state.",
+    "keyCharacteristics": [
+      "White and ice-blue grounds with Momentum cobalt structure and restrained spectral accents.",
+      "A luminous lead-agent source connected to specialist work and execution receipts.",
+      "Deterministic Momentum vector glyphs instead of emoji or platform-dependent pictograms.",
+      "Semantic generated-copy color and motion that stops under reduced-motion preferences."
+    ],
+    "rules": [
+      {
+        "name": "The Truth Before Glow Rule",
+        "body": "Color, glow, and motion may amplify recorded state; they never manufacture activity, success, cost, or urgency.",
+        "section": "colors"
+      },
+      {
+        "name": "The Spectral Semantics Rule",
+        "body": "Blue means structure, bright cyan means graphical motion, readable cyan carries small text, violet means model intelligence, green means verified completion, and red means a real exception.",
+        "section": "colors"
+      },
+      {
+        "name": "The Friendly Density Rule",
+        "body": "Use weight, spacing, and semantic color to make dense information scan quickly; keep body copy comfortably readable.",
+        "section": "typography"
+      },
+      {
+        "name": "The State Earns Light Rule",
+        "body": "Resting content stays clear and quiet; stronger glow belongs only to live, selected, focused, or actively changing state.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do drive activity, counts, model names, costs, and status from recorded runtime evidence.",
+      "Do pair the authentic Momentum mark and self-hosted type with deterministic vector glyphs.",
+      "Do preserve loading, error, empty, disabled, hover, keyboard-focus, and reduced-motion states.",
+      "Do keep generated copy colorful by meaning and readable over long sessions.",
+      "Do keep mobile controls clear of the composer and other primary actions."
+    ],
+    "donts": [
+      "Do not use emoji, Unicode stand-ins, or platform-dependent pictograms as identity.",
+      "Do not add perpetual motion, decorative fake progress, or glow to resting content.",
+      "Do not turn unavailable data into zero or configured agents into claims of running workers.",
+      "Do not flatten the lead-agent current into a generic same-size card grid.",
+      "Do not let spectral styling reduce contrast or become rainbow confetti."
+    ]
   }
 }

@@ -809,6 +809,46 @@ class TestRunRepository:
         await _cleanup()
 
     @pytest.mark.anyio
+    async def test_atomic_run_inherits_verified_thread_organization(self, tmp_path):
+        from deerflow.persistence.engine import get_session_factory
+        from deerflow.persistence.organizations.identity import private_organization_id
+        from deerflow.persistence.thread_meta.model import ThreadMetaRow
+
+        repo = await _make_repo(tmp_path)
+        organization_id = private_organization_id("user-1")
+        async with get_session_factory()() as session:
+            session.add(
+                ThreadMetaRow(
+                    thread_id="tenant-thread",
+                    user_id="user-1",
+                    organization_id=organization_id,
+                    status="idle",
+                    metadata_json={},
+                )
+            )
+            await session.commit()
+
+        row, _ = await repo.create_thread_operation_atomic(
+            "tenant-run",
+            thread_id="tenant-thread",
+            user_id="user-1",
+            owner_worker_id="worker-1",
+            lease_expires_at=None,
+        )
+
+        assert row["organization_id"] == organization_id
+        with pytest.raises(ValueError, match="thread belongs to a different user"):
+            await repo.create_thread_operation_atomic(
+                "cross-tenant-run",
+                thread_id="tenant-thread",
+                user_id="user-2",
+                owner_worker_id="worker-2",
+                lease_expires_at=None,
+            )
+        assert await repo.get("cross-tenant-run", user_id=None) is None
+        await _cleanup()
+
+    @pytest.mark.anyio
     async def test_run_admission_reuses_process_wide_idempotency_key(self, tmp_path):
         repo = await _make_repo(tmp_path)
         first_manager = RunManager(store=repo, worker_id="worker-a")

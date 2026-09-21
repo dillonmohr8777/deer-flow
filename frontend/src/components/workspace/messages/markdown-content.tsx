@@ -253,7 +253,7 @@ export function MarkdownContent({
 
   return (
     <SafeMessageResponse
-      className={className}
+      className={cn("momentum-generated-copy", className)}
       remarkPlugins={remarkPlugins}
       rehypePlugins={effectiveRehypePlugins}
       components={toStreamdownComponents(components)}

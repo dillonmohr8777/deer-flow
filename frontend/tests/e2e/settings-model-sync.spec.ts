@@ -38,7 +38,7 @@ for (const agent of [false, true]) {
               {
                 name: "thread-model",
                 display_name: "Thread Model",
-                supports_thinking: true,
+                supports_thinking: false,
                 supports_reasoning_effort: true,
               },
             ],

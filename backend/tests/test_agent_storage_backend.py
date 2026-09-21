@@ -22,6 +22,7 @@ from deerflow.persistence.managed_subagents.base import ManagedSubagentDefinitio
 from deerflow.persistence.managed_subagents.file import FileManagedSubagentStore
 from deerflow.persistence.managed_subagents.model import ManagedSubagentRow
 from deerflow.persistence.managed_subagents.sql import SqlManagedSubagentStore
+from deerflow.persistence.organizations.model import OrganizationRow
 
 
 def _cfg(agent_backend: str, db_backend: str, sqlite_dir: str = "/tmp/agent-store-test") -> SimpleNamespace:
@@ -107,7 +108,7 @@ def _patch_importer(monkeypatch, cfg):
     # does, which also creates the sqlite directory).
     pathlib.Path(cfg.database.sqlite_dir).mkdir(parents=True, exist_ok=True)
     engine = create_engine(cfg.database.app_sync_sqlalchemy_url)
-    Base.metadata.create_all(engine, tables=[AgentRow.__table__, ManagedSubagentRow.__table__])
+    Base.metadata.create_all(engine, tables=[OrganizationRow.__table__, AgentRow.__table__, ManagedSubagentRow.__table__])
     engine.dispose()
 
     monkeypatch.setattr(importer, "get_app_config", lambda: cfg)

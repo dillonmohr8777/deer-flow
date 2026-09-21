@@ -1310,6 +1310,13 @@ Gateway-generated follow-up suggestions now normalize both plain-string model ou
 
 The Web UI composer can polish draft input before sending. The rewrite runs as a short Gateway LLM request using the `input_polish` model configuration, keeps slash skill prefixes such as `/data-analysis`, and only replaces the local draft after the user clicks the polish button; it does not create a thread run or persist a message.
 
+Flash uses direct execution, Pro adds planning, and Ultra adds subagent delegation.
+Pro and Ultra are available in the main composer and Side Chat even when a model
+does not expose provider-controlled thinking. Model thinking and reasoning-effort
+controls remain capability-dependent; selecting Ultra does not remove runtime
+budgets or give ordinary subagents restart recovery. Use `/goal` for bounded
+continuation and enabled durable batches for recoverable batch work.
+
 When the agent asks for clarification, the Web UI shows the structured response card but keeps the normal composer available. Users can complete the card or send a free-form chat message to bypass it; that message closes the latest pending clarification and becomes the agent's next input. Accompanying answer text stays outside the execution steps panel, and answering the request keeps previously completed text in the conversation while the agent continues.
 
 Unsent Web UI composer drafts survive page reloads and switching between conversations within the same browser tab. Drafts are isolated by user, agent, and conversation, include a selected slash skill when present, and are cleared once a send is accepted. Attachments and quoted conversation context are intentionally not persisted.

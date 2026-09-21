@@ -44,6 +44,7 @@ import {
   ClientSpacesView,
   WorkflowsView,
 } from "./business-views";
+import { MomentumGlyph } from "./momentum-glyph";
 
 import styles from "./command-center.module.css";
 
@@ -81,6 +82,13 @@ function money(value: number | null | undefined, currency?: string | null) {
 }
 
 function Status({ status }: { status: string }) {
+  const label =
+    {
+      success: "Completed",
+      error: "Failed",
+      timeout: "Timed out",
+      interrupted: "Interrupted",
+    }[status] ?? status.charAt(0).toUpperCase() + status.slice(1);
   return (
     <span className={styles.status} data-status={status}>
       {status === "success" ? (
@@ -88,9 +96,7 @@ function Status({ status }: { status: string }) {
       ) : (
         <Circle size={9} fill="currentColor" />
       )}
-      {status === "success"
-        ? "Completed"
-        : status.charAt(0).toUpperCase() + status.slice(1)}
+      {label}
     </span>
   );
 }
@@ -109,6 +115,7 @@ export function CommandCenter() {
   const [cancelConfirm, setCancelConfirm] = useState(false);
   const stats = useConsoleStats();
   const runs = useConsoleRuns({ status: filter || undefined, offset });
+  const activityRuns = useConsoleRuns({});
   const usage = useConsoleUsage();
   const cancel = useCancelConsoleRun();
   const {
@@ -138,6 +145,11 @@ export function CommandCenter() {
     (agent) => agent.source === "managed",
   );
   const roster = displayedAgents.length ? displayedAgents : subagents;
+  const activeAgentNames =
+    activityRuns.data?.runs
+      .filter((run) => active(run.status))
+      .map((run) => run.assistant_id)
+      .filter((name): name is string => Boolean(name)) ?? null;
 
   function openRun(run: ConsoleRunItem) {
     setSelectedRunId(run.run_id);
@@ -252,20 +264,19 @@ export function CommandCenter() {
               aria-pressed={selectedRunId === run.run_id}
               onClick={() => openRun(run)}
             >
-              <span className={styles.jobIcon}>
-                {active(run.status) ? (
-                  <Clock3 size={18} />
-                ) : run.status === "success" ? (
-                  <Check size={18} />
-                ) : (
-                  <CircleStop size={18} />
-                )}
+              <span className={styles.jobIcon} data-status={run.status}>
+                <MomentumGlyph seed={`thread:${run.thread_id}`} size={34} />
               </span>
               <span className={styles.jobName}>
                 <strong>{run.thread_title ?? "Untitled assignment"}</strong>
                 <small>
-                  {run.model_name ?? "Model not recorded"} ·{" "}
-                  {number(run.total_tokens)} tokens
+                  <span className={styles.metaModel}>
+                    {run.model_name ?? "Model not recorded"}
+                  </span>{" "}
+                  <span aria-hidden="true">·</span>{" "}
+                  <span className={styles.metaTokens}>
+                    {number(run.total_tokens)} tokens
+                  </span>
                 </small>
               </span>
               <Status status={run.status} />
@@ -318,6 +329,8 @@ export function CommandCenter() {
         selectedName={selectedAgentName}
         loading={agentsLoading}
         error={Boolean(agentsError)}
+        runtimeKnown={canReadRuns && activityRuns.isSuccess}
+        activeAgentNames={activeAgentNames}
         onSelect={setSelectedAgentName}
       />
       {selectedAgent ? (
@@ -364,7 +377,10 @@ export function CommandCenter() {
   );
 
   return (
-    <main className={styles.root}>
+    <main
+      className={styles.root}
+      data-live={stats.data?.active_runs ? "true" : "false"}
+    >
       <header className={styles.topbar}>
         <div className={styles.brand}>
           <SidebarTrigger />
@@ -384,7 +400,10 @@ export function CommandCenter() {
         <div className={styles.heading}>
           <div>
             <h1>{view}</h1>
-            <p>Give your ambition a team. Keep the work in view.</p>
+            <p className={styles.headingCopy}>
+              <span>Give your ambition a team.</span>{" "}
+              <span>Keep the work in view.</span>
+            </p>
           </div>
           <Link className={styles.primary} href={startPath}>
             <Plus size={17} />

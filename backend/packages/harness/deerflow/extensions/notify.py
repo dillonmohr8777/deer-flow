@@ -116,6 +116,7 @@ async def _notify_each(
     loop = asyncio.get_running_loop()
     deadline = None if timeout is None else loop.time() + timeout
     for source, contributor in contributors:
+        budget = None
         try:
             call = invoke(contributor)
             if deadline is None:
@@ -134,10 +135,12 @@ async def _notify_each(
                     task_id,
                     timeout,
                 )
-                continue
-            await asyncio.wait_for(call, remaining)
+                return
+            budget = asyncio.timeout_at(deadline)
+            async with budget:
+                await call
         except TimeoutError:
-            if deadline is not None and loop.time() >= deadline:
+            if budget is not None and budget.expired():
                 # Budget exhaustion mid-hook is the same expected operational
                 # condition as the skip above, so it stays a warning rather
                 # than a hook failure with an asyncio-internal traceback.
@@ -148,6 +151,7 @@ async def _notify_each(
                     task_id,
                     timeout,
                 )
+                return
             else:
                 # A TimeoutError the contributor raised on its own is a hook
                 # failure like any other.

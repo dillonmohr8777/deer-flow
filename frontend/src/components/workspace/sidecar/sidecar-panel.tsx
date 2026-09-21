@@ -59,6 +59,7 @@ import {
 import { useModels } from "@/core/models/hooks";
 import type { Model } from "@/core/models/types";
 import { useLocalSettings } from "@/core/settings";
+import { getResolvedMode } from "@/core/settings/local";
 import {
   buildParentConversationContext,
   buildReferenceMessageMetadata,
@@ -112,19 +113,6 @@ function buildHiddenSidecarContextMessage({
 }
 
 type SidecarInputMode = NonNullable<ThreadStreamOptions["context"]["mode"]>;
-
-function getResolvedMode(
-  mode: ThreadStreamOptions["context"]["mode"],
-  supportsThinking: boolean,
-): SidecarInputMode {
-  if (!supportsThinking && mode !== "flash") {
-    return "flash";
-  }
-  if (mode) {
-    return mode;
-  }
-  return supportsThinking ? "pro" : "flash";
-}
 
 function reasoningEffortForMode(mode: SidecarInputMode) {
   return mode === "ultra"

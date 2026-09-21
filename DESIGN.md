@@ -1,24 +1,36 @@
 ---
 name: Momentum Command Center
-description: An inspectable paper-and-ink operating console for real agent work.
+description: A living blue-white operating current for inspectable agent work.
 colors:
-  paper: "#fbf8f4"
-  panel: "#f0ece5"
-  ink: "#14181b"
-  muted: "#636465"
-  line: "#dcd6cc"
-  strong: "#8e8578"
-  blue: "#155e86"
-  deep: "#0e1417"
-  signal: "#e27113"
-  signal-ink: "#a35309"
+  canvas: "#f7fbff"
+  surface: "#ffffff"
+  surface-blue: "#edf7ff"
+  surface-violet: "#f2f0ff"
+  ink: "#07172f"
+  muted: "#50657b"
+  line: "#d2e3f2"
+  strong: "#91b7d6"
+  blue: "#075bd8"
+  blue-deep: "#06439d"
+  cyan: "#008fc9"
+  cyan-text: "#00668e"
+  violet: "#5b3bd8"
+  rose: "#c73570"
+  green: "#087d62"
+  danger: "#b4233e"
+  focus: "#003da5"
 typography:
   display:
-    fontFamily: "Momentum Display, Archivo Black, system-ui, sans-serif"
-    fontSize: "clamp(28px, 3vw, 44px)"
+    fontFamily: "Momentum Display, Archivo Black, sans-serif"
+    fontSize: "clamp(34px, 4vw, 58px)"
     fontWeight: 400
-    lineHeight: 1.08
-    letterSpacing: "-0.025em"
+    lineHeight: 1.02
+    letterSpacing: "-0.03em"
+  headline:
+    fontFamily: "Momentum UI, Nunito Sans, system-ui, sans-serif"
+    fontSize: "21px"
+    fontWeight: 900
+    lineHeight: 1.25
   body:
     fontFamily: "Momentum UI, Nunito Sans, system-ui, sans-serif"
     fontSize: "15px"
@@ -27,14 +39,14 @@ typography:
   label:
     fontFamily: "Momentum UI, Nunito Sans, system-ui, sans-serif"
     fontSize: "13px"
-    fontWeight: 700
+    fontWeight: 800
     lineHeight: 1.2
 rounded:
-  sm: "5px"
-  md: "7px"
-  lg: "8px"
-  xl: "10px"
-  card: "12px"
+  sm: "8px"
+  md: "11px"
+  lg: "14px"
+  card: "16px"
+  pill: "999px"
 spacing:
   xs: "4px"
   sm: "8px"
@@ -44,134 +56,170 @@ spacing:
   section: "34px"
 components:
   button-primary:
-    backgroundColor: "{colors.signal}"
-    textColor: "{colors.ink}"
-    typography: "{typography.label}"
-    rounded: "{rounded.lg}"
-    padding: "12px 17px"
-  button-secondary:
-    backgroundColor: "transparent"
-    textColor: "{colors.blue}"
+    backgroundColor: "{colors.blue}"
+    textColor: "{colors.surface}"
     typography: "{typography.label}"
     rounded: "{rounded.md}"
-    padding: "8px 12px"
+    padding: "12px 18px"
   card-agent:
-    backgroundColor: "transparent"
+    backgroundColor: "{colors.surface}"
     textColor: "{colors.ink}"
-    rounded: "{rounded.xl}"
-    padding: "14px 10px"
+    rounded: "{rounded.lg}"
+    padding: "14px 12px"
   input-search:
-    backgroundColor: "transparent"
+    backgroundColor: "{colors.surface}"
     textColor: "{colors.ink}"
-    rounded: "{rounded.md}"
-    padding: "8px 10px"
+    rounded: "{rounded.sm}"
+    padding: "9px 11px"
 ---
 
 # Design System: Momentum Command Center
 
 ## Overview
 
-**Creative North Star: "The Operational Ledger"**
+**Creative North Star: "Momentum Current"**
 
-Momentum is rendered as a paper-and-ink control register: warm paper, crisp rules, compact records, and a single deep lead-agent module. The interface keeps actual assignments and account-scoped run facts in view, using blue for navigation and state and restrained orange for deliberate action. Authentic Momentum branding, Nunito Sans UI text, and Archivo Black headings establish the voice.
+Momentum is a living blue-white operating surface where language becomes work and work resolves into evidence. White and ice-blue fields carry a controlled current of cobalt, cyan, indigo, and violet; color clarifies source, model activity, state, and selection without inventing progress.
 
-The system is dense but legible. It favors visible source scope, bounded lists, keyboard-accessible controls, and honest loading/error/empty states over decorative metrics or simulated activity.
+The interface is friendly enough for daily client work and rigorous enough for an operator. Real runs, agents, artifacts, costs, and errors stay legible. Every agent and conversation receives a deterministic authored vector identity, so long histories remain scannable without emoji or platform-dependent pictograms.
 
 **Key Characteristics:**
-- Warm paper canvas with ink typography and ruled dividers.
-- Deep lead-agent card connected to a compact specialist roster.
-- Blue state/navigation signal; orange reserved for primary action.
-- Tonal layering and borders instead of decorative shadows.
+
+- White and ice-blue grounds with Momentum cobalt structure and restrained spectral accents.
+- A luminous lead-agent source connected to specialist work and execution receipts.
+- Deterministic Momentum vector glyphs for agents, conversations, and background work.
+- Glow and motion only when a state is live, selected, or actively changing.
+- Generated copy uses semantic color to speed reading while preserving long-form legibility.
 
 ## Colors
 
-The palette is a warm neutral register punctuated by a cool operational blue and a scarce orange action signal.
+The palette is cool, luminous, and operational: deep navy establishes trust, cobalt carries action, cyan signals motion, violet identifies model intelligence, green verifies completion, and red is reserved for real exceptions.
 
 ### Primary
-- **Momentum Blue** ({colors.blue}): Links, active tabs, enabled states, icons, charts, and focus-adjacent affordances.
-- **Signal Orange** ({colors.signal}): Start-a-mission actions and small intentional action accents.
+
+- **Momentum Cobalt** ({colors.blue}): Primary actions, active navigation, selected paths, links, and the dominant authored stroke.
+- **Deep Cobalt** ({colors.blue-deep}): High-emphasis labels and darker gradient anchors.
+
+### Secondary
+
+- **Current Cyan** ({colors.cyan}): Live graphical motion and the bright edge of the current.
+- **Readable Cyan** ({colors.cyan-text}): Small model metadata and link text on white; Current Cyan remains the graphical accent.
+- **Intelligence Violet** ({colors.violet}): Token data, generated-copy hierarchy, and the model-intelligence side of spectral gradients.
+- **Conversation Rose** ({colors.rose}): Rare identity variation inside the deterministic glyph system, not a generic alert color.
+
+### Tertiary
+
+- **Verified Green** ({colors.green}): Confirmed completion and enabled state.
+- **Exception Red** ({colors.danger}): Failed runs, timeouts, and errors only.
+- **Focus Cobalt** ({colors.focus}): Keyboard focus outline only; it is an accessibility signal, not a decorative accent.
 
 ### Neutral
-- **Momentum Paper** ({colors.paper}): Main canvas and drawer surfaces.
-- **Panel Beige** ({colors.panel}): Hover rows, notices, icon wells, and secondary tonal surfaces.
-- **Ink** ({colors.ink}): Default text and metrics.
-- **Deep Ink** ({colors.deep}): Lead-agent module and high-contrast anchor.
-- **Muted Ink** ({colors.muted}): Supporting copy, metadata, and labels.
-- **Rule Gray** ({colors.line}): Primary dividers and table rules.
-- **Strong Rule** ({colors.strong}): Input borders, secondary outlines, and connector lines.
-- **Signal Ink** ({colors.signal-ink}): Light-surface signal text and focus outline.
+
+- **Current Canvas** ({colors.canvas}): Main application field.
+- **Clear Surface** ({colors.surface}): Cards, controls, and readable content planes.
+- **Ice Surface** ({colors.surface-blue}): Hover, subtle state, and cool tonal layering.
+- **Violet Surface** ({colors.surface-violet}): Quiet model-intelligence emphasis.
+- **Current Ink** ({colors.ink}): Default text and high-value numbers.
+- **Muted Current** ({colors.muted}): Supporting copy and metadata.
+- **Current Line** ({colors.line}): Dividers and low-emphasis borders.
+- **Strong Current Line** ({colors.strong}): Inputs, connectors, and stronger boundaries.
 
 ### Named Rules
-**The Evidence-First Rule.** Counters and activity represent recorded workspace facts; never style invented progress or revenue as a KPI.
+
+**The Truth Before Glow Rule.** Color, glow, and motion may amplify recorded state; they never manufacture activity, success, cost, or urgency.
+
+**The Spectral Semantics Rule.** Blue means structure, cyan means motion, violet means model intelligence, green means verified completion, and red means a real exception.
 
 ## Typography
 
-**Display Font:** Momentum Display / Archivo Black (with system sans fallback)
+**Display Font:** Momentum Display / Archivo Black (with sans-serif fallback)
 **Body Font:** Momentum UI / Nunito Sans (with system sans fallback)
 
-**Character:** Heavy, compact display headlines contrast with friendly, highly readable UI copy. Labels and metadata stay small and quiet so operational records remain primary.
+**Character:** A heavy, compact display voice makes the command surface decisive; rounded Momentum UI text keeps dense operational copy warm and readable. Tabular numerals stabilize changing counts.
 
 ### Hierarchy
-- **Display** (400, `clamp(28px, 3vw, 44px)`, 1.08): Mission Control page title.
-- **Headline** (800, 20px, 1.25): Section names such as Your agent team and Latest assignments.
-- **Title** (800, 17–19px): Agent names, notices, and detail headings.
-- **Body** (400, 15px, 1.5): Default interface copy.
-- **Label** (700–800, 11–14px): Tabs, metrics labels, statuses, and controls.
+
+- **Display** (400, `clamp(34px, 4vw, 58px)`, 1.02): Mission Control and other singular page titles.
+- **Headline** (900, 21px, 1.25): Primary sections and major result headings.
+- **Title** (900, 17–19px, 1.3): Agent names, run names, and drawer headings.
+- **Body** (400, 15px, 1.5): Interface copy and generated responses, normally constrained to a readable measure.
+- **Label** (800, 11–14px, 1.2): Tabs, statuses, metadata, controls, and metric labels.
 
 ### Named Rules
-**The Register Hierarchy Rule.** Use Archivo Black only for the main display title; keep operational labels in Momentum UI with compact numeric alignment.
+
+**The Friendly Density Rule.** Use weight, spacing, and semantic color to make dense information scan quickly; never solve density by shrinking body copy below a comfortable reading size.
 
 ## Layout
 
-The desktop frame uses a branded top bar with 32px horizontal padding, a centered content column capped at 1560px, and 32px content gutters. Mission Control starts with heading/action, horizontally scrollable tabs, a four-column metric strip, then a two-column team/jobs overview with a 34px gap. The roster uses three columns at desktop and four below 1100px; destinations collapse to one column below 1100px.
+The Command Center uses a 1560px maximum content frame with 32px desktop gutters and a 34px section rhythm. The first viewport moves from title and mission action to horizontally scrollable navigation, a compact four-fact strip, then a two-column agent/work stream. Below 1100px, the overview becomes one column. At 640px, gutters reduce to 16px, the heading stacks, jobs move before the specialist roster, metrics become a single swipeable rail, specialists become a vertical connected current, and tabs scroll horizontally rather than wrap.
 
-At 640px, the top bar and content use 16px gutters, the heading stacks, metrics become a 2×2 grid, the roster becomes two columns, and job rows hide decorative icons to preserve readable records. Horizontal tab overflow is retained rather than wrapping.
+Conversation pages keep generated copy in a readable central measure and anchor the composer at the bottom. On persisted mobile conversations, the background-work control sits above the composer so it never obscures the submit control.
 
 ## Elevation & Depth
 
-The system is flat-by-default. Depth comes from warm tonal layering, ruled borders, the deep lead-agent panel, and a fixed receipt drawer; no box-shadow vocabulary is used in the Command Center CSS. Active states use color and border changes, not floating effects.
+Depth is cool and diffuse. White surfaces use faint blue ambient shadows; selected cards and the lead-agent source receive stronger cobalt depth. Background auroras and the faceted current provide atmosphere, but zero-offset glow is reserved for live rings and selected paths. Reduced-motion users receive the same hierarchy with all nonessential animation removed.
+
+Motion is state-bound: controls transition in 160ms, the desktop live ring resolves over 1.9s, the desktop status pulse runs at 1.8s, the ambient current drifts over 7s, and active fetch spinners use 1s. Mobile keeps at most one continuous state loop in the Command Center. Reduced-motion removes every loop and transition.
 
 ### Named Rules
-**The Tonal Ledger Rule.** Use panel beige and deep ink to establish hierarchy; do not introduce ornamental shadows into this paper register.
+
+**The State Earns Light Rule.** Resting content stays clear and quiet; stronger glow belongs only to live, selected, focused, or actively changing state.
 
 ## Shapes
 
-Shapes are gently rounded and functional: controls use 5–8px radii, agent cards 10px, and the lead module 12px. Dividers are 1px solid rules. The lead icon is circular; status marks are tiny circles. Inputs and selects are outlined, transparent, and compact.
+Cards use gently rounded 14–16px corners; controls use 8–11px corners. Pills are limited to compact status and account controls. Connector geometry is crisp and deterministic. Authored Momentum glyphs use circles, paths, gradients, and nodes as true vector identity marks—not as illustration substitutes.
 
 ## Components
 
 ### Buttons
-- **Shape:** Compact rounded controls (5–8px).
-- **Primary:** Signal orange fill, ink text, 12px × 17px padding, heavy label weight.
-- **Hover / Focus:** Primary shifts to a lighter orange; all interactive elements receive a 3px signal-ink outline with 3px offset on focus-visible.
-- **Secondary / Ghost:** Transparent blue text or outlined strong-rule controls for retry, pagination, and cancellation.
+
+- **Shape:** Compact rounded action controls (11px).
+- **Primary:** Cobalt-to-indigo gradient, white text, 12px × 18px padding, and a soft directional shadow.
+- **Hover / Focus:** Gradient deepens on hover; keyboard focus receives a 3px Focus Cobalt outline with 3px offset. Controls on deep blue receive a white inner outline.
+- **Secondary / Ghost:** Clear or ice-blue surfaces with cobalt text and a Current Line border.
 
 ### Cards / Containers
-- **Agent lead:** Deep ink, light text, 12px radius, 20px padding, blue outlined circular icon, orange outbound action.
-- **Agent cards:** Transparent paper cards with 1px rule border, 10px radius, 14px/10px padding; hover/selected state uses panel beige and blue border.
-- **Notices:** Panel beige, 8px radius, 16px padding.
+
+- **Operational panels:** Clear Surface at roughly 93% opacity, 16px radius, Current Line border, and a soft blue ambient shadow.
+- **Lead agent:** Deep navy-to-cobalt-to-indigo current with light text and a brighter custom glyph.
+- **Specialist cards:** Clear Surface with compact metadata; selection shifts to an ice/violet wash and strengthens the connected path.
 
 ### Inputs / Fields
-- **Search/select:** Transparent paper controls with strong-rule border, 7px radius, compact 8–10px padding, muted placeholder/label text.
-- **Focus:** Signal-ink 3px outline via the shared focus-visible rule.
+
+- **Search/select:** Clear Surface, Strong Current Line, 8–9px radius, and compact 9–11px padding.
+- **Focus:** Focus Cobalt outline; placeholders remain Muted Current and meet the surrounding tonal system.
 
 ### Navigation
-- **Top bar:** Momentum wordmark, divider, Command Center label, workspace scope; 18px × 32px padding desktop and 14px × 16px mobile.
-- **Tabs:** Blue active text with 2px blue bottom rule; muted at rest; 27px desktop gap and horizontal overflow on mobile.
 
-### Signature Component: Execution Receipt
-The selected run opens a fixed right-side paper drawer, up to 460px wide, with a strong left rule, status, actual model/usage/cost metadata, error notice when present, and cancellation controls only for active ordinary runs.
+- **Top bar:** Authentic Momentum mark, current surface name, and account scope on a translucent ice-white rail.
+- **Tabs:** Cobalt active state with a spectral underline; compact horizontal overflow on narrow screens.
+
+### Momentum Glyph
+
+Each seed deterministically chooses one of eight authored paths, six accent colors, twelve rotations, and twenty-five node positions. This yields thousands of stable identities while keeping a shared visual grammar and accessible labels where the glyph carries meaning.
+
+### Generated Copy
+
+Long-form responses keep navy body text. Headings run through a cobalt-indigo gradient; strong text is deep blue, links and emphasis use cyan, list markers and code use violet, and blockquotes receive an ice-blue wash. Dark conversations use a separate high-contrast blue-violet ramp, and forced-colors mode returns gradient headings to solid system text. The color hierarchy is semantic and restrained enough for sustained reading.
+
+### Execution Receipt
+
+Selecting a run opens a right-side evidence drawer with recorded status, model, usage, cost when available, errors, artifacts, and only the controls the runtime truly supports.
 
 ## Do's and Don'ts
 
 ### Do:
-- **Do** keep the Momentum paper/ink/blue/orange palette and authentic wordmark together.
-- **Do** use blue for state, navigation, and operational links; reserve orange for deliberate action.
-- **Do** preserve visible loading, error, empty, source-scope, and reduced-motion behavior.
-- **Do** keep numbers tabular and records bounded with readable truncation.
+
+- **Do** drive activity, counts, model names, costs, and status from recorded runtime evidence.
+- **Do** use the authentic Momentum mark, self-hosted Momentum type, and deterministic vector glyph system together.
+- **Do** preserve loading, error, empty, disabled, hover, keyboard focus, and reduced-motion states.
+- **Do** keep generated copy colorful by meaning and readable over long sessions.
+- **Do** keep mobile controls clear of the composer and other primary actions.
 
 ### Don't:
-- **Don't** turn run counters into marketing KPIs or claim data that is unavailable.
-- **Don't** add perpetual motion, orbiting diagrams, fake progress, or decorative shadows.
-- **Don't** replace the deep lead-agent anchor with a generic card grid.
-- **Don't** canonize the unrelated global aurora/golden-text utilities as Command Center language; they are outside this shipped surface.
+
+- **Don't** use emoji, Unicode stand-ins, or platform-dependent pictograms as agent or conversation identity.
+- **Don't** add perpetual motion, decorative fake progress, or glow to resting content.
+- **Don't** turn unavailable data into zero or configured agents into claims of running workers.
+- **Don't** flatten the lead-agent current into a generic same-size card grid.
+- **Don't** let spectral styling reduce contrast or become rainbow confetti.
