@@ -56,7 +56,9 @@ export function BrandSignature({
                 unoptimized
               />
             )}
-            <span className={styles.customLabel}>{label}</span>
+            <span className={styles.customLabel} title={label}>
+              {label}
+            </span>
           </>
         ) : (
           <>

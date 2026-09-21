@@ -8,6 +8,9 @@
   place-items: center;
   perspective: 700px;
 }
+.signature[data-size="compact"] {
+  grid-template-columns: minmax(0, 1fr);
+}
 .brandPlane {
   position: relative;
   z-index: 2;
@@ -41,6 +44,11 @@
   font-weight: 900;
   line-height: 1.2;
   overflow-wrap: anywhere;
+}
+.signature[data-size="compact"] .customLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .backPlane,
 .middlePlane {
