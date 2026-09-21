@@ -1,0 +1,358 @@
+/*
+ * Momentum front door.
+ *
+ * Deliberately self-contained: it borrows the --momentum-* custom properties
+ * that the Command Center already added to globals.css, so the signed-out and
+ * signed-in surfaces read as one system, but it imports no upstream landing
+ * component. Upstream owns src/components/landing/**; we do not touch it.
+ *
+ * The "/" route is pinned to dark by the theme provider, so the dark token
+ * values are the ones that render here. Light values are still honoured if
+ * that pin is ever lifted.
+ */
+
+@font-face {
+  font-family: "Momentum UI";
+  src: url("/momentum/nunito-sans.ttf") format("truetype");
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Momentum UI";
+  src: url("/momentum/nunito-sans-bold.ttf") format("truetype");
+  font-weight: 700;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Momentum Display";
+  src: url("/momentum/archivo-black.ttf") format("truetype");
+  font-weight: 400;
+  font-display: swap;
+}
+
+.page {
+  --ink: #e8f0ff;
+  --ink-soft: #a9bcd9;
+  --ink-faint: #7f93b3;
+  --edge: rgb(146 178 230 / 16%);
+  --edge-bright: rgb(146 178 230 / 34%);
+  --surface: #0b1220;
+  --surface-lift: rgb(255 255 255 / 3.5%);
+
+  min-height: 100vh;
+  width: 100%;
+  overflow-x: clip;
+  background:
+    radial-gradient(90rem 48rem at 12% -12%, rgb(49 87 213 / 26%), transparent 62%),
+    radial-gradient(64rem 40rem at 96% 4%, rgb(89 56 220 / 20%), transparent 58%),
+    var(--surface);
+  color: var(--ink);
+  font-family: "Momentum UI", "Nunito Sans", system-ui, sans-serif;
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+.shell {
+  width: min(72rem, 100% - 3rem);
+  margin-inline: auto;
+}
+
+@media (max-width: 40rem) {
+  .shell {
+    width: min(72rem, 100% - 2rem);
+  }
+}
+
+/* ---------- header ---------- */
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-block: 1.5rem;
+}
+
+.wordmark {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  text-decoration: none;
+  color: inherit;
+}
+
+.wordmarkImage {
+  height: 1.5rem;
+  width: auto;
+}
+
+.wordmarkNote {
+  font-size: 0.75rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  border-left: 1px solid var(--edge-bright);
+  padding-left: 0.625rem;
+}
+
+@media (max-width: 30rem) {
+  .wordmarkNote {
+    display: none;
+  }
+}
+
+/* ---------- hero ---------- */
+
+.hero {
+  padding-block: clamp(3.5rem, 11vw, 7.5rem) clamp(2.5rem, 7vw, 4.5rem);
+  max-width: 54rem;
+}
+
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  margin: 0 0 1.75rem;
+}
+
+.eyebrowDot {
+  width: 0.375rem;
+  height: 0.375rem;
+  border-radius: 50%;
+  background: var(--momentum-copy-heading-from, #7ec8ff);
+}
+
+.title {
+  font-family: "Momentum Display", "Archivo Black", system-ui, sans-serif;
+  font-weight: 400;
+  font-size: clamp(2.5rem, 7.2vw, 5rem);
+  line-height: 1.02;
+  letter-spacing: -0.02em;
+  margin: 0;
+  background: linear-gradient(
+    102deg,
+    var(--momentum-copy-heading-from, #7ec8ff) 0%,
+    var(--momentum-copy-heading-mid, #9ca3ff) 46%,
+    var(--momentum-copy-heading-to, #c4a7ff) 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/*
+ * Gradient text drops to a solid colour when the gradient cannot paint, and in
+ * forced-colours mode, so the headline is never invisible.
+ */
+@supports not ((-webkit-background-clip: text) or (background-clip: text)) {
+  .title {
+    background: none;
+    color: var(--momentum-copy-heading, #9fc8ff);
+  }
+}
+
+@media (forced-colors: active) {
+  .title {
+    background: none;
+    color: CanvasText;
+  }
+}
+
+.lede {
+  margin: 1.5rem 0 0;
+  max-width: 40rem;
+  font-size: clamp(1.0625rem, 1.6vw, 1.25rem);
+  color: var(--ink-soft);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.875rem;
+  margin-top: 2.5rem;
+}
+
+.primary,
+.secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 2.875rem;
+  padding: 0 1.5rem;
+  border-radius: 0.625rem;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  text-decoration: none;
+  transition:
+    transform 160ms ease,
+    box-shadow 160ms ease,
+    border-color 160ms ease;
+}
+
+.primary {
+  color: #f4f8ff;
+  background: linear-gradient(
+    102deg,
+    var(--momentum-copy-rule-from, #0b78e3),
+    var(--momentum-copy-rule-to, #6a49df)
+  );
+  box-shadow: 0 0.75rem 2rem rgb(11 120 227 / 28%);
+}
+
+.secondary {
+  color: var(--ink);
+  border: 1px solid var(--edge-bright);
+  background: var(--surface-lift);
+}
+
+.primary:hover,
+.secondary:hover {
+  transform: translateY(-1px);
+}
+
+.primary:hover {
+  box-shadow: 0 1rem 2.5rem rgb(11 120 227 / 36%);
+}
+
+.secondary:hover {
+  border-color: var(--momentum-copy-heading-from, #7ec8ff);
+}
+
+/* Keyboard users get the same affordance mouse users get. */
+.primary:focus-visible,
+.secondary:focus-visible,
+.wordmark:focus-visible,
+.footerLink:focus-visible {
+  outline: 2px solid var(--momentum-copy-heading-from, #7ec8ff);
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .primary,
+  .secondary {
+    transition: none;
+  }
+
+  .primary:hover,
+  .secondary:hover {
+    transform: none;
+  }
+}
+
+/* ---------- capability band ---------- */
+
+.band {
+  display: grid;
+  grid-template-columns: 1.35fr 1fr;
+  /* Panels size to their own content; stretching left it half empty. */
+  align-items: start;
+  gap: 1rem;
+  padding-bottom: clamp(3rem, 8vw, 5rem);
+}
+
+@media (max-width: 54rem) {
+  .band {
+    grid-template-columns: 1fr;
+  }
+}
+
+.panel {
+  border: 1px solid var(--edge);
+  border-radius: 1rem;
+  background: var(--surface-lift);
+  padding: clamp(1.5rem, 3vw, 2rem);
+}
+
+.panelLead {
+  display: grid;
+  gap: 1.25rem;
+  align-content: start;
+}
+
+.panelTitle {
+  font-family: "Momentum Display", "Archivo Black", system-ui, sans-serif;
+  font-weight: 400;
+  font-size: 1.25rem;
+  letter-spacing: -0.01em;
+  margin: 0;
+  color: var(--ink);
+}
+
+.panelBody {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.9375rem;
+}
+
+.rows {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.875rem;
+  align-items: baseline;
+  padding-block: 0.875rem;
+  border-top: 1px solid var(--edge);
+}
+
+.row:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.rowKey {
+  font-size: 0.6875rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.rowValue {
+  margin: 0;
+  font-size: 0.9375rem;
+  color: var(--ink-soft);
+}
+
+.rowValue strong {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+/* ---------- footer ---------- */
+
+.footer {
+  border-top: 1px solid var(--edge);
+  padding-block: 1.75rem 2.5rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.5rem;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--ink-faint);
+  font-size: 0.8125rem;
+}
+
+.footerLink {
+  color: var(--ink-soft);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+}
+
+.footerLink:hover {
+  border-bottom-color: var(--momentum-copy-link-line, #2e9dcc);
+}
