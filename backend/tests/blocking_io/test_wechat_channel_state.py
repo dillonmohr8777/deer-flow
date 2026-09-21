@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import mimetypes
 from pathlib import Path
 
 import pytest
@@ -55,8 +56,13 @@ async def test_wechat_constructor_is_io_free_on_async_path(tmp_path: Path) -> No
     assert channel._bot_token == "from-config"
 
 
-async def test_wechat_inbound_file_staging_does_not_block_event_loop(tmp_path: Path) -> None:
-    """Staging a downloaded inbound image writes through ``asyncio.to_thread``."""
+@pytest.mark.parametrize(
+    ("item_type", "item_key", "extra", "expected_mime"),
+    [(2, "image_item", {}, "image/jpeg"), (4, "file_item", {"file_name": "note.txt"}, "text/plain")],
+)
+async def test_wechat_inbound_file_staging_does_not_block_event_loop(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, item_type: int, item_key: str, extra: dict, expected_mime: str) -> None:
+    """Staging and first-use MIME database reads stay off the event loop."""
+    monkeypatch.setattr(mimetypes, "inited", False)
     bus = MessageBus()
     published = []
 
@@ -84,8 +90,8 @@ async def test_wechat_inbound_file_staging_does_not_block_event_loop(tmp_path: P
             "context_token": "ctx-img",
             "item_list": [
                 {
-                    "type": 2,
-                    "image_item": {"aeskey": aes_key.hex(), "media": {"full_url": "https://cdn.weixin.qq.com/image.bin"}},
+                    "type": item_type,
+                    item_key: {**extra, "aeskey": aes_key.hex(), "media": {"full_url": "https://cdn.weixin.qq.com/image.bin"}},
                 }
             ],
         }
@@ -93,6 +99,7 @@ async def test_wechat_inbound_file_staging_does_not_block_event_loop(tmp_path: P
 
     assert len(published) == 1
     assert len(published[0].files) == 1
+    assert published[0].files[0]["mime_type"] == expected_mime
     staged = Path(published[0].files[0]["path"])
     staged_exists = await asyncio.to_thread(staged.exists)
     assert staged_exists, "inbound image should be staged under the tmp state dir"
