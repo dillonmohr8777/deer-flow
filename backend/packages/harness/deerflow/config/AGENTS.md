@@ -1,5 +1,13 @@
 ### Configuration System
 
+The user-profile management API stores ``USER.md`` under the active storage
+bucket at ``{base_dir}/users/{storage_user_id}/USER.md``. Private users resolve
+to their own bucket; members of an active shared workspace resolve to that
+workspace's dedicated storage principal. The legacy root ``{base_dir}/USER.md``
+is left untouched and is a read-side fallback, never a write target.
+This file-backed profile is management storage only; it does not define a
+runtime prompt injector.
+
 Custom Agent `AgentConfig.display_name` is an optional, whitespace-trimmed Unicode
 label of at most 100 Unicode code points. C0/C1 controls and bidirectional
 formatting controls (U+202A–U+202E, U+2066–U+2069) are rejected before trimming.
