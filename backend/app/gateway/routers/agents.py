@@ -549,18 +549,28 @@ class UserProfileUpdateRequest(BaseModel):
     "/user-profile",
     response_model=UserProfileResponse,
     summary="Get User Profile",
-    description="Read the global USER.md file that is injected into all custom agents.",
+    description="Read the calling user's USER.md, which is injected into their custom agents.",
 )
 async def get_user_profile() -> UserProfileResponse:
-    """Return the current USER.md content.
+    """Return the calling user's USER.md content.
+
+    Reads `{base_dir}/users/{user_id}/USER.md`, falling back to the legacy
+    shared `{base_dir}/USER.md` when this user has no per-user file yet, so
+    installations that predate per-user profiles keep their existing content
+    until the first write migrates it.
 
     Returns:
-        UserProfileResponse with content=None if USER.md does not exist yet.
+        UserProfileResponse with content=None if neither file exists.
     """
     _require_agents_api_enabled()
+    user_id = get_effective_user_id()
 
     try:
-        user_md_path = get_paths().user_md_file
+        paths = get_paths()
+        user_md_path = paths.user_md_file_for(user_id)
+        if not user_md_path.exists():
+            # Read-side fallback only. Writes always go to the per-user path.
+            user_md_path = paths.user_md_file
         if not user_md_path.exists():
             return UserProfileResponse(content=None)
         raw = user_md_path.read_text(encoding="utf-8").strip()
@@ -574,10 +584,14 @@ async def get_user_profile() -> UserProfileResponse:
     "/user-profile",
     response_model=UserProfileResponse,
     summary="Update User Profile",
-    description="Write the global USER.md file that is injected into all custom agents.",
+    description="Write the calling user's USER.md, which is injected into their custom agents.",
 )
 async def update_user_profile(request: UserProfileUpdateRequest) -> UserProfileResponse:
-    """Create or overwrite the global USER.md.
+    """Create or overwrite the calling user's USER.md.
+
+    Writes `{base_dir}/users/{user_id}/USER.md` only. It never writes the
+    legacy shared file: USER.md is injected into custom agents, so a shared
+    write would rewrite the persona of every other user's agents.
 
     Args:
         request: The update request with the new USER.md content.
@@ -586,12 +600,13 @@ async def update_user_profile(request: UserProfileUpdateRequest) -> UserProfileR
         UserProfileResponse with the saved content.
     """
     _require_agents_api_enabled()
+    user_id = get_effective_user_id()
 
     try:
-        paths = get_paths()
-        paths.base_dir.mkdir(parents=True, exist_ok=True)
-        paths.user_md_file.write_text(request.content, encoding="utf-8")
-        logger.info(f"Updated USER.md at {paths.user_md_file}")
+        user_md_path = get_paths().user_md_file_for(user_id)
+        user_md_path.parent.mkdir(parents=True, exist_ok=True)
+        user_md_path.write_text(request.content, encoding="utf-8")
+        logger.info(f"Updated USER.md for user {user_id}")
         return UserProfileResponse(content=request.content or None)
     except Exception as e:
         logger.error(f"Failed to update user profile: {e}", exc_info=True)

@@ -174,8 +174,25 @@ class Paths:
 
     @property
     def user_md_file(self) -> Path:
-        """Path to the global user profile file: `{base_dir}/USER.md`."""
+        """Legacy shared user profile file: `{base_dir}/USER.md`.
+
+        New code should use :meth:`user_md_file_for`. This path is
+        process-global — every user and every workspace resolves to the same
+        file — so a write through it is visible to all of them. It remains only
+        as a read-side fallback for installations that predate per-user
+        profiles, mirroring :attr:`agents_dir`.
+        """
         return self.base_dir / "USER.md"
+
+    def user_md_file_for(self, user_id: str) -> Path:
+        """Per-user profile file: `{base_dir}/users/{user_id}/USER.md`.
+
+        USER.md is injected into every custom agent, so a shared file lets any
+        caller who reaches the agents API rewrite the persona of every other
+        user's agents. Isolating it per user applies the same bucket strategy
+        :meth:`user_dir` already uses for agents and memory.
+        """
+        return self.user_dir(user_id) / "USER.md"
 
     @property
     def agents_dir(self) -> Path:
