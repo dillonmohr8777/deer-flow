@@ -27,6 +27,37 @@ export type ConsoleRunItem = {
 
 export type ConsoleRunsResponse = { runs: ConsoleRunItem[]; has_more: boolean };
 
+export type ConsoleUsageLedgerItem = {
+  event_id: number;
+  run_id: string;
+  thread_id: string;
+  organization_id: string | null;
+  assistant_id: string | null;
+  provider_attempt_id: string | null;
+  llm_call_index: number | null;
+  attempt_status: string;
+  caller: string | null;
+  provider: string | null;
+  requested_model: string | null;
+  resolved_model: string | null;
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  cache_read_tokens: number;
+  latency_ms: number | null;
+  provider_reported_cost: number | null;
+  provider_reported_currency: string | null;
+  estimated_cost: number | null;
+  estimated_currency: string | null;
+  error_type: string | null;
+  created_at: string | null;
+};
+
+export type ConsoleUsageLedger = {
+  attempts: ConsoleUsageLedgerItem[];
+  has_more: boolean;
+};
+
 export type ConsoleUsageDay = {
   date: string;
   total_tokens: number;

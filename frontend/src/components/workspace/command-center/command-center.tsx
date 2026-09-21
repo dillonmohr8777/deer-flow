@@ -34,6 +34,7 @@ import {
   useConsoleRuns,
   useConsoleStats,
   useConsoleUsage,
+  useConsoleUsageLedger,
   type ConsoleRunItem,
 } from "@/core/console";
 import { useSubagents } from "@/core/subagents";
@@ -119,6 +120,7 @@ export function CommandCenter() {
   const runs = useConsoleRuns({ status: filter || undefined, offset });
   const activityRuns = useConsoleRuns({});
   const usage = useConsoleUsage();
+  const usageLedger = useConsoleUsageLedger({ limit: 10 });
   const cancel = useCancelConsoleRun();
   const {
     subagents,
@@ -577,6 +579,131 @@ export function CommandCenter() {
                   free; these figures are not your provider balance or invoice.
                   Client revenue, margins and billing are not connected.
                 </p>
+                <div className={styles.sectionHead}>
+                  <div>
+                    <h2>Provider attempt ledger</h2>
+                    <p>
+                      Read-only attempt and retry evidence; this view does not
+                      approve, block, or authorize provider spend.
+                    </p>
+                  </div>
+                  <button
+                    className={styles.iconButton}
+                    onClick={() => void usageLedger.refetch()}
+                    aria-label="Refresh provider attempt ledger"
+                    disabled={usageLedger.isFetching}
+                  >
+                    <RefreshCw
+                      size={17}
+                      className={usageLedger.isFetching ? styles.spin : undefined}
+                    />
+                  </button>
+                </div>
+                {usageLedger.isError ? (
+                  <div className={styles.empty} role="alert">
+                    <p>Provider attempt evidence could not be loaded.</p>
+                    <button onClick={() => void usageLedger.refetch()}>
+                      Try again
+                    </button>
+                  </div>
+                ) : usageLedger.isLoading ? (
+                  <p role="status">Loading provider attempts…</p>
+                ) : usageLedger.data?.attempts.length ? (
+                  <div className={styles.tableWrap}>
+                    <table>
+                      <caption>
+                        Latest provider attempts with tokens, status, latency
+                        and cost evidence
+                      </caption>
+                      <thead>
+                        <tr>
+                          <th>Attempt</th>
+                          <th>Status</th>
+                          <th>Provider / model</th>
+                          <th>Tokens</th>
+                          <th>Latency</th>
+                          <th>Provider cost</th>
+                          <th>Configured estimate</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {usageLedger.data.attempts.map((attempt) => (
+                          <tr key={attempt.event_id}>
+                            <th scope="row">
+                              {attempt.provider_attempt_id ??
+                                `Call ${attempt.llm_call_index ?? "?"}`}
+                              <span className={styles.meta}>
+                                {attempt.created_at
+                                  ? new Date(attempt.created_at).toLocaleString()
+                                  : "Time not recorded"}
+                              </span>
+                            </th>
+                            <td>
+                              <span
+                                className={styles.status}
+                                data-status={
+                                  attempt.attempt_status === "success"
+                                    ? "success"
+                                    : "error"
+                                }
+                              >
+                                {attempt.attempt_status}
+                              </span>
+                              {attempt.error_type && (
+                                <span className={styles.meta}>
+                                  {attempt.error_type}
+                                </span>
+                              )}
+                            </td>
+                            <td>
+                              {attempt.provider ?? "Provider not recorded"}
+                              <span className={styles.meta}>
+                                {attempt.resolved_model ??
+                                  attempt.requested_model ??
+                                  "Model not recorded"}
+                              </span>
+                            </td>
+                            <td>
+                              {number(attempt.total_tokens)}
+                              <span className={styles.meta}>
+                                {number(attempt.input_tokens)} in ·{" "}
+                                {number(attempt.output_tokens)} out
+                                {attempt.cache_read_tokens
+                                  ? ` · ${number(attempt.cache_read_tokens)} cached`
+                                  : ""}
+                              </span>
+                            </td>
+                            <td>
+                              {attempt.latency_ms == null
+                                ? "Not recorded"
+                                : `${number(attempt.latency_ms)}ms`}
+                            </td>
+                            <td>
+                              {money(
+                                attempt.provider_reported_cost,
+                                attempt.provider_reported_currency,
+                              )}
+                            </td>
+                            <td>
+                              {money(
+                                attempt.estimated_cost,
+                                attempt.estimated_currency,
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {usageLedger.data.has_more && (
+                      <p className={styles.diagramNote}>
+                        Showing the latest 10 attempts. The API has more
+                        evidence available for audit views.
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <p>No provider attempts were recorded in the latest ledger.</p>
+                )}
               </>
             )}
           </section>
