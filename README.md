@@ -529,6 +529,8 @@ DeerFlow's built-in custom events are available through both LangGraph streaming
 
 #### Docker Production Deployment
 
+The production image includes the standard MIME registry so active document types such as XHTML are downloaded as attachments consistently across hosts.
+
 `deploy.sh` supports building and starting separately:
 
 ```bash
