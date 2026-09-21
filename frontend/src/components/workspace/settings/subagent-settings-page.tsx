@@ -1,7 +1,8 @@
 "use client";
 
 import { PencilIcon, PlusIcon, Trash2Icon } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -30,7 +31,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/core/auth/AuthProvider";
 import { useI18n } from "@/core/i18n/hooks";
 import { useModels } from "@/core/models/hooks";
@@ -40,7 +40,16 @@ import {
   useSubagents,
   useUpdateManagedSubagent,
 } from "@/core/subagents";
-import type { Subagent } from "@/core/subagents";
+import type { Subagent, UpdateManagedSubagentRequest } from "@/core/subagents";
+
+import { AgentIdentityFields } from "../agents/agent-identity-fields";
+import {
+  composeIdentityPrompt,
+  identityPromptChanged,
+  identityVoiceIsValid,
+  splitIdentityPrompt,
+} from "../agents/agent-identity-helpers";
+import { MomentumGlyph } from "../command-center/momentum-glyph";
 
 import { SettingsSection } from "./settings-section";
 import {
@@ -56,6 +65,7 @@ type Draft = {
   displayName: string;
   description: string;
   systemPrompt: string;
+  voice: string;
   model: string;
   toolsMode: OptionalNameListMode;
   tools: string;
@@ -70,6 +80,7 @@ const EMPTY_DRAFT: Draft = {
   displayName: "",
   description: "",
   systemPrompt: "",
+  voice: "",
   model: "inherit",
   toolsMode: "all",
   tools: "",
@@ -88,11 +99,13 @@ function formatOverrideValue(value: unknown): string {
 function draftFrom(subagent: Subagent): Draft {
   const tools = optionalNameListToDraft(subagent.tools);
   const skills = optionalNameListToDraft(subagent.skills);
+  const identity = splitIdentityPrompt(subagent.system_prompt ?? "");
   return {
     name: subagent.name,
     displayName: subagent.display_name ?? "",
     description: subagent.description,
-    systemPrompt: subagent.system_prompt ?? "",
+    systemPrompt: identity.brief,
+    voice: identity.voice,
     model: subagent.model,
     toolsMode: tools.mode,
     tools: tools.text,
@@ -111,6 +124,27 @@ export function SubagentSettingsPage() {
   const update = useUpdateManagedSubagent();
   const remove = useDeleteManagedSubagent();
   const [editing, setEditing] = useState<Subagent | "new" | null>(null);
+  const searchParams = useSearchParams();
+  const requestedName =
+    searchParams.get("settings") === "subagents"
+      ? searchParams.get("specialist")
+      : null;
+  const openedSpecialist = useRef<string | null>(null);
+  useEffect(() => {
+    if (!requestedName) {
+      openedSpecialist.current = null;
+      return;
+    }
+    if (!isAdmin) return;
+    const requested = subagents.find(
+      (agent) =>
+        agent.name === requestedName && agent.editable && !agent.conflict,
+    );
+    if (requested && openedSpecialist.current !== requestedName) {
+      openedSpecialist.current = requestedName;
+      setEditing(requested);
+    }
+  }, [isAdmin, requestedName, subagents]);
 
   async function setEnabled(subagent: Subagent, enabled: boolean) {
     try {
@@ -139,6 +173,10 @@ export function SubagentSettingsPage() {
       <div className="space-y-4">
         <p className="text-muted-foreground text-sm">
           {t.settings.subagents.executionNote}
+        </p>
+        <p className="text-muted-foreground text-xs">
+          Specialists are an installation-wide catalog. Administrator changes
+          apply wherever that specialist is used.
         </p>
         <div className="flex items-center justify-between gap-4">
           {!isAdmin && (
@@ -174,8 +212,11 @@ export function SubagentSettingsPage() {
                 key={`${subagent.source}-${subagent.name}`}
               >
                 <ItemContent>
-                  <ItemTitle className="flex flex-wrap items-center gap-2">
-                    <span>{subagent.display_name ?? subagent.name}</span>
+                  <ItemTitle className="flex min-w-0 flex-wrap items-center gap-2">
+                    <MomentumGlyph seed={`agent:${subagent.name}`} size={36} />
+                    <span className="min-w-0 [overflow-wrap:anywhere]">
+                      {subagent.display_name ?? subagent.name}
+                    </span>
                     <Badge variant="outline">
                       {subagent.source === "builtin"
                         ? t.settings.subagents.sourceBuiltin
@@ -206,6 +247,7 @@ export function SubagentSettingsPage() {
                   {isAdmin && subagent.editable && (
                     <>
                       <Switch
+                        aria-label={`Enable ${subagent.display_name ?? subagent.name}`}
                         checked={subagent.enabled}
                         disabled={update.isPending || subagent.conflict}
                         onCheckedChange={(enabled) =>
@@ -215,6 +257,7 @@ export function SubagentSettingsPage() {
                       <Button
                         variant="ghost"
                         size="icon-sm"
+                        disabled={subagent.conflict}
                         onClick={() => setEditing(subagent)}
                       >
                         <PencilIcon className="size-4" />
@@ -238,6 +281,7 @@ export function SubagentSettingsPage() {
       </div>
 
       <SubagentEditor
+        key={editing === "new" ? "new" : (editing?.name ?? "closed")}
         value={editing}
         onOpenChange={(open) => !open && setEditing(null)}
       />
@@ -257,6 +301,7 @@ function SubagentEditor({
   const create = useCreateManagedSubagent();
   const update = useUpdateManagedSubagent();
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
     setDraft(value && value !== "new" ? draftFrom(value) : EMPTY_DRAFT);
@@ -270,6 +315,7 @@ function SubagentEditor({
   }
 
   async function save() {
+    setSaveError(null);
     const maxTurns = positiveInteger(draft.maxTurns);
     const timeoutSeconds = positiveInteger(draft.timeoutSeconds);
     if (
@@ -278,11 +324,27 @@ function SubagentEditor({
       !isValidManagedSubagentName(draft.name)
     )
       return;
+    if (
+      [...draft.displayName.trim()].length > 100 ||
+      !identityVoiceIsValid(draft.voice)
+    ) {
+      setSaveError(
+        "Use up to 100 characters for the name and 1600 for the voice, without reserved voice markers.",
+      );
+      return;
+    }
+
+    const prompt = { brief: draft.systemPrompt, voice: draft.voice };
 
     const payload = {
       display_name: draft.displayName.trim() || null,
       description: draft.description.trim(),
-      system_prompt: draft.systemPrompt.trim(),
+      system_prompt:
+        value &&
+        value !== "new" &&
+        !identityPromptChanged(value.system_prompt ?? "", prompt)
+          ? (value.system_prompt ?? "")
+          : composeIdentityPrompt(prompt),
       model: draft.model,
       tools: optionalNameListFromDraft(draft.toolsMode, draft.tools),
       skills: optionalNameListFromDraft(draft.skillsMode, draft.skills),
@@ -294,18 +356,29 @@ function SubagentEditor({
         await create.mutateAsync({ name: draft.name.trim(), ...payload });
         toast.success(t.settings.subagents.created);
       } else if (value) {
-        await update.mutateAsync({ name: value.name, request: payload });
+        const original = value as unknown as Record<string, unknown>;
+        const request = Object.fromEntries(
+          Object.entries(payload).filter(
+            ([field, next]) =>
+              JSON.stringify(next) !== JSON.stringify(original[field]),
+          ),
+        ) as UpdateManagedSubagentRequest;
+        await update.mutateAsync({ name: value.name, request });
         toast.success(t.settings.subagents.saved);
       }
       onOpenChange(false);
     } catch (err) {
+      setSaveError(err instanceof Error ? err.message : String(err));
       toast.error(err instanceof Error ? err.message : String(err));
     }
   }
 
   return (
-    <Dialog open={value !== null} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+    <Dialog
+      open={value !== null}
+      onOpenChange={(next) => !pending && onOpenChange(next)}
+    >
+      <DialogContent className="max-h-[calc(100dvh-2rem)] min-w-0 grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>
             {isNew
@@ -316,98 +389,103 @@ function SubagentEditor({
             {t.settings.subagents.description}
           </DialogDescription>
         </DialogHeader>
-        <div className="grid gap-4 py-1 sm:grid-cols-2">
-          <Field label={t.settings.subagents.name}>
-            <Input
-              value={draft.name}
-              disabled={!isNew}
-              onChange={(event) => set("name", event.target.value)}
-            />
-            {isNew && (
-              <p className="text-muted-foreground text-xs">
-                {t.settings.subagents.nameHint}
-              </p>
-            )}
-          </Field>
-          <Field label={t.settings.subagents.displayName}>
-            <Input
-              value={draft.displayName}
-              onChange={(event) => set("displayName", event.target.value)}
-            />
-          </Field>
-          <Field
-            className="sm:col-span-2"
-            label={t.settings.subagents.descriptionLabel}
-          >
-            <Textarea
-              value={draft.description}
-              onChange={(event) => set("description", event.target.value)}
-            />
-          </Field>
-          <Field
-            className="sm:col-span-2"
-            label={t.settings.subagents.systemPrompt}
-          >
-            <Textarea
-              className="min-h-32"
-              value={draft.systemPrompt}
-              onChange={(event) => set("systemPrompt", event.target.value)}
-            />
-          </Field>
-          <Field label={t.settings.subagents.model}>
-            <Select
-              value={draft.model}
-              onValueChange={(next) => set("model", next)}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="inherit">
-                  {t.settings.subagents.inheritModel}
-                </SelectItem>
-                {models.map((model) => (
-                  <SelectItem key={model.name} value={model.name}>
-                    {model.display_name || model.name}
+        <div className="min-h-0 min-w-0 space-y-5 overflow-y-auto overscroll-contain px-1 py-1">
+          <AgentIdentityFields
+            name={draft.name}
+            displayName={draft.displayName}
+            role={draft.description}
+            prompt={{ brief: draft.systemPrompt, voice: draft.voice }}
+            scope="Managed specialist · installation-wide definition"
+            disabled={pending}
+            promptAvailable={
+              isNew || (value !== null && value.system_prompt !== null)
+            }
+            onDisplayNameChange={(next) => set("displayName", next)}
+            onRoleChange={(next) => set("description", next)}
+            onPromptChange={(next) =>
+              setDraft((current) => ({
+                ...current,
+                systemPrompt: next.brief,
+                voice: next.voice,
+              }))
+            }
+          />
+          {saveError && (
+            <p role="alert" className="text-destructive text-sm">
+              {saveError}
+            </p>
+          )}
+          <h3 className="border-t pt-5 text-sm font-semibold">
+            Runtime &amp; access
+          </h3>
+          <div className="grid min-w-0 gap-4 sm:grid-cols-2">
+            <Field label={t.settings.subagents.name}>
+              <Input
+                value={draft.name}
+                disabled={!isNew}
+                onChange={(event) => set("name", event.target.value)}
+              />
+              {isNew && (
+                <p className="text-muted-foreground text-xs">
+                  {t.settings.subagents.nameHint}
+                </p>
+              )}
+            </Field>
+            <Field label={t.settings.subagents.model}>
+              <Select
+                value={draft.model}
+                onValueChange={(next) => set("model", next)}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="inherit">
+                    {t.settings.subagents.inheritModel}
                   </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
-          <Field label={t.settings.subagents.tools}>
-            <OptionalNameListField
-              mode={draft.toolsMode}
-              text={draft.tools}
-              onModeChange={(mode) => set("toolsMode", mode)}
-              onTextChange={(text) => set("tools", text)}
-            />
-          </Field>
-          <Field label={t.settings.subagents.skills}>
-            <OptionalNameListField
-              mode={draft.skillsMode}
-              text={draft.skills}
-              onModeChange={(mode) => set("skillsMode", mode)}
-              onTextChange={(text) => set("skills", text)}
-            />
-          </Field>
-          <Field label={t.settings.subagents.maxTurns}>
-            <Input
-              type="number"
-              min={1}
-              step={1}
-              value={draft.maxTurns}
-              onChange={(event) => set("maxTurns", event.target.value)}
-            />
-          </Field>
-          <Field label={t.settings.subagents.timeout}>
-            <Input
-              type="number"
-              min={1}
-              step={1}
-              value={draft.timeoutSeconds}
-              onChange={(event) => set("timeoutSeconds", event.target.value)}
-            />
-          </Field>
+                  {models.map((model) => (
+                    <SelectItem key={model.name} value={model.name}>
+                      {model.display_name || model.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field label={t.settings.subagents.tools}>
+              <OptionalNameListField
+                mode={draft.toolsMode}
+                text={draft.tools}
+                onModeChange={(mode) => set("toolsMode", mode)}
+                onTextChange={(text) => set("tools", text)}
+              />
+            </Field>
+            <Field label={t.settings.subagents.skills}>
+              <OptionalNameListField
+                mode={draft.skillsMode}
+                text={draft.skills}
+                onModeChange={(mode) => set("skillsMode", mode)}
+                onTextChange={(text) => set("skills", text)}
+              />
+            </Field>
+            <Field label={t.settings.subagents.maxTurns}>
+              <Input
+                type="number"
+                min={1}
+                step={1}
+                value={draft.maxTurns}
+                onChange={(event) => set("maxTurns", event.target.value)}
+              />
+            </Field>
+            <Field label={t.settings.subagents.timeout}>
+              <Input
+                type="number"
+                min={1}
+                step={1}
+                value={draft.timeoutSeconds}
+                onChange={(event) => set("timeoutSeconds", event.target.value)}
+              />
+            </Field>
+          </div>
         </div>
         <DialogFooter>
           <Button

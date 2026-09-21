@@ -10,6 +10,7 @@ import {
 } from "react";
 
 import { useAuth } from "@/core/auth/AuthProvider";
+import { useWorkspaceBranding } from "@/core/workspaces/hooks";
 
 import {
   appearanceKey,
@@ -20,6 +21,8 @@ import {
 
 type AppearanceContextValue = {
   preferences: AppearancePreferences;
+  personalPreferences: AppearancePreferences;
+  shared?: ReturnType<typeof useWorkspaceBranding>;
   reducedMotion: boolean;
   visible: boolean;
   persistence: "loading" | "local" | "memory";
@@ -30,6 +33,7 @@ type AppearanceContextValue = {
 
 const AppearanceContext = createContext<AppearanceContextValue>({
   preferences: DEFAULT_APPEARANCE,
+  personalPreferences: DEFAULT_APPEARANCE,
   reducedMotion: true,
   visible: false,
   persistence: "loading",
@@ -63,6 +67,7 @@ function AccountAppearance({
   userId: string | null;
 }) {
   const [preferences, setPreferences] = useState(DEFAULT_APPEARANCE);
+  const shared = useWorkspaceBranding();
   const currentPreferences = useRef(preferences);
   currentPreferences.current = preferences;
   const [persistence, setPersistence] =
@@ -125,6 +130,7 @@ function AccountAppearance({
 
   function reset() {
     if (!userId) return;
+    currentPreferences.current = { ...DEFAULT_APPEARANCE };
     setPreferences({ ...DEFAULT_APPEARANCE });
     try {
       window.localStorage.removeItem(appearanceKey(userId));
@@ -137,7 +143,25 @@ function AccountAppearance({
   return (
     <AppearanceContext.Provider
       value={{
-        preferences,
+        preferences: {
+          ...preferences,
+          ...(shared.workspaceId
+            ? {
+                label:
+                  shared.branding.data?.brand_name ??
+                  shared.workspace?.name ??
+                  "",
+                logo: shared.branding.data?.logo ?? null,
+                treatment: preferences.followWorkspaceStyle
+                  ? (shared.branding.data?.treatment ?? "current")
+                  : preferences.treatment,
+              }
+            : !shared.workspaces.isSuccess
+              ? { label: "", logo: null }
+              : {}),
+        },
+        personalPreferences: preferences,
+        shared,
         reducedMotion,
         visible,
         persistence,

@@ -38,30 +38,42 @@ export function WorkspaceSettingsDeepLink() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { open } = useSettingsDialog();
-  const openedFromDeepLinkRef = useRef(false);
+  const query = searchParams.toString();
+  const activeLink = useRef<{ key: string; observedOpen: boolean } | null>(
+    null,
+  );
 
   useEffect(() => {
-    const nextSection = asSettingsSection(searchParams.get("settings"));
-    if (nextSection) {
-      openedFromDeepLinkRef.current = true;
-      openSettingsDialog(nextSection);
-    }
-  }, [searchParams]);
-
-  useEffect(() => {
-    if (open || !openedFromDeepLinkRef.current) {
+    const next = new URLSearchParams(query);
+    const nextSection = asSettingsSection(next.get("settings"));
+    if (!nextSection) {
+      activeLink.current = null;
       return;
     }
-    openedFromDeepLinkRef.current = false;
-    if (searchParams.has("settings")) {
-      const next = new URLSearchParams(searchParams);
-      next.delete("settings");
-      const suffix = next.toString();
-      router.replace(suffix ? `${pathname}?${suffix}` : pathname, {
-        scroll: false,
-      });
+
+    const key = JSON.stringify([pathname, nextSection, next.get("specialist")]);
+    if (activeLink.current?.key !== key) {
+      activeLink.current = { key, observedOpen: open };
+      openSettingsDialog(nextSection);
+      return;
     }
-  }, [open, pathname, router, searchParams]);
+
+    if (open) {
+      activeLink.current.observedOpen = true;
+      return;
+    }
+
+    // The store opens after the initial closed render. Keep the query available
+    // to lazy settings pages until we have actually observed open -> closed.
+    if (!activeLink.current.observedOpen) return;
+    activeLink.current.observedOpen = false;
+    next.delete("settings");
+    next.delete("specialist");
+    const suffix = next.toString();
+    router.replace(suffix ? `${pathname}?${suffix}` : pathname, {
+      scroll: false,
+    });
+  }, [open, pathname, query, router]);
 
   return null;
 }

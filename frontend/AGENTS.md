@@ -222,12 +222,32 @@ Keep project grouping distinct from verified client tenancy. Stage independently
 with `NEXT_BUILD_DIR=.next-momentum`; do not overwrite a running server's build.
 
 `WorkspaceAppearanceProvider` owns account-scoped browser presentation under
-`momentum:appearance:v1:<encoded user ID>`. It does not call a backend or mutate
-agent/workspace metadata. Keep the shared `BrandSignature` in navigation and the
-dashboard, strict preference parsing, account-switch remount, storage fallback,
-and reset behavior. Logo preparation reuses the bounded raster-only MCP icon
-decoder; no uploaded SVG or remote image URL is rendered. Brand motion is opt-in
-and visibility/intersection/reduced-motion gated, independently of run status.
+`momentum:appearance:v1:<encoded user ID>` and overlays the active shared
+workspace's saved brand through `core/workspaces`. Query keys include account
+and workspace IDs; workspace selection still performs full navigation. Shared
+logo/name take precedence, while personal style can follow the workspace default
+or override it. Existing saved style choices are preserved. Motion is local,
+opt-in and visibility/intersection/reduced-motion gated; it is never a shared
+setting or activity signal. Private brand previews stay in browser storage and
+remain hidden until workspace scope is known.
+
+Shared branding writes bind to the returned `can_edit` capability and send
+`expected_version` on both PUT and DELETE. A 412 preserves the draft and requires
+an explicit latest-version reload; refresh errors must not unmount a populated
+editor. Logo preparation reuses the bounded raster-only MCP icon decoder; no
+uploaded SVG or remote image URL is rendered. Keep the shared `BrandSignature`
+in navigation and the dashboard, validated preferences, account-switch remount,
+storage fallback and reset behavior.
+
+Agent identity fields reuse custom-agent `description`/`soul` and managed
+specialist `description`/`system_prompt`. `agent-identity-helpers.ts` recognizes
+only its exact trailing Voice section; all other prompt text remains intact.
+Starter voices modify a draft only. Identity-only saves omit untouched model,
+tool, skill and safety settings. Managed specialists are installation-wide and
+admin-editable, not workspace-specific personas. Do not wire persona editing to
+the unrelated workspace-scoped USER.md profile route. Names retain stable runtime IDs and
+use code-point validation; bounded previews preserve full names in accessible
+DOM text/title.
 
 `backend/packages/harness/deerflow/capabilities/builtin.json` owns localized
 catalog manifests. Refresh the generated demo snapshot with `pnpm catalog:sync`

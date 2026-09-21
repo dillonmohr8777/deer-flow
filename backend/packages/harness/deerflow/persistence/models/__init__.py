@@ -25,6 +25,7 @@ from deerflow.persistence.feedback.model import FeedbackRow
 from deerflow.persistence.managed_subagents.model import ManagedSubagentRow
 from deerflow.persistence.mcp_tasks.model import McpTaskRow
 from deerflow.persistence.models.run_event import RunEventRow
+from deerflow.persistence.organizations.branding import OrganizationBrandingRow
 from deerflow.persistence.organizations.invitation import InvitationRow
 from deerflow.persistence.organizations.model import OrganizationDelegationRow, OrganizationMemberRow, OrganizationRow
 from deerflow.persistence.personal_access_tokens.model import PersonalAccessTokenRow
@@ -47,6 +48,7 @@ __all__ = [
     "InvitationRow",
     "McpTaskRow",
     "ManagedSubagentRow",
+    "OrganizationBrandingRow",
     "OrganizationDelegationRow",
     "OrganizationMemberRow",
     "OrganizationRow",

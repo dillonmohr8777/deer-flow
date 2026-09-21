@@ -128,6 +128,9 @@ export function CommandCenter() {
   const activityRuns = useConsoleRuns({});
   const usage = useConsoleUsage();
   const usageLedger = useConsoleUsageLedger({ limit: 10 });
+  const hasUnpricedModels = Object.values(usage.data?.by_model ?? {}).some(
+    (item) => item.cost == null,
+  );
   const cancel = useCancelConsoleRun();
   const {
     subagents,
@@ -367,9 +370,9 @@ export function CommandCenter() {
           {user?.system_role === "admin" && selectedAgent.editable && (
             <Link
               className={styles.textLink}
-              href="/workspace/command-center?settings=subagents"
+              href={`/workspace/command-center?settings=subagents&specialist=${encodeURIComponent(selectedAgent.name)}`}
             >
-              Edit specialist brief <ArrowUpRight size={14} />
+              Edit identity &amp; brief <ArrowUpRight size={14} />
             </Link>
           )}
           <dl>
@@ -550,10 +553,19 @@ export function CommandCenter() {
                 <h2>Operational intelligence</h2>
                 <p>Last 14 days · current account only</p>
               </div>
-              <strong>
-                {money(usage.data?.total_cost, usage.data?.currency)}
-              </strong>
+              <div className={styles.usageEstimate}>
+                <span>Available run estimates</span>
+                <strong>
+                  {money(usage.data?.total_cost, usage.data?.currency)}
+                </strong>
+                {hasUnpricedModels && <small>Partial · unpriced usage</small>}
+              </div>
             </div>
+            {hasUnpricedModels && (
+              <p className={styles.diagramNote}>
+                Some model usage is unpriced; this is not the total cost.
+              </p>
+            )}
             {!canReadRuns ? (
               <p role="status">Usage is unavailable for this account.</p>
             ) : usage.isError ? (

@@ -6,6 +6,7 @@ export type AppearancePreferences = {
   motion: boolean;
   logo: string | null;
   label: string;
+  followWorkspaceStyle: boolean;
 };
 
 export const DEFAULT_APPEARANCE: AppearancePreferences = {
@@ -13,6 +14,7 @@ export const DEFAULT_APPEARANCE: AppearancePreferences = {
   motion: false,
   logo: null,
   label: "",
+  followWorkspaceStyle: true,
 };
 
 export function appearanceKey(userId: string) {
@@ -33,6 +35,10 @@ export function parseAppearance(raw: string | null): AppearancePreferences {
           ? record.treatment
           : "current",
       motion: record.motion === true,
+      followWorkspaceStyle:
+        typeof record.followWorkspaceStyle === "boolean"
+          ? record.followWorkspaceStyle
+          : !["classic", "current", "paper"].includes(String(record.treatment)),
       logo: safePluginIcon(record.logo) ?? null,
       label:
         typeof record.label === "string"

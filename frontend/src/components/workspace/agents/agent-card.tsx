@@ -1,11 +1,6 @@
 "use client";
 
-import {
-  BotIcon,
-  MessageSquareIcon,
-  Settings2Icon,
-  Trash2Icon,
-} from "lucide-react";
+import { MessageSquareIcon, Settings2Icon, Trash2Icon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { type ComponentProps, type ReactElement, useState } from "react";
 import { toast } from "sonner";
@@ -37,6 +32,8 @@ import { useDeleteAgent } from "@/core/agents";
 import type { Agent } from "@/core/agents";
 import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
+
+import { MomentumGlyph } from "../command-center/momentum-glyph";
 
 import { AgentSettingsDialog } from "./agent-settings-dialog";
 
@@ -137,8 +134,8 @@ export function AgentCard({ agent }: AgentCardProps) {
         <CardHeader className="pb-3">
           <div className="flex min-w-0 items-start justify-between gap-2">
             <div className="flex min-w-0 items-center gap-2">
-              <div className="bg-primary/10 text-primary flex h-9 w-9 shrink-0 items-center justify-center rounded-lg">
-                <BotIcon className="h-5 w-5" />
+              <div className="bg-primary/10 text-primary flex h-12 w-12 shrink-0 items-center justify-center rounded-xl">
+                <MomentumGlyph seed={`agent:${agent.name}`} size={42} />
               </div>
               <div className="min-w-0">
                 <TruncatedTooltip text={displayName}>

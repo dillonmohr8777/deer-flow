@@ -8,6 +8,7 @@ import { PluginIconError, preparePluginIcon } from "@/core/mcp/icon";
 import { type BrandTreatment } from "./appearance-preferences";
 import { useWorkspaceAppearance } from "./appearance-provider";
 import { MomentumGlyph } from "./momentum-glyph";
+import { SharedWorkspaceBranding } from "./shared-workspace-branding";
 
 import styles from "./workspace-appearance.module.css";
 
@@ -79,6 +80,8 @@ export function BrandMotionToggle({ compact = false }: { compact?: boolean }) {
 export function WorkspaceAppearance({ onClose }: { onClose: () => void }) {
   const {
     preferences,
+    personalPreferences,
+    shared,
     persistence,
     canCustomize,
     reducedMotion,
@@ -90,14 +93,17 @@ export function WorkspaceAppearance({ onClose }: { onClose: () => void }) {
   const generation = useRef(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [label, setLabel] = useState(preferences.label);
+  const [label, setLabel] = useState(personalPreferences.label);
   useEffect(
     () => () => {
       generation.current++;
     },
     [],
   );
-  useEffect(() => setLabel(preferences.label), [preferences.label]);
+  useEffect(
+    () => setLabel(personalPreferences.label),
+    [personalPreferences.label],
+  );
 
   async function chooseLogo(file: File) {
     const current = ++generation.current;
@@ -148,7 +154,19 @@ export function WorkspaceAppearance({ onClose }: { onClose: () => void }) {
       </div>
       <div className={styles.panelBody}>
         <fieldset className={styles.treatments} disabled={!canCustomize}>
-          <legend>Workspace style</legend>
+          <legend>Your visual style</legend>
+          {shared?.workspaceId && (
+            <label className={styles.followWorkspace}>
+              <input
+                type="checkbox"
+                checked={personalPreferences.followWorkspaceStyle}
+                onChange={(event) =>
+                  update({ followWorkspaceStyle: event.target.checked })
+                }
+              />
+              Use workspace style
+            </label>
+          )}
           <div className={styles.choices}>
             {treatments.map((treatment) => (
               <label
@@ -162,7 +180,12 @@ export function WorkspaceAppearance({ onClose }: { onClose: () => void }) {
                   name={`${id}-treatment`}
                   value={treatment.value}
                   checked={preferences.treatment === treatment.value}
-                  onChange={() => update({ treatment: treatment.value })}
+                  onChange={() =>
+                    update({
+                      treatment: treatment.value,
+                      followWorkspaceStyle: false,
+                    })
+                  }
                 />
                 <span className={styles.choiceArt} aria-hidden="true">
                   <MomentumGlyph seed="agent:momentum-design" size={44} />
@@ -185,86 +208,109 @@ export function WorkspaceAppearance({ onClose }: { onClose: () => void }) {
               : "Brand motion is optional. Your agents’ recorded activity always stays separate."}
           </p>
         </fieldset>
-        <div className={styles.personalBrand}>
-          <h3>Your brand, locally.</h3>
-          <p>
-            Preview a client or team logo in this browser. This does not change
-            the shared workspace.
-          </p>
-          <label htmlFor={`${id}-name`}>Brand name</label>
-          <input
-            id={`${id}-name`}
-            type="text"
-            value={label}
-            placeholder="e.g. Your studio"
-            maxLength={80}
-            disabled={!canCustomize}
-            onChange={(event) =>
-              setLabel([...event.target.value].slice(0, 40).join(""))
-            }
-            onBlur={() => update({ label })}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                event.preventDefault();
-                update({ label });
-              }
-            }}
-          />
-          <div className={styles.uploadActions}>
-            <button
-              type="button"
-              onClick={() => uploadInput.current?.click()}
-              disabled={!canCustomize || busy}
-            >
-              <ImagePlus size={16} />
-              {busy
-                ? "Preparing logo…"
-                : preferences.logo
-                  ? "Change logo"
-                  : "Choose logo"}
-            </button>
-            {preferences.logo && (
-              <button
-                type="button"
-                className={styles.quiet}
-                onClick={() => {
-                  generation.current++;
-                  setBusy(false);
-                  setError(null);
-                  update({ logo: null });
-                }}
-              >
-                Remove
-              </button>
+        {shared?.workspaceId ? (
+          <SharedWorkspaceBranding shared={shared} />
+        ) : shared && !shared.workspaces.isSuccess ? (
+          <div className={styles.personalBrand}>
+            <h3>Workspace branding</h3>
+            <p role={shared.workspaces.error ? "alert" : "status"}>
+              {shared.workspaces.error
+                ? "Workspace scope could not be loaded. Branding controls will return after it is verified."
+                : "Loading your workspace…"}
+            </p>
+            {shared.workspaces.error && (
+              <div className={styles.uploadActions}>
+                <button
+                  type="button"
+                  onClick={() => void shared.workspaces.refetch()}
+                >
+                  Try again
+                </button>
+              </div>
             )}
           </div>
-          <input
-            ref={uploadInput}
-            type="file"
-            accept="image/png,image/jpeg,image/webp"
-            hidden
-            aria-label="Choose a local brand logo"
-            disabled={!canCustomize || busy}
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              event.target.value = "";
-              if (file) void chooseLogo(file);
-            }}
-          />
-          <small>PNG, JPEG or WebP · up to 2 MB · stays on this device</small>
-          {error && (
-            <p className={styles.error} role="alert">
-              {error}
+        ) : (
+          <div className={styles.personalBrand}>
+            <h3>Your brand, locally.</h3>
+            <p>
+              Preview a client or team logo in this browser. This does not
+              change the shared workspace.
             </p>
-          )}
-        </div>
+            <label htmlFor={`${id}-name`}>Brand name</label>
+            <input
+              id={`${id}-name`}
+              type="text"
+              value={label}
+              placeholder="e.g. Your studio"
+              maxLength={80}
+              disabled={!canCustomize}
+              onChange={(event) =>
+                setLabel([...event.target.value].slice(0, 40).join(""))
+              }
+              onBlur={() => update({ label })}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  update({ label });
+                }
+              }}
+            />
+            <div className={styles.uploadActions}>
+              <button
+                type="button"
+                onClick={() => uploadInput.current?.click()}
+                disabled={!canCustomize || busy}
+              >
+                <ImagePlus size={16} />
+                {busy
+                  ? "Preparing logo…"
+                  : personalPreferences.logo
+                    ? "Change logo"
+                    : "Choose logo"}
+              </button>
+              {personalPreferences.logo && (
+                <button
+                  type="button"
+                  className={styles.quiet}
+                  onClick={() => {
+                    generation.current++;
+                    setBusy(false);
+                    setError(null);
+                    update({ logo: null });
+                  }}
+                >
+                  Remove
+                </button>
+              )}
+            </div>
+            <input
+              ref={uploadInput}
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              hidden
+              aria-label="Choose a local brand logo"
+              disabled={!canCustomize || busy}
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                event.target.value = "";
+                if (file) void chooseLogo(file);
+              }}
+            />
+            <small>PNG, JPEG or WebP · up to 2 MB · stays on this device</small>
+            {error && (
+              <p className={styles.error} role="alert">
+                {error}
+              </p>
+            )}
+          </div>
+        )}
       </div>
       <div className={styles.panelFoot}>
         <p role="status">
           {persistence === "loading"
             ? "Loading your appearance…"
             : persistence === "local"
-              ? "Saved for your account in this browser. Other teammates keep their own appearance."
+              ? "Personal style and motion are saved in this browser. Shared branding is saved separately for the workspace."
               : "Browser storage is unavailable. Changes last only for this visit."}
         </p>
         <button
@@ -273,7 +319,7 @@ export function WorkspaceAppearance({ onClose }: { onClose: () => void }) {
           disabled={!canCustomize}
         >
           <RotateCcw size={14} />
-          Reset appearance
+          Reset personal appearance
         </button>
       </div>
     </section>

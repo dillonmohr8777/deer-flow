@@ -36,6 +36,13 @@ import { useSubagents } from "@/core/subagents";
 import { KnowledgeScopeSelector } from "../knowledge-scope-selector";
 
 import { AgentCapabilitySelection } from "./agent-capability-selection";
+import { AgentIdentityFields } from "./agent-identity-fields";
+import {
+  composeIdentityPrompt,
+  identityPromptChanged,
+  identityVoiceIsValid,
+  splitIdentityPrompt,
+} from "./agent-identity-helpers";
 import {
   allowedSubagentsToSelection,
   DEFAULT_MODEL_VALUE,
@@ -88,6 +95,12 @@ export function AgentSettingsDialog({
   const { subagents } = useSubagents();
   const subagentDescriptionId = useId();
   const updateAgent = useUpdateAgent();
+  const [initialAgent] = useState(agent);
+  const [role, setRole] = useState(agent.description);
+  const [prompt, setPrompt] = useState(() =>
+    splitIdentityPrompt(agent.soul ?? ""),
+  );
+  const [saveError, setSaveError] = useState<string | null>(null);
   // Keep the opening snapshot even if a background refetch updates agent props.
   const [initialSelections] = useState(() => ({
     plugins: agent.mcp_plugins ?? null,
@@ -122,6 +135,13 @@ export function AgentSettingsDialog({
   const [selectedSubagents, setSelectedSubagents] = useState<string[]>(
     agent.allowed_subagents ?? [],
   );
+  const [initialRuntime] = useState(() => ({
+    model,
+    temperature,
+    maxTokens,
+    thinking,
+    reasoningEffort,
+  }));
 
   // The resolved profile gates which controls are meaningful: thinking and
   // reasoning-effort only apply when the selected model advertises support.
@@ -153,8 +173,16 @@ export function AgentSettingsDialog({
   }, [selectableSubagents, selectedSubagents]);
 
   async function handleSave() {
+    setSaveError(null);
     if ([...displayName.trim()].length > 100) {
+      setSaveError(t.agents.settingsDisplayNameTooLong);
       toast.error(t.agents.settingsDisplayNameTooLong);
+      return;
+    }
+    if (!identityVoiceIsValid(prompt.voice)) {
+      setSaveError(
+        "Use up to 1600 characters for the voice, without reserved voice markers.",
+      );
       return;
     }
     const parsedSettings = parseAgentModelSettingsDraft({
@@ -174,7 +202,14 @@ export function AgentSettingsDialog({
       await updateAgent.mutateAsync({
         name: agent.name,
         request: {
-          display_name: displayName.trim() || null,
+          ...(displayName !== (initialAgent.display_name ?? "") && {
+            display_name: displayName.trim() || null,
+          }),
+          ...(role !== initialAgent.description && { description: role }),
+          ...(initialAgent.soul != null &&
+            identityPromptChanged(initialAgent.soul, prompt) && {
+              soul: composeIdentityPrompt(prompt),
+            }),
           ...(knowledgeChanged && {
             knowledge_scope:
               knowledgeSelection.mode === "all"
@@ -185,30 +220,53 @@ export function AgentSettingsDialog({
             mcp_plugins: plugins,
           }),
           ...(!sameSelection(skills, initialSelections.skills) && { skills }),
-          model: model === DEFAULT_MODEL_VALUE ? null : model,
-          model_settings: parsedSettings.modelSettings,
-          thinking_enabled: supportsThinking
-            ? selectionToThinkingEnabled(thinking)
-            : null,
-          reasoning_effort:
-            supportsReasoningEffort && reasoningEffort !== INHERIT_VALUE
-              ? (reasoningEffort as ReasoningEffort)
-              : null,
-          allowed_subagents: selectionToAllowedSubagents(
-            subagentAccess,
-            selectedSubagents,
-          ),
+          ...(model !== initialRuntime.model && {
+            model: model === DEFAULT_MODEL_VALUE ? null : model,
+          }),
+          ...((temperature !== initialRuntime.temperature ||
+            maxTokens !== initialRuntime.maxTokens) && {
+            model_settings: {
+              ...(temperature !== initialRuntime.temperature && {
+                temperature: parsedSettings.modelSettings?.temperature ?? null,
+              }),
+              ...(maxTokens !== initialRuntime.maxTokens && {
+                max_tokens: parsedSettings.modelSettings?.max_tokens ?? null,
+              }),
+            },
+          }),
+          ...(thinking !== initialRuntime.thinking && {
+            thinking_enabled: selectionToThinkingEnabled(thinking),
+          }),
+          ...(reasoningEffort !== initialRuntime.reasoningEffort && {
+            reasoning_effort:
+              reasoningEffort === INHERIT_VALUE
+                ? null
+                : (reasoningEffort as ReasoningEffort),
+          }),
+          ...(!sameSelection(
+            selectionToAllowedSubagents(subagentAccess, selectedSubagents),
+            initialAgent.allowed_subagents ?? null,
+          ) && {
+            allowed_subagents: selectionToAllowedSubagents(
+              subagentAccess,
+              selectedSubagents,
+            ),
+          }),
         },
       });
       toast.success(t.agents.settingsSaved);
       onOpenChange(false);
     } catch (err) {
+      setSaveError(err instanceof Error ? err.message : String(err));
       toast.error(err instanceof Error ? err.message : String(err));
     }
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => !updateAgent.isPending && onOpenChange(next)}
+    >
       <DialogContent className="max-h-[calc(100dvh-2rem)] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden">
         <DialogHeader className="pr-6">
           <DialogTitle>{t.agents.settingsTitle}</DialogTitle>
@@ -216,6 +274,26 @@ export function AgentSettingsDialog({
         </DialogHeader>
 
         <div className="min-h-0 min-w-0 space-y-4 overflow-y-auto overscroll-contain px-1 py-1">
+          <AgentIdentityFields
+            name={agent.name}
+            displayName={displayName}
+            role={role}
+            prompt={prompt}
+            scope="Custom lead agent · applies on its next run"
+            disabled={updateAgent.isPending}
+            promptAvailable={initialAgent.soul != null}
+            onDisplayNameChange={setDisplayName}
+            onRoleChange={setRole}
+            onPromptChange={setPrompt}
+          />
+          {saveError && (
+            <p role="alert" className="text-destructive text-sm">
+              {saveError}
+            </p>
+          )}
+          <h3 className="border-t pt-5 text-sm font-semibold">
+            Runtime &amp; access
+          </h3>
           <AgentCapabilitySelection
             plugins={plugins}
             skills={skills}
@@ -272,25 +350,6 @@ export function AgentSettingsDialog({
               )}
             </div>
           )}
-          <div className="space-y-1.5">
-            <label htmlFor="agent-display-name" className="text-sm font-medium">
-              {t.agents.settingsDisplayName}
-            </label>
-            <Input
-              id="agent-display-name"
-              value={displayName}
-              onChange={(event) => setDisplayName(event.target.value)}
-              placeholder={agent.name}
-              aria-describedby="agent-display-name-hint"
-            />
-            <p
-              id="agent-display-name-hint"
-              className="text-muted-foreground text-xs"
-            >
-              {t.agents.settingsDisplayNameHint} ({agent.name}){" · "}
-              {[...displayName.trim()].length}/100
-            </p>
-          </div>
           {/* Default model */}
           <div className="space-y-1.5">
             <span className="text-sm font-medium">

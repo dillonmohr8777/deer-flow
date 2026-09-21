@@ -1530,6 +1530,13 @@ the stable English `name`. API callers can pass `display_name` to agent creation
 or update requests; an omitted update preserves it and `null` clears it. The
 same optional field is supported in the agent's `config.yaml`.
 
+The `/api/user-profile` endpoints store `USER.md` in the active storage bucket
+(`users/{storage_user_id}/USER.md`). Private users have separate profiles, while
+members of an active shared workspace intentionally share that workspace's
+profile. The legacy root `{base_dir}/USER.md` is left untouched and is never a
+fallback for scoped profile reads; this management API does not imply automatic
+prompt injection.
+
 Sub-agents are an optimization, not the default response to a complex request.
 
 After Stop interrupts a delegated task before it returns a reply, the next user
@@ -2169,7 +2176,7 @@ A heartfelt thank you goes out to the core authors of `DeerFlow`, whose vision, 
 
 Your unwavering commitment and expertise have been the driving force behind DeerFlow's success. We are honored to have you at the helm of this journey.
 
-## Momentum workspace console (local customization)
+## Momentum workspace console
 
 The non-static workspace opens `/workspace/command-center`: a Momentum-branded
 overview of specialist definitions, authenticated run history, execution receipts,
@@ -2183,11 +2190,21 @@ configured estimates are returned as separate fields.
 The **Appearance** control offers Classic, Current and Paper cutout treatments
 for the dashboard, agent glyphs and shared workspace brand mark. Brand motion is
 off by default, has a visible pause control, and stops when hidden, offscreen or
-reduced motion is requested. Local raster logos can be previewed without an
-upload. Appearance is saved for the current account in this browser only; it
-does not change team branding, agent prompts or workspace records. Reset removes
-the local preference. Specialist briefs remain in the existing administrator
-settings; the dashboard only displays their recorded roles and model settings.
+reduced motion is requested. In a private workspace, logo/name previews and
+personal style preferences stay in account-scoped browser storage. Shared
+workspaces store their brand name, raster logo and default treatment on the
+server. Members can read the brand; owners/admins can save or reset it. Both
+writes use a version precondition to reject stale edits. The default style can
+be followed or replaced with a personal choice; motion always remains personal.
+Shared branding requires migration `0030_workspace_branding` and validates raster
+type, decoded size and dimensions independently of the browser.
+
+Existing agent settings expose display name, expertise, voice and the actual
+working brief. Optional Scout/Studio/Anchor voice drafts preserve the existing
+brief and do not change model or tool settings. Custom agents use the current
+workspace's storage; managed specialists remain an installation-wide,
+administrator-controlled catalog. The dashboard links to those existing editors.
+Available run estimates are visibly marked partial when model usage is unpriced.
 
 This customization does not establish client isolation or billing readiness.
 Runtime execution and artifact controls remain in the existing DeerFlow services.

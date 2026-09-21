@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import re
+from pathlib import Path
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException
@@ -128,6 +129,17 @@ def _require_agents_api_enabled() -> None:
             status_code=403,
             detail=("Custom-agent management API is disabled. Set agents_api.enabled=true to expose agent and user-profile routes over HTTP."),
         )
+
+
+def _user_profile_path() -> Path:
+    """Return the current workspace's user profile path.
+
+    ``get_effective_user_id`` resolves the server-selected storage principal,
+    including the shared-workspace bucket. ``Paths.user_dir`` validates that
+    principal before it becomes part of the filesystem path.
+    """
+    paths = get_paths()
+    return paths.user_dir(get_effective_user_id()) / "USER.md"
 
 
 def _validate_model_exists(model: str | None) -> None:
@@ -534,13 +546,13 @@ async def update_agent(name: str, request: AgentUpdateRequest) -> AgentResponse:
 
 
 class UserProfileResponse(BaseModel):
-    """Response model for the global user profile (USER.md)."""
+    """Response model for the current workspace-scoped user profile."""
 
     content: str | None = Field(default=None, description="USER.md content, or null if not yet created")
 
 
 class UserProfileUpdateRequest(BaseModel):
-    """Request body for setting the global user profile."""
+    """Request body for setting the current workspace-scoped user profile."""
 
     content: str = Field(default="", description="USER.md content — describes the user's background and preferences")
 
@@ -549,10 +561,10 @@ class UserProfileUpdateRequest(BaseModel):
     "/user-profile",
     response_model=UserProfileResponse,
     summary="Get User Profile",
-    description="Read the global USER.md file that is injected into all custom agents.",
+    description="Read the current workspace-scoped USER.md file.",
 )
 async def get_user_profile() -> UserProfileResponse:
-    """Return the current USER.md content.
+    """Return the current workspace-scoped USER.md content.
 
     Returns:
         UserProfileResponse with content=None if USER.md does not exist yet.
@@ -560,7 +572,7 @@ async def get_user_profile() -> UserProfileResponse:
     _require_agents_api_enabled()
 
     try:
-        user_md_path = get_paths().user_md_file
+        user_md_path = _user_profile_path()
         if not user_md_path.exists():
             return UserProfileResponse(content=None)
         raw = user_md_path.read_text(encoding="utf-8").strip()
@@ -574,10 +586,10 @@ async def get_user_profile() -> UserProfileResponse:
     "/user-profile",
     response_model=UserProfileResponse,
     summary="Update User Profile",
-    description="Write the global USER.md file that is injected into all custom agents.",
+    description="Write the current workspace-scoped USER.md file.",
 )
 async def update_user_profile(request: UserProfileUpdateRequest) -> UserProfileResponse:
-    """Create or overwrite the global USER.md.
+    """Create or overwrite the current workspace-scoped USER.md.
 
     Args:
         request: The update request with the new USER.md content.
@@ -588,10 +600,10 @@ async def update_user_profile(request: UserProfileUpdateRequest) -> UserProfileR
     _require_agents_api_enabled()
 
     try:
-        paths = get_paths()
-        paths.base_dir.mkdir(parents=True, exist_ok=True)
-        paths.user_md_file.write_text(request.content, encoding="utf-8")
-        logger.info(f"Updated USER.md at {paths.user_md_file}")
+        user_md_path = _user_profile_path()
+        user_md_path.parent.mkdir(parents=True, exist_ok=True)
+        user_md_path.write_text(request.content, encoding="utf-8")
+        logger.info(f"Updated USER.md at {user_md_path}")
         return UserProfileResponse(content=request.content or None)
     except Exception as e:
         logger.error(f"Failed to update user profile: {e}", exc_info=True)

@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, rs } from "@rstest/core";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
 import type { ReactNode } from "react";
 
 import { CommandCenter } from "@/components/workspace/command-center/command-center";
@@ -97,7 +103,7 @@ rs.mock("@/core/console", () => ({
   }),
   useConsoleUsage: () => ({
     data: {
-      by_model: {},
+      by_model: { "unpriced-provider-id": { tokens: 30, runs: 1, cost: null } },
       currency: "USD",
       days: [],
       total_cost: 0.004,
@@ -159,10 +165,21 @@ describe("CommandCenter", () => {
     );
 
     expect(screen.getByText("Provider attempt ledger")).toBeDefined();
+    expect(screen.getByText("Available run estimates")).toBeDefined();
+    expect(screen.getByText("Partial · unpriced usage")).toBeDefined();
+    expect(
+      screen.getByText(
+        "Some model usage is unpriced; this is not the total cost.",
+      ),
+    ).toBeDefined();
     expect(screen.getByText("attempt-1")).toBeDefined();
     expect(screen.getByText("rate_limit")).toBeDefined();
     expect(screen.getByText("openai")).toBeDefined();
-    expect(screen.getByRole("cell", { name: /30/ })).toBeDefined();
+    expect(
+      within(screen.getByRole("row", { name: /attempt-1/ })).getByRole("cell", {
+        name: /30/,
+      }),
+    ).toBeDefined();
     expect(screen.getByText("1,250ms")).toBeDefined();
     expect(screen.getAllByText("$0.0123").length).toBeGreaterThan(0);
     expect(

@@ -882,9 +882,10 @@ class TestUserProfileAPI:
         assert response.json()["content"] == content
 
         # File should be written to disk
-        user_md = tmp_path / "USER.md"
+        user_md = tmp_path / "users" / "test-user-autouse" / "USER.md"
         assert user_md.exists()
         assert user_md.read_text(encoding="utf-8") == content
+        assert not (tmp_path / "USER.md").exists()
 
     def test_get_user_profile_after_put(self, agent_client):
         content = "# Profile\n\nI work on data science."
@@ -898,6 +899,50 @@ class TestUserProfileAPI:
         response = agent_client.put("/api/user-profile", json={"content": ""})
         assert response.status_code == 200
         assert response.json()["content"] is None
+
+    def test_profiles_follow_private_and_shared_storage_contexts(self, agent_client, tmp_path):
+        import asyncio
+
+        from app.gateway.routers.agents import UserProfileUpdateRequest, get_user_profile, update_user_profile
+        from deerflow.runtime.user_context import WorkspaceStorageContext, reset_current_user, reset_storage_context, set_current_user, set_storage_context
+
+        legacy = tmp_path / "USER.md"
+        legacy.write_text("legacy root", encoding="utf-8")
+
+        def call(actor: str, storage: str, operation):
+            actor_token = set_current_user(SimpleNamespace(id=actor))
+            storage_token = set_storage_context(
+                WorkspaceStorageContext(
+                    actor_user_id=actor,
+                    organization_id=f"org-{storage}",
+                    storage_user_id=storage,
+                    role="member",
+                )
+            )
+            try:
+                return asyncio.run(operation())
+            finally:
+                reset_storage_context(storage_token)
+                reset_current_user(actor_token)
+
+        async def read():
+            return await get_user_profile()
+
+        async def write(content: str):
+            return await update_user_profile(UserProfileUpdateRequest(content=content))
+
+        assert call("actor-a", "private-a", read).content is None
+        assert call("actor-a", "private-a", lambda: write("private-a")).content == "private-a"
+        assert call("actor-b", "private-b", read).content is None
+        assert call("actor-b", "private-b", lambda: write("private-b")).content == "private-b"
+        assert call("actor-a", "private-a", read).content == "private-a"
+
+        assert call("actor-a", "shared-workspace", read).content is None
+        assert call("actor-a", "shared-workspace", lambda: write("shared")).content == "shared"
+        assert call("actor-b", "shared-workspace", read).content == "shared"
+        assert call("actor-c", "other-workspace", read).content is None
+
+        assert legacy.read_text(encoding="utf-8") == "legacy root"
 
 
 class TestAgentsApiDisabled:

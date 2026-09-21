@@ -73,6 +73,10 @@
 }
 .signature[data-size="hero"] .customLabel {
   font-size: 25px;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
 }
 .signature[data-treatment="current"][data-size="hero"] .brandPlane {
   background: linear-gradient(140deg, #fff 24%, #edf7ff);
@@ -321,6 +325,107 @@
 .personalBrand input::placeholder {
   color: #50657b;
 }
+.personalBrand select {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid #91b7d6;
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #fff;
+  color: #07172f;
+  font: inherit;
+  font-size: 14px;
+}
+.followWorkspace {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 5px 0 15px;
+  color: #50657b;
+  font-size: 13px;
+}
+.followWorkspace input {
+  accent-color: #075bd8;
+  width: 16px;
+  height: 16px;
+}
+.workspaceName {
+  overflow-wrap: anywhere;
+}
+.brandDraftPreview {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 13px 0;
+  color: #07172f;
+}
+.brandDraftPreview img {
+  flex: 0 0 auto;
+  object-fit: contain;
+}
+.brandDraftPreview strong {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 16px;
+}
+.brandDraftPreview span {
+  margin-left: auto;
+  flex: 0 0 auto;
+  color: #50657b;
+  font-size: 11px;
+}
+.sharedActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 19px;
+}
+.sharedActions button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 11px 14px;
+  border: 1px solid #91b7d6;
+  border-radius: 9px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  color: #06439d;
+  cursor: pointer;
+}
+.sharedActions .saveShared {
+  background: #075bd8;
+  border-color: #075bd8;
+  color: #fff;
+}
+.sharedActions button:hover:not(:disabled) {
+  background: #edf7ff;
+}
+.sharedActions .saveShared:hover:not(:disabled) {
+  background: #06439d;
+}
+.personalBrand .brandStatus {
+  font-size: 12px;
+  margin-top: 12px;
+}
+.resetConfirmation {
+  padding-top: 14px;
+  margin-top: 14px;
+  border-top: 1px solid #d2e3f2;
+}
+@media (max-width: 640px) {
+  .personalBrand select {
+    font-size: 16px;
+  }
+  .sharedActions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
 .uploadActions {
   display: flex;
   align-items: center;
@@ -389,7 +494,7 @@
   color: #06439d;
   cursor: pointer;
 }
-.panel :is(button, input):focus-visible,
+.panel :is(button, input, select):focus-visible,
 .motionToggle:focus-visible {
   outline: 3px solid #003da5;
   outline-offset: 3px;

@@ -125,6 +125,45 @@ describe("custom agent display names", () => {
 });
 
 describe("capability selection update isolation", () => {
+  it("changes only the voice document and preserves expertise and concurrent runtime settings", async () => {
+    const original =
+      "# Expert brief\n\nKeep all approval gates.\n  Preserve this exact whitespace.\n";
+    const opened: Agent = {
+      ...agent,
+      soul: original,
+      model: "expert-model",
+      thinking_enabled: true,
+      reasoning_effort: "high",
+      allowed_subagents: [],
+      model_settings: { temperature: 0.3, max_tokens: 3000 },
+    };
+    const view = render(
+      <AgentSettingsDialog agent={opened} open onOpenChange={rs.fn()} />,
+    );
+    fireEvent.change(screen.getByLabelText("Voice & personality"), {
+      target: { value: "Warm, concise, and exact." },
+    });
+    view.rerender(
+      <AgentSettingsDialog
+        agent={{
+          ...opened,
+          model: "newer-model",
+          model_settings: { temperature: 0.8, max_tokens: 6000 },
+        }}
+        open
+        onOpenChange={rs.fn()}
+      />,
+    );
+    expect(mutateAsync).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalled());
+    const { request } = mutateAsync.mock.calls[0]![0] as {
+      request: Record<string, unknown>;
+    };
+    expect(Object.keys(request)).toEqual(["soul"]);
+    expect(String(request.soul).startsWith(original)).toBe(true);
+    expect(request.soul).toContain("Warm, concise, and exact.");
+  });
   it("omits untouched selections after a concurrent agent refresh", async () => {
     const opened = {
       ...agent,

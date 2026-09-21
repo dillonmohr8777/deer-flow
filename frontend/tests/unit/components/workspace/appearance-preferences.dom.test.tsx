@@ -20,6 +20,20 @@ import {
 } from "@/components/workspace/command-center/appearance-provider";
 
 let userId = "account-a";
+let sharedName: string | null = null;
+let scopeKnown = true;
+rs.mock("@/core/workspaces/hooks", () => ({
+  useWorkspaceBranding: () => ({
+    workspaces: { isSuccess: scopeKnown },
+    workspaceId: sharedName ? "shared-a" : null,
+    workspace: sharedName ? { name: "Workspace A" } : undefined,
+    branding: {
+      data: sharedName
+        ? { brand_name: sharedName, logo: null, treatment: "paper" }
+        : undefined,
+    },
+  }),
+}));
 rs.mock("@/core/auth/AuthProvider", () => ({
   useAuth: () => ({ user: { id: userId } }),
 }));
@@ -32,6 +46,23 @@ function Controls() {
         {appearance.preferences.treatment}
       </output>
       <output data-testid="persistence">{appearance.persistence}</output>
+      <output data-testid="label">{appearance.preferences.label}</output>
+      <output data-testid="motion">
+        {String(appearance.preferences.motion)}
+      </output>
+      <button
+        onClick={() =>
+          appearance.update({
+            treatment: "classic",
+            followWorkspaceStyle: false,
+          })
+        }
+      >
+        Personal style
+      </button>
+      <button onClick={() => appearance.update({ followWorkspaceStyle: true })}>
+        Follow workspace
+      </button>
       <button
         onClick={() => appearance.update({ treatment: "paper", motion: true })}
       >
@@ -46,10 +77,55 @@ afterEach(() => {
   cleanup();
   window.localStorage.clear();
   userId = "account-a";
+  sharedName = null;
+  scopeKnown = true;
   rs.restoreAllMocks();
 });
 
 describe("workspace appearance", () => {
+  it("shows the shared identity while preserving personal style and motion, and hides private brands until scope is known", async () => {
+    window.localStorage.setItem(
+      appearanceKey(userId),
+      JSON.stringify({
+        label: "Private client",
+        treatment: "classic",
+        motion: true,
+      }),
+    );
+    sharedName = "Team brand";
+    const view = render(
+      <WorkspaceAppearanceProvider>
+        <Controls />
+      </WorkspaceAppearanceProvider>,
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("label").textContent).toBe("Team brand"),
+    );
+    expect(screen.getByTestId("preference").textContent).toBe("classic");
+    expect(screen.getByTestId("motion").textContent).toBe("true");
+    fireEvent.click(screen.getByText("Follow workspace"));
+    expect(screen.getByTestId("preference").textContent).toBe("paper");
+    fireEvent.click(screen.getByText("Personal style"));
+    expect(screen.getByTestId("preference").textContent).toBe("classic");
+    expect(
+      parseAppearance(window.localStorage.getItem(appearanceKey(userId))).label,
+    ).toBe("Private client");
+    sharedName = null;
+    scopeKnown = false;
+    view.rerender(
+      <WorkspaceAppearanceProvider>
+        <Controls />
+      </WorkspaceAppearanceProvider>,
+    );
+    expect(screen.getByTestId("label").textContent).toBe("");
+    scopeKnown = true;
+    view.rerender(
+      <WorkspaceAppearanceProvider>
+        <Controls />
+      </WorkspaceAppearanceProvider>,
+    );
+    expect(screen.getByTestId("label").textContent).toBe("Private client");
+  });
   it("validates browser data, persists only to the current account, resets, and pauses decorative motion", async () => {
     expect(
       parseAppearance(

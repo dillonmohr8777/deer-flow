@@ -113,7 +113,15 @@ class Paths:
     Directory layout (host side):
         {base_dir}/
         ├── memory.json
-        ├── USER.md          <-- global user profile (injected into all agents)
+        ├── USER.md          <-- legacy root profile (not used by the profile API)
+        ├── users/
+        │   └── {user_id}/
+        │       ├── USER.md  <-- workspace-scoped profile
+        │       └── agents/
+        │           └── {agent_name}/
+        │               ├── config.yaml
+        │               ├── SOUL.md
+        │               └── memory.json
         ├── agents/
         │   └── {agent_name}/
         │       ├── config.yaml
@@ -174,7 +182,12 @@ class Paths:
 
     @property
     def user_md_file(self) -> Path:
-        """Path to the global user profile file: `{base_dir}/USER.md`."""
+        """Path to the legacy root profile: ``{base_dir}/USER.md``.
+
+        The user-profile API uses ``user_dir(user_id) / "USER.md"`` instead;
+        this property remains for legacy callers and is never a scoped-read
+        fallback.
+        """
         return self.base_dir / "USER.md"
 
     @property

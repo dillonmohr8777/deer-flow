@@ -242,9 +242,19 @@ when offscreen, hidden or reduced motion is active. Classic always stays still.
 The shared treatment appears in workspace navigation and the dashboard brand
 stage; agent identities receive the same material framing without looping.
 
-Appearance controls expand inline beside Start a mission. Local client-logo
-previews use a validated raster file and account-scoped browser storage; the
-panel labels that scope and provides a reset. It does not imply shared workspace
-branding, a changed expert prompt or a live agent. Existing specialist records
-provide the visible name, role, model and runtime state in Mission Control and
-Agent Studio.
+Appearance controls expand inline beside Start a mission. Private logo/name
+previews stay in account-scoped browser storage. A shared workspace instead
+shows its saved brand and an explicitly scoped editor: members read, owners and
+admins save or reset, and a stale edit keeps its draft until the latest version
+is explicitly loaded. A personal style override and motion preference remain
+separate. Full brand names stay available while compact and hero labels are
+bounded; forms remain usable with a 120-code-point shared name.
+
+Agent identity is edited in the existing settings surfaces. The stable glyph
+anchors display name, expertise, optional voice and the real working brief.
+Scout, Studio and Anchor offer distinct writing directions only after an
+explicit draft action. The original brief and runtime settings remain intact.
+Custom agents follow workspace storage; managed specialists visibly disclose
+their installation-wide scope. Personality styling never implies expertise,
+runtime activity or additional permissions. Unknown costs remain unpriced and
+partial estimates are labeled where the amount is displayed.
