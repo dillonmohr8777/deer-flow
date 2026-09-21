@@ -48,7 +48,7 @@ export function BackgroundJobs() {
         aria-expanded={open}
         aria-controls="momentum-background-jobs"
         aria-label={`Background work, ${stats.data.active_runs} queued or running jobs`}
-        className="flex w-full items-center gap-3 rounded-2xl bg-[linear-gradient(105deg,#f8fcff,#edf7ff)] px-4 py-3 text-left text-sm font-bold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f39b35]"
+        className="flex w-full items-center gap-3 rounded-2xl bg-[linear-gradient(105deg,#f8fcff,#edf7ff)] px-4 py-3 text-left text-sm font-bold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#003da5]"
       >
         <MomentumGlyph seed="system:background-work" size={24} />
         <span className={open ? "flex-1" : "hidden sm:block sm:flex-1"}>
@@ -182,7 +182,7 @@ function RunRow({
         agentName ? { agent_name: agentName } : undefined,
       )}
       aria-label={`${title}, ${label}`}
-      className="flex gap-2 border-b border-[#d2e3f2] py-3 text-sm hover:bg-[#edf7ff] focus-visible:outline-2 focus-visible:outline-[#f39b35]"
+      className="flex gap-2 border-b border-[#d2e3f2] py-3 text-sm hover:bg-[#edf7ff] focus-visible:outline-2 focus-visible:outline-[#003da5]"
     >
       <MomentumGlyph seed={`thread:${run.thread_id}`} size={28} />
       <span className="min-w-0 flex-1">
