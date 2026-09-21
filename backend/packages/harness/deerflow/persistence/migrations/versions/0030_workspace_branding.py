@@ -39,11 +39,11 @@ def upgrade() -> None:
         sa.Column("organization_id", sa.String(length=64), primary_key=True),
         sa.Column("brand_name", sa.String(length=120), nullable=True),
         sa.Column("logo_data_uri", sa.Text(), nullable=True),
-        sa.Column("treatment", sa.String(length=16), nullable=False, server_default="current"),
-        sa.Column("version", sa.Integer(), nullable=False, server_default="1"),
+        sa.Column("treatment", sa.String(length=16), nullable=False),
+        sa.Column("version", sa.Integer(), nullable=False),
         sa.Column("updated_by", sa.String(length=64), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
     )
 
 

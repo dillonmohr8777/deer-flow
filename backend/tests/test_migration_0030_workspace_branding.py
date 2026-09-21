@@ -159,9 +159,18 @@ async def test_branding_migration_upgrade_downgrade_preserves_prior_schema(tmp_p
             # The new table starts empty; no backfill is attempted.
             assert (await conn.execute(sa.text(f"SELECT COUNT(*) FROM {_TABLE}"))).scalar_one() == 0
 
-        # A branding row round-trips through the migrated schema.
+        # A branding row round-trips through the migrated schema. created_at
+        # and updated_at are NOT NULL with only a client-side (ORM) default,
+        # so a raw INSERT -- unlike the real OrganizationBrandingRow path --
+        # must supply them explicitly.
         async with engine.begin() as conn:
-            await conn.execute(sa.text(f"INSERT INTO {_TABLE} (organization_id, brand_name, treatment, version) VALUES ('ws-1', 'Momentum 360', 'paper', 1)"))
+            await conn.execute(
+                sa.text(
+                    f"INSERT INTO {_TABLE} (organization_id, brand_name, treatment, version, created_at, updated_at) "
+                    "VALUES ('ws-1', 'Momentum 360', 'paper', 1, :now, :now)"
+                ),
+                {"now": datetime.now(UTC)},
+            )
         async with engine.connect() as conn:
             stored = (await conn.execute(sa.text(f"SELECT brand_name, treatment, version FROM {_TABLE}"))).one()
             assert stored == ("Momentum 360", "paper", 1)
