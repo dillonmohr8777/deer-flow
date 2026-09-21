@@ -1,0 +1,175 @@
+/*
+ * Paper cutout treatment — token layer.
+ *
+ * Canon: "blue, white, grey, with a hint of gold." Grey hardware, gold
+ * accent only. Restraint is the craft.
+ *
+ * Scope: everything here lives under [data-treatment="paper"], the
+ * attribute command-center.tsx sets on its root element when the user picks
+ * the "Paper cutout" appearance (workspace-appearance.tsx). Nothing here
+ * changes the default "current" treatment.
+ *
+ * Ratios below are the ones proven by tests/unit/paper-tokens.test.ts,
+ * which parses this file's own token values and computes WCAG contrast —
+ * this comment is documentation, not the source of truth.
+ *
+ *   --paper-cream       #F2EDE3  vs ink            14.07
+ *   --paper-cream-hi    #FBF8F1  vs ink            15.47
+ *   --paper-kraft       #D8C3A0  vs ink             9.56
+ *   --paper-royal       #1B4B9E  on cream           7.07
+ *   --paper-royal-deep  #14346E  cream-ink on it    10.49
+ *   --paper-ink-muted   #3A4A6B  on cream            7.59
+ *   --paper-brass-text  #7A5E18  on cream            5.23
+ *   --paper-cyan-text   #0A6183  on cream            5.90
+ *   --paper-line        #8C7A5C  on cream (UI only)  3.56
+ *   --paper-focus       #003DA5  on cream            8.14
+ *   --paper-danger      #9A2B3C  on cream            6.46
+ *   --paper-ok          #0A6B4F  on cream            5.57
+ *
+ * --paper-brass and --paper-cyan are OBJECT-ONLY colours (2.75 and 2.28 on
+ * cream) — never use them as a text colour. A brass or cyan *word* uses the
+ * -text variant instead.
+ */
+
+[data-treatment="paper"] {
+  /* Paper */
+  --paper-cream: #f2ede3;
+  --paper-cream-hi: #fbf8f1;
+  --paper-kraft: #d8c3a0;
+
+  /* Ink */
+  --paper-ink: #101e3f;
+  --paper-ink-muted: #3a4a6b;
+
+  /* Royal blue */
+  --paper-royal: #1b4b9e;
+  --paper-royal-deep: #14346e;
+  --paper-focus: #003da5;
+
+  /* Text-safe accents */
+  --paper-brass-text: #7a5e18;
+  --paper-cyan-text: #0a6183;
+  --paper-danger: #9a2b3c;
+  --paper-ok: #0a6b4f;
+
+  /* UI hardware, not text */
+  --paper-line: #8c7a5c;
+
+  /* Object-only colours — never text. A word uses the -text variant. */
+  --paper-brass: #c8a04a;
+  --paper-cyan: #17a9e8;
+
+  /*
+   * Surface remap: command-center.module.css defines a first-pass local
+   * palette on .root (--canvas, --surface, --ink, --line, --blue-deep, …)
+   * and redeclares a few of them again under [data-treatment="paper"].
+   * Redeclaring the same names here, at equal specificity but after that
+   * module's own paper block in the cascade, makes every surface INHERIT
+   * the tokens above instead of carrying its own paper hexes. No new
+   * off-canon hues: violet/rose fold into the blue/ink family, cyan/surface
+   * tints are restrained mixes of the tokens above, not fresh colours.
+   */
+  --canvas: var(--paper-cream);
+  --surface: var(--paper-cream-hi);
+  --surface-blue: color-mix(in srgb, var(--paper-royal) 8%, var(--paper-cream-hi));
+  --surface-violet: color-mix(in srgb, var(--paper-ink-muted) 8%, var(--paper-cream-hi));
+  --ink: var(--paper-ink);
+  --muted: var(--paper-ink-muted);
+  --line: var(--paper-line);
+  --strong: var(--paper-kraft);
+  --blue: var(--paper-royal);
+  --blue-deep: var(--paper-royal-deep);
+  --cyan: var(--paper-cyan);
+  --cyan-text: var(--paper-cyan-text);
+  --violet: var(--paper-royal-deep);
+  --rose: var(--paper-danger);
+  --green: var(--paper-ok);
+  --danger: var(--paper-danger);
+  --focus: var(--paper-focus);
+}
+
+/*
+ * Torn deckle edge — an aria-hidden decoration for a "sheet" element.
+ * Two variants meant to ALTERNATE across a run of sheets (e.g. stacked
+ * cards): apply .paper-torn to one, .paper-torn-alt to the next, and so on.
+ * Each is a single traced torn path as an inline SVG mask.
+ */
+[data-treatment="paper"] .paper-torn,
+[data-treatment="paper"] .paper-torn-alt {
+  aria-hidden: true;
+}
+
+[data-treatment="paper"] .paper-torn {
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'%3E%3Cpath d='M0 6 L7 2 L13 8 L20 3 L27 7 L34 1 L41 6 L48 2 L55 7 L62 3 L69 8 L76 2 L83 6 L90 1 L100 5 L100 100 L0 100 Z'/%3E%3C/svg%3E");
+  mask-size: 100% 100%;
+  mask-repeat: no-repeat;
+  border-radius: 2px 5px 3px 6px;
+}
+
+[data-treatment="paper"] .paper-torn-alt {
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'%3E%3Cpath d='M0 3 L8 7 L15 2 L22 8 L29 3 L36 7 L43 2 L50 6 L57 1 L64 6 L71 2 L78 7 L85 3 L92 8 L100 4 L100 100 L0 100 Z'/%3E%3C/svg%3E");
+  mask-size: 100% 100%;
+  mask-repeat: no-repeat;
+  border-radius: 5px 2px 6px 3px;
+}
+
+@supports not (mask-image: url("#")) {
+  [data-treatment="paper"] .paper-torn,
+  [data-treatment="paper"] .paper-torn-alt {
+    mask-image: none;
+    border: 1px solid var(--paper-line);
+    border-radius: 2px 5px 3px 6px;
+  }
+}
+
+/*
+ * Grain — intended for .sheet::after. A 180px feTurbulence tile at 5%
+ * opacity, laid over the sheet. aria-hidden by contract; decoration only.
+ */
+[data-treatment="paper"] .sheet::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 180px 180px;
+  opacity: 0.05;
+}
+
+/*
+ * Pin — a 14px CSS brass dome, intended for .pinned::before. Restraint:
+ * this is the one place gold is allowed to be an object, not text.
+ */
+[data-treatment="paper"] .pinned::before {
+  content: "";
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(
+    circle at 35% 30%,
+    color-mix(in srgb, var(--paper-brass) 60%, white) 0%,
+    var(--paper-brass) 55%,
+    color-mix(in srgb, var(--paper-brass) 70%, black) 100%
+  );
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--paper-ink) 40%, transparent);
+}
+
+/*
+ * All paper decoration is aria-hidden by contract and must be neutralised
+ * under forced-colors: it carries no information, so it has no business
+ * fighting the user's own high-contrast palette.
+ */
+@media (forced-colors: active) {
+  [data-treatment="paper"] .paper-torn,
+  [data-treatment="paper"] .paper-torn-alt {
+    mask-image: none;
+    border-radius: 0;
+  }
+
+  [data-treatment="paper"] .sheet::after,
+  [data-treatment="paper"] .pinned::before {
+    display: none;
+  }
+}
