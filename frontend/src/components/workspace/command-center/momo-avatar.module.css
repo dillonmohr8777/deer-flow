@@ -1,0 +1,15 @@
+.avatar {
+  display: inline-grid;
+  place-items: center;
+  line-height: 0;
+}
+
+.art {
+  display: block;
+}
+
+/* At <=48px (data-size="sm") shipped Momo artwork hides its fine detail
+   group so the glyph reads clean at small sizes. */
+.avatar[data-size="sm"] .art :global(g.detail) {
+  display: none;
+}

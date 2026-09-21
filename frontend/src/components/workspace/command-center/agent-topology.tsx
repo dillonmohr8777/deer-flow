@@ -43,7 +43,7 @@ export function AgentTopology({
     <div className={styles.topology}>
       <div className={styles.topologyLead}>
         <span className={styles.leadIcon}>
-          <MomentumGlyph seed={`lead:${leadLabel}`} size={44} />
+          <MomentumGlyph seed={`lead:${leadLabel}`} size={160} />
         </span>
         <div>
           <strong>{leadLabel}</strong>
@@ -79,7 +79,7 @@ export function AgentTopology({
                 onClick={() => onSelect(agent.name)}
               >
                 <span className={styles.agentMonogram}>
-                  <MomentumGlyph seed={`agent:${agent.name}`} size={48} />
+                  <MomentumGlyph seed={`agent:${agent.name}`} size={40} />
                 </span>
                 <strong>
                   {agent.display_name ?? agent.name.replace("dillon-", "")}
