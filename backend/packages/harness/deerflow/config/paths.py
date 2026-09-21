@@ -113,7 +113,15 @@ class Paths:
     Directory layout (host side):
         {base_dir}/
         ├── memory.json
-        ├── USER.md          <-- global user profile (injected into all agents)
+        ├── USER.md          <-- legacy root profile (not used by the profile API)
+        ├── users/
+        │   └── {user_id}/
+        │       ├── USER.md  <-- workspace-scoped profile
+        │       └── agents/
+        │           └── {agent_name}/
+        │               ├── config.yaml
+        │               ├── SOUL.md
+        │               └── memory.json
         ├── agents/
         │   └── {agent_name}/
         │       ├── config.yaml
