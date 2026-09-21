@@ -1,5 +1,7 @@
-import { ArrowUpRight, Bot } from "lucide-react";
+import { ArrowUpRight } from "lucide-react";
 import Link from "next/link";
+
+import { MomentumGlyph } from "./momentum-glyph";
 
 import styles from "./command-center.module.css";
 
@@ -38,7 +40,7 @@ export function AgentTopology({
     <div className={styles.topology}>
       <div className={styles.topologyLead}>
         <span className={styles.leadIcon}>
-          <Bot size={25} />
+          <MomentumGlyph seed={`lead:${leadLabel}`} size={44} />
         </span>
         <div>
           <strong>{leadLabel}</strong>
@@ -74,10 +76,7 @@ export function AgentTopology({
                 onClick={() => onSelect(agent.name)}
               >
                 <span className={styles.agentMonogram}>
-                  {(agent.display_name ?? agent.name)
-                    .replace(/^dillon[ -]/i, "")
-                    .slice(0, 2)
-                    .toUpperCase()}
+                  <MomentumGlyph seed={`agent:${agent.name}`} size={38} />
                 </span>
                 <strong>
                   {agent.display_name ?? agent.name.replace("dillon-", "")}

@@ -115,7 +115,7 @@ def _call_getter_concurrently(getter, workers: int = 8) -> list[object]:
     with ThreadPoolExecutor(max_workers=workers) as executor:
         futures = [executor.submit(worker) for _ in range(workers)]
         ready.wait(timeout=3)
-        return [future.result(timeout=3) for future in futures]
+        return [future.result(timeout=10) for future in futures]
 
 
 # ---------------------------------------------------------------------------
@@ -486,17 +486,19 @@ class TestSyncSingletonThreadSafety:
 
     def test_concurrent_checkpointer_getter_creates_one_instance(self):
         load_checkpointer_config_from_dict({"type": "memory"})
+        app_config_module.get_app_config()
         factory = _BlockingSingletonFactory()
 
         with patch("deerflow.runtime.checkpointer.provider._sync_checkpointer_cm", side_effect=factory.context_manager):
             futures_started = ThreadPoolExecutor(max_workers=1)
             try:
                 result_future = futures_started.submit(_call_getter_concurrently, get_checkpointer)
-                assert factory.entered.wait(timeout=3)
+                assert factory.entered.wait(timeout=10)
                 factory.release.wait(timeout=0.05)
                 factory.release.set()
-                results = result_future.result(timeout=3)
+                results = result_future.result(timeout=10)
             finally:
+                factory.release.set()
                 futures_started.shutdown(wait=True)
 
         assert all(result is factory.value for result in results)
@@ -504,17 +506,19 @@ class TestSyncSingletonThreadSafety:
 
     def test_concurrent_store_getter_creates_one_instance(self):
         load_checkpointer_config_from_dict({"type": "memory"})
+        app_config_module.get_app_config()
         factory = _BlockingSingletonFactory()
 
         with patch("deerflow.runtime.store.provider._sync_store_cm", side_effect=factory.context_manager):
             futures_started = ThreadPoolExecutor(max_workers=1)
             try:
                 result_future = futures_started.submit(_call_getter_concurrently, get_store)
-                assert factory.entered.wait(timeout=3)
+                assert factory.entered.wait(timeout=10)
                 factory.release.wait(timeout=0.05)
                 factory.release.set()
-                results = result_future.result(timeout=3)
+                results = result_future.result(timeout=10)
             finally:
+                factory.release.set()
                 futures_started.shutdown(wait=True)
 
         assert all(result is factory.value for result in results)

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "@rstest/core";
 
 import type { LocalSettings } from "@/core/settings";
+import { getResolvedMode } from "@/core/settings/local";
 import { buildRunContext } from "@/core/threads/hooks";
 
 const settings = {
@@ -10,6 +11,39 @@ const settings = {
 } as unknown as LocalSettings["context"];
 
 describe("buildRunContext", () => {
+  it.each([
+    ["flash", false, false, false, undefined],
+    ["pro", true, true, false, "medium"],
+    ["ultra", true, true, true, "high"],
+  ] as const)(
+    "%s preserves its distinct runtime options on a non-thinking model",
+    (mode, thinking, planning, subagents, effort) => {
+      const context = buildRunContext({
+        settings: { ...settings, mode: getResolvedMode(mode, false) },
+        threadId: "mode-test",
+      });
+      expect(context).toMatchObject({
+        mode,
+        thinking_enabled: thinking,
+        is_plan_mode: planning,
+        subagent_enabled: subagents,
+        reasoning_effort: effort,
+      });
+    },
+  );
+
+  it.each(["minimal", "low", "medium", "high"] as const)(
+    "preserves an explicit %s reasoning effort for the backend capability check",
+    (reasoning_effort) => {
+      expect(
+        buildRunContext({
+          settings: { ...settings, mode: "ultra", reasoning_effort },
+          threadId: "effort-test",
+        }).reasoning_effort,
+      ).toBe(reasoning_effort);
+    },
+  );
+
   it("sends attached references as a plain string[] under context.conversation_references", () => {
     const context = buildRunContext({
       settings,

@@ -14,6 +14,7 @@ from deerflow.persistence.agents.file import FileAgentStore
 from deerflow.persistence.agents.model import AgentRow
 from deerflow.persistence.agents.sql import SqlAgentStore
 from deerflow.persistence.base import Base
+from deerflow.persistence.organizations.model import OrganizationRow
 from deerflow.tools.builtins.setup_agent_tool import setup_agent
 
 
@@ -26,7 +27,7 @@ def test_bootstrap_preserves_owner_display_name(tmp_path, monkeypatch, backend, 
     else:
         url = f"sqlite:///{tmp_path}/agents.db"
         engine = create_engine(url)
-        Base.metadata.create_all(engine, tables=[AgentRow.__table__])
+        Base.metadata.create_all(engine, tables=[OrganizationRow.__table__, AgentRow.__table__])
         engine.dispose()
         store = SqlAgentStore(url)
     monkeypatch.setattr("deerflow.tools.builtins.setup_agent_tool.get_agent_store", lambda: store)
@@ -84,7 +85,7 @@ def test_invalid_stored_label_does_not_hide_or_break_agent(tmp_path, monkeypatch
     else:
         url = f"sqlite:///{tmp_path}/agents.db"
         engine = create_engine(url)
-        Base.metadata.create_all(engine, tables=[AgentRow.__table__])
+        Base.metadata.create_all(engine, tables=[OrganizationRow.__table__, AgentRow.__table__])
         engine.dispose()
         store = SqlAgentStore(url)
         store.create("reviewer", raw, "old soul", user_id=owner)

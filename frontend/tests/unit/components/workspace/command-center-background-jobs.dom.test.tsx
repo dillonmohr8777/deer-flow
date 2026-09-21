@@ -5,8 +5,13 @@ import type { ReactNode } from "react";
 import { BackgroundJobs } from "@/components/workspace/command-center/background-jobs";
 
 const mocks = rs.hoisted(() => ({
+  pathname: "/workspace/command-center",
   stats: { active_runs: 1 },
   statsError: false,
+}));
+
+rs.mock("next/navigation", () => ({
+  usePathname: () => mocks.pathname,
 }));
 
 rs.mock("next/link", () => {
@@ -94,6 +99,16 @@ rs.mock("@/core/console", () => ({
             total_tokens: 0,
             error: null,
           },
+          {
+            run_id: "r5",
+            thread_id: "t5",
+            thread_title: "Stopped work",
+            assistant_id: null,
+            status: "interrupted",
+            model_name: "model-c",
+            total_tokens: 12,
+            error: null,
+          },
         ],
         has_more: false,
       },
@@ -108,6 +123,7 @@ afterEach(() => {
   rs.clearAllMocks();
   mocks.stats = { active_runs: 1 };
   mocks.statsError = false;
+  mocks.pathname = "/workspace/command-center";
 });
 
 function open() {
@@ -127,6 +143,9 @@ describe("BackgroundJobs", () => {
     expect(
       screen.getByRole("link", { name: "Delta, Status unknown" }),
     ).toBeDefined();
+    expect(
+      screen.getByRole("link", { name: "Stopped work, Interrupted" }),
+    ).toBeDefined();
     const body = document.body.textContent ?? "";
     expect(body).toMatch(/Model not recorded/);
     expect(body).toMatch(/1,234/);
@@ -143,5 +162,14 @@ describe("BackgroundJobs", () => {
     expect(
       screen.queryByRole("button", { name: /background work/i }),
     ).toBeNull();
+  });
+
+  it("clears the mobile composer on persisted conversation routes", () => {
+    mocks.pathname = "/workspace/chats/thread-1";
+    render(<BackgroundJobs />);
+    expect(
+      screen.getByRole("button", { name: /background work/i }).parentElement
+        ?.className,
+    ).toContain("bottom-32 sm:bottom-4");
   });
 });

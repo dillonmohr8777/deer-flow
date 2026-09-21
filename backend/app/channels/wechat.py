@@ -1191,7 +1191,7 @@ class WechatChannel(Channel):
         if stored_path is None:
             return None
 
-        mime_type = detected_image[1] if detected_image else mimetypes.guess_type(filename)[0] or "image/jpeg"
+        mime_type = detected_image[1] if detected_image else "image/jpeg"
         return {
             "type": "image",
             "filename": stored_path.name,
@@ -1230,7 +1230,7 @@ class WechatChannel(Channel):
             return None
 
         filename = self._normalize_inbound_filename(file_item.get("file_name"), default_prefix="wechat-file", message_id=message_id, index=index)
-        mime_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
+        mime_type = (await asyncio.to_thread(mimetypes.guess_type, filename))[0] or "application/octet-stream"
         if not self._is_allowed_file_type(filename, mime_type):
             logger.warning("[WeChat] inbound file type blocked, skipping message_id=%s filename=%s", message_id, filename)
             return None

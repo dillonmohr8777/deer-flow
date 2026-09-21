@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import signal
 import socket
 import subprocess
 import sys
@@ -118,6 +119,7 @@ def _running_studio_server(
             stdout=log_file,
             stderr=subprocess.STDOUT,
             text=True,
+            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if sys.platform == "win32" else 0,
         )
 
         base_url = f"http://127.0.0.1:{port}"
@@ -150,7 +152,9 @@ def _running_studio_server(
             yield client
         finally:
             client.close()
-            process.terminate()
+            # Windows terminate() skips lifespan shutdown and its persistence flush.
+            if process.poll() is None:
+                process.send_signal(signal.CTRL_BREAK_EVENT) if sys.platform == "win32" else process.terminate()
             try:
                 process.wait(timeout=10)
             except subprocess.TimeoutExpired:

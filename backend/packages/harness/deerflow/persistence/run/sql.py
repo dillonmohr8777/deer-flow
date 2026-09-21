@@ -864,6 +864,8 @@ class RunRepository(RunStore):
             # mutator. One position covers this atomic set of changes; run_id
             # provides deterministic ordering within the position.
             change_seq = await self._next_change_seq(session)
+            thread = (await session.execute(select(ThreadMetaRow).where(ThreadMetaRow.thread_id == thread_id).with_for_update())).scalar_one_or_none()
+            values["organization_id"] = organization_from_owned_parent(thread, resolved_user_id, parent_name="thread")
             claimed: list[dict[str, Any]] = []
 
             if multitask_strategy in ("interrupt", "rollback"):

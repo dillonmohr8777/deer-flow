@@ -835,6 +835,13 @@ test.describe("Side chat", () => {
     await expect(
       sidecarInputForm.getByRole("button", { name: /Fast Model/i }),
     ).toBeVisible();
+    await sidecarInputForm
+      .getByRole("button", { name: "Flash", exact: true })
+      .click();
+    await page.getByRole("menuitem").filter({ hasText: "Ultra" }).click();
+    await expect(
+      sidecarInputForm.getByRole("button", { name: "Ultra", exact: true }),
+    ).toBeVisible();
     const mainInput = page.getByPlaceholder(/how can i assist you/i);
     const sidecarInput = page.getByPlaceholder(/deeper follow-up/i);
     await mainInput.fill("Left draft");
@@ -882,10 +889,10 @@ test.describe("Side chat", () => {
       .toBe(2);
     expect(streamBody?.context).toMatchObject({
       model_name: "fast-model",
-      thinking_enabled: false,
-      is_plan_mode: false,
-      subagent_enabled: false,
-      reasoning_effort: "minimal",
+      thinking_enabled: true,
+      is_plan_mode: true,
+      subagent_enabled: true,
+      reasoning_effort: "high",
       thread_id: MOCK_SIDECAR_THREAD_ID,
     });
 

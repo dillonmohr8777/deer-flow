@@ -302,7 +302,8 @@ def test_boxlite_shim_workaround_retries_after_fixing_permissions(monkeypatch, t
 
     assert result == "ok"
     assert calls == 2
-    assert shim.stat().st_mode & 0o111
+    if sys.platform != "win32":
+        assert shim.stat().st_mode & 0o111
 
 
 def test_boxlite_shim_workaround_loud_fails_for_other_versions(monkeypatch, tmp_path):

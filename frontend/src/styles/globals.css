@@ -322,6 +322,10 @@ html.dark .shiki span {
   * {
     @apply border-border outline-ring/50;
   }
+  :where(a, button, input, select, textarea, [tabindex]):focus-visible {
+    outline: 3px solid var(--ring);
+    outline-offset: 2px;
+  }
   body {
     @apply bg-background text-foreground;
   }
@@ -357,23 +361,19 @@ html.dark .shiki span {
     top: 0;
     background: linear-gradient(
       45deg,
-      #fb0094,
-      #0000ff,
-      #00ff00,
-      #ffff00,
-      #ff0000,
-      #fb0094,
-      #0000ff,
-      #00ff00,
-      #ffff00,
-      #ff0000
+      #075bd8,
+      #008fc9,
+      #5b3bd8,
+      #3157d5,
+      #075bd8,
+      #008fc9,
+      #5b3bd8
     );
     background-size: 400%;
     width: 100%;
     height: 100%;
     border-radius: 10px;
     z-index: -1;
-    animation: ambilight 40s ease-in-out infinite;
   }
 
   .ambilight.enabled {
@@ -383,18 +383,6 @@ html.dark .shiki span {
   .dark .ambilight:before,
   .dark .ambilight:after {
     opacity: 0.85;
-  }
-
-  @keyframes ambilight {
-    0% {
-      background-position: 0 0;
-    }
-    50% {
-      background-position: 400% 0;
-    }
-    100% {
-      background-position: 0 0;
-    }
   }
 
   .ambilight:after {
@@ -407,6 +395,174 @@ html.dark .shiki span {
     background-clip: text;
     -webkit-text-fill-color: transparent;
     text-fill-color: transparent;
+  }
+
+  .momentum-generated-copy {
+    --momentum-copy-body: #102f52;
+    --momentum-copy-heading: #074aab;
+    --momentum-copy-heading-from: #063b8d;
+    --momentum-copy-heading-mid: #3157d5;
+    --momentum-copy-heading-to: #5938dc;
+    --momentum-copy-strong: #173f9e;
+    --momentum-copy-link: #00698f;
+    --momentum-copy-link-line: #56c8ee;
+    --momentum-copy-marker: #5938dc;
+    --momentum-copy-quote-line: #4f64e8;
+    --momentum-copy-quote-wash: #edf7ff;
+    --momentum-copy-quote: #244a70;
+    --momentum-copy-code: #5435c6;
+    --momentum-copy-code-bg: #f0edff;
+    --momentum-copy-rule-from: #0b78e3;
+    --momentum-copy-rule-to: #6a49df;
+    color: var(--momentum-copy-body);
+  }
+
+  .momentum-conversation-surface {
+    color: #102f52;
+    background:
+      radial-gradient(
+        circle at 72% 0%,
+        rgb(91 95 239 / 12%),
+        transparent 36rem
+      ),
+      radial-gradient(
+        circle at 22% 18%,
+        rgb(0 163 224 / 10%),
+        transparent 30rem
+      ),
+      linear-gradient(180deg, #f8fcff 0%, #ffffff 52%, #f4faff 100%);
+  }
+
+  .momentum-generated-copy :is(h1, h2, h3) {
+    color: var(--momentum-copy-heading);
+    background: linear-gradient(
+      100deg,
+      var(--momentum-copy-heading-from) 0%,
+      var(--momentum-copy-heading-mid) 55%,
+      var(--momentum-copy-heading-to) 100%
+    );
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .momentum-generated-copy :is(h4, h5, h6, strong) {
+    color: var(--momentum-copy-strong);
+  }
+
+  .momentum-generated-copy :is(a, em) {
+    color: var(--momentum-copy-link);
+    text-decoration-color: var(--momentum-copy-link-line);
+    text-decoration-thickness: 0.12em;
+    text-underline-offset: 0.18em;
+  }
+
+  .momentum-generated-copy :is(ul, ol) > li::marker {
+    color: var(--momentum-copy-marker);
+    font-weight: 700;
+  }
+
+  .momentum-generated-copy blockquote {
+    border-left-color: var(--momentum-copy-quote-line);
+    background: linear-gradient(
+      90deg,
+      var(--momentum-copy-quote-wash) 0%,
+      transparent 92%
+    );
+    color: var(--momentum-copy-quote);
+  }
+
+  .momentum-generated-copy :not(pre) > code {
+    color: var(--momentum-copy-code);
+    background: var(--momentum-copy-code-bg);
+  }
+
+  .momentum-generated-copy hr {
+    border: 0;
+    height: 1px;
+    background: linear-gradient(
+      90deg,
+      var(--momentum-copy-rule-from),
+      var(--momentum-copy-rule-to),
+      transparent
+    );
+  }
+
+  .dark .momentum-generated-copy {
+    --momentum-copy-body: #dbe7ff;
+    --momentum-copy-heading: #9fc8ff;
+    --momentum-copy-heading-from: #7ec8ff;
+    --momentum-copy-heading-mid: #9ca3ff;
+    --momentum-copy-heading-to: #c4a7ff;
+    --momentum-copy-strong: #b8caff;
+    --momentum-copy-link: #71d8ff;
+    --momentum-copy-link-line: #2e9dcc;
+    --momentum-copy-marker: #b69cff;
+    --momentum-copy-quote-line: #7890ff;
+    --momentum-copy-quote-wash: rgb(83 126 230 / 14%);
+    --momentum-copy-quote: #bed5ef;
+    --momentum-copy-code: #d7c8ff;
+    --momentum-copy-code-bg: rgb(91 59 216 / 22%);
+    --momentum-copy-rule-from: #4ab8f4;
+    --momentum-copy-rule-to: #9b85ff;
+  }
+
+  .dark .momentum-conversation-surface {
+    color: #dbe7ff;
+    background:
+      radial-gradient(
+        circle at 72% 0%,
+        rgb(123 97 255 / 17%),
+        transparent 36rem
+      ),
+      radial-gradient(
+        circle at 22% 18%,
+        rgb(0 163 224 / 14%),
+        transparent 30rem
+      ),
+      linear-gradient(180deg, #071426 0%, #0a1729 52%, #10192d 100%);
+  }
+
+  .dark [data-momentum-glyph] > circle:first-of-type {
+    fill: rgb(255 255 255 / 8%);
+  }
+
+  .dark [data-momentum-glyph] {
+    filter: brightness(1.25) saturate(1.1);
+  }
+
+  .dark [data-momentum-glyph] > circle:nth-of-type(2) {
+    stroke: rgb(150 210 255 / 55%);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      scroll-behavior: auto !important;
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+
+  @media (forced-colors: active) {
+    .momentum-generated-copy :is(h1, h2, h3),
+    .golden-text {
+      background: none;
+      color: CanvasText;
+      -webkit-text-fill-color: currentColor;
+    }
+    [data-momentum-glyph] {
+      forced-color-adjust: auto;
+    }
+    [data-momentum-glyph] path {
+      stroke: CanvasText;
+    }
+    [data-momentum-glyph] circle {
+      fill: Canvas;
+      stroke: CanvasText;
+    }
   }
 
   /* KaTeX rendering polish for chat messages.

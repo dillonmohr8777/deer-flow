@@ -94,6 +94,10 @@ default-groups = ["extensions"]
     (root / "config.yaml").write_text("config_version: 1\n", encoding="utf-8")
 
 
+def _venv_python(backend: Path) -> Path:
+    return backend / ".venv" / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+
+
 def _commit_local_extension(source: Path) -> str:
     subprocess.run(["git", "init", "-q"], cwd=source, check=True)
     test_hooks = source / ".git" / "test-hooks"
@@ -156,7 +160,7 @@ def _serve_directory(directory: Path) -> Iterator[str]:
 def _assert_demo_entry_point_loads(backend: Path) -> None:
     completed = subprocess.run(
         [
-            str(backend / ".venv" / ("Scripts/python.exe" if os.name == "nt" else "bin/python")),
+            str(_venv_python(backend)),
             "-c",
             "from importlib.metadata import entry_points; eps=entry_points(group='deerflow.extensions'); assert [(e.name, e.value) for e in eps] == [('demo', 'demo_extension:install')]; assert callable(next(iter(eps)).load())",
         ],
@@ -426,7 +430,7 @@ def test_upgrade_repins_an_installed_git_source_and_preserves_private_config(tmp
         _assert_demo_entry_point_loads(root / "backend")
         marker = subprocess.run(
             [
-                str(root / "backend" / ".venv" / ("Scripts/python.exe" if os.name == "nt" else "bin/python")),
+                str(_venv_python(root / "backend")),
                 "-c",
                 "import demo_extension; print(demo_extension.MARKER)",
             ],
@@ -495,7 +499,7 @@ def test_upgrade_repins_an_installed_requirement_and_preserves_private_config(
         _assert_demo_entry_point_loads(root / "backend")
         marker = subprocess.run(
             [
-                str(root / "backend" / ".venv" / ("Scripts/python.exe" if os.name == "nt" else "bin/python")),
+                str(_venv_python(root / "backend")),
                 "-c",
                 "import demo_extension; print(demo_extension.MARKER)",
             ],
@@ -1521,7 +1525,7 @@ def test_failed_entry_point_discovery_rolls_back_dependency_and_lock(tmp_path: P
     assert not (root / "backend" / "uv.lock").exists()
     absent = subprocess.run(
         [
-            str(root / "backend" / ".venv" / "bin" / "python"),
+            str(_venv_python(root / "backend")),
             "-c",
             "from importlib.metadata import PackageNotFoundError, version; \ntry: version('deerflow-extension-demo')\nexcept PackageNotFoundError: raise SystemExit(0)\nraise SystemExit(1)",
         ],
@@ -2032,7 +2036,7 @@ def test_remove_rolls_back_package_lock_config_source_and_environment_when_confi
     assert managed_source.is_dir()
     present = subprocess.run(
         [
-            str(root / "backend" / ".venv" / "bin" / "python"),
+            str(_venv_python(root / "backend")),
             "-c",
             "from importlib.metadata import version; assert version('deerflow-extension-demo') == '1.0.0'",
         ],
@@ -2402,7 +2406,7 @@ def test_install_uses_one_controlled_uv_project_and_deferred_sync(
     assert ["--project", backend] == add[add.index("--project") : add.index("--project") + 2]
     assert "--no-sync" in add
     assert "--no-workspace" in add
-    assert add[-2:] == ["--", "extensions/sources/deerflow-extension-demo"]
+    assert add[-2:] == ["--", str(Path("extensions") / "sources" / "deerflow-extension-demo")]
     assert ["--project", backend] == sync[sync.index("--project") : sync.index("--project") + 2]
     assert "--locked" in sync
     assert "--no-sync" not in sync

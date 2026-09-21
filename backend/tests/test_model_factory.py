@@ -425,6 +425,32 @@ def test_required_thinking_profile_keeps_base_payload_when_runtime_requests_disa
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.parametrize("effort", ["minimal", "low", "medium", "high"])
+def test_muse_reasoning_effort_reaches_provider_payload_without_network(effort):
+    model = ModelConfig(
+        name="muse-contributor",
+        use="langchain_openai:ChatOpenAI",
+        model="meta/muse-spark-1.3-contributor",
+        base_url="https://openrouter.ai/api/v1",
+        api_key="offline-test-key",
+        supports_thinking=True,
+        supports_reasoning_effort=True,
+        when_thinking_disabled={"reasoning_effort": "minimal"},
+    )
+    cfg = _make_app_config([model])
+    for thinking_enabled, expected in [(True, effort), (False, "minimal")]:
+        chat_model = factory_module.create_chat_model(
+            name=model.name,
+            thinking_enabled=thinking_enabled,
+            reasoning_effort=effort,
+            app_config=cfg,
+            attach_tracing=False,
+        )
+        payload = chat_model._get_request_payload([HumanMessage(content="Offline payload check")])
+        assert payload["reasoning_effort"] == expected
+        assert payload["model"] == model.model
+
+
 def test_when_thinking_disabled_takes_precedence_over_hardcoded_disable(monkeypatch):
     """When when_thinking_disabled is set, it takes full precedence over the
     hardcoded disable logic (extra_body.thinking.type=disabled etc.)."""

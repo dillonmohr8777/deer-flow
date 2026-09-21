@@ -83,6 +83,7 @@ import {
 } from "@/core/messages/utils";
 import { useModels } from "@/core/models/hooks";
 import { useStagedProjectAttachments } from "@/core/projects/composer-attach";
+import { getResolvedMode } from "@/core/settings/local";
 import {
   buildReferenceMessageMetadata,
   type SidecarContext,
@@ -207,19 +208,6 @@ function insertPlainTextAtSelection(container: HTMLElement, text: string) {
   selection.removeAllRanges();
   selection.addRange(range);
   return true;
-}
-
-function getResolvedMode(
-  mode: InputMode | undefined,
-  supportsThinking: boolean,
-): InputMode {
-  if (!supportsThinking && mode !== "flash") {
-    return "flash";
-  }
-  if (mode) {
-    return mode;
-  }
-  return supportsThinking ? "pro" : "flash";
 }
 
 function escapeXmlAttribute(value: string) {

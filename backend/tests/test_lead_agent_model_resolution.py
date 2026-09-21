@@ -575,14 +575,17 @@ def test_resolve_model_name_raises_when_no_models_configured(monkeypatch):
         lead_agent_module._resolve_model_name("missing-model")
 
 
-def test_make_lead_agent_disables_thinking_when_model_does_not_support_it(monkeypatch):
+@pytest.mark.parametrize("plan_mode,subagent_enabled", [(False, False), (True, False), (True, True)])
+def test_make_lead_agent_disables_thinking_when_model_does_not_support_it(monkeypatch, plan_mode, subagent_enabled):
     app_config = _make_app_config([_make_model("safe-model", supports_thinking=False)])
 
     import deerflow.tools as tools_module
 
     monkeypatch.setattr(lead_agent_module, "get_app_config", lambda: app_config)
-    monkeypatch.setattr(tools_module, "get_available_tools", lambda **kwargs: [])
-    monkeypatch.setattr(lead_agent_module, "build_middlewares", lambda config, model_name, agent_name=None, **kwargs: [])
+    get_available_tools = MagicMock(return_value=[])
+    build_middlewares = MagicMock(return_value=[])
+    monkeypatch.setattr(tools_module, "get_available_tools", get_available_tools)
+    monkeypatch.setattr(lead_agent_module, "build_middlewares", build_middlewares)
 
     captured: dict[str, object] = {}
 
@@ -601,8 +604,8 @@ def test_make_lead_agent_disables_thinking_when_model_does_not_support_it(monkey
             "configurable": {
                 "model_name": "safe-model",
                 "thinking_enabled": True,
-                "is_plan_mode": False,
-                "subagent_enabled": False,
+                "is_plan_mode": plan_mode,
+                "subagent_enabled": subagent_enabled,
             }
         }
     )
@@ -611,6 +614,10 @@ def test_make_lead_agent_disables_thinking_when_model_does_not_support_it(monkey
     assert captured["thinking_enabled"] is False
     assert captured["app_config"] is app_config
     assert result["model"] is not None
+    assert get_available_tools.call_args.kwargs["subagent_enabled"] is subagent_enabled
+    middleware_config = build_middlewares.call_args.args[0]["configurable"]
+    assert middleware_config["is_plan_mode"] is plan_mode
+    assert middleware_config["subagent_enabled"] is subagent_enabled
 
 
 def test_make_lead_agent_reads_runtime_options_from_context(monkeypatch):

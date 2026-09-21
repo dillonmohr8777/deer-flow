@@ -111,6 +111,7 @@ async def test_upgrade_preserves_legacy_rows_and_allocates_from_one(migration_da
     assert task.last_occurrence_seq == 0
     assert task.run_count == 7
 
+    await asyncio.to_thread(command.upgrade, cfg, "head")
     factory = async_sessionmaker(engine, expire_on_commit=False)
     await ScheduledTaskRunRepository(factory).create(
         run_record_id="new",

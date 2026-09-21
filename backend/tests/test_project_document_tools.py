@@ -313,15 +313,13 @@ class TestInsertFailureNamespacePreservation:
         with pytest.raises(RuntimeError, match="simulated post-commit refresh failure"):
             await add_staged_document(env.docs, env.paths, user_id=_USER, project_id=env.project["id"], name="raced.txt", staged=staged)
 
-        # The namespace survived on disk and no active row appeared.
-        documents_dir = env.paths.project_documents_dir(_USER, env.project["id"])
-        survivors = list(documents_dir.rglob("raced.txt"))
-        assert len(survivors) == 1
-        assert survivors[0].read_bytes() == b"recoverable bytes"
-        assert await env.docs.count_active(env.project["id"], user_id=_USER) == 0
-        # The teeth: the trashed row restores with its content intact.
+        # The namespace survived on disk and no active row appeared. Resolve
+        # through the row so Windows long-path handling matches production.
         trashed = await env.docs.list_trashed(limit=10, offset=0, user_id=_USER)
         row = next(r for r in trashed if r["name"] == "raced.txt")
+        assert original_file_path(env.paths, user_id=_USER, row=row).read_bytes() == b"recoverable bytes"
+        assert await env.docs.count_active(env.project["id"], user_id=_USER) == 0
+        # The teeth: the trashed row restores with its content intact.
         outcome, _restored = await restore_document(env.docs, env.paths, user_id=_USER, document_id=row["id"], target_project_id=env.project["id"])
         assert outcome == "restored"
         payload = json.loads(await _read_project_document_impl(_runtime(project_id=env.project["id"]), document_id=row["id"], offset=0, limit=100))
@@ -351,13 +349,10 @@ class TestInsertFailureNamespacePreservation:
         with pytest.raises(RuntimeError, match="simulated post-commit refresh failure"):
             await add_staged_document(env.docs, env.paths, user_id=_USER, project_id=env.project["id"], name="orphaned.txt", staged=staged)
 
-        documents_dir = env.paths.project_documents_dir(_USER, env.project["id"])
-        survivors = list(documents_dir.rglob("orphaned.txt"))
-        assert len(survivors) == 1
-        assert survivors[0].read_bytes() == b"rescued bytes"
-        other = await env.projects.create(name="T", user_id=_USER)
         trashed = await env.docs.list_trashed(limit=10, offset=0, user_id=_USER)
         row = next(r for r in trashed if r["name"] == "orphaned.txt")
+        assert original_file_path(env.paths, user_id=_USER, row=row).read_bytes() == b"rescued bytes"
+        other = await env.projects.create(name="T", user_id=_USER)
         outcome, _restored = await restore_document(env.docs, env.paths, user_id=_USER, document_id=row["id"], target_project_id=other["id"])
         assert outcome == "restored"
         payload = json.loads(await _read_project_document_impl(_runtime(project_id=other["id"]), document_id=row["id"], offset=0, limit=100))
