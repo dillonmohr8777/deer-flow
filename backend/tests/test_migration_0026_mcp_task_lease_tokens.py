@@ -27,7 +27,7 @@ TOKEN_COLUMNS = {"lease_token", "notification_lease_token"}
 async def test_0026_is_in_the_single_merge_head():
     from alembic.script import ScriptDirectory
 
-    script = ScriptDirectory(bootstrap._get_alembic_config(None).get_main_option("script_location"))
+    script = ScriptDirectory(str(bootstrap._MIGRATIONS_DIR))
     assert script.get_heads() == ["0028_merge_org_mcp"]
     assert script.get_revision("0028_merge_org_mcp").down_revision == ("0027_organization_backfill", REVISION)
     assert script.get_revision(REVISION).down_revision == PREVIOUS
