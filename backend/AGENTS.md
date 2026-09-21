@@ -1,5 +1,7 @@
 # AGENTS.md
 
+The production Docker runtime includes Debian's `media-types` registry so Python MIME detection classifies XHTML as active content. Keep project-document attachment tests passing in the built image, not only on the host.
+
 ## Project Overview
 
 The backend runs a LangGraph-based super agent with sandbox execution, persistent memory, subagent delegation, and extensible tools in isolated per-thread environments.
