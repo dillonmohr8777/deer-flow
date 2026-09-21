@@ -903,6 +903,50 @@ class TestUserProfileAPI:
         assert response.status_code == 200
         assert response.json()["content"] is None
 
+    def test_profiles_follow_private_and_shared_storage_contexts(self, agent_client, tmp_path):
+        import asyncio
+
+        from app.gateway.routers.agents import UserProfileUpdateRequest, get_user_profile, update_user_profile
+        from deerflow.runtime.user_context import WorkspaceStorageContext, reset_current_user, reset_storage_context, set_current_user, set_storage_context
+
+        legacy = tmp_path / "USER.md"
+        legacy.write_text("legacy root", encoding="utf-8")
+
+        def call(actor: str, storage: str, operation):
+            actor_token = set_current_user(SimpleNamespace(id=actor))
+            storage_token = set_storage_context(
+                WorkspaceStorageContext(
+                    actor_user_id=actor,
+                    organization_id=f"org-{storage}",
+                    storage_user_id=storage,
+                    role="member",
+                )
+            )
+            try:
+                return asyncio.run(operation())
+            finally:
+                reset_storage_context(storage_token)
+                reset_current_user(actor_token)
+
+        async def read():
+            return await get_user_profile()
+
+        async def write(content: str):
+            return await update_user_profile(UserProfileUpdateRequest(content=content))
+
+        assert call("actor-a", "private-a", read).content == "legacy root"
+        assert call("actor-a", "private-a", lambda: write("private-a")).content == "private-a"
+        assert call("actor-b", "private-b", read).content == "legacy root"
+        assert call("actor-b", "private-b", lambda: write("private-b")).content == "private-b"
+        assert call("actor-a", "private-a", read).content == "private-a"
+
+        assert call("actor-a", "shared-workspace", read).content == "legacy root"
+        assert call("actor-a", "shared-workspace", lambda: write("shared")).content == "shared"
+        assert call("actor-b", "shared-workspace", read).content == "shared"
+        assert call("actor-c", "other-workspace", read).content == "legacy root"
+
+        assert legacy.read_text(encoding="utf-8") == "legacy root"
+
 
 class TestAgentsApiDisabled:
     def test_agents_list_returns_403(self, disabled_agent_client):

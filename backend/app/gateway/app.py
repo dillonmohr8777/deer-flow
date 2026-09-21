@@ -49,6 +49,7 @@ from app.gateway.routers import (
     trash,
     uploads,
     user_preferences,
+    workspace_branding,
     workspaces,
 )
 from app.gateway.trace_middleware import TraceMiddleware
@@ -986,6 +987,7 @@ This gateway provides runtime endpoints for agent runs plus custom endpoints for
     app.include_router(auth.router)
     app.include_router(invitations.router)
     app.include_router(workspaces.router)
+    app.include_router(workspace_branding.router)
     app.include_router(user_preferences.router)
 
     # Feedback API is mounted at /api/threads/{thread_id}/runs/{run_id}/feedback
