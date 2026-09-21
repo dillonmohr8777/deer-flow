@@ -87,7 +87,13 @@ from deerflow.runtime.secret_context import (
     validate_run_metadata_secrets,
 )
 from deerflow.runtime.stream_modes import normalize_stream_modes
-from deerflow.runtime.user_context import reset_current_user, set_current_user
+from deerflow.runtime.user_context import (
+    AUTHENTICATED_CONTEXT_MARKER,
+    AUTHENTICATED_CONTEXT_MARKER_KEY,
+    WORKSPACE_IDENTITY_CONTEXT_KEYS,
+    reset_current_user,
+    set_current_user,
+)
 from deerflow.sandbox.lease import SANDBOX_SERVER_OWNED_CONTEXT_KEYS
 from deerflow.subagents.status_contract import SUBAGENT_ACCEPTANCE_VERDICT_KEY, SUBAGENT_RECEIPT_VERDICT_KEY, SUBAGENT_TOOL_RECEIPTS_KEY
 from deerflow.trace_context import DEERFLOW_TRACE_METADATA_KEY, ensure_trace_context, ensure_trace_id
@@ -576,8 +582,10 @@ _SERVER_OWNED_RUNTIME_CONTEXT_KEYS: frozenset[str] = (
             PROJECT_CONTEXT_KEY,
             KNOWLEDGE_SCOPE_KEY,
             KNOWLEDGE_SCOPE_RUNTIME_KEY,
+            AUTHENTICATED_CONTEXT_MARKER_KEY,
         }
     )
+    | WORKSPACE_IDENTITY_CONTEXT_KEYS
     | SANDBOX_SERVER_OWNED_CONTEXT_KEYS
 )
 
@@ -751,6 +759,17 @@ def inject_authenticated_user_context(
     if user_id is None:
         return
 
+    # The middleware resolves organization membership and the storage
+    # principal before this function runs.  Stamp both identities into the
+    # durable run config so a worker that outlives the HTTP task cannot drift
+    # back to the actor's private bucket.  Values supplied through request
+    # context were removed above and therefore never participate here.
+    state = getattr(request, "state", None)
+    actor_user_id = getattr(state, "actor_user_id", None)
+    storage_user_id = getattr(state, "storage_user_id", None)
+    organization_id = getattr(state, "organization_id", None)
+    organization_role = getattr(state, "organization_role", None)
+
     if getattr(user, "system_role", None) == INTERNAL_SYSTEM_ROLE:
         runtime_context = config.setdefault("context", {})
         if not isinstance(runtime_context, dict):
@@ -763,17 +782,35 @@ def inject_authenticated_user_context(
         owner_user_id = getattr(internal_owner_user, "id", None)
         if owner_user_id is not None:
             runtime_context["user_id"] = str(owner_user_id)
+            actor_user_id = actor_user_id or str(owner_user_id)
+            storage_user_id = storage_user_id or str(owner_user_id)
         runtime_context["user_role"] = getattr(internal_owner_user, "system_role", None)
         runtime_context["oauth_provider"] = getattr(internal_owner_user, "oauth_provider", None)
         runtime_context["oauth_id"] = getattr(internal_owner_user, "oauth_id", None)
+    else:
+        runtime_context = config.setdefault("context", {})
+        if isinstance(runtime_context, dict):
+            runtime_context["user_id"] = str(user_id)
+            runtime_context["user_role"] = getattr(user, "system_role", None)
+            runtime_context["oauth_provider"] = getattr(user, "oauth_provider", None)
+            runtime_context["oauth_id"] = getattr(user, "oauth_id", None)
+
+    if not isinstance(runtime_context, dict):
         return
 
-    runtime_context = config.setdefault("context", {})
-    if isinstance(runtime_context, dict):
-        runtime_context["user_id"] = str(user_id)
-        runtime_context["user_role"] = getattr(user, "system_role", None)
-        runtime_context["oauth_provider"] = getattr(user, "oauth_provider", None)
-        runtime_context["oauth_id"] = getattr(user, "oauth_id", None)
+    actor_user_id = str(actor_user_id or user_id)
+    storage_user_id = str(storage_user_id or actor_user_id)
+    runtime_context["actor_user_id"] = actor_user_id
+    runtime_context["storage_user_id"] = storage_user_id
+    if organization_id is not None:
+        runtime_context["organization_id"] = str(organization_id)
+    if organization_role is not None:
+        runtime_context["organization_role"] = str(organization_role)
+    # Keep the values server-owned while the worker copies them into its
+    # runtime context.  The marker is consumed by the worker and never leaves
+    # the in-process run configuration.
+    runtime_context[AUTHENTICATED_CONTEXT_MARKER_KEY] = AUTHENTICATED_CONTEXT_MARKER
+    return
 
 
 def resolve_agent_factory(assistant_id: str | None):
@@ -1700,6 +1737,12 @@ async def start_run(
     # thread access.
     user = getattr(request.state, "user", None)
 
+    content_user_id = owner_user_id or getattr(request.state, "storage_user_id", None) or (str(user.id) if user is not None else None)
+    if user is not None and content_user_id != str(user.id) and not owner_user_id:
+        sandbox_config = get_app_config().sandbox
+        if sandbox_config.use != "deerflow.community.aio_sandbox:AioSandboxProvider" or sandbox_config.network.mode == "open":
+            raise HTTPException(status_code=503, detail="Shared workspace tools require the isolated workspace sandbox")
+
     async def thread_access_allowed() -> bool:
         if user is None:
             if not require_existing_thread:
@@ -1707,7 +1750,7 @@ async def start_run(
             return await run_ctx.thread_store.get(thread_id) is not None
         allowed = await run_ctx.thread_store.check_access(
             thread_id,
-            str(user.id),
+            getattr(request.state, "storage_user_id", None) or str(user.id),
             require_existing=require_existing_thread,
         )
         if not allowed and owner_user_id and getattr(user, "system_role", None) == INTERNAL_SYSTEM_ROLE:
@@ -1791,7 +1834,7 @@ async def start_run(
         agent_config = (
             await _load_scope_agent_config(
                 assistant_id=scope_assistant_id,
-                user_id=owner_user_id or (str(user.id) if user is not None else None),
+                user_id=content_user_id,
             )
             if not scope_runtime_config.get("is_bootstrap")
             else None
@@ -1833,7 +1876,7 @@ async def start_run(
             prepared = prepare_conversation_reader(
                 conversation_references,
                 request=request,
-                user_id=owner_user_id or (str(user.id) if user is not None else None),
+                user_id=content_user_id,
                 run_context=run_ctx,
                 run_manager=run_mgr,
                 app_config=get_app_config(),
@@ -1983,7 +2026,7 @@ async def start_run(
                     },
                     multitask_strategy=body.multitask_strategy,
                     model_name=model_name,
-                    user_id=owner_user_id,
+                    user_id=content_user_id,
                     idempotency_key=idempotency_key,
                 )
 

@@ -1,4 +1,9 @@
-"""Additive organization identity models; authorization remains user-scoped."""
+"""Organization identity, membership, and invitation persistence models.
+
+Rows stay additive to the existing owner columns. ``storage_user_id`` is
+non-null only for a deliberately shared workspace; private organizations keep
+it null so their existing owner remains the storage principal.
+"""
 
 from __future__ import annotations
 
@@ -21,6 +26,7 @@ class OrganizationRow(Base):
     slug: Mapped[str] = mapped_column(String(128), unique=True, index=True)
     name: Mapped[str] = mapped_column(String(256))
     status: Mapped[str] = mapped_column(String(32))
+    storage_user_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now, onupdate=_utc_now)
 

@@ -32,7 +32,7 @@ from deerflow.mcp.headers import (
     header_spellings,
     illegal_header_value_reason,
 )
-from deerflow.runtime.user_context import resolve_runtime_user_id
+from deerflow.runtime.user_context import resolve_runtime_actor_user_id
 
 logger = logging.getLogger(__name__)
 
@@ -98,7 +98,9 @@ def build_user_scoped_auth_interceptor(extensions_config: ExtensionsConfig) -> A
         runtime = getattr(request, "runtime", None)
         if runtime is None:
             runtime = _current_runtime()
-        user_id = resolve_runtime_user_id(runtime)
+        # MCP credentials belong to the signed-in actor, even when content is
+        # stored under a shared workspace principal.
+        user_id = resolve_runtime_actor_user_id(runtime)
         # Empty string covers a `$ENV_VAR` reference whose variable was unset:
         # ExtensionsConfig.resolve_env_variables stores "" for those, and an
         # empty credential must fail closed rather than send an empty header.

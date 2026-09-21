@@ -85,7 +85,14 @@ from deerflow.runtime.runs.stream_cleanup import close_agent_stream
 from deerflow.runtime.serialization import serialize
 from deerflow.runtime.stream_bridge import StreamBridge
 from deerflow.runtime.stream_modes import normalize_stream_modes, to_langgraph_stream_modes
-from deerflow.runtime.user_context import get_current_user, get_effective_user_id, resolve_runtime_user_id
+from deerflow.runtime.user_context import (
+    AUTHENTICATED_CONTEXT_MARKER,
+    AUTHENTICATED_CONTEXT_MARKER_KEY,
+    WORKSPACE_IDENTITY_CONTEXT_KEYS,
+    get_current_user,
+    get_effective_user_id,
+    resolve_runtime_user_id,
+)
 from deerflow.sandbox.lease import SANDBOX_SERVER_OWNED_CONTEXT_KEYS
 from deerflow.trace_context import DEERFLOW_TRACE_METADATA_KEY, ensure_trace_id
 from deerflow.tracing import inject_langfuse_metadata
@@ -524,8 +531,10 @@ _SERVER_OWNED_RUNTIME_CONTEXT_KEYS: Final[frozenset[str]] = (
             # ``config['context']`` must never be merged (§12).
             PROJECT_CONTEXT_KEY,
             KNOWLEDGE_SCOPE_RUNTIME_KEY,
+            AUTHENTICATED_CONTEXT_MARKER_KEY,
         }
     )
+    | WORKSPACE_IDENTITY_CONTEXT_KEYS
     | SANDBOX_SERVER_OWNED_CONTEXT_KEYS
 )
 
@@ -557,6 +566,14 @@ def _build_runtime_context(
             if key in _SERVER_OWNED_RUNTIME_CONTEXT_KEYS:
                 continue
             runtime_ctx.setdefault(key, value)
+        # Workspace identities are server-owned and therefore excluded from
+        # the general merge.  The Gateway's in-process capability marker is
+        # the only path that may rehydrate them for ToolRuntime consumers.
+        if caller_context.get(AUTHENTICATED_CONTEXT_MARKER_KEY) is AUTHENTICATED_CONTEXT_MARKER:
+            for key in WORKSPACE_IDENTITY_CONTEXT_KEYS:
+                value = caller_context.get(key)
+                if value is not None:
+                    runtime_ctx[key] = value
     if app_config is not None:
         runtime_ctx["app_config"] = app_config
     if conversation_reader is not None:
@@ -594,6 +611,30 @@ def _pin_admission_project_context(config: dict, runtime_context: dict[str, Any]
     caller_context = config.get("context")
     if isinstance(caller_context, dict) and PROJECT_CONTEXT_KEY in caller_context:
         runtime_context[PROJECT_CONTEXT_KEY] = caller_context[PROJECT_CONTEXT_KEY]
+
+
+def _pin_authenticated_identity_context(config: dict, runtime_context: dict[str, Any]) -> None:
+    """Carry Gateway-authenticated workspace identities into the run runtime.
+
+    Workspace identity fields are server-owned and therefore rejected by the
+    ordinary caller-context merge above.  The Gateway adds an in-process
+    capability marker after request context admission; only a config carrying
+    that marker may rehydrate these fields for ``ToolRuntime.context``.  The
+    marker is consumed here and is never exposed to tools or persisted in the
+    checkpoint context.
+    """
+    caller_context = config.get("context")
+    if not isinstance(caller_context, dict) or caller_context.get(AUTHENTICATED_CONTEXT_MARKER_KEY) is not AUTHENTICATED_CONTEXT_MARKER:
+        return
+    for key in WORKSPACE_IDENTITY_CONTEXT_KEYS:
+        value = caller_context.get(key)
+        if value is not None:
+            runtime_context[key] = value
+    # Keep the capability alive through agent assembly so
+    # ``resolve_config_user_id`` can distinguish these storage fields from a
+    # standalone caller's context.  It is removed immediately after assembly,
+    # before the graph starts and before any checkpoint config is persisted.
+    runtime_context[AUTHENTICATED_CONTEXT_MARKER_KEY] = AUTHENTICATED_CONTEXT_MARKER
 
 
 @dataclass(frozen=True)
@@ -1075,6 +1116,7 @@ async def run_agent(
             extensions,
             ctx.conversation_reader,
         )
+        _pin_authenticated_identity_context(config, runtime_ctx)
         # Bind every checkpoint produced by this run to the effective agent
         # identity that produced its state. Manual compaction uses only this
         # server-overwritten value for memory policy; request metadata cannot
@@ -1151,6 +1193,12 @@ async def run_agent(
             # initialization — it must not stall the calling event loop
             # (issue #5172).
             agent = _agent_graph(await run_assembly(agent_factory, **agent_factory_kwargs))
+
+        # ``resolve_config_user_id`` needs the capability marker while the
+        # agent is assembled, but no runtime consumer or checkpoint should see
+        # the marker object.  Remove it from both views before graph execution.
+        runtime_ctx.pop(AUTHENTICATED_CONTEXT_MARKER_KEY, None)
+        _install_runtime_context(config, runtime_ctx)
 
         accessor = CheckpointStateAccessor.bind(
             agent,
