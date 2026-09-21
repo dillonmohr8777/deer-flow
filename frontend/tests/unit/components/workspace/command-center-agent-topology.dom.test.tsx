@@ -56,7 +56,7 @@ describe("AgentTopology", () => {
     );
 
     expect(screen.getByText("Active run recorded")).toBeTruthy();
-    expect(screen.getByText("No active run recorded")).toBeTruthy();
+    expect(screen.getByText("Idle")).toBeTruthy();
     expect(screen.getByText("Disabled")).toBeTruthy();
   });
 });
