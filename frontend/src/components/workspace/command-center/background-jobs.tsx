@@ -15,6 +15,8 @@ import { pathOfThread } from "@/core/threads/utils";
 
 import { MomentumGlyph } from "./momentum-glyph";
 
+import appearanceStyles from "./workspace-appearance.module.css";
+
 const STATUS_LABEL: Record<string, string> = {
   pending: "Queued",
   running: "Running",
@@ -40,7 +42,7 @@ export function BackgroundJobs() {
   if (!stats.data || stats.isError) return null;
   return (
     <div
-      className={`fixed right-4 z-40 max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl border border-[#91b7d6] bg-white text-[#07172f] shadow-[0_16px_44px_rgba(24,84,134,0.18)] ${pathname.includes("/chats/") ? "bottom-32 sm:bottom-4" : "bottom-4"} sm:w-72 ${open ? "w-72" : "w-auto"}`}
+      className={`${appearanceStyles.backgroundTray} fixed right-4 z-40 max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl border border-[#91b7d6] bg-white text-[#07172f] shadow-[0_16px_44px_rgba(24,84,134,0.18)] ${pathname.includes("/chats/") ? "bottom-32 sm:bottom-4" : "bottom-4"} sm:w-72 ${open ? "w-72" : "w-auto"}`}
     >
       <button
         type="button"

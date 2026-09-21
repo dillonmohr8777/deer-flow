@@ -22,9 +22,9 @@ colors:
 typography:
   display:
     fontFamily: "Momentum Display, Archivo Black, sans-serif"
-    fontSize: "clamp(34px, 4vw, 58px)"
+    fontSize: "46px"
     fontWeight: 400
-    lineHeight: 1.02
+    lineHeight: 1.06
     letterSpacing: "-0.03em"
   headline:
     fontFamily: "Momentum UI, Nunito Sans, system-ui, sans-serif"
@@ -139,7 +139,7 @@ The palette is cool, luminous, and operational: deep navy establishes trust, cob
 
 ### Hierarchy
 
-- **Display** (400, `clamp(34px, 4vw, 58px)`, 1.02): Mission Control and other singular page titles.
+- **Display** (400, 46px desktop / 36px intermediate / 34px mobile, 1.06): Mission Control and other singular page titles.
 - **Headline** (900, 21px, 1.25): Primary sections and major result headings.
 - **Title** (900, 17–19px, 1.3): Agent names, run names, and drawer headings.
 - **Body** (400, 15px, 1.5): Interface copy and generated responses, normally constrained to a readable measure.
@@ -159,7 +159,7 @@ Conversation pages keep generated copy in a readable central measure and anchor 
 
 Depth is cool and diffuse. White surfaces use faint blue ambient shadows; selected cards and the lead-agent source receive stronger cobalt depth. Background auroras and the faceted current provide atmosphere, but zero-offset glow is reserved for live rings and selected paths. Reduced-motion users receive the same hierarchy with all nonessential animation removed.
 
-Motion is state-bound: controls transition in 160ms, the desktop live ring resolves over 1.9s, the desktop status pulse runs at 1.8s, the ambient current drifts over 7s, and active fetch spinners use 1s. Mobile keeps at most one continuous state loop in the Command Center. Reduced-motion removes every loop and transition.
+Operational motion is state-bound: controls transition in 160ms, the desktop live ring resolves over 1.9s, the desktop status pulse runs at 1.8s, and active fetch spinners use 1s. The ambient current is still. Optional brand expression uses a 7-second Current or 8-second Paper cycle with an explicit pause control; it is never an activity signal. Mobile keeps at most one continuous state loop in the Command Center. Reduced-motion removes every loop and transition.
 
 ### Named Rules
 
@@ -223,3 +223,28 @@ Selecting a run opens a right-side evidence drawer with recorded status, model, 
 - **Don't** turn unavailable data into zero or configured agents into claims of running workers.
 - **Don't** flatten the lead-agent current into a generic same-size card grid.
 - **Don't** let spectral styling reduce contrast or become rainbow confetti.
+
+## Personal appearance expansion — September 21, 2026
+
+Dillon requested visible dashboard customization and the dimensional paper
+language of the existing Momo film. The incumbent Momentum Current world now
+has three personal treatments: **Classic** (still, clear fields), **Current**
+(cool dimensional brand planes), and **Paper cutout** (ivory ground, cobalt and
+yellow layered brand planes, offset paper framing on stable agent glyphs).
+Operational surfaces stay readable and do not rotate. The original wordmark
+remains unchanged; the new Momo vector is a film-derived interpretation with
+provenance in `frontend/public/momentum/SOURCES.md`.
+
+The logo is the single decorative focal motion, separate from recorded agent
+activity. This user-requested exception to the original no-decorative-motion
+rule is explicitly opt-in, defaults off, has a visible pause switch, and stops
+when offscreen, hidden or reduced motion is active. Classic always stays still.
+The shared treatment appears in workspace navigation and the dashboard brand
+stage; agent identities receive the same material framing without looping.
+
+Appearance controls expand inline beside Start a mission. Local client-logo
+previews use a validated raster file and account-scoped browser storage; the
+panel labels that scope and provides a reset. It does not imply shared workspace
+branding, a changed expert prompt or a live agent. Existing specialist records
+provide the visible name, role, model and runtime state in Mission Control and
+Agent Studio.

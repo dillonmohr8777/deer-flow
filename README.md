@@ -2180,6 +2180,15 @@ Authenticated SQL deployments also expose `GET /api/console/usage-ledger` for
 user-scoped successful and failed provider attempts. Provider-reported cost and
 configured estimates are returned as separate fields.
 
+The **Appearance** control offers Classic, Current and Paper cutout treatments
+for the dashboard, agent glyphs and shared workspace brand mark. Brand motion is
+off by default, has a visible pause control, and stops when hidden, offscreen or
+reduced motion is requested. Local raster logos can be previewed without an
+upload. Appearance is saved for the current account in this browser only; it
+does not change team branding, agent prompts or workspace records. Reset removes
+the local preference. Specialist briefs remain in the existing administrator
+settings; the dashboard only displays their recorded roles and model settings.
+
 This customization does not establish client isolation or billing readiness.
 Runtime execution and artifact controls remain in the existing DeerFlow services.
 For an independent local preview, set `NEXT_BUILD_DIR=.next-momentum` and run the

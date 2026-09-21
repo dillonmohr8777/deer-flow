@@ -9,6 +9,8 @@ export type AgentTopologyItem = {
   name: string;
   display_name?: string | null;
   enabled: boolean;
+  description?: string;
+  model?: string;
 };
 
 type AgentTopologyProps = {
@@ -76,11 +78,19 @@ export function AgentTopology({
                 onClick={() => onSelect(agent.name)}
               >
                 <span className={styles.agentMonogram}>
-                  <MomentumGlyph seed={`agent:${agent.name}`} size={38} />
+                  <MomentumGlyph seed={`agent:${agent.name}`} size={48} />
                 </span>
                 <strong>
                   {agent.display_name ?? agent.name.replace("dillon-", "")}
                 </strong>
+                {agent.description && (
+                  <span className={styles.agentRole}>{agent.description}</span>
+                )}
+                {agent.model && (
+                  <span className={styles.agentModel}>
+                    {agent.model === "inherit" ? "Lead model" : agent.model}
+                  </span>
+                )}
                 <span>
                   {runtimeKnown
                     ? hasActiveRun

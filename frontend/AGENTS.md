@@ -221,6 +221,14 @@ calls. Stop actions require confirmation and the existing run-cancel permission.
 Keep project grouping distinct from verified client tenancy. Stage independently
 with `NEXT_BUILD_DIR=.next-momentum`; do not overwrite a running server's build.
 
+`WorkspaceAppearanceProvider` owns account-scoped browser presentation under
+`momentum:appearance:v1:<encoded user ID>`. It does not call a backend or mutate
+agent/workspace metadata. Keep the shared `BrandSignature` in navigation and the
+dashboard, strict preference parsing, account-switch remount, storage fallback,
+and reset behavior. Logo preparation reuses the bounded raster-only MCP icon
+decoder; no uploaded SVG or remote image URL is rendered. Brand motion is opt-in
+and visibility/intersection/reduced-motion gated, independently of run status.
+
 `backend/packages/harness/deerflow/capabilities/builtin.json` owns localized
 catalog manifests. Refresh the generated demo snapshot with `pnpm catalog:sync`
 after changing the catalog; unit tests enforce equality with the source. Demo
