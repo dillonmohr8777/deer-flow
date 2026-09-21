@@ -1,6 +1,7 @@
 import { ArrowUpRight } from "lucide-react";
 import Link from "next/link";
 
+import { formatModelLabel } from "./model-label";
 import { MomentumGlyph } from "./momentum-glyph";
 
 import styles from "./command-center.module.css";
@@ -88,14 +89,14 @@ export function AgentTopology({
                 )}
                 {agent.model && (
                   <span className={styles.agentModel}>
-                    {agent.model === "inherit" ? "Lead model" : agent.model}
+                    {formatModelLabel(agent.model)}
                   </span>
                 )}
                 <span>
                   {runtimeKnown
                     ? hasActiveRun
                       ? "Active run recorded"
-                      : "No active run recorded"
+                      : "Idle"
                     : "Live state unknown"}
                 </span>
                 <span>
