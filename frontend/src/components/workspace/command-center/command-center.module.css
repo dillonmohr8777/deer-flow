@@ -872,6 +872,12 @@
   color: #234e78;
   font-size: 14px;
 }
+.runBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgb(7 23 47 / 24%);
+}
 .runDetail {
   position: fixed;
   z-index: 50;

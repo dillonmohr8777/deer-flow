@@ -1,5 +1,6 @@
 "use client";
 
+import * as Dialog from "@radix-ui/react-dialog";
 import {
   ArrowDownToLine,
   ArrowRight,
@@ -21,7 +22,7 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { ThreadSubagentBatches } from "@/components/workspace/thread-subagent-batches";
@@ -112,6 +113,7 @@ export function CommandCenter() {
     null,
   );
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+  const receiptTrigger = useRef<HTMLElement | null>(null);
   const [cancelConfirm, setCancelConfirm] = useState(false);
   const stats = useConsoleStats();
   const runs = useConsoleRuns({ status: filter || undefined, offset });
@@ -152,6 +154,7 @@ export function CommandCenter() {
       .filter((name): name is string => Boolean(name)) ?? null;
 
   function openRun(run: ConsoleRunItem) {
+    receiptTrigger.current = document.activeElement as HTMLElement | null;
     setSelectedRunId(run.run_id);
     setCancelConfirm(false);
     cancel.reset();
@@ -584,106 +587,127 @@ export function CommandCenter() {
         </footer>
       </div>
       {selectedRun && (
-        <aside
-          className={styles.runDetail}
-          aria-labelledby="run-detail-heading"
+        <Dialog.Root
+          open
+          onOpenChange={(open) => !open && setSelectedRunId(null)}
         >
-          <div className={styles.sectionHead}>
-            <h2 id="run-detail-heading">Execution receipt</h2>
-            <button
-              className={styles.iconButton}
-              aria-label="Close execution receipt"
-              onClick={() => setSelectedRunId(null)}
+          <Dialog.Overlay className={styles.runBackdrop} />
+          <Dialog.Content
+            asChild
+            aria-describedby={undefined}
+            onCloseAutoFocus={(event) => {
+              event.preventDefault();
+              receiptTrigger.current?.focus();
+            }}
+          >
+            <aside
+              className={styles.runDetail}
+              aria-labelledby="run-detail-heading"
             >
-              <X size={20} />
-            </button>
-          </div>
-          <Status status={selectedRun.status} />
-          <h3>{selectedRun.thread_title ?? "Untitled assignment"}</h3>
-          <dl>
-            <div>
-              <dt>Model</dt>
-              <dd>{selectedRun.model_name ?? "Not recorded"}</dd>
-            </div>
-            <div>
-              <dt>Duration</dt>
-              <dd>{duration(selectedRun.duration_seconds)}</dd>
-            </div>
-            <div>
-              <dt>Tokens</dt>
-              <dd>{number(selectedRun.total_tokens)}</dd>
-            </div>
-            <div>
-              <dt>Estimated cost</dt>
-              <dd>{money(selectedRun.cost, stats.data?.currency)}</dd>
-            </div>
-            <div>
-              <dt>Run ID</dt>
-              <dd>{selectedRun.run_id}</dd>
-            </div>
-            <div>
-              <dt>Started</dt>
-              <dd>
-                {selectedRun.created_at
-                  ? new Date(selectedRun.created_at).toLocaleString()
-                  : "Not recorded"}
-              </dd>
-            </div>
-          </dl>
-          {selectedRun.error && (
-            <p className={styles.notice} role="alert">
-              {selectedRun.error}
-            </p>
-          )}
-          <Link className={styles.primary} href={runPath(selectedRun)}>
-            Open conversation &amp; artifacts <ArrowRight size={16} />
-          </Link>
-          <div className={styles.batchControls}>
-            <ThreadSubagentBatches threadId={selectedRun.thread_id} />
-          </div>
-          {active(selectedRun.status) &&
-            hasPermission(user, PERMISSIONS.RUNS_CANCEL) && (
-              <div className={styles.cancel}>
-                {cancelConfirm ? (
-                  <>
-                    <p>Stop this run? Completed tool actions will remain.</p>
-                    <button
-                      disabled={cancel.isPending}
-                      onClick={() =>
-                        cancel.mutate(
-                          {
-                            threadId: selectedRun.thread_id,
-                            runId: selectedRun.run_id,
-                          },
-                          { onSuccess: () => setCancelConfirm(false) },
-                        )
-                      }
-                    >
-                      <CircleStop size={16} />
-                      {cancel.isPending ? "Requesting stop…" : "Confirm stop"}
-                    </button>
-                    <button
-                      disabled={cancel.isPending}
-                      onClick={() => setCancelConfirm(false)}
-                    >
-                      Keep running
-                    </button>
-                  </>
-                ) : (
-                  <button onClick={() => setCancelConfirm(true)}>
-                    <CircleStop size={16} />
-                    Stop run
-                  </button>
-                )}
+              <div className={styles.sectionHead}>
+                <Dialog.Title asChild>
+                  <h2 id="run-detail-heading">Execution receipt</h2>
+                </Dialog.Title>
+                <button
+                  className={styles.iconButton}
+                  aria-label="Close execution receipt"
+                  onClick={() => setSelectedRunId(null)}
+                >
+                  <X size={20} />
+                </button>
               </div>
-            )}
-          {cancel.isError && <p role="alert">{cancel.error.message}</p>}
-          <p className={styles.diagramNote}>
-            <ArrowDownToLine size={14} /> Artifact downloads and complete task
-            timelines are available in the conversation. Batch pause/resume
-            appears when supported by the runtime.
-          </p>
-        </aside>
+              <Status status={selectedRun.status} />
+              <h3>{selectedRun.thread_title ?? "Untitled assignment"}</h3>
+              <dl>
+                <div>
+                  <dt>Model</dt>
+                  <dd>{selectedRun.model_name ?? "Not recorded"}</dd>
+                </div>
+                <div>
+                  <dt>Duration</dt>
+                  <dd>{duration(selectedRun.duration_seconds)}</dd>
+                </div>
+                <div>
+                  <dt>Tokens</dt>
+                  <dd>{number(selectedRun.total_tokens)}</dd>
+                </div>
+                <div>
+                  <dt>Estimated cost</dt>
+                  <dd>{money(selectedRun.cost, stats.data?.currency)}</dd>
+                </div>
+                <div>
+                  <dt>Run ID</dt>
+                  <dd>{selectedRun.run_id}</dd>
+                </div>
+                <div>
+                  <dt>Started</dt>
+                  <dd>
+                    {selectedRun.created_at
+                      ? new Date(selectedRun.created_at).toLocaleString()
+                      : "Not recorded"}
+                  </dd>
+                </div>
+              </dl>
+              {selectedRun.error && (
+                <p className={styles.notice} role="alert">
+                  {selectedRun.error}
+                </p>
+              )}
+              <Link className={styles.primary} href={runPath(selectedRun)}>
+                Open conversation &amp; artifacts <ArrowRight size={16} />
+              </Link>
+              <div className={styles.batchControls}>
+                <ThreadSubagentBatches threadId={selectedRun.thread_id} />
+              </div>
+              {active(selectedRun.status) &&
+                hasPermission(user, PERMISSIONS.RUNS_CANCEL) && (
+                  <div className={styles.cancel}>
+                    {cancelConfirm ? (
+                      <>
+                        <p>
+                          Stop this run? Completed tool actions will remain.
+                        </p>
+                        <button
+                          disabled={cancel.isPending}
+                          onClick={() =>
+                            cancel.mutate(
+                              {
+                                threadId: selectedRun.thread_id,
+                                runId: selectedRun.run_id,
+                              },
+                              { onSuccess: () => setCancelConfirm(false) },
+                            )
+                          }
+                        >
+                          <CircleStop size={16} />
+                          {cancel.isPending
+                            ? "Requesting stop…"
+                            : "Confirm stop"}
+                        </button>
+                        <button
+                          disabled={cancel.isPending}
+                          onClick={() => setCancelConfirm(false)}
+                        >
+                          Keep running
+                        </button>
+                      </>
+                    ) : (
+                      <button onClick={() => setCancelConfirm(true)}>
+                        <CircleStop size={16} />
+                        Stop run
+                      </button>
+                    )}
+                  </div>
+                )}
+              {cancel.isError && <p role="alert">{cancel.error.message}</p>}
+              <p className={styles.diagramNote}>
+                <ArrowDownToLine size={14} /> Artifact downloads and complete
+                task timelines are available in the conversation. Batch
+                pause/resume appears when supported by the runtime.
+              </p>
+            </aside>
+          </Dialog.Content>
+        </Dialog.Root>
       )}
     </main>
   );

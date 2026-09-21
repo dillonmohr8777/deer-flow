@@ -1,6 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
+import { usePrefersReducedMotion } from "@/core/dom/render-activity";
 import { motion } from "motion/react";
 import {
   type CSSProperties,
@@ -25,6 +26,7 @@ const ShimmerComponent = ({
   duration = 2,
   spread = 2,
 }: TextShimmerProps) => {
+  const reducedMotion = usePrefersReducedMotion();
   const MotionComponent = motion.create(
     Component as keyof JSX.IntrinsicElements,
   );
@@ -34,12 +36,24 @@ const ShimmerComponent = ({
     [children, spread],
   );
 
+  // ponytail: static same-tag fallback; CSS alone cannot stop the JS-driven
+  // infinite backgroundPosition animation.
+  if (reducedMotion) {
+    const StaticComponent = Component as "p";
+    return (
+      <StaticComponent className={cn("relative inline-block", className)}>
+        {children}
+      </StaticComponent>
+    );
+  }
+
   return (
     <MotionComponent
       animate={{ backgroundPosition: "0% center" }}
       className={cn(
         "relative inline-block bg-[length:250%_100%,auto] bg-clip-text text-transparent",
         "[background-repeat:no-repeat,padding-box] [--bg:linear-gradient(90deg,#0000_calc(50%-var(--spread)),var(--color-background),#0000_calc(50%+var(--spread)))]",
+        "forced-colors:bg-none forced-colors:text-current",
         className,
       )}
       initial={{ backgroundPosition: "100% center" }}
