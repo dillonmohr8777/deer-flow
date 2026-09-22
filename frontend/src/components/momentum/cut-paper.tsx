@@ -41,7 +41,7 @@ export function CutPaper({
   letterClassName?: string;
 }) {
   const wrapperRef = useRef<HTMLSpanElement>(null);
-  const [settled, setSettled] = useState(false);
+  const [reveal, setReveal] = useState<null | "animate" | "instant">(null);
 
   useEffect(() => {
     const node = wrapperRef.current;
@@ -50,21 +50,24 @@ export function CutPaper({
       "(prefers-reduced-motion: reduce)",
     );
 
+    // Reaching the viewport always reveals. `brandMotionAllowed` decides only
+    // HOW the word arrives, never WHETHER it is there: gating visibility on it
+    // left the headline permanently at opacity 0 whenever the tab was
+    // backgrounded at load (visible: false), because the observer disconnected
+    // on that same first intersection and nothing ever retried.
     const tryReveal = (inView: boolean) => {
-      if (settled) return;
-      if (
-        brandMotionAllowed({
+      if (!inView) return;
+      setReveal((current) =>
+        current ??
+        (brandMotionAllowed({
           motion: true,
           reducedMotion: reducedMotionQuery.matches,
           visible: document.visibilityState === "visible",
           inView,
         })
-      ) {
-        setSettled(true);
-      } else if (reducedMotionQuery.matches) {
-        // Motion fully off: skip straight to the resting state, no reveal.
-        setSettled(true);
-      }
+          ? "animate"
+          : "instant"),
+      );
     };
 
     if (!("IntersectionObserver" in window)) {
@@ -87,9 +90,8 @@ export function CutPaper({
   }, []);
 
   const letters = [...word];
-  const reduceMotion =
-    typeof window !== "undefined" &&
-    window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const shown = reveal !== null;
+  const animating = reveal === "animate";
 
   return (
     <span ref={wrapperRef} className={className} aria-label={word}>
@@ -100,17 +102,15 @@ export function CutPaper({
           className={letterClassName}
           style={{
             display: "inline-block",
-            transform:
-              settled || reduceMotion
-                ? `rotate(${jitterDeg(index, letter)}deg)`
-                : "rotate(0deg) translateY(0.4em)",
-            opacity: settled || reduceMotion ? 1 : 0,
-            transition:
-              settled && !reduceMotion
-                ? `transform ${SETTLE_MS}ms cubic-bezier(0.16, 1, 0.3, 1) ${
-                    index * STAGGER_MS
-                  }ms, opacity ${SETTLE_MS}ms ease ${index * STAGGER_MS}ms`
-                : "none",
+            transform: shown
+              ? `rotate(${jitterDeg(index, letter)}deg)`
+              : "rotate(0deg) translateY(0.4em)",
+            opacity: shown ? 1 : 0,
+            transition: animating
+              ? `transform ${SETTLE_MS}ms cubic-bezier(0.16, 1, 0.3, 1) ${
+                  index * STAGGER_MS
+                }ms, opacity ${SETTLE_MS}ms ease ${index * STAGGER_MS}ms`
+              : "none",
           }}
         >
           {letter === " " ? " " : letter}

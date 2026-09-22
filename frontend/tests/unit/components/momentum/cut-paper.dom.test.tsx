@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "@rstest/core";
-import { cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, render, screen } from "@testing-library/react";
 
 import { CutPaper } from "@/components/momentum/cut-paper";
 
@@ -30,5 +30,58 @@ describe("cut-paper headline word", () => {
   it("renders a space in multi-word input as a non-breaking space letter", () => {
     render(<CutPaper word="Go now" />);
     expect(screen.getByLabelText("Go now")).toBeTruthy();
+  });
+
+  it("still reveals the word when the tab was hidden at load", async () => {
+    // Regression: the reveal used to be gated on brandMotionAllowed, which
+    // requires visible === true. A tab that was backgrounded when the page
+    // loaded therefore never settled, and because the observer disconnected on
+    // that first intersection nothing ever retried — the headline stayed at
+    // opacity 0 forever, even after the tab was focused.
+    const observers: Array<(entries: unknown[]) => void> = [];
+    const originalObserver = window.IntersectionObserver;
+    const originalVisibility = Object.getOwnPropertyDescriptor(
+      Document.prototype,
+      "visibilityState",
+    );
+
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      get: () => "hidden",
+    });
+    // @ts-expect-error -- minimal stand-in for the observer under test
+    window.IntersectionObserver = class {
+      constructor(callback: (entries: unknown[]) => void) {
+        observers.push(callback);
+      }
+      observe() {}
+      disconnect() {}
+    };
+
+    try {
+      const { container } = render(<CutPaper word="Momentum" />);
+      act(() => {
+        observers.forEach((fire) => fire([{ isIntersecting: true }]));
+      });
+
+      const letters = container.querySelectorAll<HTMLElement>(
+        'span[aria-hidden="true"]',
+      );
+      expect(letters.length).toBe("Momentum".length);
+      for (const letter of letters) {
+        expect(letter.style.opacity).toBe("1");
+        // Hidden at load means place it, do not animate it.
+        expect(letter.style.transition).toBe("none");
+      }
+    } finally {
+      window.IntersectionObserver = originalObserver;
+      if (originalVisibility) {
+        Object.defineProperty(
+          Document.prototype,
+          "visibilityState",
+          originalVisibility,
+        );
+      }
+    }
   });
 });
