@@ -531,7 +531,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.875rem;
+  gap: 1.5rem;
   margin-top: 2.25rem;
 }
 
@@ -541,14 +541,14 @@
   align-items: center;
   justify-content: center;
   min-height: 2.875rem;
-  padding: 0 1.5rem;
-  border-radius: 0.375rem;
   font-size: 0.9375rem;
-  font-weight: 700;
   text-decoration: none;
 }
 
 .paperPrimary {
+  padding: 0 1.5rem;
+  border-radius: 0.375rem;
+  font-weight: 700;
   color: var(--paper-cream-hi);
   background: var(--paper-royal);
 }
@@ -558,15 +558,22 @@
   background: var(--paper-royal-deep);
 }
 
+/* Deliberately not a second button. An invited first-timer does not yet know
+   what a Command Center is, so two equal-weight buttons make them choose
+   between one thing they understand and one they do not. One filled action,
+   one quiet link. */
 .paperSecondary {
+  padding: 0 0.25rem;
+  font-weight: 500;
   color: var(--paper-ink);
-  border: 1px solid var(--paper-line);
-  background: var(--paper-cream-hi);
+  text-decoration: underline;
+  text-decoration-color: var(--paper-line);
+  text-underline-offset: 0.35em;
 }
 
 .paperSecondary:hover,
 .paperSecondary:focus-visible {
-  border-color: var(--paper-royal);
+  text-decoration-color: var(--paper-royal);
 }
 
 .paperPrimary:focus-visible,
