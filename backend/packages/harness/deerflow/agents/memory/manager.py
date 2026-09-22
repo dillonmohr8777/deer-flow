@@ -979,6 +979,19 @@ def get_memory_manager() -> MemoryManager:
             from deerflow.config.runtime_paths import runtime_home
 
             backend_config["storage_path"] = str((Path(runtime_home()) / backend_config["storage_path"]).resolve())
+        # Require an explicit user_id for every storage scope by default. The
+        # deer-flow request paths (Gateway routers, memory middleware, memory
+        # tools, client.py) all resolve a concrete user_id before reaching the
+        # manager -- see MEMORY-SCOPING-AUDIT-20260921.md Part A -- so a caller
+        # that reaches storage with user_id=None is either mis-wired host code
+        # or an embedder that has not adopted user scoping; fail loudly instead
+        # of silently landing on the shared legacy bucket. Set at the factory
+        # call site only -- backend defaults (e.g. DeerMemConfig.strict_user_scope)
+        # stay False so an embedder without host-side user resolution is not
+        # broken by importing the backend directly. An explicit host config
+        # value still wins, matching storage_path above.
+        if "strict_user_scope" not in backend_config:
+            backend_config["strict_user_scope"] = True
         # storage_path-is-a-file guard lives on DeerMemConfig.model_validator
         # now (DeerMem-private semantics; fires even when the factory bypassed).
         # Host hook providers: the factory supplies these as kwargs; each

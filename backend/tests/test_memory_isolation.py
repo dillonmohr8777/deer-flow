@@ -20,6 +20,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
+
 from deerflow.config.paths import Paths
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "packages" / "harness" / "deerflow" / "agents" / "memory" / "backends" / "deermem"))
@@ -124,17 +126,81 @@ def test_deermem_memory_file_path_user_id_none_falls_back_to_legacy_shared_path(
     The audit found no production caller that omits user_id (every Gateway
     router, memory middleware, and memory tool call site resolves a concrete
     user_id via get_effective_user_id()/resolve_runtime_user_id() before
-    calling into deermem). This test pins that the *capability* for a
-    call site to fall back to the shared bucket still exists in the
-    resolver and is gated only by caller discipline, not by
-    ``strict_user_scope`` (which defaults to False). See the audit's Part A
-    finding for the NOT-APPLIED hardening this test motivates.
+    calling into deermem). This test constructs a bare ``DeerMemConfig``
+    directly (deermem's OWN default, unchanged by the W-B3 follow-up below):
+    ``strict_user_scope`` defaults to False there so an embedder that
+    imports deermem standalone, without the deer-flow factory, is not broken.
+    The deer-flow factory (``manager.py::get_memory_manager``) now overrides
+    this default to True at its own call site -- see
+    ``test_factory_defaults_to_strict_user_scope`` below -- which is where
+    the hardening this test motivated actually landed.
     """
     config = DeerMemConfig(storage_path=str(tmp_path))
 
     shared = memory_file_path(config, user_id=None)
 
     assert shared == tmp_path / "memory.json"
+
+
+def test_factory_defaults_to_strict_user_scope(tmp_path):
+    """W-B3 follow-up, item 2 (authorized): the deer-flow factory call site
+    (manager.py::get_memory_manager) sets strict_user_scope=True by default,
+    so a caller that reaches deermem storage with user_id=None now fails
+    loudly instead of silently landing on the legacy shared bucket verified
+    above. Re-verified before applying: every production call site found in
+    the Part A audit (8 memory router endpoints, MemoryMiddleware,
+    summarization_hook, 4 memory tools, lead_agent prompt injection, 7
+    client.py accessors, the agent-delete cancel path) resolves a concrete
+    user_id before reaching the manager, so this cannot break any of them.
+
+    deermem's own ``DeerMemConfig.strict_user_scope`` default stays False
+    (see the test above) -- only the factory's ``backend_config`` sets it,
+    and only when the host config does not already set it explicitly.
+    """
+    from deerflow.agents.memory.manager import get_memory_manager, reset_memory_manager
+    from deerflow.config.memory_config import MemoryConfig, get_memory_config, set_memory_config
+
+    orig_config = get_memory_config()
+    try:
+        set_memory_config(MemoryConfig(manager_class="deermem", backend_config={"storage_path": str(tmp_path)}))
+        reset_memory_manager()
+        manager = get_memory_manager()
+
+        with pytest.raises(ValueError):
+            manager.get_memory(user_id=None)
+
+        # A concrete user_id is unaffected by the flip.
+        result = manager.get_memory(user_id="alice")
+        assert isinstance(result, dict)
+    finally:
+        set_memory_config(orig_config)
+        reset_memory_manager()
+
+
+def test_factory_honors_explicit_strict_user_scope_override(tmp_path):
+    """An explicit host config value still wins over the factory default,
+    matching the existing storage_path precedent in the same function.
+    """
+    from deerflow.agents.memory.manager import get_memory_manager, reset_memory_manager
+    from deerflow.config.memory_config import MemoryConfig, get_memory_config, set_memory_config
+
+    orig_config = get_memory_config()
+    try:
+        set_memory_config(
+            MemoryConfig(
+                manager_class="deermem",
+                backend_config={"storage_path": str(tmp_path), "strict_user_scope": False},
+            )
+        )
+        reset_memory_manager()
+        manager = get_memory_manager()
+
+        # Explicit False was preserved: no raise for user_id=None.
+        result = manager.get_memory(user_id=None)
+        assert isinstance(result, dict)
+    finally:
+        set_memory_config(orig_config)
+        reset_memory_manager()
 
 
 if __name__ == "__main__":  # pragma: no cover
