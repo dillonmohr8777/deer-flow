@@ -113,7 +113,12 @@ export function MomoAvatar({
           onError={() => setImgFailed(true)}
         />
       ) : (
-        <MomentumGlyph seed={seed} size={size} className={styles.art} />
+        <MomentumGlyph
+          seed={seed}
+          size={size}
+          initial={label}
+          className={styles.art}
+        />
       )}
     </span>
   );

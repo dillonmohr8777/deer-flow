@@ -44,6 +44,30 @@ describe("momo manifest", () => {
     expect([...manifestSlugs()].sort()).toEqual(shippedSlugs());
   });
 
+  it("draws the fallback glyph on the same disc as the shipped artwork", () => {
+    // Mapped and unmapped agents sit next to each other in the roster. If these
+    // two silhouettes drift apart, the set stops reading as one family.
+    const glyphSource = readFileSync(
+      join(
+        process.cwd(),
+        "src",
+        "components",
+        "workspace",
+        "command-center",
+        "momentum-glyph.tsx",
+      ),
+      "utf8",
+    );
+    const glyphDisc = glyphSource.match(/const DISC =\s*\n?\s*"([^"]+)"/)?.[1];
+    const shippedDisc = readFileSync(
+      join(MOMOS_DIR, "lead.svg"),
+      "utf8",
+    ).match(/<path d="(M24\.00[^"]+)" fill/)?.[1];
+
+    expect(glyphDisc).toBeTruthy();
+    expect(glyphDisc).toBe(shippedDisc);
+  });
+
   it("ships artwork that is a real single-root svg", () => {
     for (const slug of shippedSlugs()) {
       const svg = readFileSync(join(MOMOS_DIR, `${slug}.svg`), "utf8");

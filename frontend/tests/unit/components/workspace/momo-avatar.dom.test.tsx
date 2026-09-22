@@ -33,8 +33,15 @@ describe("MomoAvatar", () => {
     const { container: withAvatar } = render(
       <MomoAvatar agent={UNKNOWN_AGENT} size={40} />,
     );
+    // MomoAvatar passes the display name through so an unmapped agent gets a
+    // monogram rather than an abstract mark, so the direct comparison has to
+    // hand the glyph the same name.
     const { container: direct } = render(
-      <MomentumGlyph seed={`agent:${UNKNOWN_AGENT.name}`} size={40} />,
+      <MomentumGlyph
+        seed={`agent:${UNKNOWN_AGENT.name}`}
+        initial={UNKNOWN_AGENT.display_name}
+        size={40}
+      />,
     );
 
     const avatarGlyph = withAvatar.querySelector("svg[data-momentum-glyph]");
