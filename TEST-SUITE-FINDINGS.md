@@ -65,17 +65,40 @@ Given the names and the confirmed pattern above, these are very likely more
 instances of the same cancellation-handling question, not new independent
 bugs, but that's inference, not verified per-test.
 
-## Real, unfixed: Windows file-locking race, `test_project_documents_promotion.py`
+## Real, unfixed: Windows file-locking race, shared across two files
 
-Two tests fail with `[WinError 32] The process cannot access the file
-because it is being used by another process` during concurrent attach of the
-same document to a thread. Confirmed as a genuine regression: both pass
-cleanly on `83f4e423`, both fail on this branch, and the test file itself
-wasn't touched by the recovery, so something in the touched upload/project-
-document code path changed Windows file-handle timing. POSIX allows renaming
-or unlinking a file that's still open elsewhere; Windows does not, so this is
-plausibly Windows-only and may not reproduce on Linux CI, but that's
-unconfirmed, not assumed.
+Confirmed as a genuine regression, not a scattered set of unrelated
+failures. Across the two files there are 15 upload/document-attach
+failures total (13 in `test_uploads_router.py`, 2 in
+`test_project_documents_promotion.py`). The same `PermissionError:
+[WinError 32] The process cannot access the file because it is being used
+by another process` shows up in **14 of the 15**:
+
+- Both `test_project_documents_promotion.py` failures (concurrent attach)
+- 12 of the 13 `test_uploads_router.py` failures (only
+  `test_upload_files_deduplicates_max_length_filenames_without_failing_the_
+  batch` is different: `[WinError 3] The system cannot find the path
+  specified`, on a 255-character filename, almost certainly Windows'
+  ~260-character `MAX_PATH` limit, unrelated to the locking issue)
+
+Both `test_project_documents_promotion.py` tests pass cleanly on `83f4e423`
+and fail on this branch, and that test file itself wasn't touched by the
+recovery, so this is a real behavior change in the touched upload/project-
+document code, not stale test authorship.
+
+`app/gateway/routers/uploads.py::_commit_upload_temp_no_overwrite` closes its
+own handle before linking (`upload_temp.handle.close()` then
+`os.link(staged_path, ...)`, then `os.unlink(staged_path)`), which looks
+correct on inspection. The open handle causing `WinError 32` is something
+else: most plausibly a second concurrent operation (a markdown-conversion
+worker also reading the staged `.part` file, per `AGENTS.md`'s "one
+conversion worker per request" and `run_file_io`'s executor-thread
+offloading) still holding it open when the commit path tries to
+unlink/link it. POSIX allows renaming or unlinking a file that's still open
+elsewhere; Windows does not, so this is plausibly Windows-only and may not
+reproduce on Linux CI. Pinpointing the exact second holder needs handle
+tracing (Process Monitor or equivalent) that wasn't available tonight; not
+guessed at further.
 
 ## Real, unfixed: incomplete feature, `test_doctor.py::TestCheckLLMAuth`
 
@@ -85,23 +108,20 @@ anywhere in this repo or in the still-running recovered container. The
 credential-file validation) that was never implemented. Not a regression,
 not something lost in recovery, a genuine gap in the original work.
 
-## Likely environmental, not investigated to a firm conclusion
+## One flaky, one real but order-dependent
 
-- **`test_uploads_router.py`** (10 failures): sampled one,
-  `test_upload_files_deduplicates_max_length_filenames_without_failing_the_
-  batch`, which fails with `[WinError 3] The system cannot find the path
-  specified` while renaming a staged upload to a 255-character filename.
-  That's very likely Windows' classic ~260-character `MAX_PATH` limit, which
-  Linux doesn't share. The other 9 in this file weren't individually
-  checked; several share "max_length"/"companion" naming that suggests the
-  same root cause, but that's a guess, not a verified pattern.
-- **`test_delta_channel_state.py::test_merge_message_writes_randomized_
-  differential`** and **`test_setup_agent_http_e2e_real_server.py::test_
-  real_http_create_agent_lands_in_authenticated_user_dir`**: both failed in
-  the full-suite run, both passed cleanly standalone. Consistent with
-  ordering/timing flakiness (the first is literally named "randomized";
-  the second is a real HTTP e2e test) rather than a real defect. Not
-  chased further.
+`test_delta_channel_state.py::test_merge_message_writes_randomized_
+differential` failed once in the full-suite run, passed standalone, and did
+not reappear in the final verification run. Consistent with its own name:
+a randomized differential test, not a real defect.
+
+`test_setup_agent_http_e2e_real_server.py::test_real_http_create_agent_
+lands_in_authenticated_user_dir` failed in *both* the full-suite run and the
+final verification run, but passed cleanly standalone. That means it's real
+but order- or state-dependent: something earlier in the suite leaves state
+this real-HTTP-server e2e test doesn't tolerate. Not isolated to a specific
+prior test tonight; worth a `pytest --lf` bisection in daylight rather than
+guessed at further here.
 
 ## Confirmed pre-existing, unrelated to this recovery
 
@@ -127,17 +147,33 @@ not something lost in recovery, a genuine gap in the original work.
 fixed to assert `len(get_heads()) == 1` instead, matching the pattern the
 neighboring migration tests already use. Committed as `165cc803`.
 
+## Final numbers
+
+`pytest -m "not live" --ignore=tests/blocking_io tests/` with the 7
+`test_mcp_task_service.py` cancellation functions deselected:
+
+**39 failed, 17829 passed, 400 skipped, 38 deselected, 23:50 runtime.**
+
 ## Bottom line for a decision-maker
 
-- One real bug found and fixed tonight (public-paths drift), verified.
+- One real bug found and fixed tonight (public-paths drift), verified:
+  `1baee1f4`.
 - One real, well-characterized concurrency/cancellation question in
-  `McpTaskService` that needs a human call on intended behavior, not a
-  blind fix at 3am.
-- One genuine Windows file-locking regression in concurrent document attach.
-- One incomplete feature (`doctor.check_llm_auth`) that was never built.
-- A cluster of likely-Windows-specific failures (`MAX_PATH`, subprocess
-  discovery) that may simply not reproduce in this repo's actual CI.
+  `McpTaskService` (7 test functions, 38 parametrizations, deselected) that
+  needs a human call on intended behavior, not a blind fix at 3am.
+- One genuine Windows file-locking regression (`WinError 32`) affecting 14
+  tests across `test_uploads_router.py` and `test_project_documents_
+  promotion.py`, all tracing to the same class of cause: a file handle
+  still open when the commit path tries to unlink/link it.
+- One incomplete feature (`doctor.check_llm_auth`, 9 failures) that was
+  never built, confirmed absent from both this branch and the still-running
+  recovered container.
+- One likely-Windows-only `MAX_PATH` failure, and two pre-existing
+  subprocess-discovery failures unrelated to any git state.
 - Two pre-existing migration test failures, unrelated to any of this.
+- One flaky test (passed on retry, didn't reappear) and one real but
+  order-dependent test (failed consistently in the full suite, passed
+  standalone) worth a `--lf` bisection in daylight.
 
 Nothing here blocks using the recovered branch; every failure is scoped,
 explained, and none of it silently passed as "done."
