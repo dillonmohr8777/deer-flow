@@ -11,10 +11,12 @@ Exit codes:
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
 import sys
+import time
 from importlib import import_module
 from pathlib import Path
 from typing import Literal
@@ -401,6 +403,92 @@ def check_llm_package(config_path: Path) -> list[CheckResult]:
     return results
 
 
+def _read_json_object(path: Path) -> tuple[dict | None, str | None]:
+    """Read and parse a small JSON credential file.
+
+    Returns (data, error): data is a dict on success, otherwise None and a
+    short, secret-free description of what went wrong. Never returns or
+    logs the file contents.
+    """
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        return None, "file is not valid UTF-8"
+    except OSError as exc:
+        return None, f"could not read file ({exc.__class__.__name__})"
+
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return None, "file is not valid JSON"
+
+    if not isinstance(data, dict):
+        return None, "JSON content must be an object"
+    return data, None
+
+
+def _codex_auth_check(model_name: str) -> CheckResult:
+    label = f"Codex CLI auth available (model: {model_name})"
+    fix = "Run `codex login`, or set CODEX_AUTH_PATH to a valid auth.json"
+    auth_path = Path(os.environ.get("CODEX_AUTH_PATH", "~/.codex/auth.json")).expanduser()
+
+    if not auth_path.exists():
+        return CheckResult(label, "fail", str(auth_path), fix=fix)
+
+    data, error = _read_json_object(auth_path)
+    if error is not None:
+        return CheckResult(label, "fail", error, fix=fix)
+
+    token = data.get("access_token") or data.get("token")
+    if not token:
+        tokens = data.get("tokens")
+        if isinstance(tokens, dict):
+            token = tokens.get("access_token")
+    if isinstance(token, str) and token.strip():
+        return CheckResult(label, "ok", str(auth_path))
+    return CheckResult(label, "fail", "auth.json has no access token", fix=fix)
+
+
+def _claude_auth_check(model_name: str) -> CheckResult:
+    label = f"Claude auth available (model: {model_name})"
+    fix = "Set ANTHROPIC_API_KEY / CLAUDE_CODE_OAUTH_TOKEN, or place credentials at ~/.claude/.credentials.json"
+
+    has_oauth_env = any(
+        os.environ.get(name)
+        for name in (
+            "ANTHROPIC_API_KEY",
+            "CLAUDE_CODE_OAUTH_TOKEN",
+            "ANTHROPIC_AUTH_TOKEN",
+            "CLAUDE_CODE_OAUTH_TOKEN_FILE_DESCRIPTOR",
+        )
+    )
+    if has_oauth_env:
+        return CheckResult(label, "ok", "env var set")
+
+    credentials_path = Path(os.environ.get("CLAUDE_CODE_CREDENTIALS_PATH", "~/.claude/.credentials.json")).expanduser()
+    if not credentials_path.exists():
+        return CheckResult(label, "fail", str(credentials_path), fix=fix)
+
+    data, error = _read_json_object(credentials_path)
+    if error is not None:
+        return CheckResult(label, "fail", error, fix=fix)
+
+    oauth = data.get("claudeAiOauth")
+    token = oauth.get("accessToken") if isinstance(oauth, dict) else None
+    if not (isinstance(token, str) and token.strip()):
+        return CheckResult(label, "fail", "credentials file has no access token", fix=fix)
+
+    expires_at = oauth.get("expiresAt")
+    if expires_at is not None:
+        valid_type = isinstance(expires_at, (int, float)) and not isinstance(expires_at, bool)
+        if not valid_type:
+            return CheckResult(label, "fail", "credentials file has an invalid expiresAt", fix=fix)
+        if expires_at <= time.time() * 1000:
+            return CheckResult(label, "fail", "credentials file is expired", fix=fix)
+
+    return CheckResult(label, "ok", str(credentials_path))
+
+
 def check_llm_auth(config_path: Path) -> list[CheckResult]:
     if not config_path.exists():
         return []
@@ -408,50 +496,25 @@ def check_llm_auth(config_path: Path) -> list[CheckResult]:
     results: list[CheckResult] = []
     try:
         data = _load_yaml_file(config_path)
-        for model in data.get("models") or []:
-            use = model.get("use", "")
-            model_name = model.get("name", "default")
-
-            if use == "deerflow.models.openai_codex_provider:CodexChatModel":
-                auth_path = Path(os.environ.get("CODEX_AUTH_PATH", "~/.codex/auth.json")).expanduser()
-                if auth_path.exists():
-                    results.append(CheckResult(f"Codex CLI auth available (model: {model_name})", "ok", str(auth_path)))
-                else:
-                    results.append(
-                        CheckResult(
-                            f"Codex CLI auth available (model: {model_name})",
-                            "fail",
-                            str(auth_path),
-                            fix="Run `codex login`, or set CODEX_AUTH_PATH to a valid auth.json",
-                        )
-                    )
-
-            if use == "deerflow.models.claude_provider:ClaudeChatModel":
-                credential_paths = [Path(os.environ["CLAUDE_CODE_CREDENTIALS_PATH"]).expanduser() for env_name in ("CLAUDE_CODE_CREDENTIALS_PATH",) if os.environ.get(env_name)]
-                credential_paths.append(Path("~/.claude/.credentials.json").expanduser())
-                has_oauth_env = any(
-                    os.environ.get(name)
-                    for name in (
-                        "ANTHROPIC_API_KEY",
-                        "CLAUDE_CODE_OAUTH_TOKEN",
-                        "ANTHROPIC_AUTH_TOKEN",
-                        "CLAUDE_CODE_OAUTH_TOKEN_FILE_DESCRIPTOR",
-                    )
-                )
-                existing_path = next((path for path in credential_paths if path.exists()), None)
-                if has_oauth_env or existing_path is not None:
-                    detail = "env var set" if has_oauth_env else str(existing_path)
-                    results.append(CheckResult(f"Claude auth available (model: {model_name})", "ok", detail))
-                else:
-                    results.append(
-                        CheckResult(
-                            f"Claude auth available (model: {model_name})",
-                            "fail",
-                            fix=("Set ANTHROPIC_API_KEY / CLAUDE_CODE_OAUTH_TOKEN, or place credentials at ~/.claude/.credentials.json"),
-                        )
-                    )
     except Exception as exc:
-        results.append(CheckResult("LLM auth check", "fail", str(exc)))
+        return [CheckResult("LLM auth check", "fail", str(exc))]
+
+    for model in data.get("models") or []:
+        use = model.get("use", "")
+        model_name = model.get("name", "default")
+
+        if use == "deerflow.models.openai_codex_provider:CodexChatModel":
+            try:
+                results.append(_codex_auth_check(model_name))
+            except Exception as exc:
+                results.append(CheckResult(f"Codex CLI auth available (model: {model_name})", "fail", str(exc)))
+
+        if use == "deerflow.models.claude_provider:ClaudeChatModel":
+            try:
+                results.append(_claude_auth_check(model_name))
+            except Exception as exc:
+                results.append(CheckResult(f"Claude auth available (model: {model_name})", "fail", str(exc)))
+
     return results
 
 
