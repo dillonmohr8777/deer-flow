@@ -22,9 +22,7 @@ const AVATAR_SOURCE = join(
 
 function manifestSlugs(): string[] {
   const source = readFileSync(AVATAR_SOURCE, "utf8");
-  const block = source.match(
-    /AVAILABLE_MOMO_SLUGS:\s*ReadonlySet<string>\s*=\s*new Set\(\[([\s\S]*?)\]\)/,
-  );
+  const block = /AVAILABLE_MOMO_SLUGS:\s*ReadonlySet<string>\s*=\s*new Set\(\[([\s\S]*?)\]\)/.exec(source);
   const body = block?.[1];
   if (!body) throw new Error("could not find AVAILABLE_MOMO_SLUGS in momo-avatar.tsx");
   return [...body.matchAll(/"([^"]+)"/g)].flatMap((match) =>
@@ -58,11 +56,9 @@ describe("momo manifest", () => {
       ),
       "utf8",
     );
-    const glyphDisc = glyphSource.match(/const DISC =\s*\n?\s*"([^"]+)"/)?.[1];
-    const shippedDisc = readFileSync(
-      join(MOMOS_DIR, "lead.svg"),
-      "utf8",
-    ).match(/<path d="(M24\.00[^"]+)" fill/)?.[1];
+    const glyphDisc = /const DISC =\s*\n?\s*"([^"]+)"/.exec(glyphSource)?.[1];
+    const shippedSvg = readFileSync(join(MOMOS_DIR, "lead.svg"), "utf8");
+    const shippedDisc = /<path d="(M24\.00[^"]+)" fill/.exec(shippedSvg)?.[1];
 
     expect(glyphDisc).toBeTruthy();
     expect(glyphDisc).toBe(shippedDisc);
