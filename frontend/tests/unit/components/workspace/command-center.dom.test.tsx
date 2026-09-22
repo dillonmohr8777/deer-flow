@@ -1,8 +1,23 @@
-import { afterEach, describe, expect, it, rs } from "@rstest/core";
+import { afterEach, beforeEach, describe, expect, it, rs } from "@rstest/core";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 
 import { CommandCenter } from "@/components/workspace/command-center/command-center";
+
+const baseStats = {
+  active_runs: 0,
+  currency: "USD",
+  failed_runs: 0 as number | undefined,
+  total_agents: 1,
+  total_cost: 0.004,
+  total_runs: 1,
+  total_threads: 1,
+  total_tokens: 30 as number | undefined,
+};
+const mocks = rs.hoisted(() => ({
+  stats: undefined as unknown,
+  statsLoading: false,
+}));
 
 rs.mock("next/image", () => ({
   default: ({
@@ -81,18 +96,9 @@ rs.mock("@/core/console", () => ({
     refetch: rs.fn(),
   }),
   useConsoleStats: () => ({
-    data: {
-      active_runs: 0,
-      currency: "USD",
-      failed_runs: 0,
-      total_agents: 1,
-      total_cost: 0.004,
-      total_runs: 1,
-      total_threads: 1,
-      total_tokens: 30,
-    },
+    data: mocks.stats,
     isError: false,
-    isLoading: false,
+    isLoading: mocks.statsLoading,
     refetch: rs.fn(),
   }),
   useConsoleUsage: () => ({
@@ -146,12 +152,46 @@ rs.mock("@/core/console", () => ({
   }),
 }));
 
+beforeEach(() => {
+  mocks.stats = { ...baseStats };
+  mocks.statsLoading = false;
+});
+
 afterEach(() => {
   cleanup();
   rs.clearAllMocks();
 });
 
+function metric(label: string) {
+  return screen.getByText(label).parentElement!;
+}
+
 describe("CommandCenter", () => {
+  it("marks errors as an exception only when failures were recorded", () => {
+    const { unmount } = render(<CommandCenter />);
+    expect(metric("Errors & timeouts").dataset.exception).toBe("false");
+    unmount();
+    mocks.stats = { ...baseStats, failed_runs: 2 };
+    render(<CommandCenter />);
+    expect(metric("Errors & timeouts").dataset.exception).toBe("true");
+  });
+
+  it("says loading or unavailable instead of printing a number or a dash", () => {
+    mocks.statsLoading = true;
+    const { unmount } = render(<CommandCenter />);
+    expect(metric("Recorded tokens").textContent).toBe(
+      "Recorded tokensLoading",
+    );
+    unmount();
+    mocks.statsLoading = false;
+    mocks.stats = { ...baseStats, total_tokens: undefined };
+    render(<CommandCenter />);
+    expect(metric("Recorded tokens").textContent).toBe(
+      "Recorded tokensUnavailable",
+    );
+    expect(metric("Recorded runs").textContent).toBe("Recorded runs1");
+  });
+
   it("surfaces provider attempt receipts without presenting estimates as invoices", () => {
     render(<CommandCenter />);
     fireEvent.click(

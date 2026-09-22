@@ -322,10 +322,15 @@
 .root[data-treatment="paper"] .metrics {
   background: var(--paper-cream-hi);
 }
+/* Numerals scale with their own cell: a fixed 3.5rem clipped seven-digit
+   token totals at 1440px. 20cqi fits "1,342,217" with room for one more digit. */
+.root[data-treatment="paper"] .metrics > div {
+  container-type: inline-size;
+}
 .root[data-treatment="paper"] .metrics strong {
   font-family: var(--m-font-serif);
   font-weight: 700;
-  font-size: 3.5rem;
+  font-size: clamp(1.25rem, 20cqi, 3.5rem);
   color: var(--paper-royal);
 }
 .root[data-treatment="paper"] .jobRow {
@@ -380,9 +385,6 @@
   }
 }
 @media (max-width: 390px) {
-  .root[data-treatment="paper"] .metrics strong {
-    font-size: 2.25rem;
-  }
   .root[data-treatment="paper"] .topologyRoster {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -518,7 +520,11 @@
 .metrics > div:nth-child(2) strong {
   color: var(--violet);
 }
+/* Exception red only for a real failure count; zero errors is not an alert. */
 .metrics > div:nth-child(3) strong {
+  color: var(--ink);
+}
+.metrics > div[data-exception="true"] strong {
   color: var(--danger);
 }
 .metrics > div:nth-child(4) strong {

@@ -488,12 +488,22 @@ export function CommandCenter() {
               { label: "Errors & timeouts", value: stats.data?.failed_runs },
               { label: "Recorded tokens", value: stats.data?.total_tokens },
             ].map((metric) => (
-              <div key={metric.label}>
+              <div
+                key={metric.label}
+                data-exception={
+                  metric.label === "Errors & timeouts" &&
+                  Number(metric.value) > 0
+                }
+              >
                 <span>{metric.label}</span>
                 <strong>
-                  {stats.isLoading || metric.value === undefined
-                    ? "—"
-                    : number(metric.value)}
+                  {stats.isLoading ? (
+                    <span>Loading</span>
+                  ) : metric.value === undefined ? (
+                    <span>Unavailable</span>
+                  ) : (
+                    number(metric.value)
+                  )}
                 </strong>
               </div>
             ))}
