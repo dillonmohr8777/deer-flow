@@ -259,7 +259,9 @@
   --secondary: oklch(0.9455 0.0098 87.47);
   --secondary-foreground: oklch(0.205 0 0);
   --muted: oklch(0.97 0.0098 87.47);
-  --muted-foreground: oklch(0.556 0 0);
+  /* Momentum --m-muted. The shadcn default (#737373) measured 4.27:1 on the
+     cream sidebar and failed AA on every workspace page; this is 5.37:1. */
+  --muted-foreground: #636465;
   --accent: oklch(0.94 0.0098 87.47);
   --accent-foreground: oklch(0.205 0 0);
   --destructive: oklch(0.577 0.245 27.325);
