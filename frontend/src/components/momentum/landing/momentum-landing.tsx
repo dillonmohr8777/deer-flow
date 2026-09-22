@@ -1,3 +1,5 @@
+"use client";
+
 /*
  * The signed-out front door.
  *
@@ -8,10 +10,27 @@
  * Nothing under src/components/landing/** is imported or modified, so future
  * upstream pulls touching the hero, header, footer or marketing sections stay
  * conflict-free. The only upstream file this work changes is src/app/page.tsx.
+ *
+ * Two looks live here, chosen by resolveFunnelTreatment() (treatment.ts):
+ * "current" (default, unchanged) and "paper" (scrapbook, `?look=paper`
+ * only). This is a client component so it can re-resolve `?look=` after
+ * mount; the server-rendered/first-paint output always uses
+ * FUNNEL_TREATMENT ("current"), so day-one "/" stays byte-identical.
  */
 
 import Image from "next/image";
 import Link from "next/link";
+import { useEffect, useState } from "react";
+
+import { CutPaper } from "@/components/momentum/cut-paper";
+import {
+  FUNNEL_TREATMENT,
+  resolveFunnelTreatment,
+} from "@/components/momentum/treatment";
+import {
+  MomoAvatar,
+  type MomoAvatarAgent,
+} from "@/components/workspace/command-center/momo-avatar";
 
 import styles from "./momentum-landing.module.css";
 
@@ -59,7 +78,37 @@ const CAPABILITIES = [
   },
 ];
 
+// Staggered pin offsets for the four paper cards — deliberately uneven, never
+// a three/four-equal-card row.
+const CARD_OFFSETS = [0, 24, 8, 16] as const;
+
+// Fake roster entries: no live agent data exists signed-out, and
+// public/momentum/momos/ ships empty regardless, so MomoAvatar always falls
+// through to the procedural MomentumGlyph here — expected, per the brief.
+const HERO_MOMOS: MomoAvatarAgent[] = [
+  { name: "lead", description: "the Momentum lead agent" },
+  { name: "fleet-scout", description: "a Momentum research agent" },
+];
+
 export function MomentumLanding() {
+  // Initial state is always the plain default, matching what the server
+  // rendered — reading window.location.search here would run during
+  // hydration too and could disagree with the server's markup (which never
+  // sees the URL) when `?look=paper` is present. Re-resolving in the effect
+  // below (post-hydration) is what actually applies the query override, in
+  // both directions, while keeping day-one "/" byte-identical.
+  const [treatment, setTreatment] = useState<typeof FUNNEL_TREATMENT>(
+    FUNNEL_TREATMENT,
+  );
+
+  useEffect(() => {
+    setTreatment(resolveFunnelTreatment());
+  }, []);
+
+  if (treatment === "paper") {
+    return <PaperLanding />;
+  }
+
   return (
     <div className={styles.page}>
       <div className={styles.shell}>
@@ -132,6 +181,110 @@ export function MomentumLanding() {
         <footer className={styles.footer}>
           <span>© {new Date().getFullYear()} Momentum</span>
           <Link className={styles.footerLink} href="/workspace">
+            Have an invitation? Sign in
+          </Link>
+        </footer>
+      </div>
+    </div>
+  );
+}
+
+/*
+ * The paper cutout look, previewed with `?look=paper`. Scoped entirely under
+ * [data-treatment="paper"] (paper.css) so it wins over the `.dark` class the
+ * theme provider pins on this route (theme-provider.tsx:14) — nothing here
+ * reads a `--momentum-*`/shadcn dark-mode token, only `--paper-*` ones.
+ */
+function PaperLanding() {
+  return (
+    <div className={styles.paperPage} data-treatment="paper">
+      <div className={styles.paperBlueprintA} aria-hidden="true" />
+      <div className={styles.paperBlueprintB} aria-hidden="true" />
+
+      <div className={styles.paperShell}>
+        <header className={styles.paperHeader}>
+          <Link className={styles.paperWordmark} href="/">
+            <Image
+              src="/momentum/wordmark.png"
+              alt="Momentum"
+              width={132}
+              height={24}
+              priority
+            />
+          </Link>
+          <Link className={styles.paperSignIn} href="/workspace">
+            Sign in
+          </Link>
+        </header>
+
+        <main className={styles.paperHero}>
+          <p className={`${styles.paperScrap} m-voice-annotation`}>
+            still invite only, for now
+          </p>
+
+          <h1 className={styles.paperTitle}>
+            <span className="m-voice-serif">The future needs</span>
+            <CutPaper
+              word="Momentum"
+              className={`${styles.paperCutWord} m-voice-cut-paper`}
+            />
+          </h1>
+
+          <p className={`${styles.paperLede} m-voice-body`}>
+            A private workspace where a team of agents takes on real work and
+            leaves a record you can check. You were invited here because
+            someone wants you in the room.
+          </p>
+
+          <div className={styles.paperActions}>
+            <Link className={styles.paperPrimary} href="/workspace">
+              Enter the workspace
+            </Link>
+            <Link
+              className={styles.paperSecondary}
+              href="/workspace/command-center"
+            >
+              Open Command Center
+            </Link>
+          </div>
+
+          <ul className={styles.paperCards}>
+            {CAPABILITIES.map((item, index) => (
+              <li
+                key={item.key}
+                // "pinned" / "sheet" / "paper-torn(-alt)" are paper.css's
+                // own (unscoped) hooks — literal strings, not CSS-module
+                // classes, so its [data-treatment="paper"] .pinned::before
+                // etc. selectors still match.
+                className={`${styles.paperCard} pinned sheet ${
+                  index % 2 === 0 ? "paper-torn" : "paper-torn-alt"
+                }`}
+                style={{
+                  transform: `translateY(${CARD_OFFSETS[index] ?? 0}px)`,
+                }}
+              >
+                <span className={`${styles.paperCardKey} m-voice-label`}>
+                  {item.key}
+                </span>
+                <p className={`${styles.paperCardBody} m-voice-body`}>
+                  {item.body}
+                </p>
+              </li>
+            ))}
+          </ul>
+
+          <div className={styles.paperMomos} aria-hidden="true">
+            {HERO_MOMOS.map((agent) => (
+              <MomoAvatar key={agent.name} agent={agent} size={160} />
+            ))}
+          </div>
+        </main>
+
+        <footer className={styles.paperFooter}>
+          <span className="m-voice-body">
+            © {new Date().getFullYear()} Momentum
+          </span>
+          <Link className={styles.paperFooterLink} href="/workspace">
             Have an invitation? Sign in
           </Link>
         </footer>
