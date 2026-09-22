@@ -1,7 +1,7 @@
 """mem0 backend config -- parses and validates ``backend_config``.
 
 Follows the noop-template pattern: a plain dataclass + ``from_backend_config``.
-The host injects ``storage_path`` (and optionally ``should_keep_hidden_message``)
+The host injects ``storage_path``, ``strict_user_scope`` (and optionally ``should_keep_hidden_message``)
 into every backend's config dict; those keys are accepted and ignored. Any
 OTHER unknown key is rejected -- a typo in persistent-state config must fail
 fast, not silently fall back to defaults.
@@ -17,7 +17,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 #: Keys the host factory injects into backend_config; accepted and ignored.
-_HOST_INJECTED_KEYS = frozenset({"storage_path", "should_keep_hidden_message"})
+_HOST_INJECTED_KEYS = frozenset({"storage_path", "strict_user_scope", "should_keep_hidden_message"})
 
 _STARTUP_POLICIES = frozenset({"fail_fast", "tolerate"})
 _READ_POLICIES = frozenset({"fail_open", "fail_closed"})
