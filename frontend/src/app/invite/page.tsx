@@ -1,12 +1,32 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { brandMotionAllowed } from "@/components/workspace/command-center/appearance-preferences";
+
+import styles from "./invite.module.css";
+
 type InspectOk = {
   email: string;
   workspace_name: string;
   expires_at: string;
   requires_login: boolean;
 };
+
+// Highest-emotion moment in the funnel: the pin lifts, the sheet tilts and
+// slides away, 420ms. Gated the same way as S04's other moment (cut-paper):
+// prefers-reduced-motion turns it fully off, not reduced.
+const RELEASE_MS = 420;
+
+function releaseAllowed(): boolean {
+  if (typeof window === "undefined") return false;
+  return brandMotionAllowed({
+    motion: true,
+    reducedMotion: window.matchMedia("(prefers-reduced-motion: reduce)")
+      .matches,
+    visible: document.visibilityState === "visible",
+    inView: true,
+  });
+}
 
 function getDetailMessage(data: unknown): string {
   if (data && typeof data === "object" && "detail" in data) {
@@ -106,7 +126,16 @@ export default function InvitePage() {
         return;
       }
       setStatus("done");
-      window.location.assign("/workspace/command-center");
+      // The release moment (pin lifts, sheet tilts and slides away) gets
+      // its 420ms before the navigation cuts it short. Reduced motion (or
+      // no window, e.g. under test) skips straight to the redirect.
+      if (releaseAllowed()) {
+        window.setTimeout(() => {
+          window.location.assign("/workspace/command-center");
+        }, RELEASE_MS);
+      } else {
+        window.location.assign("/workspace/command-center");
+      }
     } catch {
       setStatus("ready");
       setError("Could not accept this invite. Please try again.");
@@ -114,72 +143,91 @@ export default function InvitePage() {
   }, [token, password, confirm, isNew, status]);
 
   const busy = status === "loading" || status === "accepting";
+  const released = status === "done";
 
   return (
-    <main style={{ maxWidth: 480, margin: "48px auto", padding: 24, fontFamily: "system-ui, sans-serif" }}>
-      <meta name="referrer" content="no-referrer" />
-      <h1>Workspace invite</h1>
-      <p aria-live="polite" role="status">
-        {status === "loading" ? "Loading invite…" : status === "accepting" ? "Accepting invite…" : status === "done" ? "Accepted. Redirecting…" : ""}
-      </p>
-      {error ? (
-        <p role="alert" style={{ color: "#b00020" }}>
-          {error}
+    <main className={styles.field} data-treatment="paper">
+      <div
+        className={[
+          styles.sheet,
+          "sheet",
+          "pinned",
+          "paper-torn",
+          error ? styles.sheetError : "",
+          released ? styles.sheetReleased : "",
+        ]
+          .filter(Boolean)
+          .join(" ")}
+      >
+        {error ? <span className={styles.errorTag} aria-hidden="true" /> : null}
+        <meta name="referrer" content="no-referrer" />
+        <h1 className={`${styles.title} m-voice-serif-bold`}>
+          {info ? `You're invited to ${info.workspace_name}` : "Workspace invite"}
+        </h1>
+        <p aria-live="polite" role="status" className={`${styles.status} m-voice-body`}>
+          {status === "loading" ? "Loading invite…" : status === "accepting" ? "Accepting invite…" : status === "done" ? "Accepted. Redirecting…" : ""}
         </p>
-      ) : null}
-      {info && status !== "inspect-error" ? (
-        <section aria-label="Invite details">
-          <p>
-            <strong>{info.workspace_name}</strong>
+        {error ? (
+          <p role="alert" className={`${styles.errorText} m-voice-body`}>
+            {error}
           </p>
-          <p>
-            Invited: {info.email} · Expires: {new Date(info.expires_at).toLocaleString()}
-          </p>
-          <p>{isNew ? "Create a password of at least 12 characters to join." : "Enter your current account password to join this workspace."}</p>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              void accept();
-            }}
-          >
-            <div style={{ marginBottom: 12 }}>
-              <label htmlFor="invite-password">{isNew ? "New password" : "Current password"}</label>
-              <input
-                id="invite-password"
-                name="password"
-                type="password"
-                autoComplete={isNew ? "new-password" : "current-password"}
-                minLength={isNew ? 12 : 1}
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                disabled={busy}
-                style={{ display: "block", width: "100%", padding: 8, marginTop: 4 }}
-              />
-            </div>
-            {isNew ? (
-              <div style={{ marginBottom: 12 }}>
-                <label htmlFor="invite-confirm">Confirm password</label>
+        ) : null}
+        {info && status !== "inspect-error" ? (
+          <section aria-label="Invite details" className={styles.details}>
+            <p className={`${styles.email} m-voice-body`}>
+              Invited: {info.email} · Expires: {new Date(info.expires_at).toLocaleString()}
+            </p>
+            <p className={`${styles.hint} m-voice-body`}>{isNew ? "Create a password of at least 12 characters to join." : "Enter your current account password to join this workspace."}</p>
+            <form
+              className={styles.form}
+              onSubmit={(e) => {
+                e.preventDefault();
+                void accept();
+              }}
+            >
+              <div className={styles.field2}>
+                <label htmlFor="invite-password" className={`${styles.label} m-voice-label`}>
+                  {isNew ? "New password" : "Current password"}
+                </label>
                 <input
-                  id="invite-confirm"
-                  name="confirm"
+                  id="invite-password"
+                  name="password"
                   type="password"
-                  autoComplete="new-password"
-                  minLength={12}
+                  autoComplete={isNew ? "new-password" : "current-password"}
+                  minLength={isNew ? 12 : 1}
                   required
-                  value={confirm}
-                  onChange={(e) => setConfirm(e.target.value)}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
                   disabled={busy}
-                  style={{ display: "block", width: "100%", padding: 8, marginTop: 4 }}
+                  className={styles.input}
                 />
               </div>
-            ) : null}
-            <button type="submit" disabled={busy || !token}>
-              {status === "accepting" ? "Accepting…" : "Accept invite"}
-            </button>
-          </form>
-        </section>
-      ) : null}
+              {isNew ? (
+                <div className={styles.field2}>
+                  <label htmlFor="invite-confirm" className={`${styles.label} m-voice-label`}>
+                    Confirm password
+                  </label>
+                  <input
+                    id="invite-confirm"
+                    name="confirm"
+                    type="password"
+                    autoComplete="new-password"
+                    minLength={12}
+                    required
+                    value={confirm}
+                    onChange={(e) => setConfirm(e.target.value)}
+                    disabled={busy}
+                    className={styles.input}
+                  />
+                </div>
+              ) : null}
+              <button type="submit" disabled={busy || !token} className={styles.submit}>
+                {status === "accepting" ? "Accepting…" : "Accept invite"}
+              </button>
+            </form>
+          </section>
+        ) : null}
+      </div>
     </main>
   );
 }
