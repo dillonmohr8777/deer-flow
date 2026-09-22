@@ -177,7 +177,14 @@ class Paths:
 
     @property
     def memory_file(self) -> Path:
-        """Path to the persisted memory file: `{base_dir}/memory.json`."""
+        """Legacy shared memory file: `{base_dir}/memory.json`.
+
+        New code should use :meth:`user_memory_file`. This path is
+        process-global — every user and every workspace resolves to the same
+        file — so a write through it is visible to all of them. It remains only
+        as a read-side fallback for installations that predate per-user
+        memory, mirroring :attr:`agents_dir`.
+        """
         return self.base_dir / "memory.json"
 
     @property
@@ -230,7 +237,14 @@ class Paths:
         return self.agents_dir / name.lower()
 
     def agent_memory_file(self, name: str) -> Path:
-        """Legacy per-agent memory file: `{base_dir}/agents/{name}/memory.json`."""
+        """Legacy per-agent memory file: `{base_dir}/agents/{name}/memory.json`.
+
+        New code should use :meth:`user_agent_memory_file`. This path is
+        process-global — every user resolves to the same file for a given
+        agent name — so a write through it is visible to all of them. It
+        remains only as a read-side fallback for installations that predate
+        per-user memory, mirroring :attr:`agents_dir`.
+        """
         return self.agent_dir(name) / "memory.json"
 
     def user_dir(self, user_id: str) -> Path:
