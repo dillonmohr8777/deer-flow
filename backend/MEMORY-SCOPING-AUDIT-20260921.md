@@ -69,11 +69,19 @@ follow the exact 7001a7b2 pattern (read fallback only, migration moves the
 data, no write path). Not audited further — out of scope (agent
 *definitions*, not memory).
 
+### Update (2026-09-21, W-B3 follow-up re-verification for item 2 below)
+
+`app/gateway/routers/agents.py:688` (`_cancel_pending_memory_for_agent`) —
+re-traced its caller: `delete_agent` (the DELETE route handler) sets
+`user_id = get_effective_user_id()` at line 635, then threads it through
+`_delete_agent_with_memory_cancel(name, user_id)` to both
+`_cancel_pending_memory_for_agent` calls. Confirmed concrete, never `None`.
+This closes the "not verified" gap noted below for that call site; the
+other 13 call sites were re-confirmed unchanged. Full re-verified count:
+14/14 production call sites pass a concrete `user_id`.
+
 ### Not verified
 
-- `app/gateway/routers/agents.py:688` (`_cancel_pending_memory_for_agent`) —
-  confirmed the call signature threads `user_id`, did not trace every caller
-  of the enclosing delete-agent handler back to its auth boundary.
 - Did not exhaustively check every backend implementation other than
   deermem's `FileMemoryStorage`/`MarkdownMemoryStorage` (e.g. the `honcho`
   and `noop` backends under `agents/memory/backends/`) for `user_id`
@@ -96,21 +104,25 @@ could call `paths.memory_file` believing it is the "simple" path and
 reopen the same class of bug deermem itself is not currently exposed to.
 
 - **Severity:** Low (documentation/hygiene, not exploitable as written).
-- **NOT APPLIED fix** (would require lead authorization): annotate
-  `Paths.memory_file` and `Paths.agent_memory_file` as legacy/read-only
-  fallback docstrings, mirroring exactly what 7001a7b2 did to
-  `Paths.user_md_file`'s docstring, so a future reader sees the warning
-  instead of discovering by grep that nothing calls it. No behavior change,
-  doc-only.
-- **Also NOT APPLIED**, lower priority: flip deermem's `strict_user_scope`
-  default to `True` at the deer-flow factory call site (not in deermem's
-  own default, to avoid breaking other embedders of the package) so a
-  future call site that forgets to resolve `user_id` fails loudly instead
-  of silently landing on the shared bucket the way `memory_file_path`
-  currently allows when `user_id=None`. This is the harder, cross-cutting
-  version of the 7001a7b2 pattern (helper already exists, needs the
-  call-site default tightened rather than a new helper added). Flagged, not
-  applied.
+- **APPLIED** (authorized by lead L2, 2026-09-21) — commit `3871ddc3`:
+  annotated `Paths.memory_file` and `Paths.agent_memory_file` as
+  legacy/read-only fallback docstrings, mirroring exactly what 7001a7b2 did
+  to `Paths.user_md_file`'s docstring. Doc-only; the resolved paths are
+  byte-identical before and after.
+- **APPLIED** (authorized by lead L2, 2026-09-21) — commit `72203cc2`:
+  flipped `strict_user_scope` to `True` at the deer-flow factory call site
+  only (`manager.py::get_memory_manager`'s `backend_config` dict, same
+  precedence pattern as the existing `storage_path` default — an explicit
+  host config value still wins). deermem's own `DeerMemConfig.strict_user_scope`
+  default is unchanged (stays `False`) so embedding deermem directly,
+  outside the deer-flow factory, is unaffected. Re-verified before applying
+  that all 14 production call sites pass a concrete `user_id` (see the
+  "Update" note above); none broke. Locked by
+  `test_factory_defaults_to_strict_user_scope` in
+  `backend/tests/test_memory_isolation.py`, confirmed to fail
+  (`DID NOT RAISE <class 'ValueError'>`) against the pre-flip `manager.py`
+  blob and pass after; `test_factory_honors_explicit_strict_user_scope_override`
+  locks the override precedent.
 
 ## Part B — secrets sweep
 
