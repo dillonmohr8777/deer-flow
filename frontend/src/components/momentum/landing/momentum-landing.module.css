@@ -365,7 +365,7 @@
    Paper cutout look — `?look=paper` only (resolveFunnelTreatment, S04 task D).
    Every rule below scopes under [data-treatment="paper"] (via .paperPage,
    which carries that attribute) so it wins over the `.dark` class the theme
-   provider pins on "/"; nothing here reads a --momentum-*/shadcn token.
+   provider pins on "/"; nothing here reads a --momentum- or shadcn token.
    Canon: blue, white, grey, a hint of gold — gold stays on the pin.
    ========================================================================== */
 
