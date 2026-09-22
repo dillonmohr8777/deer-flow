@@ -3,3 +3,10 @@
 - wordmark.png: unchanged exact Momentum artwork, copied from client-operations/clients/momentum-360/deliverables/2026-08-03-need-momentum-homepage-concepts/public/assets/brand/need-momentum-logo.png. Provenance documented in that deliverable's ASSET-SOURCES.md; original public Need Momentum website artwork.
 - Colors and typography: C:/Users/dillo/Documents/Codex/momentum-design-system/tokens.css (September 5, 2026).
 - Archivo Black and Nunito Sans: Google Fonts official CSS API, self-hosted unchanged font files. These are the existing Momentum brand families.
+- Fraunces (400/700) and Caveat (400): Google Fonts CSS2 API, latin subset,
+  self-hosted unchanged woff2. Both OFL 1.1. Added 2026-09-22 — fonts.css had
+  declared them since 2026-09-21 but the files were never committed, so the
+  serif and script voices were silently falling back to system faces on every
+  surface that used them.
+- No code/mono face is shipped. `--m-font-mono` is a system stack by choice;
+  see the note on it in fonts.css.

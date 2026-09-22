@@ -15,32 +15,20 @@
   font-weight: 400;
   font-style: normal;
   font-display: swap;
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6,
-    U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193,
-    U+2212, U+2215, U+FEFF, U+FFFD;
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+    U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF,
+    U+FFFD;
 }
 
-/* Voice 2 alternate: Playfair Display 400/700, OFL 1.1. Kept for the
- * milestone-1 side-by-side only; Fraunces is the default (decision 2026-09-21). */
-@font-face {
-  font-family: "Playfair Display";
-  src: url("/momentum/playfair-display.woff2") format("woff2");
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-  unicode-range: U+0020-007E, U+2018, U+2019, U+201C, U+201D, U+2013, U+2014,
-    U+2026;
-}
-
-@font-face {
-  font-family: "Playfair Display";
-  src: url("/momentum/playfair-display-bold.woff2") format("woff2");
-  font-weight: 700;
-  font-style: normal;
-  font-display: swap;
-  unicode-range: U+0020-007E, U+2018, U+2019, U+201C, U+201D, U+2013, U+2014,
-    U+2026;
-}
+/*
+ * Playfair Display's two @font-face blocks used to sit here. The side-by-side
+ * they existed for was decided on 2026-09-21 in Fraunces' favour, no component
+ * ever referenced --m-font-serif-alt, and the files were never added, so both
+ * blocks were pointing at a 404. Removed rather than left declaring a face that
+ * does not exist. To re-run the comparison, add the files and restore this
+ * block, its --m-font-serif-alt variable, and the .m-voice-serif-alt classes.
+ */
 
 /*
  * Voice 2 default: Fraunces 400/700, OFL 1.1. Chosen over Playfair Display
@@ -54,8 +42,8 @@
   font-weight: 400;
   font-style: normal;
   font-display: swap;
-  unicode-range: U+0020-007E, U+2018, U+2019, U+201C, U+201D, U+2013, U+2014,
-    U+2026;
+  unicode-range:
+    U+0020-007E, U+2018, U+2019, U+201C, U+201D, U+2013, U+2014, U+2026;
 }
 
 @font-face {
@@ -64,8 +52,8 @@
   font-weight: 700;
   font-style: normal;
   font-display: swap;
-  unicode-range: U+0020-007E, U+2018, U+2019, U+201C, U+201D, U+2013, U+2014,
-    U+2026;
+  unicode-range:
+    U+0020-007E, U+2018, U+2019, U+201C, U+201D, U+2013, U+2014, U+2026;
 }
 
 /* Voice 3: Nunito Sans, already on disk. Body/UI + label style. */
@@ -75,9 +63,10 @@
   font-weight: 400;
   font-style: normal;
   font-display: swap;
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6,
-    U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193,
-    U+2212, U+2215, U+FEFF, U+FFFD;
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+    U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF,
+    U+FFFD;
 }
 
 @font-face {
@@ -86,9 +75,10 @@
   font-weight: 700;
   font-style: normal;
   font-display: swap;
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6,
-    U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193,
-    U+2212, U+2215, U+FEFF, U+FFFD;
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+    U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF,
+    U+FFFD;
 }
 
 /* Voice 4: Caveat 500, annotation scraps only. New face, OFL 1.1. */
@@ -98,8 +88,8 @@
   font-weight: 500;
   font-style: normal;
   font-display: swap;
-  unicode-range: U+0020-007E, U+2018, U+2019, U+201C, U+201D, U+2013, U+2014,
-    U+2026;
+  unicode-range:
+    U+0020-007E, U+2018, U+2019, U+201C, U+201D, U+2013, U+2014, U+2026;
 }
 
 /* ---------- Voice custom properties ---------- */
@@ -107,10 +97,19 @@
 :root {
   --m-font-display: "Archivo Black", system-ui, sans-serif;
   --m-font-serif: "Fraunces", Georgia, serif;
-  --m-font-serif-alt: "Playfair Display", Georgia, serif;
-  --m-font-text: "Nunito Sans", system-ui, -apple-system, "Segoe UI",
-    sans-serif;
+  --m-font-text:
+    "Nunito Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
   --m-font-script: "Caveat", "Segoe Script", cursive;
+  /*
+   * Voice 5: code. No shipped face — this is a stack on purpose. Code is the
+   * one surface where the reader's own configured font is more useful than
+   * ours, and a downloaded face would cost a render-blocking request on every
+   * artifact and diff view to say nothing the system stack does not already
+   * say. Ordered for what is actually installed per platform.
+   */
+  --m-font-mono:
+    ui-monospace, "Cascadia Mono", "Segoe UI Mono", "SF Mono", "JetBrains Mono",
+    "Fira Code", Menlo, Consolas, "Liberation Mono", monospace;
 }
 
 /* ---------- Voice utilities ---------- */
@@ -140,16 +139,13 @@
   font-weight: 700;
 }
 
-/* Voice 2 alternate face for the milestone-1 comparison only. */
-.m-voice-serif-alt {
-  font-family: var(--m-font-serif-alt);
-  font-weight: 400;
-}
-
-.m-voice-serif-alt-bold {
-  font-family: var(--m-font-serif-alt);
-  font-weight: 700;
-}
+/*
+ * .m-voice-serif-alt / -bold lived here for the milestone-1 comparison. They
+ * went with the Playfair @font-face and the --m-font-serif-alt variable: no
+ * component ever used them, and once the face was gone they would have
+ * silently rendered Georgia. Restore all three together if the comparison is
+ * ever re-run.
+ */
 
 /* Voice 3: Nunito Sans — all body/UI text. */
 .m-voice-body {
@@ -179,4 +175,21 @@
 .m-voice-annotation {
   font-family: var(--m-font-script);
   font-weight: 500;
+}
+
+/*
+ * Voice 5: code — identifiers, paths, diffs, tokens, run IDs. The inverse of
+ * the annotation rule: this voice is only ever for things a person might need
+ * to copy exactly, and it never carries prose. Tabular figures so numbers in a
+ * column line up; ligatures off because `!=` and `=>` collapsing into single
+ * glyphs is a liability when someone is reading a diff for what changed.
+ */
+.m-voice-code {
+  font-family: var(--m-font-mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings:
+    "liga" 0,
+    "clig" 0,
+    "calt" 0;
+  font-size: 0.9375em;
 }
