@@ -16,18 +16,17 @@ const UNKNOWN_AGENT = { name: "some-future-specialist", display_name: "Future Sp
 
 describe("MomoAvatar", () => {
   it("renders an <img> at the expected slug path for a known agent name", () => {
-    // Force the image path regardless of whether artwork has landed yet, by
-    // asserting on what the component WOULD request for a mapped name. The
-    // component itself gates on AVAILABLE_MOMO_SLUGS (empty today), so this
-    // also proves the fallback below in the empty-momos case.
     render(<MomoAvatar agent={KNOWN_AGENT} size={40} />);
     const el = screen.getByRole("img", {
       name: /Analytics Engineer/,
     });
-    // With momos/ empty, no <img> is emitted yet -- it falls back to the
-    // glyph. The wrapper still carries the mapped identity for inspection.
-    expect(el.querySelector("svg[data-momentum-glyph]")).toBeTruthy();
-    expect(el.querySelector("img")).toBeNull();
+    const img = el.querySelector("img");
+    expect(img).toBeTruthy();
+    expect(img?.getAttribute("src")).toBe("/momentum/momos/analytics.svg");
+    // The decorative <img> must not double-announce: the wrapper owns the name.
+    expect(img?.getAttribute("alt")).toBe("");
+    expect(img?.getAttribute("aria-hidden")).toBe("true");
+    expect(el.querySelector("svg[data-momentum-glyph]")).toBeNull();
   });
 
   it("renders MomentumGlyph with the same seed an unknown agent would have had without MomoAvatar", () => {
@@ -45,30 +44,42 @@ describe("MomoAvatar", () => {
     );
   });
 
-  it("renders today's procedural glyphs for the whole current roster with momos/ empty, no <img> anywhere", () => {
+  it("gives every agent on the current roster its own shipped Momo, no glyph fallback", () => {
+    // The roster is fleet/agents/*/config.yaml. Every one of them now has
+    // artwork, so a glyph appearing here means a slug lost its mapping or its
+    // file.
     const roster = [
-      KNOWN_AGENT,
-      { name: "data-migration-engineer", display_name: "Data Migration Engineer" },
-      { name: "independent-verifier", display_name: "Independent Verifier" },
-      { name: "fleet-scout", display_name: "Fleet Scout" },
-      { name: "fleet-builder", display_name: "Fleet Builder" },
-      { name: "fleet-qa", display_name: "Fleet QA" },
-      { name: "fleet-reliability", display_name: "Fleet Reliability" },
-      { name: "senior-software-engineer", display_name: "Senior Software Engineer" },
-    ];
+      [KNOWN_AGENT, "analytics"],
+      [{ name: "data-migration-engineer", display_name: "Data Migration Engineer" }, "migration"],
+      [{ name: "independent-verifier", display_name: "Independent Verifier" }, "verifier"],
+      [{ name: "fleet-scout", display_name: "Fleet Scout" }, "research"],
+      [{ name: "fleet-builder", display_name: "Fleet Builder" }, "builder"],
+      [{ name: "fleet-qa", display_name: "Fleet QA" }, "qa"],
+      [{ name: "fleet-reliability", display_name: "Fleet Reliability" }, "reliability"],
+      [{ name: "senior-software-engineer", display_name: "Senior Software Engineer" }, "engineer"],
+    ] as const;
 
     const { container } = render(
       <>
-        {roster.map((agent) => (
+        {roster.map(([agent]) => (
           <MomoAvatar key={agent.name} agent={agent} size={40} />
         ))}
       </>,
     );
 
-    expect(container.querySelectorAll("img")).toHaveLength(0);
-    expect(container.querySelectorAll("svg[data-momentum-glyph]")).toHaveLength(
-      roster.length,
+    expect(container.querySelectorAll("svg[data-momentum-glyph]")).toHaveLength(0);
+    const sources = [...container.querySelectorAll("img")].map((img) =>
+      img.getAttribute("src"),
     );
+    expect(sources).toEqual(
+      roster.map(([, slug]) => `/momentum/momos/${slug}.svg`),
+    );
+  });
+
+  it("falls back to the glyph for an agent with no shipped Momo", () => {
+    const { container } = render(<MomoAvatar agent={UNKNOWN_AGENT} size={40} />);
+    expect(container.querySelector("img")).toBeNull();
+    expect(container.querySelector("svg[data-momentum-glyph]")).toBeTruthy();
   });
 
   it("marks itself data-size=\"sm\" at 48px and below", () => {
@@ -79,10 +90,15 @@ describe("MomoAvatar", () => {
   });
 
   it("marks decoration aria-hidden while the wrapper alone carries the accessible name", () => {
-    render(<MomoAvatar agent={KNOWN_AGENT} size={40} />);
-    const glyph = screen
-      .getByRole("img", { name: /Analytics Engineer/ })
-      .querySelector("svg");
-    expect(glyph?.getAttribute("aria-hidden")).toBe("true");
+    // Holds for both renderings: shipped artwork (<img>) and the glyph
+    // fallback (inline <svg>). Whichever one is inside, it must not be
+    // announced separately from the wrapper.
+    for (const agent of [KNOWN_AGENT, UNKNOWN_AGENT]) {
+      const { container, unmount } = render(<MomoAvatar agent={agent} size={40} />);
+      const decoration = container.querySelector("img, svg");
+      expect(decoration).toBeTruthy();
+      expect(decoration?.getAttribute("aria-hidden")).toBe("true");
+      unmount();
+    }
   });
 });
