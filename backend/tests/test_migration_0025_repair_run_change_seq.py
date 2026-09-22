@@ -67,10 +67,11 @@ def _table_and_column_state(db_path) -> tuple[bool, bool, set[str], str | None]:
     return "run_change_clock" in tables, "change_seq" in run_columns, run_indexes, version_row[0] if version_row else None
 
 
-async def test_0025_is_in_the_single_head_chain():
+async def test_0025_chains_into_the_single_head():
     script = ScriptDirectory(str(_MIGRATIONS_DIR))
     assert len(script.get_heads()) == 1
-    assert REVISION in {migration.revision for migration in script.walk_revisions()}
+    # Later migrations may advance the head without removing this revision.
+    assert REVISION in {revision.revision for revision in script.walk_revisions()}
     assert script.get_revision(REVISION).down_revision == PREVIOUS
 
 
