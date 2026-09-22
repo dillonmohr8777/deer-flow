@@ -3,9 +3,11 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
 
 import { RememberSessionOption } from "@/components/auth/remember-session-option";
+import { resolveFunnelTreatment } from "@/components/momentum/treatment";
 import { Button } from "@/components/ui/button";
 import { FlickeringGrid } from "@/components/ui/flickering-grid";
 import { Input } from "@/components/ui/input";
@@ -22,11 +24,13 @@ import {
 } from "@/core/auth/setup";
 import { parseAuthError } from "@/core/auth/types";
 import { useI18n } from "@/core/i18n/hooks";
+import { cn } from "@/lib/utils";
 
 export default function LoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { isAuthenticated } = useAuth();
+  const { theme, resolvedTheme } = useTheme();
   const { t } = useI18n();
 
   const [email, setEmail] = useState("");
@@ -198,11 +202,24 @@ export default function LoginPage() {
     }
   };
 
+  // Same gate as `/` and `/invite`: FUNNEL_TREATMENT decides the default,
+  // `?look=paper|current` previews either. Under "current" every class below
+  // is the pre-paper sign-in, unchanged.
+  const paper = resolveFunnelTreatment(searchParams.toString()) === "paper";
+  const actualTheme = theme === "system" ? resolvedTheme : theme;
+  const mutedClass = paper ? undefined : "text-muted-foreground";
+  const mutedStyle = paper ? { color: "var(--paper-ink-muted)" } : undefined;
+  const linkClass = paper ? undefined : "text-blue-500";
+  const linkStyle = paper ? { color: "var(--paper-focus)" } : undefined;
+
   return (
     <div
-      className="relative flex min-h-screen items-center justify-center overflow-x-hidden overflow-y-auto"
-      data-treatment="paper"
-      style={{ background: "var(--paper-royal-deep)" }}
+      className={cn(
+        "relative flex min-h-screen items-center justify-center overflow-x-hidden overflow-y-auto",
+        !paper && "bg-background",
+      )}
+      data-treatment={paper ? "paper" : "current"}
+      style={paper ? { background: "var(--paper-royal-deep)" } : undefined}
     >
       {/*
         Momentum front door. A blueprint grid seen through a torn hole in the
@@ -214,32 +231,49 @@ export default function LoginPage() {
         flicker already existed before this pass.
       */}
       <FlickeringGrid
-        className="absolute inset-0 z-0 paper-torn"
-        style={{ transform: "rotate(180deg)" }}
+        className={cn(
+          "absolute inset-0 z-0",
+          paper
+            ? "paper-torn"
+            : "[mask-image:radial-gradient(60vh_60vh_at_50%_42%,black,transparent_72%)]",
+        )}
+        style={paper ? { transform: "rotate(180deg)" } : undefined}
         squareSize={4}
         gridGap={4}
-        color="#17a9e8"
-        maxOpacity={0.35}
+        color={paper ? "#17a9e8" : actualTheme === "dark" ? "white" : "black"}
+        maxOpacity={paper ? 0.35 : 0.22}
         flickerChance={0.2}
       />
       <div
-        className="pinned relative w-full max-w-md space-y-6 rounded-md border p-8"
-        style={{
-          background: "var(--paper-cream-hi)",
-          borderColor: "var(--paper-line)",
-          color: "var(--paper-ink)",
-        }}
+        className={cn(
+          "relative w-full max-w-md space-y-6 border p-8",
+          paper
+            ? "pinned rounded-md"
+            : "border-border/20 bg-background/5 rounded-3xl backdrop-blur-sm",
+        )}
+        style={
+          paper
+            ? {
+                background: "var(--paper-cream-hi)",
+                borderColor: "var(--paper-line)",
+                color: "var(--paper-ink)",
+              }
+            : undefined
+        }
       >
         <div className="text-center">
           <Image
-            className="mx-auto h-7 w-auto"
+            className={cn(
+              "mx-auto h-7 w-auto",
+              !paper && "dark:brightness-0 dark:invert",
+            )}
             src="/momentum/wordmark.png"
             alt="Momentum"
             width={154}
             height={28}
             priority
           />
-          <p className="mt-2" style={{ color: "var(--paper-ink-muted)" }}>
+          <p className={cn("mt-2", mutedClass)} style={mutedStyle}>
             {isLogin ? t.login.signInTitle : t.login.createAccountTitle}
           </p>
         </div>
@@ -251,7 +285,7 @@ export default function LoginPage() {
             className="border-l-2 border-amber-500 ps-3 text-sm"
           >
             <p className="font-medium">{t.login.serviceUnavailableTitle}</p>
-            <p className="mt-1" style={{ color: "var(--paper-ink-muted)" }}>
+            <p className={cn("mt-1", mutedClass)} style={mutedStyle}>
               {t.login.serviceUnavailableDescription}
             </p>
             <Button
@@ -275,13 +309,16 @@ export default function LoginPage() {
         {systemNeedsAdminSetup && (
           <div className="border-l-2 border-blue-500 ps-3 text-sm">
             <p className="font-medium">{t.login.adminSetupRequiredTitle}</p>
-            <p className="mt-1" style={{ color: "var(--paper-ink-muted)" }}>
+            <p className={cn("mt-1", mutedClass)} style={mutedStyle}>
               {t.login.adminSetupRequiredDescription}
             </p>
             <Link
               href="/setup"
-              className="mt-2 inline-block font-medium hover:underline"
-              style={{ color: "var(--paper-focus)" }}
+              className={cn(
+                "mt-2 inline-block font-medium hover:underline",
+                linkClass,
+              )}
+              style={linkStyle}
             >
               {t.login.createAdminAccount}
             </Link>
@@ -340,16 +377,23 @@ export default function LoginPage() {
                 <div className="absolute inset-0 flex items-center">
                   <span
                     className="w-full border-t"
-                    style={{ borderColor: "var(--paper-line)" }}
+                    style={paper ? { borderColor: "var(--paper-line)" } : undefined}
                   />
                 </div>
                 <div className="relative flex justify-center text-xs uppercase">
                   <span
-                    className="px-2"
-                    style={{
-                      background: "var(--paper-cream-hi)",
-                      color: "var(--paper-ink-muted)",
-                    }}
+                    className={cn(
+                      "px-2",
+                      !paper && "bg-background text-muted-foreground",
+                    )}
+                    style={
+                      paper
+                        ? {
+                            background: "var(--paper-cream-hi)",
+                            color: "var(--paper-ink-muted)",
+                          }
+                        : undefined
+                    }
                   >
                     {t.login.orContinueWith}
                   </span>
@@ -357,10 +401,7 @@ export default function LoginPage() {
               </div>
             )}
             {showSsoHint && (
-              <p
-                className="text-center text-sm"
-                style={{ color: "var(--paper-ink-muted)" }}
-              >
+              <p className={cn("text-center text-sm", mutedClass)} style={mutedStyle}>
                 {t.login.ssoHint}
               </p>
             )}
@@ -390,18 +431,15 @@ export default function LoginPage() {
                 setError("");
                 setShowSsoHint(false);
               }}
-              className="hover:underline"
-              style={{ color: "var(--paper-focus)" }}
+              className={cn("hover:underline", linkClass)}
+              style={linkStyle}
             >
               {isLogin ? t.login.noAccountSignUp : t.login.haveAccountSignIn}
             </button>
           </div>
         )}
 
-        <div
-          className="text-center text-xs"
-          style={{ color: "var(--paper-ink-muted)" }}
-        >
+        <div className={cn("text-center text-xs", mutedClass)} style={mutedStyle}>
           <Link href="/" className="hover:underline">
             {t.login.backToHome}
           </Link>

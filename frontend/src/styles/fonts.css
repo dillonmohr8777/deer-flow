@@ -20,7 +20,8 @@
     U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
-/* Voice 2 default: Playfair Display 400/700. New face, OFL 1.1. */
+/* Voice 2 alternate: Playfair Display 400/700, OFL 1.1. Kept for the
+ * milestone-1 side-by-side only; Fraunces is the default (decision 2026-09-21). */
 @font-face {
   font-family: "Playfair Display";
   src: url("/momentum/playfair-display.woff2") format("woff2");
@@ -42,12 +43,13 @@
 }
 
 /*
- * Voice 2 alternate for the milestone-1 side-by-side decision: Fraunces
- * 400/700. Declared under a distinct family name so it never becomes the
- * default anywhere in this file — Playfair Display stays default.
+ * Voice 2 default: Fraunces 400/700, OFL 1.1. Chosen over Playfair Display
+ * 2026-09-21: softer, wonkier serifs sit with cut paper and Caveat, and its
+ * low-contrast strokes survive the 5% grain at numeral size where Playfair's
+ * hairlines break up. Flip = swap the two --m-font-serif values below.
  */
 @font-face {
-  font-family: "Fraunces Alt";
+  font-family: "Fraunces";
   src: url("/momentum/fraunces.woff2") format("woff2");
   font-weight: 400;
   font-style: normal;
@@ -57,7 +59,7 @@
 }
 
 @font-face {
-  font-family: "Fraunces Alt";
+  font-family: "Fraunces";
   src: url("/momentum/fraunces-bold.woff2") format("woff2");
   font-weight: 700;
   font-style: normal;
@@ -104,8 +106,8 @@
 
 :root {
   --m-font-display: "Archivo Black", system-ui, sans-serif;
-  --m-font-serif: "Playfair Display", Georgia, serif;
-  --m-font-serif-alt: "Fraunces Alt", Georgia, serif;
+  --m-font-serif: "Fraunces", Georgia, serif;
+  --m-font-serif-alt: "Playfair Display", Georgia, serif;
   --m-font-text: "Nunito Sans", system-ui, -apple-system, "Segoe UI",
     sans-serif;
   --m-font-script: "Caveat", "Segoe Script", cursive;
@@ -127,7 +129,7 @@
   color: var(--paper-ink);
 }
 
-/* Voice 2: Playfair Display — h2s, pull quotes, Command Center stat numerals. */
+/* Voice 2: Fraunces — h2s, pull quotes, Command Center stat numerals. */
 .m-voice-serif {
   font-family: var(--m-font-serif);
   font-weight: 400;
