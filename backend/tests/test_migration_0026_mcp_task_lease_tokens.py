@@ -1,9 +1,14 @@
 """Migration tests for 0026_mcp_task_lease_tokens.
 
 Adds the nullable per-claim token columns ``McpTaskRepository`` uses to fence
-poll, cancel, and notification mutations to the exact claim generation. This
-file owns the chain-head pin, moved on from
-``test_migration_0025_repair_run_change_seq`` with this revision.
+poll, cancel, and notification mutations to the exact claim generation.
+
+The chain check here asserts the same single-head invariant
+``test_migration_0025_repair_run_change_seq`` does, plus the shape of the
+0028 merge that joins this revision to the organization line. It deliberately
+does not pin the head's identity: that rots on every migration added
+afterwards, which is exactly how it came to assert 0028 long after the chain
+had advanced to 0030.
 """
 
 from __future__ import annotations
@@ -28,7 +33,7 @@ async def test_0026_is_in_the_single_merge_head():
     from alembic.script import ScriptDirectory
 
     script = ScriptDirectory(str(bootstrap._MIGRATIONS_DIR))
-    assert script.get_heads() == ["0028_merge_org_mcp"]
+    assert len(script.get_heads()) == 1
     assert script.get_revision("0028_merge_org_mcp").down_revision == ("0027_organization_backfill", REVISION)
     assert script.get_revision(REVISION).down_revision == PREVIOUS
 
