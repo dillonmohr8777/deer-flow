@@ -173,3 +173,129 @@
     display: none;
   }
 }
+
+/*
+ * Paper motion layer — the five-item product motion list, and no more.
+ * Source: C:\Users\dillo\Documents\Qwen\block-shots\W0-motion-vocabulary.md
+ * (ad analysis). Vocabulary borrowed: fast-start, ease-to-rest slide/settle.
+ * Vocabulary dropped on purpose: the ad's repeated spring overshoot-bounce,
+ * stagger-cascade reveals, whole-frame slide transitions, and any ambient
+ * antenna-style idle wobble — all named dashboard-unsafe. Flip/tear/peel
+ * are absent from the source and stay absent here.
+ *
+ * Consumers (S04's front-door letters, invite-release sheet) set the class
+ * names and `--paper-letter-index` below; this layer owns only the motion,
+ * not the markup.
+ *
+ * Gating, both required and enforced in CSS (not just JS), per item:
+ *   1 letters, 2 invite, 5 brand-signature (existing, untouched) — gated by
+ *     BOTH `prefers-reduced-motion: no-preference` AND a `data-motion="on"`
+ *     attribute the host sets from `brandMotionAllowed()`
+ *     (appearance-preferences.ts:49-61).
+ *   3 pixel-step, 4 card-hover — gated by `prefers-reduced-motion:
+ *     no-preference` only; preferences.motion does not touch these two.
+ * Reduced motion turns each of the five OFF, not down to something calmer.
+ */
+@layer paper-motion {
+  /* 1 — front-door cut-paper letters. One settle, 380ms, 40ms stagger. */
+  [data-treatment="paper"] .paper-letter {
+    opacity: 1;
+    transform: none;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    [data-treatment="paper"][data-motion="on"] .paper-letter {
+      animation: paper-letter-settle 380ms cubic-bezier(0.16, 1, 0.3, 1) both;
+      animation-delay: calc(var(--paper-letter-index, 0) * 40ms);
+    }
+  }
+  @keyframes paper-letter-settle {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  /* 2 — invite release. Pin lifts 4px, sheet tilts 1.5deg and slides away. */
+  [data-treatment="paper"] .paper-invite-pin,
+  [data-treatment="paper"] .paper-invite-sheet {
+    transform: none;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    [data-treatment="paper"][data-motion="on"] .paper-invite-pin {
+      animation: paper-pin-lift 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+    [data-treatment="paper"][data-motion="on"] .paper-invite-sheet {
+      animation: paper-sheet-release 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+  }
+  @keyframes paper-pin-lift {
+    from {
+      transform: translateY(0);
+    }
+    to {
+      transform: translateY(-4px);
+    }
+  }
+  @keyframes paper-sheet-release {
+    from {
+      transform: rotate(0deg) translate(0, 0);
+      opacity: 1;
+    }
+    to {
+      transform: rotate(1.5deg) translate(18px, 14px);
+      opacity: 0;
+    }
+  }
+
+  /* 3 — working-state pixels. Must TICK, not glide: steps(3), 1.2s, loops
+     while the state is active. Not gated by preferences.motion. */
+  [data-treatment="paper"] .paper-pixels {
+    background-position: 0 0;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    [data-treatment="paper"] .paper-pixels[data-active="true"] {
+      animation: paper-pixel-tick 1.2s steps(3) infinite;
+    }
+  }
+  @keyframes paper-pixel-tick {
+    from {
+      background-position: 0 0;
+    }
+    to {
+      background-position: -300% 0;
+    }
+  }
+  /* Pixel squares are decoration (the working state must also say so in
+     text — see the a11y audit). Drop them under forced-colors like the
+     rest of the treatment's decoration does above. */
+  @media (forced-colors: active) {
+    [data-treatment="paper"] .paper-pixels {
+      animation: none;
+      background-image: none;
+    }
+  }
+
+  /* 4 — card hover. 2px lift, 140ms. Invented; keep it exactly this small.
+     No hover-lift exists in the source footage — do not grow this. Not
+     gated by preferences.motion. */
+  [data-treatment="paper"] .paper-card {
+    transform: translateY(0);
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    [data-treatment="paper"] .paper-card {
+      transition: transform 140ms cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    [data-treatment="paper"] .paper-card:hover,
+    [data-treatment="paper"] .paper-card:focus-visible {
+      transform: translateY(-2px);
+    }
+  }
+
+  /* 5 — BrandSignature drift already exists in workspace-appearance.module.css
+     (.signature[data-animated="true"]), already gated the same way. Left
+     alone, per instruction — nothing to add here. */
+}
