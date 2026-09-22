@@ -28,6 +28,9 @@ set -e
 mkdir -p /tmp/src && tar -xf /src.tar -C /tmp/src
 cd /app/backend && find . -mindepth 1 -maxdepth 1 ! -name .venv -exec rm -rf {} +
 cp -a /tmp/src/. /app/
+# Some tests resolve the repo root by its .git marker and diff against it.
+command -v git >/dev/null || { apt-get update -qq && apt-get install -y -qq git >/dev/null; }
+cd /app && git init -q && git add -A && git -c user.email=t@t -c user.name=t commit -qm snapshot
 cd /app/backend
 uv sync --frozen --group dev -q >/dev/null 2>&1 || uv sync --group dev -q
 uv pip install -q pytest-timeout >/dev/null
