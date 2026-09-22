@@ -20,7 +20,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $sha = (git rev-parse --short $Ref).Trim()
 $tmp = Join-Path ([IO.Path]::GetTempPath()) "deerflow-test-$sha-$PID.tar"
-git archive --format=tar -o $tmp $Ref -- . ':(exclude)frontend' ':(exclude)docs'
+git archive --format=tar -o $tmp $Ref
 try {
   $quoted = ($PytestArgs | ForEach-Object { "'" + ($_ -replace "'", "'\''") + "'" }) -join ' '
   $script = @"
