@@ -1,0 +1,14 @@
+# Momentum overlay on docker/docker-compose.yaml + docker/docker-compose.dood.yaml.
+# Pins the verified image tags and adds the tailnet listener. Use restart.ps1,
+# which sets the env vars below and loads service credentials.
+services:
+  gateway:
+    image: ${MOMENTUM_GATEWAY_IMAGE:-deer-flow-gateway:momentum-branding-20260921}
+    environment:
+      DEER_FLOW_HOST_BASE_DIR: /var/lib/docker/volumes/${COMPOSE_PROJECT_NAME:-deer-flow}_gateway-data/_data
+  frontend:
+    image: ${MOMENTUM_FRONTEND_IMAGE:-deer-flow-frontend:momentum-collage-20260922}
+  nginx:
+    ports:
+      # The base file publishes loopback; this adds the tailnet address.
+      - "${MOMENTUM_TAILNET_HOST:-127.0.0.1}:${PORT:-2026}:2026"
