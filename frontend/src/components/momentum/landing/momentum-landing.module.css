@@ -602,6 +602,9 @@
   font-weight: 700;
   color: var(--paper-cream-hi);
   background: var(--paper-royal);
+  /* Invisible normally; forced-colors paints it, so the only filled action
+     does not collapse into plain text beside the quiet secondary link. */
+  border: 2px solid transparent;
 }
 
 .paperPrimary:hover,

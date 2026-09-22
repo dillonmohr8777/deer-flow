@@ -95,7 +95,9 @@ export function CutPaper({
   const animating = reveal === "animate";
 
   return (
-    <span ref={wrapperRef} className={className} aria-label={word}>
+    // role="img" makes the aria-label count: on a role-less span it is
+    // prohibited and ignored, so the landing h1 read only "The future needs".
+    <span ref={wrapperRef} className={className} role="img" aria-label={word}>
       {letters.map((letter, index) => (
         <span
           key={index}
