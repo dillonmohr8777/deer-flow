@@ -146,7 +146,7 @@ function AccountAppearance({
         reset,
       }}
     >
-      {children}
+      <div data-treatment={preferences.treatment}>{children}</div>
     </AppearanceContext.Provider>
   );
 }

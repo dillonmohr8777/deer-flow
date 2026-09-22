@@ -2,7 +2,7 @@ import { ArrowUpRight } from "lucide-react";
 import Link from "next/link";
 
 import { formatModelLabel } from "./model-label";
-import { MomentumGlyph } from "./momentum-glyph";
+import { MomoAvatar } from "./momo-avatar";
 
 import styles from "./command-center.module.css";
 
@@ -43,7 +43,7 @@ export function AgentTopology({
     <div className={styles.topology}>
       <div className={styles.topologyLead}>
         <span className={styles.leadIcon}>
-          <MomentumGlyph seed={`lead:${leadLabel}`} size={160} />
+          <MomoAvatar agent={{ name: `lead:${leadLabel}`, display_name: leadLabel }} size={160} />
         </span>
         <div>
           <strong>{leadLabel}</strong>
@@ -79,7 +79,7 @@ export function AgentTopology({
                 onClick={() => onSelect(agent.name)}
               >
                 <span className={styles.agentMonogram}>
-                  <MomentumGlyph seed={`agent:${agent.name}`} size={40} />
+                  <MomoAvatar agent={agent} size={40} />
                 </span>
                 <strong>
                   {agent.display_name ?? agent.name.replace("dillon-", "")}
