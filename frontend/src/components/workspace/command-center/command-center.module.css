@@ -261,6 +261,170 @@
 .root[data-treatment="current"] .agentMonogram {
   filter: drop-shadow(0 5px 5px #185b9729);
 }
+
+/*
+ * Paper cutout: type, the lead kraft band, stat numerals, and pinned
+ * assignments. Tokens come from src/styles/paper.css (read first, never a
+ * raw hex here). Receipts (.runDetail) intentionally get the least
+ * decoration of anything on this surface - cream + hairlines, no rotation,
+ * no pins - restraint is the point. All decoration below is presentational
+ * only and is neutralised under forced-colors.
+ */
+.root[data-treatment="paper"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 180px 180px;
+  opacity: 0.05;
+}
+.root[data-treatment="paper"] .heading h1 {
+  font-family: var(--m-font-serif);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+@media (min-width: 1440px) {
+  .root[data-treatment="paper"] .heading h1 {
+    font-family: var(--m-font-display);
+    font-weight: 400;
+    letter-spacing: 0;
+  }
+}
+.root[data-treatment="paper"] .topologyLead {
+  background: var(--paper-kraft);
+  color: var(--paper-ink);
+  border-color: var(--paper-line);
+  box-shadow: 3px 6px 14px
+    color-mix(in srgb, var(--paper-ink) 22%, transparent);
+}
+.root[data-treatment="paper"] .topologyLead div span {
+  color: var(--paper-ink-muted);
+}
+.root[data-treatment="paper"] .topologyLead::after {
+  background: repeating-linear-gradient(
+    var(--paper-ink-muted),
+    var(--paper-ink-muted) 4px,
+    transparent 4px,
+    transparent 7px
+  );
+}
+.root[data-treatment="paper"] .topologyLead a {
+  border-color: var(--paper-line);
+  color: var(--paper-ink);
+}
+.root[data-treatment="paper"] .topologyRoster::before,
+.root[data-treatment="paper"] .topologyRoster .agent::before {
+  border-color: var(--paper-line);
+  background: var(--paper-line);
+}
+.root[data-treatment="paper"] .metrics {
+  background: var(--paper-cream-hi);
+}
+.root[data-treatment="paper"] .metrics strong {
+  font-family: var(--m-font-serif);
+  font-weight: 700;
+  font-size: 3.5rem;
+  color: var(--paper-royal);
+}
+.root[data-treatment="paper"] .jobRow {
+  position: relative;
+  background: var(--paper-cream-hi);
+  border-color: var(--paper-line);
+}
+.root[data-treatment="paper"] .jobRow:nth-child(odd) {
+  transform: rotate(0.6deg);
+}
+.root[data-treatment="paper"] .jobRow:nth-child(even) {
+  transform: rotate(-0.6deg);
+}
+.root[data-treatment="paper"] .jobRow::before {
+  content: "";
+  position: absolute;
+  top: 6px;
+  left: 10px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(
+    circle at 35% 30%,
+    color-mix(in srgb, var(--paper-brass) 60%, white) 0%,
+    var(--paper-brass) 55%,
+    color-mix(in srgb, var(--paper-brass) 70%, black) 100%
+  );
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--paper-ink) 40%, transparent);
+}
+/* Receipts: least decoration on this surface, on purpose. */
+.root[data-treatment="paper"] .runDetail {
+  background: var(--paper-cream-hi);
+  border-left-color: var(--paper-line);
+  box-shadow: -12px 0 32px
+    color-mix(in srgb, var(--paper-ink) 14%, transparent);
+}
+.root[data-treatment="paper"] .runDetail > h3 {
+  font-family: var(--m-font-serif);
+  font-weight: 700;
+  color: var(--paper-royal-deep);
+}
+@media (forced-colors: active) {
+  .root[data-treatment="paper"]::after {
+    display: none;
+  }
+  .root[data-treatment="paper"] .jobRow::before {
+    display: none;
+  }
+  .root[data-treatment="paper"] .jobRow {
+    transform: none;
+  }
+}
+@media (max-width: 390px) {
+  .root[data-treatment="paper"] .metrics strong {
+    font-size: 2.25rem;
+  }
+  .root[data-treatment="paper"] .topologyRoster {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    border-left: 0;
+    padding-left: 0;
+  }
+  .root[data-treatment="paper"] .agentMonogram,
+  .root[data-treatment="paper"] .jobRow {
+    transform: none;
+  }
+  .root[data-treatment="paper"] .content {
+    position: relative;
+  }
+  .root[data-treatment="paper"] .content::before,
+  .root[data-treatment="paper"] .content::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    z-index: 1;
+    width: 100%;
+    height: 10px;
+    pointer-events: none;
+    background: var(--paper-cream);
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'%3E%3Cpath d='M0 6 L7 2 L13 8 L20 3 L27 7 L34 1 L41 6 L48 2 L55 7 L62 3 L69 8 L76 2 L83 6 L90 1 L100 5 L100 100 L0 100 Z'/%3E%3C/svg%3E");
+    mask-size: 100% 100%;
+    mask-repeat: no-repeat;
+  }
+  .root[data-treatment="paper"] .content::before {
+    top: 0;
+  }
+  .root[data-treatment="paper"] .content::after {
+    bottom: 0;
+    transform: scaleY(-1);
+  }
+}
+@media (max-width: 390px) and (forced-colors: active) {
+  .root[data-treatment="paper"] .content::before,
+  .root[data-treatment="paper"] .content::after {
+    display: none;
+  }
+}
 .primary {
   display: inline-flex;
   flex-shrink: 0;
@@ -436,13 +600,17 @@
 }
 .leadIcon {
   display: grid;
-  width: 50px;
-  height: 50px;
+  width: 160px;
+  height: 160px;
   flex: 0 0 auto;
   place-items: center;
   border-radius: 50%;
   background: white;
   box-shadow: 0 8px 20px rgba(0, 24, 72, 0.24);
+}
+.leadIcon svg {
+  width: 100%;
+  height: 100%;
 }
 .topologyLead > div {
   display: flex;
@@ -1296,6 +1464,13 @@
   .runDetail {
     padding: 20px;
     padding-bottom: max(20px, env(safe-area-inset-bottom));
+  }
+}
+
+@media (max-width: 390px) {
+  .leadIcon {
+    width: 96px;
+    height: 96px;
   }
 }
 

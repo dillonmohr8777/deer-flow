@@ -17,6 +17,10 @@
   margin: 0;
   font-size: clamp(1.25rem, 2vw, 1.6rem);
 }
+[data-treatment="paper"] .header h2 {
+  font-family: var(--m-font-serif);
+  font-weight: 700;
+}
 .subtle,
 .meta,
 .state,
