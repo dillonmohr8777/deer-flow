@@ -164,7 +164,9 @@ test.describe("Agent chat", () => {
     const textarea = page.getByPlaceholder(/how can i assist you/i);
     await expect(textarea).toBeVisible({ timeout: 15_000 });
     await expect(
-      page.getByText("DeerFlow is AI and can make mistakes", { exact: true }),
+      page.getByText("Agents can make mistakes. Check the record.", {
+        exact: true,
+      }),
     ).toBeVisible();
   });
 

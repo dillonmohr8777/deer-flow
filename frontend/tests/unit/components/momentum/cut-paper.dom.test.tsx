@@ -27,6 +27,17 @@ describe("cut-paper headline word", () => {
     expect(container.textContent).toBe("Momentum");
   });
 
+  it("contributes the word to its heading's accessible name", () => {
+    render(
+      <h1>
+        <span>The future needs</span> <CutPaper word="Momentum" />
+      </h1>,
+    );
+    expect(
+      screen.getByRole("heading", { name: "The future needs Momentum" }),
+    ).toBeTruthy();
+  });
+
   it("renders a space in multi-word input as a non-breaking space letter", () => {
     render(<CutPaper word="Go now" />);
     expect(screen.getByLabelText("Go now")).toBeTruthy();
@@ -54,8 +65,12 @@ describe("cut-paper headline word", () => {
       constructor(callback: (entries: unknown[]) => void) {
         observers.push(callback);
       }
-      observe() {}
-      disconnect() {}
+      observe() {
+        /* driven manually via observers[] */
+      }
+      disconnect() {
+        /* nothing to release */
+      }
     };
 
     try {

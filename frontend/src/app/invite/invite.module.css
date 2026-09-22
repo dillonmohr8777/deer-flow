@@ -138,6 +138,18 @@
   margin-bottom: 1.25rem;
 }
 
+.link {
+  color: var(--paper-royal);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.link:focus-visible {
+  outline: 2px solid var(--paper-focus);
+  outline-offset: 2px;
+}
+
 .form {
   display: grid;
   gap: 1.25rem;
