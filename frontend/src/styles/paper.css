@@ -1,0 +1,324 @@
+/*
+ * Paper cutout treatment — token layer.
+ *
+ * Canon: "blue, white, grey, with a hint of gold." Grey hardware, gold
+ * accent only. Restraint is the craft.
+ *
+ * Scope: everything here lives under [data-treatment="paper"], the
+ * attribute command-center.tsx sets on its root element when the user picks
+ * the "Paper cutout" appearance (workspace-appearance.tsx). Nothing here
+ * changes the default "current" treatment.
+ *
+ * Ratios below are the ones proven by tests/unit/paper-tokens.test.ts,
+ * which parses this file's own token values and computes WCAG contrast —
+ * this comment is documentation, not the source of truth.
+ *
+ *   --paper-cream       #F2EDE3  vs ink            14.07
+ *   --paper-cream-hi    #FBF8F1  vs ink            15.47
+ *   --paper-kraft       #D8C3A0  vs ink             9.56
+ *   --paper-royal       #1B4B9E  on cream           7.07
+ *   --paper-royal-deep  #14346E  cream-ink on it    10.49
+ *   --paper-ink-muted   #3A4A6B  on cream            7.59
+ *   --paper-brass-text  #7A5E18  on cream            5.23
+ *   --paper-cyan-text   #0A6183  on cream            5.90
+ *   --paper-line        #8C7A5C  on cream (UI only)  3.56
+ *   --paper-focus       #003DA5  on cream            8.14
+ *   --paper-danger      #9A2B3C  on cream            6.46
+ *   --paper-ok          #0A6B4F  on cream            5.57
+ *
+ * --paper-brass and --paper-cyan are OBJECT-ONLY colours (2.75 and 2.28 on
+ * cream) — never use them as a text colour. A brass or cyan *word* uses the
+ * -text variant instead.
+ */
+
+[data-treatment="paper"] {
+  /* Paper */
+  --paper-cream: #f2ede3;
+  --paper-cream-hi: #fbf8f1;
+  --paper-kraft: #d8c3a0;
+
+  /* Ink */
+  --paper-ink: #101e3f;
+  --paper-ink-muted: #3a4a6b;
+
+  /* Royal blue */
+  --paper-royal: #1b4b9e;
+  --paper-royal-deep: #14346e;
+  --paper-focus: #003da5;
+
+  /* Text-safe accents */
+  --paper-brass-text: #7a5e18;
+  --paper-cyan-text: #0a6183;
+  --paper-danger: #9a2b3c;
+  --paper-ok: #0a6b4f;
+
+  /* UI hardware, not text */
+  --paper-line: #8c7a5c;
+
+  /* Object-only colours — never text. A word uses the -text variant. */
+  --paper-brass: #c8a04a;
+  --paper-cyan: #17a9e8;
+
+  /*
+   * Surface remap: command-center.module.css defines a first-pass local
+   * palette on .root (--canvas, --surface, --ink, --line, --blue-deep, …)
+   * and redeclares a few of them again under [data-treatment="paper"].
+   * Redeclaring the same names here, at equal specificity but after that
+   * module's own paper block in the cascade, makes every surface INHERIT
+   * the tokens above instead of carrying its own paper hexes. No new
+   * off-canon hues: violet/rose fold into the blue/ink family, cyan/surface
+   * tints are restrained mixes of the tokens above, not fresh colours.
+   */
+  --canvas: var(--paper-cream);
+  --surface: var(--paper-cream-hi);
+  --surface-blue: color-mix(in srgb, var(--paper-royal) 8%, var(--paper-cream-hi));
+  --surface-violet: color-mix(in srgb, var(--paper-ink-muted) 8%, var(--paper-cream-hi));
+  --ink: var(--paper-ink);
+  --muted: var(--paper-ink-muted);
+  --line: var(--paper-line);
+  --strong: var(--paper-kraft);
+  --blue: var(--paper-royal);
+  --blue-deep: var(--paper-royal-deep);
+  --cyan: var(--paper-cyan);
+  --cyan-text: var(--paper-cyan-text);
+  --violet: var(--paper-royal-deep);
+  --rose: var(--paper-danger);
+  --green: var(--paper-ok);
+  --danger: var(--paper-danger);
+  --focus: var(--paper-focus);
+}
+
+/*
+ * Torn deckle edge — an aria-hidden decoration for a "sheet" element.
+ * Two variants meant to ALTERNATE across a run of sheets (e.g. stacked
+ * cards): apply .paper-torn to one, .paper-torn-alt to the next, and so on.
+ * Each is a single traced torn path as an inline SVG mask.
+ */
+[data-treatment="paper"] .paper-torn,
+[data-treatment="paper"] .paper-torn-alt {
+  aria-hidden: true;
+}
+
+/*
+ * Two mask layers so the tear is a fixed 24px band at the top edge whatever
+ * the sheet's height: a tall sign-in sheet and a short card get the same
+ * hand-torn amplitude (~14px). A single 100%-tall mask scaled the tear with
+ * the sheet, which made tall sheets look sawn, not torn. The second layer is
+ * a solid fill from 23px down (1px overlap, no seam); mask-composite add.
+ */
+[data-treatment="paper"] .paper-torn {
+  mask-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'%3E%3Cpath d='M0 45 L7 15 L13 60 L20 25 L27 70 L34 10 L41 50 L48 20 L55 65 L62 30 L69 70 L76 15 L83 55 L90 10 L100 40 L100 100 L0 100 Z'/%3E%3C/svg%3E"),
+    linear-gradient(#000, #000);
+  mask-size:
+    100% 24px,
+    100% calc(100% - 23px);
+  mask-position:
+    top,
+    bottom;
+  mask-repeat: no-repeat;
+  mask-composite: add;
+  border-radius: 2px 5px 3px 6px;
+}
+
+[data-treatment="paper"] .paper-torn-alt {
+  mask-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'%3E%3Cpath d='M0 25 L8 65 L15 15 L22 70 L29 30 L36 60 L43 10 L50 50 L57 20 L64 65 L71 15 L78 60 L85 30 L92 70 L100 35 L100 100 L0 100 Z'/%3E%3C/svg%3E"),
+    linear-gradient(#000, #000);
+  mask-size:
+    100% 24px,
+    100% calc(100% - 23px);
+  mask-position:
+    top,
+    bottom;
+  mask-repeat: no-repeat;
+  mask-composite: add;
+  border-radius: 5px 2px 6px 3px;
+}
+
+@supports not (mask-image: url("#")) {
+  [data-treatment="paper"] .paper-torn,
+  [data-treatment="paper"] .paper-torn-alt {
+    mask-image: none;
+    border: 1px solid var(--paper-line);
+    border-radius: 2px 5px 3px 6px;
+  }
+}
+
+/*
+ * Grain — intended for .sheet::after. A 180px feTurbulence tile at 5%
+ * opacity, laid over the sheet. aria-hidden by contract; decoration only.
+ */
+[data-treatment="paper"] .sheet::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 180px 180px;
+  opacity: 0.05;
+}
+
+/*
+ * Pin — a 14px CSS brass dome, intended for .pinned::before. Restraint:
+ * this is the one place gold is allowed to be an object, not text.
+ */
+[data-treatment="paper"] .pinned::before {
+  content: "";
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(
+    circle at 35% 30%,
+    color-mix(in srgb, var(--paper-brass) 60%, white) 0%,
+    var(--paper-brass) 55%,
+    color-mix(in srgb, var(--paper-brass) 70%, black) 100%
+  );
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--paper-ink) 40%, transparent);
+}
+
+/*
+ * All paper decoration is aria-hidden by contract and must be neutralised
+ * under forced-colors: it carries no information, so it has no business
+ * fighting the user's own high-contrast palette.
+ */
+@media (forced-colors: active) {
+  [data-treatment="paper"] .paper-torn,
+  [data-treatment="paper"] .paper-torn-alt {
+    mask-image: none;
+    border-radius: 0;
+  }
+
+  [data-treatment="paper"] .sheet::after,
+  [data-treatment="paper"] .pinned::before {
+    display: none;
+  }
+}
+
+/*
+ * Paper motion layer — the five-item product motion list, and no more.
+ * Source: C:\Users\dillo\Documents\Qwen\block-shots\W0-motion-vocabulary.md
+ * (ad analysis). Vocabulary borrowed: fast-start, ease-to-rest slide/settle.
+ * Vocabulary dropped on purpose: the ad's repeated spring overshoot-bounce,
+ * stagger-cascade reveals, whole-frame slide transitions, and any ambient
+ * antenna-style idle wobble — all named dashboard-unsafe. Flip/tear/peel
+ * are absent from the source and stay absent here.
+ *
+ * Consumers (S04's front-door letters, invite-release sheet) set the class
+ * names and `--paper-letter-index` below; this layer owns only the motion,
+ * not the markup.
+ *
+ * Gating, both required and enforced in CSS (not just JS), per item:
+ *   1 letters, 2 invite, 5 brand-signature (existing, untouched) — gated by
+ *     BOTH `prefers-reduced-motion: no-preference` AND a `data-motion="on"`
+ *     attribute the host sets from `brandMotionAllowed()`
+ *     (appearance-preferences.ts:49-61).
+ *   3 pixel-step, 4 card-hover — gated by `prefers-reduced-motion:
+ *     no-preference` only; preferences.motion does not touch these two.
+ * Reduced motion turns each of the five OFF, not down to something calmer.
+ */
+@layer paper-motion {
+  /* 1 — front-door cut-paper letters. One settle, 380ms, 40ms stagger. */
+  [data-treatment="paper"] .paper-letter {
+    opacity: 1;
+    transform: none;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    [data-treatment="paper"][data-motion="on"] .paper-letter {
+      animation: paper-letter-settle 380ms cubic-bezier(0.16, 1, 0.3, 1) both;
+      animation-delay: calc(var(--paper-letter-index, 0) * 40ms);
+    }
+  }
+  @keyframes paper-letter-settle {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  /* 2 — invite release. Pin lifts 4px, sheet tilts 1.5deg and slides away. */
+  [data-treatment="paper"] .paper-invite-pin,
+  [data-treatment="paper"] .paper-invite-sheet {
+    transform: none;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    [data-treatment="paper"][data-motion="on"] .paper-invite-pin {
+      animation: paper-pin-lift 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+    [data-treatment="paper"][data-motion="on"] .paper-invite-sheet {
+      animation: paper-sheet-release 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+  }
+  @keyframes paper-pin-lift {
+    from {
+      transform: translateY(0);
+    }
+    to {
+      transform: translateY(-4px);
+    }
+  }
+  @keyframes paper-sheet-release {
+    from {
+      transform: rotate(0deg) translate(0, 0);
+      opacity: 1;
+    }
+    to {
+      transform: rotate(1.5deg) translate(18px, 14px);
+      opacity: 0;
+    }
+  }
+
+  /* 3 — working-state pixels. Must TICK, not glide: steps(3), 1.2s, loops
+     while the state is active. Not gated by preferences.motion. */
+  [data-treatment="paper"] .paper-pixels {
+    background-position: 0 0;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    [data-treatment="paper"] .paper-pixels[data-active="true"] {
+      animation: paper-pixel-tick 1.2s steps(3) infinite;
+    }
+  }
+  @keyframes paper-pixel-tick {
+    from {
+      background-position: 0 0;
+    }
+    to {
+      background-position: -300% 0;
+    }
+  }
+  /* Pixel squares are decoration (the working state must also say so in
+     text — see the a11y audit). Drop them under forced-colors like the
+     rest of the treatment's decoration does above. */
+  @media (forced-colors: active) {
+    [data-treatment="paper"] .paper-pixels {
+      animation: none;
+      background-image: none;
+    }
+  }
+
+  /* 4 — card hover. 2px lift, 140ms. Invented; keep it exactly this small.
+     No hover-lift exists in the source footage — do not grow this. Not
+     gated by preferences.motion. */
+  [data-treatment="paper"] .paper-card {
+    transform: translateY(0);
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    [data-treatment="paper"] .paper-card {
+      transition: transform 140ms cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    [data-treatment="paper"] .paper-card:hover,
+    [data-treatment="paper"] .paper-card:focus-visible {
+      transform: translateY(-2px);
+    }
+  }
+
+  /* 5 — BrandSignature drift already exists in workspace-appearance.module.css
+     (.signature[data-animated="true"]), already gated the same way. Left
+     alone, per instruction — nothing to add here. */
+}

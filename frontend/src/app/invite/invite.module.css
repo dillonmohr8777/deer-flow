@@ -1,0 +1,205 @@
+/*
+ * The invite as a physical object: one deckled cream sheet pinned at
+ * top-centre on a blueprint field. S04 task E.
+ *
+ * Scoped under [data-treatment="paper"] (set on .field below) so it wins
+ * over any inherited dark styling, same contract as the landing page.
+ */
+
+.field {
+  position: relative;
+  min-height: 100vh;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  padding: clamp(3rem, 10vh, 6rem) 1.5rem 3rem;
+  background: var(--paper-royal-deep);
+  background-image: linear-gradient(
+      to right,
+      color-mix(in srgb, var(--paper-cream) 6%, transparent) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--paper-cream) 6%, transparent) 1px,
+      transparent 1px
+    );
+  background-size: 28px 28px;
+}
+
+/*
+ * Two elements, on purpose. The deckle is a mask-image on .sheet, and a mask
+ * clips everything painted by that element — including a ::before pin sitting
+ * above its top edge and its box-shadow. So the pin, the tilt, the release
+ * motion and the shadow live on .frame (unmasked), and only the cream sheet
+ * itself is torn. drop-shadow on the frame follows the torn silhouette.
+ * Shared with /login, which pins the same sheet on the same field.
+ */
+.frame {
+  position: relative;
+  width: min(28rem, 100%);
+  height: fit-content;
+  filter: drop-shadow(0 1.25rem 1.75rem rgb(16 30 63 / 40%));
+  transform: rotate(-0.4deg);
+  transition:
+    transform 420ms cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 420ms ease;
+}
+
+.sheet {
+  position: relative;
+  background: var(--paper-cream-hi);
+  border: 1px solid var(--paper-line);
+  padding: 2.5rem 2rem 2rem;
+  color: var(--paper-ink);
+}
+
+/* Pin, centred over the sheet's top edge (paper.css's .pinned::before). */
+.frame:global(.pinned)::before {
+  /* Below the 24px tear band's deepest notch, so the pin pierces paper. */
+  top: 14px;
+  left: 50%;
+  z-index: 1;
+  transform: translateX(-50%);
+  transition: transform 420ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/*
+ * Moment: on accept, the pin lifts 4px, the sheet tilts 1.5deg and slides
+ * away, 420ms. Reduced motion turns this fully off (InvitePage only adds
+ * .sheetReleased when release is allowed to begin with).
+ */
+
+.sheetReleased {
+  transform: rotate(1.5deg) translate(14px, -10px);
+  opacity: 0;
+}
+
+.sheetReleased:global(.pinned)::before {
+  transform: translate(-50%, -4px);
+}
+
+/* Error state: a red tag on the pin, a torn corner, plus the existing text
+   (never colour alone). */
+.sheetError {
+  clip-path: polygon(
+    0 0,
+    100% 0,
+    100% 100%,
+    0 100%,
+    0 22px,
+    22px 22px,
+    22px 0
+  );
+}
+
+.errorTag {
+  position: absolute;
+  z-index: 1;
+  top: -2px;
+  left: calc(50% + 10px);
+  width: 10px;
+  height: 16px;
+  background: var(--paper-danger);
+  clip-path: polygon(0 0, 100% 0, 100% 70%, 50% 100%, 0 70%);
+}
+
+.title {
+  margin: 0 0 0.5rem;
+  font-size: clamp(1.5rem, 4vw, 2rem);
+  color: var(--paper-ink);
+}
+
+.status {
+  margin: 0 0 1rem;
+  color: var(--paper-ink-muted);
+  font-size: 0.9375rem;
+}
+
+.errorText {
+  margin: 0 0 1rem;
+  color: var(--paper-danger);
+  font-weight: 700;
+}
+
+.details {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.email,
+.hint {
+  margin: 0;
+  color: var(--paper-ink-muted);
+  font-size: 0.875rem;
+}
+
+.hint {
+  margin-bottom: 1.25rem;
+}
+
+.form {
+  display: grid;
+  gap: 1.25rem;
+  margin-top: 0.5rem;
+}
+
+.field2 {
+  display: grid;
+  gap: 0.375rem;
+}
+
+.label {
+  color: var(--paper-ink-muted);
+}
+
+.input {
+  width: 100%;
+  padding: 0.5rem 0.125rem;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid var(--paper-kraft);
+  color: var(--paper-ink);
+  font-size: 1rem;
+}
+
+.input:focus-visible {
+  outline: none;
+  border-bottom-color: var(--paper-focus);
+}
+
+.submit {
+  justify-self: start;
+  min-height: 2.75rem;
+  padding: 0 1.5rem;
+  border: none;
+  border-radius: 0.375rem;
+  background: var(--paper-royal);
+  color: var(--paper-cream-hi);
+  font-weight: 700;
+  font-size: 0.9375rem;
+}
+
+.submit:hover:not(:disabled),
+.submit:focus-visible {
+  background: var(--paper-royal-deep);
+}
+
+.submit:disabled {
+  opacity: 0.6;
+}
+
+.submit:focus-visible {
+  outline: 2px solid var(--paper-focus);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .frame {
+    transition: none;
+  }
+
+  .frame:global(.pinned)::before {
+    transition: none;
+  }
+}

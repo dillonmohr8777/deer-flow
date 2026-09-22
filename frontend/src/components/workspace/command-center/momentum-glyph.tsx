@@ -69,7 +69,20 @@ export function MomentumGlyph({
         </linearGradient>
       </defs>
       <circle cx="24" cy="24" r="21" fill="#eef8ff" />
-      <circle cx="24" cy="24" r="19.5" stroke="#b9dcf5" />
+      <circle cx="24" cy="24" r="19.5" stroke="#b9dcf5" strokeWidth="1.25" />
+      <path
+        d="M9 24a15 15 0 0 1 25-11"
+        stroke="white"
+        strokeWidth="2.5"
+        strokeLinecap="round"
+      />
+      <path
+        d="M14 37a16 16 0 0 0 24-13"
+        stroke={accent}
+        strokeOpacity=".2"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
       <g transform={`rotate(${rotation} 24 24)`}>
         <path
           d={path}

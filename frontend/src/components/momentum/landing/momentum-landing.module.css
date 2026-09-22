@@ -360,3 +360,313 @@
 .footerLink:hover {
   border-bottom-color: var(--momentum-copy-link-line, #2e9dcc);
 }
+
+/* ==========================================================================
+   Paper cutout look — `?look=paper` only (resolveFunnelTreatment, S04 task D).
+   Every rule below scopes under [data-treatment="paper"] (via .paperPage,
+   which carries that attribute) so it wins over the `.dark` class the theme
+   provider pins on "/"; nothing here reads a --momentum- or shadcn token.
+   Canon: blue, white, grey, a hint of gold — gold stays on the pin.
+   ========================================================================== */
+
+.paperPage {
+  position: relative;
+  min-height: 100vh;
+  width: 100%;
+  overflow: clip; /* scraps never extend the scroll height past the sheet */
+  background: var(--paper-cream);
+  color: var(--paper-ink);
+  font-family: var(--m-font-text, "Nunito Sans", system-ui, sans-serif);
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+/*
+ * Two torn blueprint scraps behind the sheet content: royal paper with a
+ * faint cream drafting grid, deckled by paper.css's .paper-torn(-alt) mask,
+ * and placed where no copy sits — A in the empty right column beside the
+ * hero, B behind the Momos above the footer. Never under words: ink on royal
+ * fails contrast, and a scrap under text reads as a bug, not craft.
+ */
+.paperBlueprintA,
+.paperBlueprintB {
+  position: absolute;
+  pointer-events: none;
+  z-index: 0;
+  background-color: var(--paper-royal-deep);
+  background-image:
+    linear-gradient(
+      to right,
+      color-mix(in srgb, var(--paper-cream) 10%, transparent) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--paper-cream) 10%, transparent) 1px,
+      transparent 1px
+    );
+  background-size: 28px 28px;
+}
+
+.paperBlueprintA {
+  top: 7rem;
+  right: -4rem;
+  width: min(30rem, 38vw);
+  height: 24rem;
+  transform: rotate(-2.5deg);
+}
+
+.paperBlueprintB {
+  bottom: 8rem;
+  left: -5rem;
+  width: 26rem;
+  height: 14rem;
+  transform: rotate(1.5deg);
+  /* Kraft, not royal: a royal Momo on a royal scrap disappears. */
+  background-color: var(--paper-kraft);
+  background-image:
+    linear-gradient(
+      to right,
+      color-mix(in srgb, var(--paper-ink) 10%, transparent) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--paper-ink) 10%, transparent) 1px,
+      transparent 1px
+    );
+}
+
+@media (max-width: 48rem) {
+  .paperBlueprintA {
+    display: none;
+  }
+
+  .paperBlueprintB {
+    width: 18rem;
+    height: 10rem;
+    left: -4rem;
+    bottom: 7rem;
+  }
+}
+
+.paperShell {
+  position: relative;
+  z-index: 1;
+  width: min(72rem, 100% - 3rem);
+  margin-inline: auto;
+}
+
+@media (max-width: 40rem) {
+  .paperShell {
+    width: min(72rem, 100% - 2rem);
+  }
+}
+
+.paperHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-block: 1.5rem;
+}
+
+.paperWordmark {
+  display: inline-flex;
+  align-items: center;
+}
+
+.paperSignIn {
+  color: var(--paper-ink);
+  font-weight: 700;
+  text-decoration: none;
+  border-bottom: 1px solid var(--paper-line);
+}
+
+.paperSignIn:hover,
+.paperSignIn:focus-visible {
+  border-bottom-color: var(--paper-royal);
+}
+
+.paperHero {
+  position: relative;
+  padding-block: clamp(2.5rem, 8vw, 5rem) clamp(3rem, 9vw, 6rem);
+  max-width: 44rem;
+}
+
+.paperScrap {
+  color: var(--paper-ink-muted);
+  font-size: 1.25rem;
+  transform: rotate(-3deg);
+  margin: 0 0 1rem;
+}
+
+.paperTitle {
+  margin: 0;
+  display: grid;
+  gap: 0.25rem;
+}
+
+.paperTitle > :global(.m-voice-serif) {
+  display: block;
+  font-size: clamp(1.5rem, 3.4vw, 2.25rem);
+  color: var(--paper-ink-muted);
+}
+
+.paperCutWord {
+  display: block;
+  font-size: clamp(3rem, 10vw, 6.5rem);
+  line-height: 1;
+  letter-spacing: -0.01em;
+}
+
+.paperLede {
+  margin: 1.5rem 0 0;
+  max-width: 34rem;
+  font-size: clamp(1rem, 1.5vw, 1.125rem);
+  color: var(--paper-ink-muted);
+}
+
+.paperActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.875rem;
+  margin-top: 2.25rem;
+}
+
+.paperPrimary,
+.paperSecondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.875rem;
+  padding: 0 1.5rem;
+  border-radius: 0.375rem;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.paperPrimary {
+  color: var(--paper-cream-hi);
+  background: var(--paper-royal);
+}
+
+.paperPrimary:hover,
+.paperPrimary:focus-visible {
+  background: var(--paper-royal-deep);
+}
+
+.paperSecondary {
+  color: var(--paper-ink);
+  border: 1px solid var(--paper-line);
+  background: var(--paper-cream-hi);
+}
+
+.paperSecondary:hover,
+.paperSecondary:focus-visible {
+  border-color: var(--paper-royal);
+}
+
+.paperPrimary:focus-visible,
+.paperSecondary:focus-visible,
+.paperSignIn:focus-visible,
+.paperFooterLink:focus-visible {
+  outline: 2px solid var(--paper-focus);
+  outline-offset: 3px;
+}
+
+/* Four pinned cards, staggered — never a three/four-equal-card row. */
+.paperCards {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(11rem, 1fr));
+  gap: 1.5rem 1.25rem;
+  margin: clamp(3rem, 7vw, 4.5rem) 0 0;
+  padding: 0;
+  list-style: none;
+  max-width: 34rem;
+}
+
+@media (max-width: 30rem) {
+  .paperCards {
+    grid-template-columns: 1fr;
+  }
+}
+
+.paperCard {
+  position: relative;
+  background: var(--paper-cream-hi);
+  border: 1px solid var(--paper-line);
+  padding: 1.5rem 1.25rem 1.25rem;
+}
+
+/*
+ * Re-centre paper.css's .pinned::before dome over the card's top edge.
+ * Matches [data-treatment="paper"] explicitly too so this rule's
+ * specificity (attribute + 2 classes + pseudo-element) beats paper.css's
+ * own (attribute + 1 class + pseudo-element) regardless of CSS load order.
+ */
+:global([data-treatment="paper"]) .paperCard:global(.pinned)::before {
+  top: 14px; /* below the 24px tear band, so the pin pierces paper */
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.paperCardKey {
+  display: block;
+  color: var(--paper-ink-muted);
+  margin-bottom: 0.5rem;
+}
+
+.paperCardBody {
+  margin: 0;
+  font-size: 0.9375rem;
+  color: var(--paper-ink);
+}
+
+.paperMomos {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.5rem;
+  margin-top: clamp(2.5rem, 6vw, 4rem);
+}
+
+.paperMomos svg {
+  display: block;
+  flex: 0 0 auto;
+  /* Kraft offset under the mark: the cut-paper read, no glow, no gradient. */
+  filter: drop-shadow(3px 4px 0 var(--paper-kraft));
+}
+
+@media (max-width: 34rem) {
+  .paperMomos svg {
+    width: 38%;
+    max-width: 112px;
+    height: auto;
+  }
+}
+
+.paperFooter {
+  position: relative;
+  border-top: 1px solid var(--paper-line);
+  padding-block: 1.75rem 2.5rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.5rem;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--paper-ink-muted);
+  font-size: 0.8125rem;
+}
+
+.paperFooterLink {
+  color: var(--paper-ink-muted);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+}
+
+.paperFooterLink:hover {
+  border-bottom-color: var(--paper-royal);
+}

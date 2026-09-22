@@ -33,6 +33,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { formatModelLabel } from "@/components/workspace/command-center/model-label";
 import { useDeleteAgent } from "@/core/agents";
 import type { Agent } from "@/core/agents";
 import { useI18n } from "@/core/i18n/hooks";
@@ -148,7 +149,7 @@ export function AgentCard({ agent }: AgentCardProps) {
                 </TruncatedTooltip>
                 {agent.model && (
                   <TruncatedBadge
-                    label={agent.model}
+                    label={formatModelLabel(agent.model)}
                     variant="secondary"
                     className="mt-0.5 text-xs"
                   />

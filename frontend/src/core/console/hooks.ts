@@ -8,6 +8,7 @@ import {
   fetchConsoleRuns,
   fetchConsoleStats,
   fetchConsoleUsage,
+  fetchConsoleUsageLedger,
 } from "./api";
 
 const RUNS_READ = "runs:read";
@@ -69,6 +70,25 @@ export function useConsoleUsage() {
       "usage",
     ],
     queryFn: fetchConsoleUsage,
+    enabled,
+    refetchIntervalInBackground: false,
+  });
+}
+
+export function useConsoleUsageLedger(
+  options: { limit?: number; offset?: number; runId?: string } = {},
+) {
+  const { user } = useAuth();
+  const enabled = canRead(user);
+  return useQuery({
+    queryKey: [
+      ...(user ? consoleQueryKey(user.id) : ["console", "anonymous"]),
+      "usage-ledger",
+      options.limit ?? 10,
+      options.offset ?? 0,
+      options.runId ?? null,
+    ],
+    queryFn: () => fetchConsoleUsageLedger(options),
     enabled,
     refetchIntervalInBackground: false,
   });

@@ -1489,7 +1489,8 @@ async def list_thread_messages(
     feedback_map: dict[str, dict] = {}
     if last_ai_per_run:
         feedback_repo = get_feedback_repo(request)
-        feedback_map = await feedback_repo.list_by_thread_grouped(thread_id, user_id=user_id)
+        feedback_user_id = getattr(request.state, "actor_user_id", None) or user_id
+        feedback_map = await feedback_repo.list_by_thread_grouped(thread_id, user_id=feedback_user_id)
 
     last_ai_indices = set(last_ai_per_run.values())
     for i, msg in enumerate(messages):
@@ -1560,7 +1561,8 @@ async def _enrich_thread_message_page(
     feedback_run_ids = {run_id for row in data if isinstance((run_id := row.get("run_id")), str) and row.get("seq") == last_ai_seq_by_run.get(run_id)}
     if feedback_run_ids:
         feedback_repo = get_feedback_repo(request)
-        feedback_map = await feedback_repo.list_by_run_ids(thread_id, feedback_run_ids, user_id=user_id)
+        feedback_user_id = getattr(request.state, "actor_user_id", None) or user_id
+        feedback_map = await feedback_repo.list_by_run_ids(thread_id, feedback_run_ids, user_id=feedback_user_id)
 
     for row in data:
         run_id = row.get("run_id")

@@ -2,7 +2,12 @@ import { getAPIClient } from "@/core/api";
 import { fetch as fetchWithAuth } from "@/core/api/fetcher";
 import { getBackendBaseURL } from "@/core/config";
 
-import type { ConsoleRunsResponse, ConsoleStats, ConsoleUsage } from "./types";
+import type {
+  ConsoleRunsResponse,
+  ConsoleStats,
+  ConsoleUsage,
+  ConsoleUsageLedger,
+} from "./types";
 
 async function getJSON<T>(path: string): Promise<T> {
   const response = await fetchWithAuth(`${getBackendBaseURL()}${path}`, {
@@ -30,6 +35,21 @@ export function fetchConsoleUsage() {
   const tzOffset = -new Date().getTimezoneOffset();
   return getJSON<ConsoleUsage>(
     `/api/console/usage?days=14&tz_offset_minutes=${encodeURIComponent(String(tzOffset))}`,
+  );
+}
+
+export function fetchConsoleUsageLedger({
+  limit = 10,
+  offset = 0,
+  runId,
+}: { limit?: number; offset?: number; runId?: string } = {}) {
+  const params = new URLSearchParams({
+    limit: String(limit),
+    offset: String(offset),
+  });
+  if (runId) params.set("run_id", runId);
+  return getJSON<ConsoleUsageLedger>(
+    `/api/console/usage-ledger?${params.toString()}`,
   );
 }
 

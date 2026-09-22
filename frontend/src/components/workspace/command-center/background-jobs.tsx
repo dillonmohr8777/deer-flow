@@ -15,6 +15,8 @@ import { pathOfThread } from "@/core/threads/utils";
 
 import { MomentumGlyph } from "./momentum-glyph";
 
+import appearanceStyles from "./workspace-appearance.module.css";
+
 const STATUS_LABEL: Record<string, string> = {
   pending: "Queued",
   running: "Running",
@@ -40,7 +42,7 @@ export function BackgroundJobs() {
   if (!stats.data || stats.isError) return null;
   return (
     <div
-      className={`fixed right-4 z-40 max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl border border-[#91b7d6] bg-white text-[#07172f] shadow-[0_16px_44px_rgba(24,84,134,0.18)] ${pathname.includes("/chats/") ? "bottom-32 sm:bottom-4" : "bottom-4"} sm:w-72 ${open ? "w-72" : "w-auto"}`}
+      className={`${appearanceStyles.backgroundTray} fixed right-4 z-40 max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl border border-[#91b7d6] bg-white text-[#07172f] shadow-[0_16px_44px_rgba(24,84,134,0.18)] ${pathname.includes("/chats/") ? "bottom-32 sm:bottom-4" : "bottom-4"} sm:w-72 ${open ? "w-72" : "w-auto"}`}
     >
       <button
         type="button"
@@ -48,7 +50,7 @@ export function BackgroundJobs() {
         aria-expanded={open}
         aria-controls="momentum-background-jobs"
         aria-label={`Background work, ${stats.data.active_runs} queued or running jobs`}
-        className="flex w-full items-center gap-3 rounded-2xl bg-[linear-gradient(105deg,#f8fcff,#edf7ff)] px-4 py-3 text-left text-sm font-bold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f39b35]"
+        className="flex w-full items-center gap-3 rounded-2xl bg-[linear-gradient(105deg,#f8fcff,#edf7ff)] px-4 py-3 text-left text-sm font-bold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#003da5]"
       >
         <MomentumGlyph seed="system:background-work" size={24} />
         <span className={open ? "flex-1" : "hidden sm:block sm:flex-1"}>
@@ -182,7 +184,7 @@ function RunRow({
         agentName ? { agent_name: agentName } : undefined,
       )}
       aria-label={`${title}, ${label}`}
-      className="flex gap-2 border-b border-[#d2e3f2] py-3 text-sm hover:bg-[#edf7ff] focus-visible:outline-2 focus-visible:outline-[#f39b35]"
+      className="flex gap-2 border-b border-[#d2e3f2] py-3 text-sm hover:bg-[#edf7ff] focus-visible:outline-2 focus-visible:outline-[#003da5]"
     >
       <MomentumGlyph seed={`thread:${run.thread_id}`} size={28} />
       <span className="min-w-0 flex-1">

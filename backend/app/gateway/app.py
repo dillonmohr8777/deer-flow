@@ -29,6 +29,7 @@ from app.gateway.routers import (
     github_webhooks,
     input_polish,
     integrations,
+    invitations,
     knowledge,
     mcp,
     mcp_tasks,
@@ -48,6 +49,8 @@ from app.gateway.routers import (
     trash,
     uploads,
     user_preferences,
+    workspace_branding,
+    workspaces,
 )
 from app.gateway.trace_middleware import TraceMiddleware
 from deerflow.config import app_config as deerflow_app_config
@@ -905,6 +908,9 @@ This gateway provides runtime endpoints for agent runs plus custom endpoints for
 
     # Include routers
     # Models API is mounted at /api/models
+    from app.gateway.routers import managed_models
+
+    app.include_router(managed_models.router)
     app.include_router(models.router)
 
     # Features API is mounted at /api/features
@@ -979,6 +985,9 @@ This gateway provides runtime endpoints for agent runs plus custom endpoints for
 
     # Auth API is mounted at /api/v1/auth
     app.include_router(auth.router)
+    app.include_router(invitations.router)
+    app.include_router(workspaces.router)
+    app.include_router(workspace_branding.router)
     app.include_router(user_preferences.router)
 
     # Feedback API is mounted at /api/threads/{thread_id}/runs/{run_id}/feedback

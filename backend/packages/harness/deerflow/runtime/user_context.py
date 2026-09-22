@@ -36,6 +36,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from contextvars import ContextVar, Token
+from dataclasses import dataclass
 from typing import Final, Protocol, runtime_checkable
 
 
@@ -51,6 +52,44 @@ class CurrentUser(Protocol):
 
 
 _current_user: Final[ContextVar[CurrentUser | None]] = ContextVar("deerflow_current_user", default=None)
+
+# The Gateway stamps these fields after authentication.  The marker is an
+# in-process capability: it lets the run worker distinguish the values that
+# were written by ``inject_authenticated_user_context`` from a caller's
+# ordinary ``RunnableConfig.context`` without persisting a secret or relying
+# on a user-controlled boolean.  The worker consumes and removes the marker
+# before exposing ``ToolRuntime.context``.
+AUTHENTICATED_CONTEXT_MARKER_KEY: Final[str] = "__deerflow_authenticated_context"
+AUTHENTICATED_CONTEXT_MARKER: Final[object] = object()
+
+WORKSPACE_IDENTITY_CONTEXT_KEYS: Final[frozenset[str]] = frozenset(
+    {
+        "actor_user_id",
+        "storage_user_id",
+        "organization_id",
+        "organization_role",
+    }
+)
+
+
+@dataclass(frozen=True, slots=True)
+class WorkspaceStorageContext:
+    """Server-selected workspace identity for shared resource storage.
+
+    ``actor_user_id`` is the authenticated human. ``storage_user_id`` is the
+    owner bucket used by repositories and filesystem paths; it equals the
+    actor for private organizations and is a dedicated non-login principal for
+    shared workspaces. The two identities must not be conflated.
+    """
+
+    actor_user_id: str
+    organization_id: str | None
+    storage_user_id: str
+    role: str | None = None
+
+
+StorageContext = WorkspaceStorageContext
+_storage_context: Final[ContextVar[WorkspaceStorageContext | None]] = ContextVar("deerflow_storage_context", default=None)
 
 
 def set_current_user(user: CurrentUser) -> Token[CurrentUser | None]:
@@ -77,6 +116,36 @@ def get_current_user() -> CurrentUser | None:
     return _current_user.get()
 
 
+def set_storage_context(context: WorkspaceStorageContext) -> Token[WorkspaceStorageContext | None]:
+    """Set the server-validated workspace storage identity for this task."""
+
+    if not context.actor_user_id or not context.storage_user_id:
+        raise ValueError("workspace storage context requires actor and storage user ids")
+    return _storage_context.set(context)
+
+
+def reset_storage_context(token: Token[WorkspaceStorageContext | None]) -> None:
+    """Restore the previous workspace storage context."""
+
+    _storage_context.reset(token)
+
+
+def get_storage_context() -> WorkspaceStorageContext | None:
+    """Return the server-validated workspace context, if one is active."""
+
+    return _storage_context.get()
+
+
+def get_workspace_actor_user_id() -> str | None:
+    """Return the authenticated actor id without changing storage scoping."""
+
+    context = _storage_context.get()
+    if context is not None:
+        return context.actor_user_id
+    user = _current_user.get()
+    return str(user.id) if user is not None else None
+
+
 def require_current_user() -> CurrentUser:
     """Return the current user, or raise :class:`RuntimeError`.
 
@@ -99,15 +168,32 @@ DEFAULT_USER_ID: Final[str] = "default"
 
 
 def get_effective_user_id() -> str:
-    """Return the current user's id as a string, or DEFAULT_USER_ID if unset.
+    """Return the active storage principal, or DEFAULT_USER_ID if unset.
 
     Unlike :func:`require_current_user` this never raises — it is designed
     for filesystem-path resolution where a valid user bucket is always needed.
+    A shared workspace supplies its dedicated principal; private requests fall
+    back to the authenticated actor for backwards compatibility.
     """
+    context = _storage_context.get()
+    if context is not None:
+        return context.storage_user_id
     user = _current_user.get()
     if user is None:
         return DEFAULT_USER_ID
     return str(user.id)
+
+
+def get_effective_storage_user_id() -> str:
+    """Explicit spelling for callers that need the workspace storage bucket."""
+
+    return get_effective_user_id()
+
+
+def get_effective_actor_user_id() -> str:
+    """Return the authenticated actor id, with the legacy default fallback."""
+
+    return get_workspace_actor_user_id() or DEFAULT_USER_ID
 
 
 def _storage_user_id_from_auth_identity(identity: object | None) -> str | None:
@@ -155,6 +241,25 @@ def resolve_config_user_id(config: object | None) -> str:
     embedded run path, followed by the legacy configurable channel and the
     request ContextVar/default fallback.
     """
+    # Gateway-injected storage identity is server-owned and must win over the
+    # authenticated actor when a selected shared workspace is active.  The
+    # in-process marker prevents an arbitrary standalone RunnableConfig from
+    # selecting another workspace by naming ``storage_user_id`` directly.
+    if isinstance(config, Mapping):
+        context = config.get("context")
+        if isinstance(context, Mapping):
+            storage_user_id = context.get("storage_user_id")
+            if storage_user_id:
+                if context.get(AUTHENTICATED_CONTEXT_MARKER_KEY) is AUTHENTICATED_CONTEXT_MARKER:
+                    return str(storage_user_id)
+                # Once the worker consumes the in-process marker, the
+                # middleware's task-local storage context remains the trusted
+                # proof for this live run.  Do not infer trust from a caller's
+                # actor/org fields; those are ordinary mapping values.
+                active_storage = _storage_context.get()
+                if active_storage is not None and active_storage.storage_user_id == str(storage_user_id):
+                    return str(storage_user_id)
+
     langgraph_user_id = _user_id_from_langgraph_config(config)
     if langgraph_user_id:
         return langgraph_user_id
@@ -179,27 +284,26 @@ def resolve_runtime_user_id(runtime: object | None) -> str:
     """Single source of truth for a tool/middleware's effective user_id.
 
     Resolution order (most authoritative first):
-      1. ``runtime.server_info.user.identity`` — populated by current LangGraph
+      1. server-owned ``runtime.context["storage_user_id"]`` from the Gateway
+         workspace selector.
+      2. ``runtime.server_info.user.identity`` — populated by current LangGraph
          runtimes from Agent Server's authenticated user. Unlike ordinary run
          context, this is server-owned.
-      2. ``config["configurable"]["langgraph_auth_user_id"]`` — populated by
+      3. ``config["configurable"]["langgraph_auth_user_id"]`` — populated by
          LangGraph Server from the deployment's ``@auth.authenticate`` result.
          This supports older runtimes and code paths without ``server_info``.
-      3. ``runtime.context["user_id"]`` — set by ``inject_authenticated_user_context``
-         in the gateway from the auth-validated ``request.state.user``. This is
-         the only source that survives boundaries where the contextvar may have
-         been lost (background tasks scheduled outside the request task,
-         worker pools that don't copy_context, future cross-process drivers).
-      4. The ``_current_user`` ContextVar — set by the auth middleware at
-         request entry. Reliable for in-task work; copied by ``asyncio``
-         child tasks and by ``ContextThreadPoolExecutor``.
-      5. ``DEFAULT_USER_ID`` — last-resort fallback so unauthenticated
-         CLI / migration / test paths keep working without raising.
+      4. ``runtime.context["user_id"]`` — legacy Gateway identity when no
+         workspace storage principal was selected.
+      5. The workspace ContextVar, then
+         ``_current_user`` — set by the auth middleware at request entry.
+      6. ``DEFAULT_USER_ID`` — last-resort fallback.
 
-    Tools that persist user-scoped state (custom agents, memory, uploads)
-    MUST call this instead of ``get_effective_user_id()`` directly so they
-    benefit from the runtime.context channel that ``setup_agent`` already
-    relies on.
+    ``actor_user_id`` is carried beside this value for credential-sensitive
+    consumers; use :func:`resolve_runtime_actor_user_id` there.
+
+    The storage identity survives boundaries where the contextvar may have
+    been lost (background tasks scheduled outside the request task, worker
+    pools, and future cross-process drivers).
     """
     server_info = getattr(runtime, "server_info", None)
     server_user_id = _user_id_from_auth_user(getattr(server_info, "user", None))
@@ -212,10 +316,42 @@ def resolve_runtime_user_id(runtime: object | None) -> str:
 
     context = getattr(runtime, "context", None)
     if isinstance(context, Mapping):
+        storage_user_id = context.get("storage_user_id")
+        if storage_user_id:
+            return str(storage_user_id)
+    active_storage = _storage_context.get()
+    if active_storage is not None:
+        return active_storage.storage_user_id
+
+    if isinstance(context, Mapping):
         ctx_user_id = context.get("user_id")
         if ctx_user_id:
             return str(ctx_user_id)
     return get_effective_user_id()
+
+
+def resolve_runtime_actor_user_id(runtime: object | None) -> str:
+    """Resolve the authenticated actor for credentials and audit attribution."""
+    server_info = getattr(runtime, "server_info", None)
+    server_user_id = _user_id_from_auth_user(getattr(server_info, "user", None))
+    if server_user_id:
+        return server_user_id
+
+    langgraph_user_id = _user_id_from_langgraph_auth()
+    if langgraph_user_id:
+        return langgraph_user_id
+
+    context = getattr(runtime, "context", None)
+    if isinstance(context, Mapping):
+        actor_user_id = context.get("actor_user_id")
+        if actor_user_id:
+            return str(actor_user_id)
+
+    if isinstance(context, Mapping):
+        ctx_user_id = context.get("user_id")
+        if ctx_user_id:
+            return str(ctx_user_id)
+    return get_effective_actor_user_id()
 
 
 def _user_id_from_langgraph_auth() -> str | None:
@@ -282,6 +418,9 @@ def resolve_user_id(
       and CLI tools that intentionally bypass isolation.
     """
     if isinstance(value, _AutoSentinel):
+        storage_context = _storage_context.get()
+        if storage_context is not None:
+            return storage_context.storage_user_id
         user = _current_user.get()
         if user is None:
             raise RuntimeError(f"{method_name} called with user_id=AUTO but no user context is set; pass an explicit user_id, set the contextvar via auth middleware, or opt out with user_id=None for migration/CLI paths.")

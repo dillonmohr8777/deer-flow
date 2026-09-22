@@ -1,5 +1,7 @@
 ### Schema Migrations (`packages/harness/deerflow/persistence/migrations/`)
 
+Organization backfill must distinguish a NULL optional run reference from a non-NULL reference whose run is missing. Missing referenced runs remain quarantined for both batches and MCP tasks. The deployed September 20 upgrade was audited to contain zero such rows before applying this correction to future backfills.
+
 DeerFlow's application tables (`runs`, `threads_meta`, `feedback`, `users`, `run_events`, plus the four `channel_*` tables) are owned by alembic via a **hybrid bootstrap** strategy. LangGraph's checkpointer tables (`checkpoints`, `checkpoint_blobs`, `checkpoint_writes`, `checkpoint_migrations`) live in the same database but are owned by LangGraph and excluded from alembic's view via `migrations/_env_filters.py::include_object`.
 
 **Convention**: every ORM model change (new column, new table, new index) MUST ship as an alembic revision under `migrations/versions/`. The Gateway runs `alembic upgrade head` automatically on startup; routine production upgrades do not require manual Alembic commands. The audited offline recovery below is an exception for the out-of-tree incarnation revision. A new revision must always chain onto the current head — never insert one ahead of an already-shipped revision (re-parenting it): alembic only walks forward from a database's stamped revision, so every database already stamped at or past the insertion point treats the inserted revision as an applied ancestor and never executes it. Inserting `0023_run_change_seq` ahead of the shipped `0023_user_preferences` stranded those databases without the run-change clock schema until `0025_repair_run_change_seq` re-applied it (#5516).
@@ -25,10 +27,13 @@ The empty-DB path keeps using `create_all` because `Base.metadata` is the only a
 `0019_thread_incarnations` → `0022_scheduled_occurrence_seq` →
 `0023_run_change_seq` → `0023_user_preferences` →
 `0024_project_documents` → `0025_repair_run_change_seq` →
-`0026_organization_foundation` → `0027_organization_backfill` (current head). The preference
+two branches (`0026_organization_foundation` → `0027_organization_backfill`,
+and `0026_mcp_task_lease_tokens`) → `0028_merge_org_mcp` (current head). The merge
+preserves both deployed revision histories without re-parenting either. The preference
 revision adds a separate owner/key table with a cascading users foreign key and
 does not alter users; the project-documents revision adds a new owner-scoped
-shelf table, so the bootstrap forward-compat floor is unchanged.
+shelf table, and the MCP lease-token revision adds two nullable token columns to
+`mcp_tasks`, so the bootstrap forward-compat floor is unchanged.
 The incarnation revision deliberately retains the exact id audited by the
 rollback-floor binary; Alembic orders revisions by `down_revision`, not by the
 numeric prefix.
@@ -153,7 +158,7 @@ on installs that never enabled it. The convention is:
 - `migrations/versions/0014_managed_subagents.py` — creates the deployment-level managed Subagent catalog table
 - `migrations/versions/0015_scheduled_task_enqueue.py` — interrupts legacy transient queued rows, adds durable scheduled-run launch leases and attempt counts, expands the one-active-occurrence index to `queued`/`launching`/`running`, and migrates the overlap policy from `skip` to `enqueue`; chains after `0014_managed_subagents`
 - `migrations/versions/0016_subagent_batches.py` — creates durable native-subagent batch and item tables, including owner/submission idempotency, item identity, lease/recovery state, and result fields
-- `migrations/versions/0017_personal_access_tokens.py` — creates the personal access token table for programmatic API access
+- `migrations/versions/0017_personal_access_tokens.py` — creates the personal access token table for programmatic API access; chains after `0016_subagent_batches`
 - `migrations/versions/0018_oauth_identity_pg_partial.py` — converts `idx_users_oauth_identity` to a partial index on Postgres (`postgresql_where`), matching what `UserRow.__table_args__` already builds via `create_all`; `0001_baseline` never applied the predicate on Postgres, so every `alembic upgrade head`-provisioned deployment carried a full index until this revision. Postgres-only, idempotent (checks `pg_index.indpred` directly), no-op on SQLite (already partial via `sqlite_where`) and on a DB where the index doesn't exist yet. Originally generated as 0017 and renumbered to 0018 after 0017_personal_access_tokens merged first and kept that slot
 - `migrations/versions/0019_projects.py` — creates the `projects` table (id/user_id/name/instructions/presentation/status + timestamps) for the Projects Phase-1 organization feature; chains after `0018_oauth_identity_pg_partial`
 - `migrations/versions/0020_threads_meta_project_id.py` — adds nullable `threads_meta.project_id` plus `ix_threads_meta_project_id` (no FK by design: project delete clears membership first, and the reserved `deerflow_project_id` metadata key stays in sync); chains after `0019_projects`
@@ -165,6 +170,8 @@ on installs that never enabled it. The convention is:
 - `migrations/versions/0025_repair_run_change_seq.py` — heals databases that skipped `0023_run_change_seq` because it was inserted ahead of the already-shipped `0023_user_preferences` (#5516): re-applies the guarded `run_change_clock` table, `runs.change_seq` column, and cursor indexes on upgrade; no-ops on healthy shapes; chains after `0024_project_documents`. Its downgrade is intentionally a no-op: the repaired objects belong to ancestor `0023_run_change_seq`, remain required at 0024, and must retain their existing change positions. Only the original 0023 downgrade removes them. `tests/test_run_change_repair_history.py` reconstructs both pre-insertion published descendants and verifies historical upgrade, unchanged healthy positions, and usable run-store writes after downgrade and re-upgrade
 - `migrations/versions/0026_organization_foundation.py` — adds nullable, unused `organization_id` columns to directly scoped rows plus organization identity, membership, and delegation tables. It does not change reads, writes, authorization, or tenant enforcement.
 - `migrations/versions/0027_organization_backfill.py` — creates deterministic private organization/owner membership rows for existing users and stamps only resource rows whose owner and parent relationships prove that private organization. Orphaned, mismatched-owner, and conflicting rows remain nullable-organization quarantine. Its downgrade clears only matching deterministic private stamps and identities; it deliberately leaves 0026 schema and unrelated organization rows intact.
+- `migrations/versions/0026_mcp_task_lease_tokens.py` — chains after `0025_repair_run_change_seq` and adds nullable `mcp_tasks.lease_token` / `notification_lease_token` columns so every poll, cancel, and notification mutation can be fenced to the exact claim generation
+- `migrations/versions/0028_merge_org_mcp.py` — joins the organization and MCP lease branches without schema operations. Both ancestries must execute before the single merge head is stamped.
 - `persistence/bootstrap.py` — `bootstrap_schema(engine, backend=...)`, the three-branch provisioning decision, locked revision validation, and the narrow 0019 forward-compatibility exception
 - `extensions/loader.py::load_extensions` — registers each spec's `table_prefix` with `register_extension_table_prefix()`
 - Tests: `tests/test_persistence_bootstrap.py` (branches), `tests/test_persistence_bootstrap_concurrency.py` (concurrency), `tests/test_persistence_bootstrap_regression.py` (issue #3682), `tests/test_persistence_migrations_env.py` (filter, including extension-owned tables), `tests/test_extension_loader.py::TestTablePrefixRegistration` (spec-to-filter wiring), `tests/blocking_io/test_persistence_bootstrap.py` (asyncio.to_thread anchor), `tests/test_migration_0004_run_ownership_dedupe.py` + `tests/test_migration_0007_scheduled_run_active_dedupe.py` (dedupe-before-unique-index pre-steps), `tests/test_migration_0025_repair_run_change_seq.py` (issue #5516 skipped-revision heal)

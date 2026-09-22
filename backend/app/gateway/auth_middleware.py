@@ -29,9 +29,27 @@ from app.gateway.auth_disabled import (
 from app.gateway.authz import AuthContext, resolve_route_permissions
 from app.gateway.internal_auth import INTERNAL_AUTH_HEADER_NAME, get_internal_user, is_valid_internal_auth_token
 from app.gateway.request_path import get_request_route_path
-from deerflow.runtime.user_context import reset_current_user, set_current_user
+from deerflow.persistence.organizations.resolution import ActiveOrganization, storage_user_id_for_organization
+from deerflow.runtime.user_context import (
+    WorkspaceStorageContext,
+    reset_current_user,
+    reset_storage_context,
+    set_current_user,
+    set_storage_context,
+)
 
 logger = logging.getLogger(__name__)
+
+WORKSPACE_COOKIE_NAME = "deerflow_workspace"
+_WORKSPACE_AUTH_EXEMPT_PREFIXES: tuple[str, ...] = (
+    "/api/v1/auth/",
+    "/api/integrations",
+    # Workspace discovery and explicit selection must stay on the actor's
+    # private organization so a stale/revoked cookie can be cleared safely.
+    "/api/workspaces",
+)
+# Kept for callers/tests that imported the original single-prefix seam.
+_WORKSPACE_AUTH_EXEMPT_PREFIX = "/api/v1/auth/"
 
 # Paths that never require authentication.
 _PUBLIC_PATH_PREFIXES: tuple[str, ...] = (
@@ -56,6 +74,11 @@ _PUBLIC_EXACT_PATHS: frozenset[str] = frozenset(
         "/api/v1/auth/setup-status",
         "/api/v1/auth/initialize",
         "/api/v1/auth/providers",
+        # Invitation inspection and acceptance happen before the recipient has
+        # a session.  Creation/revocation routes remain protected by the
+        # normal middleware and invitation router permissions.
+        "/api/v1/auth/invitations/inspect",
+        "/api/v1/auth/invitations/accept",
     }
 )
 
@@ -67,7 +90,26 @@ def _is_public(path: str) -> bool:
     return any(path.startswith(prefix) for prefix in _PUBLIC_PATH_PREFIXES)
 
 
+async def _resolve_active_workspace(user_id: str, selected_organization_id: str | None) -> ActiveOrganization | None:
+    from deerflow.persistence.engine import get_session_factory
+    from deerflow.persistence.organizations.resolution import active_organization_for_user
+
+    session_factory = get_session_factory()
+    if session_factory is None:
+        raise RuntimeError("organization authorization requires a configured database")
+    # Keep the existing private-org gate as the compatibility seam used by
+    # deployments/tests that override it. A missing private membership is a
+    # hard denial; a cookie-selected workspace is resolved independently.
+    if selected_organization_id is None:
+        private_id = await _resolve_active_private_organization_id(user_id)
+        if private_id is None:
+            return None
+    async with session_factory() as session:
+        return await active_organization_for_user(session, user_id, selected_organization_id or private_id)
+
+
 async def _resolve_active_private_organization_id(user_id: str) -> str | None:
+    """Backward-compatible private-org membership resolver."""
     from deerflow.persistence.engine import get_session_factory
     from deerflow.persistence.organizations.resolution import active_private_organization_for_user
 
@@ -76,6 +118,21 @@ async def _resolve_active_private_organization_id(user_id: str) -> str | None:
         raise RuntimeError("organization authorization requires a configured database")
     async with session_factory() as session:
         return await active_private_organization_for_user(session, user_id)
+
+
+def _workspace_selection_for_request(request: Request, auth_source: str) -> str | None:
+    """Return a cookie-selected organization only for browser session calls.
+
+    Credential-management routes and PAT requests always stay on the actor's
+    private organization. This prevents an ambient browser cookie from
+    widening a bearer-token request or changing account/PAT semantics.
+    """
+    if auth_source != AUTH_SOURCE_SESSION:
+        return None
+    if any(get_request_route_path(request).startswith(prefix) for prefix in _WORKSPACE_AUTH_EXEMPT_PREFIXES):
+        return None
+    selected = request.cookies.get(WORKSPACE_COOKIE_NAME)
+    return selected.strip() if selected and selected.strip() else None
 
 
 class AuthMiddleware(BaseHTTPMiddleware):
@@ -195,16 +252,32 @@ class AuthMiddleware(BaseHTTPMiddleware):
         # JWT-decode + DB-lookup pipeline a second time per request).
         request.state.user = user
         request.state.auth_source = auth_source
-        organization_id = None
+        organization: ActiveOrganization | None = None
         if auth_source in {AUTH_SOURCE_SESSION, AUTH_SOURCE_PAT}:
             try:
-                organization_id = await _resolve_active_private_organization_id(str(user.id))
+                organization = await _resolve_active_workspace(
+                    str(user.id),
+                    _workspace_selection_for_request(request, auth_source),
+                )
             except Exception:
                 logger.exception("Could not resolve organization authorization for authenticated request")
                 return JSONResponse(status_code=503, content={"detail": "Organization authorization is unavailable"})
-            if organization_id is None:
+            if organization is None:
                 return JSONResponse(status_code=403, content={"detail": "Active organization membership required"})
+        organization_id = organization.id if organization is not None else None
+        actor_user_id = str(user.id)
+        storage_user_id = actor_user_id
+        organization_role = None
+        if organization is not None:
+            storage_user_id = storage_user_id_for_organization(organization, actor_user_id) or ""
+            organization_role = organization.role
+            if not storage_user_id:
+                logger.error("Active organization %s has no valid storage principal", organization.id)
+                return JSONResponse(status_code=503, content={"detail": "Organization storage is unavailable"})
         request.state.organization_id = organization_id
+        request.state.organization_role = organization_role
+        request.state.actor_user_id = actor_user_id
+        request.state.storage_user_id = storage_user_id
         permissions = await resolve_route_permissions(
             user,
             is_internal=auth_source == AUTH_SOURCE_INTERNAL,
@@ -215,9 +288,25 @@ class AuthMiddleware(BaseHTTPMiddleware):
             # them, and role changes / authorization policy stay authoritative
             # because they were resolved fresh from the owning user above.
             permissions = [permission for permission in permissions if permission in pat_scopes]
-        request.state.auth = AuthContext(user=user, permissions=permissions, organization_id=organization_id)
+        request.state.auth = AuthContext(
+            user=user,
+            permissions=permissions,
+            organization_id=organization_id,
+            actor_user_id=actor_user_id,
+            storage_user_id=storage_user_id,
+            organization_role=organization_role,
+        )
         token = set_current_user(user)
+        storage_token = set_storage_context(
+            WorkspaceStorageContext(
+                actor_user_id=actor_user_id,
+                organization_id=organization_id,
+                storage_user_id=storage_user_id,
+                role=organization_role,
+            )
+        )
         try:
             return await call_next(request)
         finally:
+            reset_storage_context(storage_token)
             reset_current_user(token)

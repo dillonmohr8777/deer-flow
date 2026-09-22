@@ -82,15 +82,29 @@ class AuthContext:
     Attributes:
         user: The authenticated user, or None if anonymous
         permissions: List of permission strings (e.g., "threads:read")
-        organization_id: Active server-resolved private organization for session/PAT callers
+        organization_id: Active server-resolved organization for session/PAT callers
+        actor_user_id: Authenticated human identity, retained for audit/credentials
+        storage_user_id: Server-selected content storage principal
     """
 
-    __slots__ = ("user", "permissions", "organization_id")
+    __slots__ = ("user", "permissions", "organization_id", "actor_user_id", "storage_user_id", "organization_role")
 
-    def __init__(self, user: User | None = None, permissions: list[str] | None = None, organization_id: str | None = None):
+    def __init__(
+        self,
+        user: User | None = None,
+        permissions: list[str] | None = None,
+        organization_id: str | None = None,
+        *,
+        actor_user_id: str | None = None,
+        storage_user_id: str | None = None,
+        organization_role: str | None = None,
+    ):
         self.user = user
         self.permissions = permissions or []
         self.organization_id = organization_id
+        self.actor_user_id = actor_user_id
+        self.storage_user_id = storage_user_id
+        self.organization_role = organization_role
 
     @property
     def is_authenticated(self) -> bool:
@@ -715,9 +729,10 @@ def require_permission(
                 from app.gateway.deps import get_thread_store
 
                 thread_store = get_thread_store(request)
+                storage_user_id = auth.storage_user_id or str(auth.user.id)
                 allowed = await thread_store.check_access(
                     thread_id,
-                    str(auth.user.id),
+                    storage_user_id,
                     require_existing=require_existing,
                 )
                 if not allowed and getattr(auth.user, "system_role", None) == INTERNAL_SYSTEM_ROLE:

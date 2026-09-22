@@ -65,8 +65,8 @@
   position: absolute;
   z-index: -1;
   top: 68px;
-  left: -12%;
-  width: 124%;
+  left: 0;
+  width: 100%;
   height: 360px;
   pointer-events: none;
   background: linear-gradient(
@@ -94,15 +94,11 @@
   opacity: 0.72;
   transform: translate3d(0, 0, 0);
 }
-.root[data-live="true"]::before {
-  animation: current-breathe 7s cubic-bezier(0.22, 1, 0.36, 1) infinite
-    alternate;
-}
 .root ::selection {
   background: var(--blue);
   color: white;
 }
-.root :is(button, a, input, select):focus-visible {
+.root :is(button, a, input, select, [tabindex]):focus-visible {
   outline: 3px solid var(--focus);
   outline-offset: 3px;
 }
@@ -139,16 +135,10 @@
   gap: 18px;
   align-items: center;
 }
-.brand img {
-  width: 165px;
-  height: auto;
-}
-.brand > span {
-  border-left: 1px solid var(--strong);
-  padding-left: 18px;
+.brand .appName {
   color: var(--blue-deep);
-  font-size: 13px;
-  font-weight: 800;
+  font-size: 15px;
+  font-weight: 900;
 }
 .account {
   border: 1px solid var(--line);
@@ -164,20 +154,23 @@
   z-index: 1;
   max-width: 1560px;
   margin: auto;
-  padding: 42px 32px 22px;
+  padding: 30px 32px 22px;
 }
 .heading {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 24px;
-  margin-bottom: 28px;
+  margin-bottom: 30px;
+}
+.heading > div:first-child {
+  min-width: 0;
 }
 .heading h1 {
   margin: 0 0 9px;
   color: var(--blue-deep);
   font:
-    400 clamp(34px, 4vw, 58px) / 1.02 "Momentum Display",
+    400 46px / 1.06 "Momentum Display",
     "Archivo Black",
     sans-serif;
   letter-spacing: -0.03em;
@@ -194,6 +187,243 @@
 }
 .headingCopy span:last-child {
   color: var(--violet);
+}
+.headingActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 24px;
+}
+.appearanceButton {
+  display: inline-flex;
+  min-height: 46px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid var(--strong);
+  border-radius: 11px;
+  background: var(--surface);
+  color: var(--blue-deep);
+  padding: 10px 15px;
+  font-size: 13px;
+  font-weight: 800;
+}
+.appearanceButton:hover,
+.appearanceButton[aria-expanded="true"] {
+  background: var(--surface-blue);
+  border-color: var(--blue);
+}
+.brandStage {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 18px 2px;
+}
+.root[data-treatment="classic"] {
+  background: var(--canvas);
+}
+.root[data-treatment="classic"]::before {
+  display: none;
+}
+.root[data-treatment="paper"] {
+  --canvas: #f8f6ef;
+  --surface: #fffef9;
+  --line: #d9dfdf;
+  background: linear-gradient(145deg, #f6f2e7, #fbfaf5 48%, #f0f6fd);
+}
+.root[data-treatment="paper"]::before {
+  left: 50%;
+  top: 80px;
+  width: 50%;
+  height: 250px;
+  background: #e8eff6;
+  clip-path: polygon(10% 13%, 100% 0, 100% 100%, 0 80%);
+  opacity: 0.65;
+}
+.root[data-treatment="paper"] .team,
+.root[data-treatment="paper"] .jobs,
+.root[data-treatment="paper"] .usage {
+  background: #fffefb;
+}
+.root[data-treatment="paper"] .agentMonogram {
+  border-radius: 12px 9px 11px 8px;
+  background: #fffef9;
+  outline: 4px solid #fffef9;
+  box-shadow: 3px 5px 8px #22344a20;
+  transform: rotate(-7deg);
+}
+.root[data-treatment="paper"] .agent:nth-child(2n) .agentMonogram {
+  transform: rotate(5deg);
+}
+.root[data-treatment="current"] .agentMonogram {
+  filter: drop-shadow(0 5px 5px #185b9729);
+}
+
+/*
+ * Paper cutout: type, the lead kraft band, stat numerals, and pinned
+ * assignments. Tokens come from src/styles/paper.css (read first, never a
+ * raw hex here). Receipts (.runDetail) intentionally get the least
+ * decoration of anything on this surface - cream + hairlines, no rotation,
+ * no pins - restraint is the point. All decoration below is presentational
+ * only and is neutralised under forced-colors.
+ */
+.root[data-treatment="paper"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 180px 180px;
+  opacity: 0.05;
+}
+.root[data-treatment="paper"] .heading h1 {
+  font-family: var(--m-font-serif);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+@media (min-width: 1440px) {
+  .root[data-treatment="paper"] .heading h1 {
+    font-family: var(--m-font-display);
+    font-weight: 400;
+    letter-spacing: 0;
+  }
+}
+.root[data-treatment="paper"] .topologyLead {
+  background: var(--paper-kraft);
+  color: var(--paper-ink);
+  border-color: var(--paper-line);
+  box-shadow: 3px 6px 14px
+    color-mix(in srgb, var(--paper-ink) 22%, transparent);
+}
+.root[data-treatment="paper"] .topologyLead div span {
+  color: var(--paper-ink-muted);
+}
+.root[data-treatment="paper"] .topologyLead::after {
+  background: repeating-linear-gradient(
+    var(--paper-ink-muted),
+    var(--paper-ink-muted) 4px,
+    transparent 4px,
+    transparent 7px
+  );
+}
+.root[data-treatment="paper"] .topologyLead a {
+  border-color: var(--paper-line);
+  color: var(--paper-ink);
+}
+.root[data-treatment="paper"] .topologyRoster::before,
+.root[data-treatment="paper"] .topologyRoster .agent::before {
+  border-color: var(--paper-line);
+  background: var(--paper-line);
+}
+.root[data-treatment="paper"] .metrics {
+  background: var(--paper-cream-hi);
+}
+.root[data-treatment="paper"] .metrics strong {
+  font-family: var(--m-font-serif);
+  font-weight: 700;
+  font-size: 3.5rem;
+  color: var(--paper-royal);
+}
+.root[data-treatment="paper"] .jobRow {
+  position: relative;
+  background: var(--paper-cream-hi);
+  border-color: var(--paper-line);
+}
+.root[data-treatment="paper"] .jobRow:nth-child(odd) {
+  transform: rotate(0.6deg);
+}
+.root[data-treatment="paper"] .jobRow:nth-child(even) {
+  transform: rotate(-0.6deg);
+}
+.root[data-treatment="paper"] .jobRow::before {
+  content: "";
+  position: absolute;
+  top: 6px;
+  left: 10px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(
+    circle at 35% 30%,
+    color-mix(in srgb, var(--paper-brass) 60%, white) 0%,
+    var(--paper-brass) 55%,
+    color-mix(in srgb, var(--paper-brass) 70%, black) 100%
+  );
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--paper-ink) 40%, transparent);
+}
+/* Receipts: least decoration on this surface, on purpose. */
+.root[data-treatment="paper"] .runDetail {
+  background: var(--paper-cream-hi);
+  border-left-color: var(--paper-line);
+  box-shadow: -12px 0 32px
+    color-mix(in srgb, var(--paper-ink) 14%, transparent);
+}
+.root[data-treatment="paper"] .runDetail > h3 {
+  font-family: var(--m-font-serif);
+  font-weight: 700;
+  color: var(--paper-royal-deep);
+}
+@media (forced-colors: active) {
+  .root[data-treatment="paper"]::after {
+    display: none;
+  }
+  .root[data-treatment="paper"] .jobRow::before {
+    display: none;
+  }
+  .root[data-treatment="paper"] .jobRow {
+    transform: none;
+  }
+}
+@media (max-width: 390px) {
+  .root[data-treatment="paper"] .metrics strong {
+    font-size: 2.25rem;
+  }
+  .root[data-treatment="paper"] .topologyRoster {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    border-left: 0;
+    padding-left: 0;
+  }
+  .root[data-treatment="paper"] .agentMonogram,
+  .root[data-treatment="paper"] .jobRow {
+    transform: none;
+  }
+  .root[data-treatment="paper"] .content {
+    position: relative;
+  }
+  .root[data-treatment="paper"] .content::before,
+  .root[data-treatment="paper"] .content::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    z-index: 1;
+    width: 100%;
+    height: 10px;
+    pointer-events: none;
+    background: var(--paper-cream);
+    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'%3E%3Cpath d='M0 6 L7 2 L13 8 L20 3 L27 7 L34 1 L41 6 L48 2 L55 7 L62 3 L69 8 L76 2 L83 6 L90 1 L100 5 L100 100 L0 100 Z'/%3E%3C/svg%3E");
+    mask-size: 100% 100%;
+    mask-repeat: no-repeat;
+  }
+  .root[data-treatment="paper"] .content::before {
+    top: 0;
+  }
+  .root[data-treatment="paper"] .content::after {
+    bottom: 0;
+    transform: scaleY(-1);
+  }
+}
+@media (max-width: 390px) and (forced-colors: active) {
+  .root[data-treatment="paper"] .content::before,
+  .root[data-treatment="paper"] .content::after {
+    display: none;
+  }
 }
 .primary {
   display: inline-flex;
@@ -370,13 +600,17 @@
 }
 .leadIcon {
   display: grid;
-  width: 50px;
-  height: 50px;
+  width: 160px;
+  height: 160px;
   flex: 0 0 auto;
   place-items: center;
   border-radius: 50%;
   background: white;
   box-shadow: 0 8px 20px rgba(0, 24, 72, 0.24);
+}
+.leadIcon svg {
+  width: 100%;
+  height: 100%;
 }
 .topologyLead > div {
   display: flex;
@@ -453,11 +687,11 @@
   min-width: 0;
   align-items: flex-start;
   flex-direction: column;
-  gap: 7px;
+  gap: 8px;
   border: 1px solid var(--line);
   border-radius: 13px;
   background: #fbfdff;
-  padding: 12px;
+  padding: 16px 13px;
   text-align: left;
 }
 .agent:hover {
@@ -483,7 +717,38 @@
 }
 .agent > span:not(.agentMonogram) {
   color: var(--muted);
+  font-size: 12px;
+}
+.agent .agentRole {
+  display: -webkit-box;
+  min-height: 36px;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-height: 1.5;
+}
+.agent .agentModel {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--blue-deep);
   font-size: 11px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.selectedIdentity {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+}
+.selectedIdentity > svg {
+  flex: 0 0 auto;
+}
+.selectedIdentity span {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
 }
 .agent > span:last-child {
   display: flex;
@@ -809,13 +1074,18 @@
   align-items: end;
   gap: 10px;
   overflow-x: auto;
+  max-width: 100%;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+  scroll-snap-type: x proximity;
   margin: 30px 0;
   padding: 8px 0;
 }
 .usageChart > div {
   display: flex;
-  min-width: 39px;
-  flex: 1;
+  min-width: 44px;
+  flex: 1 0 44px;
+  scroll-snap-align: start;
   align-items: center;
   flex-direction: column;
   gap: 7px;
@@ -835,12 +1105,29 @@
 }
 .tableWrap {
   overflow-x: auto;
+  max-width: 100%;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+}
+.scrollHint {
+  display: none;
+}
+.meta {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
 }
 .root table {
   width: 100%;
+  min-width: 540px;
   border-collapse: collapse;
   font-size: 14px;
   text-align: left;
+}
+.root .ledgerTable {
+  min-width: 1000px;
 }
 .root caption {
   margin: 18px 0;
@@ -957,14 +1244,16 @@
     transform: scale(1.16);
   }
 }
-@keyframes current-breathe {
-  to {
-    opacity: 1;
-    transform: translate3d(2.5%, 7px, 0) scaleY(1.08);
-  }
-}
-
 @media (max-width: 1100px) {
+  .heading h1 {
+    font-size: 36px;
+  }
+  .brandStage {
+    width: 250px;
+    flex: 0 0 250px;
+    padding-right: 0;
+    padding-left: 0;
+  }
   .overview {
     grid-template-columns: 1fr;
   }
@@ -985,12 +1274,20 @@
 }
 
 @media (max-width: 640px) {
+  .scrollHint {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin: 18px 0 0;
+    color: var(--muted);
+    font-size: 12px;
+  }
+  .scrollHint svg {
+    flex: 0 0 auto;
+  }
   .root::before {
     top: 56px;
     height: 300px;
-  }
-  .root[data-live="true"]::before {
-    animation: none;
   }
   .topbar {
     position: sticky;
@@ -1002,18 +1299,14 @@
   .brand {
     gap: 10px;
   }
-  .brand img {
-    width: 132px;
-  }
-  .brand > span,
   .account {
     display: none;
   }
   .content {
-    padding: 30px 16px 20px;
+    padding: 30px 16px 96px;
   }
   .heading {
-    align-items: flex-start;
+    align-items: stretch;
     flex-direction: column;
     gap: 16px;
     margin-bottom: 20px;
@@ -1024,6 +1317,31 @@
   .heading p {
     max-width: 31ch;
     font-size: 14px;
+  }
+  .headingActions {
+    width: 100%;
+    margin-top: 20px;
+  }
+  .headingActions .primary {
+    width: auto;
+    flex: 1;
+    padding-right: 12px;
+    padding-left: 12px;
+  }
+  .appearanceButton {
+    min-height: 48px;
+    padding-right: 12px;
+    padding-left: 12px;
+  }
+  .brandStage {
+    width: auto;
+    flex: 0 0 auto;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 8px 0 0;
   }
   .tabs {
     position: sticky;
@@ -1085,6 +1403,23 @@
     border-top: 2px solid rgba(72, 157, 229, 0.42);
     border-left: 0;
   }
+  .agent {
+    display: grid;
+    grid-template-columns: 56px minmax(0, 1fr);
+    column-gap: 14px;
+    row-gap: 5px;
+  }
+  .agent > :not(.agentMonogram) {
+    grid-column: 2;
+  }
+  .agentMonogram {
+    grid-column: 1;
+    grid-row: 1 / span 5;
+    align-self: center;
+  }
+  .agent .agentRole {
+    min-height: 0;
+  }
   .filters {
     align-items: stretch;
     flex-direction: column;
@@ -1129,6 +1464,13 @@
   .runDetail {
     padding: 20px;
     padding-bottom: max(20px, env(safe-area-inset-bottom));
+  }
+}
+
+@media (max-width: 390px) {
+  .leadIcon {
+    width: 96px;
+    height: 96px;
   }
 }
 
