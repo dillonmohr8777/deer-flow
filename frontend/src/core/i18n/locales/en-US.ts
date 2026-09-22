@@ -305,8 +305,7 @@ export const enUS: Translations = {
   // Input Box
   inputBox: {
     placeholder: "How can I assist you today?",
-    disclaimer:
-      "Agents can make mistakes. Check the record before you act on it.",
+    disclaimer: "Agents can make mistakes. Check the record.",
     createSkillPrompt:
       "We're going to build a new skill step by step with `skill-creator`. To start, what do you want this skill to do?",
     addAttachments: "Add attachments",
