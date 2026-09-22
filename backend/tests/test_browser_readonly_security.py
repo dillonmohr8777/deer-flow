@@ -22,6 +22,8 @@ from app.gateway.routers import browser
 from deerflow.authz.provider import AuthzDecision
 from deerflow.authz.rbac import RbacAuthorizationProvider
 from deerflow.config.authorization_config import AuthorizationConfig
+from deerflow.persistence.organizations.identity import private_organization_id
+from deerflow.persistence.organizations.resolution import ActiveOrganization
 
 
 @pytest.mark.parametrize("role", ["admin", "user"])
@@ -48,6 +50,13 @@ def test_browser_stream_enforces_write_permission(monkeypatch, role, writable, b
     monkeypatch.setattr(browser, "_authenticate_ws", AsyncMock(return_value=user))
     monkeypatch.setattr(browser, "_browser_tools_enabled", lambda: True)
     monkeypatch.setattr("deerflow.config.get_app_config", lambda: SimpleNamespace(get_tool_config=lambda _: None))
+
+    # The Momentum AuthMiddleware fails closed (503) without an organization
+    # store; give the fake user its private organization, as test_auth_middleware does.
+    async def active_organization(request_user_id, _selected=None):
+        return ActiveOrganization(id=private_organization_id(request_user_id), name="Private organization", role="owner", storage_user_id=None)
+
+    monkeypatch.setattr("app.gateway.auth_middleware._resolve_active_workspace", active_organization)
 
     received = threading.Event()
     frame_sent = threading.Event()
