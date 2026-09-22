@@ -486,7 +486,6 @@ class TestSyncSingletonThreadSafety:
 
     def test_concurrent_checkpointer_getter_creates_one_instance(self):
         load_checkpointer_config_from_dict({"type": "memory"})
-        app_config_module.get_app_config()
         factory = _BlockingSingletonFactory()
 
         with patch("deerflow.runtime.checkpointer.provider._sync_checkpointer_cm", side_effect=factory.context_manager):
@@ -506,7 +505,6 @@ class TestSyncSingletonThreadSafety:
 
     def test_concurrent_store_getter_creates_one_instance(self):
         load_checkpointer_config_from_dict({"type": "memory"})
-        app_config_module.get_app_config()
         factory = _BlockingSingletonFactory()
 
         with patch("deerflow.runtime.store.provider._sync_store_cm", side_effect=factory.context_manager):
