@@ -39,7 +39,7 @@ line; nothing lives only in an agent's context.
 
 | # | Milestone | Done when | Hours |
 |---|---|---|---|
-| M0 | **Rescue and record** | polish repo pushed to fork as an archive; s09b branch on fork; live config shape in repo as a template with secrets as env refs; ops scripts in `deploy/momentum/`; encrypted off-machine backup of `gateway-data` restored into a scratch compose project | 3-6 |
+| M0 | **Rescue and record** (PR #2: done except the off-machine copy) | polish repo pushed to fork as an archive; s09b branch on fork; live config shape in repo as a template with secrets as env refs; ops scripts in `deploy/momentum/`; encrypted off-machine backup of `gateway-data` restored into a scratch compose project | 3-6 |
 | M1 | **Green gate** | hanging test named (pytest-timeout); s09b merged; McpTaskService cancellation contract decided and fixed; upload WinError 32 root-caused; `check_llm_auth` built or its tests removed with a reason; full suite green in a Linux container, Windows-only failures listed; PR opened to `fork/main` | 10-20 |
 | M2 | **Upstream sync** | 70 upstream commits merged; one alembic head; suite green | 6-15 |
 | M3 | **Isolation gate** (contract 3, 4, 7.1, 7.2) | every shareable resource carries server-owned `organization_id`, dual-written and backfilled; parent/child consistency enforced; internal callers go through `organization_delegation`; org A cannot list, read, attach, mutate, cancel, stream or download org B; revocation and org switching invalidate access; cross-org probes 404 | 20-45 |
@@ -67,6 +67,8 @@ gate. M2 can run beside M1. M4 and M5 follow M3. M7 last.
 1. Rotate the OpenRouter key and the DeerFlow password (both pasted in chat).
 2. Docker AutoStart on.
 3. USD cap for the M6 eval (balance is $16.88).
-4. Decision: should a cancelled McpTaskService caller get `CancelledError`? (M1)
+4. Where the key for the off-machine encrypted backup lives (M0). The McpTaskService
+   cancellation question is moot: `service.py` already re-raises (lines 654, 1044,
+   1212, per an Astra review 2026-09-22), so those test failures have another cause.
 5. Approval before any org-mode enablement for a second member beyond the current
    single-owner rule (contract section 4).
