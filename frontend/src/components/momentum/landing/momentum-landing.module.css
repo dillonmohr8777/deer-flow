@@ -45,8 +45,16 @@
   width: 100%;
   overflow-x: clip;
   background:
-    radial-gradient(90rem 48rem at 12% -12%, rgb(49 87 213 / 26%), transparent 62%),
-    radial-gradient(64rem 40rem at 96% 4%, rgb(89 56 220 / 20%), transparent 58%),
+    radial-gradient(
+      90rem 48rem at 12% -12%,
+      rgb(49 87 213 / 26%),
+      transparent 62%
+    ),
+    radial-gradient(
+      64rem 40rem at 96% 4%,
+      rgb(89 56 220 / 20%),
+      transparent 58%
+    ),
     var(--surface);
   color: var(--ink);
   font-family: "Momentum UI", "Nunito Sans", system-ui, sans-serif;
@@ -518,6 +526,49 @@
   font-size: clamp(3rem, 10vw, 6.5rem);
   line-height: 1;
   letter-spacing: -0.01em;
+}
+
+/*
+ * The brief's undegraded headline: the word knocked out of a torn navy paper
+ * collage. cut-paper.tsx shipped the degrade path (solid --paper-ink at
+ * 14.07:1) because no art existed that held contrast as TEXT; brass and cyan
+ * are object-only for exactly this reason.
+ *
+ * collage-navy.png is measured, not assumed: mean 13.02:1 on cream, worst
+ * pixel 4.52:1, zero pixels below AA large. The generated original had cream
+ * hairlines at 0.91:1 where a torn edge lifted, so its highlights were clamped
+ * to a 4.5:1 floor before shipping. Provenance in public/momentum/SOURCES.md.
+ *
+ * Behind @supports because without background-clip this would paint
+ * transparent text on cream and the headline would vanish. Unsupported
+ * browsers keep the solid-ink degrade, which is why the fill is only ever
+ * added here and never on .paperCutWord itself.
+ */
+/*
+ * The fill goes on each LETTER, not the wrapper. cut-paper.tsx gives every
+ * letter its own rotate() for the jitter, and a transform creates a stacking
+ * context, so a background-clip on the wrapper cannot paint through them: the
+ * word came out completely invisible, transparent letters over nothing.
+ * Per-letter is also the truer reading of the idea, since each letter becomes
+ * its own torn scrap rather than a window onto one shared sheet.
+ */
+@supports (background-clip: text) or (-webkit-background-clip: text) {
+  .paperCutLetter {
+    background-image: url("/momentum/collage-navy.png");
+    background-size: cover;
+    background-position: center;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  /* Forced-colours users get the system's own text colour, not a texture. */
+  @media (forced-colors: active) {
+    .paperCutLetter {
+      background-image: none;
+      color: CanvasText;
+    }
+  }
 }
 
 .paperLede {

@@ -10,3 +10,11 @@
   surface that used them.
 - No code/mono face is shipped. `--m-font-mono` is a system stack by choice;
   see the note on it in fonts.css.
+- collage-navy.png: torn navy paper collage, the undegraded fill for the
+  cut-paper headline. Generated 2026-09-22 with google/gemini-3-pro-image via
+  OpenRouter, then post-processed locally: downscaled 1408x768 to 704x384, and
+  every highlight clamped to a 4.5:1 contrast floor against cream. The raw
+  generation had cream hairlines at 0.91:1 where torn edges lifted, which would
+  have put light speckles inside the letterforms. Measured after processing:
+  mean 13.02:1, worst pixel 4.52:1, zero pixels below AA large. No text, marks
+  or third-party imagery in the generated content.

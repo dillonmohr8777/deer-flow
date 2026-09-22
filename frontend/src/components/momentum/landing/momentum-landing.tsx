@@ -49,8 +49,8 @@ const CAPABILITIES = [
     key: "Runs",
     body: (
       <>
-        Every dispatch is <strong>recorded</strong> — inputs, model, tokens and
-        outcome — so work can be replayed rather than retold.
+        Every dispatch is <strong>recorded</strong>: inputs, model, tokens and
+        outcome, so work can be replayed rather than retold.
       </>
     ),
   },
@@ -78,7 +78,6 @@ const CAPABILITIES = [
 // a three/four-equal-card row.
 const CARD_OFFSETS = [0, 24, 8, 16] as const;
 
-
 export function MomentumLanding() {
   // Initial state is always the plain default, matching what the server
   // rendered — reading window.location.search here would run during
@@ -86,9 +85,8 @@ export function MomentumLanding() {
   // sees the URL) when `?look=paper` is present. Re-resolving in the effect
   // below (post-hydration) is what actually applies the query override, in
   // both directions, while keeping day-one "/" byte-identical.
-  const [treatment, setTreatment] = useState<typeof FUNNEL_TREATMENT>(
-    FUNNEL_TREATMENT,
-  );
+  const [treatment, setTreatment] =
+    useState<typeof FUNNEL_TREATMENT>(FUNNEL_TREATMENT);
 
   useEffect(() => {
     setTreatment(resolveFunnelTreatment());
@@ -127,15 +125,18 @@ export function MomentumLanding() {
             <h1 className={styles.title}>Give your ambition a team.</h1>
             <p className={styles.lede}>
               Momentum Workspace is a private environment where a team of agents
-              takes on real work — research, build, review — and leaves a record
-              you can check. You were invited here because someone wants you in
-              the room.
+              takes on real work across research, build and review, and leaves a
+              record you can check. You were invited here because someone wants
+              you in the room.
             </p>
             <div className={styles.actions}>
               <Link className={styles.primary} href="/workspace">
                 Enter the workspace
               </Link>
-              <Link className={styles.secondary} href="/workspace/command-center">
+              <Link
+                className={styles.secondary}
+                href="/workspace/command-center"
+              >
                 Open Command Center
               </Link>
             </div>
@@ -211,8 +212,22 @@ function PaperMomo({ size, tilt = 0 }: { size: number; tilt?: number }) {
         d="M60 28c30 0 49 20 49 49s-18 47-49 47S11 106 11 77s19-49 49-49Z"
         fill="var(--paper-royal)"
       />
-      <rect x="35" y="59" width="12" height="23" rx="6" fill="var(--paper-cream-hi)" />
-      <rect x="73" y="59" width="12" height="23" rx="6" fill="var(--paper-cream-hi)" />
+      <rect
+        x="35"
+        y="59"
+        width="12"
+        height="23"
+        rx="6"
+        fill="var(--paper-cream-hi)"
+      />
+      <rect
+        x="73"
+        y="59"
+        width="12"
+        height="23"
+        rx="6"
+        fill="var(--paper-cream-hi)"
+      />
     </svg>
   );
 }
@@ -255,13 +270,14 @@ function PaperLanding() {
             <CutPaper
               word="Momentum"
               className={`${styles.paperCutWord} m-voice-cut-paper`}
+              letterClassName={styles.paperCutLetter}
             />
           </h1>
 
           <p className={`${styles.paperLede} m-voice-body`}>
             A private workspace where a team of agents takes on real work and
-            leaves a record you can check. You were invited here because
-            someone wants you in the room.
+            leaves a record you can check. You were invited here because someone
+            wants you in the room.
           </p>
 
           <div className={styles.paperActions}>

@@ -7,13 +7,14 @@
  * span is aria-hidden so nothing is announced letter by letter.
  *
  * "background-clip: text over a collage tile" is the brief's undegraded
- * look; the caller supplies that tile as a background on `className`. No
- * approved collage art exists yet that stays within the brass/cyan
- * text-contrast ban (paper.css: both are object-only, 2.10/2.28 on cream —
- * never text), so momentum-landing.tsx currently renders the degrade path:
- * solid --paper-ink text at 14.07:1, which this component already produces
- * with no collage background set. Swap in a collage `className` once art
- * lands; the per-letter/aria/motion mechanics here don't change.
+ * look; the caller supplies that tile as a background on `className`.
+ * momentum-landing.tsx now passes .paperCutWordCollage, which fills the word
+ * with collage-navy.png (measured: mean 13.02:1 on cream, worst pixel 4.52:1,
+ * nothing below AA large). That fill is applied only inside an @supports
+ * guard, so anywhere background-clip is missing this component still renders
+ * its degrade path: solid --paper-ink at 14.07:1, which is what it produces
+ * with no collage background set. The per-letter, aria and motion mechanics
+ * here are the same either way.
  */
 
 import { useEffect, useRef, useState } from "react";
@@ -57,16 +58,17 @@ export function CutPaper({
     // on that same first intersection and nothing ever retried.
     const tryReveal = (inView: boolean) => {
       if (!inView) return;
-      setReveal((current) =>
-        current ??
-        (brandMotionAllowed({
-          motion: true,
-          reducedMotion: reducedMotionQuery.matches,
-          visible: document.visibilityState === "visible",
-          inView,
-        })
-          ? "animate"
-          : "instant"),
+      setReveal(
+        (current) =>
+          current ??
+          (brandMotionAllowed({
+            motion: true,
+            reducedMotion: reducedMotionQuery.matches,
+            visible: document.visibilityState === "visible",
+            inView,
+          })
+            ? "animate"
+            : "instant"),
       );
     };
 
@@ -86,7 +88,6 @@ export function CutPaper({
     );
     observer.observe(node);
     return () => observer.disconnect();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const letters = [...word];
