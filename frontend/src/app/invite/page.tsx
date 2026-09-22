@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { brandMotionAllowed } from "@/components/workspace/command-center/appearance-preferences";
@@ -39,8 +40,8 @@ function getDetailMessage(data: unknown): string {
 }
 
 function getCsrfHeader(): Record<string, string> {
-  const m = typeof document !== "undefined" ? document.cookie.match(/(?:^|;\s*)csrf_token=([^;]+)/) : null;
-  if (m && m[1]) return { "X-CSRF-Token": decodeURIComponent(m[1]) };
+  const m = typeof document !== "undefined" ? /(?:^|;\s*)csrf_token=([^;]+)/.exec(document.cookie) : null;
+  if (m?.[1]) return { "X-CSRF-Token": decodeURIComponent(m[1]) };
   return {};
 }
 
@@ -58,8 +59,8 @@ export default function InvitePage() {
     if (initialized.current) return;
     initialized.current = true;
     const h = window.location.hash || "";
-    const m = h.match(/#token=([^&]+)/);
-    if (m && m[1]) {
+    const m = /#token=([^&]+)/.exec(h);
+    if (m?.[1]) {
       setToken(m[1]);
       window.history.replaceState(null, "", window.location.pathname + window.location.search);
     } else {
@@ -71,7 +72,7 @@ export default function InvitePage() {
   useEffect(() => {
     if (!token) return;
     let cancelled = false;
-    (async () => {
+    void (async () => {
       try {
         const res = await fetch("/api/v1/auth/invitations/inspect", {
           method: "POST",
@@ -177,6 +178,14 @@ export default function InvitePage() {
         {error ? (
           <p role="alert" className={`${styles.errorText} m-voice-body`}>
             {error}
+          </p>
+        ) : null}
+        {status === "inspect-error" ? (
+          <p className={`${styles.hint} m-voice-body`}>
+            Already a member?{" "}
+            <Link className={styles.link} href="/login">
+              Sign in instead
+            </Link>
           </p>
         ) : null}
         {info && status !== "inspect-error" ? (
