@@ -13,7 +13,7 @@ beforeEach(() => {
 });
 
 test("console requests use the authenticated gateway and bounded query parameters", async () => {
-  const { fetchConsoleRuns, fetchConsoleUsage } =
+  const { fetchConsoleRuns, fetchConsoleUsage, fetchConsoleUsageLedger } =
     await import("@/core/console/api");
 
   await fetchConsoleRuns({ status: "error", offset: 20 });
@@ -27,6 +27,14 @@ test("console requests use the authenticated gateway and bounded query parameter
   await fetchConsoleUsage();
   const usageUrl = String(fetchWithAuth.mock.calls.at(-1)?.[0]);
   expect(usageUrl).toContain("/api/console/usage?days=14&tz_offset_minutes=");
+
+  await fetchConsoleUsageLedger({ limit: 7, offset: 10, runId: "run/2" });
+  expect(fetchWithAuth).toHaveBeenLastCalledWith(
+    expect.stringContaining(
+      "/api/console/usage-ledger?limit=7&offset=10&run_id=run%2F2",
+    ),
+    { method: "GET" },
+  );
 });
 
 test("cancel delegates to the LangGraph run manager", async () => {
