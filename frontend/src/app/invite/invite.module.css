@@ -27,22 +27,39 @@
   background-size: 28px 28px;
 }
 
-.sheet {
+/*
+ * Two elements, on purpose. The deckle is a mask-image on .sheet, and a mask
+ * clips everything painted by that element — including a ::before pin sitting
+ * above its top edge and its box-shadow. So the pin, the tilt, the release
+ * motion and the shadow live on .frame (unmasked), and only the cream sheet
+ * itself is torn. drop-shadow on the frame follows the torn silhouette.
+ * Shared with /login, which pins the same sheet on the same field.
+ */
+.frame {
   position: relative;
   width: min(28rem, 100%);
   height: fit-content;
+  filter: drop-shadow(0 1.25rem 1.75rem rgb(16 30 63 / 40%));
+  transform: rotate(-0.4deg);
+  transition:
+    transform 420ms cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 420ms ease;
+}
+
+.sheet {
+  position: relative;
   background: var(--paper-cream-hi);
   border: 1px solid var(--paper-line);
   padding: 2.5rem 2rem 2rem;
   color: var(--paper-ink);
-  box-shadow: 0 1.5rem 3rem rgb(16 30 63 / 35%);
-  transform: rotate(-0.4deg);
 }
 
 /* Pin, centred over the sheet's top edge (paper.css's .pinned::before). */
-.sheet:global(.pinned)::before {
-  top: -7px;
+.frame:global(.pinned)::before {
+  /* Below the 24px tear band's deepest notch, so the pin pierces paper. */
+  top: 14px;
   left: 50%;
+  z-index: 1;
   transform: translateX(-50%);
   transition: transform 420ms cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -52,11 +69,6 @@
  * away, 420ms. Reduced motion turns this fully off (InvitePage only adds
  * .sheetReleased when release is allowed to begin with).
  */
-.sheet {
-  transition:
-    transform 420ms cubic-bezier(0.16, 1, 0.3, 1),
-    opacity 420ms ease;
-}
 
 .sheetReleased {
   transform: rotate(1.5deg) translate(14px, -10px);
@@ -83,6 +95,7 @@
 
 .errorTag {
   position: absolute;
+  z-index: 1;
   top: -2px;
   left: calc(50% + 10px);
   width: 10px;
@@ -182,11 +195,11 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .sheet {
+  .frame {
     transition: none;
   }
 
-  .sheet:global(.pinned)::before {
+  .frame:global(.pinned)::before {
     transition: none;
   }
 }

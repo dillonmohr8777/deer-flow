@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
 
+import inviteStyles from "@/app/invite/invite.module.css";
 import { RememberSessionOption } from "@/components/auth/remember-session-option";
 import { resolveFunnelTreatment } from "@/components/momentum/treatment";
 import { Button } from "@/components/ui/button";
@@ -212,55 +213,19 @@ export default function LoginPage() {
   const linkClass = paper ? undefined : "text-blue-500";
   const linkStyle = paper ? { color: "var(--paper-focus)" } : undefined;
 
-  return (
+  // Paper: the sign-in is the same physical object as the invite — one
+  // deckled cream sheet pinned on the blueprint field (invite.module.css
+  // .field/.frame/.sheet). No flickering grid, no motion: the static
+  // composition is the thesis for this surface. Auth logic is untouched.
+  const card = (
     <div
       className={cn(
-        "relative flex min-h-screen items-center justify-center overflow-x-hidden overflow-y-auto",
-        !paper && "bg-background",
+        "relative w-full max-w-md space-y-6",
+        paper
+          ? cn(inviteStyles.sheet, "sheet paper-torn")
+          : "border-border/20 bg-background/5 rounded-3xl border p-8 backdrop-blur-sm",
       )}
-      data-treatment={paper ? "paper" : "current"}
-      style={paper ? { background: "var(--paper-royal-deep)" } : undefined}
     >
-      {/*
-        Momentum front door. A blueprint grid seen through a torn hole in the
-        paper — paper.css's own deckle-edge mask (`.paper-torn`), inverted
-        180deg so it reads as a hole torn out rather than a sheet's own top
-        edge, instead of the old soft radial fade. Auth logic below is
-        untouched; only presentation changed. No motion added here — the
-        brief for this surface is "Moment: NONE", and the grid's ambient
-        flicker already existed before this pass.
-      */}
-      <FlickeringGrid
-        className={cn(
-          "absolute inset-0 z-0",
-          paper
-            ? "paper-torn"
-            : "[mask-image:radial-gradient(60vh_60vh_at_50%_42%,black,transparent_72%)]",
-        )}
-        style={paper ? { transform: "rotate(180deg)" } : undefined}
-        squareSize={4}
-        gridGap={4}
-        color={paper ? "#17a9e8" : actualTheme === "dark" ? "white" : "black"}
-        maxOpacity={paper ? 0.35 : 0.22}
-        flickerChance={0.2}
-      />
-      <div
-        className={cn(
-          "relative w-full max-w-md space-y-6 border p-8",
-          paper
-            ? "pinned rounded-md"
-            : "border-border/20 bg-background/5 rounded-3xl backdrop-blur-sm",
-        )}
-        style={
-          paper
-            ? {
-                background: "var(--paper-cream-hi)",
-                borderColor: "var(--paper-line)",
-                color: "var(--paper-ink)",
-              }
-            : undefined
-        }
-      >
         <div className="text-center">
           <Image
             className={cn(
@@ -273,7 +238,10 @@ export default function LoginPage() {
             height={28}
             priority
           />
-          <p className={cn("mt-2", mutedClass)} style={mutedStyle}>
+          <p
+            className={cn("mt-2", mutedClass, paper && "m-voice-serif text-lg")}
+            style={mutedStyle}
+          >
             {isLogin ? t.login.signInTitle : t.login.createAccountTitle}
           </p>
         </div>
@@ -361,7 +329,19 @@ export default function LoginPage() {
 
           {error && <p className="text-sm text-red-500">{error}</p>}
 
-          <Button type="submit" className="w-full" disabled={loading}>
+          <Button
+            type="submit"
+            className="w-full"
+            disabled={loading}
+            style={
+              paper
+                ? {
+                    background: "var(--paper-royal)",
+                    color: "var(--paper-cream-hi)",
+                  }
+                : undefined
+            }
+          >
             {loading
               ? t.login.pleaseWait
               : isLogin
@@ -445,6 +425,33 @@ export default function LoginPage() {
           </Link>
         </div>
       </div>
+  );
+
+  return (
+    <div
+      className={cn(
+        "relative min-h-screen overflow-x-hidden overflow-y-auto",
+        paper
+          ? inviteStyles.field
+          : "bg-background flex items-center justify-center",
+      )}
+      data-treatment={paper ? "paper" : "current"}
+    >
+      {paper ? (
+        <div className={cn(inviteStyles.frame, "pinned")}>{card}</div>
+      ) : (
+        <>
+          <FlickeringGrid
+            className="absolute inset-0 z-0 [mask-image:radial-gradient(60vh_60vh_at_50%_42%,black,transparent_72%)]"
+            squareSize={4}
+            gridGap={4}
+            color={actualTheme === "dark" ? "white" : "black"}
+            maxOpacity={0.22}
+            flickerChance={0.2}
+          />
+          {card}
+        </>
+      )}
     </div>
   );
 }

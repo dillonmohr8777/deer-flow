@@ -149,17 +149,24 @@ export default function InvitePage() {
     <main className={styles.field} data-treatment="paper">
       <div
         className={[
-          styles.sheet,
-          "sheet",
+          styles.frame,
           "pinned",
-          "paper-torn",
-          error ? styles.sheetError : "",
           released ? styles.sheetReleased : "",
         ]
           .filter(Boolean)
           .join(" ")}
       >
         {error ? <span className={styles.errorTag} aria-hidden="true" /> : null}
+      <div
+        className={[
+          styles.sheet,
+          "sheet",
+          "paper-torn",
+          error ? styles.sheetError : "",
+        ]
+          .filter(Boolean)
+          .join(" ")}
+      >
         <meta name="referrer" content="no-referrer" />
         <h1 className={`${styles.title} m-voice-serif-bold`}>
           {info ? `You're invited to ${info.workspace_name}` : "Workspace invite"}
@@ -227,6 +234,7 @@ export default function InvitePage() {
             </form>
           </section>
         ) : null}
+      </div>
       </div>
     </main>
   );

@@ -11,7 +11,7 @@
 
 export type FunnelTreatment = "current" | "paper";
 
-export const FUNNEL_TREATMENT: FunnelTreatment = "current";
+export const FUNNEL_TREATMENT: FunnelTreatment = "paper";
 
 const VALID_TREATMENTS: ReadonlySet<string> = new Set(["current", "paper"]);
 

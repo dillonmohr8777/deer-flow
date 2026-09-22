@@ -27,10 +27,6 @@ import {
   FUNNEL_TREATMENT,
   resolveFunnelTreatment,
 } from "@/components/momentum/treatment";
-import {
-  MomoAvatar,
-  type MomoAvatarAgent,
-} from "@/components/workspace/command-center/momo-avatar";
 
 import styles from "./momentum-landing.module.css";
 
@@ -82,13 +78,6 @@ const CAPABILITIES = [
 // a three/four-equal-card row.
 const CARD_OFFSETS = [0, 24, 8, 16] as const;
 
-// Fake roster entries: no live agent data exists signed-out, and
-// public/momentum/momos/ ships empty regardless, so MomoAvatar always falls
-// through to the procedural MomentumGlyph here — expected, per the brief.
-const HERO_MOMOS: MomoAvatarAgent[] = [
-  { name: "lead", description: "the Momentum lead agent" },
-  { name: "fleet-scout", description: "a Momentum research agent" },
-];
 
 export function MomentumLanding() {
   // Initial state is always the plain default, matching what the server
@@ -195,11 +184,50 @@ export function MomentumLanding() {
  * theme provider pins on this route (theme-provider.tsx:14) — nothing here
  * reads a `--momentum-*`/shadcn dark-mode token, only `--paper-*` ones.
  */
+/*
+ * The canonical flat Momo (public/momentum/momo-mark.svg geometry) drawn in
+ * paper tokens per the 2026-09-21 re-lock: royal body, cream eyes, grey
+ * hardware, gold only on the antenna ball. Stands in for the hero crew until
+ * public/momentum/momos/ has art; the console glyph fallback is the wrong
+ * medium on a paper sheet. The stem grey is Momo hardware, not a text token.
+ */
+function PaperMomo({ size, tilt = 0 }: { size: number; tilt?: number }) {
+  return (
+    <svg
+      viewBox="0 0 120 132"
+      width={size}
+      height={(size * 132) / 120}
+      aria-hidden="true"
+      style={{ transform: `rotate(${tilt}deg)` }}
+    >
+      <path
+        d="M60 29V14"
+        stroke="#5c6773"
+        strokeWidth="7"
+        strokeLinecap="round"
+      />
+      <circle cx="60" cy="11" r="6" fill="var(--paper-brass)" />
+      <path
+        d="M60 28c30 0 49 20 49 49s-18 47-49 47S11 106 11 77s19-49 49-49Z"
+        fill="var(--paper-royal)"
+      />
+      <rect x="35" y="59" width="12" height="23" rx="6" fill="var(--paper-cream-hi)" />
+      <rect x="73" y="59" width="12" height="23" rx="6" fill="var(--paper-cream-hi)" />
+    </svg>
+  );
+}
+
 function PaperLanding() {
   return (
     <div className={styles.paperPage} data-treatment="paper">
-      <div className={styles.paperBlueprintA} aria-hidden="true" />
-      <div className={styles.paperBlueprintB} aria-hidden="true" />
+      <div
+        className={`${styles.paperBlueprintA} paper-torn`}
+        aria-hidden="true"
+      />
+      <div
+        className={`${styles.paperBlueprintB} paper-torn-alt`}
+        aria-hidden="true"
+      />
 
       <div className={styles.paperShell}>
         <header className={styles.paperHeader}>
@@ -274,9 +302,8 @@ function PaperLanding() {
           </ul>
 
           <div className={styles.paperMomos} aria-hidden="true">
-            {HERO_MOMOS.map((agent) => (
-              <MomoAvatar key={agent.name} agent={agent} size={160} />
-            ))}
+            <PaperMomo size={160} tilt={-4} />
+            <PaperMomo size={112} tilt={3} />
           </div>
         </main>
 

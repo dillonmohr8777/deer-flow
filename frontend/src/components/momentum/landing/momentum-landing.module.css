@@ -373,7 +373,7 @@
   position: relative;
   min-height: 100vh;
   width: 100%;
-  overflow-x: clip;
+  overflow: clip; /* scraps never extend the scroll height past the sheet */
   background: var(--paper-cream);
   color: var(--paper-ink);
   font-family: var(--m-font-text, "Nunito Sans", system-ui, sans-serif);
@@ -381,30 +381,73 @@
   line-height: 1.6;
 }
 
-/* Two deckled royal blueprint shapes, sat behind the sheet content. */
+/*
+ * Two torn blueprint scraps behind the sheet content: royal paper with a
+ * faint cream drafting grid, deckled by paper.css's .paper-torn(-alt) mask,
+ * and placed where no copy sits — A in the empty right column beside the
+ * hero, B behind the Momos above the footer. Never under words: ink on royal
+ * fails contrast, and a scrap under text reads as a bug, not craft.
+ */
 .paperBlueprintA,
 .paperBlueprintB {
   position: absolute;
   pointer-events: none;
   z-index: 0;
+  background-color: var(--paper-royal-deep);
+  background-image:
+    linear-gradient(
+      to right,
+      color-mix(in srgb, var(--paper-cream) 10%, transparent) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--paper-cream) 10%, transparent) 1px,
+      transparent 1px
+    );
+  background-size: 28px 28px;
 }
 
 .paperBlueprintA {
-  top: -6rem;
-  right: -8rem;
-  width: 34rem;
-  height: 30rem;
-  background: var(--paper-royal);
-  opacity: 0.92;
+  top: 7rem;
+  right: -4rem;
+  width: min(30rem, 38vw);
+  height: 24rem;
+  transform: rotate(-2.5deg);
 }
 
 .paperBlueprintB {
-  bottom: -10rem;
-  left: -10rem;
-  width: 30rem;
-  height: 26rem;
-  background: var(--paper-royal-deep);
-  opacity: 0.85;
+  bottom: 8rem;
+  left: -5rem;
+  width: 26rem;
+  height: 14rem;
+  transform: rotate(1.5deg);
+  /* Kraft, not royal: a royal Momo on a royal scrap disappears. */
+  background-color: var(--paper-kraft);
+  background-image:
+    linear-gradient(
+      to right,
+      color-mix(in srgb, var(--paper-ink) 10%, transparent) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--paper-ink) 10%, transparent) 1px,
+      transparent 1px
+    );
+}
+
+@media (max-width: 48rem) {
+  .paperBlueprintA {
+    display: none;
+  }
+
+  .paperBlueprintB {
+    width: 18rem;
+    height: 10rem;
+    left: -4rem;
+    bottom: 7rem;
+  }
 }
 
 .paperShell {
@@ -566,7 +609,7 @@
  * own (attribute + 1 class + pseudo-element) regardless of CSS load order.
  */
 :global([data-treatment="paper"]) .paperCard:global(.pinned)::before {
-  top: -7px;
+  top: 14px; /* below the 24px tear band, so the pin pierces paper */
   left: 50%;
   transform: translateX(-50%);
 }
@@ -590,15 +633,18 @@
   margin-top: clamp(2.5rem, 6vw, 4rem);
 }
 
-.paperMomos :global(.avatar) {
-  width: 160px;
-  height: 160px;
+.paperMomos svg {
+  display: block;
+  flex: 0 0 auto;
+  /* Kraft offset under the mark: the cut-paper read, no glow, no gradient. */
+  filter: drop-shadow(3px 4px 0 var(--paper-kraft));
 }
 
 @media (max-width: 34rem) {
-  .paperMomos :global(.avatar) {
-    width: 96px;
-    height: 96px;
+  .paperMomos svg {
+    width: 38%;
+    max-width: 112px;
+    height: auto;
   }
 }
 

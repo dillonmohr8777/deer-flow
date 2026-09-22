@@ -99,17 +99,40 @@
   aria-hidden: true;
 }
 
+/*
+ * Two mask layers so the tear is a fixed 24px band at the top edge whatever
+ * the sheet's height: a tall sign-in sheet and a short card get the same
+ * hand-torn amplitude (~14px). A single 100%-tall mask scaled the tear with
+ * the sheet, which made tall sheets look sawn, not torn. The second layer is
+ * a solid fill from 23px down (1px overlap, no seam); mask-composite add.
+ */
 [data-treatment="paper"] .paper-torn {
-  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'%3E%3Cpath d='M0 6 L7 2 L13 8 L20 3 L27 7 L34 1 L41 6 L48 2 L55 7 L62 3 L69 8 L76 2 L83 6 L90 1 L100 5 L100 100 L0 100 Z'/%3E%3C/svg%3E");
-  mask-size: 100% 100%;
+  mask-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'%3E%3Cpath d='M0 45 L7 15 L13 60 L20 25 L27 70 L34 10 L41 50 L48 20 L55 65 L62 30 L69 70 L76 15 L83 55 L90 10 L100 40 L100 100 L0 100 Z'/%3E%3C/svg%3E"),
+    linear-gradient(#000, #000);
+  mask-size:
+    100% 24px,
+    100% calc(100% - 23px);
+  mask-position:
+    top,
+    bottom;
   mask-repeat: no-repeat;
+  mask-composite: add;
   border-radius: 2px 5px 3px 6px;
 }
 
 [data-treatment="paper"] .paper-torn-alt {
-  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'%3E%3Cpath d='M0 3 L8 7 L15 2 L22 8 L29 3 L36 7 L43 2 L50 6 L57 1 L64 6 L71 2 L78 7 L85 3 L92 8 L100 4 L100 100 L0 100 Z'/%3E%3C/svg%3E");
-  mask-size: 100% 100%;
+  mask-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'%3E%3Cpath d='M0 25 L8 65 L15 15 L22 70 L29 30 L36 60 L43 10 L50 50 L57 20 L64 65 L71 15 L78 60 L85 30 L92 70 L100 35 L100 100 L0 100 Z'/%3E%3C/svg%3E"),
+    linear-gradient(#000, #000);
+  mask-size:
+    100% 24px,
+    100% calc(100% - 23px);
+  mask-position:
+    top,
+    bottom;
   mask-repeat: no-repeat;
+  mask-composite: add;
   border-radius: 5px 2px 6px 3px;
 }
 
