@@ -1,6 +1,8 @@
 # Momo films
 
-Higgsfield Seedance 2.5 (omni_reference, 720p, no audio), made 2026-09-23. The style and character reference is Dillon's own Momo clip. Each clip is trimmed and crossfade-looped locally with ffmpeg, then encoded to WebM (VP9), MP4 (H.264) and a WebP poster.
+Momo films were made 2026-09-23. The character reference is Dillon's own Momo clip. Other clips use Higgsfield Seedance 2.5 (omni_reference, 720p, no audio), then local ffmpeg WebM (VP9), MP4 (H.264), and WebP poster exports.
+
+`momo-intro` is a 10-second silent scrapbook montage: eight multi-image plates generated with OpenAI `gpt-image-2.5-sunburst`, composited locally with blue/yellow particles and the exact Momo mark, then resolved into the Higgsfield intro source below. The generated plates, prompts, source hashes, render script, and QA are in `C:\Users\dillo\Documents\Codex\2026-09-23\we-ll-see-how-good-you\work\momo-collage`.
 
 | Name          | Job                                  | Used on                                   |
 | ------------- | ------------------------------------ | ----------------------------------------- |
