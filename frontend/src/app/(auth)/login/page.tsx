@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTheme } from "next-themes";
@@ -8,6 +7,11 @@ import { useEffect, useState } from "react";
 
 import inviteStyles from "@/app/invite/invite.module.css";
 import { RememberSessionOption } from "@/components/auth/remember-session-option";
+import { useIntroMotion } from "@/components/momentum/momobot/intro-motion";
+import { MomoBotLockup } from "@/components/momentum/momobot/lockup";
+import momoStyles from "@/components/momentum/momobot/momobot.module.css";
+import { ScrapbookBackdrop } from "@/components/momentum/momobot/scrapbook-backdrop";
+import { WavingMomo } from "@/components/momentum/momobot/waving-momo";
 import { resolveFunnelTreatment } from "@/components/momentum/treatment";
 import { Button } from "@/components/ui/button";
 import { FlickeringGrid } from "@/components/ui/flickering-grid";
@@ -63,6 +67,11 @@ export default function LoginPage() {
   // Nudge the user toward the SSO buttons without confirming the account exists.
   const [showSsoHint, setShowSsoHint] = useState(false);
   const [loading, setLoading] = useState(false);
+  // Momo waves on load, then again whenever the email field is hovered or
+  // focused. Motion (reduced motion, hidden tab, pause) is decided inside.
+  const introMotion = useIntroMotion();
+  const [waveCue, setWaveCue] = useState(0);
+  const cueWave = () => setWaveCue((cue) => cue + 1);
 
   // Get next parameter for validated redirect
   const nextParam = searchParams.get("next");
@@ -227,23 +236,16 @@ export default function LoginPage() {
       )}
     >
         <div className="text-center">
-          <Image
-            className={cn(
-              "mx-auto h-7 w-auto",
-              !paper && "dark:brightness-0 dark:invert",
-            )}
-            src="/momentum/wordmark.png"
-            alt="Momentum"
-            width={154}
-            height={28}
-            priority
+          <MomoBotLockup
+            className="mx-auto"
+            wordmarkClassName={cn(!paper && "dark:brightness-0 dark:invert")}
           />
-          <p
+          <h1
             className={cn("mt-2", mutedClass, paper && "m-voice-serif text-lg")}
             style={mutedStyle}
           >
             {isLogin ? t.login.signInTitle : t.login.createAccountTitle}
-          </p>
+          </h1>
         </div>
 
         {showSetupStatusUnavailable && (
@@ -303,6 +305,8 @@ export default function LoginPage() {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              onFocus={cueWave}
+              onMouseEnter={cueWave}
               placeholder={t.login.emailPlaceholder}
               required
             />
@@ -438,7 +442,19 @@ export default function LoginPage() {
       data-treatment={paper ? "paper" : "current"}
     >
       {paper ? (
-        <div className={cn(inviteStyles.frame, "pinned")}>{card}</div>
+        <>
+          <ScrapbookBackdrop motion={introMotion} tone="royal" />
+          <div
+            className={cn(
+              inviteStyles.frame,
+              "pinned",
+              momoStyles.frameWithMomo,
+            )}
+          >
+            <WavingMomo live={introMotion.live} cue={waveCue} />
+            {card}
+          </div>
+        </>
       ) : (
         <>
           <FlickeringGrid

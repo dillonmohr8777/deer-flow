@@ -390,13 +390,11 @@
 }
 
 /*
- * Two torn blueprint scraps behind the sheet content: royal paper with a
- * faint cream drafting grid, deckled by paper.css's .paper-torn(-alt) mask,
- * and placed where no copy sits — A in the empty right column beside the
- * hero, B behind the Momos above the footer. Never under words: ink on royal
+ * A torn blueprint scrap behind the sheet content, deckled by paper.css's
+ * .paper-torn-alt mask and placed where no copy sits: behind the Momos above
+ * the footer. Never under words: ink on royal
  * fails contrast, and a scrap under text reads as a bug, not craft.
  */
-.paperBlueprintA,
 .paperBlueprintB {
   position: absolute;
   pointer-events: none;
@@ -416,12 +414,18 @@
   background-size: 28px 28px;
 }
 
-.paperBlueprintA {
-  top: 7rem;
-  right: -4rem;
-  width: min(30rem, 38vw);
-  height: 24rem;
-  transform: rotate(-2.5deg);
+/*
+ * The MomoBot scrapbook collage (momobot/scrapbook-backdrop.tsx) fills the
+ * hero band in place of the old right-column blueprint scrap. Its cream
+ * scrim keeps every word in the hero column at 4.5:1 or better.
+ */
+.paperIntro {
+  position: absolute;
+  inset: 0 0 auto;
+  height: min(100vh, 54rem);
+  z-index: 0;
+  /* The collage fades out into the page instead of ending on a hard line. */
+  mask-image: linear-gradient(to bottom, #000 78%, transparent);
 }
 
 .paperBlueprintB {
@@ -446,10 +450,6 @@
 }
 
 @media (max-width: 48rem) {
-  .paperBlueprintA {
-    display: none;
-  }
-
   .paperBlueprintB {
     width: 18rem;
     height: 10rem;

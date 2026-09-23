@@ -1,0 +1,229 @@
+/*
+ * MomoBot front door: lockup, scrapbook collage backdrop, paper doves and the
+ * waving login Momo. Only --paper-* tokens (paper.css), scoped under the
+ * [data-treatment="paper"] pages that mount these components.
+ */
+
+/* ---- Lockup: "MomoBot by Momentum" ------------------------------------- */
+
+.lockup {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  white-space: nowrap;
+}
+
+.lockupName {
+  font-size: 1.375rem;
+  line-height: 1;
+  color: var(--paper-royal, currentColor);
+}
+
+.lockupBy {
+  font-size: 0.8125rem;
+  color: var(--paper-ink-muted, currentColor);
+}
+
+.lockupWordmark {
+  height: 0.95rem;
+  width: auto;
+  align-self: center;
+}
+
+/* ---- Collage backdrop -------------------------------------------------- */
+
+.backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.clipping {
+  position: absolute;
+  filter: drop-shadow(0 0.5rem 0.75rem rgb(16 30 63 / 35%));
+}
+
+/* Newsprint mat around each picture, deckled by paper.css's torn mask. */
+.clippingPaper {
+  position: relative;
+  overflow: hidden;
+  background: #efe9dc;
+  border: 0.45rem solid #efe9dc;
+  border-top-width: 1.1rem;
+}
+
+.clippingImage {
+  object-fit: cover;
+  filter: saturate(0.85) sepia(0.12);
+  animation: clipping-in 260ms ease-out;
+}
+
+@keyframes clipping-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/*
+ * Royal (sign in): the collage calms under the blueprint field colour; no
+ * copy sits on it, the cream sheet carries its own contrast.
+ * Cream (landing): hero copy sits over this. The text column gets the full
+ * LANDING_SCRIM_ALPHA (intro-motion.ts, contrast pinned by a unit test),
+ * fading only beyond
+ * the hero's right edge where no words sit.
+ */
+.scrim {
+  position: absolute;
+  inset: 0;
+}
+
+.backdrop[data-tone="royal"] .scrim {
+  background: rgb(20 52 110 / 38%);
+}
+
+.backdrop[data-tone="cream"] .scrim {
+  --text-edge: max(50% + 9rem, 47rem);
+  background: linear-gradient(
+    90deg,
+    rgb(242 237 227 / var(--scrim-alpha)) 0,
+    rgb(242 237 227 / var(--scrim-alpha)) var(--text-edge),
+    rgb(242 237 227 / 30%) calc(var(--text-edge) + 14rem)
+  );
+}
+
+@media (max-width: 48rem) {
+  .clipping[data-optional="true"] {
+    display: none;
+  }
+
+  .backdrop[data-tone="cream"] .scrim {
+    background: rgb(242 237 227 / var(--scrim-alpha));
+  }
+}
+
+/* ---- Paper doves ------------------------------------------------------- */
+
+.doves {
+  position: absolute;
+  inset: 0;
+}
+
+.dove {
+  position: absolute;
+  left: 0;
+  width: 3.25rem;
+  height: auto;
+  animation-name: dove-drift;
+  animation-iteration-count: infinite;
+  animation-timing-function: cubic-bezier(0.45, 0.05, 0.55, 0.95);
+  will-change: transform;
+}
+
+@keyframes dove-drift {
+  0% {
+    transform: translate(-10vw, 0) scale(var(--dove-scale));
+  }
+  25% {
+    transform: translate(22vw, -5vh) scale(var(--dove-scale));
+  }
+  50% {
+    transform: translate(50vw, 2vh) scale(var(--dove-scale));
+  }
+  75% {
+    transform: translate(78vw, -4vh) scale(var(--dove-scale));
+  }
+  100% {
+    transform: translate(112vw, 1vh) scale(var(--dove-scale));
+  }
+}
+
+/* Two wing frames, stepped: never tweened. */
+.wingUp,
+.wingDown {
+  animation: wing-flap 620ms steps(1, end) infinite;
+}
+
+.wingDown {
+  animation-delay: -310ms;
+}
+
+@keyframes wing-flap {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+
+.backdrop[data-live="false"] .dove,
+.backdrop[data-live="false"] .wingUp,
+.backdrop[data-live="false"] .wingDown {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .doves {
+    display: none;
+  }
+
+  .clippingImage {
+    animation: none;
+  }
+}
+
+/* ---- Pause / play ------------------------------------------------------ */
+
+.motionToggle {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 0.8rem;
+  border: 1px solid var(--paper-line);
+  background: var(--paper-cream-hi);
+  color: var(--paper-ink);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 0.25rem 0.75rem rgb(16 30 63 / 25%);
+}
+
+.motionToggle:hover {
+  background: var(--paper-cream);
+}
+
+.motionToggle:focus-visible {
+  outline: 2px solid var(--paper-focus);
+  outline-offset: 2px;
+}
+
+/* ---- Waving login Momo ------------------------------------------------- */
+
+/*
+ * The sprite is 5 frames of 360x262. Row 233 is where the sheet's top edge
+ * falls under his fingers, so translateY(-88.9%) puts that line at `top`,
+ * 14px into the sheet: below the torn band, so the tear never bites him.
+ */
+.momo {
+  position: absolute;
+  top: 14px;
+  right: 0.5rem;
+  z-index: 2;
+  width: clamp(7.5rem, 30vw, 10.5rem);
+  aspect-ratio: 360 / 262;
+  transform: translateY(-88.9%);
+  background: url("/momentum/momobot/login-wave.webp") 0 0 / 500% 100% no-repeat;
+  pointer-events: none;
+}
+
+/* Room above the pinned sheet for Momo's head and antenna. */
+.frameWithMomo {
+  z-index: 1;
+  margin-top: clamp(4.5rem, 12vw, 6.5rem);
+}

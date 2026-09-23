@@ -78,7 +78,7 @@ export const enUS: Translations = {
       notice:
         "Discover integrations for your team. Connect accounts and configure access when you need them.",
       configured: "Configured",
-      nativeHint: "Supported by Momentum · requires deployment configuration",
+      nativeHint: "Supported by MomoBot · requires deployment configuration",
       guideHint: "Setup reference · not connected",
       unknownStatus: "Status unavailable",
       notConnected: "Not connected",
@@ -86,7 +86,7 @@ export const enUS: Translations = {
     integrationSkills: "From plugins",
     sharedSkills: "Shared skills",
     title: "Capability Center",
-    description: "Add tools and skills that help Momentum work your way.",
+    description: "Add tools and skills that help MomoBot work your way.",
     plugins: "Plugins",
     skills: "Skills",
     searchPlugins: "Search plugins by name or purpose",
@@ -202,7 +202,7 @@ export const enUS: Translations = {
     greeting: "What should the team take on?",
     createYourOwnSkill: "Create Your Own Skill",
     createYourOwnSkillDescription:
-      "Create your own skill to release the power of Momentum. With customized skills,\nMomentum can help you search on the web, analyze data, and generate\n artifacts like slides, web pages and do almost anything.",
+      "Create your own skill to release the power of MomoBot. With customized skills,\nMomoBot can help you search on the web, analyze data, and generate\n artifacts like slides, web pages and do almost anything.",
   },
 
   // Clipboard
@@ -348,7 +348,7 @@ export const enUS: Translations = {
     voiceInputStartLabel: "Dictate with voice",
     voiceInputStopLabel: "Stop voice input",
     voiceInputStart:
-      "Dictate with voice. Momentum receives only transcribed text; audio is handled by your browser or system speech service.",
+      "Dictate with voice. MomoBot receives only transcribed text; audio is handled by your browser or system speech service.",
     voiceInputStop: "Stop voice input",
     voiceInputListening: "Listening... Click to stop voice input.",
     voiceInputUnsupported:
@@ -638,12 +638,12 @@ export const enUS: Translations = {
     cancelling: "Cancelling…",
     cancelFailed: "Failed to cancel task",
     cancellationRetrying: (attempt) =>
-      `Cancellation attempt ${attempt} failed; Momentum will keep retrying.`,
+      `Cancellation attempt ${attempt} failed; MomoBot will keep retrying.`,
     notificationRetrying: (attempt) =>
-      `Chat notification attempt ${attempt} failed; Momentum will retry with backoff.`,
+      `Chat notification attempt ${attempt} failed; MomoBot will retry with backoff.`,
     notificationStopped:
       "Chat notification delivery stopped after repeated or permanent failures.",
-    trackingDegraded: "Status checks are delayed; Momentum is still retrying.",
+    trackingDegraded: "Status checks are delayed; MomoBot is still retrying.",
     viewDetails: "View details",
     hideDetails: "Hide details",
     detailsFailed: "Couldn't load task details",
@@ -757,7 +757,7 @@ export const enUS: Translations = {
       threadIdPlaceholder: "Thread ID",
       reuseNoticeTitle: "Uses this thread's conversation history",
       reuseNoticeDescription:
-        "If this thread has an active run at the scheduled time, Momentum queues this occurrence and starts it when the thread is available. It fails if the configured queue wait limit is exceeded.",
+        "If this thread has an active run at the scheduled time, MomoBot queues this occurrence and starts it when the thread is available. It fails if the configured queue wait limit is exceeded.",
     },
     search: {
       placeholder: "Search task titles or prompts",
@@ -913,13 +913,13 @@ export const enUS: Translations = {
     save: "Save agent",
     saving: "Saving agent...",
     saveRequested:
-      "Save requested. Momentum is generating and saving an initial version now.",
+      "Save requested. MomoBot is generating and saving an initial version now.",
     saveHint:
       "You can save this agent at any time from the top-right menu, even if this is only a first draft.",
     saveCommandMessage:
       "Please save this custom agent now based on everything we have discussed so far. Treat this as my explicit confirmation to save. If some details are still missing, make reasonable assumptions, generate a concise first SOUL.md in English, and call setup_agent immediately without asking me for more confirmation.",
     agentCreatedPendingRefresh:
-      "The agent was created, but Momentum could not load it yet. Please refresh this page in a moment.",
+      "The agent was created, but MomoBot could not load it yet. Please refresh this page in a moment.",
     more: "More actions",
     agentCreated: "Agent created!",
     startChatting: "Start chatting",
@@ -1088,10 +1088,10 @@ export const enUS: Translations = {
         "WeChat says this bot is already linked. Close this dialog and check its connection, or choose a different bot on your phone.",
       saved: "Token saved securely",
       savedDescription:
-        "Momentum has saved your token on the server and started the WeChat channel.",
+        "MomoBot has saved your token on the server and started the WeChat channel.",
       bindTitle: "One more step: link your account",
       bindDescription:
-        "Send this command to the bot in WeChat to link it to your Momentum account.",
+        "Send this command to the bot in WeChat to link it to your MomoBot account.",
       bindWaiting: "Waiting for your message in WeChat…",
       bindLoading: "Preparing your account connection…",
       bindFailed:
@@ -1108,7 +1108,7 @@ export const enUS: Translations = {
 
       login: "Scan QR code",
       manual: "Use token",
-      description: "Connect WeChat to your Momentum workspace.",
+      description: "Connect WeChat to your MomoBot workspace.",
       loading: "Generating QR code…",
       imageTitle: "WeChat login QR code",
       scan: "Scan this code with WeChat, then confirm on your phone.",
@@ -1135,21 +1135,21 @@ export const enUS: Translations = {
     saveAndConnect: "Save and connect",
     saveChanges: "Save changes",
     descriptions: {
-      buzz: "Buzz channels and direct messages through your Momentum agent.",
-      telegram: "Telegram direct messages through your Momentum bot.",
+      buzz: "Buzz channels and direct messages through your MomoBot agent.",
+      telegram: "Telegram direct messages through your MomoBot bot.",
       slack: "Slack workspace messages and mentions.",
-      discord: "Discord server messages through your Momentum bot.",
-      feishu: "Feishu and Lark messages through your Momentum app.",
-      dingtalk: "DingTalk Stream Push messages through your Momentum bot.",
-      wechat: "WeChat iLink messages through your Momentum bot.",
-      wecom: "WeCom messages through your Momentum AI bot.",
+      discord: "Discord server messages through your MomoBot bot.",
+      feishu: "Feishu and Lark messages through your MomoBot app.",
+      dingtalk: "DingTalk Stream Push messages through your MomoBot bot.",
+      wechat: "WeChat iLink messages through your MomoBot bot.",
+      wecom: "WeCom messages through your MomoBot AI bot.",
     },
     connectedAs: (name: string) => `Connected as ${name}.`,
   },
 
   // Page titles (document title)
   pages: {
-    appName: "Momentum",
+    appName: "MomoBot",
     chats: "Chats",
     newChat: "New chat",
     untitled: "Untitled",
@@ -1185,7 +1185,7 @@ export const enUS: Translations = {
     writeFile: "Write file",
     clickToViewContent: "Click to view file content",
     writeTodos: "Update to-do list",
-    skillInstallTooltip: "Install skill and make it available to Momentum",
+    skillInstallTooltip: "Install skill and make it available to MomoBot",
     browserNavigate: (url: string) => `Open ${url} in browser`,
     browserNavigateGeneric: "Open page in browser",
     browserClick: "Click element in browser",
@@ -1284,7 +1284,7 @@ export const enUS: Translations = {
     actions: "Actions",
     keyboardShortcuts: "Keyboard Shortcuts",
     keyboardShortcutsDescription:
-      "Navigate Momentum faster with keyboard shortcuts.",
+      "Navigate MomoBot faster with keyboard shortcuts.",
     openCommandPalette: "Open Command Palette",
     toggleSidebar: "Toggle Sidebar",
   },
@@ -1292,7 +1292,7 @@ export const enUS: Translations = {
   // Settings
   settings: {
     title: "Settings",
-    description: "Adjust how Momentum looks and behaves for you.",
+    description: "Adjust how MomoBot looks and behaves for you.",
     models: {
       title: "Models",
       description:
@@ -1348,7 +1348,7 @@ export const enUS: Translations = {
     memory: {
       title: "Memory",
       description:
-        "Momentum automatically learns from your conversations in the background. These memories help Momentum understand you better and deliver a more personalized experience.",
+        "MomoBot automatically learns from your conversations in the background. These memories help MomoBot understand you better and deliver a more personalized experience.",
       empty: "No memory data to display.",
       rawJson: "Raw JSON",
       exportButton: "Export memory",
@@ -1520,7 +1520,7 @@ export const enUS: Translations = {
     channels: {
       title: "Channels",
       description:
-        "Connect IM accounts that can send messages to Momentum from outside the browser.",
+        "Connect IM accounts that can send messages to MomoBot from outside the browser.",
       disabled:
         "Channel connections are not enabled on this server. Ask an administrator to enable channel_connections.",
     },
@@ -1574,7 +1574,7 @@ export const enUS: Translations = {
         changeAppButton: "Change Lark app",
         changeAppTitle: "Switch to a different Lark app",
         changeAppDescription:
-          "Point your Momentum account at a different Lark/Feishu app. This only affects your account; other users are not changed.",
+          "Point your MomoBot account at a different Lark/Feishu app. This only affects your account; other users are not changed.",
         changeAppIdLabel: "App ID",
         changeAppSecretLabel: "App Secret",
         changeAppAuthResetNote:
@@ -1588,12 +1588,12 @@ export const enUS: Translations = {
         connectionStarted: "Connection link opened",
         connectionReady: "Connection is ready. Opening authorization...",
         authStarted:
-          "Authorization page opened. Momentum will detect completion automatically.",
+          "Authorization page opened. MomoBot will detect completion automatically.",
         authorizationStillPending:
-          'Authorization is not complete yet. Finish it in the browser; Momentum keeps checking automatically. You can click "I completed authorization" if the page does not update.',
+          'Authorization is not complete yet. Finish it in the browser; MomoBot keeps checking automatically. You can click "I completed authorization" if the page does not update.',
         permissionTitle: "Authorization scope",
         permissionDescription:
-          "By default, Momentum only completes the base sign-in and does not request any business permissions. Select the domains you need here; connected users can re-authorize to add more (scopes accumulate).",
+          "By default, MomoBot only completes the base sign-in and does not request any business permissions. Select the domains you need here; connected users can re-authorize to add more (scopes accumulate).",
         authDomains: {
           calendar: {
             label: "Calendar",
@@ -1704,10 +1704,10 @@ export const enUS: Translations = {
           "The first connection needs one browser confirmation from Lark. Open the link below and finish the prompt, then return here to continue authorization.",
         openAuthLinkTitle: "Authorize Lark in your browser",
         openAuthLinkDescription:
-          "Open the link below to authorize. Momentum keeps checking automatically and will save the connection after approval.",
+          "Open the link below to authorize. MomoBot keeps checking automatically and will save the connection after approval.",
         waitingAuthTitle: "Waiting for Lark authorization",
         waitingAuthDescription:
-          "Finish authorization in the browser page that just opened. Momentum will update this panel automatically; the button below is only a fallback.",
+          "Finish authorization in the browser page that just opened. MomoBot will update this panel automatically; the button below is only a fallback.",
         openAuthLink: "Open link",
         copyAuthLink: "Copy link",
         completeAuth: "I completed authorization",
@@ -1733,7 +1733,7 @@ export const enUS: Translations = {
           "The current user's authorization was verified with Lark during this connection flow. Reconnect whenever you need to refresh it or add permissions.",
         authNextTitle: "Complete browser authorization next",
         authNextDescription:
-          "Click “Connect Lark”; Momentum checks the current status first and opens browser authorization only when disconnected or expired.",
+          "Click “Connect Lark”; MomoBot checks the current status first and opens browser authorization only when disconnected or expired.",
       },
     },
     skills: {
@@ -1799,7 +1799,7 @@ export const enUS: Translations = {
       createSkill: "Create skill",
       emptyTitle: "No agent skill yet",
       emptyDescription:
-        "Put your agent skill folders under the `/skills/custom` folder under the root folder of Momentum.",
+        "Put your agent skill folders under the `/skills/custom` folder under the root folder of MomoBot.",
       emptyButton: "Create Your First Skill",
       adminRequired: "Admin privileges are required to manage agent skills.",
       installAdminRequired:
@@ -1813,12 +1813,12 @@ export const enUS: Translations = {
     notification: {
       title: "Notification",
       description:
-        "Momentum only sends a completion notification when the window is not active. This is especially useful for long-running tasks so you can switch to other work and get notified when done.",
+        "MomoBot only sends a completion notification when the window is not active. This is especially useful for long-running tasks so you can switch to other work and get notified when done.",
       requestPermission: "Request notification permission",
       deniedHint:
         "Notification permission was denied. You can enable it in your browser's site settings to receive completion alerts.",
       testButton: "Send test notification",
-      testTitle: "Momentum",
+      testTitle: "MomoBot",
       testBody: "This is a test notification.",
       notSupported: "Your browser does not support notifications.",
       disableNotification: "Disable notification",
@@ -1832,7 +1832,7 @@ export const enUS: Translations = {
       changePasswordDescription: "Update your account password.",
       ssoPasswordDescription: "Password is managed by your SSO provider.",
       ssoPasswordMessage:
-        "This account signs in with {provider}, so Momentum cannot manage or change its password here. Use your SSO provider's account settings instead.",
+        "This account signs in with {provider}, so MomoBot cannot manage or change its password here. Use your SSO provider's account settings instead.",
       currentPassword: "Current password",
       newPassword: "New password",
       confirmNewPassword: "Confirm new password",
@@ -1850,8 +1850,8 @@ export const enUS: Translations = {
     },
   },
   login: {
-    signInTitle: "Sign in to your account",
-    createAccountTitle: "Create a new account",
+    signInTitle: "Sign in to MomoBot",
+    createAccountTitle: "Create your MomoBot account",
     email: "Email",
     emailPlaceholder: "you@example.com",
     password: "Password",
@@ -1865,7 +1865,7 @@ export const enUS: Translations = {
     createAdminAccount: "Create admin account",
     adminSetupRequiredTitle: "Administrator setup is required",
     adminSetupRequiredDescription:
-      "Momentum needs an administrator account before new regular accounts can be created.",
+      "MomoBot needs an administrator account before new regular accounts can be created.",
     orContinueWith: "Or continue with",
     ssoHint:
       "If your account uses single sign-on, sign in with the option below instead.",

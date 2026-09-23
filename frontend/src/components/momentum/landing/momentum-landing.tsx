@@ -18,11 +18,13 @@
  * FUNNEL_TREATMENT ("current"), so day-one "/" stays byte-identical.
  */
 
-import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { CutPaper } from "@/components/momentum/cut-paper";
+import { useIntroMotion } from "@/components/momentum/momobot/intro-motion";
+import { MomoBotLockup } from "@/components/momentum/momobot/lockup";
+import { ScrapbookBackdrop } from "@/components/momentum/momobot/scrapbook-backdrop";
 import {
   FUNNEL_TREATMENT,
   resolveFunnelTreatment,
@@ -101,15 +103,7 @@ export function MomentumLanding() {
       <div className={styles.shell}>
         <header className={styles.header}>
           <Link className={styles.wordmark} href="/">
-            <Image
-              className={styles.wordmarkImage}
-              src="/momentum/wordmark.png"
-              alt="Momentum"
-              width={132}
-              height={24}
-              priority
-            />
-            <span className={styles.wordmarkNote}>Workspace</span>
+            <MomoBotLockup wordmarkClassName={styles.wordmarkImage} />
           </Link>
           <Link className={styles.secondary} href="/workspace">
             Sign in
@@ -124,10 +118,10 @@ export function MomentumLanding() {
             </p>
             <h1 className={styles.title}>Give your ambition a team.</h1>
             <p className={styles.lede}>
-              Momentum Workspace is a private environment where a team of agents
-              takes on real work across research, build and review, and leaves a
-              record you can check. You were invited here because someone wants
-              you in the room.
+              MomoBot is a private workspace where a team of agents takes on
+              real work across research, build and review, and leaves a record
+              you can check. You were invited here because someone wants you in
+              the room.
             </p>
             <div className={styles.actions}>
               <Link className={styles.primary} href="/workspace">
@@ -236,12 +230,12 @@ function PaperMomo({ size, tilt = 0 }: { size: number; tilt?: number }) {
 }
 
 function PaperLanding() {
+  const motion = useIntroMotion();
   return (
     <div className={styles.paperPage} data-treatment="paper">
-      <div
-        className={`${styles.paperBlueprintA} paper-torn`}
-        aria-hidden="true"
-      />
+      <div className={styles.paperIntro}>
+        <ScrapbookBackdrop motion={motion} tone="cream" />
+      </div>
       <div
         className={`${styles.paperBlueprintB} paper-torn-alt`}
         aria-hidden="true"
@@ -250,13 +244,7 @@ function PaperLanding() {
       <div className={styles.paperShell}>
         <header className={styles.paperHeader}>
           <Link className={styles.paperWordmark} href="/">
-            <Image
-              src="/momentum/wordmark.png"
-              alt="Momentum"
-              width={132}
-              height={24}
-              priority
-            />
+            <MomoBotLockup />
           </Link>
           <Link className={styles.paperSignIn} href="/workspace">
             Sign in
@@ -269,18 +257,18 @@ function PaperLanding() {
           </p>
 
           <h1 className={styles.paperTitle}>
-            <span className="m-voice-serif">The future needs</span>
+            <span className="m-voice-serif">Say hello to</span>
             <CutPaper
-              word="Momentum"
+              word="MomoBot"
               className={`${styles.paperCutWord} m-voice-cut-paper`}
               letterClassName={styles.paperCutLetter}
             />
           </h1>
 
           <p className={`${styles.paperLede} m-voice-body`}>
-            A private workspace where a team of agents takes on real work and
-            leaves a record you can check. You were invited here because someone
-            wants you in the room.
+            MomoBot is a private workspace where a team of agents takes on real
+            work and leaves a record you can check. You were invited here
+            because someone wants you in the room.
           </p>
 
           <div className={styles.paperActions}>
