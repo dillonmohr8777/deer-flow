@@ -50,7 +50,8 @@ class OrganizationDelegationRow(Base):
     subject_type: Mapped[str] = mapped_column(String(32))
     subject_id: Mapped[str] = mapped_column(String(128))
     owner_user_id: Mapped[str] = mapped_column(String(64))
-    scopes: Mapped[dict] = mapped_column(JSON)
+    # Sorted route-permission strings ("runs:create"), narrowed like PAT scopes.
+    scopes: Mapped[list[str]] = mapped_column(JSON)
     status: Mapped[str] = mapped_column(String(32))
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
