@@ -3,7 +3,7 @@
 # which sets the env vars below and loads service credentials.
 services:
   gateway:
-    image: ${MOMENTUM_GATEWAY_IMAGE:-deer-flow-gateway:momentum-branding-20260921}
+    image: ${MOMENTUM_GATEWAY_IMAGE:-deer-flow-gateway:momentum-m2-20260923}
     environment:
       DEER_FLOW_HOST_BASE_DIR: /var/lib/docker/volumes/${COMPOSE_PROJECT_NAME:-deer-flow}_gateway-data/_data
   frontend:
