@@ -1,6 +1,29 @@
 import { describe, expect, test } from "@rstest/core";
 
+import { enUS } from "@/core/i18n/locales/en-US";
+import { zhCN } from "@/core/i18n/locales/zh-CN";
 import { findSuggestionTemplatePlaceholder } from "@/core/suggestions/placeholders";
+
+describe("empty-thread starter prompts", () => {
+  test("each carries a placeholder the composer selects and guards", () => {
+    for (const locale of [enUS, zhCN]) {
+      expect(locale.inputBox.starters).toHaveLength(3);
+      for (const starter of locale.inputBox.starters) {
+        expect(findSuggestionTemplatePlaceholder(starter.prompt)).not.toBeNull();
+      }
+    }
+  });
+
+  test("finds the client placeholder in both languages", () => {
+    expect(
+      findSuggestionTemplatePlaceholder("Plan the delivery for [client]."),
+    ).toEqual({ start: 22, end: 30 });
+    expect(findSuggestionTemplatePlaceholder("规划 [客户] 的交付")).toEqual({
+      start: 3,
+      end: 7,
+    });
+  });
+});
 
 describe("findSuggestionTemplatePlaceholder", () => {
   test("finds Chinese [主题] and returns correct range", () => {

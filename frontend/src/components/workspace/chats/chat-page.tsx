@@ -131,14 +131,6 @@ export default function ChatPage() {
     mountedRef.current = true;
   }, []);
 
-  // Keep welcome layout in sync when navigating between threads (sidebar
-  // clicks, "new chat" button).  Submitting in /chats/new flips the layout
-  // via onSend below — `isNewThread` stays true until onStart, so this effect
-  // is harmless during the submit transition.
-  useEffect(() => {
-    setIsWelcomeMode(isNewThread);
-  }, [isNewThread]);
-
   const { showNotification } = useNotification();
   const { scopeSelectionEnabled } = useKnowledgeBaseEnabled();
   const selectorVisible =
@@ -222,6 +214,27 @@ export default function ChatPage() {
   });
 
   const hasThreadMessages = thread.messages.length > 0;
+  // A thread that exists but holds nothing yet (a channel thread, a project
+  // pre-create) gets the new-chat empty state instead of a blank wash. Only
+  // once everything has loaded, so a slow history never flashes it.
+  const isEmptyThread =
+    !isNewThread &&
+    !isMock &&
+    threadMetadata.data != null &&
+    !thread.isThreadLoading &&
+    !thread.isLoading &&
+    !isHistoryLoading &&
+    !hasMoreHistory &&
+    !hasThreadMessages;
+  const showsEmptyState = isNewThread || isEmptyThread;
+
+  // Keep welcome layout in sync when navigating between threads (sidebar
+  // clicks, "new chat" button) and when an existing thread loads empty.
+  // Submitting flips the layout via onSend above; `showsEmptyState` holds
+  // until the first message lands, so this effect is harmless meanwhile.
+  useEffect(() => {
+    setIsWelcomeMode(showsEmptyState);
+  }, [showsEmptyState]);
 
   useEffect(() => {
     if (
