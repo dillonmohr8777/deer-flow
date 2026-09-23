@@ -28,7 +28,9 @@
   --secondary-foreground: var(--paper-ink);
   --muted: var(--paper-cream);
   --muted-foreground: var(--paper-ink-muted);
-  --accent: var(--paper-cream);
+  /* Hover and selection: a light kraft wash, so it shows on cream. Only ink
+     sits on it, and ink clears 9.56:1 even on full kraft. */
+  --accent: color-mix(in srgb, var(--paper-kraft) 35%, var(--paper-cream-hi));
   --accent-foreground: var(--paper-ink);
   --destructive: var(--paper-danger);
   --border: var(--paper-line);
@@ -37,6 +39,14 @@
   background: var(--paper-cream);
   color: var(--paper-ink);
   font-family: var(--m-font-text);
+}
+
+/* globals.css .momentum-page re-declares --primary as the current
+   treatment's cobalt (specificity 0,2,1); in paper the royal token wins. */
+:global([data-treatment="paper"]) .page:global(.momentum-page),
+:global([data-treatment="paper"]) .page :global(.momentum-page) {
+  --primary: var(--paper-royal);
+  --primary-foreground: var(--paper-cream-hi);
 }
 
 /* Fraunces for page and section headings; row titles stay Nunito Sans. */
@@ -50,6 +60,18 @@
 :global([data-treatment="paper"]) .page h1 {
   font-size: clamp(1.75rem, 1.25rem + 1.2vw, 2.25rem);
   line-height: 1.15;
+}
+
+/* Inactive tabs: the shared trigger fades --foreground to 60%, which is
+   4.2:1 on cream (axe color-contrast). Ink-muted is 7.59:1. */
+:global([data-treatment="paper"]) .page [data-slot="tabs-trigger"] {
+  color: var(--paper-ink-muted);
+}
+
+:global([data-treatment="paper"])
+  .page
+  [data-slot="tabs-trigger"][data-state="active"] {
+  color: var(--paper-ink);
 }
 
 /* A cream sheet on the cream page: hairline edge, a hint of print depth. */
