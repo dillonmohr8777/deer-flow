@@ -17,7 +17,7 @@ const dateFormatter = new Intl.DateTimeFormat(undefined, {
 });
 
 function formatDate(value: string | null | undefined) {
-  if (!value) return "—";
+  if (!value) return "Not recorded";
   const date = new Date(value);
   return Number.isNaN(date.valueOf()) ? value : dateFormatter.format(date);
 }
@@ -133,23 +133,22 @@ export function ClientSpacesView() {
       <div className={styles.header}>
         <div>
           <h2 id="client-spaces-heading">Client spaces</h2>
-          <p className={styles.subtle}>
-            Project-backed groupings only. Client or tenant mapping is not
-            verified here.
-          </p>
+          <p className={styles.subtle}>Your active projects.</p>
         </div>
       </div>
       {query.isLoading ? (
-        <p className={styles.state}>Loading project spaces…</p>
+        <p className={styles.state}>Loading projects…</p>
       ) : null}
       {query.isError ? (
         <QueryNotice
-          message="Project spaces could not be loaded."
+          message="Projects could not be loaded."
           onRetry={() => void query.refetch()}
         />
       ) : null}
       {!query.isLoading && !query.isError && projects.length === 0 ? (
-        <p className={styles.state}>No active project spaces found.</p>
+        <p className={styles.state}>
+          No active projects yet. Projects you create appear here.
+        </p>
       ) : null}
       <ul className={styles.cards}>
         {projects.map((project) => (
@@ -163,8 +162,9 @@ export function ClientSpacesView() {
                 {project.name || "Untitled project"}
               </Link>
               <span className={styles.meta}>
-                Project-backed grouping · not verified client tenancy · updated{" "}
-                {formatDate(project.updated_at)}
+                {project.updated_at
+                  ? `Updated ${formatDate(project.updated_at)}`
+                  : "Update time not recorded"}
               </span>
             </div>
           </li>
@@ -190,8 +190,7 @@ export function ArtifactLibraryView() {
         <div>
           <h2 id="artifact-library-heading">Artifact library</h2>
           <p className={styles.subtle}>
-            Browse files returned by a selected project. This is not a global
-            index.
+            Files from the conversations in one project.
           </p>
         </div>
       </div>
@@ -219,7 +218,9 @@ export function ArtifactLibraryView() {
       </select>
       {!projectId ? (
         <p className={styles.state}>
-          Choose a project to load its thread files.
+          {projectsQuery.data?.length === 0
+            ? "No active projects yet, so there are no files to list."
+            : "Choose a project to load its thread files."}
         </p>
       ) : null}
       {project && filesQuery.isLoading ? (
