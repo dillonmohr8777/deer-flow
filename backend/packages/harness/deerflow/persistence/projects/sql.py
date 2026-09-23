@@ -28,7 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from deerflow.persistence.organizations.resolution import organization_from_owned_parent, private_organization_for_user
 from deerflow.persistence.projects.model import ProjectDocumentRow, ProjectRow
 from deerflow.persistence.thread_meta.model import ThreadMetaRow
-from deerflow.runtime.user_context import AUTO, _AutoSentinel, resolve_user_id
+from deerflow.runtime.user_context import AUTO, _AutoSentinel, resolve_organization_id, resolve_user_id
 from deerflow.utils.file_io import await_drained
 from deerflow.utils.time import coerce_iso
 
@@ -89,11 +89,14 @@ class ProjectRepository:
 
     async def get(self, project_id: str, *, user_id: str | None | _AutoSentinel = AUTO) -> dict | None:
         resolved_user_id = resolve_user_id(user_id, method_name="ProjectRepository.get")
+        resolved_organization_id = resolve_organization_id()
         async with self._sf() as session:
             row = await session.get(ProjectRow, project_id)
             if row is None:
                 return None
             if resolved_user_id is not None and row.user_id != resolved_user_id:
+                return None
+            if resolved_organization_id is not None and row.organization_id != resolved_organization_id:
                 return None
             return self._row_to_dict(row)
 
@@ -104,9 +107,12 @@ class ProjectRepository:
         user_id: str | None | _AutoSentinel = AUTO,
     ) -> list[dict]:
         resolved_user_id = resolve_user_id(user_id, method_name="ProjectRepository.list")
+        resolved_organization_id = resolve_organization_id()
         stmt = select(ProjectRow).order_by(ProjectRow.created_at.asc(), ProjectRow.id.asc())
         if resolved_user_id is not None:
             stmt = stmt.where(ProjectRow.user_id == resolved_user_id)
+        if resolved_organization_id is not None:
+            stmt = stmt.where(ProjectRow.organization_id == resolved_organization_id)
         if status is not None:
             stmt = stmt.where(ProjectRow.status == status)
         async with self._sf() as session:
@@ -123,9 +129,10 @@ class ProjectRepository:
         user_id: str | None | _AutoSentinel = AUTO,
     ) -> dict | None:
         resolved_user_id = resolve_user_id(user_id, method_name="ProjectRepository.patch")
+        resolved_organization_id = resolve_organization_id()
         async with self._sf() as session:
             row = await session.get(ProjectRow, project_id)
-            if row is None or (resolved_user_id is not None and row.user_id != resolved_user_id):
+            if row is None or (resolved_user_id is not None and row.user_id != resolved_user_id) or (resolved_organization_id is not None and row.organization_id != resolved_organization_id):
                 return None
             if name is not None:
                 row.name = name
@@ -146,9 +153,10 @@ class ProjectRepository:
     ) -> dict | None:
         """Idempotent status flip; returns the current row or None (missing/foreign)."""
         resolved_user_id = resolve_user_id(user_id, method_name="ProjectRepository.set_status")
+        resolved_organization_id = resolve_organization_id()
         async with self._sf() as session:
             row = await session.get(ProjectRow, project_id)
-            if row is None or (resolved_user_id is not None and row.user_id != resolved_user_id):
+            if row is None or (resolved_user_id is not None and row.user_id != resolved_user_id) or (resolved_organization_id is not None and row.organization_id != resolved_organization_id):
                 return None
             row.status = status
             await session.commit()
@@ -161,6 +169,7 @@ class ProjectRepository:
         Returns True when the project row was deleted; False when missing/foreign.
         """
         resolved_user_id = resolve_user_id(user_id, method_name="ProjectRepository.delete")
+        resolved_organization_id = resolve_organization_id()
         async with self._sf() as session:
             async with session.begin():
                 # Lock the project row before touching it (FOR UPDATE on
@@ -174,19 +183,25 @@ class ProjectRepository:
                 lock_stmt = select(ProjectRow).where(ProjectRow.id == project_id)
                 if resolved_user_id is not None:
                     lock_stmt = lock_stmt.where(ProjectRow.user_id == resolved_user_id)
+                if resolved_organization_id is not None:
+                    lock_stmt = lock_stmt.where(ProjectRow.organization_id == resolved_organization_id)
                 locked = (await session.execute(lock_stmt.with_for_update())).scalar_one_or_none()
                 if locked is None:
                     return False
                 # §8.1 statement 2: every active shelf row moves to trash in
                 # the same transaction and lock — never an active row pointing
                 # at a deleted project. No filesystem work.
-                await ProjectDocumentRepository.trash_all_for_project(session, project_id, project_name=locked.name, user_id=resolved_user_id)
+                await ProjectDocumentRepository.trash_all_for_project(session, project_id, project_name=locked.name, user_id=resolved_user_id, organization_id=resolved_organization_id)
+                thread_update = update(ThreadMetaRow).where(ThreadMetaRow.project_id == project_id)
+                delete_stmt = sa_delete(ProjectRow).where(ProjectRow.id == project_id)
                 if resolved_user_id is not None:
-                    await session.execute(update(ThreadMetaRow).where(ThreadMetaRow.project_id == project_id, ThreadMetaRow.user_id == resolved_user_id).values(project_id=None, updated_at=ThreadMetaRow.__table__.c.updated_at))
-                    result = await session.execute(sa_delete(ProjectRow).where(ProjectRow.id == project_id, ProjectRow.user_id == resolved_user_id))
-                else:
-                    await session.execute(update(ThreadMetaRow).where(ThreadMetaRow.project_id == project_id).values(project_id=None, updated_at=ThreadMetaRow.__table__.c.updated_at))
-                    result = await session.execute(sa_delete(ProjectRow).where(ProjectRow.id == project_id))
+                    thread_update = thread_update.where(ThreadMetaRow.user_id == resolved_user_id)
+                    delete_stmt = delete_stmt.where(ProjectRow.user_id == resolved_user_id)
+                if resolved_organization_id is not None:
+                    thread_update = thread_update.where(ThreadMetaRow.organization_id == resolved_organization_id)
+                    delete_stmt = delete_stmt.where(ProjectRow.organization_id == resolved_organization_id)
+                await session.execute(thread_update.values(project_id=None, updated_at=ThreadMetaRow.__table__.c.updated_at))
+                result = await session.execute(delete_stmt)
             return result.rowcount > 0
 
 
@@ -223,11 +238,13 @@ class ProjectDocumentRepository:
             await session.execute(text("BEGIN IMMEDIATE"))
 
     @staticmethod
-    async def _lock_active_project(session: AsyncSession, project_id: str, resolved_user_id: str | None) -> ProjectRow | None:
+    async def _lock_active_project(session: AsyncSession, project_id: str, resolved_user_id: str | None, resolved_organization_id: str | None = None) -> ProjectRow | None:
         """Lock the owned ``status='active'`` project row inside the transaction."""
         stmt = select(ProjectRow).where(ProjectRow.id == project_id, ProjectRow.status == "active")
         if resolved_user_id is not None:
             stmt = stmt.where(ProjectRow.user_id == resolved_user_id)
+        if resolved_organization_id is not None:
+            stmt = stmt.where(ProjectRow.organization_id == resolved_organization_id)
         return (await session.execute(stmt.with_for_update())).scalar_one_or_none()
 
     async def insert_active(
@@ -258,9 +275,10 @@ class ProjectDocumentRepository:
         hit by ``row["id"] != document_id``.
         """
         resolved_user_id = resolve_user_id(user_id, method_name="ProjectDocumentRepository.insert_active")
+        resolved_organization_id = resolve_organization_id()
         async with self._sf() as session:
             await self._begin_immediate_if_sqlite(session)
-            project = await self._lock_active_project(session, project_id, resolved_user_id)
+            project = await self._lock_active_project(session, project_id, resolved_user_id, resolved_organization_id)
             if project is None:
                 await session.rollback()
                 return None
@@ -271,6 +289,8 @@ class ProjectDocumentRepository:
             )
             if resolved_user_id is not None:
                 dedup_stmt = dedup_stmt.where(ProjectDocumentRow.user_id == resolved_user_id)
+            if resolved_organization_id is not None:
+                dedup_stmt = dedup_stmt.where(ProjectDocumentRow.organization_id == resolved_organization_id)
             existing = (await session.execute(dedup_stmt)).scalars().first()
             if existing is not None:
                 await session.commit()
@@ -303,6 +323,7 @@ class ProjectDocumentRepository:
     async def find_active_by_sha256(self, project_id: str, sha256: str, *, user_id: str | None | _AutoSentinel = AUTO) -> dict | None:
         """Return the active row with this content address, or ``None`` (dedup probe)."""
         resolved_user_id = resolve_user_id(user_id, method_name="ProjectDocumentRepository.find_active_by_sha256")
+        resolved_organization_id = resolve_organization_id()
         stmt = select(ProjectDocumentRow).where(
             ProjectDocumentRow.project_id == project_id,
             ProjectDocumentRow.sha256 == sha256,
@@ -310,6 +331,8 @@ class ProjectDocumentRepository:
         )
         if resolved_user_id is not None:
             stmt = stmt.where(ProjectDocumentRow.user_id == resolved_user_id)
+        if resolved_organization_id is not None:
+            stmt = stmt.where(ProjectDocumentRow.organization_id == resolved_organization_id)
         async with self._sf() as session:
             row = (await session.execute(stmt)).scalars().first()
             return self._row_to_dict(row) if row is not None else None
@@ -317,18 +340,24 @@ class ProjectDocumentRepository:
     async def list_active(self, project_id: str, *, limit: int, offset: int, user_id: str | None | _AutoSentinel = AUTO) -> list[dict]:
         """Active shelf rows in index order: ``updated_at DESC, id ASC`` (§10.10)."""
         resolved_user_id = resolve_user_id(user_id, method_name="ProjectDocumentRepository.list_active")
+        resolved_organization_id = resolve_organization_id()
         stmt = select(ProjectDocumentRow).where(ProjectDocumentRow.project_id == project_id, ProjectDocumentRow.trashed_at.is_(None)).order_by(ProjectDocumentRow.updated_at.desc(), ProjectDocumentRow.id.asc()).limit(limit).offset(offset)
         if resolved_user_id is not None:
             stmt = stmt.where(ProjectDocumentRow.user_id == resolved_user_id)
+        if resolved_organization_id is not None:
+            stmt = stmt.where(ProjectDocumentRow.organization_id == resolved_organization_id)
         async with self._sf() as session:
             result = await session.execute(stmt)
             return [self._row_to_dict(r) for r in result.scalars()]
 
     async def count_active(self, project_id: str, *, user_id: str | None | _AutoSentinel = AUTO) -> int:
         resolved_user_id = resolve_user_id(user_id, method_name="ProjectDocumentRepository.count_active")
+        resolved_organization_id = resolve_organization_id()
         stmt = select(func.count()).select_from(ProjectDocumentRow).where(ProjectDocumentRow.project_id == project_id, ProjectDocumentRow.trashed_at.is_(None))
         if resolved_user_id is not None:
             stmt = stmt.where(ProjectDocumentRow.user_id == resolved_user_id)
+        if resolved_organization_id is not None:
+            stmt = stmt.where(ProjectDocumentRow.organization_id == resolved_organization_id)
         async with self._sf() as session:
             return int((await session.execute(stmt)).scalar_one())
 
@@ -341,6 +370,7 @@ class ProjectDocumentRepository:
         the extra row only to decide truncation — it is never rendered.
         """
         resolved_user_id = resolve_user_id(user_id, method_name="ProjectDocumentRepository.shelf_snapshot")
+        resolved_organization_id = resolve_organization_id()
         stmt = (
             select(ProjectDocumentRow, func.count().over().label("total"))
             .where(ProjectDocumentRow.project_id == project_id, ProjectDocumentRow.trashed_at.is_(None))
@@ -349,6 +379,8 @@ class ProjectDocumentRepository:
         )
         if resolved_user_id is not None:
             stmt = stmt.where(ProjectDocumentRow.user_id == resolved_user_id)
+        if resolved_organization_id is not None:
+            stmt = stmt.where(ProjectDocumentRow.organization_id == resolved_organization_id)
         async with self._sf() as session:
             result = await session.execute(stmt)
             pairs = result.all()
@@ -359,11 +391,14 @@ class ProjectDocumentRepository:
     async def get(self, document_id: str, *, include_trashed: bool = False, user_id: str | None | _AutoSentinel = AUTO) -> dict | None:
         """Return one owned row, or ``None`` (missing/foreign; trashed unless included)."""
         resolved_user_id = resolve_user_id(user_id, method_name="ProjectDocumentRepository.get")
+        resolved_organization_id = resolve_organization_id()
         async with self._sf() as session:
             row = await session.get(ProjectDocumentRow, document_id)
             if row is None:
                 return None
             if resolved_user_id is not None and row.user_id != resolved_user_id:
+                return None
+            if resolved_organization_id is not None and row.organization_id != resolved_organization_id:
                 return None
             if row.trashed_at is not None and not include_trashed:
                 return None
@@ -386,21 +421,32 @@ class ProjectDocumentRepository:
         on the expected id. When omitted, the document's own project is used.
         """
         resolved_user_id = resolve_user_id(user_id, method_name="ProjectDocumentRepository.trash")
+        resolved_organization_id = resolve_organization_id()
         async with self._sf() as session:
             await self._begin_immediate_if_sqlite(session)
             # Route to the owning project: the authoritative validation is the
             # locked re-read below, so this unlocked probe leaks nothing.
             probe = await session.get(ProjectDocumentRow, document_id)
-            if probe is None or (project_id is not None and probe.project_id != project_id) or (resolved_user_id is not None and probe.user_id != resolved_user_id):
+            if (
+                probe is None
+                or (project_id is not None and probe.project_id != project_id)
+                or (resolved_user_id is not None and probe.user_id != resolved_user_id)
+                or (resolved_organization_id is not None and probe.organization_id != resolved_organization_id)
+            ):
                 await session.rollback()
                 return False
             expected_project_id = project_id if project_id is not None else probe.project_id
-            locked_project = await self._lock_active_project(session, expected_project_id, resolved_user_id)
+            locked_project = await self._lock_active_project(session, expected_project_id, resolved_user_id, resolved_organization_id)
             if locked_project is None:
                 await session.rollback()
                 return False
             locked = (await session.execute(select(ProjectDocumentRow).where(ProjectDocumentRow.id == document_id).with_for_update())).scalar_one_or_none()
-            if locked is None or locked.project_id != expected_project_id or (resolved_user_id is not None and locked.user_id != resolved_user_id):
+            if (
+                locked is None
+                or locked.project_id != expected_project_id
+                or (resolved_user_id is not None and locked.user_id != resolved_user_id)
+                or (resolved_organization_id is not None and locked.organization_id != resolved_organization_id)
+            ):
                 await session.rollback()
                 return False
             stmt = (
@@ -417,12 +463,14 @@ class ProjectDocumentRepository:
             )
             if resolved_user_id is not None:
                 stmt = stmt.where(ProjectDocumentRow.user_id == resolved_user_id)
+            if resolved_organization_id is not None:
+                stmt = stmt.where(ProjectDocumentRow.organization_id == resolved_organization_id)
             result = await session.execute(stmt)
             await session.commit()
             return result.rowcount > 0
 
     @staticmethod
-    async def trash_all_for_project(session: AsyncSession, project_id: str, *, project_name: str, user_id: str | None) -> int:
+    async def trash_all_for_project(session: AsyncSession, project_id: str, *, project_name: str, user_id: str | None, organization_id: str | None = None) -> int:
         """Trash every active shelf row of a project inside the caller's transaction.
 
         §8.1 statement 2: runs under the same project row lock
@@ -442,6 +490,8 @@ class ProjectDocumentRepository:
         )
         if user_id is not None:
             stmt = stmt.where(ProjectDocumentRow.user_id == user_id)
+        if organization_id is not None:
+            stmt = stmt.where(ProjectDocumentRow.organization_id == organization_id)
         result = await session.execute(stmt)
         return int(result.rowcount or 0)
 
@@ -469,10 +519,17 @@ class ProjectDocumentRepository:
         is released.
         """
         resolved_user_id = resolve_user_id(user_id, method_name="ProjectDocumentRepository.stage_live_copy")
+        resolved_organization_id = resolve_organization_id()
         async with self._sf() as session:
             await self._begin_immediate_if_sqlite(session)
             locked = (await session.execute(select(ProjectDocumentRow).where(ProjectDocumentRow.id == document_id).with_for_update())).scalar_one_or_none()
-            if locked is None or locked.project_id != project_id or locked.trashed_at is not None or (resolved_user_id is not None and locked.user_id != resolved_user_id):
+            if (
+                locked is None
+                or locked.project_id != project_id
+                or locked.trashed_at is not None
+                or (resolved_user_id is not None and locked.user_id != resolved_user_id)
+                or (resolved_organization_id is not None and locked.organization_id != resolved_organization_id)
+            ):
                 await session.rollback()
                 return None
             row = self._row_to_dict(locked)
@@ -508,10 +565,17 @@ class ProjectDocumentRepository:
         semantics.
         """
         resolved_user_id = resolve_user_id(user_id, method_name="ProjectDocumentRepository.convert_under_live_lock")
+        resolved_organization_id = resolve_organization_id()
         async with self._sf() as session:
             await self._begin_immediate_if_sqlite(session)
             locked = (await session.execute(select(ProjectDocumentRow).where(ProjectDocumentRow.id == document_id).with_for_update())).scalar_one_or_none()
-            if locked is None or locked.project_id != project_id or locked.trashed_at is not None or (resolved_user_id is not None and locked.user_id != resolved_user_id):
+            if (
+                locked is None
+                or locked.project_id != project_id
+                or locked.trashed_at is not None
+                or (resolved_user_id is not None and locked.user_id != resolved_user_id)
+                or (resolved_organization_id is not None and locked.organization_id != resolved_organization_id)
+            ):
                 await session.rollback()
                 return None
             row = self._row_to_dict(locked)
@@ -524,18 +588,24 @@ class ProjectDocumentRepository:
     async def list_trashed(self, *, limit: int, offset: int, user_id: str | None | _AutoSentinel = AUTO) -> list[dict]:
         """Trashed rows, most recently trashed first (trash listing, §6.5)."""
         resolved_user_id = resolve_user_id(user_id, method_name="ProjectDocumentRepository.list_trashed")
+        resolved_organization_id = resolve_organization_id()
         stmt = select(ProjectDocumentRow).where(ProjectDocumentRow.trashed_at.is_not(None)).order_by(ProjectDocumentRow.trashed_at.desc(), ProjectDocumentRow.id.asc()).limit(limit).offset(offset)
         if resolved_user_id is not None:
             stmt = stmt.where(ProjectDocumentRow.user_id == resolved_user_id)
+        if resolved_organization_id is not None:
+            stmt = stmt.where(ProjectDocumentRow.organization_id == resolved_organization_id)
         async with self._sf() as session:
             result = await session.execute(stmt)
             return [self._row_to_dict(r) for r in result.scalars()]
 
     async def count_trashed(self, *, user_id: str | None | _AutoSentinel = AUTO) -> int:
         resolved_user_id = resolve_user_id(user_id, method_name="ProjectDocumentRepository.count_trashed")
+        resolved_organization_id = resolve_organization_id()
         stmt = select(func.count()).select_from(ProjectDocumentRow).where(ProjectDocumentRow.trashed_at.is_not(None))
         if resolved_user_id is not None:
             stmt = stmt.where(ProjectDocumentRow.user_id == resolved_user_id)
+        if resolved_organization_id is not None:
+            stmt = stmt.where(ProjectDocumentRow.organization_id == resolved_organization_id)
         async with self._sf() as session:
             return int((await session.execute(stmt)).scalar_one())
 
@@ -547,9 +617,12 @@ class ProjectDocumentRepository:
         selection (the retention sweep's).
         """
         resolved_user_id = resolve_user_id(user_id, method_name="ProjectDocumentRepository.list_all_trashed")
+        resolved_organization_id = resolve_organization_id()
         stmt = select(ProjectDocumentRow).where(ProjectDocumentRow.trashed_at.is_not(None)).order_by(ProjectDocumentRow.trashed_at.asc(), ProjectDocumentRow.id.asc())
         if resolved_user_id is not None:
             stmt = stmt.where(ProjectDocumentRow.user_id == resolved_user_id)
+        if resolved_organization_id is not None:
+            stmt = stmt.where(ProjectDocumentRow.organization_id == resolved_organization_id)
         async with self._sf() as session:
             result = await session.execute(stmt)
             return [self._row_to_dict(r) for r in result.scalars()]
@@ -564,9 +637,12 @@ class ProjectDocumentRepository:
         deleting anything.
         """
         resolved_user_id = resolve_user_id(user_id, method_name="ProjectDocumentRepository.list_all_for_sweep")
+        resolved_organization_id = resolve_organization_id()
         stmt = select(ProjectDocumentRow).order_by(ProjectDocumentRow.id.asc())
         if resolved_user_id is not None:
             stmt = stmt.where(ProjectDocumentRow.user_id == resolved_user_id)
+        if resolved_organization_id is not None:
+            stmt = stmt.where(ProjectDocumentRow.organization_id == resolved_organization_id)
         async with self._sf() as session:
             result = await session.execute(stmt)
             return [self._row_to_dict(r) for r in result.scalars()]
@@ -594,13 +670,23 @@ class ProjectDocumentRepository:
         trash row is deleted and the surviving row returned; the caller
         unlinks the discarded source namespace best-effort AFTER commit.
         Otherwise the row is re-pointed (``project_id`` = target, trash
-        fields cleared) with NO file moves — ``stored_relpath`` is
-        projects-root-relative, so the bytes stay valid (§10.6).
+        fields cleared, ``organization_id`` re-derived from the target) with
+        NO file moves — ``stored_relpath`` is projects-root-relative, so the
+        bytes stay valid (§10.6).
+
+        The source lookup below intentionally checks only ``user_id``, never
+        ``organization_id``: ``user_id`` (the storage principal) already
+        proves ownership on this table, and restore is the row's one
+        healing opportunity for a stale/NULL ``organization_id`` (a legacy
+        row, or a prior restore that predates this fix) — gating the lookup
+        on a match would make such a row permanently unrestorable instead of
+        healed.
         """
         resolved_user_id = resolve_user_id(user_id, method_name="ProjectDocumentRepository.restore")
+        resolved_organization_id = resolve_organization_id()
         async with self._sf() as session:
             await self._begin_immediate_if_sqlite(session)
-            locked_project = await self._lock_active_project(session, target_project_id, resolved_user_id)
+            locked_project = await self._lock_active_project(session, target_project_id, resolved_user_id, resolved_organization_id)
             if locked_project is None:
                 await session.rollback()
                 return "no_target", None
@@ -625,7 +711,8 @@ class ProjectDocumentRepository:
             locked_rows = (await session.execute(select(ProjectDocumentRow).where(ProjectDocumentRow.id.in_(lock_ids)).order_by(ProjectDocumentRow.id.asc()).with_for_update())).scalars().all()
             by_id = {row.id: row for row in locked_rows}
             source = by_id.get(document_id)
-            # Revalidate under the lock: ownership + still trashed.
+            # Revalidate under the lock: ownership + still trashed. See the
+            # docstring above for why this is user_id-only.
             if source is None or source.trashed_at is None or (resolved_user_id is not None and source.user_id != resolved_user_id):
                 await session.rollback()
                 return "not_found", None
@@ -652,7 +739,12 @@ class ProjectDocumentRepository:
                 return "merged", self._row_to_dict(surviving)
             # Re-point: no file moves (§10.6). The document row lock held
             # since the revalidation above serializes this against purge.
+            # organization_id is re-derived from the now-locked target
+            # project, exactly like insert_active's stamp — never left as
+            # whatever the source row carried (the bug this fixes: a stale
+            # or NULL organization_id survived a restore untouched).
             source.project_id = target_project_id
+            source.organization_id = organization_from_owned_parent(locked_project, resolved_user_id, parent_name="project")
             source.trashed_at = None
             source.trash_origin = None
             await session.commit()
@@ -668,10 +760,13 @@ class ProjectDocumentRepository:
         anything (§6.1).
         """
         resolved_user_id = resolve_user_id(user_id, method_name="ProjectDocumentRepository.purge_candidates")
+        resolved_organization_id = resolve_organization_id()
         cutoff = (now or datetime.now(UTC)) - timedelta(days=retention_days)
         stmt = select(ProjectDocumentRow).where(ProjectDocumentRow.trashed_at.is_not(None), ProjectDocumentRow.trashed_at <= cutoff).order_by(ProjectDocumentRow.trashed_at.asc(), ProjectDocumentRow.id.asc())
         if resolved_user_id is not None:
             stmt = stmt.where(ProjectDocumentRow.user_id == resolved_user_id)
+        if resolved_organization_id is not None:
+            stmt = stmt.where(ProjectDocumentRow.organization_id == resolved_organization_id)
         async with self._sf() as session:
             result = await session.execute(stmt)
             return [self._row_to_dict(r) for r in result.scalars()]
@@ -704,11 +799,14 @@ class ProjectDocumentRepository:
         unguarded row deletion exists.
         """
         resolved_user_id = resolve_user_id(user_id, method_name="ProjectDocumentRepository.purge")
+        resolved_organization_id = resolve_organization_id()
         async with self._sf() as session:
             await self._begin_immediate_if_sqlite(session)
             lock_stmt = select(ProjectDocumentRow).where(ProjectDocumentRow.id == document_id)
             if resolved_user_id is not None:
                 lock_stmt = lock_stmt.where(ProjectDocumentRow.user_id == resolved_user_id)
+            if resolved_organization_id is not None:
+                lock_stmt = lock_stmt.where(ProjectDocumentRow.organization_id == resolved_organization_id)
             locked = (await session.execute(lock_stmt.with_for_update())).scalar_one_or_none()
             if locked is None or locked.trashed_at is None:
                 await session.rollback()
