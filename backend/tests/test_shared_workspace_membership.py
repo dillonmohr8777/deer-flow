@@ -1,9 +1,11 @@
 """Exercise membership enforcement through the actual HTTP middleware and SQL."""
+
 from types import SimpleNamespace
 
 import httpx
 import pytest
 from fastapi import FastAPI, Request
+from test_workspace_invitations import _seed_workspace, invitation_db  # noqa: F401
 
 from app.gateway.auth_middleware import AuthMiddleware
 from app.gateway.routers import workspaces
@@ -11,11 +13,10 @@ from deerflow.config.authorization_config import AuthorizationConfig
 from deerflow.persistence.organizations.identity import private_organization_id, private_organization_slug
 from deerflow.persistence.organizations.model import OrganizationMemberRow, OrganizationRow
 from deerflow.runtime.user_context import AUTO, resolve_user_id
-from test_workspace_invitations import invitation_db, _seed_workspace  # noqa: F401
 
 
 @pytest.mark.asyncio
-async def test_two_members_share_content_identity_but_revocation_and_foreign_cookie_deny(invitation_db, monkeypatch):
+async def test_two_members_share_content_identity_but_revocation_and_foreign_cookie_deny(invitation_db, monkeypatch):  # noqa: F811 (pytest fixture imported above)
     shared_id = await _seed_workspace(invitation_db, owner_id="actor-a")
     async with invitation_db() as session, session.begin():
         for actor in ("actor-a", "actor-b", "outsider"):
@@ -41,8 +42,10 @@ async def test_two_members_share_content_identity_but_revocation_and_foreign_coo
         return {"actor": str(request.state.user.id), "storage": resolve_user_id(AUTO)}
 
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+
         async def read(actor, path="/api/proof"):
             return await client.get(path, headers={"Cookie": f"access_token={actor}; deerflow_workspace={shared_id}"})
+
         for actor in ("actor-a", "actor-b"):
             result = await read(actor)
             assert result.status_code == 200

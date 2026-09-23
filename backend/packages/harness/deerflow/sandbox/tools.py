@@ -2106,7 +2106,6 @@ def _lark_cli_env_from_runtime(runtime: Runtime, command: str, *, sandbox_paths:
         return None
     try:
         from deerflow.integrations.lark_cli import lark_cli_env_overlay, sandbox_lark_broker_active
-
         from deerflow.runtime.user_context import resolve_runtime_actor_user_id
 
         broker = sandbox_paths and sandbox_lark_broker_active()

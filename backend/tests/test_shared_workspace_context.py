@@ -9,6 +9,7 @@ from app.gateway.services import inject_authenticated_user_context
 from deerflow.runtime.runs.worker import _build_runtime_context, _install_runtime_context
 from deerflow.runtime.user_context import (
     AUTHENTICATED_CONTEXT_MARKER_KEY,
+    AUTO,
     WorkspaceStorageContext,
     get_effective_actor_user_id,
     get_effective_user_id,
@@ -19,7 +20,6 @@ from deerflow.runtime.user_context import (
     resolve_user_id,
     set_current_user,
     set_storage_context,
-    AUTO,
 )
 
 

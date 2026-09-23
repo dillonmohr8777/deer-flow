@@ -289,16 +289,20 @@ class TestUsageLedger:
         data = resp.json()
         assert [attempt["provider_attempt_id"] for attempt in data["attempts"]] == ["attempt-r2", "attempt-r1", "attempt-r5"]
         by_id = {attempt["provider_attempt_id"]: attempt for attempt in data["attempts"]}
-        assert by_id["attempt-r1"] | {
-            "caller": "subagent:data-migration-engineer",
-            "provider": "openrouter",
-            "input_tokens": 800,
-            "output_tokens": 400,
-            "cache_read_tokens": 500,
-            "provider_reported_cost": 0.014,
-            "provider_reported_currency": "USD",
-            "estimated_currency": "CNY",
-        } == by_id["attempt-r1"]
+        assert (
+            by_id["attempt-r1"]
+            | {
+                "caller": "subagent:data-migration-engineer",
+                "provider": "openrouter",
+                "input_tokens": 800,
+                "output_tokens": 400,
+                "cache_read_tokens": 500,
+                "provider_reported_cost": 0.014,
+                "provider_reported_currency": "USD",
+                "estimated_currency": "CNY",
+            }
+            == by_id["attempt-r1"]
+        )
         assert by_id["attempt-r1"]["estimated_cost"] == pytest.approx(_R1_COST_CACHED)
         assert by_id["attempt-r2"]["attempt_status"] == "error"
         assert by_id["attempt-r2"]["error_type"] == "TimeoutError"

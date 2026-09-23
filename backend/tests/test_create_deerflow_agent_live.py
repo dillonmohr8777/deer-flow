@@ -15,9 +15,7 @@ from langchain_core.tools import tool
 pytestmark = pytest.mark.live
 
 requires_llm = pytest.mark.skipif(
-    os.getenv("CI", "").lower() in ("true", "1")
-    or os.getenv("DEER_FLOW_RUN_LIVE_TESTS") != "1"
-    or not os.getenv("OPENAI_API_KEY"),
+    os.getenv("CI", "").lower() in ("true", "1") or os.getenv("DEER_FLOW_RUN_LIVE_TESTS") != "1" or not os.getenv("OPENAI_API_KEY"),
     reason="Requires DEER_FLOW_RUN_LIVE_TESTS=1 and an LLM API key; skipped in CI",
 )
 

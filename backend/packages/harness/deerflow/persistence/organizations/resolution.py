@@ -49,8 +49,7 @@ async def active_organization_for_user(
             select(OrganizationRow, OrganizationMemberRow.role)
             .join(
                 OrganizationMemberRow,
-                (OrganizationMemberRow.organization_id == OrganizationRow.id)
-                & (OrganizationMemberRow.user_id == user_id),
+                (OrganizationMemberRow.organization_id == OrganizationRow.id) & (OrganizationMemberRow.user_id == user_id),
             )
             .where(
                 OrganizationRow.id == target_id,

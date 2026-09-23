@@ -39,9 +39,7 @@ def _rows(connection: sqlite3.Connection) -> list[tuple[str, str, str, int, str]
     required = {"id", "name", "segment", "revenue_cents", "updated_at"}
     if not required <= columns:
         raise ValueError(f"source customers table is missing: {sorted(required - columns)}")
-    return connection.execute(
-        "SELECT id, name, segment, revenue_cents, updated_at FROM customers ORDER BY id"
-    ).fetchall()
+    return connection.execute("SELECT id, name, segment, revenue_cents, updated_at FROM customers ORDER BY id").fetchall()
 
 
 def _digest(rows: list[tuple[str, str, str, int, str]]) -> str:
@@ -178,9 +176,7 @@ def rollback_migration(target: str | Path) -> int:
     """Restore the exact pre-pilot account rows and remove the pilot checkpoint."""
     with sqlite3.connect(Path(target).resolve()) as target_db:
         _prepare_target(target_db)
-        if target_db.execute(
-            "SELECT 1 FROM momentum_migration_state WHERE pipeline = ?", (PIPELINE,)
-        ).fetchone() is None:
+        if target_db.execute("SELECT 1 FROM momentum_migration_state WHERE pipeline = ?", (PIPELINE,)).fetchone() is None:
             raise ValueError("no migration state to roll back")
         target_db.execute("DELETE FROM momentum_accounts")
         target_db.execute("INSERT INTO momentum_accounts SELECT * FROM momentum_accounts_before_pilot")

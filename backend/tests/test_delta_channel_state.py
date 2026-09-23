@@ -126,6 +126,7 @@ def test_merge_message_writes_randomized_batching_invariance(case: tuple[list, l
     state, writes = case
     expected = _outcome(lambda: merge_message_writes(copy.deepcopy(state), copy.deepcopy(writes)))
     for split in range(len(writes) + 1):
+
         def batched():
             intermediate = merge_message_writes(copy.deepcopy(state), copy.deepcopy(writes[:split]))
             return merge_message_writes(intermediate, copy.deepcopy(writes[split:]))

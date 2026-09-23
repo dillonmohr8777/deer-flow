@@ -165,10 +165,7 @@ async def test_branding_migration_upgrade_downgrade_preserves_prior_schema(tmp_p
         # must supply them explicitly.
         async with engine.begin() as conn:
             await conn.execute(
-                sa.text(
-                    f"INSERT INTO {_TABLE} (organization_id, brand_name, treatment, version, created_at, updated_at) "
-                    "VALUES ('ws-1', 'Momentum 360', 'paper', 1, :now, :now)"
-                ),
+                sa.text(f"INSERT INTO {_TABLE} (organization_id, brand_name, treatment, version, created_at, updated_at) VALUES ('ws-1', 'Momentum 360', 'paper', 1, :now, :now)"),
                 {"now": datetime.now(UTC)},
             )
         async with engine.connect() as conn:

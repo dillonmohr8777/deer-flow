@@ -30,7 +30,6 @@ test_shared_workspace_membership.py / test_workspace_branding.py style.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from types import SimpleNamespace
 
 import httpx
@@ -75,7 +74,6 @@ async def membership_db(monkeypatch):
         )
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
 
-    now = datetime.now(UTC)
     async with session_factory() as session, session.begin():
         session.add(OrganizationRow(id=SHARED_ID, slug="revocation-co", name="Revocation Co", status="active", storage_user_id="storage-owner"))
         session.add(OrganizationMemberRow(organization_id=SHARED_ID, user_id=OWNER, role="owner", status="active"))
