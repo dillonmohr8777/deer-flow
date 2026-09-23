@@ -1,5 +1,6 @@
 "use client";
 
+import { Scraps } from "@/components/momentum/scraps";
 import {
   Sidebar,
   SidebarHeader,
@@ -8,6 +9,7 @@ import {
   SidebarRail,
   useSidebar,
 } from "@/components/ui/sidebar";
+import { useWorkspaceAppearance } from "@/components/workspace/command-center/appearance-provider";
 
 import { WorkspaceChannelsList } from "./channels/workspace-channels-list";
 import { BackgroundJobs } from "./command-center/background-jobs";
@@ -20,10 +22,13 @@ import { WorkspaceNavChatList } from "./workspace-nav-chat-list";
 import { WorkspaceNavMenu } from "./workspace-nav-menu";
 import { WorkspaceSelector } from "./workspace-selector";
 
+import styles from "./workspace-sidebar.module.css";
+
 export function WorkspaceSidebar({
   ...props
 }: React.ComponentProps<typeof Sidebar>) {
   const { open: isSidebarOpen } = useSidebar();
+  const { motionOn } = useWorkspaceAppearance();
   return (
     <ThreadDeleteDialogProvider>
       <Sidebar variant="sidebar" collapsible="icon" {...props}>
@@ -44,6 +49,14 @@ export function WorkspaceSidebar({
         </SidebarContent>
         <SidebarFooter>
           {/* Docked, not floating: it used to cover the composer and lists. */}
+          {isSidebarOpen && (
+            <Scraps
+              names={["compass", "twine", "sunflowers"]}
+              live={motionOn}
+              size={52}
+              className={styles.scraps}
+            />
+          )}
           <BackgroundJobs />
           <WorkspaceNavMenu />
         </SidebarFooter>

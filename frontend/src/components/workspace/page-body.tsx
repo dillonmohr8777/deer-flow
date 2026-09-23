@@ -2,6 +2,8 @@
 
 import type { ReactNode } from "react";
 
+import { Scraps, type ScrapName } from "@/components/momentum/scraps";
+import { useWorkspaceAppearance } from "@/components/workspace/command-center/appearance-provider";
 import { cn } from "@/lib/utils";
 
 import styles from "./page-body.module.css";
@@ -24,6 +26,18 @@ const MOMO_ART = {
 } as const;
 
 export type MomoRole = keyof typeof MOMO_ART;
+
+/** Two scraps per Momo role, tucked behind it, echoing what it is holding. */
+const EMPTY_SCRAPS: Record<MomoRole, readonly [ScrapName, ScrapName]> = {
+  lead: ["handshake", "speech-bubbles"],
+  research: ["compass", "coast"],
+  builder: ["writing", "brushes"],
+  verifier: ["exclamation", "circles"],
+  analytics: ["circles", "tablet"],
+  qa: ["exclamation", "twine"],
+  reliability: ["seedling", "train"],
+  engineer: ["laptop", "headphones"],
+};
 
 /** Loading: working squares that tick, and the same state in words. */
 export function WorkingState({
@@ -98,16 +112,25 @@ export function EmptyState({
   action?: ReactNode;
   className?: string;
 }) {
+  const { motionOn } = useWorkspaceAppearance();
   return (
     <div className={cn(styles.empty, className)} data-empty-state="">
-      <img
-        className={styles.emptyMomo}
-        src={MOMO_ART[momo]}
-        alt=""
-        aria-hidden="true"
-        width={56}
-        height={56}
-      />
+      <div className={styles.emptyArt}>
+        <img
+          className={styles.emptyMomo}
+          src={MOMO_ART[momo]}
+          alt=""
+          aria-hidden="true"
+          width={56}
+          height={56}
+        />
+        <Scraps
+          names={EMPTY_SCRAPS[momo]}
+          live={motionOn}
+          size={34}
+          className={styles.emptyScraps}
+        />
+      </div>
       <div className="min-w-0">
         {title ? <p className={styles.stateMessage}>{title}</p> : null}
         <p className={title ? styles.stateDetail : styles.lede}>{children}</p>

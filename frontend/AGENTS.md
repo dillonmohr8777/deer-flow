@@ -224,6 +224,13 @@ with `NEXT_BUILD_DIR=.next-momentum`; do not overwrite a running server's build.
 Momo films (`public/momentum/films/`, provenance in its SOURCES.md) render only
 through `components/momentum/momo-film.tsx`: muted, `preload="none"`, poster-only
 when motion is off (workspace `motionOn`, front door `useIntroMotion().live`).
+Scrapbook scraps (`public/momentum/scraps/`, provenance in its SOURCES.md) render
+only through `components/momentum/scraps.tsx`'s `Scraps` component: the sidebar
+footer, empty states (`page-body.tsx`'s `EmptyState`), and the Momo Daily front
+page margins at desktop widths. They stay out of chat threads, forms, dialogs, and
+dense tables, where a moving decoration would distract rather than help. `data-live`
+(the same `motionOn`/`useDailyMotion()` switch as Momo films) pauses their sway, and
+they are hidden entirely under the future and retro treatments.
 
 `backend/packages/harness/deerflow/capabilities/builtin.json` owns localized
 catalog manifests. Refresh the generated demo snapshot with `pnpm catalog:sync`

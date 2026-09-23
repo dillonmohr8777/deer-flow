@@ -25,6 +25,7 @@
 .stage {
   --daily-tilt-x: 0deg;
   --daily-tilt-y: 0deg;
+  position: relative;
   max-width: 1180px;
   margin: 0 auto;
   perspective: 2200px;
@@ -801,4 +802,47 @@
 .leadFilm {
   width: min(100%, 220px);
   transform: rotate(1.5deg);
+}
+
+/* ---------- Margin scraps (desktop only) -------------------------------- */
+
+/* Four pinned scraps in the stage's outer margins, wide desktop only. The
+   [data-live] attribute selector (always present, Scraps sets it) keeps
+   this specific enough to win over scraps.module.css's own unconditional
+   .scraps rule regardless of stylesheet bundling order. */
+.dailyScraps[data-live] {
+  display: none;
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+@media (min-width: 1200px) {
+  .dailyScraps[data-live] {
+    display: block;
+  }
+}
+
+.dailyScraps > span:nth-child(1) {
+  position: absolute;
+  top: 8%;
+  left: -108px;
+}
+
+.dailyScraps > span:nth-child(2) {
+  position: absolute;
+  top: 54%;
+  left: -86px;
+}
+
+.dailyScraps > span:nth-child(3) {
+  position: absolute;
+  top: 14%;
+  right: -108px;
+}
+
+.dailyScraps > span:nth-child(4) {
+  position: absolute;
+  top: 60%;
+  right: -86px;
 }
