@@ -181,7 +181,7 @@ test("catalog navigation, search, details, and migrated settings", async ({
     page.getByRole("dialog").getByText(skills[0]!.description),
   ).toBeVisible();
   await page.keyboard.press("Escape");
-  await page.getByRole("tab", { name: "社区", exact: true }).click();
+  await page.getByRole("button", { name: "社区", exact: true }).click();
   await expect(page.getByText("从社区带来新的技能")).toBeVisible();
 
   await page.goto("/workspace/capabilities?settings=appearance");
@@ -246,7 +246,7 @@ test("Community search gives feedback and clearing it restores import guidance",
   await expect(
     page.getByText("No matches found", { exact: true }),
   ).toBeVisible();
-  await page.getByRole("tab", { name: "Community", exact: true }).click();
+  await page.getByRole("button", { name: "Community", exact: true }).click();
   await expect(search).toHaveValue("nonexistent-query");
   await expect(
     page.getByText("No matches found", { exact: true }),
@@ -259,7 +259,7 @@ test("Community search gives feedback and clearing it restores import guidance",
     page.getByText("Bring a skill from the community", { exact: true }),
   ).toBeVisible();
   await search.fill("");
-  await page.getByRole("tab", { name: "Built-in", exact: true }).click();
+  await page.getByRole("button", { name: "Built-in", exact: true }).click();
   await expect(page.locator("article")).toHaveCount(9);
 });
 
@@ -279,7 +279,10 @@ test("plugin filters remain usable after an MCP refetch fails", async ({
   });
   await page.goto("/workspace/capabilities");
   await expect(page.locator("article")).toHaveCount(17);
-  const installed = page.getByRole("tab", { name: "Installed", exact: true });
+  const installed = page.getByRole("button", {
+    name: "Installed",
+    exact: true,
+  });
   await installed.click();
   await expect(page.locator("article")).toHaveCount(5);
   await page
@@ -288,11 +291,11 @@ test("plugin filters remain usable after an MCP refetch fails", async ({
   await expect(
     page.getByRole("alert").filter({ hasText: "Admin privileges" }),
   ).toBeVisible();
-  await expect(installed).toHaveAttribute("aria-selected", "true");
+  await expect(installed).toHaveAttribute("aria-pressed", "true");
   await expect(
     page.getByRole("button", { name: "Add MCP plugin" }),
   ).toHaveCount(0);
-  await page.getByRole("tab", { name: "All plugins", exact: true }).click();
+  await page.getByRole("button", { name: "All plugins", exact: true }).click();
   await expect(
     page.locator("article").filter({ hasText: "Lark / Feishu" }),
   ).toBeVisible();
@@ -353,14 +356,14 @@ test("plugin categories, setup guides, and installed state remain distinct", asy
   await expect(page.getByRole("dialog")).toContainText("Firecrawl");
   await screenshot(page, "capability-catalog-detail-zh.png");
   await page.keyboard.press("Escape");
-  await page.getByRole("tab", { name: "已安装", exact: true }).click();
+  await page.getByRole("button", { name: "已安装", exact: true }).click();
   await expect(page.locator("article")).toHaveCount(0);
   await expect(
     page.getByText("没有找到匹配的内容", { exact: true }),
   ).toBeVisible();
   await page.getByRole("textbox", { name: "搜索插件名称或用途" }).fill("");
   await expect(page.locator("article")).toHaveCount(5);
-  await page.getByRole("tab", { name: "全部插件", exact: true }).click();
+  await page.getByRole("button", { name: "全部插件", exact: true }).click();
   await page.setViewportSize({ width: 390, height: 844 });
   expect(
     await page.evaluate(

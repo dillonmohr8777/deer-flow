@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { pageStyles } from "@/components/workspace/page-body";
 import { TrashView } from "@/components/workspace/trash/trash-view";
 import {
   WorkspaceBody,
@@ -32,7 +33,7 @@ export default function TrashPage() {
   return (
     <WorkspaceContainer>
       <WorkspaceHeader />
-      <WorkspaceBody>
+      <WorkspaceBody className={pageStyles.page}>
         <ScrollArea className="size-full">
           <TrashView />
         </ScrollArea>

@@ -1,0 +1,470 @@
+/*
+ * Page bodies: Capability Center, Agents, Scheduled tasks, Projects, Trash.
+ *
+ * Structure here works in both treatments. Everything that belongs only to
+ * the paper treatment is scoped under [data-treatment="paper"]. The shell's
+ * paper skin (paper.css) already maps the shadcn tokens, the canvas and
+ * dialogs; .page only adds what a page body needs on top of it.
+ */
+
+/* ---------- Paper: page frame ---------- */
+
+/* Fraunces for page and section headings; row titles stay Nunito Sans. */
+:global([data-treatment="paper"]) .page :is(h1, h2) {
+  font-family: var(--m-font-serif);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--paper-ink);
+}
+
+:global([data-treatment="paper"]) .page h1 {
+  font-size: clamp(1.75rem, 1.25rem + 1.2vw, 2.25rem);
+  line-height: 1.15;
+}
+
+/* Inactive tabs: the shared trigger fades --foreground to 60%, which is
+   4.2:1 on cream (axe color-contrast). Ink-muted is 7.59:1. */
+:global([data-treatment="paper"]) .page [data-slot="tabs-trigger"] {
+  color: var(--paper-ink-muted);
+}
+
+:global([data-treatment="paper"])
+  .page
+  [data-slot="tabs-trigger"][data-state="active"] {
+  color: var(--paper-ink);
+}
+
+/* A cream sheet on the cream page: hairline edge, a hint of print depth. */
+:global([data-treatment="paper"]) .sheet {
+  background: var(--paper-cream-hi);
+  border: 1px solid var(--paper-line);
+  border-radius: 2px 5px 3px 6px;
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--paper-ink) 10%, transparent);
+}
+
+/* Row lists: lighter hairlines between rows than around sheets. */
+:global([data-treatment="paper"]) .rows > * {
+  border-color: color-mix(in srgb, var(--paper-line) 45%, transparent);
+}
+
+:global([data-treatment="paper"]) .eyebrow {
+  color: var(--paper-ink-muted);
+}
+
+/* A pin is reserved for something that is doing work right now. */
+.pin {
+  position: relative;
+}
+
+:global([data-treatment="paper"]) .pin::before {
+  top: -6px;
+  left: 18px;
+  z-index: 1;
+}
+
+/* ---------- Shared parts ---------- */
+
+.eyebrow {
+  font-family: var(--m-font-text);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+
+.lede {
+  max-width: 62ch;
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+  line-height: 1.5rem;
+}
+
+.chip {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  padding: 0.0625rem 0.4375rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  line-height: 1.125rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:global([data-treatment="paper"]) .chip {
+  border-color: color-mix(in srgb, var(--paper-line) 60%, transparent);
+  border-radius: 2px;
+  background: var(--paper-cream);
+}
+
+/* A capability or file mark. Paper: cream tile, hairline, no decorative hue. */
+:global([data-treatment="paper"]) .mark {
+  border: 1px solid color-mix(in srgb, var(--paper-line) 60%, transparent);
+  border-radius: 4px;
+  background: var(--paper-cream-hi);
+  color: var(--paper-ink-muted);
+}
+
+/* Numbers that line up in a column. */
+.figure {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ---------- Ledger rows: documents and trash ---------- */
+
+/*
+ * One DOM per row for every width. Phones stack name, a meta line and the
+ * actions; from 48rem the meta wrapper dissolves (display: contents) and its
+ * cells take their own columns under the header.
+ */
+.ledgerHead,
+.ledgerRow {
+  display: grid;
+  grid-template-columns: 1.75rem minmax(0, 1fr);
+  grid-template-areas:
+    "mark name"
+    "mark meta"
+    "mark actions";
+  column-gap: 0.75rem;
+  row-gap: 0.125rem;
+  align-items: center;
+}
+
+.ledgerRow {
+  /* Contains the sr-only action labels: absolutely positioned text inside a
+     scroll area otherwise overflows the page, not the scroller. */
+  position: relative;
+  padding: 0.625rem 0;
+}
+
+.ledgerHead {
+  display: none;
+}
+
+.ledgerMark {
+  grid-area: mark;
+  align-self: start;
+  margin-top: 0.125rem;
+  color: var(--muted-foreground);
+}
+
+.ledgerName {
+  grid-area: name;
+  min-width: 0;
+}
+
+.ledgerMeta {
+  grid-area: meta;
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: 0.375rem;
+  min-width: 0;
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  line-height: 1.125rem;
+}
+
+.ledgerMeta > * + *::before {
+  content: "·";
+  margin-right: 0.375rem;
+}
+
+.ledgerActions {
+  grid-area: actions;
+  display: flex;
+  align-items: center;
+  gap: 0.125rem;
+  margin: 0.25rem 0 0 -0.625rem;
+}
+
+.ledgerSource {
+  grid-area: source;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ledgerDate {
+  grid-area: date;
+  white-space: nowrap;
+}
+
+.ledgerSize {
+  grid-area: size;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+@media (min-width: 48rem) {
+  /* Fixed action width: head and rows are separate grids, and an auto
+     column would size to nothing in the head and shift its labels. */
+  .ledgerHead,
+  .ledgerRow {
+    grid-template-columns: 1.75rem minmax(0, 1fr) 9rem 7rem 5rem 11.5rem;
+    grid-template-areas: "mark name source date size actions";
+    column-gap: 1rem;
+  }
+
+  .ledgerHead {
+    display: grid;
+    padding-bottom: 0.5rem;
+  }
+
+  .ledgerMeta {
+    display: contents;
+    font-size: 0.8125rem;
+  }
+
+  .ledgerMeta > * + *::before {
+    content: none;
+  }
+
+  .ledgerSize {
+    text-align: right;
+  }
+
+  .ledgerActions {
+    justify-content: flex-end;
+    margin: 0;
+  }
+}
+
+/* The trash lives elsewhere; this strip only says so and points there. */
+.trashStrip {
+  border-top: 1px dashed var(--border);
+}
+
+:global([data-treatment="paper"]) .trashStrip {
+  border-top-color: var(--paper-line);
+}
+
+/* ---------- Status tags: shape and word, never colour alone ---------- */
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1rem;
+  white-space: nowrap;
+}
+
+.status::before {
+  content: "";
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border: 1.5px solid currentColor;
+  border-radius: 50%;
+}
+
+.status[data-tone="ok"] {
+  color: var(--paper-ok, #047857);
+}
+
+.status[data-tone="ok"]::before,
+.status[data-tone="active"]::before {
+  background: currentColor;
+}
+
+.status[data-tone="active"] {
+  color: var(--paper-royal, #1d4ed8);
+}
+
+.status[data-tone="attention"] {
+  color: var(--paper-brass-text, #92400e);
+}
+
+.status[data-tone="attention"]::before {
+  border-radius: 1px;
+  background: currentColor;
+}
+
+.status[data-tone="danger"] {
+  color: var(--paper-danger, #b91c1c);
+}
+
+.status[data-tone="danger"]::before {
+  border-radius: 1px;
+  background: currentColor;
+  transform: rotate(45deg) scale(0.9);
+}
+
+.status[data-tone="unknown"]::before {
+  border-style: dashed;
+}
+
+/* ---------- Filter groups (toggle buttons, not tabs) ---------- */
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.filterLabel {
+  margin-right: 0.375rem;
+}
+
+.filter {
+  min-height: 2rem;
+  padding: 0 0.625rem;
+  border-radius: 6px;
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+  line-height: 1;
+}
+
+.filter:hover {
+  color: var(--foreground);
+  background: var(--accent);
+}
+
+.filter[aria-pressed="true"] {
+  color: var(--foreground);
+  font-weight: 700;
+  background: var(--accent);
+  box-shadow: inset 0 -2px 0 var(--foreground);
+}
+
+:global([data-treatment="paper"]) .filter {
+  border-radius: 2px;
+}
+
+:global([data-treatment="paper"]) .filter[aria-pressed="true"] {
+  background: var(--paper-kraft);
+  box-shadow: none;
+}
+
+/* ---------- Loading: working squares tick in steps(3) ---------- */
+
+.working {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 2rem 0;
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+}
+
+.squares {
+  position: relative;
+  display: inline-grid;
+  flex: none;
+  grid-auto-flow: column;
+  gap: 3px;
+  color: var(--paper-royal, var(--primary));
+}
+
+.squares > span,
+.squares::after {
+  width: 6px;
+  height: 6px;
+  background: currentColor;
+}
+
+.squares > span {
+  opacity: 0.25;
+}
+
+.squares::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .squares::after {
+    /* Three positions, 9px apart: a tick, never a glide. */
+    animation: page-working-tick 1.2s steps(3) infinite;
+  }
+}
+
+@keyframes page-working-tick {
+  to {
+    transform: translateX(27px);
+  }
+}
+
+/* ---------- Error: red-thread tag, plain text, one next step ---------- */
+
+.error {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.875rem;
+  max-width: 40rem;
+  padding: 1.25rem 0;
+}
+
+.errorTag {
+  flex: none;
+  width: 56px;
+  height: 36px;
+  margin-top: 0.125rem;
+}
+
+.errorTag .tagBody {
+  fill: var(--paper-kraft, #eadfcb);
+  stroke: var(--paper-line, #8c7a5c);
+}
+
+.errorTag .thread {
+  fill: none;
+  stroke: var(--paper-danger, #b91c1c);
+  stroke-linecap: round;
+  stroke-width: 1.75;
+}
+
+.stateMessage {
+  color: var(--foreground);
+  font-size: 0.9375rem;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.stateDetail {
+  margin-top: 0.25rem;
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.stateAction {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+/* ---------- Empty: a small Momo with a tool, one helpful sentence ---------- */
+
+.empty {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  max-width: 38rem;
+  padding: 1.75rem 0;
+}
+
+.emptyMomo {
+  flex: none;
+  width: 56px;
+  height: 56px;
+}
+
+@media (forced-colors: active) {
+  .squares,
+  .errorTag {
+    display: none;
+  }
+}
