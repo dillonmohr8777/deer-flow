@@ -14,7 +14,11 @@
  * but the flattened fallback image: no stage, no layers, no listeners.
  */
 
-import { useCallback, useRef, type PointerEvent as ReactPointerEvent } from "react";
+import {
+  useCallback,
+  useRef,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 
 import { brandMotionAllowed } from "@/components/workspace/command-center/appearance-preferences";
 import { useWorkspaceAppearance } from "@/components/workspace/command-center/appearance-provider";
@@ -34,6 +38,7 @@ export function PaperLayers({
   alt = "",
   state = "idle",
   className,
+  motionAllowed: motionOverride,
 }: {
   /** Ordered back-to-front image srcs; index 0 sits nearest the surface, the last one on top. */
   layers: readonly string[];
@@ -46,28 +51,44 @@ export function PaperLayers({
   alt?: string;
   state?: PaperLayersState;
   className?: string;
+  /**
+   * Surfaces outside /workspace (no appearance provider, whose default reads
+   * as "no motion") pass their own brandMotionAllowed() result here.
+   */
+  motionAllowed?: boolean;
 }) {
   const stageRef = useRef<HTMLDivElement>(null);
   const { preferences, reducedMotion, visible } = useWorkspaceAppearance();
-  const motionAllowed = brandMotionAllowed({
-    motion: preferences.motion,
-    reducedMotion,
-    visible,
-    inView: true,
-  });
+  const motionAllowed =
+    motionOverride ??
+    brandMotionAllowed({
+      motion: preferences.motion,
+      reducedMotion,
+      visible,
+      inView: true,
+    });
   const height = Math.round(size * aspectRatio);
 
-  const handlePointerMove = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
-    if (event.pointerType !== "mouse") return;
-    const node = stageRef.current;
-    if (!node) return;
-    const rect = node.getBoundingClientRect();
-    if (!rect.width || !rect.height) return;
-    const px = (event.clientX - rect.left) / rect.width - 0.5;
-    const py = (event.clientY - rect.top) / rect.height - 0.5;
-    node.style.setProperty("--pl-tilt-y", `${(px * 2 * MAX_TILT_DEG).toFixed(2)}deg`);
-    node.style.setProperty("--pl-tilt-x", `${(-py * 2 * MAX_TILT_DEG).toFixed(2)}deg`);
-  }, []);
+  const handlePointerMove = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (event.pointerType !== "mouse") return;
+      const node = stageRef.current;
+      if (!node) return;
+      const rect = node.getBoundingClientRect();
+      if (!rect.width || !rect.height) return;
+      const px = (event.clientX - rect.left) / rect.width - 0.5;
+      const py = (event.clientY - rect.top) / rect.height - 0.5;
+      node.style.setProperty(
+        "--pl-tilt-y",
+        `${(px * 2 * MAX_TILT_DEG).toFixed(2)}deg`,
+      );
+      node.style.setProperty(
+        "--pl-tilt-x",
+        `${(-py * 2 * MAX_TILT_DEG).toFixed(2)}deg`,
+      );
+    },
+    [],
+  );
 
   const handlePointerLeave = useCallback(() => {
     const node = stageRef.current;
