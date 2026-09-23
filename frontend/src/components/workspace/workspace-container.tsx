@@ -125,12 +125,23 @@ export function WorkspaceBody({
   );
 }
 
-function nameOfSegment(
+export function nameOfSegment(
   segment: string | undefined,
   t: ReturnType<typeof useI18n>["t"],
 ) {
   if (!segment) return t.common.home;
-  if (segment === "workspace") return t.breadcrumb.workspace;
-  if (segment === "chats") return t.breadcrumb.chats;
-  return segment[0]?.toUpperCase() + segment.slice(1);
+  const named: Record<string, string> = {
+    workspace: t.breadcrumb.workspace,
+    chats: t.breadcrumb.chats,
+    agents: t.sidebar.agents,
+    "scheduled-tasks": t.sidebar.scheduledTasks,
+    capabilities: t.capabilities.title,
+    projects: t.projects.title,
+    trash: t.trash.title,
+    "command-center": "Command Center",
+  };
+  // Unknown sections read as words in sentence case, never as a raw slug
+  // ("Scheduled-tasks" was the old fallback).
+  const words = segment.replace(/[-_]+/g, " ").trim();
+  return named[segment] ?? words.charAt(0).toUpperCase() + words.slice(1);
 }
