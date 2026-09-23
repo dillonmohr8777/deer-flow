@@ -317,7 +317,7 @@ describe("CommandCenter", () => {
       screen.getByRole("button", { name: "Client Spaces Preview" }),
     );
     expect(
-      screen.getByText(/Client spaces are not connected yet/),
+      screen.getByText(/Client spaces aren't connected yet/),
     ).toBeDefined();
     expect(screen.getByTestId("client-spaces")).toBeDefined();
   });
@@ -366,10 +366,10 @@ describe("CommandCenter", () => {
       screen.getByRole("row", { name: /attempt-1/ }).textContent,
     ).toContain("$0.004");
     expect(document.body.textContent).toContain(
-      "does not approve, block, or authorize provider spend",
+      "doesn't approve, block, or authorize provider spend",
     );
     expect(document.body.textContent).toContain(
-      "not your provider balance or invoice",
+      "aren't your provider balance or invoice",
     );
   });
 });

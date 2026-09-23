@@ -103,8 +103,8 @@ describe("InputBox stop gating (runs:cancel)", () => {
     });
 
     const submit = getSubmitButton(container);
-    expect(submit.getAttribute("aria-label")).toContain("not permitted");
-    expect(submit.title).toContain("not permitted");
+    expect(submit.getAttribute("aria-label")).toContain("isn't permitted");
+    expect(submit.title).toContain("isn't permitted");
   });
 
   it("keeps stop enabled for an unresolved permission list (default)", () => {

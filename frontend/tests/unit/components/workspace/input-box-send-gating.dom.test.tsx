@@ -170,7 +170,7 @@ describe("InputBox send gating (runs:create)", () => {
       submitForm(container, "/goal finish all tests");
       await waitFor(() =>
         expect(info).toHaveBeenCalledWith(
-          expect.stringContaining("not permitted"),
+          expect.stringContaining("isn't permitted"),
         ),
       );
 
@@ -228,7 +228,7 @@ describe("InputBox send gating (runs:create)", () => {
     expect(onSubmit).not.toHaveBeenCalled();
     expect(onPrepareThread).not.toHaveBeenCalled();
     expect(info).not.toHaveBeenCalledWith(
-      expect.stringContaining("not permitted"),
+      expect.stringContaining("isn't permitted"),
     );
   });
 
@@ -273,8 +273,8 @@ describe("InputBox send gating (runs:create)", () => {
     });
 
     const submit = getSubmitButton(container);
-    expect(submit.getAttribute("aria-label")).toContain("not permitted");
-    expect(submit.title).toContain("not permitted");
+    expect(submit.getAttribute("aria-label")).toContain("isn't permitted");
+    expect(submit.title).toContain("isn't permitted");
   });
 
   it("keeps send enabled for an unresolved permission list (default)", async () => {

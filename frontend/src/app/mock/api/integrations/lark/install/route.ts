@@ -27,7 +27,7 @@ export function POST() {
       },
       auth: {
         status: "not_configured",
-        message: "lark-cli auth is not configured",
+        message: "lark-cli auth isn't configured",
         user: null,
         verified: false,
       },

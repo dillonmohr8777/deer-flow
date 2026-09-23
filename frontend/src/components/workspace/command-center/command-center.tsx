@@ -86,11 +86,11 @@ type View = (typeof tabs)[number];
  */
 const PREVIEW_NOTES: Partial<Record<View, string>> = {
   "Client Spaces":
-    "Client spaces are not connected yet. Until they are, this lists your active projects, and a project is not a verified client.",
+    "Client spaces aren't connected yet. Until they are, this lists your active projects, and a project isn't a verified client.",
   "Business Intelligence":
-    "Token usage and provider attempts are recorded here. Revenue, margins and billing are not connected yet.",
+    "Token usage and provider attempts are recorded here. Revenue, margins and billing aren't connected yet.",
   "Artifact Library":
-    "There is no workspace-wide artifact index yet. Choose a project to browse the files its conversations produced.",
+    "There's no workspace-wide artifact index yet. Choose a project to browse the files its conversations produced.",
 };
 
 function duration(seconds: number | null) {
@@ -575,7 +575,7 @@ export function CommandCenter() {
           </p>
         ) : stats.isError ? (
           <div className={styles.notice} role="alert">
-            Workspace totals could not be loaded.{" "}
+            Workspace totals couldn&apos;t be loaded.{" "}
             <button onClick={() => void stats.refetch()}>Retry</button>
           </div>
         ) : (
@@ -660,7 +660,7 @@ export function CommandCenter() {
               <p role="status">Usage is unavailable for this account.</p>
             ) : usage.isError ? (
               <div className={styles.empty} role="alert">
-                <p>Usage could not be loaded.</p>
+                <p>Usage couldn&apos;t be loaded.</p>
                 <button onClick={() => void usage.refetch()}>Try again</button>
               </div>
             ) : usage.isLoading ? (
@@ -724,15 +724,16 @@ export function CommandCenter() {
                   <p>No model usage was recorded in this period.</p>
                 )}
                 <p className={styles.diagramNote}>
-                  Cost estimates cover priced models only. Unpriced usage is not
-                  free; these figures are not your provider balance or invoice.
+                  Cost estimates cover priced models only. Unpriced usage
+                  isn&apos;t free; these figures aren&apos;t your provider
+                  balance or invoice.
                 </p>
                 <div className={`${styles.sectionHead} ${styles.ledgerHead}`}>
                   <div>
                     <h2>Provider attempt ledger</h2>
                     <p>
-                      Read-only attempt and retry evidence; this view does not
-                      approve, block, or authorize provider spend.
+                      Read-only attempt and retry evidence; this view
+                      doesn&apos;t approve, block, or authorize provider spend.
                     </p>
                   </div>
                   <button
@@ -751,7 +752,7 @@ export function CommandCenter() {
                 </div>
                 {usageLedger.isError ? (
                   <div className={styles.empty} role="alert">
-                    <p>Provider attempt evidence could not be loaded.</p>
+                    <p>Provider attempt evidence couldn&apos;t be loaded.</p>
                     <button onClick={() => void usageLedger.refetch()}>
                       Try again
                     </button>

@@ -268,7 +268,7 @@ export default function ScheduledTasksPage() {
   };
 
   useEffect(() => {
-    document.title = `${t.sidebar.scheduledTasks} - ${t.pages.appName}`;
+    document.title = `${t.sidebar.scheduledTasks} (${t.pages.appName})`;
   }, [t.pages.appName, t.sidebar.scheduledTasks]);
 
   useEffect(() => {

@@ -63,7 +63,7 @@ for (const mode of ["create", "edit"] as const) {
     });
     await form.getByLabel("Run at").fill("2027-03-14T02:30");
     await expect(form.getByRole("alert")).toContainText(
-      "This local time does not exist",
+      "This local time doesn't exist",
     );
     await expect(submit).toBeDisabled();
     expect(writes).toHaveLength(0);

@@ -38,7 +38,7 @@ export function ToolCallDetails({
       {open && (
         <div id={panelId} className="space-y-3 rounded-md border p-3">
           <Payload label={t.toolCalls.toolName} value={name} />
-          <Payload label={t.toolCalls.callId} value={callId ?? "—"} />
+          <Payload label={t.toolCalls.callId} value={callId ?? "N/A"} />
           <Payload label={t.toolCalls.input} value={args} />
           {resultMessage ? (
             <Payload

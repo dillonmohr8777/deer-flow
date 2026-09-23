@@ -311,14 +311,14 @@ export function MemorySettingsPage() {
     t.settings.memory.clearAllConfirmTitle ?? "Clear all memory?";
   const clearAllConfirmDescription =
     t.settings.memory.clearAllConfirmDescription ??
-    "This will remove all saved summaries and facts. This action cannot be undone.";
+    "This will remove all saved summaries and facts. This action can't be undone.";
   const clearAllSuccess =
     t.settings.memory.clearAllSuccess ?? "All memory cleared";
   const factDeleteConfirmTitle =
     t.settings.memory.factDeleteConfirmTitle ?? "Delete this fact?";
   const factDeleteConfirmDescription =
     t.settings.memory.factDeleteConfirmDescription ??
-    "This fact will be removed from memory immediately. This action cannot be undone.";
+    "This fact will be removed from memory immediately. This action can't be undone.";
   const factDeleteSuccess =
     t.settings.memory.factDeleteSuccess ?? "Fact deleted";
   const addFactLabel = t.settings.memory.addFact;

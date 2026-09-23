@@ -34,9 +34,9 @@ export function ThreadTitle({
       _title = t.pages.newChat;
     }
     if (thread.isThreadLoading) {
-      document.title = `Loading... - ${t.pages.appName}`;
+      document.title = `Loading... (${t.pages.appName})`;
     } else {
-      document.title = `${_title} - ${t.pages.appName}`;
+      document.title = `${_title} (${t.pages.appName})`;
     }
   }, [
     isNewThread,

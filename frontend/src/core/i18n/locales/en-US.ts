@@ -17,7 +17,7 @@ export const enUS: Translations = {
     reload: "Reload",
     reloadAll: "Reload extensions (refresh page)",
     all: "All extensions",
-    notInstalled: "This extension is not installed.",
+    notInstalled: "This extension isn't installed.",
     enabledManaged: "Enabled · Managed by your administrator",
     disabledManaged: "Disabled · Managed by your administrator",
     deploymentHint:
@@ -26,7 +26,7 @@ export const enUS: Translations = {
     noResults: "No matching installed extensions.",
     pageUnavailable: "Extension page unavailable",
     pageUnavailableHint:
-      "This page is not registered, or its plugin is disabled or unavailable.",
+      "This page isn't registered, or its plugin is disabled or unavailable.",
     viewAll: "View extensions",
     viewFailed: "Plugin view unavailable. Reload to retry.",
     actionFailed: "Extension action unavailable. Try again.",
@@ -47,7 +47,7 @@ export const enUS: Translations = {
         type: "Choose a PNG, JPG or WebP image.",
         size: "The image must be 2 MB or smaller.",
         invalid:
-          "Cannot read this image. Choose a valid image up to 16 megapixels.",
+          "Can't read this image. Choose a valid image up to 16 megapixels.",
       },
     },
     directory: {
@@ -110,7 +110,7 @@ export const enUS: Translations = {
       "Turn useful methods into skills, ready to use in any conversation.",
     noResults: "No matches found",
     noResultsHint: "Try a shorter search, or choose All categories.",
-    skillsLoadFailed: "Could not load skills.",
+    skillsLoadFailed: "Couldn't load skills.",
     larkName: "Lark / Feishu",
     larkDescription:
       "Work with documents, messages, calendars, and multidimensional tables in your conversations.",
@@ -169,7 +169,7 @@ export const enUS: Translations = {
     editAndRerun: "Edit and rerun",
     updateAndRerun: "Update and rerun",
     editRerunWarning:
-      "Rerunning restores conversation state only. Files, memory, and external actions are not undone.",
+      "Rerunning restores conversation state only. Files, memory, and external actions aren't undone.",
     branch: "Branch conversation",
     showArtifacts: "Show artifacts of this conversation",
     browser: "Browser",
@@ -235,9 +235,9 @@ export const enUS: Translations = {
     loadFullFile: "Load full file",
     loadingFullFile: "Loading full file...",
     previewFailed:
-      "This file could not be previewed. You can still download it.",
+      "This file couldn't be previewed. You can still download it.",
     viewSource: "View source",
-    missingTarget: "This link does not say which artifact to display.",
+    missingTarget: "This link doesn't say which artifact to display.",
   },
 
   artifactTable: {
@@ -247,7 +247,7 @@ export const enUS: Translations = {
     total: (count) => `${count} rows`,
     sample: (count) => `Preview of first ${count} rows`,
     range: (start, end, limited) =>
-      `${start}–${end}${limited ? " of preview" : ""}`,
+      `${start} to ${end}${limited ? " of preview" : ""}`,
     columnsLimited: "Showing the first 50 columns of the preview.",
     uneven:
       "Some rows have different numbers of fields. Missing fields are marked.",
@@ -263,7 +263,7 @@ export const enUS: Translations = {
     cellValue: "Cell value",
     missing: "Missing",
     savedVersion:
-      "Opens or downloads the saved file. Your draft has not been saved.",
+      "Opens or downloads the saved file. Your draft hasn't been saved.",
   },
 
   artifactArchive: {
@@ -352,15 +352,15 @@ export const enUS: Translations = {
     voiceInputStop: "Stop voice input",
     voiceInputListening: "Listening... Click to stop voice input.",
     voiceInputUnsupported:
-      "Voice input is not supported in this browser. Try Chrome or Edge.",
+      "Voice input isn't supported in this browser. Try Chrome or Edge.",
     voiceInputPermissionDenied:
       "Microphone access was denied. Allow microphone access and try again.",
     voiceInputMicrophoneUnavailable:
       "No microphone was detected. Check your device input and try again.",
     voiceInputUnsupportedLanguage:
-      "Voice input does not support the current language in this browser.",
+      "Voice input doesn't support the current language in this browser.",
     voiceInputNetworkError:
-      "Voice input could not reach the browser speech service.",
+      "Voice input couldn't reach the browser speech service.",
     voiceInputNoSpeech: "No speech was detected. Please try again.",
     voiceInputFailed: "Voice input failed. Please try again.",
     mode: "Mode",
@@ -413,30 +413,30 @@ export const enUS: Translations = {
     goalLengthCounter: "Goal length: {length}/{max} characters",
     compactSuccess:
       "Earlier context compacted. The full chat remains visible; future model calls will use the summary and recent messages.",
-    compactSkipped: "The current context does not need compaction yet.",
+    compactSkipped: "The current context doesn't need compaction yet.",
     compactFailed: "Context compaction failed.",
     startersLabel: "Start from",
     starters: [
       {
         label: "Plan a client delivery",
         prompt:
-          "Plan this month's delivery for [client]: what we owe them, who owns each piece, and what is blocked. Ask me for anything you cannot find.",
+          "Plan this month's delivery for [client]: what we owe them, who owns each piece, and what's blocked. Ask me for anything you can't find.",
       },
       {
         label: "Research with sources",
         prompt:
-          "Research [topic] and bring back sources I can check. Keep what is confirmed apart from what is still open.",
+          "Research [topic] and bring back sources I can check. Keep what's confirmed apart from what's still open.",
       },
       {
         label: "Draft a client report",
         prompt:
-          "Draft this month's report for [client]: results, spend, and next steps. Mark every number you could not verify.",
+          "Draft this month's report for [client]: results, spend, and next steps. Mark every number you couldn't verify.",
       },
     ],
     pleaseWaitStreaming: "Please wait for the current response to finish.",
     stopStreamingUnavailable:
-      "Stopping the running turn is not permitted for your role.",
-    startTurnUnavailable: "Starting a new turn is not permitted for your role.",
+      "Stopping the running turn isn't permitted for your role.",
+    startTurnUnavailable: "Starting a new turn isn't permitted for your role.",
     send: "Send",
     stopRun: "Stop the running turn",
   },
@@ -476,11 +476,11 @@ export const enUS: Translations = {
       files: "Files",
       notSearchable: "Not searchable",
       loadFailed:
-        "The catalog could not be loaded. Your current selection is unchanged.",
+        "The catalog couldn't be loaded. Your current selection is unchanged.",
       selectionInvalid: "This selection exceeds the supported size limits.",
       previous: "Previous",
       next: "Next",
-      agentUnavailable: "This agent does not allow the knowledge tool group.",
+      agentUnavailable: "This agent doesn't allow the knowledge tool group.",
       apply: "Apply",
       historyAll: "Knowledge: all allowed bases",
       historyDisabled: "Knowledge: off",
@@ -503,7 +503,7 @@ export const enUS: Translations = {
     restore: "Restore",
     deleteProject: "Delete project",
     deleteProjectConfirm:
-      "Deleting this project unlinks its chats; chats, their history, and their files are not deleted. Shelf documents move to trash and stay recoverable for the retention window.",
+      "Deleting this project unlinks its chats; chats, their history, and their files aren't deleted. Shelf documents move to trash and stay recoverable for the retention window.",
     archived: "Archived",
     empty: "No chats in this project yet.",
     newChat: "New chat",
@@ -521,7 +521,7 @@ export const enUS: Translations = {
     settings: "Settings",
     notFound: "Project not found or deleted.",
     projectUnavailable:
-      "Couldn't link the chat to the project. Your message was not sent — try again.",
+      "Couldn't link the chat to the project. Your message wasn't sent. Try again.",
     documents: "Documents",
     documentsEmptyTitle: "No documents yet",
     documentsEmptyHint:
@@ -570,7 +570,7 @@ export const enUS: Translations = {
     viewTrash: "Trash",
     openTrash: "Open trash",
     trashNote: (days) =>
-      `Removed documents wait in the trash for ${days} days before they are deleted.`,
+      `Removed documents wait in the trash for ${days} days before they're deleted.`,
     documentColumnName: "Document",
     documentColumnSource: "Source",
     documentColumnAdded: "Added",
@@ -602,7 +602,7 @@ export const enUS: Translations = {
           ? "1 day left"
           : `${days} days left`,
     retentionNote: (days) =>
-      `Documents you remove from a project wait here for ${days} days, then they are deleted for good.`,
+      `Documents you remove from a project wait here for ${days} days, then they're deleted for good.`,
     restore: "Restore",
     restoreFailed: "Failed to restore document",
     restoredToast: (name) => `Restored "${name}"`,
@@ -616,14 +616,14 @@ export const enUS: Translations = {
     deletePermanently: "Delete permanently",
     deletePermanentlyTitle: "Delete permanently?",
     deletePermanentlyConfirm: (name) =>
-      `"${name}" will be permanently deleted. This cannot be undone.`,
+      `"${name}" will be permanently deleted. This can't be undone.`,
     purgeFailed: "Failed to delete document",
     emptyTrash: "Empty trash",
     emptyTrashTitle: "Empty trash?",
     emptyTrashConfirm: (count) =>
       count === 1
-        ? "1 document will be permanently deleted. This cannot be undone."
-        : `${count} documents will be permanently deleted. This cannot be undone.`,
+        ? "1 document will be permanently deleted. This can't be undone."
+        : `${count} documents will be permanently deleted. This can't be undone.`,
     emptyTrashFailed: "Failed to empty trash",
   },
 
@@ -654,7 +654,7 @@ export const enUS: Translations = {
     resultArtifact: "Result artifact",
     inputRequired: "Input required",
     inputUnavailable:
-      "This integration cannot send your response back to the remote task yet.",
+      "This integration can't send your response back to the remote task yet.",
     lastPollError: "Latest status error",
     created: (time) => `Started ${time}`,
     updated: (time) => `Updated ${time}`,
@@ -673,7 +673,7 @@ export const enUS: Translations = {
     title: "Subagent batches",
     description: "Durable, restart-safe work for many independent items.",
     workerUnavailable:
-      "The batch worker is not running. Historical batches remain available in read-only mode.",
+      "The batch worker isn't running. Historical batches remain available in read-only mode.",
     empty: "No subagent batches yet",
     emptyHint: "Explicit batch_task submissions in this chat will appear here.",
     loadFailed: "Couldn't load subagent batches",
@@ -726,7 +726,7 @@ export const enUS: Translations = {
       cronPlaceholder: "0 9 * * *",
       runAt: "Run at",
       invalidRunAt:
-        "This local time does not exist in the selected timezone. Choose another time.",
+        "This local time doesn't exist in the selected timezone. Choose another time.",
       timezone: "Timezone",
       intervalAmount: "Every",
       intervalUnitSeconds: "seconds",
@@ -811,7 +811,7 @@ export const enUS: Translations = {
       delete: "Delete",
     },
     deleteConfirm:
-      "Are you sure you want to delete this scheduled task? This action cannot be undone.",
+      "Are you sure you want to delete this scheduled task? This action can't be undone.",
     errors: {
       create: "Failed to create scheduled task",
       update: "Failed to update scheduled task",
@@ -842,7 +842,7 @@ export const enUS: Translations = {
       paused:
         "Automatic refresh is paused on older pages. Return to latest for current runs.",
       loading: "Loading runs…",
-      loadFailed: "Could not load run history.",
+      loadFailed: "Couldn't load run history.",
       retry: "Retry history",
     },
     runTrigger: { scheduled: "scheduled", manual: "manual" },
@@ -885,14 +885,14 @@ export const enUS: Translations = {
     emptyTitle: "No custom agents yet",
     emptyDescription:
       "Create your first custom agent with a specialized system prompt.",
-    featureDisabledTitle: "Agents feature is not enabled",
+    featureDisabledTitle: "Agents feature isn't enabled",
     featureDisabledDescription:
-      "This feature is not enabled on this server. Please contact your administrator.",
-    loadFailed: "Could not load agents.",
+      "This feature isn't enabled on this server. Please contact your administrator.",
+    loadFailed: "Couldn't load agents.",
     chat: "Chat",
     delete: "Delete",
     deleteConfirm:
-      "Are you sure you want to delete this agent? This action cannot be undone.",
+      "Are you sure you want to delete this agent? This action can't be undone.",
     deleteSuccess: "Agent deleted",
     newChat: "New chat",
     createPageTitle: "Design your Agent",
@@ -907,10 +907,10 @@ export const enUS: Translations = {
     nameStepAlreadyExistsError: "An agent with this name already exists",
     nameStepNetworkError:
       "Network request failed. Check your network or backend connection.",
-    nameStepCheckError: "Could not verify name availability. Please try again.",
+    nameStepCheckError: "Couldn't verify name availability. Please try again.",
     nameStepCheckErrorWithDetail: "Name check failed: {detail}",
     nameStepApiDisabledError:
-      "Custom agent management is not enabled on this server. Please contact your administrator.",
+      "Custom agent management isn't enabled on this server. Please contact your administrator.",
     nameStepBootstrapMessage:
       "The new custom agent name is {name}. Help me design its purpose, behavior, and SOUL.md before saving it.",
     save: "Save agent",
@@ -920,9 +920,9 @@ export const enUS: Translations = {
     saveHint:
       "You can save this agent at any time from the top-right menu, even if this is only a first draft.",
     saveCommandMessage:
-      "Please save this custom agent now based on everything we have discussed so far. Treat this as my explicit confirmation to save. If some details are still missing, make reasonable assumptions, generate a concise first SOUL.md in English, and call setup_agent immediately without asking me for more confirmation.",
+      "Please save this custom agent now based on everything we've discussed so far. Treat this as my explicit confirmation to save. If some details are still missing, make reasonable assumptions, generate a concise first SOUL.md in English, and call setup_agent immediately without asking me for more confirmation.",
     agentCreatedPendingRefresh:
-      "The agent was created, but MomoBot could not load it yet. Please refresh this page in a moment.",
+      "The agent was created, but MomoBot couldn't load it yet. Please refresh this page in a moment.",
     more: "More actions",
     agentCreated: "Agent created!",
     startChatting: "Start chatting",
@@ -943,7 +943,8 @@ export const enUS: Translations = {
     settingsModel: "Default model",
     settingsModelDefault: "Use global default",
     settingsTemperature: "Temperature",
-    settingsTemperatureHint: "0 = deterministic, higher = more creative (0–2).",
+    settingsTemperatureHint:
+      "0 = deterministic, higher = more creative (0 to 2).",
     settingsMaxTokens: "Max output tokens",
     settingsMaxTokensPlaceholder: "Inherit from model",
     settingsThinking: "Thinking mode",
@@ -997,7 +998,7 @@ export const enUS: Translations = {
   chats: {
     deleteChat: "Delete chat",
     deleteConfirm: (title) =>
-      `Delete “${title}”? This will delete the conversation and its files. This action cannot be undone.`,
+      `Delete “${title}”? This will delete the conversation and its files. This action can't be undone.`,
     deleteFailed: "Failed to delete chat. Please try again.",
     noActiveChats: "No recent chats",
     activeChats: "Recent chats",
@@ -1031,7 +1032,7 @@ export const enUS: Translations = {
     close: "Close side chat",
     delete: "Delete side chat",
     deleteConfirm:
-      "Are you sure you want to delete this side chat? This action cannot be undone. To simply hide it, use the side chat toggle in the header instead.",
+      "Are you sure you want to delete this side chat? This action can't be undone. To simply hide it, use the side chat toggle in the header instead.",
     deleteSuccess: "Side chat deleted",
     deleteFailed: "Failed to delete side chat.",
     addToConversation: "Add to conversation",
@@ -1084,7 +1085,7 @@ export const enUS: Translations = {
       invalid_response:
         "WeChat returned an unexpected response. Refresh the QR code and try again.",
       verification_rejected:
-        "The code did not match. Check the digits on your phone and try again.",
+        "The code didn't match. Check the digits on your phone and try again.",
       verification_blocked:
         "Too many incorrect attempts. Wait a moment, then refresh the QR code.",
       already_bound:
@@ -1098,13 +1099,13 @@ export const enUS: Translations = {
       bindWaiting: "Waiting for your message in WeChat…",
       bindLoading: "Preparing your account connection…",
       bindFailed:
-        "Your token is saved, but account binding could not start. Try again.",
+        "Your token is saved, but account binding couldn't start. Try again.",
       bindExpired:
         "This binding code has expired. Generate a new one; no need to scan again.",
       bindRetry: "Generate binding code",
       copyCommand: "Copy command",
       copied: "Copied",
-      copyFailed: "Could not copy. Select and copy the command above.",
+      copyFailed: "Couldn't copy. Select and copy the command above.",
       connectedTitle: "WeChat is connected",
       connectedDescription: "You can now send a message to your bot in WeChat.",
       done: "Done",
@@ -1134,7 +1135,7 @@ export const enUS: Translations = {
       failedTitle: "Unable to connect",
     },
     setupDescription:
-      "Enter the values needed by this server process. They are not written to config.yaml.",
+      "Enter the values needed by this server process. They're not written to config.yaml.",
     saveAndConnect: "Save and connect",
     saveChanges: "Save changes",
     descriptions: {
@@ -1221,7 +1222,7 @@ export const enUS: Translations = {
     limitsHint: (maxFiles: number, maxFileSize: string, maxTotalSize: string) =>
       `Add attachments (up to ${maxFiles} files, ${maxFileSize} each, ${maxTotalSize} total). Most regular file types are supported; compress macOS .app bundles first.`,
     filesTooLarge: (files: string, maxFileSize: string) =>
-      `Files exceeding the ${maxFileSize} per-file limit were not added: ${files}.`,
+      `Files exceeding the ${maxFileSize} per-file limit weren't added: ${files}.`,
     tooManyFiles: (count: number, maxFiles: number) =>
       `${count} file${count === 1 ? " was" : "s were"} not added. You can attach up to ${maxFiles} files at once.`,
     totalSizeTooLarge: (count: number, maxTotalSize: string) =>
@@ -1304,7 +1305,7 @@ export const enUS: Translations = {
         "Only administrators can manage shared models. This feature is unavailable in demos.",
       add: "Add model",
       loading: "Loading models…",
-      failed: "Could not complete the request.",
+      failed: "Couldn't complete the request.",
       reload: "Reload",
       empty: "No models configured.",
       yaml: "Server configuration · read-only",
@@ -1334,7 +1335,7 @@ export const enUS: Translations = {
       saved: "Model saved",
       success: "Streaming and tool-call test passed.",
       tool_call_missing:
-        "The endpoint responded, but did not return a tool call. Check the model’s tool support.",
+        "The endpoint responded, but didn't return a tool call. Check the model’s tool support.",
       connection_failed:
         "Connection test failed. Check the endpoint, credentials, model ID and streaming/tool support.",
     },
@@ -1374,11 +1375,11 @@ export const enUS: Translations = {
       clearAll: "Clear all memory",
       clearAllConfirmTitle: "Clear all memory?",
       clearAllConfirmDescription:
-        "This will remove all saved summaries and facts. This action cannot be undone.",
+        "This will remove all saved summaries and facts. This action can't be undone.",
       clearAllSuccess: "All memory cleared",
       factDeleteConfirmTitle: "Delete this fact?",
       factDeleteConfirmDescription:
-        "This fact will be removed from memory immediately. This action cannot be undone.",
+        "This fact will be removed from memory immediately. This action can't be undone.",
       factDeleteSuccess: "Fact deleted",
       factContentLabel: "Content",
       factCategoryLabel: "Category",
@@ -1387,7 +1388,7 @@ export const enUS: Translations = {
       factCategoryPlaceholder: "context",
       factConfidenceHint: "Use a number between 0 and 1.",
       factSave: "Save fact",
-      factValidationContent: "Fact content cannot be empty.",
+      factValidationContent: "Fact content can't be empty.",
       factValidationConfidence: "Confidence must be a number between 0 and 1.",
       noFacts: "No saved facts yet.",
       summaryReadOnly:
@@ -1481,7 +1482,7 @@ export const enUS: Translations = {
       description:
         "Reusable workers that the Lead Agent and permitted Custom Agents can delegate bounded tasks to.",
       executionNote:
-        "Each invocation starts a fresh temporary context with no persistent chat or memory and cannot ask the user follow-up questions. A system prompt changes behavior; tools and skills grant actual capabilities.",
+        "Each invocation starts a fresh temporary context with no persistent chat or memory and can't ask the user follow-up questions. A system prompt changes behavior; tools and skills grant actual capabilities.",
       adminNote:
         "You can view the catalog. Only administrators can add, edit, enable, or delete subagents.",
       create: "Add subagent",
@@ -1489,7 +1490,7 @@ export const enUS: Translations = {
       sourceBuiltin: "Built-in",
       sourceConfig: "config.yaml",
       sourceManaged: "Managed",
-      conflict: "Name conflict — excluded from runtime",
+      conflict: "Name conflict: excluded from runtime",
       overridden: "Some runtime values are overridden by config.yaml",
       createTitle: "Add managed subagent",
       editTitle: "Edit managed subagent",
@@ -1512,7 +1513,7 @@ export const enUS: Translations = {
       saved: "Subagent saved",
       deleted: "Subagent deleted",
       deleteConfirm:
-        "Delete this managed subagent? Custom Agents may keep referencing its name, and recreating the same name will reconnect those bindings. This cannot be undone.",
+        "Delete this managed subagent? Custom Agents may keep referencing its name, and recreating the same name will reconnect those bindings. This can't be undone.",
       bindingTitle: "Subagent access",
       bindingDescription:
         "Choose which subagents this Custom Agent may invoke. This is enforced by the server.",
@@ -1526,7 +1527,7 @@ export const enUS: Translations = {
       description:
         "Connect IM accounts that can send messages to MomoBot from outside the browser.",
       disabled:
-        "Channel connections are not enabled on this server. Ask an administrator to enable channel_connections.",
+        "Channel connections aren't enabled on this server. Ask an administrator to enable channel_connections.",
     },
     integrations: {
       title: "Integrations",
@@ -1555,13 +1556,13 @@ export const enUS: Translations = {
         sandboxRuntimeBroker: "Provisioned by broker sidecar",
         sandboxRuntimeGatewayDownload: "Provisioned by Gateway",
         sandboxRuntimeNotReady:
-          "Not ready — lark-cli may be missing at chat time",
+          "Not ready: lark-cli may be missing at chat time",
         notInstalled: "Not installed",
         skillsInstalled: (installed, expected) =>
           `${installed}/${expected} skills installed`,
         installedVersion: (version) => `Installed: ${version}`,
         updateAvailable: (version) =>
-          `Update available: ${version} — admin reinstall updates the managed Gateway CLI and skill pack`,
+          `Update available: ${version}. Admin reinstall updates the managed Gateway CLI and skill pack`,
         runtimeVersionMismatch:
           "Skill pack version differs from the Gateway runtime lark-cli; admin reinstall attempts to update the managed Gateway CLI and realign the skill pack",
         authNotConfigured: "Not connected",
@@ -1578,11 +1579,11 @@ export const enUS: Translations = {
         changeAppButton: "Change Lark app",
         changeAppTitle: "Switch to a different Lark app",
         changeAppDescription:
-          "Point your MomoBot account at a different Lark/Feishu app. This only affects your account; other users are not changed.",
+          "Point your MomoBot account at a different Lark/Feishu app. This only affects your account; other users aren't changed.",
         changeAppIdLabel: "App ID",
         changeAppSecretLabel: "App Secret",
         changeAppAuthResetNote:
-          "Switching revokes the previous app's authorization. You will authorize the new app next.",
+          "Switching revokes the previous app's authorization. You'll authorize the new app next.",
         changeAppSubmit: "Switch app",
         changeAppReRegister: "Re-register in browser",
         changeAppSwitched:
@@ -1594,10 +1595,10 @@ export const enUS: Translations = {
         authStarted:
           "Authorization page opened. MomoBot will detect completion automatically.",
         authorizationStillPending:
-          'Authorization is not complete yet. Finish it in the browser; MomoBot keeps checking automatically. You can click "I completed authorization" if the page does not update.',
+          "Authorization isn't complete yet. Finish it in the browser; MomoBot keeps checking automatically. You can click \"I completed authorization\" if the page doesn't update.",
         permissionTitle: "Authorization scope",
         permissionDescription:
-          "By default, MomoBot only completes the base sign-in and does not request any business permissions. Select the domains you need here; connected users can re-authorize to add more (scopes accumulate).",
+          "By default, MomoBot only completes the base sign-in and doesn't request any business permissions. Select the domains you need here; connected users can re-authorize to add more (scopes accumulate).",
         authDomains: {
           calendar: {
             label: "Calendar",
@@ -1728,10 +1729,10 @@ export const enUS: Translations = {
           "After installation, /lark-doc, /lark-im, /lark-sheets and related skills appear in the skill index.",
         cliNextTitle: "Install Gateway CLI",
         cliNextDescription:
-          "The skill pack is installed, but the Gateway cannot find lark-cli. Admin reinstall attempts to download the managed Gateway CLI; offline deployments can use an image with @larksuite/cli built in.",
+          "The skill pack is installed, but the Gateway can't find lark-cli. Admin reinstall attempts to download the managed Gateway CLI; offline deployments can use an image with @larksuite/cli built in.",
         configuredTitle: "Lark credentials are configured locally",
         configuredDescription:
-          "Credentials are present, but their current validity has not been checked with Lark. Reconnect to refresh and live-verify authorization.",
+          "Credentials are present, but their current validity hasn't been checked with Lark. Reconnect to refresh and live-verify authorization.",
         connectedTitle: "Lark authorization is live-verified",
         connectedDescription:
           "The current user's authorization was verified with Lark during this connection flow. Reconnect whenever you need to refresh it or add permissions.",
@@ -1744,20 +1745,20 @@ export const enUS: Translations = {
       exportPrevious: "Previous 50 files",
       exportNotices: {
         skill_export_yaml_alias:
-          "YAML aliases are not supported for export. Replace aliases with explicit values in SKILL.md.",
+          "YAML aliases aren't supported for export. Replace aliases with explicit values in SKILL.md.",
         skill_export_yaml_complexity:
           "The YAML declarations are too deeply nested or complex to export.",
         skill_export_invalid_declaration:
           "A malformed credential declaration was omitted; inspect SKILL.md.",
-        skill_export_link: "Linked files or directories cannot be exported.",
+        skill_export_link: "Linked files or directories can't be exported.",
         skill_export_unsupported_node:
-          "Only ordinary files and directories are supported; hard links and special files cannot be exported.",
+          "Only ordinary files and directories are supported; hard links and special files can't be exported.",
         skill_export_invalid_path:
-          "This path is not portable or conflicts with another path.",
+          "This path isn't portable or conflicts with another path.",
         skill_export_nested_skill:
-          "Nested SKILL.md files are not accepted by the installer.",
+          "Nested SKILL.md files aren't accepted by the installer.",
         skill_export_executable_binary:
-          "Executable binaries are not accepted by the installer.",
+          "Executable binaries aren't accepted by the installer.",
         skill_export_invalid_frontmatter:
           "SKILL.md must have valid declarations and its name must match the skill folder.",
         skill_export_sensitive_filename:
@@ -1786,15 +1787,15 @@ export const enUS: Translations = {
         "Includes all files inside this skill. Account settings, conversations and history outside the skill folder are excluded. Configure tools and credentials again on the destination.",
       exportWarnings: "Check package contents",
       exportWarningDescription:
-        "These notices are based on filenames and declarations. Secrets written inside package files are included unchanged. This is not a security scan.",
-      exportBlocked: "This package cannot be exported",
+        "These notices are based on filenames and declarations. Secrets written inside package files are included unchanged. This isn't a security scan.",
+      exportBlocked: "This package can't be exported",
       exportDownload: "Download .skill",
       exportDownloading: "Preparing download…",
       exportHandedOff: "File handed to your browser for download.",
       exportChanged:
         "The skill changed. Refresh the file list before downloading.",
       exportRefresh: "Refresh file list",
-      exportFailed: "Could not export this skill. Try again.",
+      exportFailed: "Couldn't export this skill. Try again.",
       exportBusy: "Two exports are active. Try again shortly.",
       exportTimeout: "Preparing the package timed out. Try again shortly.",
       exportLimit: "The package exceeds an export limit.",
@@ -1817,14 +1818,14 @@ export const enUS: Translations = {
     notification: {
       title: "Notification",
       description:
-        "MomoBot only sends a completion notification when the window is not active. This is especially useful for long-running tasks so you can switch to other work and get notified when done.",
+        "MomoBot only sends a completion notification when the window isn't active. This is especially useful for long-running tasks so you can switch to other work and get notified when done.",
       requestPermission: "Request notification permission",
       deniedHint:
         "Notification permission was denied. You can enable it in your browser's site settings to receive completion alerts.",
       testButton: "Send test notification",
       testTitle: "MomoBot",
       testBody: "This is a test notification.",
-      notSupported: "Your browser does not support notifications.",
+      notSupported: "Your browser doesn't support notifications.",
       disableNotification: "Disable notification",
     },
     experience: {
@@ -1857,11 +1858,11 @@ export const enUS: Translations = {
       changePasswordDescription: "Update your account password.",
       ssoPasswordDescription: "Password is managed by your SSO provider.",
       ssoPasswordMessage:
-        "This account signs in with {provider}, so MomoBot cannot manage or change its password here. Use your SSO provider's account settings instead.",
+        "This account signs in with {provider}, so MomoBot can't manage or change its password here. Use your SSO provider's account settings instead.",
       currentPassword: "Current password",
       newPassword: "New password",
       confirmNewPassword: "Confirm new password",
-      passwordMismatch: "New passwords do not match",
+      passwordMismatch: "New passwords don't match",
       passwordTooShort: "Password must be at least 8 characters",
       passwordChangedSuccess: "Password changed successfully",
       networkError: "Network error. Please try again.",
@@ -1901,7 +1902,7 @@ export const enUS: Translations = {
     networkError: "Network error. Please try again.",
     serviceUnavailableTitle: "Service temporarily unavailable",
     serviceUnavailableDescription:
-      "The Gateway is taking too long to respond. Check that it is running, then try again.",
+      "The Gateway is taking too long to respond. Check that it's running, then try again.",
     retry: "Try again",
     authFailed: "Authentication failed.",
     errors: {
@@ -1910,7 +1911,7 @@ export const enUS: Translations = {
       sso_account_exists:
         "An account with this email already exists. Please sign in with your password or contact your administrator.",
       sso_not_allowed:
-        "SSO login is not allowed for your account. Contact your administrator.",
+        "SSO login isn't allowed for your account. Contact your administrator.",
     },
   },
 };

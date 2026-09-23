@@ -241,7 +241,7 @@ test("shows, refreshes, and cancels current-chat background tasks", async ({
   await expect(page.getByText("Approve the revised budget?")).toBeVisible();
   await expect(
     page.getByText(
-      "This integration cannot send your response back to the remote task yet.",
+      "This integration can't send your response back to the remote task yet.",
     ),
   ).toBeVisible();
 

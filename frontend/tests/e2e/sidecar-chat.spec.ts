@@ -1351,7 +1351,7 @@ test.describe("Side chat", () => {
     // The panel's own button deletes the side chat (it does not merely hide it).
     await page.getByTestId("sidecar-delete-button").click();
     await expect(
-      page.getByText("This action cannot be undone", { exact: false }),
+      page.getByText("This action can't be undone", { exact: false }),
     ).toBeVisible();
 
     const deleteRequestPromise = page.waitForRequest(

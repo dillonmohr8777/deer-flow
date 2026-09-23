@@ -71,8 +71,8 @@ export default function ProjectPage() {
 
   useEffect(() => {
     document.title = project?.name
-      ? `${project.name} - ${t.pages.appName}`
-      : `${t.projects.title} - ${t.pages.appName}`;
+      ? `${project.name} (${t.pages.appName})`
+      : `${t.projects.title} (${t.pages.appName})`;
   }, [project?.name, t.projects.title, t.pages.appName]);
 
   // Static demo mode has no Gateway and hides every project surface.
