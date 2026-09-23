@@ -51,19 +51,6 @@ const CANON_BODY =
   '<circle cx="60" cy="76" r="48" fill="#1B4B9E"/><path d="M90.81 39.19A48 48 0 1 1 23.19 106.81A48 48 0 0 0 90.81 39.19Z" fill="#14346E"/>';
 const CANON_ANTENNA_BALL = '<circle cx="60" cy="11" r="6" fill="#C8A04A"/>';
 
-/**
- * Dillon Brain is the one hand-authored exception: a literal brain, not the
- * robot Momo body, so it does not share the sphere/crescent/antenna or the
- * <=48px .detail hiding. Its own palette is a subset of the canon one (royal,
- * royal deep, cream-hi) — allowed explicitly rather than by coincidence.
- */
-const BRAIN_SLUG = "dillon-brain";
-const BRAIN_PALETTE: ReadonlySet<string> = new Set([
-  "#1B4B9E", // royal: the brain body
-  "#14346E", // royal deep: the folds
-  "#FBF8F1", // cream-hi: the highlight folds
-]);
-
 function shippedSlugs(): string[] {
   return readdirSync(MOMOS_DIR)
     .filter((name) => name.endsWith(".svg"))
@@ -80,9 +67,10 @@ describe("momo manifest", () => {
     // The crew sits side by side in the roster. The sphere, its crescent and
     // the gold antenna ball are identical in every file; only the tool, pose
     // and eyes change. If the body drifts, the set stops reading as one
-    // family. Dillon Brain is not a robot Momo, so it is exempt.
+    // family. Dillon Brain is a PaperLayers WebP composition
+    // (public/momentum/brain/), not a shipped robot Momo svg, so it never
+    // appears in this directory at all.
     for (const slug of shippedSlugs()) {
-      if (slug === BRAIN_SLUG) continue;
       const svg = readFileSync(join(MOMOS_DIR, `${slug}.svg`), "utf8");
       expect(svg).toContain(CANON_BODY);
       expect(svg).toContain(CANON_ANTENNA_BALL);
@@ -95,7 +83,6 @@ describe("momo manifest", () => {
       expect(svg.startsWith("<svg")).toBe(true);
       expect(svg).toContain('viewBox="0 0 160 160"');
       expect(svg).toMatch(/<title>[^<]+<\/title>/);
-      if (slug === BRAIN_SLUG) continue;
       // The detail group is what the <=48px rule hides; without it the fine
       // tool detail would survive down into the 40px roster and turn to mud.
       expect(svg).toContain('class="detail"');
@@ -112,14 +99,30 @@ describe("momo manifest", () => {
         ...svg.matchAll(/#[0-9a-f]{3,8}\b/gi),
         ...svg.matchAll(/(?:fill|stroke)="([^"#]+)"/g),
       ].map(([hex, named]) => (named ?? hex).toUpperCase());
-      const palette = slug === BRAIN_SLUG ? BRAIN_PALETTE : CANON_PALETTE;
       const offPalette = colours.filter(
-        (colour) => colour !== "NONE" && !palette.has(colour),
+        (colour) => colour !== "NONE" && !CANON_PALETTE.has(colour),
       );
       expect({ slug, offPalette }).toEqual({ slug, offPalette: [] });
       // Flat cut paper: no gradients, glows or colour functions.
       expect(svg).not.toMatch(/gradient|<filter|rgba?\(|hsla?\(/i);
       expect(statSync(file).size).toBeLessThan(8 * 1024);
     }
+  });
+
+  it("never re-ships dillon-brain.svg: it is a PaperLayers WebP composition now", () => {
+    expect(shippedSlugs()).not.toContain("dillon-brain");
+  });
+});
+
+describe("dillon brain paper layers", () => {
+  const BRAIN_DIR = join(process.cwd(), "public", "momentum", "brain");
+  const LAYER_FILES = ["kraft.webp", "body.webp", "folds.webp"];
+
+  it("ships the three layers under 80 KB combined, plus a flattened fallback", () => {
+    const layerBytes = LAYER_FILES.map(
+      (name) => statSync(join(BRAIN_DIR, name)).size,
+    );
+    expect(layerBytes.reduce((a, b) => a + b, 0)).toBeLessThan(80 * 1024);
+    expect(statSync(join(BRAIN_DIR, "flat.webp")).size).toBeGreaterThan(0);
   });
 });

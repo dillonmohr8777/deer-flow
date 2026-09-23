@@ -1,0 +1,88 @@
+.flat {
+  display: block;
+}
+
+.perspective {
+  display: inline-block;
+  perspective: 900px;
+}
+
+.stage {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  transform: rotateY(var(--pl-tilt-y, 0deg)) rotateX(var(--pl-tilt-x, 0deg));
+  transition: transform 200ms ease-out;
+}
+
+.layer {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* Base layer: no lift, the deepest shadow (matches the prototype's .kraft). */
+.layer[data-depth="0"] {
+  transform: translateZ(0);
+  filter: drop-shadow(0 8px 10px rgba(16, 30, 63, 0.22));
+}
+
+.layer[data-depth="1"] {
+  transform: translateZ(10px);
+  filter: drop-shadow(0 2px 2px rgba(16, 30, 63, 0.35));
+}
+
+.layer[data-depth="2"] {
+  transform: translateZ(22px);
+  filter: drop-shadow(0 2px 1.5px rgba(16, 30, 63, 0.45));
+}
+
+/* "Working" breathes the upper layers a few px closer, deepening their
+   shadow, at the prototype's accelerated (active) pace. ponytail: only
+   depths 1-2 are wired (the two use sites need at most 3 layers total);
+   add a depth-3 keyframe if a caller ever stacks a fourth layer. */
+.stage[data-state="working"] .layer[data-depth="1"] {
+  animation: pl-lift-1 1.3s ease-in-out infinite;
+}
+
+.stage[data-state="working"] .layer[data-depth="2"] {
+  animation: pl-lift-2 1.3s ease-in-out infinite;
+}
+
+@keyframes pl-lift-1 {
+  0%,
+  100% {
+    transform: translateZ(10px);
+    filter: drop-shadow(0 2px 2px rgba(16, 30, 63, 0.35));
+  }
+  50% {
+    transform: translateZ(18px) translateY(-2px);
+    filter: drop-shadow(0 5px 4px rgba(16, 30, 63, 0.3));
+  }
+}
+
+@keyframes pl-lift-2 {
+  0%,
+  100% {
+    transform: translateZ(22px);
+    filter: drop-shadow(0 2px 1.5px rgba(16, 30, 63, 0.45));
+  }
+  50% {
+    transform: translateZ(36px) translateY(-4px);
+    filter: drop-shadow(0 7px 5px rgba(16, 30, 63, 0.32));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stage {
+    transition: none;
+  }
+  .stage[data-state="working"] .layer {
+    animation: none;
+  }
+}

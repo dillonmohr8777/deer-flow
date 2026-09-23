@@ -22,6 +22,7 @@ import {
 import Link from "next/link";
 import { useRef, useState } from "react";
 
+import { PaperLayers } from "@/components/momentum/paper-layers";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { ThreadSubagentBatches } from "@/components/workspace/thread-subagent-batches";
 import { useAgents } from "@/core/agents";
@@ -48,7 +49,7 @@ import {
 } from "./business-views";
 import { modelDisplayName } from "./model-label";
 import { MomentumGlyph } from "./momentum-glyph";
-import { MomoAvatar } from "./momo-avatar";
+import { BRAIN_ASPECT, BRAIN_FLAT, BRAIN_LAYERS, MomoAvatar } from "./momo-avatar";
 import { WorkspaceAppearance } from "./workspace-appearance";
 
 import styles from "./command-center.module.css";
@@ -212,6 +213,12 @@ export function CommandCenter() {
       .filter((run) => active(run.status))
       .map((run) => run.assistant_id)
       .filter((name): name is string => Boolean(name)) ?? null;
+  // Same guard as AgentTopology's leadActive: an unknown live state must
+  // never read as the lead working.
+  const heroBrainActive =
+    canReadRuns &&
+    activityRuns.isSuccess &&
+    (activeAgentNames ?? []).includes("dillon-brain");
 
   function openRun(run: ConsoleRunItem) {
     receiptTrigger.current = document.activeElement as HTMLElement | null;
@@ -485,17 +492,36 @@ export function CommandCenter() {
               means a specialist is working. The sidebar carries the wordmark. */}
           <div className={styles.heroArt} aria-hidden="true">
             <span className={`${styles.heroScrap} paper-torn`} />
-            {HERO_CREW.map((slug) => (
-              <img
-                key={slug}
-                className={styles.heroMomo}
-                data-crew={slug}
-                src={`/momentum/momos/${slug}.svg`}
-                alt=""
-                width={160}
-                height={160}
-              />
-            ))}
+            {HERO_CREW.map((slug) =>
+              slug === "dillon-brain" ? (
+                // Its box is sized by .heroMomo's own CSS (percentage width,
+                // aspect-ratio); PaperLayers fills it, [data-paper-layers]
+                // overriding its usual fixed pixel box for this one site.
+                <span
+                  key={slug}
+                  className={styles.heroMomo}
+                  data-crew={slug}
+                >
+                  <PaperLayers
+                    layers={BRAIN_LAYERS}
+                    flatSrc={BRAIN_FLAT}
+                    size={160}
+                    aspectRatio={BRAIN_ASPECT}
+                    state={heroBrainActive ? "working" : "idle"}
+                  />
+                </span>
+              ) : (
+                <img
+                  key={slug}
+                  className={styles.heroMomo}
+                  data-crew={slug}
+                  src={`/momentum/momos/${slug}.svg`}
+                  alt=""
+                  width={160}
+                  height={160}
+                />
+              ),
+            )}
           </div>
           <div className={styles.headingActions}>
             <Link className={styles.primary} href={startPath}>

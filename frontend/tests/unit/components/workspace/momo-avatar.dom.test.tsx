@@ -181,34 +181,47 @@ describe("MomoAvatar", () => {
     }
   });
 
-  it("renders the pulsing Dillon Brain for the lead agent dillon-brain, faster and stronger while active", () => {
-    const { container: gentle } = render(
+  it("renders Dillon Brain as a flat image below 40px, no PaperLayers stage", () => {
+    const { container } = render(
+      <MomoAvatar
+        agent={{ name: "dillon-brain", display_name: "Dillon Brain" }}
+        size={32}
+      />,
+    );
+    const imgs = container.querySelectorAll("img");
+    expect(imgs).toHaveLength(1);
+    expect(imgs[0]?.getAttribute("src")).toBe("/momentum/brain/flat.webp");
+    expect(container.querySelector("[data-depth]")).toBeNull();
+  });
+
+  it("renders Dillon Brain's PaperLayers stage at 160px, breathing only while active", () => {
+    const { container: idle } = render(
       <MomoAvatar
         agent={{ name: "dillon-brain", display_name: "Dillon Brain" }}
         size={160}
       />,
     );
-    const gentleImg = gentle.querySelector("img");
-    expect(gentleImg?.getAttribute("src")).toBe(
-      "/momentum/momos/dillon-brain.svg",
+    expect(idle.querySelector('[data-state="idle"]')).toBeTruthy();
+    const idleLayers = [...idle.querySelectorAll("img[data-depth]")].map((img) =>
+      img.getAttribute("src"),
     );
-    expect(gentleImg?.getAttribute("data-motion")).toBe("on");
-    // Not told the lead has an active run: the gentle pulse only.
-    expect(gentleImg?.getAttribute("data-active")).toBeNull();
+    expect(idleLayers).toEqual([
+      "/momentum/brain/kraft.webp",
+      "/momentum/brain/body.webp",
+      "/momentum/brain/folds.webp",
+    ]);
 
-    const { container: active } = render(
+    const { container: working } = render(
       <MomoAvatar
         agent={{ name: "dillon-brain", display_name: "Dillon Brain" }}
         size={160}
         active
       />,
     );
-    const activeImg = active.querySelector("img");
-    expect(activeImg?.getAttribute("data-motion")).toBe("on");
-    expect(activeImg?.getAttribute("data-active")).toBe("true");
+    expect(working.querySelector('[data-state="working"]')).toBeTruthy();
   });
 
-  it("holds the Dillon Brain fully static under reduced motion or the app motion switch off", () => {
+  it("holds Dillon Brain fully static (flat image) under reduced motion or the app motion switch off", () => {
     for (const setting of [
       { reducedMotion: true },
       { motion: false },
@@ -221,10 +234,9 @@ describe("MomoAvatar", () => {
           active
         />,
       );
-      const img = container.querySelector("img");
-      expect(img?.getAttribute("src")).toBe("/momentum/momos/dillon-brain.svg");
-      expect(img?.getAttribute("data-motion")).toBeNull();
-      expect(img?.getAttribute("data-active")).toBeNull();
+      const imgs = container.querySelectorAll("img");
+      expect(imgs).toHaveLength(1);
+      expect(imgs[0]?.getAttribute("src")).toBe("/momentum/brain/flat.webp");
       unmount();
     }
   });
