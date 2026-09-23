@@ -274,7 +274,8 @@ export const zhCN: Translations = {
     favorites: "收藏",
     otherModels: "其他模型",
     noModels: "暂无可用模型",
-    favoriteModel: (displayName, name) => `收藏 ${displayName}（${name}）`,
+    favoriteModel: (label) => `收藏 ${label}`,
+    repeatedName: (position, total) => `第 ${position} 个，共 ${total} 个`,
     sessionOnly: "收藏仅在本次会话中保留。",
   },
 

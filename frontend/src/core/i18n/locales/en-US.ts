@@ -288,7 +288,8 @@ export const enUS: Translations = {
     favorites: "Favorites",
     otherModels: "Other models",
     noModels: "No models available",
-    favoriteModel: (displayName, name) => `Favorite ${displayName} (${name})`,
+    favoriteModel: (label) => `Favorite ${label}`,
+    repeatedName: (position, total) => `${position} of ${total}`,
     sessionOnly: "Favorites are stored for this session only.",
   },
 

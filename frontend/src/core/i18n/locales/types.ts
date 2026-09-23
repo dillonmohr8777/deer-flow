@@ -247,7 +247,8 @@ export interface Translations {
     favorites: string;
     otherModels: string;
     noModels: string;
-    favoriteModel: (displayName: string, name: string) => string;
+    favoriteModel: (label: string) => string;
+    repeatedName: (position: number, total: number) => string;
     sessionOnly: string;
   };
 
