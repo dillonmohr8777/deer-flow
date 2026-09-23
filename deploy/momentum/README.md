@@ -43,3 +43,17 @@ project-document rows (hash), 9 users, 156 user files (hash), JWT secret
 
 Before starting a rehearsal, confirm the copy cannot act: no rows in
 `channel_connections`, no pending runs or batches, `scheduler.enabled: false`.
+
+## Encrypted off-machine backup (nightly)
+
+`offsite_backup.py` snapshots `deer-flow_gateway-data` with `backup_volume.py`, then:
+
+- tars the snapshot and encrypts it with AES-256-GCM;
+- writes `gateway-data-<stamp>.tgz.enc` plus a receipt to `OneDrive\MomoBot-Backups`, which syncs off the machine;
+- reads the file back and decrypts it to confirm the hash, then keeps the newest 14.
+
+The key is 32 random bytes at `C:\Users\dillo\Documents\Qwen\.secrets\momobot-backup.key`. It's outside every synced folder and never printed. Keep a second copy in a password manager: without it, the backups can't be restored.
+
+**Restore:** `python offsite_backup.py --restore <file.enc>` decrypts to a local temp `.tgz`, never into the synced folder. Then extract it into an empty volume and rehearse on `:2027` before touching live.
+
+**Schedule:** a Windows scheduled task named "MomoBot offsite backup" runs daily at 03:15 using `pythonw`, so no window opens. It needs Docker Desktop running.
