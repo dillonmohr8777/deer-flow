@@ -2,11 +2,25 @@
 
 import { useState } from "react";
 
-import { brandMotionAllowed } from "./appearance-preferences";
-import { useWorkspaceAppearance } from "./appearance-provider";
+import { PaperLayers } from "@/components/momentum/paper-layers";
+
 import { MomentumGlyph } from "./momentum-glyph";
 
 import styles from "./momo-avatar.module.css";
+
+// Dillon Brain's paper layers (kraft -> body -> folds), converted from the
+// reference prototype at Documents/Qwen/block-shots/2026-09-23-brain-v2/.
+// Not part of AVAILABLE_MOMO_SLUGS below: it is a hand-authored PaperLayers
+// composition, not a robot Momo svg loaded by slug. Exported so other
+// surfaces that draw Dillon Brain outside MomoAvatar (the Command Center
+// hero crew) use the same files rather than a second copy of the paths.
+export const BRAIN_LAYERS = [
+  "/momentum/brain/kraft.webp",
+  "/momentum/brain/body.webp",
+  "/momentum/brain/folds.webp",
+] as const;
+export const BRAIN_FLAT = "/momentum/brain/flat.webp";
+export const BRAIN_ASPECT = 422 / 480;
 
 export type MomoAvatarAgent = {
   name: string;
@@ -55,15 +69,14 @@ const SLUG_MAP: Record<string, string> = {
 
 // ponytail: manual manifest instead of a build-time fs glob of momos/. Every
 // slug here must have a matching public/momentum/momos/<slug>.svg, generated
-// by scripts/generate-momos.mjs (dillon-brain is hand-authored, not
-// generated: it is not a robot Momo) — a slug listed without its file would
-// fire a 404 before onError fell back to the glyph. Add a fs-glob manifest
-// only if this list grows unwieldy to hand-maintain.
+// by scripts/generate-momos.mjs — a slug listed without its file would fire
+// a 404 before onError fell back to the glyph. Add a fs-glob manifest only
+// if this list grows unwieldy to hand-maintain. dillon-brain is handled
+// separately below, as a PaperLayers composition, not a robot Momo svg.
 const AVAILABLE_MOMO_SLUGS: ReadonlySet<string> = new Set([
   "analytics",
   "builder",
   "client-success",
-  "dillon-brain",
   "engineer",
   "growth",
   "lead",
@@ -98,14 +111,13 @@ export function MomoAvatar({
   sizeBucket?: MomoSizeBucket;
   /**
    * True while this agent has a recorded active run. Only Dillon Brain reads
-   * it, for the faster/stronger pulse; omit it where that state is unknown,
-   * which simply keeps the gentle pulse.
+   * it today, for its PaperLayers "working" breathe; omit it where that
+   * state is unknown, which simply keeps the stack still.
    */
   active?: boolean;
   className?: string;
 }) {
   const [imgFailed, setImgFailed] = useState(false);
-  const { preferences, reducedMotion, visible } = useWorkspaceAppearance();
   const bucket = sizeBucket ?? bucketFor(size);
   const seed = `agent:${agent.name}`;
   const slug = slugFor(agent.name);
@@ -113,12 +125,9 @@ export function MomoAvatar({
   const accessibleName = agent.description
     ? `${label}, ${agent.description}`
     : label;
-  const showImage = slug !== null && AVAILABLE_MOMO_SLUGS.has(slug) && !imgFailed;
-  // Dillon Brain's pulse: prefers-reduced-motion and the app's own motion
-  // switch (brandMotionAllowed) both make it fully static.
-  const pulse =
-    slug === "dillon-brain" &&
-    brandMotionAllowed({ motion: preferences.motion, reducedMotion, visible, inView: true });
+  const isBrain = slug === "dillon-brain";
+  const showImage =
+    !isBrain && slug !== null && AVAILABLE_MOMO_SLUGS.has(slug) && !imgFailed;
 
   return (
     <span
@@ -127,7 +136,19 @@ export function MomoAvatar({
       role="img"
       aria-label={accessibleName}
     >
-      {showImage ? (
+      {isBrain ? (
+        // PaperLayers itself goes fully static under prefers-reduced-motion
+        // or the workspace motion switch; "working" only ever requests the
+        // breathe, never forces it.
+        <PaperLayers
+          className={styles.art}
+          layers={BRAIN_LAYERS}
+          flatSrc={BRAIN_FLAT}
+          size={size}
+          aspectRatio={BRAIN_ASPECT}
+          state={active ? "working" : "idle"}
+        />
+      ) : showImage ? (
         <img
           className={styles.art}
           src={`/momentum/momos/${slug}.svg`}
@@ -136,8 +157,6 @@ export function MomoAvatar({
           width={size}
           height={size}
           data-slug={slug}
-          data-motion={pulse ? "on" : undefined}
-          data-active={pulse && active ? "true" : undefined}
           onError={() => setImgFailed(true)}
         />
       ) : (

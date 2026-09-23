@@ -254,20 +254,33 @@ describe("CommandCenter", () => {
 
   it("introduces the crew in the hero, lead in front, rather than repeating the lead card", () => {
     const { container } = render(<CommandCenter />);
-    const crew = [...container.querySelectorAll("img[data-crew]")];
+    const crew = [...container.querySelectorAll("[data-crew]")];
     expect(crew.length).toBeGreaterThanOrEqual(3);
     expect(crew.length).toBeLessThanOrEqual(4);
-    for (const img of crew) {
+    for (const el of crew) {
+      const slug = el.getAttribute("data-crew");
+      if (slug === "dillon-brain") {
+        // PaperLayers, not a robot Momo svg. No appearance provider is
+        // mounted here, so its motion default (off) holds it to the
+        // flattened WebP fallback.
+        const img = el.querySelector("img");
+        expect(img?.getAttribute("src")).toBe("/momentum/brain/flat.webp");
+        expect(
+          existsSync(join(process.cwd(), "public", "momentum/brain/flat.webp")),
+        ).toBe(true);
+        expect(el.closest('[aria-hidden="true"]')).not.toBeNull();
+        continue;
+      }
       // Canon art by path, and the file is really there: no 404 in the hero.
-      const src = img.getAttribute("src") ?? "";
+      const src = el.getAttribute("src") ?? "";
       expect(src).toMatch(/^\/momentum\/momos\/[a-z-]+\.svg$/);
       expect(existsSync(join(process.cwd(), "public", src))).toBe(true);
       // Decoration: the heading beside it says what the page is.
-      expect(img.getAttribute("alt")).toBe("");
-      expect(img.closest('[aria-hidden="true"]')).not.toBeNull();
+      expect(el.getAttribute("alt")).toBe("");
+      expect(el.closest('[aria-hidden="true"]')).not.toBeNull();
     }
     // One lead (Dillon Brain), painted last so it stands in front of the crew.
-    const slugs = crew.map((img) => img.getAttribute("data-crew"));
+    const slugs = crew.map((el) => el.getAttribute("data-crew"));
     expect(slugs.filter((slug) => slug === "dillon-brain")).toHaveLength(1);
     expect(slugs.at(-1)).toBe("dillon-brain");
     expect(new Set(slugs).size).toBe(slugs.length);

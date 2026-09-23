@@ -116,7 +116,7 @@ describe("AgentTopology", () => {
     expect(document.querySelectorAll(".pinned, .paper-pixels")).toHaveLength(0);
   });
 
-  it("draws the lead as the pulsing Dillon Brain at 160 and specialists at 56, not a lettered monogram", () => {
+  it("draws the lead as Dillon Brain's PaperLayers art at 160 and specialists at 56, not a lettered monogram", () => {
     const { container } = render(
       <AgentTopology
         leadLabel="Dillon Brain"
@@ -130,9 +130,10 @@ describe("AgentTopology", () => {
       />,
     );
 
-    // The lead is Dillon Brain's artwork by path, decorative beside its name.
+    // No appearance mock here: the context default (motion off) holds
+    // PaperLayers to its flattened fallback, decorative beside the name.
     const lead = container.querySelector(
-      'img[src="/momentum/momos/dillon-brain.svg"]',
+      'img[src="/momentum/brain/flat.webp"]',
     );
     expect(lead?.getAttribute("width")).toBe("160");
     expect(lead?.getAttribute("alt")).toBe("");
