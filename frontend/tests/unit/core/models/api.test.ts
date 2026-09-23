@@ -88,7 +88,7 @@ test("loadModels includes the status code when statusText is empty", async () =>
   await expect(loadModels()).rejects.toThrow("Failed to load models: 503");
 });
 
-test("loadModels names models without the tier word or a routing slug", async () => {
+test("loadModels shows the configured display name and never a routing slug", async () => {
   rs.stubGlobal(
     "fetch",
     rs.fn(
@@ -100,7 +100,7 @@ test("loadModels names models without the tier word or a routing slug", async ()
                 id: "a",
                 name: "openrouter-muse-spark-contributor",
                 model: "meta/muse-spark-1.3-contributor",
-                display_name: "Muse Spark 1.3 Contributor (OpenRouter)",
+                display_name: "Muse Spark 1.3 (OpenRouter)",
               },
               {
                 id: "b",

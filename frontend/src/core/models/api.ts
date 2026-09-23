@@ -8,15 +8,14 @@ import { isStaticWebsiteOnly } from "../static-mode";
 import type { Model, ModelsResponse } from "./types";
 
 /**
- * Every model surface reads names through here. The access tier word never
- * reaches product UI, and a model without a configured display name gets a
+ * Every model surface reads names through here. The configured display name
+ * is shown as written (config owns the wording); a model without one gets a
  * presentable name instead of its routing slug.
  */
 export function presentModel(model: Model): Model {
-  const label = (model.display_name ?? "")
-    .replace(/\s*\bcontributor\b/gi, "")
-    .trim();
-  return { ...model, display_name: label || formatModelLabel(model.name) };
+  return model.display_name?.trim()
+    ? model
+    : { ...model, display_name: formatModelLabel(model.name) };
 }
 
 const STATIC_MODELS_RESPONSE: ModelsResponse = {

@@ -1,46 +1,24 @@
 /*
- * The conversation on paper: a calm record. Cream canvas, cream-hi sheets
- * with kraft hairlines, ink type, and receipts with the least decoration.
+ * The conversation on paper: a calm record. The workspace shell already
+ * re-points the shadcn tokens and lays the cream canvas (styles/paper.css);
+ * this file only shapes what is particular to a conversation: the thread
+ * header, the composer sheet, the person's messages, the reply copy,
+ * receipts and subagent cards. Hairlines use the shell's --border.
  *
  * Every paper rule is gated on the paper treatment in light mode, so
- * "current", "classic" and dark mode render exactly as before. Colour values
- * are the tokens in styles/paper.css; the one mix is a hover tint, not text.
- *
- * Hooks are data attributes set in chat-page.tsx, input-box.tsx and
- * messages/*, so no rule depends on utility class names.
+ * "current", "classic" and dark mode render exactly as before. Hooks are data
+ * attributes set in chat-page.tsx, input-box.tsx and messages/*, so no rule
+ * depends on utility class names.
  */
 
-/* Surface: shadcn tokens re-pointed at paper tokens for everything inside the
-   conversation. --muted is restored here on purpose: paper.css re-points it at
-   ink-muted as a text colour for Command Center, which painted every bg-muted
-   chip in the chat navy (inline code measured 1.13:1). */
-:global(:root:not(.dark) [data-treatment="paper"]) .surface {
-  --background: var(--paper-cream);
-  --foreground: var(--paper-ink);
-  --card: var(--paper-cream-hi);
-  --card-foreground: var(--paper-ink);
-  --primary: var(--paper-royal);
-  --primary-foreground: var(--paper-cream-hi);
-  --secondary: var(--paper-cream-hi);
-  --secondary-foreground: var(--paper-ink);
-  --muted: var(--paper-cream-hi);
-  --muted-foreground: var(--paper-ink-muted);
-  --accent: color-mix(in srgb, var(--paper-kraft) 30%, var(--paper-cream-hi));
-  --accent-foreground: var(--paper-ink);
-  --border: var(--paper-kraft);
-  --input: var(--paper-line);
-  --ring: var(--paper-focus);
-  color: var(--paper-ink);
-  background: var(--paper-cream);
-  font-family: var(--m-font-text);
-}
-
-/* Thread header: opaque cream and one hairline. No blur, no shadow. */
+/* Thread header: the canvas itself (cream and the shell's grain, whose tiles
+   line up because the header starts at the surface's corner) over one
+   hairline. Opaque, since the record scrolls under it. No blur, no shadow. */
 :global(:root:not(.dark) [data-treatment="paper"])
   .surface
   :global([data-chat-header]) {
-  background: var(--paper-cream);
-  border-bottom-color: var(--paper-kraft);
+  background-color: var(--paper-cream);
+  background-image: var(--paper-grain);
   box-shadow: none;
   backdrop-filter: none;
 }
@@ -63,8 +41,8 @@
   background: var(--accent);
 }
 
-/* Composer: one cream-hi sheet. The line colour is the 3:1 UI token so the
-   field stays findable; focus is a crisp focus-blue edge, not a glow. */
+/* Composer: one cream-hi sheet on the canvas. Its line is the 3:1 UI token so
+   the field stays findable; focus is a crisp focus-blue edge, not a glow. */
 :global(:root:not(.dark) [data-treatment="paper"])
   .surface
   :global([data-chat-composer]) {
@@ -75,7 +53,7 @@
 :global(:root:not(.dark) [data-treatment="paper"])
   .surface
   :global([data-chat-composer] [data-slot="input-group"]) {
-  border-color: var(--paper-line);
+  border-color: var(--border);
   border-radius: 8px;
   background: var(--paper-cream-hi);
   box-shadow: none;
@@ -96,17 +74,18 @@
 :global(:root:not(.dark) [data-treatment="paper"])
   .surface
   :global([data-chat-starters] [data-variant]) {
-  border-color: var(--paper-kraft);
+  border-color: var(--border);
   background: var(--paper-cream-hi);
   color: var(--paper-ink);
 }
 
-/* The person's words: a cream-hi sheet with a kraft hairline. */
+/* The person's words: a cream-hi sheet on a hairline. */
 :global(:root:not(.dark) [data-treatment="paper"])
   .surface
   :global([data-human-message]) {
-  border: 1px solid var(--paper-kraft);
+  border: 1px solid var(--border);
   border-radius: 6px;
+  background: var(--paper-cream-hi);
 }
 
 /* The agent's words: ink on the canvas. Headings take the Fraunces voice;
@@ -123,13 +102,13 @@
   --momentum-copy-link: var(--paper-royal);
   --momentum-copy-link-line: var(--paper-royal);
   --momentum-copy-marker: var(--paper-ink-muted);
-  --momentum-copy-quote-line: var(--paper-kraft);
+  --momentum-copy-quote-line: var(--border);
   --momentum-copy-quote-wash: transparent;
   --momentum-copy-quote: var(--paper-ink-muted);
   --momentum-copy-code: var(--paper-ink);
   --momentum-copy-code-bg: var(--paper-cream-hi);
-  --momentum-copy-rule-from: var(--paper-kraft);
-  --momentum-copy-rule-to: var(--paper-kraft);
+  --momentum-copy-rule-from: var(--border);
+  --momentum-copy-rule-to: var(--border);
 }
 
 :global(:root:not(.dark) [data-treatment="paper"])
@@ -166,7 +145,6 @@
 :global(:root:not(.dark) [data-treatment="paper"])
   .surface
   :global([data-subtask-card]) {
-  border-color: var(--paper-kraft);
   border-radius: 6px;
 }
 
@@ -174,15 +152,6 @@
   .surface
   :global([data-working-glow]) {
   display: none;
-}
-
-/* Every treatment: the fixed background-work tray (bottom-right, 50px tall,
-   16px up) sat on the composer's send button at every desktop width under
-   1680px. While the tray exists, the docked composer keeps clear of it. */
-@media (min-width: 640px) {
-  :global(body:has([aria-controls="momentum-background-jobs"])) .dock {
-    padding-bottom: 84px;
-  }
 }
 
 /* Every treatment, phones: header actions shrink to 32px squares so the

@@ -2490,8 +2490,7 @@ export function InputBox({
         </div>
         <PromptInputFooter className="flex flex-wrap gap-2 sm:flex-nowrap">
           {/* Phones: the tools take a full row and the model and Send the
-              next, so the composer stays two rows tall and clear of the
-              background-work tray floating above it. */}
+              next, so the composer stays two rows tall. */}
           <PromptInputTools className="min-w-0 flex-1 basis-full flex-wrap sm:basis-auto">
             <AddAttachmentsButton
               className="px-2!"

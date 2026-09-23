@@ -578,9 +578,7 @@ export default function ChatPage() {
               <div
                 className={cn(
                   "right-0 bottom-0 left-0 z-30 flex justify-center px-3 sm:px-4",
-                  isWelcomeMode
-                    ? "absolute"
-                    : cn("relative shrink-0 pb-4", styles.dock),
+                  isWelcomeMode ? "absolute" : "relative shrink-0 pb-4",
                 )}
               >
                 {/* Welcome lifts the composer toward the middle; the min()
