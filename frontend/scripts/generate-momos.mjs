@@ -102,6 +102,16 @@ function momo({ arms = CANON_ARMS, eyes = "pill", look = 0 }) {
 // Tool silhouettes reused for their cream margin.
 const WRENCH = `<path d="M-3.5 -24.83V-17H3.5V-24.83A9.5 9.5 0 1 1 -3.5 -24.83Z"/><rect x="-4" y="-9" width="8" height="25" rx="4"/>`;
 const SHIELD = "M-8 80H28V95C28 108 20 118 10 124C0 118-8 108-8 95Z";
+const NEEDLE = "M-3 3A3 3 0 0 1 3 3V34L0 42L-3 34Z";
+// A kraft patch torn open at the top of its seam; the rest is stitched.
+const TORN_PATCH =
+  "M116 100H125L128 105L126.5 107.5L130 112L132.5 106.5L131 104.5L134 100H144V128H116Z";
+const RECEIPT =
+  "M129 37V26.5L130.67 25L132.33 26.5L134 25L135.67 26.5L137.33 25L139 26.5V37Z";
+const PANS = "M98 36H114A8 5 0 0 1 98 36ZM126 36H142A8 5 0 0 1 126 36Z";
+const POT = `<rect x="113" y="92" width="28" height="7" rx="2"/><path d="M115.5 99H138.5L135 117H119Z"/>`;
+const STEM = "M127 91C125 84 129 76 127 68";
+const LEAVES = `<path d="M127 71Q126.2 57.6 113 60Q113.8 73.4 127 71ZM127 69Q142.2 71.2 144 56Q128.8 53.8 127 69Z"/>`;
 
 /**
  * One entry per shipped slug; the slugs and filenames are fixed because
@@ -328,6 +338,87 @@ const MOMOS = {
       `<rect x="-13" y="32" width="26" height="4.5" rx="1" fill="${ROYAL}"/><circle r="7.5" fill="${GREY}"/>` +
       `</g>` +
       hand([3, 47]),
+  },
+
+  // client-success: keeps the relationship whole. A stitch just pulled
+  // through: needle up, point leading, the thread running on from its eye to
+  // the newest stitch under what is left of a small torn seam.
+  "client-success": {
+    title:
+      "Momo, client success: mends a small torn seam with needle and thread",
+    x: 8,
+    arms: [
+      [15, 86, 6, 101],
+      [104, 84, 122.5, 78],
+    ],
+    back:
+      cut(`<path d="${TORN_PATCH}"/>`) +
+      `<path d="${TORN_PATCH}" fill="${KRAFT}"/>` +
+      detail(
+        `<path d="M130 112l-1.5 3.5 2.5 3-2 3.5 1.5 3-.5 3" fill="none" stroke="${SHADE}" stroke-width="1.2" stroke-linejoin="round"/>`,
+      ) +
+      `<path d="M126 113.5l8 3M126 118.5l8 3M126 123.5l8 3" stroke="${ROYAL}" stroke-width="2.6" stroke-linecap="round"/>`,
+    // Eye end down by the patch, point up; the eye clears the hand.
+    front:
+      `<g transform="translate(114 96) rotate(-155)">` +
+      cut(`<path d="${NEEDLE}"/>`) +
+      `<path d="${NEEDLE}" fill="${GREY}"/><rect x="-1.2" y="3.5" width="2.4" height="7.5" rx="1.2" fill="${SHADE}"/>` +
+      `</g>` +
+      detail(
+        `<path d="M117.1 89.4C119 100 121 109 126 113.5" fill="none" stroke="${ROYAL}" stroke-width="1.8" stroke-linecap="round"/>`,
+      ) +
+      hand([122.5, 78]),
+  },
+
+  // revenue: reconciles what was billed with what was paid. A balance scale
+  // held up and level: a coin in one pan, a receipt in the other.
+  revenue: {
+    title:
+      "Momo, revenue: holds up a level balance scale, a coin in one pan and a receipt in the other",
+    x: 8,
+    arms: [
+      [15, 86, 6, 101],
+      [103, 70, 117, 58],
+    ],
+    front:
+      cut(
+        `<rect x="118" y="14" width="4" height="53" rx="2"/><circle cx="120" cy="13" r="3.5"/>` +
+          `<rect x="104" y="16.5" width="32" height="4.5" rx="2.25"/><circle cx="106" cy="31.5" r="5.5"/><path d="${RECEIPT}${PANS}"/>`,
+      ) +
+      `<path d="M106 19L98.5 36M106 19L113.5 36M134 19L126.5 36M134 19L141.5 36" stroke="${SHADE}" stroke-width="1.8" stroke-linecap="round"/>` +
+      `<rect x="118" y="14" width="4" height="53" rx="2" fill="${GREY}"/>` +
+      `<circle cx="120" cy="13" r="3.5" fill="${SHADE}"/>` +
+      `<rect x="104" y="16.5" width="32" height="4.5" rx="2.25" fill="${GREY}"/>` +
+      detail(`<circle cx="120" cy="18.75" r="1.6" fill="${GOLD}"/>`) +
+      // The coin is grey on purpose: gold stays on the antenna and one rivet.
+      `<circle cx="106" cy="31.5" r="5.5" fill="${GREY}"/>` +
+      `<path d="${RECEIPT}" fill="${KRAFT}"/>` +
+      detail(
+        `<circle cx="106" cy="31.5" r="3.3" fill="none" stroke="${SHADE}" stroke-width="1.2"/><path d="M131 29.5h6M131 32h4" stroke="${SHADE}" stroke-width="1"/>`,
+      ) +
+      `<path d="${PANS}" fill="${SHADE}"/>` +
+      hand([117, 58]),
+  },
+
+  // growth: grows the account steadily, not in spikes. A seedling in a small
+  // grey pot, held out on one hand.
+  growth: {
+    title: "Momo, growth: holds out a seedling in a small pot",
+    x: 6,
+    arms: [
+      [15, 86, 8, 100],
+      [104, 90, 114, 106],
+    ],
+    front:
+      cut(`${POT}<path d="${STEM}" fill="none"/>${LEAVES}`) +
+      `<path d="${STEM}" fill="none" stroke="${ROYAL}" stroke-width="3.5" stroke-linecap="round"/>` +
+      `<g fill="${ROYAL}">${LEAVES}</g>` +
+      detail(
+        `<path d="M127 71L116.5 63M127 69L139 60.5" stroke="${DEEP}" stroke-width="1.2" stroke-linecap="round"/><ellipse cx="127" cy="92" rx="11" ry="2.5" fill="${SHADE}"/>`,
+      ) +
+      `<g fill="${GREY}">${POT}</g>` +
+      detail(`<path d="M115.5 99h23" stroke="${SHADE}" stroke-width="1.5"/>`) +
+      hand([114, 106]),
   },
 };
 
