@@ -151,14 +151,17 @@ export function SubtaskCard({
                 {collapsed && (
                   <div
                     className={cn(
-                      "text-muted-foreground flex min-w-0 items-center gap-1 text-xs font-normal",
+                      "text-muted-foreground flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-xs font-normal sm:flex-nowrap sm:gap-x-1",
                       task.status === "failed"
                         ? "text-red-600 dark:text-red-400"
                         : "",
                     )}
                   >
                     {modelLabel && (
-                      <span className="max-w-32 truncate" title={modelLabel}>
+                      <span
+                        className="max-w-full truncate sm:max-w-32"
+                        title={modelLabel}
+                      >
                         {modelLabel}
                       </span>
                     )}

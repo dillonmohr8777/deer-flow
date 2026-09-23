@@ -2489,7 +2489,10 @@ export function InputBox({
           )}
         </div>
         <PromptInputFooter className="flex flex-wrap gap-2 sm:flex-nowrap">
-          <PromptInputTools className="min-w-0 flex-1 flex-wrap">
+          {/* Phones: the tools take a full row and the model and Send the
+              next, so the composer stays two rows tall and clear of the
+              background-work tray floating above it. */}
+          <PromptInputTools className="min-w-0 flex-1 basis-full flex-wrap sm:basis-auto">
             <AddAttachmentsButton
               className="px-2!"
               disabled={composerLocked}
@@ -2924,7 +2927,8 @@ export function InputBox({
 
       <p
         className={cn(
-          "text-muted-foreground/67 z-10 px-4 text-center text-xs leading-4",
+          // Full muted ink: at 67% it measured 3.4:1 on cream paper.
+          "text-muted-foreground z-10 px-4 text-center text-xs leading-4",
           !isWelcomeMode && "absolute top-full right-0 left-0",
         )}
       >
