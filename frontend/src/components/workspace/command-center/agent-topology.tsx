@@ -40,14 +40,23 @@ export function AgentTopology({
   activeAgentNames = null,
   onSelect,
 }: AgentTopologyProps) {
+  // Only meaningful when runtimeKnown: an unknown live state must never
+  // read as an accelerated pulse.
+  const leadActive =
+    runtimeKnown && (activeAgentNames ?? []).includes("dillon-brain");
+
   return (
     <div className={styles.topology}>
       <div className={styles.topologyLead}>
-        {/* The lead role always wears the canon lead Momo ("lead" in
-            MomoAvatar's map), whichever agent is leading. Hidden from
-            assistive tech: the name beside it says who this is. */}
+        {/* The lead is Dillon Brain (agent name "dillon-brain"), a pulsing
+            brain rather than a robot Momo. Hidden from assistive tech: the
+            name beside it says who this is. */}
         <span className={styles.leadMomo} aria-hidden="true">
-          <MomoAvatar agent={{ name: "lead", display_name: leadLabel }} size={160} />
+          <MomoAvatar
+            agent={{ name: "dillon-brain", display_name: leadLabel }}
+            size={160}
+            active={leadActive}
+          />
         </span>
         <div>
           <strong>{leadLabel}</strong>
