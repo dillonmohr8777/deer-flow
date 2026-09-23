@@ -428,6 +428,15 @@ type OverclockWord = {
   text: string;
   rect: DOMRect;
   style: CSSStyleDeclaration;
+  /** Scroll containers around the word, innermost first. */
+  scrollers: readonly Element[];
+};
+
+type ScrollFollow = {
+  scroller: Element;
+  top: number;
+  left: number;
+  layer: HTMLElement;
 };
 
 /**
@@ -443,6 +452,10 @@ export function overclock(onFinish?: () => void): () => void {
   const overlay = document.createElement("div");
   overlay.className = styles.overclock!;
   overlay.setAttribute("aria-hidden", "true");
+  // The conversation keeps scrolling to follow the stream during the jolt,
+  // so glyphs ride with their scroll containers: clipped to each one and
+  // shifted by however far it has scrolled since the words were measured.
+  const follows: ScrollFollow[] = [];
   for (const [frameClass, scramble] of [
     [styles.frameA, "all"],
     [styles.frameB, "some"],
@@ -450,14 +463,23 @@ export function overclock(onFinish?: () => void): () => void {
   ] as const) {
     const frame = document.createElement("div");
     frame.className = frameClass!;
+    const layers = new Map<Element, HTMLElement>();
     for (const word of words) {
-      frame.append(glyphSpan(word, scramble));
+      layerFor(frame, word.scrollers, layers, follows).append(
+        glyphSpan(word, scramble),
+      );
     }
     overlay.append(frame);
   }
+  const follow = () => {
+    for (const { scroller, top, left, layer } of follows) {
+      layer.style.transform = `translate(${left - scroller.scrollLeft}px, ${top - scroller.scrollTop}px)`;
+    }
+  };
   const root = document.documentElement;
   document.body.append(overlay);
   root.classList.add(styles.jolting!);
+  document.addEventListener("scroll", follow, { capture: true, passive: true });
   let done = false;
   const stop = () => {
     if (done) {
@@ -465,6 +487,7 @@ export function overclock(onFinish?: () => void): () => void {
     }
     done = true;
     window.clearTimeout(timer);
+    document.removeEventListener("scroll", follow, { capture: true });
     overlay.remove();
     root.classList.remove(styles.jolting!);
   };
@@ -473,6 +496,36 @@ export function overclock(onFinish?: () => void): () => void {
     onFinish?.();
   }, JOLT_MS);
   return stop;
+}
+
+/** A clip and a moving layer per scroll container, outermost first. */
+function layerFor(
+  frame: HTMLElement,
+  scrollers: readonly Element[],
+  layers: Map<Element, HTMLElement>,
+  follows: ScrollFollow[],
+) {
+  let container = frame;
+  for (const scroller of [...scrollers].reverse()) {
+    let layer = layers.get(scroller);
+    if (!layer) {
+      const box = scroller.getBoundingClientRect();
+      const clip = document.createElement("div");
+      clip.style.clipPath = `inset(${box.top}px ${window.innerWidth - box.right}px ${window.innerHeight - box.bottom}px ${box.left}px)`;
+      layer = document.createElement("div");
+      clip.append(layer);
+      container.append(clip);
+      layers.set(scroller, layer);
+      follows.push({
+        scroller,
+        top: scroller.scrollTop,
+        left: scroller.scrollLeft,
+        layer,
+      });
+    }
+    container = layer;
+  }
+  return container;
 }
 
 function glyphSpan(
@@ -507,11 +560,17 @@ function glyphSpan(
   return span;
 }
 
-/** Words drawn on screen right now, topmost only, capped. */
+/**
+ * Words drawn on screen right now, topmost only, capped.
+ * ponytail: measured once. Scrolling is followed, but text that reflows
+ * during the 520ms (content below the live block as it grows, about a line
+ * at real speed) keeps its measured spot; re-measure per frame if it shows.
+ */
 function visibleWords(): OverclockWord[] {
   const words: OverclockWord[] = [];
   const range = document.createRange();
   const computed = new Map<Element, CSSStyleDeclaration | null>();
+  const chains = new Map<Element, readonly Element[]>();
   const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
   let measures = 0;
   for (
@@ -541,19 +600,57 @@ function visibleWords(): OverclockWord[] {
         break; // the rest of this node is below the fold
       }
       if (rect.width > 0 && drawnOnTop(parent, rect)) {
-        words.push({ text: match[0], rect, style });
+        words.push({
+          text: match[0],
+          rect,
+          style,
+          scrollers: scrollChain(parent, chains),
+        });
       }
     }
   }
   return words;
 }
 
+/** Scroll containers at or above an element, innermost first (cached). */
+function scrollChain(
+  element: Element,
+  chains: Map<Element, readonly Element[]>,
+): readonly Element[] {
+  const cached = chains.get(element);
+  if (cached) {
+    return cached;
+  }
+  const outer = element.parentElement
+    ? scrollChain(element.parentElement, chains)
+    : [];
+  const { overflowX, overflowY } = getComputedStyle(element);
+  const scrolls =
+    (/auto|scroll|overlay/.test(overflowY) &&
+      element.scrollHeight > element.clientHeight) ||
+    (/auto|scroll|overlay/.test(overflowX) &&
+      element.scrollWidth > element.clientWidth);
+  const chain = scrolls ? [element, ...outer] : outer;
+  chains.set(element, chain);
+  return chain;
+}
+
 function onScreen(element: Element) {
-  if (element.closest(UNTOUCHED)) {
+  if (
+    element.closest(UNTOUCHED) ||
+    // An opacity-0 or hidden ancestor still hit-tests, so ask directly.
+    element.checkVisibility?.({
+      opacityProperty: true,
+      visibilityProperty: true,
+    }) === false
+  ) {
     return false;
   }
   const box = element.getBoundingClientRect();
   return (
+    // A 1px box is a visually hidden label (sr-only): its text is not drawn.
+    box.width > 1 &&
+    box.height > 1 &&
     box.bottom > 0 &&
     box.right > 0 &&
     box.top < window.innerHeight &&

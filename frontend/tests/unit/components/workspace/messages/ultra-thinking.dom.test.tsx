@@ -628,6 +628,46 @@ describe("DeepReasoning", () => {
         false,
       );
     });
+
+    it("keeps the glyphs on their scroll container while the stream scrolls it", () => {
+      const scroller = document.createElement("div");
+      document.body.append(scroller);
+      scroller.append(label);
+      Object.defineProperty(scroller, "scrollHeight", { value: 2000 });
+      Object.defineProperty(scroller, "clientHeight", { value: 600 });
+      const computed = window.getComputedStyle.bind(window);
+      rs.spyOn(window, "getComputedStyle").mockImplementation(
+        (element, pseudo) =>
+          element === scroller
+            ? ({
+                overflowX: "visible",
+                overflowY: "auto",
+              } as CSSStyleDeclaration)
+            : computed(element, pseudo),
+      );
+      render(
+        withI18n(
+          <DeepReasoning
+            messageId="block-jolt-scroll"
+            reasoning={REASONING}
+            live
+            jolt
+            seconds={null}
+          />,
+        ),
+      );
+      // frame > clip (the scroller's box) > layer that follows its scroll
+      const layer = document.querySelector<HTMLElement>(
+        `.${styles.frameA} > div > div`,
+      );
+      expect(layer?.textContent).toHaveLength("KestrelSeptemberreport".length);
+      expect(layer?.parentElement?.style.clipPath).toContain("inset(");
+
+      scroller.scrollTop = 40;
+      scroller.dispatchEvent(new Event("scroll"));
+      expect(layer?.style.transform).toBe("translate(0px, -40px)");
+      scroller.remove();
+    });
   });
 });
 

@@ -103,7 +103,8 @@
   align-items: center;
   gap: 10px;
   min-height: 44px;
-  padding: 10px 18px;
+  /* 24px inline clears the 16px registration marks set 3px in. */
+  padding: 10px 24px;
   cursor: pointer;
   list-style: none;
   user-select: none;
@@ -173,7 +174,7 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 12px;
-  padding: 12px 18px 14px;
+  padding: 12px 24px 16px;
 }
 
 .block[data-motion="on"] .body {
@@ -388,9 +389,13 @@
   -webkit-text-fill-color: currentcolor;
 }
 
-.overclock > div {
+/* Frames, and inside them a clip and a moving layer per scroll container. */
+.overclock div {
   position: absolute;
   inset: 0;
+}
+
+.overclock > div {
   opacity: 0;
 }
 
@@ -664,11 +669,11 @@
 
 @media (max-width: 480px) {
   .head {
-    padding-inline: 14px;
+    padding-inline: 22px;
   }
 
   .body {
-    padding: 10px 14px 12px;
+    padding: 10px 22px 14px;
   }
 
   .block[data-motion="on"] .body {
