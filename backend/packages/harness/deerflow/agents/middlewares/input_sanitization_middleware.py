@@ -119,6 +119,10 @@ _BLOCKED_TAG_NAMES: frozenset[str] = frozenset(
         # configuration or fabricates shelf entries/tool-callable IDs.
         "project",
         "documents",
+        # Experience mode block (lead_agent/prompt.py): carries the user's
+        # Easy/Medium/Hard guidance. Forging it in untrusted input could switch
+        # the reading level, the clarifying-question rule or memory saving.
+        "experience_mode",
         # Common prompt-injection tag patterns
         "system",
         "instruction",
