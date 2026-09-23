@@ -1,0 +1,84 @@
+{
+  "title": "Local SEO when Google answers with AI first",
+  "dek": "What changes for a local business now that Google often shows an AI Overview before the map pack and the results list.",
+  "slug": "local-seo-ai-overviews",
+  "date": "2026-09-19",
+  "author": { "name": "Dillon Mohr", "title": "AI Marketing Director" },
+  "keywords": [
+    "local SEO",
+    "Google AI Overviews",
+    "Google Business Profile",
+    "local search",
+    "AI search local business"
+  ],
+  "summary": "Google AI Overviews now sit above many search results, including local ones, and pull from your Google Business Profile, your website, and public review sites. Local SEO has not stopped mattering. It has to work harder, because the AI summary can now answer a customer's question before they ever scroll down to your listing.",
+  "section": "Search and Growth",
+  "hero": {
+    "src": "/momentum/daily/art/local-seo-ai-overviews.webp",
+    "alt": "Momo the blue robot mascot as a noir beat cop studying a city street map under a lamppost with a magnifying glass, in dramatic ink and halftone on cream newsprint"
+  },
+  "status": "draft",
+  "body": [
+    {
+      "heading": "What actually changed on a local search results page?",
+      "paragraphs": [
+        "A search for something local, a plumber nearby, the best coffee shop downtown, restaurant hours tonight, increasingly returns an AI generated summary at the very top of the page, above the familiar map with a handful of pinned businesses and above the standard list of links. That summary often answers the question outright: naming a business, stating hours, or comparing a few options in a sentence or two.",
+        "The map pack and organic results have not disappeared. They still sit on the page, and most local searches still lead a person to click through eventually. But the AI Overview is now the first thing many people see and read, which makes it a new gatekeeper local businesses have to account for."
+      ]
+    },
+    {
+      "heading": "Where does an AI Overview get its local information?",
+      "paragraphs": [
+        "For local questions specifically, the AI Overview leans heavily on the same sources it always has: your Google Business Profile, your website, and public review platforms. It is not pulling from a separate, mysterious source. It is reading the same information a person would find if they clicked through manually, and summarizing it.",
+        "That means the fastest way to influence what the AI Overview says about your business is the same work that has always mattered for local SEO, just done with more care: a complete, accurate Business Profile, a website that clearly states what you do and where, and reviews that reflect reality.",
+        "It also means there is no separate local GEO tool to buy. The work is the same work a good local SEO checklist has always called for. What changed is how quickly a gap in that work now shows up, since the AI Overview surfaces before a person ever has the chance to scroll past a thin listing."
+      ]
+    },
+    {
+      "heading": "Does the map pack still matter?",
+      "paragraphs": [
+        "Yes, and for now it may matter more, not less. The map pack is still where most local clicks go once a person decides to act, and Google Business Profile data still feeds both the map pack and the AI Overview. Keeping that profile accurate and current does double duty.",
+        "Treat the map pack and the AI Overview as two views of the same underlying data, not two separate projects. A business that gets its Business Profile right is doing the work that supports both, rather than choosing which one to chase."
+      ]
+    },
+    {
+      "heading": "What should a local business fix first?",
+      "paragraphs": [
+        "Start with the Google Business Profile: correct hours, correct service area, correct categories, and a description that states plainly what the business does and for whom. Inconsistent or outdated information here is one of the most common reasons a business gets left out of both the map pack and the AI summary, and it is usually the fastest fix on this list.",
+        "Next, check that the website itself states the same basic facts, in plain language, on the page a customer would actually land on. A homepage that never mentions the city or service area by name, relying instead on a logo and a tagline, gives an AI system very little to work with."
+      ]
+    },
+    {
+      "heading": "Do reviews still carry the same weight?",
+      "paragraphs": [
+        "Reviews still matter, and arguably more so, because they are one of the few sources that reflect real customer experience rather than a business's own description of itself. An AI Overview comparing two similar local businesses is likely to lean on review content, especially specific, recent comments, when deciding how to characterize each one.",
+        "Responding to reviews, especially negative ones, with a calm and specific reply still helps. It shows both future customers and any system reading the page that the business is attentive and accountable."
+      ]
+    },
+    {
+      "heading": "What does a monthly local SEO habit look like now?",
+      "paragraphs": [
+        "A short monthly check covers most of it: confirm the Business Profile is still accurate, especially hours around holidays, read new reviews and respond, and make sure any changes to services or pricing show up on the website in plain language, not just in an internal system. None of this requires new tools. It requires treating information that is already public as something worth keeping current. We check in on questions like this regularly over on The Momo Daily.",
+        "Assign the check to one person, even at a small business, rather than leaving it to whoever happens to notice something is out of date. A recurring fifteen minute task with a clear owner gets done far more reliably than a general intention to keep things updated."
+      ]
+    }
+  ],
+  "faq": [
+    {
+      "question": "Does an AI Overview replace the local map pack?",
+      "answer": "Not currently. Both typically appear on the same results page, with the AI Overview above and the map pack still visible below it."
+    },
+    {
+      "question": "What is the single most important fix for local visibility now?",
+      "answer": "Keeping the Google Business Profile complete and accurate, since it feeds both the map pack and most AI Overview summaries."
+    },
+    {
+      "question": "Do online reviews still matter as much?",
+      "answer": "Yes, and possibly more, since reviews are one of the few sources that reflect actual customer experience rather than a business's own claims."
+    },
+    {
+      "question": "Should I change my website copy for this?",
+      "answer": "Mostly just make sure it plainly states your service area, services, and key facts in ordinary language, without relying only on a logo or a tagline to communicate that."
+    }
+  ]
+}
