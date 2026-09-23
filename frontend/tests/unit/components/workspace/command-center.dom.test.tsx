@@ -72,7 +72,6 @@ rs.mock("@/components/workspace/thread-subagent-batches", () => ({
 
 rs.mock("@/components/workspace/command-center/agent-topology", () => ({
   AgentTopology: () => <div data-testid="agent-topology" />,
-  LEAD_MOMO_SRC: "/momentum/momos/lead.svg",
 }));
 
 rs.mock("@/components/workspace/command-center/business-views", () => ({

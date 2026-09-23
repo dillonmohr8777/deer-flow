@@ -83,6 +83,49 @@ describe("MomoAvatar", () => {
     );
   });
 
+  it("gives the Command Center's lead and live specialists their canon Momo", () => {
+    // Names as /api/subagents returns them; "lead" is the lead card's seat.
+    const live = [
+      ["lead", "lead"],
+      ["dillon-builder", "builder"],
+      ["dillon-critic", "qa"],
+      ["dillon-reliability", "reliability"],
+      ["dillon-intelligence", "research"],
+      ["momentum-independent-verifier", "verifier"],
+      ["momentum-analytics-engineer", "analytics"],
+      ["momentum-solutions-architect", "engineer"],
+      ["momentum-migration-engineer", "migration"],
+    ] as const;
+
+    const { container } = render(
+      <>
+        {live.map(([name]) => (
+          <MomoAvatar key={name} agent={{ name, display_name: name }} size={40} />
+        ))}
+      </>,
+    );
+
+    expect(container.querySelectorAll("svg[data-momentum-glyph]")).toHaveLength(0);
+    expect(
+      [...container.querySelectorAll("img")].map((img) => img.getAttribute("src")),
+    ).toEqual(live.map(([, slug]) => `/momentum/momos/${slug}.svg`));
+  });
+
+  it("keeps the glyph for live specialists that have no artwork yet", () => {
+    for (const name of [
+      "dillon-client-operations",
+      "dillon-revenue",
+      "dillon-growth",
+    ]) {
+      const { container, unmount } = render(
+        <MomoAvatar agent={{ name, display_name: name }} size={40} />,
+      );
+      expect(container.querySelector("img")).toBeNull();
+      expect(container.querySelector("svg[data-momentum-glyph]")).toBeTruthy();
+      unmount();
+    }
+  });
+
   it("falls back to the glyph for an agent with no shipped Momo", () => {
     const { container } = render(<MomoAvatar agent={UNKNOWN_AGENT} size={40} />);
     expect(container.querySelector("img")).toBeNull();

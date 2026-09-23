@@ -336,11 +336,6 @@
   border-color: var(--strong);
   color: var(--paper-ink);
 }
-.root[data-treatment="paper"] .leadMomo {
-  padding: 0;
-  background: none;
-  box-shadow: none;
-}
 /* Specialists are small pinned cards. The brass pin is paper.css's .pinned;
    this only centres it above the card's top edge. */
 .root[data-treatment="paper"] .agent {
@@ -541,17 +536,18 @@
   color: white;
   padding: 18px;
 }
-/* The canon lead Momo. On cobalt (current) it sits on a white disc so a dark
-   body stays legible; paper drops the disc. */
+/* The canon lead Momo at 160 (96 on phones). Its own cream cut-paper margin
+   separates it from the cobalt card, so it needs no disc behind it. */
 .leadMomo {
-  display: block;
+  display: grid;
   width: 160px;
   height: 160px;
   flex: 0 0 auto;
-  border-radius: 50%;
-  background: white;
-  box-shadow: 0 8px 20px rgba(0, 24, 72, 0.24);
-  padding: 8px;
+}
+.leadMomo > span,
+.leadMomo img {
+  width: 100%;
+  height: 100%;
 }
 .topologyLead > div {
   display: flex;
@@ -1324,7 +1320,6 @@
   .leadMomo {
     width: 96px;
     height: 96px;
-    padding: 5px;
   }
   .topologyLead {
     gap: 12px;

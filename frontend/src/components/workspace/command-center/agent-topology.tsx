@@ -5,14 +5,6 @@ import { MomoAvatar } from "./momo-avatar";
 
 import styles from "./command-center.module.css";
 
-/**
- * The canon lead Momo. Referenced by path, never copied: the artwork under
- * public/momentum/momos/ is owned and redrawn separately. MomoAvatar has no
- * slug for the lead (the lead is seeded from a label, not a roster name), so
- * the lead renders this file directly instead of a lettered glyph.
- */
-export const LEAD_MOMO_SRC = "/momentum/momos/lead.svg";
-
 export type AgentTopologyItem = {
   name: string;
   display_name?: string | null;
@@ -49,13 +41,12 @@ export function AgentTopology({
   return (
     <div className={styles.topology}>
       <div className={styles.topologyLead}>
-        <img
-          className={styles.leadMomo}
-          src={LEAD_MOMO_SRC}
-          alt=""
-          width={160}
-          height={160}
-        />
+        {/* The lead role always wears the canon lead Momo ("lead" in
+            MomoAvatar's map), whichever agent is leading. Hidden from
+            assistive tech: the name beside it says who this is. */}
+        <span className={styles.leadMomo} aria-hidden="true">
+          <MomoAvatar agent={{ name: "lead", display_name: leadLabel }} size={160} />
+        </span>
         <div>
           <strong>{leadLabel}</strong>
           <span>Orchestration &amp; delegation</span>

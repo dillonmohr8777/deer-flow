@@ -39,7 +39,7 @@ import { useModels } from "@/core/models/hooks";
 import { useSubagents } from "@/core/subagents";
 import { pathOfThread } from "@/core/threads/utils";
 
-import { AgentTopology, LEAD_MOMO_SRC } from "./agent-topology";
+import { AgentTopology } from "./agent-topology";
 import { useWorkspaceAppearance } from "./appearance-provider";
 import {
   ArtifactLibraryView,
@@ -53,6 +53,8 @@ import { WorkspaceAppearance } from "./workspace-appearance";
 
 import styles from "./command-center.module.css";
 
+/** Canon art, referenced by path and never copied; its lane owns the file. */
+const LEAD_MOMO_SRC = "/momentum/momos/lead.svg";
 const number = (value: number) => new Intl.NumberFormat("en-US").format(value);
 const active = (status: string) => status === "pending" || status === "running";
 const tabs = [

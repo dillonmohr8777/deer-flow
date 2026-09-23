@@ -16,24 +16,15 @@ export type MomoSizeBucket = "sm" | "md" | "lg";
 
 /**
  * Roster `agent.name` -> shipped Momo slug (public/momentum/momos/<slug>.svg).
- * Only names with a confident, verified fit are mapped here. Everything else
- * falls through to MomentumGlyph, which is correct today regardless: the
- * momos/ directory ships empty (see AVAILABLE_MOMO_SLUGS below), so every
- * agent renders the procedural glyph until artwork lands.
+ * Only names with a confident fit are mapped here. Everything else falls
+ * through to MomentumGlyph.
  *
- * Verified against the live roster in fleet/agents/*\/config.yaml (the only
- * concrete agent roster in this repo — there is no "dillon-" prefixed
- * lead/architect/brand/client-success/revenue/critic roster anywhere in the
- * codebase). Of the ten intended slugs, four have a confident live-name fit:
- *   analytics-engineer      -> analytics
- *   data-migration-engineer -> migration
- *   independent-verifier    -> verifier
- *   fleet-scout             -> research
- * "lead" is not roster-driven (agent-topology.tsx always seeds it from
- * leadLabel, not from a roster entry). The remaining slugs — architect,
- * brand, client-success, revenue, critic — and the remaining roster names —
- * fleet-builder, fleet-qa, fleet-reliability, senior-software-engineer —
- * have no confident match today and are intentionally left unmapped.
+ * Two rosters feed this: the fleet definitions in fleet/agents/*\/config.yaml
+ * and the managed subagents the Command Center lists from /api/subagents
+ * (dillon-* and momentum-*). "lead" is not a roster name: the Command Center
+ * seeds the lead card with it, whichever agent is leading. dillon-client-
+ * operations, dillon-revenue and dillon-growth have no artwork yet and keep
+ * the glyph on purpose.
  */
 const SLUG_MAP: Record<string, string> = {
   "analytics-engineer": "analytics",
@@ -44,6 +35,15 @@ const SLUG_MAP: Record<string, string> = {
   "fleet-qa": "qa",
   "fleet-reliability": "reliability",
   "senior-software-engineer": "engineer",
+  lead: "lead",
+  "dillon-builder": "builder",
+  "dillon-critic": "qa",
+  "dillon-reliability": "reliability",
+  "dillon-intelligence": "research",
+  "momentum-independent-verifier": "verifier",
+  "momentum-analytics-engineer": "analytics",
+  "momentum-solutions-architect": "engineer",
+  "momentum-migration-engineer": "migration",
 };
 
 // ponytail: manual manifest instead of a build-time fs glob of momos/. Every
