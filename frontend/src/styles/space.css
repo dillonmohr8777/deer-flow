@@ -1,0 +1,232 @@
+/*
+ * Space treatment — token layer.
+ *
+ * Deep navy void, cream-white text, one cool cyan accent. No purple, no
+ * violet anywhere. A very subtle static starfield (CSS radial-gradient
+ * dots, no animation by default) sits on the canvas only.
+ *
+ * Scope: everything here lives under [data-treatment="space"], set the same
+ * way paper.css's scope is (WorkspaceAppearanceProvider, on the workspace
+ * wrapper and on <html>). Nothing here changes another treatment.
+ *
+ * Ratios below are proven by tests/unit/space-tokens.test.ts, which parses
+ * this file's own token values and computes WCAG contrast.
+ *
+ *   --space-void         #0A0F1E  (canvas)
+ *   --space-panel        #121A30  vs cream          15.27
+ *   --space-panel-hi     #16203C  vs cream          14.22
+ *   --space-cream        #F3F1E9  vs void            16.88
+ *   --space-cream-muted  #C7C9D6  vs void            11.59
+ *   --space-cyan         #7FE3F0  vs void            12.86
+ *   --space-line         #2C3757  (UI hairline, not text)
+ *   --space-focus        #8FEAF5  vs void            13.87
+ *   --space-danger       #FF9B85  vs void             9.34
+ *   --space-ok           #8EE6B0  vs void            12.81
+ */
+
+[data-treatment="space"] {
+  --space-void: #0a0f1e;
+  --space-panel: #121a30;
+  --space-panel-hi: #16203c;
+  --space-cream: #f3f1e9;
+  --space-cream-muted: #c7c9d6;
+  --space-cyan: #7fe3f0;
+  --space-line: #2c3757;
+  --space-focus: #8feaf5;
+  --space-danger: #ff9b85;
+  --space-ok: #8ee6b0;
+
+  /* Static starfield: a handful of hairline dots at fixed positions, no
+     animation. Layered radial-gradients, each a single 1px point. */
+  --space-stars: radial-gradient(
+      1px 1px at 8% 14%,
+      color-mix(in srgb, var(--space-cream) 70%, transparent),
+      transparent
+    ),
+    radial-gradient(
+      1px 1px at 22% 62%,
+      color-mix(in srgb, var(--space-cream) 55%, transparent),
+      transparent
+    ),
+    radial-gradient(
+      1px 1px at 38% 28%,
+      color-mix(in srgb, var(--space-cyan) 60%, transparent),
+      transparent
+    ),
+    radial-gradient(
+      1px 1px at 51% 80%,
+      color-mix(in srgb, var(--space-cream) 45%, transparent),
+      transparent
+    ),
+    radial-gradient(
+      1px 1px at 64% 12%,
+      color-mix(in srgb, var(--space-cream) 65%, transparent),
+      transparent
+    ),
+    radial-gradient(
+      1px 1px at 77% 46%,
+      color-mix(in srgb, var(--space-cyan) 50%, transparent),
+      transparent
+    ),
+    radial-gradient(
+      1px 1px at 88% 70%,
+      color-mix(in srgb, var(--space-cream) 60%, transparent),
+      transparent
+    ),
+    radial-gradient(
+      1px 1px at 95% 24%,
+      color-mix(in srgb, var(--space-cream) 40%, transparent),
+      transparent
+    );
+}
+
+/* ---------- Self-hosted face ---------- */
+/* Space Mono 400/700, OFL 1.1. Source: frontend/public/momentum/SOURCES.md. */
+@font-face {
+  font-family: "Space Mono";
+  src: url("/momentum/space-mono.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+    U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF,
+    U+FFFD;
+}
+@font-face {
+  font-family: "Space Mono";
+  src: url("/momentum/space-mono-bold.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+    U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF,
+    U+FFFD;
+}
+
+[data-treatment="space"] {
+  --space-font: "Space Mono", ui-monospace, "SF Mono", Consolas, monospace;
+}
+
+/*
+ * Shell remap: sidebar, headers, page canvas, dialogs, menus. Matches the
+ * appearance provider's wrapper ([data-workspace-shell]) and <html>, so
+ * portalled dialogs and the mobile sidebar sheet get it too. Light theme
+ * only; the treatment IS the dark surface, so ":not(.dark)" keeps a user's
+ * separate dark-mode toggle from double-darkening it.
+ */
+:root:not(.dark)[data-treatment="space"],
+:root:not(.dark) [data-workspace-shell][data-treatment="space"] {
+  --background: var(--space-void);
+  --foreground: var(--space-cream);
+  --card: var(--space-panel);
+  --card-foreground: var(--space-cream);
+  --popover: var(--space-panel-hi);
+  --popover-foreground: var(--space-cream);
+  --primary: var(--space-cyan);
+  --primary-foreground: var(--space-void);
+  --secondary: var(--space-panel-hi);
+  --secondary-foreground: var(--space-cream);
+  --muted-surface: var(--space-panel);
+  --muted-foreground: var(--space-cream-muted);
+  --accent: var(--space-panel-hi);
+  --accent-foreground: var(--space-cream);
+  --destructive: var(--space-danger);
+  --border: var(--space-line);
+  --input: var(--space-line);
+  --ring: var(--space-focus);
+  --sidebar: var(--space-void);
+  --sidebar-foreground: var(--space-cream);
+  --sidebar-primary: var(--space-cyan);
+  --sidebar-primary-foreground: var(--space-void);
+  --sidebar-accent: var(--space-panel-hi);
+  --sidebar-accent-foreground: var(--space-cream);
+  --sidebar-border: var(--space-line);
+  --sidebar-ring: var(--space-focus);
+  font-family: var(--m-font-text);
+}
+
+/* Headings and code share the spacey monospace voice. */
+:is(
+    :root:not(.dark)[data-treatment="space"],
+    :root:not(.dark) [data-workspace-shell][data-treatment="space"]
+  )
+  :is(h1, h2, h3, h4, [data-slot="dialog-title"]) {
+  font-family: var(--space-font);
+  letter-spacing: -0.01em;
+}
+:is(
+    :root:not(.dark)[data-treatment="space"],
+    :root:not(.dark) [data-workspace-shell][data-treatment="space"]
+  )
+  code,
+:is(
+    :root:not(.dark)[data-treatment="space"],
+    :root:not(.dark) [data-workspace-shell][data-treatment="space"]
+  )
+  pre,
+:is(
+    :root:not(.dark)[data-treatment="space"],
+    :root:not(.dark) [data-workspace-shell][data-treatment="space"]
+  )
+  .m-voice-code {
+  font-family: var(--space-font);
+}
+
+/* The starfield lives on the canvas only — sidebar, page background, the
+   conversation surface — never inside a card so it never sits behind text. */
+:is(
+    :root:not(.dark)[data-treatment="space"],
+    :root:not(.dark) [data-workspace-shell][data-treatment="space"]
+  )
+  :is(
+    [data-slot="sidebar-inner"],
+    [data-slot="sidebar-inset"],
+    [data-slot="sidebar"][data-mobile="true"],
+    .momentum-conversation-surface
+  ) {
+  background-color: var(--space-void);
+  background-image: var(--space-stars);
+  color: var(--space-cream);
+}
+
+/* Cards: dark sheets with a hairline border, no glow. */
+:is(
+    :root:not(.dark)[data-treatment="space"],
+    :root:not(.dark) [data-workspace-shell][data-treatment="space"]
+  )
+  [data-slot="card"] {
+  background-color: var(--space-panel);
+  border-color: var(--space-line);
+  box-shadow: none;
+}
+
+:is(
+    :root:not(.dark)[data-treatment="space"],
+    :root:not(.dark) [data-workspace-shell][data-treatment="space"]
+  )
+  [data-slot="dialog-content"] {
+  background-color: var(--space-panel-hi);
+  border-color: var(--space-line);
+}
+
+/* The composer's input group is styled with its own light default
+   independent of the shell token remap above (paper.css needs the same
+   kind of override for the same reason). */
+:is(
+    :root:not(.dark)[data-treatment="space"],
+    :root:not(.dark) [data-workspace-shell][data-treatment="space"]
+  )
+  [data-chat-composer]
+  [data-slot="input-group"] {
+  background-color: var(--space-panel);
+  border-color: var(--space-line);
+  color: var(--space-cream);
+}
+
+@media (forced-colors: active) {
+  [data-treatment="space"] * {
+    background-image: none !important;
+  }
+}

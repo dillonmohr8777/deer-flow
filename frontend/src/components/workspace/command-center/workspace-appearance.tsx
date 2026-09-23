@@ -31,6 +31,21 @@ const treatments: {
     name: "Paper cutout",
     description: "Ivory layers. Cobalt character.",
   },
+  {
+    value: "space",
+    name: "Space",
+    description: "Navy void. Cyan focus. Quiet stars.",
+  },
+  {
+    value: "future",
+    name: "Future",
+    description: "Chrome and graphite. Geometric headings.",
+  },
+  {
+    value: "retro",
+    name: "Retro 16-bit",
+    description: "Pixel type. Chunky borders. Square corners.",
+  },
 ];
 
 export function BrandMotionToggle({ compact = false }: { compact?: boolean }) {

@@ -37,6 +37,9 @@ function Controls() {
       >
         Current
       </button>
+      <button onClick={() => appearance.update({ treatment: "space" })}>
+        Space
+      </button>
       <button onClick={appearance.reset}>Reset</button>
     </>
   );
@@ -58,7 +61,14 @@ describe("workspace appearance", () => {
     ).toEqual(DEFAULT_APPEARANCE);
     expect(parseAppearance("broken")).toEqual(DEFAULT_APPEARANCE);
     expect(DEFAULT_APPEARANCE.treatment).toBe("paper");
-    for (const saved of ["current", "classic", "paper"] as const)
+    for (const saved of [
+      "current",
+      "classic",
+      "paper",
+      "space",
+      "future",
+      "retro",
+    ] as const)
       expect(
         parseAppearance(JSON.stringify({ treatment: saved })).treatment,
       ).toBe(saved);
@@ -103,6 +113,16 @@ describe("workspace appearance", () => {
     await waitFor(() =>
       expect(screen.getByTestId("preference").textContent).toBe("current"),
     );
+
+    // A new treatment (space/future/retro) persists exactly like the
+    // existing ones.
+    fireEvent.click(screen.getByText("Space"));
+    expect(screen.getByTestId("preference").textContent).toBe("space");
+    expect(
+      parseAppearance(window.localStorage.getItem(appearanceKey("account-a")))
+        .treatment,
+    ).toBe("space");
+
     fireEvent.click(screen.getByText("Reset"));
     expect(window.localStorage.getItem(appearanceKey("account-a"))).toBeNull();
     expect(screen.getByTestId("preference").textContent).toBe("paper");

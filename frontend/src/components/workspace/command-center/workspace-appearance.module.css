@@ -276,6 +276,47 @@
   filter: drop-shadow(3px 5px 3px #26394b24);
   transform: rotate(-10deg);
 }
+/* Space: navy void, a few star points, cyan-tinted glyph. */
+.choice[data-treatment="space"] .choiceArt {
+  background:
+    radial-gradient(1px 1px at 18% 28%, #f3f1e9, transparent),
+    radial-gradient(1px 1px at 62% 66%, #7fe3f0, transparent),
+    radial-gradient(1px 1px at 82% 22%, #f3f1e9, transparent),
+    radial-gradient(1px 1px at 40% 80%, #f3f1e9, transparent),
+    #0a0f1e;
+}
+.choice[data-treatment="space"] .choiceArt svg {
+  filter: brightness(0) saturate(100%) invert(88%) sepia(6%) saturate(255%)
+    hue-rotate(179deg) brightness(102%);
+}
+/* Future: brushed-chrome band, dark glyph for contrast on the light metal. */
+.choice[data-treatment="future"] .choiceArt {
+  background: repeating-linear-gradient(
+    100deg,
+    #ffffff 0%,
+    #e4e6ea 8%,
+    #ffffff 16%,
+    #7a828e 24%,
+    #e4e6ea 32%,
+    #ffffff 40%
+  );
+}
+.choice[data-treatment="future"] .choiceArt svg {
+  filter: brightness(0) saturate(100%) invert(13%) sepia(9%) saturate(682%)
+    hue-rotate(176deg) brightness(94%);
+}
+/* Retro: a navy/amber pixel checker, square corners, chunky border. */
+.choice[data-treatment="retro"] .choiceArt {
+  border-radius: 0;
+  background:
+    repeating-conic-gradient(#101833 0% 25%, #182449 0% 50%) 0 0 / 12px 12px;
+  outline: 2px solid #b9791f;
+  outline-offset: -2px;
+}
+.choice[data-treatment="retro"] .choiceArt svg {
+  filter: brightness(0) saturate(100%) invert(76%) sepia(45%) saturate(848%)
+    hue-rotate(345deg) brightness(97%);
+}
 .choiceName {
   display: flex;
   justify-content: space-between;

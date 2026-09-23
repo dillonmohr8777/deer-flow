@@ -269,6 +269,77 @@
   border-bottom-color: var(--line);
   background: var(--paper-cream) var(--paper-grain);
 }
+
+/* Space, Future and Retro: reskin the hero surface's local palette so it
+   doesn't stay on the "current" cool-light gradient. Tokens come from the
+   matching src/styles/*.css files; no bespoke hero decoration beyond that,
+   matching the effort "classic" gets. */
+.root[data-treatment="space"] {
+  --canvas: var(--space-void);
+  --surface: var(--space-panel);
+  --surface-blue: var(--space-panel-hi);
+  --ink: var(--space-cream);
+  --muted: var(--space-cream-muted);
+  --line: var(--space-line);
+  --strong: var(--space-line);
+  --blue: var(--space-cyan);
+  --blue-deep: var(--space-cyan);
+  --cyan: var(--space-cyan);
+  --cyan-text: var(--space-cyan);
+  --green: var(--space-ok);
+  --danger: var(--space-danger);
+  --focus: var(--space-focus);
+  background: var(--space-void) var(--space-stars);
+}
+.root[data-treatment="space"] .heading h1 {
+  font-family: var(--space-font);
+}
+
+.root[data-treatment="future"] {
+  --canvas: var(--future-white);
+  --surface: var(--future-white);
+  --surface-blue: var(--future-silver);
+  --ink: var(--future-graphite);
+  --muted: var(--future-graphite-lo);
+  --line: var(--future-line);
+  --strong: var(--future-chrome-deep);
+  --blue: var(--future-accent);
+  --blue-deep: var(--future-accent);
+  --cyan: var(--future-accent);
+  --cyan-text: var(--future-accent);
+  --green: var(--future-ok);
+  --danger: var(--future-danger);
+  --focus: var(--future-focus);
+  background: var(--future-white);
+}
+.root[data-treatment="future"] .heading h1 {
+  font-family: var(--future-font);
+  text-transform: uppercase;
+}
+
+.root[data-treatment="retro"] {
+  --canvas: var(--retro-navy);
+  --surface: var(--retro-navy-hi);
+  --surface-blue: var(--retro-navy-hi);
+  --ink: var(--retro-cream);
+  --muted: var(--retro-cream-muted);
+  --line: var(--retro-amber-deep);
+  --strong: var(--retro-amber-deep);
+  --blue: var(--retro-amber);
+  --blue-deep: var(--retro-amber);
+  --cyan: var(--retro-amber);
+  --cyan-text: var(--retro-amber);
+  --green: var(--retro-ok);
+  --danger: var(--retro-danger);
+  --focus: var(--retro-amber);
+  background: var(--retro-navy);
+}
+.root[data-treatment="retro"] .heading h1 {
+  font-family: var(--retro-pixel-font);
+}
+.root[data-treatment="retro"] * {
+  border-radius: 0 !important;
+}
 .root[data-treatment="paper"] .heading h1 {
   color: var(--paper-ink);
   font-family: var(--m-font-serif);
