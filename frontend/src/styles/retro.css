@@ -1,0 +1,170 @@
+/*
+ * Retro treatment — token layer.
+ *
+ * 16-bit. Pixel font for headings/labels/code, a crisp readable face for
+ * long body text, chunky 2px borders, a limited palette (navy, cream, one
+ * warm accent), square corners. On first paint of a page, main content
+ * resolves from heavily pixelated to crisp over ~600ms (retro-resolve.tsx
+ * drives the SVG mosaic filter's step size; this file only supplies the
+ * palette, fonts and border/radius rules).
+ *
+ * Scope: everything here lives under [data-treatment="retro"], set the same
+ * way paper.css's scope is (WorkspaceAppearanceProvider, on the workspace
+ * wrapper and on <html>). Nothing here changes another treatment.
+ *
+ * Ratios below are proven by tests/unit/retro-tokens.test.ts, which parses
+ * this file's own token values and computes WCAG contrast.
+ *
+ *   --retro-navy         #101833  (canvas)
+ *   --retro-navy-hi      #182449  (panel)
+ *   --retro-cream        #F4EDD8  vs navy            14.95
+ *   --retro-cream-muted  #C9BE9E  vs navy             9.45
+ *   --retro-amber        #E8A23A  vs navy             8.05
+ *   --retro-danger       #E86A5C  vs navy             5.54
+ *   --retro-ok           #7FD1A0  vs navy             9.60
+ *   --retro-amber-deep   #B9791F  (object-only, border/accent, not text)
+ */
+
+[data-treatment="retro"] {
+  --retro-navy: #101833;
+  --retro-navy-hi: #182449;
+  --retro-cream: #f4edd8;
+  --retro-cream-muted: #c9be9e;
+  --retro-amber: #e8a23a;
+  --retro-amber-deep: #b9791f;
+  --retro-danger: #e86a5c;
+  --retro-ok: #7fd1a0;
+}
+
+/* ---------- Self-hosted faces ---------- */
+/* Press Start 2P 400, OFL 1.1 — headings, labels and code. */
+@font-face {
+  font-family: "Press Start 2P";
+  src: url("/momentum/press-start-2p.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+    U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF,
+    U+FFFD;
+}
+
+[data-treatment="retro"] {
+  --retro-pixel-font: "Press Start 2P", monospace;
+  /* Body text stays legible at length: the existing self-hosted UI face
+     (fonts.css), not the pixel display face. */
+  --retro-body-font: var(--m-font-text);
+}
+
+/*
+ * Shell remap: sidebar, headers, page canvas, dialogs, menus. Matches the
+ * appearance provider's wrapper ([data-workspace-shell]) and <html>.
+ */
+:root:not(.dark)[data-treatment="retro"],
+:root:not(.dark) [data-workspace-shell][data-treatment="retro"] {
+  --background: var(--retro-navy);
+  --foreground: var(--retro-cream);
+  --card: var(--retro-navy-hi);
+  --card-foreground: var(--retro-cream);
+  --popover: var(--retro-navy-hi);
+  --popover-foreground: var(--retro-cream);
+  --primary: var(--retro-amber);
+  --primary-foreground: var(--retro-navy);
+  --secondary: var(--retro-navy-hi);
+  --secondary-foreground: var(--retro-cream);
+  --muted-surface: var(--retro-navy-hi);
+  --muted-foreground: var(--retro-cream-muted);
+  --accent: var(--retro-navy-hi);
+  --accent-foreground: var(--retro-cream);
+  --destructive: var(--retro-danger);
+  --border: var(--retro-amber-deep);
+  --input: var(--retro-amber-deep);
+  --ring: var(--retro-amber);
+  --sidebar: var(--retro-navy);
+  --sidebar-foreground: var(--retro-cream);
+  --sidebar-primary: var(--retro-amber);
+  --sidebar-primary-foreground: var(--retro-navy);
+  --sidebar-accent: var(--retro-navy-hi);
+  --sidebar-accent-foreground: var(--retro-cream);
+  --sidebar-border: var(--retro-amber-deep);
+  --sidebar-ring: var(--retro-amber);
+  --radius: 0px;
+  font-family: var(--retro-body-font);
+}
+
+/* Pixel face for headings, labels and code; body text keeps the readable
+   face declared above. */
+:is(
+    :root:not(.dark)[data-treatment="retro"],
+    :root:not(.dark) [data-workspace-shell][data-treatment="retro"]
+  )
+  :is(h1, h2, h3, h4, [data-slot="dialog-title"], label, .m-voice-label) {
+  font-family: var(--retro-pixel-font);
+  line-height: 1.6;
+  letter-spacing: 0;
+}
+:is(
+    :root:not(.dark)[data-treatment="retro"],
+    :root:not(.dark) [data-workspace-shell][data-treatment="retro"]
+  )
+  :is(code, pre, .m-voice-code) {
+  font-family: var(--retro-pixel-font);
+}
+
+/* Square corners everywhere, chunky 2px borders on cards and dialogs. */
+:is(
+    :root:not(.dark)[data-treatment="retro"],
+    :root:not(.dark) [data-workspace-shell][data-treatment="retro"]
+  )
+  * {
+  border-radius: 0 !important;
+}
+:is(
+    :root:not(.dark)[data-treatment="retro"],
+    :root:not(.dark) [data-workspace-shell][data-treatment="retro"]
+  )
+  :is([data-slot="card"], [data-slot="dialog-content"], [data-slot="input-group"]) {
+  border-width: 2px;
+  border-color: var(--retro-amber-deep);
+  background-color: var(--retro-navy-hi);
+  box-shadow: none;
+}
+
+:is(
+    :root:not(.dark)[data-treatment="retro"],
+    :root:not(.dark) [data-workspace-shell][data-treatment="retro"]
+  )
+  :is(
+    [data-slot="sidebar-inner"],
+    [data-slot="sidebar-inset"],
+    [data-slot="sidebar"][data-mobile="true"],
+    .momentum-conversation-surface
+  ) {
+  background-color: var(--retro-navy);
+  /* The base rule (globals.css) sets a shorthand `background` with its own
+     gradient image; a longhand background-color alone leaves that image
+     layered on top, so it must be cleared explicitly here too. */
+  background-image: none;
+  color: var(--retro-cream);
+}
+
+/* The composer's input group is styled with its own light default
+   independent of the shell token remap above (paper.css needs the same
+   kind of override for the same reason). */
+:is(
+    :root:not(.dark)[data-treatment="retro"],
+    :root:not(.dark) [data-workspace-shell][data-treatment="retro"]
+  )
+  [data-chat-composer]
+  [data-slot="input-group"] {
+  background-color: var(--retro-navy-hi);
+  border-color: var(--retro-amber-deep);
+  color: var(--retro-cream);
+}
+
+@media (forced-colors: active) {
+  [data-treatment="retro"] * {
+    filter: none !important;
+  }
+}

@@ -64,4 +64,20 @@ describe("WorkspaceAppearanceProvider coverage", () => {
     unmount();
     expect(document.documentElement.dataset.treatment).toBeUndefined();
   });
+
+  it("mirrors data-motion (brandMotionAllowed) onto the wrapper and <html> the same way", async () => {
+    // Default preferences have motion off, so both should read "off" — the
+    // gate future's H1 echo and retro's resolve read directly.
+    const { container, unmount } = render(
+      <WorkspaceAppearanceProvider>
+        <div data-testid="rest-of-workspace">sidebar + header + threads</div>
+      </WorkspaceAppearanceProvider>,
+    );
+    const wrapper = container.querySelector("[data-treatment]");
+    await waitFor(() => expect(wrapper?.getAttribute("data-motion")).toBe("off"));
+    expect(document.documentElement.dataset.motion).toBe("off");
+
+    unmount();
+    expect(document.documentElement.dataset.motion).toBeUndefined();
+  });
 });

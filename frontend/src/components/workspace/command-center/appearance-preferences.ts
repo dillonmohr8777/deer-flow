@@ -1,6 +1,21 @@
 import { safePluginIcon } from "@/core/mcp/icon";
 
-export type BrandTreatment = "classic" | "current" | "paper";
+export type BrandTreatment =
+  | "classic"
+  | "current"
+  | "paper"
+  | "space"
+  | "future"
+  | "retro";
+
+const TREATMENTS: readonly BrandTreatment[] = [
+  "classic",
+  "current",
+  "paper",
+  "space",
+  "future",
+  "retro",
+];
 export type AppearancePreferences = {
   treatment: BrandTreatment;
   motion: boolean;
@@ -30,12 +45,9 @@ export function parseAppearance(raw: string | null): AppearancePreferences {
     const record = value as Record<string, unknown>;
     return {
       // A saved choice always wins; only a missing or unknown one gets the default.
-      treatment:
-        record.treatment === "classic" ||
-        record.treatment === "current" ||
-        record.treatment === "paper"
-          ? record.treatment
-          : DEFAULT_APPEARANCE.treatment,
+      treatment: TREATMENTS.includes(record.treatment as BrandTreatment)
+        ? (record.treatment as BrandTreatment)
+        : DEFAULT_APPEARANCE.treatment,
       motion: record.motion === true,
       logo: safePluginIcon(record.logo) ?? null,
       label:
