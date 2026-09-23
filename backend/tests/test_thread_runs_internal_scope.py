@@ -59,9 +59,10 @@ class _ScopeAuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next) -> Response:
         request.state.user = self._user
         request.state.auth_source = self._auth_source
-        request.state.auth = AuthContext(user=self._user, permissions=list(_STUB_PERMISSIONS))
         owner = request.headers.get(INTERNAL_OWNER_USER_ID_HEADER_NAME)
-        if self._auth_source == AUTH_SOURCE_INTERNAL and owner:
+        delegated = self._auth_source == AUTH_SOURCE_INTERNAL and bool(owner)
+        request.state.auth = AuthContext(user=self._user, permissions=list(_STUB_PERMISSIONS), storage_user_id=owner if delegated else None)
+        if delegated:
             # As AuthMiddleware stamps a verified delegation owned by this owner.
             request.state.delegation_id = "dlg-test"
             request.state.storage_user_id = owner
