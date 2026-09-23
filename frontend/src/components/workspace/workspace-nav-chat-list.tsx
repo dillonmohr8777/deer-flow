@@ -6,6 +6,7 @@ import {
   MessagesSquare,
   BlocksIcon,
   Network,
+  Newspaper,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -120,6 +121,14 @@ export function WorkspaceNavChatList() {
             >
               <BlocksIcon />
               <span>{t.capabilities.title}</span>
+            </Link>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+        <SidebarMenuItem>
+          <SidebarMenuButton isActive={pathname.startsWith("/daily")} asChild>
+            <Link className="text-muted-foreground" href="/daily">
+              <Newspaper />
+              <span>The Momo Daily</span>
             </Link>
           </SidebarMenuButton>
         </SidebarMenuItem>

@@ -1,0 +1,42 @@
+{
+  "title": "How should AI agents hand work back to people?",
+  "dek": "The best agent teams are not the ones that do everything. They are the ones that know exactly when to stop and ask.",
+  "slug": "how-ai-agents-hand-work-to-people",
+  "date": "2026-09-22",
+  "author": { "name": "Dillon Mohr", "title": "AI Marketing Director" },
+  "keywords": [
+    "AI agents",
+    "human in the loop",
+    "approval gates",
+    "agent safety"
+  ],
+  "summary": "AI agents should hand work back at the moment an action becomes hard to undo: a send, a deploy, a payment. A good handoff arrives as a finished draft with its evidence attached, so a person can approve it in one read.",
+  "section": "Safety",
+  "hero": {
+    "src": "/momentum/momos-living/verifier/flat.webp",
+    "alt": "The Verifier Momo, cut from blue and kraft paper, studying a tag through a magnifying glass"
+  },
+  "status": "draft",
+  "body": [
+    {
+      "heading": "When should an agent stop and ask?",
+      "paragraphs": [
+        "Whenever the next step leaves the building. Research, drafting and checking are cheap to redo; an email sent or a budget spent is not.",
+        "Drawing that line once, in writing, saves a hundred judgment calls later."
+      ]
+    },
+    {
+      "heading": "What makes a good handoff?",
+      "paragraphs": [
+        "A finished draft, not a question. The evidence it relied on, linked. A one line statement of what happens if the person says yes."
+      ]
+    },
+    {
+      "heading": "Does this slow the work down?",
+      "paragraphs": [
+        "Less than it seems. The agent does the long part; the person spends a minute on the part that carries the risk. That is the trade clients are paying for."
+      ]
+    }
+  ],
+  "faq": []
+}

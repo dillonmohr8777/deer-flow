@@ -170,6 +170,9 @@ export function MomentumLanding() {
 
         <footer className={styles.footer}>
           <span>© {new Date().getFullYear()} Momentum</span>
+          <Link className={styles.footerLink} href="/daily">
+            The Momo Daily
+          </Link>
           <Link className={styles.footerLink} href="/workspace">
             Have an invitation? Sign in
           </Link>
@@ -327,6 +330,9 @@ function PaperLanding() {
           <span className="m-voice-body">
             © {new Date().getFullYear()} Momentum
           </span>
+          <Link className={styles.paperFooterLink} href="/daily">
+            The Momo Daily
+          </Link>
           <Link className={styles.paperFooterLink} href="/workspace">
             Have an invitation? Sign in
           </Link>

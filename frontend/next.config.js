@@ -34,6 +34,13 @@ const config = {
   },
   devIndicators: false,
   allowedDevOrigins: getAllowedDevOrigins(),
+  // The Momo Daily reads its JSON articles with node:fs at request time;
+  // make sure standalone output carries them.
+  outputFileTracingIncludes: {
+    "/daily": ["./src/content/momo-daily/**"],
+    "/daily/[slug]": ["./src/content/momo-daily/**"],
+    "/sitemap.xml": ["./src/content/momo-daily/**"],
+  },
   // Momentum does not publish upstream DeerFlow's blog or docs site. Redirect
   // instead of deleting the routes so upstream merges stay conflict-free.
   async redirects() {
