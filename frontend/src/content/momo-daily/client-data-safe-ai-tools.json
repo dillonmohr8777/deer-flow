@@ -1,0 +1,75 @@
+{
+  "title": "How do you keep client data safe when your team uses AI tools?",
+  "dek": "AI tools can speed up client work without putting client data at risk, if you set the boundaries first.",
+  "slug": "client-data-safe-ai-tools",
+  "date": "2026-09-25",
+  "author": { "name": "Dillon Mohr", "title": "AI Marketing Director" },
+  "keywords": [
+    "client data safety",
+    "AI tools",
+    "data privacy",
+    "agency data protection"
+  ],
+  "summary": "Keeping client data safe when your team uses AI tools means limiting what each tool can see, knowing where a client's data actually goes once it is entered, and never treating a default setting as a safe one until you have checked it yourself.",
+  "section": "Safety",
+  "hero": {
+    "src": "/momentum/daily/art/client-data-safe-ai-tools.webp",
+    "alt": "A 1930s pulp noir illustration of Momo the robot mascot as a night watchman holding a lantern, standing guard before a large bank vault door"
+  },
+  "status": "draft",
+  "body": [
+    {
+      "heading": "What is actually at risk here?",
+      "paragraphs": [
+        "Client data covers more than names and emails. It includes contracts, ad account access, customer lists, internal pricing, unreleased campaigns and anything a client shared expecting it to stay between your team and theirs. Once that information goes into an AI tool, the question is simple: where does it go from there, and who else can see it.",
+        "Most of the risk is not dramatic. It is not a hacker breaking in. It is a team member pasting a client's customer list into a free AI tool to save time, without knowing whether that tool stores the input, uses it to train a model, or hands it to a third party."
+      ]
+    },
+    {
+      "heading": "What should never go into a general purpose AI tool?",
+      "paragraphs": [
+        "A good rule: if you would not paste it into a public forum, do not paste it into a free consumer AI tool without checking its data policy first. That includes customer lists, financial figures, login credentials, unreleased creative, and anything covered by a signed confidentiality agreement.",
+        "This does not mean AI tools are off limits. It means the tool has to earn that level of trust first, with a clear answer to where the data goes, how long it is kept, and whether it is used to train anything beyond your own account."
+      ]
+    },
+    {
+      "heading": "How do you check whether a tool is actually safe to use?",
+      "paragraphs": [
+        "Read the tool's data policy before the team starts using it, not after. Look specifically for whether it trains its models on your input by default, whether that can be turned off, and whether it offers a business or enterprise tier with stronger guarantees than the free version.",
+        "Favor tools that let you control retention, that support single sign on so access can be revoked the moment someone leaves the team, and that separate each client's data instead of pooling everything into one shared account.",
+        "When in doubt, ask the vendor directly. A vendor that cannot answer a plain question about where your data goes is telling you something, even if the answer is just silence.",
+        "It is worth revisiting this check even for tools already in use. Vendors change their data policies, sometimes quietly, and a tool that was safe to use a year ago may not be on the same terms today. A short annual review of the policies behind every tool your team relies on catches that drift before it becomes a problem."
+      ]
+    },
+    {
+      "heading": "What does a safe setup actually look like day to day?",
+      "paragraphs": [
+        "Each client's work lives in its own space, with access limited to the people actually working on that account. Tools used for drafting or research run on business accounts with data retention and training turned off, not personal free accounts.",
+        "Anything an AI tool produces that touches client information gets reviewed by a person before it goes anywhere near the client or a live campaign. That review is not just about quality, it is a second check that nothing sensitive slipped into a draft that should not have it.",
+        "New tools go through a quick check before the team adopts them: what does the policy say, who has used it before, is there a business tier worth paying for. A five minute check before adoption is cheaper than explaining a leak afterward.",
+        "Training matters as much as the tools themselves. A team member who does not know why pasting a client list into a random AI tool is risky will do it anyway, not out of carelessness but because nobody explained the boundary. A short onboarding note on approved tools and why the line is drawn where it is closes that gap quickly."
+      ]
+    },
+    {
+      "heading": "Where should a small team start?",
+      "paragraphs": [
+        "Write down, in one page, which tools the team is allowed to use for client work and what is off limits in each one. Share it with everyone who touches client accounts, not just the people who chose the tools. Review that list twice a year, since tools change their policies more often than most teams check.",
+        "None of this requires slowing down. It requires deciding the rules once, in writing, instead of leaving each person to guess. You can read more short guides like this one at The Momo Daily."
+      ]
+    }
+  ],
+  "faq": [
+    {
+      "question": "Can I use free AI tools for client work at all?",
+      "answer": "Only for work that does not include client data: general research, brainstorming, or drafting with placeholder information. Anything containing real client details belongs on a business account with data training turned off."
+    },
+    {
+      "question": "What should I check before letting my team use a new AI tool?",
+      "answer": "Read its data policy for whether it trains on your input by default, whether that can be disabled, and whether it offers a business tier with stronger data controls than the free version."
+    },
+    {
+      "question": "Who should review AI drafts before they reach a client?",
+      "answer": "A person who knows the client's account, not just anyone on the team. That review catches both quality issues and any sensitive detail that should not have made it into the draft."
+    }
+  ]
+}
