@@ -91,7 +91,7 @@ async def membership_db(monkeypatch):
     monkeypatch.setattr("deerflow.persistence.engine.get_session_factory", lambda: session_factory)
     monkeypatch.setattr(workspaces, "get_session_factory", lambda: session_factory)
     monkeypatch.setattr(invitations, "_session_factory", lambda: session_factory)
-    monkeypatch.setattr("app.gateway.authz._get_route_authorization_config", lambda: AuthorizationConfig())
+    monkeypatch.setattr("app.gateway.authz._get_route_authorization_config", lambda: AuthorizationConfig(invitations_frozen=False))
 
     yield session_factory
     await engine.dispose()

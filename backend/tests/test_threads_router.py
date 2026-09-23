@@ -1148,7 +1148,7 @@ def test_internal_owner_header_assigns_thread_to_owner() -> None:
     thread_store = MemoryThreadMetaStore(store)
     request = SimpleNamespace(
         headers={INTERNAL_OWNER_USER_ID_HEADER_NAME: "owner-1"},
-        state=SimpleNamespace(user=SimpleNamespace(id="default", system_role=INTERNAL_SYSTEM_ROLE), auth_source=AUTH_SOURCE_INTERNAL),
+        state=SimpleNamespace(user=SimpleNamespace(id="default", system_role=INTERNAL_SYSTEM_ROLE), auth_source=AUTH_SOURCE_INTERNAL, delegation_id="dlg-test", storage_user_id="owner-1"),
         app=SimpleNamespace(state=SimpleNamespace(checkpointer=checkpointer, thread_store=thread_store)),
     )
 
@@ -1180,7 +1180,7 @@ def test_goal_thread_creation_uses_internal_owner_header() -> None:
     thread_store = MemoryThreadMetaStore(store)
     request = SimpleNamespace(
         headers={INTERNAL_OWNER_USER_ID_HEADER_NAME: "owner-1"},
-        state=SimpleNamespace(user=SimpleNamespace(id="default", system_role=INTERNAL_SYSTEM_ROLE), auth_source=AUTH_SOURCE_INTERNAL),
+        state=SimpleNamespace(user=SimpleNamespace(id="default", system_role=INTERNAL_SYSTEM_ROLE), auth_source=AUTH_SOURCE_INTERNAL, delegation_id="dlg-test", storage_user_id="owner-1"),
         app=SimpleNamespace(state=SimpleNamespace(checkpointer=checkpointer, thread_store=thread_store)),
     )
 

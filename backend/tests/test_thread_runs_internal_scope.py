@@ -59,7 +59,13 @@ class _ScopeAuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next) -> Response:
         request.state.user = self._user
         request.state.auth_source = self._auth_source
-        request.state.auth = AuthContext(user=self._user, permissions=list(_STUB_PERMISSIONS))
+        owner = request.headers.get(INTERNAL_OWNER_USER_ID_HEADER_NAME)
+        delegated = self._auth_source == AUTH_SOURCE_INTERNAL and bool(owner)
+        request.state.auth = AuthContext(user=self._user, permissions=list(_STUB_PERMISSIONS), storage_user_id=owner if delegated else None)
+        if delegated:
+            # As AuthMiddleware stamps a verified delegation owned by this owner.
+            request.state.delegation_id = "dlg-test"
+            request.state.storage_user_id = owner
         return await call_next(request)
 
 
@@ -571,8 +577,11 @@ def _helper_request(*, user, auth_source: str, run_store, event_store, owner_hea
     """Minimal Request stand-in: the helpers touch state, app.state and headers."""
     app_state = SimpleNamespace(run_manager=RunManager(store=run_store), run_event_store=event_store)
     headers = {INTERNAL_OWNER_USER_ID_HEADER_NAME: owner_header} if owner_header else {}
+    state = SimpleNamespace(user=user, auth_source=auth_source)
+    if owner_header and auth_source == AUTH_SOURCE_INTERNAL:
+        state.delegation_id, state.storage_user_id = "dlg-test", owner_header  # a verified delegation
     return SimpleNamespace(
-        state=SimpleNamespace(user=user, auth_source=auth_source),
+        state=state,
         app=SimpleNamespace(state=app_state),
         headers=headers,
     )

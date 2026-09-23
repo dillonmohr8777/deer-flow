@@ -9,6 +9,7 @@ from org_isolation_fixtures import ORG_A, ORG_B, ORG_S, STORAGE_S, USER_A, USER_
 
 from app.gateway.auth_middleware import AuthMiddleware
 from app.gateway.internal_auth import create_internal_auth_headers
+from deerflow.persistence.organizations.delegation import OrganizationDelegationRepository
 from deerflow.persistence.organizations.resolution import OrganizationMismatchError, organization_for_write
 from deerflow.runtime.user_context import AUTO, resolve_organization_id, resolve_user_id
 
@@ -32,8 +33,10 @@ async def test_world_and_active_organization_match_real_auth_middleware(org_worl
         assert await who(auth_headers(USER_A, ORG_S)) == {"actor": USER_A, "storage": STORAGE_S, "organization": ORG_S}
         assert await who(auth_headers(USER_C, ORG_S)) == {"actor": USER_C, "storage": STORAGE_S, "organization": ORG_S}
         assert await who(auth_headers(USER_B, ORG_S)) == 403
-        # Phase 1 keeps header-only internal calls working; they carry no organization boundary.
-        assert await who(create_internal_auth_headers(owner_user_id=USER_A)) == {"actor": USER_A, "storage": USER_A, "organization": None}
+        # Phase 2: a header-only internal call is refused; a delegated one acts in its organization.
+        assert await who(create_internal_auth_headers(owner_user_id=USER_A)) == 403
+        delegation_id = await OrganizationDelegationRepository(org_world).grant(organization_id=ORG_S, subject_type="test_worker", subject_id="worker", owner_user_id=USER_A, scopes=["runs:create"])
+        assert await who(create_internal_auth_headers(owner_user_id=USER_A, delegation_id=delegation_id)) == {"actor": USER_A, "storage": STORAGE_S, "organization": ORG_S}
 
     with acting_as(USER_C, ORG_S):
         assert (resolve_user_id(AUTO), resolve_organization_id()) == (STORAGE_S, ORG_S)

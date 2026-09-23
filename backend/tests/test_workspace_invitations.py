@@ -18,6 +18,7 @@ from app.gateway.auth.config import AuthConfig
 from app.gateway.auth.password import hash_password_async
 from app.gateway.auth_disabled import AUTH_SOURCE_SESSION
 from app.gateway.routers import invitations
+from deerflow.config.authorization_config import AuthorizationConfig
 from deerflow.persistence.base import Base
 from deerflow.persistence.organizations.invitation import InvitationRow
 from deerflow.persistence.organizations.model import OrganizationMemberRow, OrganizationRow
@@ -68,6 +69,8 @@ async def invitation_db(monkeypatch):
         )
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
     monkeypatch.setattr(invitations, "get_session_factory", lambda: session_factory)
+    # The freeze (decision 1) has its own test; these exercise the unfrozen flow.
+    monkeypatch.setattr("app.gateway.authz._get_route_authorization_config", lambda: AuthorizationConfig(invitations_frozen=False))
     monkeypatch.setattr(
         "app.gateway.auth.config._auth_config",
         AuthConfig(jwt_secret="workspace-invitation-test-secret"),

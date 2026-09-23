@@ -274,13 +274,17 @@ def test_auth_middleware_stamps_provider_derived_permissions(monkeypatch):
 
 
 def test_auth_middleware_marks_internal_route_principal(monkeypatch):
+    from org_isolation_fixtures import fake_delegation
+
     from app.gateway.internal_auth import create_internal_auth_headers
 
     permission_resolver = AsyncMock(return_value=[Permissions.THREADS_READ])
     monkeypatch.setattr("app.gateway.auth_middleware.resolve_route_permissions", permission_resolver)
+    delegation = fake_delegation("owner-1", scopes=frozenset({Permissions.THREADS_READ}))
+    monkeypatch.setattr("app.gateway.auth_middleware._resolve_internal_delegation", AsyncMock(return_value=delegation))
 
     with TestClient(_make_middleware_app()) as client:
-        response = client.get("/api/threads", headers=create_internal_auth_headers())
+        response = client.get("/api/threads", headers=create_internal_auth_headers(delegation_id=delegation.id))
 
     assert response.status_code == 200
     permission_resolver.assert_awaited_once()

@@ -59,6 +59,8 @@ class InboundMessage:
         files: Optional list of file attachments (platform-specific dicts).
         metadata: Arbitrary extra data from the channel.
         created_at: Unix timestamp when the message was created.
+        delegation_id: The connection's active organization delegation, sent
+            to the Gateway as ``X-DeerFlow-Delegation-Id`` (re-validated there).
     """
 
     channel_name: str
@@ -74,6 +76,7 @@ class InboundMessage:
     files: list[dict[str, Any]] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
     created_at: float = field(default_factory=time.time)
+    delegation_id: str | None = None
 
 
 @dataclass

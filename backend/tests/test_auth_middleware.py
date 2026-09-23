@@ -508,18 +508,17 @@ def test_mcp_cache_reset_post_no_cookie_returns_401(client):
     assert res.status_code == 401
 
 
-def test_protected_post_with_internal_auth_header_passes():
+def test_protected_post_with_internal_token_alone_is_refused():
+    """Contract section 4: the internal token (plus owner header) needs a delegation."""
     from app.gateway.internal_auth import create_internal_auth_headers
 
     app = _make_app()
     client = TestClient(app)
 
-    res = client.post(
-        "/api/threads/abc/runs/stream",
-        headers=create_internal_auth_headers(),
-    )
-
-    assert res.status_code == 200
+    for headers in (create_internal_auth_headers(), create_internal_auth_headers(owner_user_id="owner-1")):
+        res = client.post("/api/threads/abc/runs/stream", headers=headers)
+        assert res.status_code == 403
+        assert res.json() == {"detail": "Internal calls require an active organization delegation"}
 
 
 # ── Method matrix: PUT/DELETE/PATCH also protected ────────────────────────

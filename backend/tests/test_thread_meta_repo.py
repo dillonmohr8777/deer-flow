@@ -615,7 +615,7 @@ class TestThreadMetaRepository:
         project = await projects.create(name="P")
         record = RunRecord(run_id="run-1", thread_id="t1", assistant_id="lead-agent", status=RunStatus.pending, on_disconnect=DisconnectMode.cancel, metadata={"deerflow_project_id": project["id"]})
         run_ctx = RunContext(checkpointer=None, thread_store=repo)
-        await _ensure_thread_metadata(run_ctx, record, owner_user_id=None)
+        await _ensure_thread_metadata(run_ctx, record)
 
         async with repo._sf() as session:
             row = await session.get(ThreadMetaRow, "t1")

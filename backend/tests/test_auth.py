@@ -311,18 +311,21 @@ def _internal_auth_context() -> AuthContext:
     return AuthContext(user=user, permissions=[Permissions.THREADS_READ])
 
 
-def test_require_permission_internal_role_scoped_by_owner_header():
-    """An internal caller acting for the thread owner passes the owner check."""
+def test_require_permission_internal_owner_check_uses_the_delegated_storage_principal_only():
+    """A delegated caller (AuthMiddleware stamped storage_user_id) passes; the header alone does not."""
     from app.gateway.internal_auth import INTERNAL_OWNER_USER_ID_HEADER_NAME
 
     app = _make_internal_owner_check_app()
     with patch("app.gateway.authz._authenticate", return_value=_internal_auth_context()):
         with TestClient(app) as client:
-            response = client.get(
-                "/threads/alice-thread",
-                headers={INTERNAL_OWNER_USER_ID_HEADER_NAME: "alice"},
-            )
-    assert response.status_code == 200
+            response = client.get("/threads/alice-thread", headers={INTERNAL_OWNER_USER_ID_HEADER_NAME: "alice"})
+    assert response.status_code == 404
+
+    delegated = _internal_auth_context()
+    delegated.storage_user_id = "alice"
+    with patch("app.gateway.authz._authenticate", return_value=delegated):
+        with TestClient(app) as client:
+            assert client.get("/threads/alice-thread").status_code == 200
 
 
 def test_require_permission_internal_role_denied_for_other_owner():

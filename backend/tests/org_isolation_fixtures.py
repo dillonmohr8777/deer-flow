@@ -89,6 +89,28 @@ def acting_as(actor: str, organization_id: str | None = None):
         reset_current_user(user_token)
 
 
+def fake_delegation(owner_user_id: str, *, subject_type: str = "scheduled_task", subject_id: str = "task-1", scopes: frozenset[str] = frozenset({"runs:create"})):
+    """An already-resolved delegation in ``owner_user_id``'s private organization, for launcher unit tests."""
+    from deerflow.persistence.organizations.delegation import ActiveDelegation
+    from deerflow.persistence.organizations.resolution import ActiveOrganization
+
+    organization = ActiveOrganization(id=private_organization_id(owner_user_id), name="Private organization", role="owner", storage_user_id=None)
+    return ActiveDelegation(id=f"dlg-{subject_id}", organization=organization, subject_type=subject_type, subject_id=subject_id, owner_user_id=owner_user_id, scopes=scopes)
+
+
+def delegate_every_scheduled_task(monkeypatch) -> None:
+    """For scheduler-mechanics tests with org-less tasks: every task resolves a delegation.
+
+    Delegation denial itself is covered in ``test_org_isolation_c_schedules.py``.
+    """
+    from deerflow.persistence.scheduled_tasks import ScheduledTaskRepository
+
+    async def resolve(self, task):
+        return fake_delegation(task["user_id"], subject_id=task["id"])
+
+    monkeypatch.setattr(ScheduledTaskRepository, "resolve_launch_delegation", resolve)
+
+
 async def _user_from_access_token(request):
     return SimpleNamespace(id=request.cookies["access_token"], system_role="user", email="org-world@example.com")
 
