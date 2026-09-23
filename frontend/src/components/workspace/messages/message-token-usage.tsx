@@ -12,11 +12,17 @@ function TokenUsageSummary({
   inputTokens,
   outputTokens,
   totalTokens,
+  modelName,
+  reasoningEffort,
+  showModelDetail = false,
 }: {
   className?: string;
   inputTokens?: number;
   outputTokens?: number;
   totalTokens?: number;
+  modelName?: string;
+  reasoningEffort?: string;
+  showModelDetail?: boolean;
 }) {
   const { t } = useI18n();
 
@@ -41,6 +47,12 @@ function TokenUsageSummary({
       <span className="font-medium">
         {t.tokenUsage.total}: {formatTokenCount(totalTokens ?? 0)}
       </span>
+      {showModelDetail && modelName && (
+        <span data-receipt-model="">
+          {modelName}
+          {reasoningEffort ? ` · ${reasoningEffort}` : ""}
+        </span>
+      )}
     </div>
   );
 }
@@ -50,11 +62,17 @@ export function MessageTokenUsageList({
   enabled = false,
   isLoading: _isLoading = false,
   messages,
+  modelName,
+  reasoningEffort,
+  showModelDetail = false,
 }: {
   className?: string;
   enabled?: boolean;
   isLoading?: boolean;
   messages: Message[];
+  modelName?: string;
+  reasoningEffort?: string;
+  showModelDetail?: boolean;
 }) {
   if (!enabled) {
     return null;
@@ -78,6 +96,9 @@ export function MessageTokenUsageList({
       inputTokens={usage.inputTokens}
       outputTokens={usage.outputTokens}
       totalTokens={usage.totalTokens}
+      modelName={modelName}
+      reasoningEffort={reasoningEffort}
+      showModelDetail={showModelDetail}
     />
   );
 }

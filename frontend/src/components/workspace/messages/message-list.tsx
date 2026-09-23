@@ -70,6 +70,7 @@ import {
   type StreamMetadataSnapshot,
 } from "@/core/messages/utils";
 import { getWorkspaceChangeAnchorGroupIndices } from "@/core/messages/workspace-change-anchor";
+import { useLocalSettings } from "@/core/settings";
 import {
   buildMessageSidecarContext,
   type SidecarContext,
@@ -354,6 +355,7 @@ export function MessageList({
 }) {
   const { t } = useI18n();
   const sidecar = useMaybeSidecar();
+  const [{ context: activeContext }] = useLocalSettings();
   const [selectionToolbar, setSelectionToolbar] =
     useState<SelectionToolbarState | null>(null);
   const messages = thread.messages;
@@ -1018,6 +1020,9 @@ export function MessageList({
             enabled={true}
             isLoading={thread.isLoading}
             messages={turnUsageMessages ?? []}
+            showModelDetail={activeContext.experience_mode === "hard"}
+            modelName={activeContext.model_name}
+            reasoningEffort={activeContext.reasoning_effort}
           />
         );
       }
@@ -1044,6 +1049,9 @@ export function MessageList({
       return null;
     },
     [
+      activeContext.experience_mode,
+      activeContext.model_name,
+      activeContext.reasoning_effort,
       showTokenDebugSummaries,
       thread.isLoading,
       tokenDebugSteps,

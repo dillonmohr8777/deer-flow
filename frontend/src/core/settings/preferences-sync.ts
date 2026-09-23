@@ -5,6 +5,7 @@ const fields = {
   model_name: z.string().max(200).nullable(),
   mode: z.enum(["flash", "thinking", "pro", "ultra"]).nullable(),
   reasoning_effort: z.enum(["minimal", "low", "medium", "high"]).nullable(),
+  experience_mode: z.enum(["easy", "medium", "hard"]).nullable(),
 };
 const schema = z.object(fields).partial();
 export type Preferences = z.infer<typeof schema>;

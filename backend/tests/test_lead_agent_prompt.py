@@ -775,3 +775,46 @@ def test_apply_prompt_template_deferred_path_mentions_describe_skill(monkeypatch
     assert "describe_skill(name)" in prompt
     # Must NOT contain the legacy wording
     assert "Always load the relevant skill" not in prompt
+
+
+def _experience_mode_prompt(monkeypatch, *, experience_mode, interaction_policy=None):
+    config = _make_minimal_app_config()
+    monkeypatch.setattr("deerflow.config.get_app_config", lambda: config)
+    monkeypatch.setattr(prompt_module, "get_or_new_skill_storage", lambda app_config=None: SimpleNamespace(load_skills=lambda enabled_only=True: []))
+    monkeypatch.setattr(prompt_module, "get_agent_soul", lambda agent_name=None, **kwargs: "")
+    kwargs = {"app_config": config, "experience_mode": experience_mode}
+    if interaction_policy is not None:
+        kwargs["interaction_policy"] = interaction_policy
+    return prompt_module.apply_prompt_template(**kwargs)
+
+
+def test_experience_mode_easy_adds_reading_level_and_ask_and_memory_guidance(monkeypatch):
+    prompt = _experience_mode_prompt(monkeypatch, experience_mode="easy")
+
+    assert '<experience_mode mode="easy">' in prompt
+    assert "10th grade reading level" in prompt
+    assert "ask up to 3 short clarifying questions" in prompt
+    assert "save it with the memory tools" in prompt
+    assert "Never claim to have done something you have not actually done" in prompt
+
+
+def test_experience_mode_easy_non_interactive_omits_ask_clarification_instruction(monkeypatch):
+    policy = RunInteractionPolicy(RunInteractionMode.SCHEDULED)
+    prompt = _experience_mode_prompt(monkeypatch, experience_mode="easy", interaction_policy=policy)
+
+    assert '<experience_mode mode="easy">' in prompt
+    assert "ask up to 3 short clarifying questions" not in prompt
+
+
+def test_experience_mode_hard_adds_concise_technical_guidance(monkeypatch):
+    prompt = _experience_mode_prompt(monkeypatch, experience_mode="hard")
+
+    assert '<experience_mode mode="hard">' in prompt
+    assert "concise and technical" in prompt
+    assert "model, reasoning effort, and tool calls made" in prompt
+
+
+def test_experience_mode_medium_and_unset_have_no_guidance_block(monkeypatch):
+    for mode in (None, "medium", "invalid-value"):
+        prompt = _experience_mode_prompt(monkeypatch, experience_mode=mode)
+        assert "<experience_mode" not in prompt

@@ -339,6 +339,9 @@ export interface Translations {
     reasoningEffortHigh: string;
     reasoningEffortHighDescription: string;
     followupLoading: string;
+    easyStarterHelp: string;
+    easyStarterExplain: string;
+    easyStarterPlan: string;
     followupConfirmTitle: string;
     followupConfirmDescription: string;
     followupConfirmAppend: string;
@@ -1163,6 +1166,7 @@ export interface Translations {
       memory: string;
       subagents: string;
       notification: string;
+      experience: string;
       about: string;
     };
     memory: {
@@ -1483,6 +1487,23 @@ export interface Translations {
       testBody: string;
       notSupported: string;
       disableNotification: string;
+    };
+    experience: {
+      title: string;
+      description: string;
+      easyLabel: string;
+      easyTagline: string;
+      easyDescription: string;
+      mediumLabel: string;
+      mediumTagline: string;
+      mediumDescription: string;
+      hardLabel: string;
+      hardTagline: string;
+      hardDescription: string;
+      chooserTitle: string;
+      chooserSubtitle: string;
+      chooserSkip: string;
+      saved: string;
     };
     account: {
       profileTitle: string;
