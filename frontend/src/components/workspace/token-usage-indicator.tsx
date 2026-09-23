@@ -69,6 +69,12 @@ export function TokenUsageIndicator({
   const contextPercentage = formatContextUsagePercentage(
     contextUsage?.percentage,
   );
+  // No usage yet shows no figure: a bare dash reads as a value.
+  const headerFigure = preferences.headerTotal
+    ? usage
+      ? formatTokenCount(usage.totalTokens)
+      : null
+    : t.tokenUsage.presets[presetKeyToTranslationKey(preset)];
 
   if (!enabled) {
     return null;
@@ -88,13 +94,9 @@ export function TokenUsageIndicator({
           <CoinsIcon size={14} />
           {/* Below sm the pill collapses to its icon so the thread title fits. */}
           <span className="sr-only sm:not-sr-only">{t.tokenUsage.label}</span>
-          <span className="hidden font-mono sm:inline">
-            {preferences.headerTotal
-              ? usage
-                ? formatTokenCount(usage.totalTokens)
-                : "-"
-              : t.tokenUsage.presets[presetKeyToTranslationKey(preset)]}
-          </span>
+          {headerFigure && (
+            <span className="hidden font-mono sm:inline">{headerFigure}</span>
+          )}
           {contextPercentage != null && (
             <span
               className="text-muted-foreground/80 hidden border-l pl-1.5 font-mono sm:inline"

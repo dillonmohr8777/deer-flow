@@ -370,7 +370,7 @@ export const enUS: Translations = {
     ultraMode: "Ultra",
     ultraModeDescription:
       "Pro mode with subagents to divide work; best for complex multi-step tasks",
-    reasoningEffort: "Reasoning Effort",
+    reasoningEffort: "Reasoning effort",
     reasoningEffortMinimal: "Minimal",
     reasoningEffortMinimalDescription: "Retrieval + Direct Output",
     reasoningEffortLow: "Low",
@@ -429,6 +429,8 @@ export const enUS: Translations = {
     stopStreamingUnavailable:
       "Stopping the running turn is not permitted for your role.",
     startTurnUnavailable: "Starting a new turn is not permitted for your role.",
+    send: "Send",
+    stopRun: "Stop the running turn",
   },
 
   // Sidebar

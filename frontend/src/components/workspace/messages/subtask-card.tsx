@@ -112,28 +112,34 @@ export function SubtaskCard({
   return (
     <ChainOfThought
       className={cn("relative w-full gap-2 rounded-lg border py-0", className)}
+      data-subtask-card=""
       open={!collapsed}
     >
+      {/* The glow and shine are off under paper (chat-paper.module.css):
+          the working state is said in words, not light. */}
       {task.status === "in_progress" && !collapsed && (
-        <div className="ambilight enabled z-[-1]"></div>
+        <div className="ambilight enabled z-[-1]" data-working-glow=""></div>
       )}
       {task.status === "in_progress" && !collapsed && (
         <ShineBorder
           className="hidden sm:block"
           borderWidth={1.5}
+          data-working-glow=""
           shineColor={["#075bd8", "#008fc9", "#5b3bd8"]}
         />
       )}
-      <div className="bg-background/95 flex w-full flex-col rounded-lg">
+      <div className="bg-card flex w-full flex-col rounded-lg">
         <div className="flex w-full items-center justify-between p-0.5">
           <Button
-            className="w-full items-start justify-start text-left"
+            className="h-auto min-h-9 w-full items-start justify-start py-2 text-left"
             variant="ghost"
             onClick={() => setCollapsed(!collapsed)}
           >
-            <div className="flex w-full items-center justify-between">
+            {/* Wraps: on a phone the model, tokens and status drop under
+                the title instead of cutting it to three letters. */}
+            <div className="flex w-full flex-wrap items-center justify-between gap-x-3 gap-y-1">
               <ChainOfThoughtStep
-                className="min-w-24 flex-1 font-normal"
+                className="min-w-[min(100%,14rem)] flex-1 font-normal"
                 label={
                   <span className="block truncate" title={task.description}>
                     {task.description}

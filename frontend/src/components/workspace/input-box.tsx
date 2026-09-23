@@ -2331,6 +2331,7 @@ export function InputBox({
             "shadow-primary/10 ring-primary/25 shadow-lg ring-1",
           className,
         )}
+        data-chat-composer=""
         disabled={composerLocked}
         globalDrop
         multiple
@@ -2564,15 +2565,12 @@ export function InputBox({
                       <GraduationCapIcon className="size-3" />
                     )}
                     {context.mode === "ultra" && (
-                      <RocketIcon className="size-3 text-[#dabb5e]" />
+                      <RocketIcon className="size-3" />
                     )}
                   </div>
-                  <div
-                    className={cn(
-                      "truncate text-xs font-normal",
-                      context.mode === "ultra" ? "golden-text" : "",
-                    )}
-                  >
+                  {/* Ink like every other mode: brass is for objects, and
+                      the word carries the mode, not its colour. */}
+                  <div className="truncate text-xs font-normal">
                     {(context.mode === "flash" && t.inputBox.flashMode) ||
                       (context.mode === "thinking" &&
                         t.inputBox.reasoningMode) ||
@@ -2689,16 +2687,11 @@ export function InputBox({
                           <RocketIcon
                             className={cn(
                               "mr-2 size-4",
-                              context.mode === "ultra" && "text-[#dabb5e]",
+                              context.mode === "ultra" &&
+                                "text-accent-foreground",
                             )}
                           />
-                          <div
-                            className={cn(
-                              context.mode === "ultra" && "golden-text",
-                            )}
-                          >
-                            {t.inputBox.ultraMode}
-                          </div>
+                          {t.inputBox.ultraMode}
                         </div>
                         <div className="pl-7 text-xs">
                           {t.inputBox.ultraModeDescription}
@@ -2717,22 +2710,26 @@ export function InputBox({
             {knowledgeScopeControl}
             {supportReasoningEffort && context.mode !== "flash" && (
               <PromptInputActionMenu>
+                {/* Shown at every width: phones set effort too. The label
+                    is quiet and the chosen level carries the weight. */}
                 <PromptInputActionMenuTrigger
-                  className="hidden gap-1! px-2! sm:inline-flex"
+                  className="gap-1! px-2!"
                   disabled={composerLocked}
                 >
-                  <div className="text-xs font-normal">
-                    {t.inputBox.reasoningEffort}:
-                    {context.reasoning_effort === "minimal" &&
-                      " " + t.inputBox.reasoningEffortMinimal}
-                    {context.reasoning_effort === "low" &&
-                      " " + t.inputBox.reasoningEffortLow}
-                    {(context.reasoning_effort === "medium" ||
-                      !context.reasoning_effort) &&
-                      " " + t.inputBox.reasoningEffortMedium}
-                    {context.reasoning_effort === "high" &&
-                      " " + t.inputBox.reasoningEffortHigh}
-                  </div>
+                  <span className="text-xs font-normal">
+                    <span className="text-muted-foreground">
+                      {t.inputBox.reasoningEffort}
+                    </span>{" "}
+                    <span className="font-semibold">
+                      {context.reasoning_effort === "minimal"
+                        ? t.inputBox.reasoningEffortMinimal
+                        : context.reasoning_effort === "low"
+                          ? t.inputBox.reasoningEffortLow
+                          : context.reasoning_effort === "high"
+                            ? t.inputBox.reasoningEffortHigh
+                            : t.inputBox.reasoningEffortMedium}
+                    </span>
+                  </span>
                 </PromptInputActionMenuTrigger>
                 <PromptInputActionMenuContent className="w-70">
                   <DropdownMenuGroup>
@@ -2885,10 +2882,9 @@ export function InputBox({
               status={status}
               // A bare disabled square reads as a broken composer; explain
               // the permission boundary (native title, since a Radix
-              // tooltip won't fire on a disabled button). Spread
-              // conditionally: an explicitly-undefined aria-label would
-              // clobber PromptInputSubmit's default aria-label="Submit"
-              // and strip the submit control's accessible name.
+              // tooltip won't fire on a disabled button). Otherwise name
+              // what the button does now: while a turn streams it stops
+              // the run, and a generic "Submit" would hide that.
               {...(stopDenied
                 ? {
                     "aria-label": t.inputBox.stopStreamingUnavailable,
@@ -2899,7 +2895,12 @@ export function InputBox({
                       "aria-label": t.inputBox.startTurnUnavailable,
                       title: t.inputBox.startTurnUnavailable,
                     }
-                  : {})}
+                  : {
+                      "aria-label":
+                        status === "streaming"
+                          ? t.inputBox.stopRun
+                          : t.inputBox.send,
+                    })}
               onClick={(e) => {
                 if (status === "streaming") {
                   e.preventDefault();
@@ -3021,7 +3022,7 @@ function StarterPrompts({
       {t.inputBox.starters.map((starter) => (
         <Suggestion
           key={starter.label}
-          className="paper-card text-foreground text-sm"
+          className="paper-card text-foreground text-xs sm:text-sm"
           suggestion={starter.label}
           onClick={() => {
             textInput.setInput(starter.prompt);

@@ -400,6 +400,8 @@ export const zhCN: Translations = {
     pleaseWaitStreaming: "请等待当前响应完成。",
     stopStreamingUnavailable: "你的角色无权停止正在运行的回合。",
     startTurnUnavailable: "你的角色无权开启新的回合。",
+    send: "发送",
+    stopRun: "停止当前回合",
   },
 
   // Sidebar

@@ -84,6 +84,8 @@ import { ChatBox } from "./chat-box";
 import { useSpecificChatMode } from "./use-chat-mode";
 import { useThreadChat } from "./use-thread-chat";
 
+import styles from "./chat-paper.module.css";
+
 export default function ChatPage() {
   const { t } = useI18n();
   const { user } = useAuth();
@@ -448,8 +450,14 @@ export default function ChatPage() {
         isMock={isMock}
       >
         <ChatBox threadId={threadId} browserEnabled={browserEnabled}>
-          <div className="momentum-conversation-surface relative flex size-full min-h-0 justify-between">
+          <div
+            className={cn(
+              "momentum-conversation-surface relative flex size-full min-h-0 justify-between",
+              styles.surface,
+            )}
+          >
             <header
+              data-chat-header=""
               className={cn(
                 "border-border bg-card/80 absolute top-0 right-0 left-0 flex h-12 shrink-0 items-center gap-2 border-b px-2 shadow-xs backdrop-blur sm:px-4",
                 isWelcomeMode ? "z-40" : "z-30",
@@ -457,8 +465,9 @@ export default function ChatPage() {
             >
               {!isMock && <SidebarTrigger className="md:hidden" />}
               <div className="flex min-w-0 flex-1 items-center gap-2 text-sm font-medium">
+                {/* Decorative; below sm its 32px go to the thread title. */}
                 <MomentumGlyph
-                  className="size-6 shrink-0"
+                  className="hidden size-6 shrink-0 sm:block"
                   seed={`thread:${threadId}`}
                 />
                 <ThreadTitle
@@ -569,14 +578,19 @@ export default function ChatPage() {
               <div
                 className={cn(
                   "right-0 bottom-0 left-0 z-30 flex justify-center px-3 sm:px-4",
-                  isWelcomeMode ? "absolute" : "relative shrink-0 pb-4",
+                  isWelcomeMode
+                    ? "absolute"
+                    : cn("relative shrink-0 pb-4", styles.dock),
                 )}
               >
+                {/* Welcome lifts the composer toward the middle; the min()
+                    stops short screens from pushing the Momo and its line
+                    up under the header. */}
                 <div
                   className={cn(
                     "relative w-full",
                     isWelcomeMode &&
-                      "-translate-y-[calc(50vh-48px)] sm:-translate-y-[calc(50vh-96px)]",
+                      "-translate-y-[min(calc(50vh_-_100px),calc(100vh_-_500px))] sm:-translate-y-[min(calc(50vh_-_96px),calc(100vh_-_430px))]",
                     isWelcomeMode
                       ? "max-w-(--container-width-sm)"
                       : "max-w-(--container-width-md)",

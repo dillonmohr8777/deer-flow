@@ -409,14 +409,6 @@ html:not(.dark) .momentum-page {
     filter: blur(60px);
   }
 
-  .golden-text {
-    background: linear-gradient(135deg, #d19e1d 0%, #e9c665 50%, #e3a812 100%);
-    -webkit-background-clip: text;
-    background-clip: text;
-    -webkit-text-fill-color: transparent;
-    text-fill-color: transparent;
-  }
-
   .momentum-generated-copy {
     --momentum-copy-body: #102f52;
     --momentum-copy-heading: #074aab;
@@ -567,8 +559,7 @@ html:not(.dark) .momentum-page {
   }
 
   @media (forced-colors: active) {
-    .momentum-generated-copy :is(h1, h2, h3),
-    .golden-text {
+    .momentum-generated-copy :is(h1, h2, h3) {
       background: none;
       color: CanvasText;
       -webkit-text-fill-color: currentColor;

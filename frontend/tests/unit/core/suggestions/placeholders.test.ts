@@ -9,7 +9,9 @@ describe("empty-thread starter prompts", () => {
     for (const locale of [enUS, zhCN]) {
       expect(locale.inputBox.starters).toHaveLength(3);
       for (const starter of locale.inputBox.starters) {
-        expect(findSuggestionTemplatePlaceholder(starter.prompt)).not.toBeNull();
+        expect(
+          findSuggestionTemplatePlaceholder(starter.prompt),
+        ).not.toBeNull();
       }
     }
   });

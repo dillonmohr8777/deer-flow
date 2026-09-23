@@ -361,6 +361,8 @@ export interface Translations {
     pleaseWaitStreaming: string;
     stopStreamingUnavailable: string;
     startTurnUnavailable: string;
+    send: string;
+    stopRun: string;
   };
 
   // Sidebar
