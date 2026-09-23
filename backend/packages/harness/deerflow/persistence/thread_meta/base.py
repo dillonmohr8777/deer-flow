@@ -156,7 +156,12 @@ class ThreadMetaStore(abc.ABC):
 
     @abc.abstractmethod
     async def check_access(self, thread_id: str, user_id: str, *, require_existing: bool = False) -> bool:
-        """Check if ``user_id`` has access to ``thread_id``."""
+        """Check if ``user_id`` has access to ``thread_id``.
+
+        An existing row must be owned by ``user_id`` (and, in the SQL store, sit in
+        the active organization); ownerless rows are denied to everyone. A missing
+        row is allowed only with ``require_existing=False``.
+        """
         pass
 
     @abc.abstractmethod

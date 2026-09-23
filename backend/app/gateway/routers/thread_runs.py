@@ -1089,9 +1089,9 @@ def _parse_run_page_created_at(value: str) -> str:
 async def _thread_ownership_established(request: Request, thread_id: str) -> bool:
     """Whether an existing meta row with a concrete owner covers ``thread_id``.
 
-    Missing rows (legacy compatibility) and NULL-owner rows (shared/pre-auth
-    data) do **not** establish ownership, even though ``owner_check=True``
-    still authorizes access to them.
+    Missing rows and NULL-owner rows do **not** establish ownership. Since M3
+    the read routes reject both before running (``require_existing=True``, and
+    ownerless rows fail closed), so callers of this helper are defense in depth.
     """
     thread_store = getattr(request.app.state, "thread_store", None)
     if thread_store is None:
@@ -1112,10 +1112,11 @@ async def _run_scope_user_id(request: Request, thread_id: str) -> str | None:
     the raw trusted-owner value. Filtering by the authorization identity
     therefore never matches the persisted rows (#5437).
 
-    Owner isolation (#5448 review P1): ``owner_check=True`` also authorizes
-    threads whose meta row is missing (legacy compatibility) or NULL-owner
-    (shared/pre-auth data). On those, an unfiltered read would expose other
-    users' persisted runs to the acting owner's internal caller, so the
+    Owner isolation (#5448 review P1): before M3, ``owner_check=True`` also
+    authorized threads whose meta row is missing or NULL-owner; the read routes
+    now reject both, and this fallback stays as defense in depth. On such a
+    thread an unfiltered read would expose other users' persisted runs to the
+    acting owner's internal caller, so the
     per-user filter is only dropped when the thread's meta row exists with an
     established owner; otherwise the raw trusted owner — the exact value
     ``start_run`` stamps — is retained as the filter. Browser/API sessions
@@ -1173,7 +1174,7 @@ async def _require_run_visible_to_scope(run_id: str, thread_id: str, request: Re
 
 
 @router.get("/{thread_id}/runs", response_model=list[RunResponse])
-@require_permission("runs", "read", owner_check=True)
+@require_permission("runs", "read", owner_check=True, require_existing=True)
 async def list_runs(thread_id: ThreadId, request: Request) -> list[RunResponse]:
     """List the newest runs for a thread (default 100, as a bare array)."""
     run_mgr = get_run_manager(request)
@@ -1183,7 +1184,7 @@ async def list_runs(thread_id: ThreadId, request: Request) -> list[RunResponse]:
 
 
 @router.get("/{thread_id}/runs/page", response_model=ThreadRunsPageResponse)
-@require_permission("runs", "read", owner_check=True)
+@require_permission("runs", "read", owner_check=True, require_existing=True)
 async def list_runs_page(
     thread_id: ThreadId,
     request: Request,
@@ -1225,7 +1226,7 @@ async def list_runs_page(
 
 
 @router.get("/{thread_id}/runs/{run_id}", response_model=RunResponse)
-@require_permission("runs", "read", owner_check=True)
+@require_permission("runs", "read", owner_check=True, require_existing=True)
 async def get_run(thread_id: ThreadId, run_id: str, request: Request) -> RunResponse:
     """Get details of a specific run."""
     run_mgr = get_run_manager(request)
@@ -1298,7 +1299,7 @@ async def cancel_run(
 
 
 @router.get("/{thread_id}/runs/{run_id}/join")
-@require_permission("runs", "read", owner_check=True)
+@require_permission("runs", "read", owner_check=True, require_existing=True)
 async def join_run(thread_id: ThreadId, run_id: str, request: Request) -> StreamingResponse:
     """Join an existing run's SSE stream."""
     await _require_run_visible_to_scope(run_id, thread_id, request)
@@ -1416,7 +1417,7 @@ async def _stream_existing_run(
 # Allow header, while separate signatures keep cancel-only parameters off the
 # GET schema. The shared route name keeps generated operationIds stable.
 @router.post("/{thread_id}/runs/{run_id}/stream", response_model=None, name="stream_existing_run")
-@require_permission("runs", "read", owner_check=True)
+@require_permission("runs", "read", owner_check=True, require_existing=True)
 async def stream_existing_run(
     thread_id: ThreadId,
     run_id: str,
@@ -1434,7 +1435,7 @@ async def stream_existing_run(
     dependencies=[Depends(_reject_get_stream_action)],
     name="stream_existing_run",
 )
-@require_permission("runs", "read", owner_check=True)
+@require_permission("runs", "read", owner_check=True, require_existing=True)
 async def join_existing_run_stream(thread_id: ThreadId, run_id: str, request: Request) -> Response:
     """Join an existing run's observation-only SSE stream."""
     return await _stream_existing_run(thread_id, run_id, request, action=None, wait=0)
@@ -1446,7 +1447,7 @@ async def join_existing_run_stream(thread_id: ThreadId, run_id: str, request: Re
 
 
 @router.get("/{thread_id}/messages")
-@require_permission("runs", "read", owner_check=True)
+@require_permission("runs", "read", owner_check=True, require_existing=True)
 async def list_thread_messages(
     thread_id: ThreadId,
     request: Request,
@@ -1588,7 +1589,7 @@ async def _enrich_thread_message_page(
 
 
 @router.get("/{thread_id}/messages/page", response_model=ThreadMessagesPageResponse)
-@require_permission("runs", "read", owner_check=True)
+@require_permission("runs", "read", owner_check=True, require_existing=True)
 async def list_thread_messages_page(
     thread_id: ThreadId,
     request: Request,
@@ -1616,7 +1617,7 @@ async def list_thread_messages_page(
 
 
 @router.get("/{thread_id}/runs/{run_id}/messages")
-@require_permission("runs", "read", owner_check=True)
+@require_permission("runs", "read", owner_check=True, require_existing=True)
 async def list_run_messages(
     thread_id: ThreadId,
     run_id: str,
@@ -1801,7 +1802,7 @@ async def create_run_artifact_archive(
 
 
 @router.get("/{thread_id}/runs/{run_id}/events")
-@require_permission("runs", "read", owner_check=True)
+@require_permission("runs", "read", owner_check=True, require_existing=True)
 async def list_run_events(
     thread_id: ThreadId,
     run_id: str,
@@ -1839,7 +1840,7 @@ async def list_run_events(
 
 
 @router.get("/{thread_id}/runs/{run_id}/workspace-changes")
-@require_permission("runs", "read", owner_check=True)
+@require_permission("runs", "read", owner_check=True, require_existing=True)
 async def get_run_workspace_changes(
     thread_id: ThreadId,
     run_id: str,
@@ -1860,7 +1861,7 @@ async def get_run_workspace_changes(
 
 
 @router.get("/{thread_id}/token-usage", response_model=ThreadTokenUsageResponse)
-@require_permission("threads", "read", owner_check=True)
+@require_permission("threads", "read", owner_check=True, require_existing=True)
 async def thread_token_usage(
     thread_id: ThreadId,
     request: Request,

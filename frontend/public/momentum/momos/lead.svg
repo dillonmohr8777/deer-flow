@@ -1,22 +1,11 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48" role="presentation">
-  <style><![CDATA[
-    /* An img-embedded SVG gets a viewport equal to its rendered box, so this
-       matches the data-size="sm" bucket (48px and under) that module.css
-       names. Served as image/svg+xml it is parsed as strict XML, so this stays
-       in CDATA and free of raw angle brackets. */
-    @media (max-width: 48px) { .detail { display: none; } }
-  ]]></style>
-  <path d="M24.00 3.60L28.83 2.85L32.89 5.55L37.21 7.44L40.36 10.95L42.95 14.87L44.74 19.27L44.63 24.00L44.34 28.64L43.06 33.18L41.01 37.57L37.44 40.85L32.96 42.61L28.85 45.25L24.00 45.54L19.32 44.49L14.59 43.55L10.90 40.42L7.35 37.28L5.21 33.05L3.07 28.78L2.82 24.00L3.21 19.25L5.09 14.89L7.90 11.16L10.99 7.69L14.85 5.00L19.46 4.11Z" fill="#101e3f" />
-  <g>
-    <circle cx="24" cy="24" r="4.3" fill="none" stroke="#fbf8f1" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" />
-    <path d="M24 19.7V14M24 28.3V34M19.7 24H14M28.3 24H34" fill="none" stroke="#fbf8f1" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" />
-    <circle cx="24" cy="12.2" r="1.9" fill="#fbf8f1" />
-    <circle cx="24" cy="35.8" r="1.9" fill="#fbf8f1" />
-    <circle cx="12.2" cy="24" r="1.9" fill="#fbf8f1" />
-    <circle cx="35.8" cy="24" r="1.9" fill="#fbf8f1" />
-  </g>
-  <g class="detail">
-    <circle cx="35.6" cy="11.4" r="2.5" fill="#c8a04a" />
-    <circle cx="34.9" cy="10.6" r="0.8" fill="#fbf8f1" opacity="0.55" />
-  </g>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" width="160" height="160" role="img">
+<title>Momo, lead: holds a spool of rope, its lines running out to the crew</title>
+<style><![CDATA[
+  /* An img-embedded SVG gets a viewport equal to its rendered box, so this
+     matches the data-size="sm" bucket (48px and under) that module.css
+     names. Served as image/svg+xml it is parsed as strict XML, so this stays
+     in CDATA and free of raw angle brackets. */
+  @media (max-width: 48px) { .detail { display: none; } }
+]]></style>
+<g transform="translate(6 12)"><g class="detail"><path d="M134 82L162 42M134 90L162 91M134 98L162 136" stroke="#5C6773" stroke-width="2.5" stroke-linecap="round"/></g><g fill="#FBF8F1" stroke="#FBF8F1" stroke-width="12" stroke-linejoin="round" stroke-linecap="round"><rect x="113" y="72" width="26" height="36" rx="3"/></g><rect x="116" y="78" width="20" height="24" fill="#8E9AA6"/><g class="detail"><path d="M116 85l20-3M116 91l20-3M116 97l20-3" stroke="#5C6773" stroke-width="1.5"/></g><rect x="113" y="72" width="26" height="6" rx="2" fill="#5C6773"/><rect x="113" y="102" width="26" height="6" rx="2" fill="#5C6773"/><g fill="#FBF8F1" stroke="#FBF8F1" stroke-width="12" stroke-linejoin="round" stroke-linecap="round"><circle cx="60" cy="76" r="48"/><path d="M60 30V11" fill="none"/><circle cx="60" cy="11" r="6"/><path d="M15 86L8 100M103 84L114 92" fill="none"/><circle cx="8" cy="100" r="5.5"/><circle cx="114" cy="92" r="5.5"/><rect x="37" y="112" width="19" height="20" rx="4"/><rect x="64" y="112" width="19" height="20" rx="4"/></g><path d="M15 86L8 100M103 84L114 92" stroke="#8E9AA6" stroke-width="7" stroke-linecap="round"/><circle cx="8" cy="100" r="5.5" fill="#5C6773"/><circle cx="114" cy="92" r="5.5" fill="#5C6773"/><path d="M47 112v16M73 112v16" stroke="#8E9AA6" stroke-width="8"/><path d="M40.5 128.5h12M67.5 128.5h12" stroke="#5C6773" stroke-width="7" stroke-linecap="round"/><path d="M60 29V14" stroke="#8E9AA6" stroke-width="7" stroke-linecap="round"/><circle cx="60" cy="11" r="6" fill="#C8A04A"/><circle cx="60" cy="76" r="48" fill="#1B4B9E"/><path d="M90.81 39.19A48 48 0 1 1 23.19 106.81A48 48 0 0 0 90.81 39.19Z" fill="#14346E"/><g class="detail"><ellipse cx="60" cy="29.5" rx="7.5" ry="3.2" fill="#5C6773"/></g><g fill="#FFFFFF"><rect x="35" y="59" width="12" height="23" rx="6"/><rect x="73" y="59" width="12" height="23" rx="6"/></g></g>
 </svg>

@@ -28,6 +28,7 @@ from deerflow.persistence.engine import get_session_factory
 from deerflow.persistence.models.run_event import RunEventRow
 from deerflow.persistence.run.model import RunRow
 from deerflow.persistence.thread_meta.model import ThreadMetaRow
+from deerflow.runtime.user_context import resolve_organization_id
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/console", tags=["console"])
@@ -160,6 +161,14 @@ def _session_factory_or_503():
             detail="Console requires a SQL database backend; set database.backend to sqlite or postgres in config.yaml.",
         )
     return sf
+
+
+def _owner_filters(model, user_id: str | None) -> list:
+    """The storage-user filter plus, when the request has one, the active organization filter."""
+    filters = [model.user_id == user_id] if user_id else []
+    if (organization_id := resolve_organization_id()) is not None:
+        filters.append(model.organization_id == organization_id)
+    return filters
 
 
 def _as_utc(dt: datetime | None) -> datetime | None:
@@ -320,10 +329,8 @@ async def console_stats(request: Request) -> ConsoleStatsResponse:
     """Return the dashboard's headline counters."""
     sf = _session_factory_or_503()
     user_id = await get_current_user(request)
-    run_where = (RunRow.operation_kind == "run",)
-    if user_id:
-        run_where += (RunRow.user_id == user_id,)
-    thread_where = (ThreadMetaRow.user_id == user_id,) if user_id else ()
+    run_where = (RunRow.operation_kind == "run", *_owner_filters(RunRow, user_id))
+    thread_where = _owner_filters(ThreadMetaRow, user_id)
 
     pricing = _build_pricing_map()
 
@@ -405,8 +412,7 @@ async def console_runs(
         .limit(limit + 1)
         .offset(offset)
     )
-    if user_id:
-        stmt = stmt.where(RunRow.user_id == user_id)
+    stmt = stmt.where(*_owner_filters(RunRow, user_id))
     if status:
         stmt = stmt.where(RunRow.status == status)
 
@@ -475,8 +481,7 @@ async def console_usage_ledger(
         .limit(limit + 1)
         .offset(offset)
     )
-    if user_id:
-        stmt = stmt.where(RunRow.user_id == user_id)
+    stmt = stmt.where(*_owner_filters(RunRow, user_id))
     if run_id:
         stmt = stmt.where(RunRow.run_id == run_id)
 
@@ -546,9 +551,7 @@ async def console_usage(
     start_local = today_local - timedelta(days=days - 1)
     window_start_utc = datetime.combine(start_local, time.min, tzinfo=UTC) - tz_delta
 
-    stmt = select(RunRow).where(RunRow.operation_kind == "run", RunRow.created_at >= window_start_utc)
-    if user_id:
-        stmt = stmt.where(RunRow.user_id == user_id)
+    stmt = select(RunRow).where(RunRow.operation_kind == "run", RunRow.created_at >= window_start_utc, *_owner_filters(RunRow, user_id))
 
     async with sf() as session:
         rows = (await session.execute(stmt)).scalars().all()
