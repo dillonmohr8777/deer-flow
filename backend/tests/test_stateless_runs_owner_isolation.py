@@ -16,8 +16,9 @@ with 409 before any agent code runs. The two outcomes:
 - 409 + ``create_or_reject`` awaited       -> passed the owner check
 
 The thread store is a real ``MemoryThreadMetaStore`` (not a mock) so the
-``check_access`` semantics under test — missing row allows, ``user_id``
-NULL allows, foreign owner denies — are exercised through real code.
+``check_access`` semantics under test are exercised through real code: a
+missing row allows (stateless runs create their thread), while a ``user_id``
+NULL row (M3: ownerless rows fail closed) and a foreign owner deny.
 """
 
 from __future__ import annotations
@@ -126,7 +127,7 @@ def test_wait_cross_user_returns_404_without_channel_values():
 
 
 # ---------------------------------------------------------------------------
-# Allowed: owner, fresh/untracked/shared threads, internal role
+# Allowed: owner, fresh/untracked threads, internal role (ownerless: denied)
 # ---------------------------------------------------------------------------
 
 
@@ -161,12 +162,12 @@ def test_stream_untracked_thread_passes_owner_check():
     create_or_reject.assert_awaited()
 
 
-def test_stream_shared_thread_passes_owner_check():
-    """A thread_meta row with user_id NULL (shared / pre-auth data) stays accessible."""
+def test_stream_ownerless_thread_returns_404():
+    """A thread_meta row with user_id NULL (legacy pre-auth data) is nobody's (M3)."""
     with _client(USER_B) as (client, create_or_reject):
         response = client.post("/api/runs/stream", json=_body(THREAD_SHARED))
-    assert response.status_code == 409
-    create_or_reject.assert_awaited()
+    assert response.status_code == 404
+    create_or_reject.assert_not_awaited()
 
 
 def test_stream_internal_role_scoped_by_owner_header():
@@ -200,11 +201,13 @@ def test_stream_internal_role_with_foreign_owner_header_returns_404():
 
 
 def test_stream_internal_role_without_owner_header_is_scoped_to_internal_user():
-    """Without an owner header internal callers keep access to their own and
-    shared/untracked threads, but not to user-owned threads."""
+    """Without an owner header internal callers may start an untracked thread,
+    but neither a user-owned nor an ownerless one."""
     with _client(INTERNAL_USER) as (client, create_or_reject):
         denied = client.post("/api/runs/stream", json=_body(THREAD_A))
-        allowed = client.post("/api/runs/stream", json=_body(THREAD_SHARED))
+        ownerless = client.post("/api/runs/stream", json=_body(THREAD_SHARED))
+        allowed = client.post("/api/runs/stream", json=_body("never-created-thread"))
     assert denied.status_code == 404
+    assert ownerless.status_code == 404
     assert allowed.status_code == 409
-    create_or_reject.assert_awaited()
+    create_or_reject.assert_awaited_once()

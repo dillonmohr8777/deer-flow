@@ -10,9 +10,8 @@
  * blue it was drawn over. Gradients and those accents are also exactly what
  * paper.css exists to keep out.
  *
- * This generates identity instead of geometry. The silhouette is fixed — the
- * same deckle-edged disc the shipped Momos use, so mapped and unmapped agents
- * read as one family — and the seed only chooses between hand-drawn marks that
+ * This generates identity instead of geometry. The silhouette is fixed, a
+ * deckle-edged ink disc, and the seed only chooses between hand-drawn marks that
  * are each composed on purpose. Callers with a real name pass `initial` and get
  * a monogram, which beats any abstract mark for telling two agents apart.
  */
@@ -22,9 +21,9 @@ const CREAM = "#fbf8f1";
 const BRASS = "#c8a04a";
 
 /**
- * Identical to the disc in scripts/generate-momos.mjs. Pinned by
- * tests/unit/components/workspace/momo-manifest.test.ts so the fallback and the
- * shipped artwork can never drift into two different silhouettes.
+ * The torn-paper disc every glyph is cut from. Agents with shipped art render
+ * the canon Momo character instead (scripts/generate-momos.mjs); this disc is
+ * only for names without a Momo.
  */
 const DISC =
   "M24.00 3.60L28.83 2.85L32.89 5.55L37.21 7.44L40.36 10.95L42.95 14.87L44.74 19.27L44.63 24.00L44.34 28.64L43.06 33.18L41.01 37.57L37.44 40.85L32.96 42.61L28.85 45.25L24.00 45.54L19.32 44.49L14.59 43.55L10.90 40.42L7.35 37.28L5.21 33.05L3.07 28.78L2.82 24.00L3.21 19.25L5.09 14.89L7.90 11.16L10.99 7.69L14.85 5.00L19.46 4.11Z";
