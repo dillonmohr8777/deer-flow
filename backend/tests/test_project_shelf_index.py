@@ -20,6 +20,7 @@ from deerflow.agents.middlewares.dynamic_context_middleware import DynamicContex
 from deerflow.projects.context import (
     is_project_context_message,
     render_documents_block,
+    render_evidence_citation_instructions,
     resolve_project_context,
 )
 from deerflow.runtime.context_keys import PROJECT_CONTEXT_KEY
@@ -123,6 +124,24 @@ class TestRenderDocumentsBlock:
 
 
 # ---------------------------------------------------------------------------
+# render_evidence_citation_instructions - pure rendering
+# ---------------------------------------------------------------------------
+
+
+class TestRenderEvidenceCitationInstructions:
+    def test_none_documents_block_renders_nothing(self):
+        assert render_evidence_citation_instructions(None) is None
+
+    def test_nonempty_documents_block_renders_the_instruction(self):
+        documents_block = render_documents_block(_snapshot(), max_entries=50, max_bytes=4096)
+        instructions = render_evidence_citation_instructions(documents_block)
+        assert instructions is not None
+        assert "[doc:<id>]" in instructions
+        assert "verify_quote" in instructions
+        assert "could not be confirmed" in instructions
+
+
+# ---------------------------------------------------------------------------
 # Delivery through DynamicContextMiddleware
 # ---------------------------------------------------------------------------
 
@@ -182,6 +201,24 @@ class TestShelfDelivery:
         assert len(transient) == 1
         assert "<project" in transient[0].content
         assert "<documents" not in transient[0].content
+
+    def test_nonempty_shelf_appends_citation_instructions_after_documents(self):
+        mw = DynamicContextMiddleware()
+        assembled = _wrap(mw, _base_messages(), _runtime(_snapshot()))
+        content = _transient(assembled)[0].content
+        assert "verify_quote" in content
+        assert content.index("</documents>") < content.index("verify_quote")
+
+    def test_empty_shelf_omits_citation_instructions_too(self):
+        mw = DynamicContextMiddleware()
+        assembled = _wrap(mw, _base_messages(), _runtime(_snapshot(entries=[], total=0)))
+        content = _transient(assembled)[0].content
+        assert "verify_quote" not in content
+
+    def test_unassigned_run_has_no_citation_instructions(self):
+        mw = DynamicContextMiddleware()
+        assembled = _wrap(mw, _base_messages(), _runtime(None))
+        assert _transient(assembled) == []
 
     def test_empty_instructions_still_renders_both_halves(self):
         mw = DynamicContextMiddleware()
