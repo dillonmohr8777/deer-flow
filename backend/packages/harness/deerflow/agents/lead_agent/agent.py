@@ -1110,6 +1110,7 @@ def _assemble_lead_agent(config: RunnableConfig, *, app_config: AppConfig) -> Le
             subagent_execution_capacity=subagent_execution_capacity,
             interaction_policy=interaction_policy,
             memory_enabled=memory_enabled,
+            experience_mode=cfg.get("experience_mode"),
         )
         graph = create_agent(
             model=chat_model,
@@ -1242,6 +1243,7 @@ def _assemble_lead_agent(config: RunnableConfig, *, app_config: AppConfig) -> Le
         subagent_execution_capacity=subagent_execution_capacity,
         interaction_policy=interaction_policy,
         memory_enabled=memory_enabled,
+        experience_mode=cfg.get("experience_mode"),
     )
     graph = create_agent(
         model=chat_model,
