@@ -53,8 +53,12 @@ import { WorkspaceAppearance } from "./workspace-appearance";
 
 import styles from "./command-center.module.css";
 
-/** Canon art, referenced by path and never copied; its lane owns the file. */
-const LEAD_MOMO_SRC = "/momentum/momos/lead.svg";
+/**
+ * The hero introduces the crew rather than repeating the lead card below it:
+ * canon Momos by path (never copied; their lane owns the files), in paint
+ * order, so the lead is drawn last and stands in front.
+ */
+const HERO_CREW = ["growth", "builder", "research", "lead"] as const;
 const number = (value: number) => new Intl.NumberFormat("en-US").format(value);
 const active = (status: string) => status === "pending" || status === "running";
 const tabs = [
@@ -476,17 +480,22 @@ export function CommandCenter() {
               <span>Give your ambition a team.</span> Keep the work in view.
             </p>
           </div>
-          {/* The page's one loud moment: the lead Momo on a kraft scrap, as on
-              the landing. The sidebar already carries the wordmark. */}
+          {/* The page's one loud moment: the crew on a kraft scrap, as on the
+              landing, lead in front. No brass pins here: on this page a pin
+              means a specialist is working. The sidebar carries the wordmark. */}
           <div className={styles.heroArt} aria-hidden="true">
             <span className={`${styles.heroScrap} paper-torn`} />
-            <img
-              className={styles.heroMomo}
-              src={LEAD_MOMO_SRC}
-              alt=""
-              width={184}
-              height={184}
-            />
+            {HERO_CREW.map((slug) => (
+              <img
+                key={slug}
+                className={styles.heroMomo}
+                data-crew={slug}
+                src={`/momentum/momos/${slug}.svg`}
+                alt=""
+                width={160}
+                height={160}
+              />
+            ))}
           </div>
           <div className={styles.headingActions}>
             <Link className={styles.primary} href={startPath}>

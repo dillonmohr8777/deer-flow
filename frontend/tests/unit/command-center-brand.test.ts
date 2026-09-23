@@ -25,6 +25,15 @@ function rule(selector: string): string {
   return css.slice(start, css.indexOf("}", start));
 }
 
+describe("command center reading order", () => {
+  // Below 640px `.jobs { order: -1 }` once drew the assignments above the
+  // team while Tab still visited the team first. The page follows its source
+  // order at every width, so no rule may reorder with `order`.
+  it("never reorders sections visually away from the keyboard order", () => {
+    expect(css).not.toMatch(/(?<![-\w])order\s*:/);
+  });
+});
+
 describe("command center brand surfaces", () => {
   // .topologyLead::after (the old connector line) is gone; the specialist
   // card took its place as the fourth brand surface checked here.

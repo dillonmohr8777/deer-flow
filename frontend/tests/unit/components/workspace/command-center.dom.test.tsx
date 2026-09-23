@@ -1,3 +1,6 @@
+import { existsSync } from "node:fs";
+import { join } from "node:path";
+
 import { afterEach, beforeEach, describe, expect, it, rs } from "@rstest/core";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
@@ -247,6 +250,27 @@ describe("CommandCenter", () => {
     expect(screen.queryByAltText("Momentum")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Appearance" }));
     expect(screen.getByRole("switch", { name: "Brand motion" })).toBeDefined();
+  });
+
+  it("introduces the crew in the hero, lead in front, rather than repeating the lead card", () => {
+    const { container } = render(<CommandCenter />);
+    const crew = [...container.querySelectorAll("img[data-crew]")];
+    expect(crew.length).toBeGreaterThanOrEqual(3);
+    expect(crew.length).toBeLessThanOrEqual(4);
+    for (const img of crew) {
+      // Canon art by path, and the file is really there: no 404 in the hero.
+      const src = img.getAttribute("src") ?? "";
+      expect(src).toMatch(/^\/momentum\/momos\/[a-z-]+\.svg$/);
+      expect(existsSync(join(process.cwd(), "public", src))).toBe(true);
+      // Decoration: the heading beside it says what the page is.
+      expect(img.getAttribute("alt")).toBe("");
+      expect(img.closest('[aria-hidden="true"]')).not.toBeNull();
+    }
+    // One lead, painted last so it stands in front of the crew.
+    const slugs = crew.map((img) => img.getAttribute("data-crew"));
+    expect(slugs.filter((slug) => slug === "lead")).toHaveLength(1);
+    expect(slugs.at(-1)).toBe("lead");
+    expect(new Set(slugs).size).toBe(slugs.length);
   });
 
   it("names models by display name, never the slug or the Contributor tier", () => {

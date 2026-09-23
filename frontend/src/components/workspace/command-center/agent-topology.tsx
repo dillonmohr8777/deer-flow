@@ -1,6 +1,8 @@
 import { ArrowUpRight } from "lucide-react";
 import Link from "next/link";
 
+import { cn } from "@/lib/utils";
+
 import { MomoAvatar } from "./momo-avatar";
 
 import styles from "./command-center.module.css";
@@ -75,31 +77,47 @@ export function AgentTopology({
             const hasActiveRun =
               runtimeKnown && (activeAgentNames ?? []).includes(agent.name);
             return (
-              // "paper-card" and "pinned" are paper.css hooks (2px hover
-              // lift, brass pin), inert outside the paper treatment.
+              // "paper-card" (2px hover lift), "pinned" (brass pin) and
+              // "paper-pixels" (steps(3) tick) are paper.css hooks, inert
+              // outside the paper treatment. A pin means working: only a
+              // specialist with an active recorded run wears one, with the
+              // three working squares. The words carry the state either way.
               <button
                 key={agent.name}
-                className={`${styles.agent} paper-card pinned`}
+                className={cn(
+                  styles.agent,
+                  "paper-card",
+                  hasActiveRun && "pinned",
+                )}
                 aria-pressed={selectedName === agent.name}
                 onClick={() => onSelect(agent.name)}
               >
                 <span className={styles.agentMomo} aria-hidden="true">
-                  <MomoAvatar agent={agent} size={40} />
+                  <MomoAvatar agent={agent} size={56} />
                 </span>
-                <strong>
-                  {agent.display_name ?? agent.name.replace("dillon-", "")}
-                </strong>
-                <span className={styles.agentState}>
-                  <span>
-                    {runtimeKnown
-                      ? hasActiveRun
-                        ? "Active run recorded"
-                        : "Idle"
-                      : "Live state unknown"}
-                  </span>
-                  <span>
-                    <i data-enabled={agent.enabled} />
-                    {agent.enabled ? "Enabled" : "Disabled"}
+                <span className={styles.agentText}>
+                  <strong>
+                    {agent.display_name ?? agent.name.replace("dillon-", "")}
+                  </strong>
+                  <span className={styles.agentState}>
+                    <span>
+                      {hasActiveRun && (
+                        <span
+                          className={`${styles.working} paper-pixels`}
+                          data-active="true"
+                          aria-hidden="true"
+                        />
+                      )}
+                      {runtimeKnown
+                        ? hasActiveRun
+                          ? "Active run recorded"
+                          : "Idle"
+                        : "Live state unknown"}
+                    </span>
+                    <span>
+                      <i data-enabled={agent.enabled} />
+                      {agent.enabled ? "Enabled" : "Disabled"}
+                    </span>
                   </span>
                 </span>
               </button>
