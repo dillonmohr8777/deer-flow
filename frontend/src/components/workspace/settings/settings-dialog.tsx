@@ -6,6 +6,7 @@ import {
   CableIcon,
   InfoIcon,
   BrainIcon,
+  GraduationCapIcon,
   PaletteIcon,
   UsersRoundIcon,
   UserIcon,
@@ -66,6 +67,13 @@ const NotificationSettingsPage = dynamic(
     ),
   { loading: SettingsPageLoading },
 );
+const ExperienceSettingsPage = dynamic(
+  () =>
+    import("./experience-settings-page").then(
+      (module) => module.ExperienceSettingsPage,
+    ),
+  { loading: SettingsPageLoading },
+);
 const SubagentSettingsPage = dynamic(
   () =>
     import("./subagent-settings-page").then(
@@ -92,6 +100,7 @@ export type SettingsSection =
   | "memory"
   | "subagents"
   | "notification"
+  | "experience"
   | "about";
 
 type SettingsDialogProps = React.ComponentProps<typeof Dialog> & {
@@ -132,6 +141,11 @@ export function SettingsDialog(props: SettingsDialogProps) {
         icon: BellIcon,
       },
       {
+        id: "experience",
+        label: t.settings.sections.experience,
+        icon: GraduationCapIcon,
+      },
+      {
         id: "channels",
         label: t.settings.sections.channels,
         icon: CableIcon,
@@ -156,6 +170,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
       t.settings.sections.memory,
       t.settings.sections.subagents,
       t.settings.sections.notification,
+      t.settings.sections.experience,
       t.settings.sections.about,
     ],
   );
@@ -221,6 +236,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
               {activeSection === "memory" && <MemorySettingsPage />}
               {activeSection === "subagents" && <SubagentSettingsPage />}
               {activeSection === "notification" && <NotificationSettingsPage />}
+              {activeSection === "experience" && <ExperienceSettingsPage />}
               {activeSection === "channels" && <ChannelsSettingsPage />}
               {activeSection === "about" && <AboutSettingsPage />}
             </div>

@@ -44,6 +44,7 @@ export function activatePreferences(
         model_name: value.model_name ?? undefined,
         mode: value.mode ?? undefined,
         reasoning_effort: value.reasoning_effort ?? undefined,
+        experience_mode: value.experience_mode ?? undefined,
       },
     };
     emitChange();
@@ -81,6 +82,7 @@ function persistLocalOnlySettings() {
       model_name: legacy.context.model_name,
       mode: legacy.context.mode,
       reasoning_effort: legacy.context.reasoning_effort,
+      experience_mode: legacy.context.experience_mode,
     },
   });
 }
@@ -142,6 +144,7 @@ function readSharedSettings(): LocalSettings {
       model_name: baseSettings.context.model_name,
       mode: baseSettings.context.mode,
       reasoning_effort: baseSettings.context.reasoning_effort,
+      experience_mode: baseSettings.context.experience_mode,
     },
   };
 }

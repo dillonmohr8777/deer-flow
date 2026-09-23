@@ -387,6 +387,9 @@ export const enUS: Translations = {
     reasoningEffortHighDescription:
       "Full-dimensional Logic Deduction + Multi-path Verification + Backward Check",
     followupLoading: "Generating follow-up questions...",
+    easyStarterHelp: "Help me with something, step by step",
+    easyStarterExplain: "Explain this in plain words",
+    easyStarterPlan: "What should I do next?",
     followupConfirmTitle: "Send suggestion?",
     followupConfirmDescription:
       "You already have text in the input. Choose how to send it.",
@@ -1343,6 +1346,7 @@ export const enUS: Translations = {
       memory: "Memory",
       subagents: "Subagents",
       notification: "Notification",
+      experience: "Experience",
       about: "About",
     },
     memory: {
@@ -1822,6 +1826,27 @@ export const enUS: Translations = {
       testBody: "This is a test notification.",
       notSupported: "Your browser does not support notifications.",
       disableNotification: "Disable notification",
+    },
+    experience: {
+      title: "Experience",
+      description:
+        "Choose how MomoBot talks to you and how much it asks. You can change this any time.",
+      easyLabel: "Easy",
+      easyTagline: "Guide me",
+      easyDescription:
+        "Plain language, short answers, and a few quick questions so MomoBot gets to know you.",
+      mediumLabel: "Medium",
+      mediumTagline: "Balanced",
+      mediumDescription: "The current MomoBot experience, unchanged.",
+      hardLabel: "Hard",
+      hardTagline: "Expert",
+      hardDescription:
+        "Concise and technical, with more detail on the model and tools used.",
+      chooserTitle: "How do you like to work?",
+      chooserSubtitle:
+        "Pick one to start. You can change this later in Settings.",
+      chooserSkip: "Skip for now",
+      saved: "Saved",
     },
     account: {
       profileTitle: "Profile",

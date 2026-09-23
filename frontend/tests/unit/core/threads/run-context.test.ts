@@ -90,6 +90,20 @@ describe("buildRunContext", () => {
     ).toEqual(["source-a"]);
   });
 
+  it("forwards the account's experience_mode preference on every run", () => {
+    const context = buildRunContext({
+      settings: { ...settings, experience_mode: "easy" },
+      threadId: "t-1",
+    });
+    expect(context.experience_mode).toBe("easy");
+  });
+
+  it("omits experience_mode when the account has not chosen one (medium behaviour)", () => {
+    expect(
+      "experience_mode" in buildRunContext({ settings, threadId: "t-1" }),
+    ).toBe(false);
+  });
+
   it("copies the list so later mutation of the caller's array cannot change the request", () => {
     const references = ["source-a"];
     const context = buildRunContext({
