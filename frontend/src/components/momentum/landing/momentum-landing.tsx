@@ -18,8 +18,9 @@
  * FUNNEL_TREATMENT ("current"), so day-one "/" stays byte-identical.
  */
 
+import { useInView } from "motion/react";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { CutPaper } from "@/components/momentum/cut-paper";
 import { MomoFilm } from "@/components/momentum/momo-film";
@@ -185,6 +186,8 @@ export function MomentumLanding() {
  */
 function PaperLanding() {
   const motion = useIntroMotion();
+  const filmRef = useRef<HTMLDivElement>(null);
+  const filmInView = useInView(filmRef, { once: true, amount: 0.25 });
   return (
     <div className={styles.paperPage} data-treatment="paper">
       <div className={styles.paperIntro}>
@@ -262,8 +265,12 @@ function PaperLanding() {
             ))}
           </ul>
 
-          <div className={styles.paperMomos} aria-hidden="true">
-            <MomoFilm name="momo-intro" live={motion.live} loop={false} />
+          <div ref={filmRef} className={styles.paperMomos} aria-hidden="true">
+            <MomoFilm
+              name="momo-intro"
+              live={motion.live && filmInView}
+              loop={false}
+            />
           </div>
         </main>
 
