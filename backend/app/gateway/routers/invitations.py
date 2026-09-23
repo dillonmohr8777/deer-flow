@@ -179,6 +179,17 @@ def _set_workspace_session(response: Response, request: Request, user_id: str, t
     )
 
 
+_INVITATIONS_FROZEN_DETAIL = "Workspace invitations are paused while workspace isolation is upgraded. Existing members keep their access."
+
+
+def _refuse_if_frozen() -> None:
+    """Decision 1: no new invitations and no acceptance of existing tokens."""
+    from app.gateway.authz import _get_route_authorization_config
+
+    if _get_route_authorization_config().invitations_frozen:
+        raise HTTPException(status_code=403, detail=_INVITATIONS_FROZEN_DETAIL)
+
+
 def _no_store(response: Response) -> None:
     response.headers["Cache-Control"] = "no-store"
     response.headers["Pragma"] = "no-cache"
@@ -187,6 +198,7 @@ def _no_store(response: Response) -> None:
 @router.post("", response_model=CreateInvitationResponse, status_code=status.HTTP_201_CREATED)
 async def create_invitation(body: CreateInvitationRequest, request: Request, response: Response) -> CreateInvitationResponse:
     _no_store(response)
+    _refuse_if_frozen()
     actor = await get_current_user_from_request(request)
     actor_id = str(actor.id)
     token = secrets.token_urlsafe(32)
@@ -225,6 +237,7 @@ async def create_invitation(body: CreateInvitationRequest, request: Request, res
 @router.post("/inspect", response_model=InspectInvitationResponse)
 async def inspect_invitation(body: InvitationTokenRequest, response: Response) -> InspectInvitationResponse:
     _no_store(response)
+    _refuse_if_frozen()
     now = _now()
     async with _session_factory()() as session:
         invitation = await session.scalar(select(InvitationRow).where(InvitationRow.token_hash == _token_hash(body.token)))
@@ -252,6 +265,7 @@ async def inspect_invitation(body: InvitationTokenRequest, response: Response) -
 @router.post("/accept", response_model=AcceptInvitationResponse)
 async def accept_invitation(body: AcceptInvitationRequest, request: Request, response: Response) -> AcceptInvitationResponse:
     _no_store(response)
+    _refuse_if_frozen()
     from app.gateway.routers.auth import _check_rate_limit, _get_client_ip, _record_login_failure, _record_login_success
 
     client_ip = _get_client_ip(request)

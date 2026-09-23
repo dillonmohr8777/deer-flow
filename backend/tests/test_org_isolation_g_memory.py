@@ -25,11 +25,9 @@ Plus two lower-level locks on the files this lane owns:
 - routers/memory.py: _resolve_memory_user_id always resolves a concrete,
   organization-correct storage principal, for every fixture organization.
 
-And one documented gap (not this lane's to fix): the internal owner-header
-override in _resolve_memory_user_id (mirroring AuthMiddleware's own
-resolution for internal callers) accepts any owner id with no delegation or
-membership check. See the REQUIREMENT FOR LANE 0 note on the xfail test at
-the bottom of this file.
+And the internal owner-header path: AuthMiddleware refuses a valid internal
+token plus X-DeerFlow-Owner-User-Id without an active delegation, so
+_resolve_memory_user_id's internal branch only ever sees a delegated caller.
 """
 
 from __future__ import annotations
@@ -246,23 +244,9 @@ def test_router_resolves_concrete_storage_principal_per_organization(actor, orga
     assert resolved == expected_storage_user
 
 
-# -- REQUIREMENT FOR LANE 0 ---------------------------------------------------
+# -- Lane 0 phase 2: header-only internal calls ---------------------------------
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "REQUIREMENT FOR LANE 0 phase 2: a valid internal token plus "
-        "X-DeerFlow-Owner-User-Id must require an active OrganizationDelegation "
-        "for that owner (plan section 7, F1) before it is honored. Today "
-        "AuthMiddleware (auth_middleware.py:185-187,268-269) stamps the raw "
-        "header value as storage_user_id with no membership or delegation "
-        "check, and routers/memory.py's own internal-owner branch "
-        "(_resolve_memory_user_id, mirroring that same resolution) inherits "
-        "the gap. Once lane 0 rejects an undelegated header-only call, delete "
-        "this xfail."
-    ),
-)
 @pytest.mark.asyncio
 async def test_internal_owner_header_cannot_impersonate_another_org_without_delegation(org_world, tmp_path, monkeypatch):  # noqa: F811 (pytest fixture imported above)
     async with _memory_client(monkeypatch, tmp_path) as client:

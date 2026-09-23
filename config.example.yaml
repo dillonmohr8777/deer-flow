@@ -2907,6 +2907,9 @@ run_ownership:
 #           skills: {allow: []}      # no skills visible in the listing
 authorization:
   enabled: false
+  # Shared-workspace invitations (create, inspect, accept) answer 403 while
+  # true; existing memberships are unaffected. Default: true.
+  # invitations_frozen: true
 
 # ============================================================================
 # Circuit Breaker Configuration

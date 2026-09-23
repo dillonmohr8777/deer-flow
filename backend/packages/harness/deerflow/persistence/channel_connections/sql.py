@@ -31,6 +31,10 @@ logger = logging.getLogger(__name__)
 
 # Organization delegation subject type for a channel connection; the subject id is the connection id.
 CHANNEL_CONNECTION_SUBJECT_TYPE = "channel_connection"
+# Route permissions a channel worker needs to act for the connection owner:
+# find or create the conversation's thread, read and set its goal, start runs
+# and read their results. Nothing destructive and no cancellation.
+CHANNEL_WORKER_SCOPES = ("threads:read", "threads:write", "runs:create", "runs:read")
 
 # Bounded retries for upsert_connection when a concurrent writer commits a
 # conflicting row first (same owner identity, or the same active external
@@ -212,6 +216,16 @@ class ChannelConnectionRepository:
                 raise last_error  # type: ignore[misc]  # loop runs at least once
         # A transferred connection takes its previous owner's delegation with it.
         await self._revoke_delegations(transferred_ids)
+        if status == "connected" and connection.get("organization_id"):
+            # Connecting grants the worker its delegation (a reconnect replaces
+            # it); without one the Gateway refuses every call the worker makes.
+            await OrganizationDelegationRepository(self.session_factory).grant(
+                organization_id=connection["organization_id"],
+                subject_type=CHANNEL_CONNECTION_SUBJECT_TYPE,
+                subject_id=connection["id"],
+                owner_user_id=owner_user_id,
+                scopes=list(CHANNEL_WORKER_SCOPES),
+            )
         return connection
 
     async def _revoke_delegations(self, connection_ids: list[str]) -> None:
@@ -561,7 +575,19 @@ class ChannelConnectionRepository:
                 .limit(1)
             )
             row = result.scalar_one_or_none()
-            return self._connection_to_dict(row) if row is not None else None
+        if row is None:
+            return None
+        connection = self._connection_to_dict(row)
+        # The worker presents this id (X-DeerFlow-Delegation-Id); the Gateway
+        # re-validates it on every call, so it is a pointer, not authority.
+        delegation = await OrganizationDelegationRepository(self.session_factory).resolve_active_delegation(
+            subject_type=CHANNEL_CONNECTION_SUBJECT_TYPE,
+            subject_id=connection["id"],
+            organization_id=connection.get("organization_id"),
+            scope="runs:create",
+        )
+        connection["delegation_id"] = delegation.id if delegation is not None else None
+        return connection
 
     async def set_thread_id(
         self,

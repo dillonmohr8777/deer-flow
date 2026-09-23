@@ -123,21 +123,23 @@ class OrganizationDelegationRepository:
             # Deny rather than pick an owner; add a partial unique index with 0033.
             if len(rows) != 1:
                 return None
-            row = rows[0]
-            scopes = frozenset(item for item in row.scopes if isinstance(item, str)) if isinstance(row.scopes, list) else frozenset()
-            if _is_expired(row.expires_at) or scope not in scopes:
-                return None
-            organization = await active_organization_for_user(session, row.owner_user_id, organization_id)
-        if organization is None:
+            return await _validated(session, rows[0], organization_id, scope)
+
+    async def resolve_delegation_by_id(self, delegation_id: str | None, *, scope: str | None = None) -> ActiveDelegation | None:
+        """Return delegation ``delegation_id`` when every check passes, else ``None``.
+
+        The same checks as :meth:`resolve_active_delegation`, keyed by the id an
+        internal caller presents (``X-DeerFlow-Delegation-Id``). ``scope=None``
+        checks everything but scope: the caller then narrows its permissions to
+        ``scopes`` the way a PAT does.
+        """
+        if not delegation_id:
             return None
-        return ActiveDelegation(
-            id=row.id,
-            organization=organization,
-            subject_type=row.subject_type,
-            subject_id=row.subject_id,
-            owner_user_id=row.owner_user_id,
-            scopes=scopes,
-        )
+        async with self._sf() as session:
+            row = await session.get(OrganizationDelegationRow, delegation_id)
+            if row is None or row.status != "active":
+                return None
+            return await _validated(session, row, row.organization_id, scope)
 
     async def is_membership_active(self, *, user_id: str | None, organization_id: str | None) -> bool:
         """Cheap re-check for open streams: an active member of an active organization.
@@ -148,3 +150,21 @@ class OrganizationDelegationRepository:
             return False
         async with self._sf() as session:
             return await active_organization_for_user(session, user_id, organization_id) is not None
+
+
+async def _validated(session: AsyncSession, row: OrganizationDelegationRow, organization_id: str, scope: str | None) -> ActiveDelegation | None:
+    """Expiry, scope and the owner's active membership in an active organization."""
+    scopes = frozenset(item for item in row.scopes if isinstance(item, str)) if isinstance(row.scopes, list) else frozenset()
+    if _is_expired(row.expires_at) or not scopes or (scope is not None and scope not in scopes):
+        return None
+    organization = await active_organization_for_user(session, row.owner_user_id, organization_id)
+    if organization is None:
+        return None
+    return ActiveDelegation(
+        id=row.id,
+        organization=organization,
+        subject_type=row.subject_type,
+        subject_id=row.subject_id,
+        owner_user_id=row.owner_user_id,
+        scopes=scopes,
+    )

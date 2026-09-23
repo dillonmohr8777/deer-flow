@@ -239,17 +239,13 @@ async def test_repository_adds_the_organization_filter_beside_the_user_filter(or
     assert {task["id"] for task in await repo.list_by_user(USER_A)} == {"task-own", "task-quarantined", "task-conflicting"}
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason="needs lane 0 phase 2")
 async def test_scheduled_launcher_acts_through_its_delegation_not_a_raw_owner_header(world, monkeypatch):
-    """REQUIREMENT FOR LANE 0: ``app/gateway/services.py::launch_scheduled_thread_run`` (~2117-2180).
+    """``services.launch_scheduled_thread_run`` acts through the task's delegation.
 
-    Today the launcher builds its internal request from a raw
-    ``X-DeerFlow-Owner-User-Id`` header, the header-only path phase 2 rejects.
-    It must instead act through the task's delegation (the scheduler already
-    resolves it before launching): set ``state.organization_id`` to the
-    delegation's organization, ``state.storage_user_id`` to that organization's
-    storage principal, ``state.actor_user_id`` to the delegation owner, and send
-    no owner header. Remove this xfail marker in that change.
+    The scheduler resolves the delegation before launching; the launcher sets
+    ``state.organization_id`` to its organization, ``state.storage_user_id`` to
+    that organization's storage principal, ``state.actor_user_id`` to the
+    delegation owner, and sends no owner header.
     """
     from app.gateway import services
 

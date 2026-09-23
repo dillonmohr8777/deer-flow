@@ -3,9 +3,8 @@
 A probe from another organization answers 404 (or is left out of a list), never 403 and
 never data, and it changes nothing. Ownerless (``user_id`` NULL) and row-less threads fail
 closed; the one row-less path left open is upload-before-create, which writes only into the
-caller's own storage bucket. What lane 0 phase 2 must add in ``services.py`` and for the
-internal owner header is pinned at the end as strict xfails, so this suite stays green until
-those land and fails loudly once they do (then drop the marker).
+caller's own storage bucket. Internal callers act only through a delegation: a delegated
+internal caller is held to the same boundaries, and a header-only one is refused outright.
 """
 
 from __future__ import annotations
@@ -27,11 +26,13 @@ from sqlalchemy import select, update
 
 from app.gateway import services
 from app.gateway.auth_middleware import AuthMiddleware
+from app.gateway.authz import _ALL_PERMISSIONS as ALL_ROUTE_PERMISSIONS
 from app.gateway.internal_auth import create_internal_auth_headers
 from app.gateway.routers import artifacts, browser, console, runs, thread_runs, threads, uploads
 from deerflow.config.app_config import AppConfig, reset_app_config, set_app_config
 from deerflow.config.paths import Paths
 from deerflow.persistence.feedback import FeedbackRepository
+from deerflow.persistence.organizations.delegation import OrganizationDelegationRepository
 from deerflow.persistence.organizations.model import OrganizationMemberRow
 from deerflow.persistence.organizations.resolution import OrganizationMismatchError
 from deerflow.persistence.run import RunRepository, RunRow
@@ -131,6 +132,9 @@ async def world(org_world, tmp_path, monkeypatch):  # noqa: F811
     state.checkpoint_channel_mode = "full"
     state.run_events_config = None
     w = World(org_world, tmp_path, app)
+    # A fully scoped internal worker acting for a in org A: delegated, not header-only.
+    worker = await OrganizationDelegationRepository(org_world).grant(organization_id=ORG_A, subject_type="test_worker", subject_id="worker-a", owner_user_id=USER_A, scopes=sorted(ALL_ROUTE_PERMISSIONS))
+    w.delegated_a = create_internal_auth_headers(owner_user_id=USER_A, delegation_id=worker)
 
     for actor, org, thread_id, run_id, tokens in SEEDED:
         with acting_as(actor, org):
@@ -246,7 +250,7 @@ THREAD_ROUTES = [(method, path, body) for method, path, body in PROBES if path.s
 @pytest.mark.parametrize(("method", "path", "body"), THREAD_ROUTES, ids=[f"{method} {path}" for method, path, _ in THREAD_ROUTES])
 async def test_ownerless_and_orphan_threads_fail_closed_for_everyone(world, method, path, body):
     before = await world.snapshot()
-    internal = create_internal_auth_headers(owner_user_id=USER_A)
+    internal = world.delegated_a
     for thread_id in (T_NULL, T_ORPHAN):
         target, payload = _fill(path, thread_id, R_A), _fill(body, thread_id, R_A)
         for actor, headers in ((USER_A, None), (USER_B, None), (None, internal)):
@@ -259,7 +263,7 @@ async def test_ownerless_and_orphan_threads_fail_closed_for_everyone(world, meth
 @pytest.mark.asyncio
 async def test_create_and_goal_cannot_claim_an_existing_checkpoint_or_row(world):
     before = await world.snapshot()
-    internal = create_internal_auth_headers(owner_user_id=USER_A)
+    internal = world.delegated_a
     for thread_id in (T_NULL, T_ORPHAN, T_B):
         for headers in (auth_headers(USER_A), internal):
             created = await world.request(None, "POST", "/api/threads", {"thread_id": thread_id}, headers=headers)
@@ -405,11 +409,10 @@ async def test_runs_are_stamped_with_the_server_resolved_organization(world):
 
 
 # ---------------------------------------------------------------------------
-# REQUIREMENTS FOR LANE 0 (services.py and the internal owner header). Each fails today.
+# Lane 0 phase 2: run admission, seeding, stream revocation and the internal owner header.
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(strict=True, reason="needs lane 0 phase 2")
 @pytest.mark.asyncio
 async def test_stateless_run_cannot_claim_an_orphan_checkpoint(world):
     """services.start_run admits a missing row, then _ensure_thread_metadata creates ownership over the checkpoint."""
@@ -419,7 +422,6 @@ async def test_stateless_run_cannot_claim_an_orphan_checkpoint(world):
     assert await world.threads.get(T_ORPHAN, user_id=None) is None
 
 
-@pytest.mark.xfail(strict=True, reason="needs lane 0 phase 2")
 @pytest.mark.asyncio
 async def test_checkpoint_history_is_not_seeded_from_an_unowned_checkpoint(world):
     """services.ensure_checkpoint_history_seeded copies any thread's checkpoint messages into the caller's feed."""
@@ -434,7 +436,6 @@ async def test_checkpoint_history_is_not_seeded_from_an_unowned_checkpoint(world
     assert await world.events.list_messages(T_ORPHAN, user_id=None) == []
 
 
-@pytest.mark.xfail(strict=True, reason="needs lane 0 phase 2")
 @pytest.mark.asyncio
 async def test_open_stream_closes_when_membership_is_revoked(world):
     """services.sse_consumer checks admission once; revoking the viewer's membership must end the stream."""
@@ -463,7 +464,6 @@ async def test_open_stream_closes_when_membership_is_revoked(world):
     await asyncio.wait_for(watch(), timeout=2)
 
 
-@pytest.mark.xfail(strict=True, reason="needs lane 0 phase 2")
 @pytest.mark.asyncio
 async def test_internal_owner_header_alone_cannot_read_another_bucket(world):
     """artifacts.py resolves the storage bucket from X-DeerFlow-Owner-User-Id; with no delegation that must fail closed."""

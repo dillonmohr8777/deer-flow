@@ -624,3 +624,36 @@ async def console_usage(
         total_cost=total_cost,
         currency=_pricing_currency(pricing),
     )
+
+
+class OwnerlessThreadsResponse(BaseModel):
+    """Thread ids no one can open (decision 3), listed so an admin can assign them later."""
+
+    ownerless: list[str] = Field(..., description="threads_meta rows with no owner (user_id NULL)")
+    orphan_checkpoints: list[str] = Field(..., description="Checkpointed thread ids with no threads_meta row")
+
+
+@router.get(
+    "/ownerless-threads",
+    response_model=OwnerlessThreadsResponse,
+    summary="Ownerless and orphan threads (admin only)",
+    description="Read-only. Ownerless and orphan threads fail closed for every caller; this lists their ids, never their content.",
+)
+async def console_ownerless_threads(request: Request) -> OwnerlessThreadsResponse:
+    from app.gateway.deps import require_admin_user
+
+    await require_admin_user(request, detail="Admin privileges required to list ownerless threads.")
+    sf = _session_factory_or_503()
+    async with sf() as session:
+        rows = (await session.execute(select(ThreadMetaRow.thread_id, ThreadMetaRow.user_id))).all()
+    known = {thread_id for thread_id, _ in rows}
+    orphans: set[str] = set()
+    checkpointer = getattr(request.app.state, "checkpointer", None)
+    if checkpointer is not None:
+        # ponytail: scans every checkpoint; fine for a one-off admin listing.
+        # Query the checkpoint table directly if it ever gets slow.
+        async for item in checkpointer.alist(None):
+            thread_id = (item.config.get("configurable") or {}).get("thread_id")
+            if thread_id and thread_id not in known:
+                orphans.add(str(thread_id))
+    return OwnerlessThreadsResponse(ownerless=sorted(thread_id for thread_id, owner in rows if owner is None), orphan_checkpoints=sorted(orphans))

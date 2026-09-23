@@ -15,12 +15,11 @@ Covers:
   storage-principal ``user_id``. Fixed feedback is stored with the person's
   own ``user_id`` and the workspace's organization
   (``app/gateway/routers/feedback.py``).
-- REQUIREMENT FOR LANE 0 (xfail): the MCP notification launcher
-  (``app/gateway/services.py::launch_mcp_task_notification_run``, roughly
-  lines 2196-2269) must resolve an active ``organization_delegation`` for the
-  task's owner before launching the delivery run. It currently trusts the
-  caller-supplied ``owner_user_id`` alone, the internal-token-plus-header
-  pattern contract section 4 forbids.
+- The MCP notification launcher
+  (``app/gateway/services.py::launch_mcp_task_notification_run``) resolves the
+  task's active ``mcp_task`` delegation before launching the delivery run and
+  denies without one; ``owner_user_id`` alone is never trusted (contract
+  section 4).
 """
 
 from __future__ import annotations
@@ -400,16 +399,10 @@ async def test_feedback_repository_denies_same_person_across_organizations(org_w
 
 
 # ---------------------------------------------------------------------------
-# REQUIREMENT FOR LANE 0: MCP notification launcher delegation check
+# Lane 0 phase 2: MCP notification launcher delegation check
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="needs lane 0 phase 2: services.py launch_mcp_task_notification_run must "
-    "resolve an active organization_delegation for the task's owner before launching; "
-    "today it trusts owner_user_id via the internal-token-plus-header pattern alone",
-)
 async def test_mcp_notification_launcher_denies_without_active_delegation():
     from app.gateway.services import launch_mcp_task_notification_run
 

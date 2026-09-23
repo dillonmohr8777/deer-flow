@@ -264,17 +264,19 @@ class ScheduledTaskService:
         launched_thread_id: str | None = None
         launch_succeeded = False
         try:
-            # Contract section 4: an organization's task starts runs only through
-            # its owner's delegation, re-read here so a revoked owner fails the
-            # occurrence closed. NULL-organization (legacy) tasks keep the owner
-            # header path until lane 0 rejects header-only internal calls.
-            if task.get("organization_id") and await self._task_repo.resolve_launch_delegation(task) is None:
+            # Contract section 4: a task starts runs only through its owner's
+            # delegation, re-read here so a revoked owner fails the occurrence
+            # closed. A NULL-organization (quarantined) task has none and fails
+            # closed too; the launcher acts through the delegation, never a raw
+            # owner header.
+            delegation = await self._task_repo.resolve_launch_delegation(task)
+            if delegation is None:
                 raise PermissionError(_NO_DELEGATION_ERROR)
             result = await self._launch_run(
                 thread_id=execution_thread_id,
                 assistant_id=task.get("assistant_id"),
                 prompt=task["prompt"],
-                owner_user_id=task.get("user_id"),
+                delegation=delegation,
                 metadata={
                     "scheduled_task_id": task["id"],
                     "scheduled_task_run_id": task_run_id,

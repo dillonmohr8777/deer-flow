@@ -4,7 +4,8 @@ Channels stay personal during M3 (decision 4): a connection, its pending connect
 codes (``channel_oauth_states``) and its conversations live in the owner's
 private organization. Browser routes filter by the active organization, so from
 another organization, or from a shared workspace, they answer as if nothing
-exists. Header-only internal calls keep working in this phase.
+exists. Connecting grants the connection's worker a delegation; header-only
+internal calls are refused.
 """
 
 from __future__ import annotations
@@ -78,8 +79,11 @@ async def test_connections_are_not_found_from_another_organization(org_world, tm
             assert [provider["connection_status"] for provider in providers.json()["providers"]] == ["not_connected"]
             assert (await client.delete(f"/api/channels/connections/{connection['id']}", headers=headers)).status_code == 404
 
-        # Header-only internal calls carry no organization and keep their user filter in this phase.
-        internal = await client.get("/api/channels/connections", headers=create_internal_auth_headers(owner_user_id=USER_A))
+        # A header-only internal call is refused; the connection's own worker acts through its delegation.
+        header_only = await client.get("/api/channels/connections", headers=create_internal_auth_headers(owner_user_id=USER_A))
+        assert header_only.status_code == 403
+        delegation_id = (await repo.find_connection_by_external_identity(provider="telegram", external_account_id="tg-a", workspace_id="chat-a"))["delegation_id"]
+        internal = await client.get("/api/channels/connections", headers=create_internal_auth_headers(owner_user_id=USER_A, delegation_id=delegation_id))
         assert [item["id"] for item in internal.json()["connections"]] == [connection["id"]]
 
         listed = await client.get("/api/channels/connections", headers=auth_headers(USER_A))

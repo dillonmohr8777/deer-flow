@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -12,11 +13,17 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from deerflow.mcp.tasks import ATTENTION_TASK_STATUSES, POLLABLE_TASK_STATUSES, TERMINAL_TASK_STATUSES
 from deerflow.persistence.mcp_tasks.model import McpTaskRow
+from deerflow.persistence.organizations.delegation import OrganizationDelegationRepository
 from deerflow.persistence.organizations.resolution import organization_for_write, organization_from_owned_parent
 from deerflow.persistence.run.model import RunRow
 from deerflow.persistence.thread_meta.model import ThreadMetaRow
-from deerflow.runtime.user_context import resolve_organization_id
+from deerflow.runtime.user_context import get_workspace_actor_user_id, resolve_organization_id
 from deerflow.utils.time import coerce_iso
+
+logger = logging.getLogger(__name__)
+
+# Organization delegation subject type for a durable MCP task; the subject id is the task id.
+MCP_TASK_SUBJECT_TYPE = "mcp_task"
 
 _POLLABLE_STATUS_VALUES = tuple(status.value for status in POLLABLE_TASK_STATUSES)
 _ATTENTION_STATUS_VALUES = frozenset(status.value for status in ATTENTION_TASK_STATUSES)
@@ -201,7 +208,23 @@ class McpTaskRepository:
                     raise DuplicateMcpRemoteTaskError(f"Remote MCP task {remote_task_id!r} is already tracked for server {server_name!r} by this user") from exc
                 raise
             await session.refresh(row)
-            return self._row_to_dict(row)
+            created = self._row_to_dict(row)
+            organization_id = row.organization_id
+        if organization_id is not None:
+            # The notification launcher acts only through this delegation. The
+            # acting member owns it (a shared workspace's storage principal
+            # never can); without one, notifications fail closed.
+            try:
+                await OrganizationDelegationRepository(self._sf).grant(
+                    organization_id=organization_id,
+                    subject_type=MCP_TASK_SUBJECT_TYPE,
+                    subject_id=task_id,
+                    owner_user_id=get_workspace_actor_user_id() or user_id,
+                    scopes=["runs:create"],
+                )
+            except PermissionError:
+                logger.warning("MCP task %s has no delegation: its owner is not an active member of its organization", task_id)
+        return created
 
     async def get(self, task_id: str, *, user_id: str) -> dict[str, Any] | None:
         active_organization_id = resolve_organization_id()
