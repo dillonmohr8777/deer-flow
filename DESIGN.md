@@ -104,7 +104,7 @@ The palette is cool, luminous, and operational: deep navy establishes trust, cob
 
 - **Current Cyan** ({colors.cyan}): Live graphical motion and the bright edge of the current.
 - **Readable Cyan** ({colors.cyan-text}): Small model metadata and link text on white; Current Cyan remains the graphical accent.
-- **Intelligence Violet** ({colors.violet}): Token data, generated-copy hierarchy, and the model-intelligence side of spectral gradients.
+- **Intelligence Violet** ({colors.violet}): Token data and generated-copy hierarchy as text only. Never an action surface or gradient stop.
 - **Conversation Rose** ({colors.rose}): Rare identity variation inside the deterministic glyph system, not a generic alert color.
 
 ### Tertiary
@@ -174,14 +174,14 @@ Cards use gently rounded 14–16px corners; controls use 8–11px corners. Pills
 ### Buttons
 
 - **Shape:** Compact rounded action controls (11px).
-- **Primary:** Cobalt-to-indigo gradient, white text, 12px × 18px padding, and a soft directional shadow.
-- **Hover / Focus:** Gradient deepens on hover; keyboard focus receives a 3px Focus Cobalt outline with 3px offset. Controls on deep blue receive a white inner outline.
+- **Primary:** Solid Momentum Cobalt, white text (6.0:1), 12px × 18px padding, hairline shadow. No gradient: brand tokens only, no AI purple (owner decision, 2026-09-22).
+- **Hover / Focus:** Deepens to Deep Cobalt on hover; keyboard focus receives a 3px Focus Cobalt outline with 3px offset. Controls on deep blue receive a white inner outline.
 - **Secondary / Ghost:** Clear or ice-blue surfaces with cobalt text and a Current Line border.
 
 ### Cards / Containers
 
 - **Operational panels:** Clear Surface at roughly 93% opacity, 16px radius, Current Line border, and a soft blue ambient shadow.
-- **Lead agent:** Deep navy-to-cobalt-to-indigo current with light text and a brighter custom glyph.
+- **Lead agent:** Solid Deep Cobalt with white text (9.1:1) and the custom glyph. No violet, no glow (owner decision, 2026-09-22).
 - **Specialist cards:** Clear Surface with compact metadata; selection shifts to an ice/violet wash and strengthens the connected path.
 
 ### Inputs / Fields
@@ -192,7 +192,7 @@ Cards use gently rounded 14–16px corners; controls use 8–11px corners. Pills
 ### Navigation
 
 - **Top bar:** Authentic Momentum mark, current surface name, and account scope on a translucent ice-white rail.
-- **Tabs:** Cobalt active state with a spectral underline; compact horizontal overflow on narrow screens.
+- **Tabs:** Cobalt active state with a solid cobalt underline; compact horizontal overflow on narrow screens.
 
 ### Momentum Glyph
 

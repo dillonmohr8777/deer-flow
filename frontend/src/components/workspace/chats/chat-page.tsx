@@ -464,7 +464,7 @@ export default function ChatPage() {
                   <ProjectAffiliationBadge projectId={affiliatedProjectId} />
                 )}
               </div>
-              <div className="flex shrink-0 items-center gap-2">
+              <div className="flex shrink-0 items-center gap-1 sm:gap-2">
                 {!isNewThread &&
                   !isMock &&
                   env.NEXT_PUBLIC_STATIC_WEBSITE_ONLY !== "true" && (
@@ -679,7 +679,7 @@ function ProjectAffiliationBadge({ projectId }: { projectId: string }) {
   return (
     <Link
       href={`/workspace/projects/${encodeURIComponent(project.id)}`}
-      className="text-muted-foreground hover:text-foreground focus-visible:text-foreground focus-visible:ring-ring inline-flex max-w-40 min-w-0 items-center gap-1 truncate rounded-full border px-2 py-0.5 text-xs font-normal transition-colors focus-visible:ring-1 focus-visible:outline-none"
+      className="text-muted-foreground hover:text-foreground focus-visible:text-foreground focus-visible:ring-ring hidden max-w-40 min-w-0 items-center gap-1 truncate rounded-full border px-2 py-0.5 text-xs font-normal transition-colors focus-visible:ring-1 focus-visible:outline-none sm:inline-flex"
     >
       <Folder className="size-3 shrink-0" />
       <span className="truncate">{project.name}</span>

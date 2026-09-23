@@ -86,8 +86,9 @@ export function TokenUsageIndicator({
           )}
         >
           <CoinsIcon size={14} />
-          <span>{t.tokenUsage.label}</span>
-          <span className="font-mono">
+          {/* Below sm the pill collapses to its icon so the thread title fits. */}
+          <span className="sr-only sm:not-sr-only">{t.tokenUsage.label}</span>
+          <span className="hidden font-mono sm:inline">
             {preferences.headerTotal
               ? usage
                 ? formatTokenCount(usage.totalTokens)
@@ -96,13 +97,13 @@ export function TokenUsageIndicator({
           </span>
           {contextPercentage != null && (
             <span
-              className="text-muted-foreground/80 border-l pl-1.5 font-mono"
+              className="text-muted-foreground/80 hidden border-l pl-1.5 font-mono sm:inline"
               aria-label={t.contextUsage.badgeAriaLabel(contextPercentage)}
             >
               {contextPercentage}%
             </span>
           )}
-          <ChevronDownIcon className="size-3" />
+          <ChevronDownIcon className="hidden size-3 sm:block" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent side="bottom" align="end" className="w-80">

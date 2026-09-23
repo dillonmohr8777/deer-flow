@@ -11,7 +11,7 @@ import {
   UserIcon,
 } from "lucide-react";
 import dynamic from "next/dynamic";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
   Dialog,
@@ -103,6 +103,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
   const { t } = useI18n();
   const [activeSection, setActiveSection] =
     useState<SettingsSection>(defaultSection);
+  const navRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     // When opening the dialog, ensure the active section follows the caller's intent.
@@ -164,8 +165,16 @@ export function SettingsDialog(props: SettingsDialogProps) {
       onOpenChange={(open) => props.onOpenChange?.(open)}
     >
       <DialogContent
-        className="flex h-[75vh] max-h-[calc(100vh-2rem)] flex-col sm:max-w-5xl md:max-w-6xl"
+        className="flex h-[calc(100dvh-2rem)] max-h-[calc(100dvh-2rem)] flex-col gap-3 p-4 sm:h-[75vh] sm:max-w-5xl sm:gap-4 sm:p-6 md:max-w-6xl"
         aria-describedby={undefined}
+        onOpenAutoFocus={(event) => {
+          // Radix focuses the first nav item (Models) while another section
+          // is selected: two highlights at once. Focus the selected one.
+          event.preventDefault();
+          navRef.current
+            ?.querySelector<HTMLElement>(`[data-section="${defaultSection}"]`)
+            ?.focus();
+        }}
       >
         <DialogHeader className="gap-1">
           <DialogTitle>{t.settings.title}</DialogTitle>
@@ -173,18 +182,24 @@ export function SettingsDialog(props: SettingsDialogProps) {
             {t.settings.description}
           </p>
         </DialogHeader>
-        <div className="grid min-h-0 flex-1 gap-4 md:grid-cols-[220px_minmax(0,1fr)]">
-          <nav className="bg-sidebar min-h-0 overflow-y-auto rounded-lg border p-2">
-            <ul className="space-y-1 pr-1">
+        <div className="grid min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)] gap-3 md:grid-cols-[220px_minmax(0,1fr)] md:grid-rows-1 md:gap-4">
+          <nav
+            ref={navRef}
+            aria-label={t.settings.title}
+            className="bg-sidebar min-h-0 overflow-x-auto rounded-lg border p-1.5 md:overflow-y-auto md:p-2"
+          >
+            <ul className="flex gap-1 md:block md:space-y-1 md:pr-1">
               {sections.map(({ id, label, icon: Icon }) => {
                 const active = activeSection === id;
                 return (
-                  <li key={id}>
+                  <li key={id} className="shrink-0">
                     <button
                       type="button"
+                      data-section={id}
+                      aria-current={active ? "page" : undefined}
                       onClick={() => setActiveSection(id as SettingsSection)}
                       className={cn(
-                        "flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                        "flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors md:gap-3",
                         active
                           ? "bg-primary text-primary-foreground shadow-sm"
                           : "text-muted-foreground hover:bg-muted hover:text-foreground",
@@ -199,7 +214,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
             </ul>
           </nav>
           <ScrollArea className="h-full min-h-0 rounded-lg border">
-            <div className="space-y-8 p-6">
+            <div className="space-y-8 p-4 sm:p-6">
               {activeSection === "models" && <ModelSettingsPage />}
               {activeSection === "account" && <AccountSettingsPage />}
               {activeSection === "appearance" && <AppearanceSettingsPage />}

@@ -47,7 +47,7 @@ export function ContextUsageBadge({
       )}
     >
       <GaugeIcon size={14} />
-      <span>{t.contextUsage.label}</span>
+      <span className="hidden sm:inline">{t.contextUsage.label}</span>
       <span className="font-mono">{formatted}%</span>
     </div>
   );

@@ -322,6 +322,22 @@ html.dark .shiki span {
   font-weight: 300;
 }
 
+/* Momentum language for list pages that came from upstream (Agents,
+   Scheduled tasks). Light mode only: primary is Momentum cobalt instead of
+   shadcn black (white on #075bd8 is 6.0:1; #075bd8 on the cream background is
+   5.6:1), focus is Focus Cobalt, and the page title takes the display face.
+   Lists and receipts get no further decoration on purpose. */
+html:not(.dark) .momentum-page {
+  --primary: #075bd8;
+  --primary-foreground: #ffffff;
+  --ring: #003da5;
+}
+.momentum-page h1 {
+  font-family: var(--m-font-display);
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
