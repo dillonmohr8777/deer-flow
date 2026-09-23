@@ -189,7 +189,14 @@ export function AgentCard({ agent }: AgentCardProps) {
         )}
 
         <CardFooter className="mt-auto flex items-center justify-between gap-2 pt-3">
-          <Button size="sm" className="flex-1" onClick={handleChat}>
+          {/* Outline, not filled: in a list of agents one filled button per
+              card is a wall of blue. "New Agent" stays the page's primary. */}
+          <Button
+            size="sm"
+            variant="outline"
+            className="text-primary flex-1"
+            onClick={handleChat}
+          >
             <MessageSquareIcon className="mr-1.5 h-3.5 w-3.5" />
             {t.agents.chat}
           </Button>
