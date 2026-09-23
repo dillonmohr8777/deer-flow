@@ -13,14 +13,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "@/components/ui/empty";
 import { formatArtifactBytes } from "@/components/workspace/artifacts/artifact-file-preview";
+import {
+  EmptyState,
+  ErrorState,
+  pageStyles,
+  WorkingState,
+} from "@/components/workspace/page-body";
 import { useI18n } from "@/core/i18n/hooks";
 import {
   PROJECTS_CONFIG_DEFAULT,
@@ -37,6 +36,7 @@ import {
   type TrashDocument,
 } from "@/core/trash";
 import { getFileIcon } from "@/core/utils/files";
+import { cn } from "@/lib/utils";
 
 function errorToastMessage(error: unknown, fallback: string): string {
   return error instanceof Error && error.message ? error.message : fallback;
@@ -70,13 +70,19 @@ export function TrashView() {
   const emptyTrash = useEmptyTrash();
 
   return (
-    <div className="mx-auto flex w-full max-w-(--container-width-md) flex-col gap-6 p-6 pt-8">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-lg font-semibold">{t.trash.title}</h1>
+    <div className="mx-auto flex w-full max-w-(--container-width-lg) flex-col gap-6 p-4 pt-8 pb-28 sm:p-6 sm:pt-10 sm:pb-28">
+      <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
+        <div className="min-w-0 flex-1 basis-72">
+          <h1 className="text-2xl font-semibold">{t.trash.title}</h1>
+          <p className={cn(pageStyles.lede, "mt-1")}>
+            {t.trash.retentionNote(retentionDays)}
+          </p>
+        </div>
         {documents.length > 0 && (
           <Button
-            variant="destructive"
+            variant="outline"
             size="sm"
+            className="text-destructive hover:text-destructive"
             onClick={() => setEmptyConfirmOpen(true)}
             data-testid="trash-empty-button"
           >
@@ -87,34 +93,32 @@ export function TrashView() {
       </div>
 
       {trashQuery.isError ? (
-        <div role="alert" className="p-4 text-center text-sm">
-          <p>{t.trash.loadFailed}</p>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void trashQuery.refetch()}
-          >
-            {t.trash.retry}
-          </Button>
-        </div>
+        <ErrorState
+          message={t.trash.loadFailed}
+          action={
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void trashQuery.refetch()}
+            >
+              {t.trash.retry}
+            </Button>
+          }
+        />
       ) : trashQuery.isLoading ? (
-        <div className="text-muted-foreground flex items-center justify-center gap-2 py-16 text-sm">
-          <LoaderIcon className="size-4 animate-spin" />
-          {t.common.loading}
-        </div>
+        <WorkingState label={t.common.loading} />
       ) : documents.length === 0 ? (
-        <Empty className="border py-16">
-          <EmptyHeader>
-            <EmptyMedia variant="icon">
-              <Trash2 />
-            </EmptyMedia>
-            <EmptyTitle>{t.trash.title}</EmptyTitle>
-            <EmptyDescription>{t.trash.empty}</EmptyDescription>
-          </EmptyHeader>
-        </Empty>
+        <EmptyState momo="builder" title={t.trash.empty}>
+          {t.trash.retentionNote(retentionDays)}
+        </EmptyState>
       ) : (
         <>
-          <ul className="flex w-full flex-col gap-2">
+          <ul
+            className={cn(
+              "flex w-full flex-col divide-y border-y",
+              pageStyles.rows,
+            )}
+          >
             {documents.map((document) => (
               <TrashDocumentRow
                 key={document.id}
@@ -125,7 +129,9 @@ export function TrashView() {
             ))}
           </ul>
           <div className="flex flex-col items-center gap-1">
-            <p className="text-muted-foreground text-xs">
+            <p
+              className={cn(pageStyles.figure, "text-muted-foreground text-xs")}
+            >
               {t.common.showingOf(documents.length, documentsTotal)}
             </p>
             {trashQuery.hasNextPage && (
@@ -282,20 +288,28 @@ function TrashDocumentRow({
   };
 
   return (
-    <li className="flex items-center gap-3 rounded-md border p-3">
-      {getFileIcon(document.name, "size-5 shrink-0")}
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="truncate text-sm font-medium">{document.name}</span>
-        <span className="text-muted-foreground text-xs">
-          {t.trash.originProject(
-            document.trash_origin?.project_name ?? t.trash.unknownProject,
-          )}
-          {" · "}
-          {formatArtifactBytes(document.size_bytes)}
-          {" · "}
-          {t.trash.retentionLeft(
-            retentionDaysLeft(document.trashed_at, retentionDays),
-          )}
+    <li className="flex flex-wrap items-center gap-x-3 gap-y-2 py-3">
+      <span className="text-muted-foreground shrink-0">
+        {getFileIcon(document.name, "size-5")}
+      </span>
+      <div className="flex min-w-0 flex-1 basis-48 flex-col gap-0.5">
+        <span className="truncate text-sm font-bold">{document.name}</span>
+        <span className="text-muted-foreground flex flex-wrap gap-x-1.5 text-xs">
+          <span>
+            {t.trash.originProject(
+              document.trash_origin?.project_name ?? t.trash.unknownProject,
+            )}
+          </span>
+          <span aria-hidden="true">·</span>
+          <span className={pageStyles.figure}>
+            {formatArtifactBytes(document.size_bytes)}
+          </span>
+          <span aria-hidden="true">·</span>
+          <span>
+            {t.trash.retentionLeft(
+              retentionDaysLeft(document.trashed_at, retentionDays),
+            )}
+          </span>
         </span>
       </div>
       <div className="flex shrink-0 items-center gap-1">
@@ -308,7 +322,12 @@ function TrashDocumentRow({
           <RotateCcw className="size-4" />
           {t.trash.restore}
         </Button>
-        <Button variant="ghost" size="sm" onClick={onPurge}>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="text-destructive hover:text-destructive"
+          onClick={onPurge}
+        >
           <Trash2 className="size-4" />
           {t.trash.deletePermanently}
         </Button>

@@ -1,18 +1,11 @@
 "use client";
 
-import {
-  Archive,
-  Folder,
-  MessageSquarePlus,
-  RotateCcw,
-  Trash2,
-} from "lucide-react";
+import { Archive, MessageSquarePlus, RotateCcw, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -22,16 +15,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Empty,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "@/components/ui/empty";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  ErrorState,
+  pageStyles,
+  StatusTag,
+  WorkingState,
+} from "@/components/workspace/page-body";
 import { ProjectDocumentsSection } from "@/components/workspace/projects/project-documents-section";
 import { ProjectThreadsSection } from "@/components/workspace/projects/project-threads-section";
 import {
@@ -90,37 +83,41 @@ export default function ProjectPage() {
   return (
     <WorkspaceContainer>
       <WorkspaceHeader />
-      <WorkspaceBody>
+      <WorkspaceBody className={pageStyles.page}>
         <ScrollArea className="size-full">
-          <div className="mx-auto flex w-full max-w-(--container-width-md) flex-col gap-8 p-6 pt-8">
+          <div className="mx-auto flex w-full max-w-(--container-width-lg) flex-col gap-8 p-4 pt-8 pb-28 sm:p-6 sm:pt-10 sm:pb-28">
             {projectQuery.isError ? (
               <ProjectNotFoundState />
             ) : project == null ? (
-              <div className="text-muted-foreground py-16 text-center text-sm">
-                {t.common.loading}
-              </div>
+              <WorkingState label={t.common.loading} />
             ) : (
               <>
                 <ProjectHeader project={project} />
                 <Tabs
                   value={tab}
                   onValueChange={setTab}
-                  className="flex flex-col gap-6"
+                  className="flex flex-col gap-7"
                 >
-                  <TabsList aria-label={project.name}>
-                    <TabsTrigger value="chats">
-                      {t.projects.threads}
-                    </TabsTrigger>
-                    <TabsTrigger value="documents">
-                      {t.projects.documents}
-                    </TabsTrigger>
-                    <TabsTrigger value="instructions">
-                      {t.projects.instructions}
-                    </TabsTrigger>
-                    <TabsTrigger value="settings">
-                      {t.projects.settings}
-                    </TabsTrigger>
-                  </TabsList>
+                  <div className="overflow-x-auto border-b">
+                    <TabsList
+                      variant="line"
+                      aria-label={project.name}
+                      className="h-11 gap-5"
+                    >
+                      <TabsTrigger value="chats" className="px-1 pb-3">
+                        {t.projects.threads}
+                      </TabsTrigger>
+                      <TabsTrigger value="documents" className="px-1 pb-3">
+                        {t.projects.documents}
+                      </TabsTrigger>
+                      <TabsTrigger value="instructions" className="px-1 pb-3">
+                        {t.projects.instructions}
+                      </TabsTrigger>
+                      <TabsTrigger value="settings" className="px-1 pb-3">
+                        {t.projects.settings}
+                      </TabsTrigger>
+                    </TabsList>
+                  </div>
                   <TabsContent value="chats">
                     <ProjectThreadsSection query={threadsQuery} />
                   </TabsContent>
@@ -165,27 +162,33 @@ export default function ProjectPage() {
 function ProjectNotFoundState() {
   const { t } = useI18n();
   return (
-    <Empty className="py-16">
-      <EmptyHeader>
-        <EmptyMedia variant="icon">
-          <Folder />
-        </EmptyMedia>
-        <EmptyTitle>{t.projects.notFound}</EmptyTitle>
-      </EmptyHeader>
-    </Empty>
+    <ErrorState
+      message={t.projects.notFound}
+      detail={t.projects.notFoundHint}
+      action={
+        <Button variant="outline" size="sm" asChild>
+          <Link href="/workspace/chats">{t.projects.backToChats}</Link>
+        </Button>
+      }
+    />
   );
 }
 
 function ProjectHeader({ project }: { project: Project }) {
   const { t } = useI18n();
   return (
-    <header className="flex flex-wrap items-center gap-3">
-      <h1 className="min-w-0 flex-1 truncate text-2xl font-semibold">
-        {project.name}
-      </h1>
-      {project.status === "archived" && (
-        <Badge variant="secondary">{t.projects.archived}</Badge>
-      )}
+    <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
+      <div className="min-w-0 flex-1 basis-80">
+        <p className={pageStyles.eyebrow}>{t.projects.title}</p>
+        <h1 className="mt-1 text-2xl font-semibold [overflow-wrap:anywhere]">
+          {project.name}
+        </h1>
+        {project.status === "archived" && (
+          <StatusTag tone="idle" className="mt-2">
+            {t.projects.archived}
+          </StatusTag>
+        )}
+      </div>
       {project.status !== "archived" && (
         <Button asChild>
           <Link href={newProjectChatPath(project.id)}>
