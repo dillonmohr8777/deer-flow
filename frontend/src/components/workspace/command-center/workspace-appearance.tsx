@@ -184,6 +184,7 @@ export function WorkspaceAppearance({ onClose }: { onClose: () => void }) {
               ? "Reduced motion is enabled on your device. The selected style stays visible without movement."
               : "Brand motion is optional. Your agents’ recorded activity always stays separate."}
           </p>
+          <BrandMotionToggle />
         </fieldset>
         <div className={styles.personalBrand}>
           <h3>Your brand, locally.</h3>

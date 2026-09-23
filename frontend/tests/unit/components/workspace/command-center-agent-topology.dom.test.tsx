@@ -60,7 +60,7 @@ describe("AgentTopology", () => {
     expect(screen.getByText("Disabled")).toBeTruthy();
   });
 
-  it("renders the lead and every specialist through MomoAvatar's procedural glyph fallback, with no <img> and no empty box (momos/ ships empty)", () => {
+  it("draws the lead as the canon lead Momo at 160 and specialists at 40, not a lettered monogram", () => {
     const { container } = render(
       <AgentTopology
         leadLabel="Dillon Brain"
@@ -74,11 +74,21 @@ describe("AgentTopology", () => {
       />,
     );
 
-    // No <img> anywhere: AVAILABLE_MOMO_SLUGS is empty, so both the lead
-    // and every specialist call site must fall through to the procedural
-    // MomentumGlyph fallback inside MomoAvatar - no 404 request, no flash.
-    expect(container.querySelectorAll("img")).toHaveLength(0);
-    // Lead + 2 specialists = 3 rendered glyphs, none of them an empty box.
-    expect(container.querySelectorAll("svg[data-momentum-glyph]")).toHaveLength(3);
+    // The lead is the canon artwork by path, decorative beside its name.
+    const lead = container.querySelector(
+      'img[src="/momentum/momos/lead.svg"]',
+    );
+    expect(lead?.getAttribute("width")).toBe("160");
+    expect(lead?.getAttribute("alt")).toBe("");
+    // Specialists without a mapped Momo fall back to MomoAvatar's glyph, at
+    // the 40px specialist size; the lead no longer renders a glyph at all.
+    const glyphs = container.querySelectorAll("svg[data-momentum-glyph]");
+    expect(glyphs).toHaveLength(2);
+    for (const glyph of glyphs) expect(glyph.getAttribute("width")).toBe("40");
+    // The avatar is hidden from assistive tech: the card's name says it once.
+    expect(
+      screen.getByRole("button", { name: /Reviewer/ }).textContent,
+    ).toContain("Reviewer");
+    expect(screen.queryAllByRole("img")).toHaveLength(0);
   });
 });

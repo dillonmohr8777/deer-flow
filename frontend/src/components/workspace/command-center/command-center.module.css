@@ -21,7 +21,6 @@
   --canvas: #f7fbff;
   --surface: #ffffff;
   --surface-blue: #edf7ff;
-  --surface-violet: #f2f0ff;
   --ink: #07172f;
   --muted: #50657b;
   --line: #d2e3f2;
@@ -30,8 +29,6 @@
   --blue-deep: #06439d;
   --cyan: #008fc9;
   --cyan-text: #00668e;
-  --violet: #5b3bd8;
-  --rose: #c73570;
   --green: #087d62;
   --danger: #b4233e;
   --focus: #003da5;
@@ -40,18 +37,13 @@
   min-height: 100%;
   overflow-x: clip;
   overflow-y: auto;
-  background:
-    radial-gradient(
-      circle at 12% 3%,
-      rgba(91, 204, 255, 0.19),
-      transparent 27rem
-    ),
-    radial-gradient(
-      circle at 78% 8%,
-      rgba(96, 74, 255, 0.12),
-      transparent 31rem
-    ),
-    linear-gradient(180deg, #fafdff 0%, var(--canvas) 34rem, #ffffff 100%);
+  /* Cool light without the violet and cyan orbs: those read as AI purple. */
+  background: linear-gradient(
+    180deg,
+    #fafdff 0%,
+    var(--canvas) 34rem,
+    #ffffff 100%
+  );
   color: var(--ink);
   font-family: "Momentum UI", "Nunito Sans", system-ui, sans-serif;
   font-size: 15px;
@@ -59,40 +51,6 @@
   accent-color: var(--blue);
   caret-color: var(--blue);
   scrollbar-color: var(--strong) var(--surface-blue);
-}
-.root::before {
-  content: "";
-  position: absolute;
-  z-index: -1;
-  top: 68px;
-  left: 0;
-  width: 100%;
-  height: 360px;
-  pointer-events: none;
-  background: linear-gradient(
-    105deg,
-    transparent 5%,
-    rgba(0, 148, 255, 0.08) 28%,
-    rgba(76, 54, 220, 0.1) 54%,
-    rgba(0, 191, 214, 0.07) 78%,
-    transparent 95%
-  );
-  clip-path: polygon(
-    0 42%,
-    19% 25%,
-    42% 39%,
-    64% 12%,
-    82% 31%,
-    100% 19%,
-    100% 78%,
-    79% 63%,
-    58% 84%,
-    37% 66%,
-    18% 80%,
-    0 68%
-  );
-  opacity: 0.72;
-  transform: translate3d(0, 0, 0);
 }
 .root ::selection {
   background: var(--blue);
@@ -156,14 +114,22 @@
   margin: auto;
   padding: 30px 32px 22px;
 }
+
+/* Hero: heading and actions on the left, the lead Momo on a scrap right. */
 .heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 24px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto auto 1fr;
+  grid-template-areas:
+    "text art"
+    "actions art"
+    ". art";
+  align-items: start;
+  column-gap: 32px;
   margin-bottom: 30px;
 }
-.heading > div:first-child {
+.headingText {
+  grid-area: text;
   min-width: 0;
 }
 .heading h1 {
@@ -181,14 +147,12 @@
   margin: 0;
   color: var(--muted);
 }
-.headingCopy span:first-child {
-  color: var(--blue-deep);
+.headingCopy span {
+  color: var(--ink);
   font-weight: 800;
 }
-.headingCopy span:last-child {
-  color: var(--violet);
-}
 .headingActions {
+  grid-area: actions;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -214,113 +178,132 @@
   background: var(--surface-blue);
   border-color: var(--blue);
 }
-.brandStage {
-  display: flex;
-  flex: 0 0 auto;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  padding: 4px 18px 2px;
+.heroArt {
+  grid-area: art;
+  position: relative;
+  width: 300px;
+  height: 212px;
+}
+.heroScrap {
+  position: absolute;
+  inset: 22px 0 0 44px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface-blue);
+}
+.heroMomo {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  display: block;
+  width: 184px;
+  height: 184px;
 }
 .root[data-treatment="classic"] {
   background: var(--canvas);
 }
-.root[data-treatment="classic"]::before {
-  display: none;
-}
-.root[data-treatment="paper"] {
-  --canvas: #f8f6ef;
-  --surface: #fffef9;
-  --line: #d9dfdf;
-  background: linear-gradient(145deg, #f6f2e7, #fbfaf5 48%, #f0f6fd);
-}
-.root[data-treatment="paper"]::before {
-  left: 50%;
-  top: 80px;
-  width: 50%;
-  height: 250px;
-  background: #e8eff6;
-  clip-path: polygon(10% 13%, 100% 0, 100% 100%, 0 80%);
-  opacity: 0.65;
-}
-.root[data-treatment="paper"] .team,
-.root[data-treatment="paper"] .jobs,
-.root[data-treatment="paper"] .usage {
-  background: #fffefb;
-}
-.root[data-treatment="paper"] .agentMonogram {
-  border-radius: 12px 9px 11px 8px;
-  background: #fffef9;
-  outline: 4px solid #fffef9;
-  box-shadow: 3px 5px 8px #22344a20;
-  transform: rotate(-7deg);
-}
-.root[data-treatment="paper"] .agent:nth-child(2n) .agentMonogram {
-  transform: rotate(5deg);
-}
-.root[data-treatment="current"] .agentMonogram {
-  filter: drop-shadow(0 5px 5px #185b9729);
-}
 
 /*
- * Paper cutout: type, the lead kraft band, stat numerals, and pinned
- * assignments. Tokens come from src/styles/paper.css (read first, never a
- * raw hex here). Receipts (.runDetail) intentionally get the least
- * decoration of anything on this surface - cream + hairlines, no rotation,
- * no pins - restraint is the point. All decoration below is presentational
- * only and is neutralised under forced-colors.
+ * Paper cutout. Tokens come from src/styles/paper.css and are mapped here,
+ * on the root itself: paper.css's own remap sits on [data-treatment="paper"]
+ * at lower specificity than .root, so it never reached this surface and the
+ * treatment kept the current palette (the primary action measured #075bd8).
+ * One loud moment only (the hero scrap). Receipts get the least decoration
+ * on this surface: cream, hairlines, no rotation, no pins. Decoration is
+ * presentational and neutralised under forced colours.
  */
-.root[data-treatment="paper"]::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-  background-size: 180px 180px;
-  opacity: 0.05;
+.root[data-treatment="paper"] {
+  --canvas: var(--paper-cream);
+  --surface: var(--paper-cream-hi);
+  --surface-blue: color-mix(
+    in srgb,
+    var(--paper-royal) 8%,
+    var(--paper-cream-hi)
+  );
+  --ink: var(--paper-ink);
+  --muted: var(--paper-ink-muted);
+  /* Hairlines stay soft; controls take the full 3.56:1 line as --strong. */
+  --line: color-mix(in srgb, var(--paper-line) 42%, transparent);
+  --strong: var(--paper-line);
+  --blue: var(--paper-royal);
+  --blue-deep: var(--paper-royal-deep);
+  --cyan: var(--paper-cyan);
+  --cyan-text: var(--paper-cyan-text);
+  --green: var(--paper-ok);
+  --danger: var(--paper-danger);
+  --focus: var(--paper-focus);
+  /* The shell's own paper canvas: cream with its 5% grain, so the page and
+     the sidebar read as one sheet. */
+  background: var(--paper-cream) var(--paper-grain);
+}
+.root[data-treatment="paper"] .topbar {
+  border-bottom-color: var(--line);
+  background: var(--paper-cream) var(--paper-grain);
 }
 .root[data-treatment="paper"] .heading h1 {
+  color: var(--paper-ink);
   font-family: var(--m-font-serif);
+  font-size: clamp(2.25rem, 4vw, 3.25rem);
   font-weight: 700;
   letter-spacing: -0.01em;
 }
-@media (min-width: 1440px) {
-  .root[data-treatment="paper"] .heading h1 {
-    font-family: var(--m-font-display);
-    font-weight: 400;
-    letter-spacing: 0;
-  }
+.root[data-treatment="paper"] .primary {
+  border-radius: 6px;
+  box-shadow: none;
 }
-.root[data-treatment="paper"] .topologyLead {
-  background: var(--paper-kraft);
+/* One filled action, one quiet one, as on the landing. */
+.root[data-treatment="paper"] .appearanceButton {
+  border-color: transparent;
+  background: transparent;
   color: var(--paper-ink);
-  border-color: var(--paper-line);
-  box-shadow: 3px 6px 14px
-    color-mix(in srgb, var(--paper-ink) 22%, transparent);
+  text-decoration: underline;
+  text-decoration-color: var(--paper-line);
+  text-underline-offset: 0.35em;
 }
-.root[data-treatment="paper"] .topologyLead div span {
-  color: var(--paper-ink-muted);
+.root[data-treatment="paper"] .appearanceButton:hover,
+.root[data-treatment="paper"] .appearanceButton[aria-expanded="true"] {
+  border-color: transparent;
+  background: transparent;
+  text-decoration-color: var(--paper-royal);
 }
-.root[data-treatment="paper"] .topologyLead::after {
-  background: repeating-linear-gradient(
-    var(--paper-ink-muted),
-    var(--paper-ink-muted) 4px,
-    transparent 4px,
-    transparent 7px
+/* Kraft, not royal: a royal Momo on a royal scrap disappears. The torn top
+   edge is paper.css's .paper-torn mask. */
+.root[data-treatment="paper"] .heroScrap {
+  border: 0;
+  background-color: var(--paper-kraft);
+  background-image:
+    linear-gradient(
+      to right,
+      color-mix(in srgb, var(--paper-ink) 10%, transparent) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--paper-ink) 10%, transparent) 1px,
+      transparent 1px
+    );
+  background-size: 28px 28px;
+  transform: rotate(-2deg);
+}
+/* A hard offset with no blur: the cut-paper read, never a glow. */
+.root[data-treatment="paper"] .heroMomo {
+  filter: drop-shadow(
+    3px 4px 0 color-mix(in srgb, var(--paper-ink) 18%, transparent)
   );
 }
-.root[data-treatment="paper"] .topologyLead a {
-  border-color: var(--paper-line);
+.root[data-treatment="paper"] :is(.team, .jobs, .usage, .metrics) {
+  border-radius: 4px;
+  box-shadow: none;
+}
+.root[data-treatment="paper"]
+  :is(.sectionHead h2, .sectionHead h3, .runDetail > h3, .topologyLead strong) {
   color: var(--paper-ink);
+  font-family: var(--m-font-serif);
+  font-weight: 700;
+  letter-spacing: 0;
 }
-.root[data-treatment="paper"] .topologyRoster::before,
-.root[data-treatment="paper"] .topologyRoster .agent::before {
-  border-color: var(--paper-line);
-  background: var(--paper-line);
-}
-.root[data-treatment="paper"] .metrics {
-  background: var(--paper-cream-hi);
+.root[data-treatment="paper"] .topologyLead strong {
+  font-size: 22px;
 }
 /* Numerals scale with their own cell: a fixed 3.5rem clipped seven-digit
    token totals at 1440px. 20cqi fits "1,342,217" with room for one more digit. */
@@ -329,104 +312,53 @@
 }
 .root[data-treatment="paper"] .metrics strong {
   font-family: var(--m-font-serif);
-  font-weight: 700;
   font-size: clamp(1.25rem, 20cqi, 3.5rem);
-  color: var(--paper-royal);
+  font-weight: 700;
 }
-.root[data-treatment="paper"] .jobRow {
-  position: relative;
+.root[data-treatment="paper"] .metrics strong span {
+  font-family: var(--m-font-text);
+  font-size: 13px;
+}
+.root[data-treatment="paper"] .metrics > div > span {
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.root[data-treatment="paper"] .topologyLead {
+  border-color: var(--line);
+  border-radius: 4px;
   background: var(--paper-cream-hi);
-  border-color: var(--paper-line);
+  box-shadow: none;
+  color: var(--paper-ink);
 }
-.root[data-treatment="paper"] .jobRow:nth-child(odd) {
-  transform: rotate(0.6deg);
+.root[data-treatment="paper"] .topologyLead div span {
+  color: var(--paper-ink-muted);
 }
-.root[data-treatment="paper"] .jobRow:nth-child(even) {
-  transform: rotate(-0.6deg);
+.root[data-treatment="paper"] .topologyLead a {
+  border-color: var(--strong);
+  color: var(--paper-ink);
 }
-.root[data-treatment="paper"] .jobRow::before {
-  content: "";
-  position: absolute;
-  top: 6px;
-  left: 10px;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  pointer-events: none;
-  background: radial-gradient(
-    circle at 35% 30%,
-    color-mix(in srgb, var(--paper-brass) 60%, white) 0%,
-    var(--paper-brass) 55%,
-    color-mix(in srgb, var(--paper-brass) 70%, black) 100%
-  );
-  box-shadow: 0 1px 2px color-mix(in srgb, var(--paper-ink) 40%, transparent);
+/* Specialists are small pinned cards. The brass pin is paper.css's .pinned;
+   this only centres it above the card's top edge. */
+.root[data-treatment="paper"] .agent {
+  border-color: var(--strong);
+  border-radius: 2px;
+  padding-top: 22px;
 }
-/* Receipts: least decoration on this surface, on purpose. */
+.agent:global(.pinned)::before {
+  top: 5px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+.root[data-treatment="paper"] .jobIcon {
+  display: none;
+}
 .root[data-treatment="paper"] .runDetail {
-  background: var(--paper-cream-hi);
-  border-left-color: var(--paper-line);
+  border-left-color: var(--line);
   box-shadow: -12px 0 32px
     color-mix(in srgb, var(--paper-ink) 14%, transparent);
 }
-.root[data-treatment="paper"] .runDetail > h3 {
-  font-family: var(--m-font-serif);
-  font-weight: 700;
-  color: var(--paper-royal-deep);
-}
-@media (forced-colors: active) {
-  .root[data-treatment="paper"]::after {
-    display: none;
-  }
-  .root[data-treatment="paper"] .jobRow::before {
-    display: none;
-  }
-  .root[data-treatment="paper"] .jobRow {
-    transform: none;
-  }
-}
-@media (max-width: 390px) {
-  .root[data-treatment="paper"] .topologyRoster {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
-    border-left: 0;
-    padding-left: 0;
-  }
-  .root[data-treatment="paper"] .agentMonogram,
-  .root[data-treatment="paper"] .jobRow {
-    transform: none;
-  }
-  .root[data-treatment="paper"] .content {
-    position: relative;
-  }
-  .root[data-treatment="paper"] .content::before,
-  .root[data-treatment="paper"] .content::after {
-    content: "";
-    position: absolute;
-    left: 0;
-    z-index: 1;
-    width: 100%;
-    height: 10px;
-    pointer-events: none;
-    background: var(--paper-cream);
-    mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'%3E%3Cpath d='M0 6 L7 2 L13 8 L20 3 L27 7 L34 1 L41 6 L48 2 L55 7 L62 3 L69 8 L76 2 L83 6 L90 1 L100 5 L100 100 L0 100 Z'/%3E%3C/svg%3E");
-    mask-size: 100% 100%;
-    mask-repeat: no-repeat;
-  }
-  .root[data-treatment="paper"] .content::before {
-    top: 0;
-  }
-  .root[data-treatment="paper"] .content::after {
-    bottom: 0;
-    transform: scaleY(-1);
-  }
-}
-@media (max-width: 390px) and (forced-colors: active) {
-  .root[data-treatment="paper"] .content::before,
-  .root[data-treatment="paper"] .content::after {
-    display: none;
-  }
-}
+
 .primary {
   display: inline-flex;
   flex-shrink: 0;
@@ -482,6 +414,30 @@
   height: 2px;
   background: var(--blue);
 }
+/* "Preview" marks a tab whose backend covers less than its name promises.
+   No colour: it is a caveat, not a state. */
+.previewTag {
+  display: inline-block;
+  border: 1px solid var(--strong);
+  border-radius: 999px;
+  padding: 0 7px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  line-height: 17px;
+  text-transform: uppercase;
+  vertical-align: 1px;
+}
+.previewNote {
+  max-width: 76ch;
+  margin: -14px 0 24px;
+  color: var(--muted);
+  font-size: 14px;
+}
+.previewNote .previewTag {
+  margin-right: 4px;
+}
 .metrics {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -489,16 +445,13 @@
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 14px;
-  background: linear-gradient(
-    105deg,
-    rgba(255, 255, 255, 0.96),
-    rgba(237, 247, 255, 0.84)
-  );
+  background: var(--surface);
 }
 .metrics > div {
   display: flex;
   min-width: 0;
   flex-direction: column;
+  justify-content: space-between;
   gap: 3px;
   border-left: 1px solid var(--line);
   padding: 15px 20px;
@@ -511,25 +464,20 @@
   font-size: 12px;
   font-weight: 700;
 }
+/* One ink for every numeral. Colour only for state: danger for a recorded
+   failure, ok once runs exist and none failed. */
 .metrics strong {
-  color: var(--blue-deep);
+  color: var(--ink);
   font-size: 25px;
   font-variant-numeric: tabular-nums;
   font-weight: 900;
   line-height: 1.2;
 }
-.metrics > div:nth-child(2) strong {
-  color: var(--violet);
-}
-/* Exception red only for a real failure count; zero errors is not an alert. */
-.metrics > div:nth-child(3) strong {
-  color: var(--ink);
-}
-.metrics > div[data-exception="true"] strong {
+.metrics > div[data-state="danger"] strong {
   color: var(--danger);
 }
-.metrics > div:nth-child(4) strong {
-  color: var(--cyan);
+.metrics > div[data-state="ok"] strong {
+  color: var(--green);
 }
 .overview {
   display: grid;
@@ -570,7 +518,7 @@
   min-width: 0;
   border: 1px solid var(--line);
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.93);
+  background: var(--surface);
   box-shadow: 0 14px 42px rgba(24, 84, 134, 0.08);
   padding: 22px;
 }
@@ -581,8 +529,7 @@
   position: relative;
   display: flex;
   align-items: center;
-  gap: 15px;
-  overflow: hidden;
+  gap: 18px;
   border: 1px solid var(--blue-deep);
   border-radius: 16px;
   /* Solid deep cobalt: white on #06439d is 9.1:1. No violet, no glow. */
@@ -591,26 +538,16 @@
   color: white;
   padding: 18px;
 }
-.topologyLead::after {
-  content: "";
-  position: absolute;
-  top: 100%;
-  left: 50%;
-  width: 2px;
-  height: 25px;
-  background: rgba(72, 157, 229, 0.42);
-}
-.leadIcon {
+/* The canon lead Momo at 160 (96 on phones). Its own cream cut-paper margin
+   separates it from the cobalt card, so it needs no disc behind it. */
+.leadMomo {
   display: grid;
   width: 160px;
   height: 160px;
   flex: 0 0 auto;
-  place-items: center;
-  border-radius: 50%;
-  background: white;
-  box-shadow: 0 8px 20px rgba(0, 24, 72, 0.24);
 }
-.leadIcon svg {
+.leadMomo > span,
+.leadMomo img {
   width: 100%;
   height: 100%;
 }
@@ -619,13 +556,13 @@
   min-width: 0;
   flex: 1;
   flex-direction: column;
+  gap: 2px;
 }
 .topologyLead strong {
-  overflow: hidden;
+  overflow-wrap: break-word;
   font-size: 18px;
   font-weight: 900;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.25;
 }
 .topologyLead div span {
   color: white;
@@ -648,108 +585,64 @@
   outline-color: white;
   box-shadow: 0 0 0 6px var(--focus);
 }
+.root[data-treatment="paper"] .topologyLead a:focus-visible {
+  outline-color: var(--focus);
+  box-shadow: none;
+}
+/* Small cards: the size step from the 160px lead to 40px specialists is the
+   hierarchy, so there are no connector lines. */
 .topologyRoster {
-  position: relative;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 11px;
-  margin-top: 24px;
-  border-top: 2px solid transparent;
-  border-image: linear-gradient(90deg, transparent, var(--blue), transparent)
-    1;
-  padding-top: 22px;
-}
-.topologyRoster::before {
-  content: "";
-  position: absolute;
-  top: -2px;
-  right: 16.666%;
-  left: 16.666%;
-  border-top: 2px solid rgba(72, 157, 229, 0.42);
-}
-.topologyRoster .agent {
-  position: relative;
-}
-.topologyRoster .agent::before {
-  content: "";
-  position: absolute;
-  top: -24px;
-  left: 50%;
-  height: 23px;
-  border-left: 2px solid rgba(72, 157, 229, 0.42);
+  gap: 14px 12px;
+  margin-top: 22px;
 }
 .agent {
+  position: relative;
   display: flex;
   min-width: 0;
   align-items: flex-start;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   border: 1px solid var(--line);
-  border-radius: 13px;
-  background: #fbfdff;
-  padding: 16px 13px;
+  border-radius: 12px;
+  background: var(--surface);
+  padding: 12px;
   text-align: left;
 }
 .agent:hover {
-  border-color: #75aee1;
+  border-color: var(--strong);
   background: var(--surface-blue);
 }
 .agent[aria-pressed="true"] {
-  border-color: #4b7fe0;
+  border-color: var(--blue);
   background: var(--surface-blue);
-  box-shadow: 0 1px 2px rgba(7, 23, 47, 0.12);
+  box-shadow: inset 0 0 0 1px var(--blue);
 }
-.agentMonogram {
+.agentMomo {
   display: grid;
   place-items: center;
 }
 .agent strong {
   max-width: 100%;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
   color: var(--blue-deep);
   font-size: 14px;
-  font-weight: 900;
+  font-weight: 800;
+  line-height: 1.3;
   text-transform: capitalize;
 }
-.agent > span:not(.agentMonogram) {
+.agentState {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
   color: var(--muted);
   font-size: 12px;
 }
-.agent .agentRole {
-  display: -webkit-box;
-  min-height: 36px;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-height: 1.5;
-}
-.agent .agentModel {
-  max-width: 100%;
-  overflow: hidden;
-  color: var(--blue-deep);
-  font-size: 11px;
-  font-weight: 800;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.selectedIdentity {
-  display: flex;
+.agentState > span:last-child {
+  display: inline-flex;
   align-items: center;
-  gap: 13px;
-}
-.selectedIdentity > svg {
-  flex: 0 0 auto;
-}
-.selectedIdentity span {
-  display: block;
-  margin-top: 4px;
-  color: var(--muted);
-  font-size: 12px;
-}
-.agent > span:last-child {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+  gap: 5px;
 }
 .agent i {
   width: 6px;
@@ -759,7 +652,21 @@
 }
 .agent i[data-enabled="true"] {
   background: var(--green);
-  box-shadow: 0 0 0 3px rgba(8, 125, 98, 0.12);
+}
+.selectedIdentity {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+}
+.selectedIdentity > span {
+  flex: 0 0 auto;
+  line-height: 0;
+}
+.selectedIdentity div span {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
 }
 .diagramNote {
   margin-top: 15px;
@@ -821,7 +728,7 @@
   gap: 9px;
   border: 1px solid var(--strong);
   border-radius: 9px;
-  background: white;
+  background: var(--surface);
   padding: 8px 10px;
   color: var(--cyan);
 }
@@ -839,7 +746,7 @@
   max-width: 140px;
   border: 1px solid var(--strong);
   border-radius: 9px;
-  background: white;
+  background: var(--surface);
   color: var(--ink);
   padding: 6px 8px;
   font-size: 13px;
@@ -847,6 +754,7 @@
 .jobRows {
   border-top: 1px solid var(--line);
 }
+/* Receipts: rows on the sheet, hairlines, no pins, no rotation. */
 .jobRow {
   display: flex;
   width: 100%;
@@ -858,11 +766,7 @@
 }
 .jobRow:hover,
 .jobRow[aria-pressed="true"] {
-  background: linear-gradient(
-    90deg,
-    rgba(232, 246, 255, 0.86),
-    rgba(244, 241, 255, 0.62)
-  );
+  background: var(--surface-blue);
 }
 .jobIcon {
   position: relative;
@@ -898,6 +802,9 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.root[data-treatment="paper"] .jobName strong {
+  color: var(--ink);
+}
 .jobName small {
   overflow: hidden;
   color: var(--muted);
@@ -906,13 +813,11 @@
   white-space: nowrap;
 }
 .metaModel {
-  color: var(--cyan-text);
-  font-weight: 800;
+  color: var(--ink);
+  font-weight: 700;
 }
 .metaTokens {
-  color: var(--violet);
   font-variant-numeric: tabular-nums;
-  font-weight: 800;
 }
 .status {
   display: inline-flex;
@@ -1009,42 +914,33 @@
   color: var(--blue);
   font-weight: 900;
 }
+/* A quiet line of links, not a row of three equal cards. */
 .destinations {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 24px;
   margin-top: 28px;
   border-top: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.58);
-}
-.destinations a {
-  display: flex;
-  align-items: center;
-  gap: 13px;
-  border-left: 1px solid var(--line);
-  color: var(--blue);
-  padding: 20px 14px;
-}
-.destinations a:first-child {
-  border-left: 0;
-}
-.destinations a:hover {
-  background: var(--surface-blue);
-}
-.destinations a > div {
-  display: flex;
-  min-width: 0;
-  flex: 1;
-  flex-direction: column;
-  gap: 3px;
-}
-.destinations strong {
-  color: var(--ink);
+  padding-top: 18px;
   font-size: 14px;
 }
-.destinations span {
+.destinations > span {
   color: var(--muted);
   font-size: 12px;
+  font-weight: 700;
+}
+.destinations a {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--blue-deep);
+  font-weight: 800;
+  text-decoration: underline;
+  text-decoration-color: var(--strong);
+}
+.destinations a:hover {
+  text-decoration-color: currentColor;
 }
 .footer {
   display: flex;
@@ -1063,6 +959,9 @@
 }
 .usage {
   min-height: 400px;
+}
+.ledgerHead {
+  margin-top: 36px;
 }
 .usageChart {
   display: flex;
@@ -1154,6 +1053,9 @@
   color: #234e78;
   font-size: 14px;
 }
+.root[data-treatment="paper"] .notice {
+  color: var(--ink);
+}
 .runBackdrop {
   position: fixed;
   inset: 0;
@@ -1169,13 +1071,7 @@
   width: min(460px, 100%);
   overflow-y: auto;
   border-left: 1px solid var(--strong);
-  background:
-    radial-gradient(
-      circle at 100% 0,
-      rgba(77, 53, 198, 0.12),
-      transparent 18rem
-    ),
-    white;
+  background: var(--surface);
   box-shadow: -18px 0 55px rgba(17, 59, 101, 0.18);
   padding: 26px;
 }
@@ -1210,7 +1106,7 @@
   margin-bottom: 8px;
   border: 1px solid var(--strong);
   border-radius: 8px;
-  background: white;
+  background: var(--surface);
   padding: 8px 12px;
   color: var(--danger);
 }
@@ -1243,28 +1139,19 @@
   .heading h1 {
     font-size: 36px;
   }
-  .brandStage {
-    width: 250px;
-    flex: 0 0 250px;
-    padding-right: 0;
-    padding-left: 0;
+  .heroArt {
+    width: 240px;
+    height: 172px;
+  }
+  .heroMomo {
+    width: 148px;
+    height: 148px;
   }
   .overview {
     grid-template-columns: 1fr;
   }
   .topologyRoster {
     grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-  .destinations {
-    grid-template-columns: 1fr;
-  }
-  .destinations a,
-  .destinations a:first-child {
-    border-top: 1px solid var(--line);
-    border-left: 0;
-  }
-  .destinations a:first-child {
-    border-top: 0;
   }
 }
 
@@ -1279,10 +1166,6 @@
   }
   .scrollHint svg {
     flex: 0 0 auto;
-  }
-  .root::before {
-    top: 56px;
-    height: 300px;
   }
   .topbar {
     position: sticky;
@@ -1300,18 +1183,31 @@
   .content {
     padding: 30px 16px 96px;
   }
+  /* The Momo tucks in beside the heading; actions take the full width. */
   .heading {
-    align-items: stretch;
-    flex-direction: column;
-    gap: 16px;
+    grid-template-rows: auto auto;
+    grid-template-areas:
+      "text art"
+      "actions actions";
+    column-gap: 12px;
     margin-bottom: 20px;
   }
   .heading h1 {
     font-size: 34px;
   }
   .heading p {
-    max-width: 31ch;
     font-size: 14px;
+  }
+  .heroArt {
+    width: 108px;
+    height: 100px;
+  }
+  .heroScrap {
+    inset: 12px 0 0 16px;
+  }
+  .heroMomo {
+    width: 88px;
+    height: 88px;
   }
   .headingActions {
     width: 100%;
@@ -1328,25 +1224,18 @@
     padding-right: 12px;
     padding-left: 12px;
   }
-  .brandStage {
-    width: auto;
-    flex: 0 0 auto;
-    flex-direction: row;
-    align-items: center;
-    justify-content: center;
-    flex-wrap: wrap;
-    gap: 8px;
-    padding: 8px 0 0;
-  }
   .tabs {
     position: sticky;
     z-index: 3;
     top: 58px;
     gap: 22px;
-    background: rgba(247, 251, 255, 0.96);
+    background: var(--canvas);
   }
   .tabs button {
     min-height: 44px;
+  }
+  .previewNote {
+    margin-top: -6px;
   }
   .metrics {
     grid-auto-columns: minmax(140px, 1fr);
@@ -1379,41 +1268,8 @@
     order: -1;
   }
   .topologyRoster {
-    display: flex;
-    align-items: stretch;
-    flex-direction: column;
-    gap: 8px;
-    border-top: 0;
-    border-left: 2px solid rgba(72, 157, 229, 0.42);
-    padding: 0 0 0 17px;
-  }
-  .topologyRoster::before {
-    display: none;
-  }
-  .topologyRoster .agent::before {
-    top: 50%;
-    left: -18px;
-    width: 17px;
-    height: 1px;
-    border-top: 2px solid rgba(72, 157, 229, 0.42);
-    border-left: 0;
-  }
-  .agent {
-    display: grid;
-    grid-template-columns: 56px minmax(0, 1fr);
-    column-gap: 14px;
-    row-gap: 5px;
-  }
-  .agent > :not(.agentMonogram) {
-    grid-column: 2;
-  }
-  .agentMonogram {
-    grid-column: 1;
-    grid-row: 1 / span 5;
-    align-self: center;
-  }
-  .agent .agentRole {
-    min-height: 0;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px 8px;
   }
   .filters {
     align-items: stretch;
@@ -1462,10 +1318,14 @@
   }
 }
 
-@media (max-width: 390px) {
-  .leadIcon {
+@media (max-width: 480px) {
+  .leadMomo {
     width: 96px;
     height: 96px;
+  }
+  .topologyLead {
+    gap: 12px;
+    padding: 14px;
   }
 }
 

@@ -163,6 +163,20 @@
   color: #07172f;
   padding: 26px;
 }
+/* Paper: the panel is a sheet like the rest of the Command Center. The
+   style swatches inside keep their own looks on purpose. */
+[data-treatment="paper"] .panel {
+  border-color: color-mix(in srgb, var(--paper-line) 42%, transparent);
+  border-radius: 4px;
+  background: var(--paper-cream-hi);
+  color: var(--paper-ink);
+}
+[data-treatment="paper"] .panelHead h2 {
+  color: var(--paper-ink);
+  font-family: var(--m-font-serif);
+  font-weight: 700;
+  letter-spacing: 0;
+}
 .panelHead {
   display: flex;
   align-items: start;
@@ -278,7 +292,7 @@
   line-height: 1.5;
 }
 .motionNote {
-  margin: 14px 0 0;
+  margin: 14px 0 10px;
   color: #50657b;
   font-size: 12px;
   line-height: 1.6;
