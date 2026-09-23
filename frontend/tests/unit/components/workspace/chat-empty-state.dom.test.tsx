@@ -73,15 +73,16 @@ function renderWelcomeComposer(onSubmit: () => void) {
 }
 
 describe("empty thread", () => {
-  it("shows the lead Momo as decoration beside one line", () => {
+  it("shows Momo's Pencil film as decoration beside one line", () => {
     const { container } = render(
       <I18nProvider initialLocale={DEFAULT_LOCALE}>
         <Welcome />
       </I18nProvider>,
     );
-    const momo = container.querySelector("img");
-    expect(momo?.getAttribute("src")).toBe("/momentum/momos/lead.svg");
-    expect(momo?.getAttribute("alt")).toBe("");
+    const momo = container.querySelector("video");
+    expect(momo?.getAttribute("poster")).toBe(
+      "/momentum/films/momo-pencil.webp",
+    );
     expect(momo?.getAttribute("aria-hidden")).toBe("true");
     expect(
       screen.getByRole("heading", { name: enUS.welcome.greeting }),

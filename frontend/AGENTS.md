@@ -221,6 +221,9 @@ or invoices. The global background tray observes work; it does not start model
 calls. Stop actions require confirmation and the existing run-cancel permission.
 Keep project grouping distinct from verified client tenancy. Stage independently
 with `NEXT_BUILD_DIR=.next-momentum`; do not overwrite a running server's build.
+Momo films (`public/momentum/films/`, provenance in its SOURCES.md) render only
+through `components/momentum/momo-film.tsx`: muted, `preload="none"`, poster-only
+when motion is off (workspace `motionOn`, front door `useIntroMotion().live`).
 
 `backend/packages/harness/deerflow/capabilities/builtin.json` owns localized
 catalog manifests. Refresh the generated demo snapshot with `pnpm catalog:sync`

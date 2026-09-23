@@ -687,26 +687,27 @@
   color: var(--paper-ink);
 }
 
+/*
+ * The Momo intro film, pinned into the page as a scrapbook photo: cream
+ * border, a slight hand-stuck tilt. It plays once and holds its last frame.
+ */
 .paperMomos {
-  display: flex;
-  align-items: flex-end;
-  gap: 0.5rem;
+  position: relative;
+  width: min(100%, 40rem);
   margin-top: clamp(2.5rem, 6vw, 4rem);
+  padding: 0.55rem 0.55rem 1.6rem;
+  background: var(--paper-cream-hi);
+  box-shadow:
+    0 1px 2px rgb(16 30 63 / 0.16),
+    0 18px 36px -14px rgb(16 30 63 / 0.4);
+  transform: rotate(-1.2deg);
 }
 
-.paperMomos svg {
+.paperMomos video {
   display: block;
-  flex: 0 0 auto;
-  /* Kraft offset under the mark: the cut-paper read, no glow, no gradient. */
-  filter: drop-shadow(3px 4px 0 var(--paper-kraft));
-}
-
-@media (max-width: 34rem) {
-  .paperMomos svg {
-    width: 38%;
-    max-width: 112px;
-    height: auto;
-  }
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
 }
 
 .paperFooter {

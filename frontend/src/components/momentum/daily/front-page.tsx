@@ -11,6 +11,7 @@ import {
   type PointerEvent,
 } from "react";
 
+import { MomoFilm } from "@/components/momentum/momo-film";
 import {
   articlePath,
   type DailyArticle,
@@ -57,7 +58,11 @@ function Masthead({
       </div>
       <div className={styles.mastheadRow}>
         <div className={styles.ear}>
-          <Reporter slug="lead" size={72} motion={motion} />
+          <MomoFilm
+            name="momo-daily"
+            live={motion}
+            className={styles.earFilm}
+          />
           <p>Reporting the latest in AI for Momentum clients and crew.</p>
         </div>
         <h1 className={styles.title}>{MOMO_DAILY_NAME}</h1>
@@ -204,7 +209,11 @@ export function DailyFrontPage({
               aria-labelledby="daily-empty-heading"
             >
               <figure className={styles.leadArt}>
-                <Reporter slug="lead" size={200} motion={motion} />
+                <MomoFilm
+                  name="momo-daily"
+                  live={motion}
+                  className={styles.leadFilm}
+                />
               </figure>
               <div className={styles.leadCopy}>
                 <p className={styles.kicker}>From the editor</p>

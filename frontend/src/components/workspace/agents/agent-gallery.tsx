@@ -3,8 +3,10 @@
 import { PlusIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 
+import { MomoFilm } from "@/components/momentum/momo-film";
 import { Button } from "@/components/ui/button";
 import { SidebarTrigger } from "@/components/ui/sidebar";
+import { useWorkspaceAppearance } from "@/components/workspace/command-center/appearance-provider";
 import {
   EmptyState,
   ErrorState,
@@ -19,6 +21,7 @@ import { AgentCard } from "./agent-card";
 
 export function AgentGallery() {
   const { t } = useI18n();
+  const { motionOn } = useWorkspaceAppearance();
   const { agents, isLoading, error, refetch } = useAgents();
   const router = useRouter();
 
@@ -49,6 +52,15 @@ export function AgentGallery() {
       {/* Roster */}
       <div className="flex-1 overflow-y-auto px-4 pb-28 sm:px-8">
         <div className="mx-auto w-full max-w-5xl">
+          {/* The crew film, pinned at the top of the roster: plays once. */}
+          <div className="mt-6 mb-2 w-full max-w-xl rotate-[-0.8deg] border-[6px] border-b-[18px] border-[#fbf8f1] shadow-[0_14px_30px_-14px_rgb(16_30_63/0.5)]">
+            <MomoFilm
+              name="momo-crew"
+              live={motionOn}
+              loop={false}
+              className="aspect-video w-full object-cover"
+            />
+          </div>
           {isLoading ? (
             <WorkingState label={t.common.loading} />
           ) : error ? (

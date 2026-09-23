@@ -7,11 +7,11 @@ import { useEffect, useState } from "react";
 
 import inviteStyles from "@/app/invite/invite.module.css";
 import { RememberSessionOption } from "@/components/auth/remember-session-option";
+import { MomoFilm } from "@/components/momentum/momo-film";
 import { useIntroMotion } from "@/components/momentum/momobot/intro-motion";
 import { MomoBotLockup } from "@/components/momentum/momobot/lockup";
 import momoStyles from "@/components/momentum/momobot/momobot.module.css";
 import { ScrapbookBackdrop } from "@/components/momentum/momobot/scrapbook-backdrop";
-import { WavingMomo } from "@/components/momentum/momobot/waving-momo";
 import { resolveFunnelTreatment } from "@/components/momentum/treatment";
 import { Button } from "@/components/ui/button";
 import { FlickeringGrid } from "@/components/ui/flickering-grid";
@@ -67,11 +67,9 @@ export default function LoginPage() {
   // Nudge the user toward the SSO buttons without confirming the account exists.
   const [showSsoHint, setShowSsoHint] = useState(false);
   const [loading, setLoading] = useState(false);
-  // Momo waves on load, then again whenever the email field is hovered or
-  // focused. Motion (reduced motion, hidden tab, pause) is decided inside.
+  // Momo's Hello film plays while motion is allowed (reduced motion, hidden
+  // tab and pause are decided inside) and holds its poster otherwise.
   const introMotion = useIntroMotion();
-  const [waveCue, setWaveCue] = useState(0);
-  const cueWave = () => setWaveCue((cue) => cue + 1);
 
   // Get next parameter for validated redirect
   const nextParam = searchParams.get("next");
@@ -305,8 +303,6 @@ export default function LoginPage() {
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            onFocus={cueWave}
-            onMouseEnter={cueWave}
             placeholder={t.login.emailPlaceholder}
             required
           />
@@ -456,7 +452,9 @@ export default function LoginPage() {
               momoStyles.frameWithMomo,
             )}
           >
-            <WavingMomo live={introMotion.live} cue={waveCue} />
+            <div className={momoStyles.momoPhoto}>
+              <MomoFilm name="momo-hello" live={introMotion.live} />
+            </div>
             {card}
           </div>
         </>

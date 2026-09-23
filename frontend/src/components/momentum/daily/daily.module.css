@@ -782,3 +782,23 @@
     margin: 0 auto 16px;
   }
 }
+
+/* Momo's Extra! Extra! film, as small pinned newspaper photos. */
+.earFilm,
+.leadFilm {
+  display: block;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border: 3px solid var(--paper-cream-hi, #fbf8f1);
+  box-shadow: 0 6px 14px -6px rgb(16 30 63 / 0.45);
+}
+
+.earFilm {
+  width: 72px;
+  transform: rotate(-3deg);
+}
+
+.leadFilm {
+  width: min(100%, 220px);
+  transform: rotate(1.5deg);
+}

@@ -3,6 +3,8 @@
 import { Clock3Icon } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { MomoFilm } from "@/components/momentum/momo-film";
+import { useWorkspaceAppearance } from "@/components/workspace/command-center/appearance-provider";
 import { useI18n } from "@/core/i18n/hooks";
 import { formatRunDuration } from "@/core/messages/run-duration";
 
@@ -10,6 +12,7 @@ import { WorkingSquares } from "./ultra-thinking";
 
 export function RunActivity({ startTime }: { startTime: number | null }) {
   const { t } = useI18n();
+  const { motionOn } = useWorkspaceAppearance();
   const [elapsed, setElapsed] = useState(0);
 
   useEffect(() => {
@@ -33,6 +36,14 @@ export function RunActivity({ startTime }: { startTime: number | null }) {
       className="text-muted-foreground flex items-center gap-2 text-sm"
       data-testid="run-activity"
     >
+      {/* Momo's Thinking film as a tiny pinned photo; poster when motion is off. */}
+      <span className="size-10 shrink-0 -rotate-3 overflow-hidden rounded-sm border-2 border-[#fbf8f1] shadow-sm">
+        <MomoFilm
+          name="momo-thinking"
+          live={motionOn}
+          className="size-full origin-[50%_45%] scale-150 object-cover"
+        />
+      </span>
       {/* Ticks in steps(3) over 1.2s; still under reduced motion. The word
           says it too, so the squares stay decoration. */}
       <WorkingSquares />

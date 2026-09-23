@@ -19,18 +19,16 @@ afterEach(() => {
 describe("workspace invitations", () => {
   it("keeps a fragment invite through StrictMode, hides its URL token and never auto-accepts", async () => {
     window.history.replaceState(null, "", "/invite#token=private-invite");
-    const fetcher = rs
-      .spyOn(globalThis, "fetch")
-      .mockResolvedValue(
-        new Response(
-          JSON.stringify({
-            email: "person@example.com",
-            workspace_name: "Team",
-            expires_at: "2026-10-01T00:00:00Z",
-            requires_login: false,
-          }),
-        ),
-      );
+    const fetcher = rs.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          email: "person@example.com",
+          workspace_name: "Team",
+          expires_at: "2026-10-01T00:00:00Z",
+          requires_login: false,
+        }),
+      ),
+    );
     render(
       <StrictMode>
         <InvitePage />
