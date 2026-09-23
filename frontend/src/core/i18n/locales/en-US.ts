@@ -120,6 +120,8 @@ export const enUS: Translations = {
     skillHint:
       "Turn useful methods into skills, ready to use in any conversation.",
     noResults: "No matches found",
+    noResultsHint: "Try a shorter search, or choose All categories.",
+    skillsLoadFailed: "Could not load skills.",
     larkName: "Lark / Feishu",
     larkDescription:
       "Work with documents, messages, calendars, and multidimensional tables in your conversations.",
@@ -139,6 +141,7 @@ export const enUS: Translations = {
   // Common
   common: {
     home: "Home",
+    tryAgain: "Try again",
     settings: "Settings",
     delete: "Delete",
     edit: "Edit",
@@ -593,7 +596,7 @@ export const enUS: Translations = {
     previewUnsupported:
       "This file type can't be previewed in the browser. Download it to view it.",
     archivedDocumentsBanner:
-      "This project is archived. Documents are read-only — upload, save to project, and trash are unavailable.",
+      "This project is archived. Documents are read-only: upload, save to project and trash are unavailable.",
     conversationFiles: "Conversation files",
     conversationFilesEmpty: "No files in this project's chats yet.",
     threadFilesTruncated: (count) =>
@@ -604,6 +607,18 @@ export const enUS: Translations = {
     savedToProject: (name) => `Saved "${name}" to the shelf`,
     shelfNameLabel: "Shelf name",
     viewTrash: "Trash",
+    openTrash: "Open trash",
+    trashNote: (days) =>
+      `Removed documents wait in the trash for ${days} days before they are deleted.`,
+    documentColumnName: "Document",
+    documentColumnSource: "Source",
+    documentColumnAdded: "Added",
+    documentColumnSize: "Size",
+    documentSourceSlack: "Slack channel",
+    documentSourceUpload: "Uploaded",
+    notFoundHint:
+      "It may have been deleted, or it belongs to another workspace.",
+    backToChats: "Back to chats",
     documentsLoadFailed: "Couldn't load project documents",
     threadFilesLoadFailed: "Couldn't load conversation files",
     interimMemoryNotice:
@@ -623,11 +638,13 @@ export const enUS: Translations = {
         : days === 1
           ? "1 day left"
           : `${days} days left`,
+    retentionNote: (days) =>
+      `Documents you remove from a project wait here for ${days} days, then they are deleted for good.`,
     restore: "Restore",
     restoreFailed: "Failed to restore document",
     restoredToast: (name) => `Restored "${name}"`,
     restoreMergedToast: (name) =>
-      `"${name}" matched existing shelf content — merged.`,
+      `"${name}" matched existing shelf content, so it was merged.`,
     restoreConflict:
       "This document's content is missing or damaged, so it stays in the trash.",
     restorePickProjectTitle: "Choose a project",

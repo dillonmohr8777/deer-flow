@@ -99,6 +99,8 @@ export interface Translations {
     pluginHint: string;
     skillHint: string;
     noResults: string;
+    noResultsHint: string;
+    skillsLoadFailed: string;
     larkName: string;
     larkDescription: string;
     larkTag: string;
@@ -116,6 +118,7 @@ export interface Translations {
   // Common
   common: {
     home: string;
+    tryAgain: string;
     settings: string;
     delete: string;
     edit: string;
@@ -461,6 +464,16 @@ export interface Translations {
     savedToProject: (name: string) => string;
     shelfNameLabel: string;
     viewTrash: string;
+    openTrash: string;
+    trashNote: (days: number) => string;
+    documentColumnName: string;
+    documentColumnSource: string;
+    documentColumnAdded: string;
+    documentColumnSize: string;
+    documentSourceSlack: string;
+    documentSourceUpload: string;
+    notFoundHint: string;
+    backToChats: string;
     documentsLoadFailed: string;
     threadFilesLoadFailed: string;
     interimMemoryNotice: string;
@@ -475,6 +488,7 @@ export interface Translations {
     originProject: (projectName: string) => string;
     unknownProject: string;
     retentionLeft: (days: number) => string;
+    retentionNote: (days: number) => string;
     restore: string;
     restoreFailed: string;
     restoredToast: (name: string) => string;

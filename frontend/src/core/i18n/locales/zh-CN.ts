@@ -115,6 +115,8 @@ export const zhCN: Translations = {
     pluginHint: "连接常用应用，让 Agent 直接访问资料、处理工作。",
     skillHint: "把常用方法变成技能，在对话中按需使用。",
     noResults: "没有找到匹配的内容",
+    noResultsHint: "试试更短的关键词，或选择全部分类。",
+    skillsLoadFailed: "无法加载技能。",
     larkName: "飞书 / Lark",
     larkDescription: "连接飞书文档、消息、日历与多维表格，在对话中协同办公。",
     larkTag: "办公协作",
@@ -133,6 +135,7 @@ export const zhCN: Translations = {
   // Common
   common: {
     home: "首页",
+    tryAgain: "重试",
     settings: "设置",
     delete: "删除",
     edit: "编辑",
@@ -564,6 +567,16 @@ export const zhCN: Translations = {
     savedToProject: (name) => `已将「${name}」保存到文件架`,
     shelfNameLabel: "文件架名称",
     viewTrash: "回收站",
+    openTrash: "打开回收站",
+    trashNote: (days) => `移入回收站的文档可在 ${days} 天内恢复。`,
+    documentColumnName: "文档",
+    documentColumnSource: "来源",
+    documentColumnAdded: "添加时间",
+    documentColumnSize: "大小",
+    documentSourceSlack: "Slack 频道",
+    documentSourceUpload: "上传",
+    notFoundHint: "它可能已被删除，或属于其他工作区。",
+    backToChats: "返回对话",
     documentsLoadFailed: "无法加载项目文档",
     threadFilesLoadFailed: "无法加载对话文件",
     interimMemoryNotice:
@@ -579,6 +592,8 @@ export const zhCN: Translations = {
     unknownProject: "未知项目",
     retentionLeft: (days) =>
       days <= 0 ? "保留期不足 1 天" : `剩余 ${days} 天`,
+    retentionNote: (days) =>
+      `从项目中移除的文档会在这里保留 ${days} 天，之后将被永久删除。`,
     restore: "恢复",
     restoreFailed: "恢复文档失败",
     restoredToast: (name) => `已恢复「${name}」`,

@@ -4,9 +4,17 @@ import { ArrowLeftIcon, ChevronRightIcon } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
+import {
+  EmptyState,
+  ErrorState,
+  pageStyles,
+  StatusTag,
+  WorkingState,
+} from "@/components/workspace/page-body";
 import { useFrontendExtensions } from "@/core/extensions/hooks";
 import { extensionIcon } from "@/core/extensions/registry";
 import { useI18n } from "@/core/i18n/hooks";
+import { cn } from "@/lib/utils";
 
 import { PluginRow } from "./plugin-directory";
 
@@ -26,15 +34,17 @@ export function ExtensionGallery({ query = "" }: { query?: string }) {
     else next.delete("extension");
     router.replace(`${pathname}?${next.toString()}`, { scroll: false });
   }
-  if (source.isPending) return <p role="status">{t.extensions.loading}</p>;
+  if (source.isPending) return <WorkingState label={t.extensions.loading} />;
   if (source.isError)
     return (
-      <div role="alert">
-        <p>{t.extensions.unavailable}</p>
-        <Button variant="outline" onClick={() => void source.refetch()}>
-          {t.extensions.retry}
-        </Button>
-      </div>
+      <ErrorState
+        message={t.extensions.unavailable}
+        action={
+          <Button variant="outline" onClick={() => void source.refetch()}>
+            {t.extensions.retry}
+          </Button>
+        }
+      />
     );
   const reload = (
     <Button variant="outline" onClick={() => window.location.reload()}>
@@ -77,48 +87,53 @@ export function ExtensionGallery({ query = "" }: { query?: string }) {
       <p className="text-muted-foreground text-sm">
         {t.extensions.deploymentHint}
       </p>
-      <div className="grid gap-x-10 md:grid-cols-2">
+      <div className={cn("grid gap-x-10 md:grid-cols-2", pageStyles.rows)}>
         {visible.map((entry) => {
           const loaded = publicQuery.data?.find(
             (item) => item.namespace === entry.namespace,
           );
           const Icon = extensionIcon(loaded?.extension?.icon);
           return (
-            <PluginRow
-              key={entry.namespace}
-              name={entry.title}
-              description={entry.description}
-              icon={
-                <div className="bg-muted flex size-12 shrink-0 items-center justify-center rounded-xl">
-                  <Icon className="size-6" />
-                </div>
-              }
-              label={
-                loaded?.error
-                  ? t.extensions.moduleUnavailable
-                  : entry.settings.enabled === true
-                    ? t.capabilities.enabled
-                    : t.capabilities.disabled
-              }
-              onDetails={() => select(entry.namespace)}
-              detailsLabel={t.extensions.view(entry.title)}
-            >
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label={t.extensions.open(entry.title)}
-                onClick={() => select(entry.namespace)}
+            <div key={entry.namespace} className="min-w-0 border-b">
+              <PluginRow
+                name={entry.title}
+                description={entry.description}
+                icon={
+                  <div className="bg-muted flex size-10 shrink-0 items-center justify-center rounded-lg border">
+                    <Icon className="size-5" />
+                  </div>
+                }
+                label={
+                  loaded?.error ? (
+                    <StatusTag tone="unknown">
+                      {t.extensions.moduleUnavailable}
+                    </StatusTag>
+                  ) : entry.settings.enabled === true ? (
+                    <StatusTag tone="ok">{t.capabilities.enabled}</StatusTag>
+                  ) : (
+                    <StatusTag tone="idle">{t.capabilities.disabled}</StatusTag>
+                  )
+                }
+                onDetails={() => select(entry.namespace)}
+                detailsLabel={t.extensions.view(entry.title)}
               >
-                <ChevronRightIcon />
-              </Button>
-            </PluginRow>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label={t.extensions.open(entry.title)}
+                  onClick={() => select(entry.namespace)}
+                >
+                  <ChevronRightIcon />
+                </Button>
+              </PluginRow>
+            </div>
           );
         })}
       </div>
       {!visible.length && (
-        <p role="status" className="text-muted-foreground py-8">
-          {t.extensions.noResults}
-        </p>
+        <div role="status">
+          <EmptyState momo="engineer">{t.extensions.noResults}</EmptyState>
+        </div>
       )}
     </div>
   );
