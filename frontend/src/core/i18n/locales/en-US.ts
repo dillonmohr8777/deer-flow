@@ -178,6 +178,8 @@ export const enUS: Translations = {
 
   runDuration: {
     reasoning: "Reasoning",
+    thinkingDeeply: "Thinking deeply",
+    thoughtFor: (duration) => `Thought for ${duration}`,
     working: "Working…",
     completedIn: (duration) => `Completed in ${duration}`,
     description:

@@ -11,6 +11,7 @@ import {
 import {
   memo,
   useCallback,
+  useContext,
   useMemo,
   useState,
   type ImgHTMLAttributes,
@@ -73,6 +74,11 @@ import { Tooltip } from "../tooltip";
 import { KnowledgeScopeSummary } from "./knowledge-scope-summary";
 import { MarkdownContent } from "./markdown-content";
 import { createMarkdownLinkComponent } from "./markdown-link";
+import {
+  DeepReasoning,
+  DeepReasoningContext,
+  deepReasoningFor,
+} from "./ultra-thinking";
 
 function FeedbackButtons({
   threadId,
@@ -428,6 +434,18 @@ function MessageContent_({
 
   const rawContent = extractContentFromMessage(message);
   const reasoningContent = extractReasoningContentFromMessage(message);
+  const deepReasoningState = useContext(DeepReasoningContext);
+  const deepReasoning = deepReasoningFor(deepReasoningState, message.id);
+  const reasoning = reasoningContent ? (
+    deepReasoning ? (
+      <DeepReasoning reasoning={reasoningContent} {...deepReasoning} />
+    ) : (
+      <Reasoning isStreaming={isLoading}>
+        <ReasoningTrigger getThinkingMessage={getReasoningMessage} />
+        <SafeReasoningContent>{reasoningContent}</SafeReasoningContent>
+      </Reasoning>
+    )
+  ) : null;
 
   const files = useMemo(() => {
     const files = message.additional_kwargs?.files;
@@ -499,10 +517,7 @@ function MessageContent_({
   if (!isHuman && reasoningContent && !rawContent) {
     return (
       <AIElementMessageContent className={className}>
-        <Reasoning isStreaming={isLoading}>
-          <ReasoningTrigger getThinkingMessage={getReasoningMessage} />
-          <SafeReasoningContent>{reasoningContent}</SafeReasoningContent>
-        </Reasoning>
+        {reasoning}
       </AIElementMessageContent>
     );
   }
@@ -611,12 +626,7 @@ function MessageContent_({
   return (
     <AIElementMessageContent className={className}>
       {filesList}
-      {reasoningContent && (
-        <Reasoning isStreaming={isLoading}>
-          <ReasoningTrigger getThinkingMessage={getReasoningMessage} />
-          <SafeReasoningContent>{reasoningContent}</SafeReasoningContent>
-        </Reasoning>
-      )}
+      {reasoning}
       <MarkdownContent
         content={contentToDisplay}
         isLoading={isLoading}

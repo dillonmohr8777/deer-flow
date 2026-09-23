@@ -1,0 +1,710 @@
+/*
+ * Ultra thinking: the reasoning block while a deep run (Ultra, or high/xhigh
+ * effort on a model that reasons) streams its reasoning. Variant B of the
+ * approved prototype inside the block, Variant D across the view:
+ * block-shots/2026-09-22-design/acid/acid-prototype.html.
+ *
+ * Reading text is always the real DOM text, never a pseudo-element. Every
+ * print layer (cyan drum, token rain, scanline, registration marks, the
+ * overclock glyphs) is an aria-hidden duplicate or decoration. Brass is only
+ * dots and thin rules; cyan never carries reading text.
+ *
+ * Motion is gated twice: data-motion="on" (set from brandMotionAllowed, so
+ * the appearance motion switch and reduced motion both turn it off) and
+ * prefers-reduced-motion: no-preference here. Loops tick in steps and move
+ * transform, opacity or filter only.
+ *
+ * Reading contrast, paper light (text on --paper-cream-hi): live royal 7.8:1,
+ * newest word cream-hi on royal 7.8:1, settled ink-muted 8.3:1. Worst pixel
+ * under the 45-degree halftone stays above 6:1.
+ */
+
+.block {
+  /* Any treatment, light or dark: theme tokens. Paper light remaps below. */
+  --ur-paper: var(--card);
+  --ur-ink: var(--card-foreground);
+  --ur-key: var(--card-foreground);
+  --ur-key-deep: var(--card-foreground);
+  --ur-muted: var(--muted-foreground);
+  --ur-line: var(--border);
+  --ur-cyan: color-mix(in srgb, var(--muted-foreground) 55%, transparent);
+  --ur-cyan-text: var(--muted-foreground);
+  --ur-brass: var(--border);
+
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  margin: 0 0 16px;
+  border: 1px solid var(--ur-line);
+  border-radius: 4px;
+  background-color: var(--ur-paper);
+  color: var(--ur-ink);
+  /* The overclock hides page glyphs through this property; never this block. */
+  -webkit-text-fill-color: currentcolor;
+}
+
+:global(:root:not(.dark) [data-treatment="paper"]) .block {
+  --ur-paper: var(--paper-cream-hi);
+  --ur-ink: var(--paper-ink);
+  --ur-key: var(--paper-royal);
+  --ur-key-deep: var(--paper-royal-deep);
+  --ur-muted: var(--paper-ink-muted);
+  --ur-cyan: var(--paper-cyan);
+  --ur-cyan-text: var(--paper-cyan-text);
+  --ur-brass: var(--paper-brass);
+}
+
+/* Inside a processing panel the panel's hairline is the frame. */
+.block[data-framed="false"] {
+  margin: 0;
+  border-color: transparent;
+  border-radius: 6px;
+}
+
+/* Paper grain, always (an undefined token outside paper draws nothing). */
+.block::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  background: var(--paper-grain) 0 0 / 180px 180px;
+  mix-blend-mode: multiply;
+}
+
+/* Riso halftone at 45 degrees, only while the press runs. */
+.block[data-motion="on"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  opacity: 0.7;
+  mix-blend-mode: multiply;
+  background:
+    radial-gradient(
+        circle,
+        color-mix(in srgb, var(--ur-key) 20%, transparent) 0.8px,
+        transparent 1.3px
+      )
+      0 0 / 5px 5px,
+    radial-gradient(
+        circle,
+        color-mix(in srgb, var(--ur-key) 20%, transparent) 0.8px,
+        transparent 1.3px
+      )
+      2.5px 2.5px / 5px 5px;
+}
+
+/* ---------- Head: the disclosure's summary ---------- */
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  /* 24px inline clears the 16px registration marks set 3px in. */
+  padding: 10px 24px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.head::-webkit-details-marker {
+  display: none;
+}
+
+.head:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: -3px;
+}
+
+/* A dotted brass rule under the head while the body shows. */
+.block[open] .head {
+  background: radial-gradient(circle, var(--ur-brass) 1px, transparent 1.5px) 0
+    100% / 6px 3px repeat-x;
+}
+
+.title {
+  display: inline-grid;
+  isolation: isolate;
+  margin-right: auto;
+  font: 700 12px/1 var(--m-font-text);
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--ur-key-deep);
+}
+
+.title > span {
+  grid-area: 1 / 1;
+}
+
+.titleGhost {
+  z-index: -1;
+  color: var(--ur-cyan);
+  transform: translate(2px, -1px);
+}
+
+.block[data-phase="settled"] .title {
+  color: var(--ur-muted);
+}
+
+.receipt {
+  font: 12px/1 var(--m-font-mono);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--ur-muted);
+}
+
+.chevron {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  color: var(--ur-muted);
+}
+
+.block[open] .chevron {
+  transform: rotate(180deg);
+}
+
+/* ---------- Body: the print ---------- */
+
+.body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  padding: 12px 24px 16px;
+}
+
+.block[data-motion="on"] .body {
+  grid-template-columns: minmax(0, 1fr) clamp(32px, 12%, 60px);
+}
+
+.print {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  font: 13px/1.6 var(--m-font-mono);
+}
+
+/* While it streams, a terminal window on the newest 16 lines. The whole
+   text stays in the DOM; settled, the disclosure shows all of it. */
+.block[data-phase="live"] .print {
+  max-height: 16lh;
+  overflow: hidden;
+}
+
+.stack {
+  display: grid;
+}
+
+.stack > * {
+  grid-area: 1 / 1;
+}
+
+.text,
+.ghost {
+  margin: 0;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings:
+    "liga" 0,
+    "clig" 0,
+    "calt" 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.text {
+  color: var(--ur-key);
+}
+
+.block[data-phase="settled"] .text {
+  color: var(--ur-muted);
+}
+
+/* The word being printed, in inverse. */
+.hot {
+  background: var(--ur-key);
+  color: var(--ur-paper);
+}
+
+.caret {
+  display: inline-block;
+  width: 0.6em;
+  height: 1.15em;
+  vertical-align: -0.22em;
+  background: currentcolor;
+}
+
+/* Second drum: cyan, halftoned, overprinted a few pixels off. Never read. */
+.ghost {
+  pointer-events: none;
+  user-select: none;
+  color: var(--ur-cyan);
+  mix-blend-mode: multiply;
+  transform: translate(3px, -1px);
+  -webkit-mask: radial-gradient(circle, #000 1.1px, transparent 1.6px) 0 0 / 3px
+    3px;
+  mask: radial-gradient(circle, #000 1.1px, transparent 1.6px) 0 0 / 3px 3px;
+}
+
+.ghost .hot {
+  background: none;
+  color: transparent;
+}
+
+/* Token rain: the newest words, down a narrow brass-dotted gutter. */
+.rain {
+  contain: size;
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+  padding-left: 9px;
+  font: 10px/12px var(--m-font-mono);
+  user-select: none;
+  background: radial-gradient(circle, var(--ur-brass) 1px, transparent 1.5px) 0
+    0 / 3px 6px repeat-y;
+  -webkit-mask-image: linear-gradient(#000 55%, transparent);
+  mask-image: linear-gradient(#000 55%, transparent);
+}
+
+.rain > div {
+  overflow: hidden;
+  min-width: 0;
+}
+
+.rain span {
+  display: block;
+  white-space: nowrap;
+  color: var(--ur-key);
+}
+
+.rain > div + div span {
+  color: var(--ur-cyan-text);
+}
+
+/* Registration marks: brass rules, a cyan plate that drifts off register. */
+.reg {
+  position: absolute;
+  z-index: 4;
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke-width: 1;
+  pointer-events: none;
+}
+
+.reg[data-corner="tl"] {
+  top: 3px;
+  left: 3px;
+}
+
+.reg[data-corner="tr"] {
+  top: 3px;
+  right: 3px;
+}
+
+.reg[data-corner="bl"] {
+  bottom: 3px;
+  left: 3px;
+}
+
+.reg[data-corner="br"] {
+  right: 3px;
+  bottom: 3px;
+}
+
+.regB {
+  stroke: var(--ur-brass);
+}
+
+.regC {
+  stroke: var(--ur-cyan);
+}
+
+.block[data-motion="on"] .regC {
+  transform: translate(1.5px, -1px);
+}
+
+/* A stepped scanline band, top to bottom, then a rest. */
+.sweep {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+  transform: translateY(-100%);
+  mix-blend-mode: multiply;
+  background: repeating-linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--ur-cyan) 30%, transparent) 0 1px,
+      transparent 1px 3px
+    )
+    0 100% / 100% 26px no-repeat;
+}
+
+/* ---------- Working squares: three, ticking in steps(3) over 1.2s ---------- */
+
+.squares {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  gap: 3px;
+}
+
+.squares > span {
+  width: 5px;
+  height: 5px;
+  background: currentcolor;
+  opacity: 0.3;
+}
+
+.squares::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 5px;
+  height: 5px;
+  background: currentcolor;
+}
+
+/* ---------- D: the overclock overlay (built once, by overclock()) ---------- */
+
+.overclock {
+  --ur-jolt-ink: color-mix(
+    in srgb,
+    var(--paper-cyan, currentcolor) 85%,
+    transparent
+  );
+
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  overflow: hidden;
+  contain: strict;
+  pointer-events: none;
+  -webkit-text-fill-color: currentcolor;
+}
+
+/* Frames, and inside them a clip and a moving layer per scroll container. */
+.overclock div {
+  position: absolute;
+  inset: 0;
+}
+
+.overclock > div {
+  opacity: 0;
+}
+
+.overclock span {
+  position: absolute;
+  white-space: pre;
+}
+
+.frameA {
+  transform: translate(2px, -1px);
+  text-shadow: -3px 1px 0 var(--ur-jolt-ink);
+}
+
+.frameB {
+  transform: translate(-1px, 1px);
+  text-shadow: 2px 0 0 var(--ur-jolt-ink);
+}
+
+.frameC {
+  transform: translate(1px, 0);
+}
+
+.frameC span {
+  color: var(--ur-jolt-ink);
+}
+
+/* D while streaming: the labels shimmer a pixel off register. */
+.live {
+  --ur-shimmer-ink: color-mix(
+    in srgb,
+    var(--paper-cyan, currentcolor) 75%,
+    transparent
+  );
+}
+
+/* ---------- Motion, all of it ---------- */
+
+@media (prefers-reduced-motion: no-preference) and (forced-colors: none) {
+  .squares::after {
+    animation: ur-tick 1.2s steps(3, end) infinite;
+  }
+
+  .block[data-motion="on"] .ghost {
+    animation: ur-misreg-b 350ms steps(1, end) infinite;
+  }
+
+  .block[data-motion="on"] .titleGhost {
+    animation: ur-label-b 280ms steps(1, end) infinite;
+  }
+
+  .block[data-motion="on"] .regC {
+    animation: ur-misreg-a 350ms steps(1, end) infinite;
+  }
+
+  .block[data-motion="on"] .caret {
+    animation: ur-blink 700ms steps(1, end) infinite;
+  }
+
+  .block[data-motion="on"] .sweep {
+    animation: ur-sweep 2.3s infinite;
+  }
+
+  .overclock {
+    animation: ur-jolt 520ms steps(1, end) both;
+  }
+
+  .frameA {
+    animation: ur-frame-a 520ms steps(1, end) both;
+  }
+
+  .frameB {
+    animation: ur-frame-b 520ms steps(1, end) both;
+  }
+
+  .frameC {
+    animation: ur-frame-c 520ms steps(1, end) both;
+  }
+
+  /* The real glyphs step aside (colour only, nothing reflows) while the
+     overlay's scrambled frames stand in; the animation ends by itself. */
+  .jolting :global(body) {
+    animation: ur-text-hide 364ms linear;
+  }
+
+  .jolting :global(:is(input, textarea, select, [contenteditable])) {
+    -webkit-text-fill-color: currentcolor;
+  }
+
+  /* Headings and UI labels, never message text. */
+  .live
+    :global(
+      :is(
+        h1,
+        h2,
+        h3,
+        [data-sidebar="group-label"],
+        [data-sidebar="menu-button"],
+        [data-chat-header] button,
+        [data-chat-composer] button
+      ):not(
+        :is(.momentum-generated-copy, [data-human-message], [data-ultra-block])
+          *
+      )
+    ) {
+    animation: ur-shimmer 420ms steps(1, end) infinite;
+  }
+}
+
+@keyframes ur-tick {
+  to {
+    transform: translateX(24px);
+  }
+}
+
+@keyframes ur-misreg-a {
+  0% {
+    transform: translate(1px, 1px);
+  }
+  20% {
+    transform: translate(2px, 0);
+  }
+  40% {
+    transform: translate(1px, -1px);
+  }
+  60% {
+    transform: translate(2px, 1px);
+  }
+  80% {
+    transform: translate(0, 2px);
+  }
+  100% {
+    transform: translate(1px, 1px);
+  }
+}
+
+@keyframes ur-misreg-b {
+  0% {
+    transform: translate(3px, -1px);
+  }
+  20% {
+    transform: translate(-2px, 2px);
+  }
+  40% {
+    transform: translate(4px, 1px);
+  }
+  60% {
+    transform: translate(1px, -3px);
+  }
+  80% {
+    transform: translate(-3px, 1px);
+  }
+  100% {
+    transform: translate(3px, -1px);
+  }
+}
+
+@keyframes ur-label-b {
+  0% {
+    transform: translate(2px, -1px);
+  }
+  25% {
+    transform: translate(-2px, 2px);
+  }
+  50% {
+    transform: translate(3px, 1px);
+  }
+  75% {
+    transform: translate(-1px, -2px);
+  }
+  100% {
+    transform: translate(2px, -1px);
+  }
+}
+
+@keyframes ur-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+@keyframes ur-sweep {
+  0% {
+    transform: translateY(-100%);
+    animation-timing-function: steps(14, end);
+  }
+  36%,
+  100% {
+    transform: translateY(26px);
+  }
+}
+
+@keyframes ur-jolt {
+  0% {
+    transform: translate(-3px, 2px);
+  }
+  12% {
+    transform: translate(3px, -1px);
+  }
+  24% {
+    transform: translate(-2px, 0);
+  }
+  38% {
+    transform: translate(1px, 1px);
+  }
+  54% {
+    transform: translate(0, -1px);
+  }
+  72%,
+  100% {
+    transform: none;
+  }
+}
+
+@keyframes ur-frame-a {
+  0% {
+    opacity: 1;
+  }
+  30%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes ur-frame-b {
+  0% {
+    opacity: 0;
+  }
+  30% {
+    opacity: 1;
+  }
+  70%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes ur-frame-c {
+  0% {
+    opacity: 0;
+  }
+  70%,
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes ur-text-hide {
+  from,
+  to {
+    -webkit-text-fill-color: transparent;
+  }
+}
+
+@keyframes ur-shimmer {
+  0% {
+    filter: drop-shadow(1px 0 0 var(--ur-shimmer-ink));
+  }
+  25% {
+    filter: drop-shadow(0 1px 0 var(--ur-shimmer-ink));
+  }
+  50% {
+    filter: drop-shadow(-1px 0 0 var(--ur-shimmer-ink));
+  }
+  75% {
+    filter: drop-shadow(1px 1px 0 var(--ur-shimmer-ink));
+  }
+  100% {
+    filter: drop-shadow(1px 0 0 var(--ur-shimmer-ink));
+  }
+}
+
+@media (max-width: 480px) {
+  .head {
+    padding-inline: 22px;
+  }
+
+  .body {
+    padding: 10px 22px 14px;
+  }
+
+  .block[data-motion="on"] .body {
+    grid-template-columns: minmax(0, 1fr) 30px;
+  }
+
+  .rain {
+    grid-template-columns: 1fr;
+  }
+
+  .rain > div + div {
+    display: none;
+  }
+}
+
+/* Print layers carry nothing a high-contrast palette needs. */
+@media (forced-colors: active) {
+  .block::before,
+  .block::after,
+  .reg,
+  .sweep,
+  .ghost,
+  .titleGhost,
+  .rain,
+  .squares,
+  .overclock {
+    display: none;
+  }
+
+  .hot {
+    background: none;
+    color: inherit;
+  }
+}

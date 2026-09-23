@@ -172,6 +172,8 @@ export const zhCN: Translations = {
 
   runDuration: {
     reasoning: "思考过程",
+    thinkingDeeply: "深度思考中",
+    thoughtFor: (duration) => `思考用时 ${duration}`,
     working: "执行中…",
     completedIn: (duration) => `本次任务耗时 ${duration}`,
     description: "任务总耗时，包括模型推理、工具调用和等待时间。",
