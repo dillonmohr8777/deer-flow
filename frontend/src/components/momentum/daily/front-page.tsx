@@ -12,6 +12,7 @@ import {
 } from "react";
 
 import { MomoFilm } from "@/components/momentum/momo-film";
+import { Scraps } from "@/components/momentum/scraps";
 import {
   articlePath,
   type DailyArticle,
@@ -296,6 +297,12 @@ export function DailyFrontPage({
           </div>
         </div>
       </div>
+      <Scraps
+        names={["old-town", "writing", "speech-bubbles", "coast-road"]}
+        live={motion}
+        size={110}
+        className={styles.dailyScraps}
+      />
     </div>
   );
 }

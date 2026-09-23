@@ -456,10 +456,37 @@
   padding: 1.75rem 0;
 }
 
-.emptyMomo {
+.emptyArt {
+  position: relative;
   flex: none;
+}
+
+/* Positioned so it always wins the stacking order over the scraps behind
+   it, regardless of their DOM order (see .emptyScraps below). */
+.emptyMomo {
+  position: relative;
+  z-index: 1;
   width: 56px;
   height: 56px;
+}
+
+/* Two scraps peeking from behind the Momo: one top left, one bottom right. */
+.emptyScraps {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.emptyScraps > span:nth-child(1) {
+  position: absolute;
+  top: -10px;
+  left: -12px;
+}
+
+.emptyScraps > span:nth-child(2) {
+  position: absolute;
+  right: -12px;
+  bottom: -10px;
 }
 
 @media (forced-colors: active) {
