@@ -19,7 +19,7 @@ export const STAFF = [
     title: "Director of Content",
   },
   { slug: "mac-frederick", name: "Mac Frederick", title: "Google Guru" },
-  { slug: "melissa-rigby", name: "Melissa Rigby", title: "" },
+  { slug: "melissa-silber", name: "Melissa Silber", title: "" },
   { slug: "beth-kann", name: "Beth Kann", title: "" },
 ] as const;
 
