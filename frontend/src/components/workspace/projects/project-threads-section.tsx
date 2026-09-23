@@ -24,8 +24,8 @@ export function ProjectThreadsSection({
   const { t } = useI18n();
   const threads = query.data?.pages.flatMap((page) => page) ?? [];
   return (
+    // The Chats tab already names this panel; no second "Chats" heading.
     <section className="flex flex-col gap-2">
-      <h2 className="text-lg font-semibold">{t.projects.threads}</h2>
       {query.isError ? (
         <ErrorState
           message={t.projects.threadsLoadFailed}

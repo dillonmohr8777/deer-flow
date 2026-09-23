@@ -483,6 +483,7 @@ export interface Translations {
   trash: {
     title: string;
     empty: string;
+    emptyHint: string;
     loadFailed: string;
     retry: string;
     originProject: (projectName: string) => string;

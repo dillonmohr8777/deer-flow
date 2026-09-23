@@ -628,6 +628,8 @@ export const enUS: Translations = {
   trash: {
     title: "Trash",
     empty: "Trash is empty.",
+    emptyHint:
+      "Anything you move to the trash from a project's Documents tab waits here.",
     loadFailed: "Couldn't load trash",
     retry: "Try again",
     originProject: (projectName) => `from ${projectName}`,

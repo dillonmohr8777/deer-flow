@@ -586,6 +586,7 @@ export const zhCN: Translations = {
   trash: {
     title: "回收站",
     empty: "回收站为空。",
+    emptyHint: "从项目“文档”页移入回收站的内容会在这里等待。",
     loadFailed: "无法加载回收站",
     retry: "重试",
     originProject: (projectName) => `来自 ${projectName}`,

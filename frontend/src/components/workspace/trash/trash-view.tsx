@@ -109,7 +109,7 @@ export function TrashView() {
         <WorkingState label={t.common.loading} />
       ) : documents.length === 0 ? (
         <EmptyState momo="builder" title={t.trash.empty}>
-          {t.trash.retentionNote(retentionDays)}
+          {t.trash.emptyHint}
         </EmptyState>
       ) : (
         <>
