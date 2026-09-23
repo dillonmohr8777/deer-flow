@@ -66,7 +66,9 @@ function hashSeed(seed: string) {
 /** First letter of a human label. Returns null when there is nothing to show. */
 function monogramOf(initial: string | undefined) {
   if (!initial) return null;
-  const letters = [...initial].filter((character) => /[\p{L}\p{N}]/u.test(character));
+  const letters = [...initial].filter((character) =>
+    /[\p{L}\p{N}]/u.test(character),
+  );
   return letters.length ? letters[0]!.toUpperCase() : null;
 }
 
@@ -127,7 +129,13 @@ export function MomentumGlyph({
       {size > 48 ? (
         <>
           <circle cx={pinX} cy={pinY} r="2.5" fill={BRASS} />
-          <circle cx={pinX - 0.7} cy={pinY - 0.8} r="0.8" fill={CREAM} opacity="0.55" />
+          <circle
+            cx={pinX - 0.7}
+            cy={pinY - 0.8}
+            r="0.8"
+            fill={CREAM}
+            opacity="0.55"
+          />
         </>
       ) : null}
     </svg>

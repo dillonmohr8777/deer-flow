@@ -37,14 +37,20 @@ function renderList() {
   queryClient.setQueryData(
     [...INFINITE_THREADS_QUERY_KEY_PREFIX, { archived: false }],
     {
-      pages: [[makeThread("t1", "First chat"), makeThread("t2", "Second chat")]],
+      pages: [
+        [makeThread("t1", "First chat"), makeThread("t2", "Second chat")],
+      ],
       pageParams: [0],
     },
   );
   return render(
     <I18nProvider initialLocale={DEFAULT_LOCALE}>
       <QueryClientProvider client={queryClient}>
-        <AuthProvider initialUser={{ id: "u1", email: "u@example.test", system_role: "user" } as User}>
+        <AuthProvider
+          initialUser={
+            { id: "u1", email: "u@example.test", system_role: "user" } as User
+          }
+        >
           <SidebarProvider>
             <ThreadDeleteDialogProvider>
               <RecentChatList />

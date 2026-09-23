@@ -41,6 +41,8 @@ describe("workspace breadcrumb", () => {
       </I18nProvider>,
     );
     expect(screen.getByText(label)).toBeDefined();
-    expect(screen.getByRole("banner").textContent).not.toMatch(/[a-z][-_][a-z]/i);
+    expect(screen.getByRole("banner").textContent).not.toMatch(
+      /[a-z][-_][a-z]/i,
+    );
   });
 });

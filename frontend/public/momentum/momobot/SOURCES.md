@@ -33,8 +33,8 @@ All three sources are Momentum 360's own brand deliverables:
 
 - `still-*.webp` (16): Google AI Studio batch stills, 2026-09-07,
   `client-operations\clients\momentum-360\deliverables\2026-09-07-google-aistudio-batch\site\stills\momentum_*.png`:
-  01_launch_{detail,hero,module}, 02_services_{detail,hero,props},
-  03_momo_hero, 05_launch_{burst,hero} (Philadelphia at night),
+  01*launch*{detail,hero,module}, 02*services*{detail,hero,props},
+  03*momo_hero, 05_launch*{burst,hero} (Philadelphia at night),
   x1_momo_machine, x2_paper_city, x3_the_fold, x4_page_writes,
   x6_particles_cream, x7_bird_plate, x8_scrapbook_opener.
 - `engraving-{philly,bird,botanical}.webp`: Momentum brand system v3,

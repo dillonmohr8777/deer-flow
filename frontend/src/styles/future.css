@@ -172,7 +172,8 @@
 @media (prefers-reduced-motion: no-preference) {
   :is(
       :root:not(.dark)[data-treatment="future"][data-motion="on"],
-      :root:not(.dark) [data-workspace-shell][data-treatment="future"][data-motion="on"]
+      :root:not(.dark)
+        [data-workspace-shell][data-treatment="future"][data-motion="on"]
     )
     h1 {
     animation: future-h1-echo 900ms steps(6, end) both;

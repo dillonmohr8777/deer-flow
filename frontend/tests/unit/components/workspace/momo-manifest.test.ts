@@ -22,9 +22,13 @@ const AVATAR_SOURCE = join(
 
 function manifestSlugs(): string[] {
   const source = readFileSync(AVATAR_SOURCE, "utf8");
-  const block = /AVAILABLE_MOMO_SLUGS:\s*ReadonlySet<string>\s*=\s*new Set\(\[([\s\S]*?)\]\)/.exec(source);
+  const block =
+    /AVAILABLE_MOMO_SLUGS:\s*ReadonlySet<string>\s*=\s*new Set\(\[([\s\S]*?)\]\)/.exec(
+      source,
+    );
   const body = block?.[1];
-  if (!body) throw new Error("could not find AVAILABLE_MOMO_SLUGS in momo-avatar.tsx");
+  if (!body)
+    throw new Error("could not find AVAILABLE_MOMO_SLUGS in momo-avatar.tsx");
   return [...body.matchAll(/"([^"]+)"/g)].flatMap((match) =>
     match[1] ? [match[1]] : [],
   );

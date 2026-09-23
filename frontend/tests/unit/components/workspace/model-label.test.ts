@@ -97,9 +97,7 @@ describe("modelDisplayName", () => {
       "Muse Spark 1.3",
     );
     expect(modelDisplayName("openrouter-luna", models)).toBe("GPT 5.6 Luna");
-    expect(modelDisplayName("ollama-qwen3.5-27b", models)).toBe(
-      "Qwen 3.5 27B",
-    );
+    expect(modelDisplayName("ollama-qwen3.5-27b", models)).toBe("Qwen 3.5 27B");
   });
 
   it("falls back to the slug formatter for models the list does not know", () => {

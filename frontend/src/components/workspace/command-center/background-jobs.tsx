@@ -116,7 +116,10 @@ function Count({ count }: { count: number | null | undefined }) {
   if (count === undefined) return null;
   if (count === null)
     return (
-      <span aria-hidden="true" className="text-muted-foreground ml-auto text-xs">
+      <span
+        aria-hidden="true"
+        className="text-muted-foreground ml-auto text-xs"
+      >
         Unavailable
       </span>
     );
@@ -125,7 +128,9 @@ function Count({ count }: { count: number | null | undefined }) {
       aria-hidden="true"
       className={cn(
         "ml-auto min-w-5 rounded-full px-1.5 text-center text-xs font-bold tabular-nums",
-        count > 0 ? "bg-primary text-primary-foreground" : "text-muted-foreground",
+        count > 0
+          ? "bg-primary text-primary-foreground"
+          : "text-muted-foreground",
       )}
     >
       {count}
@@ -272,8 +277,13 @@ function RunRow({
       <span className="block truncate font-bold">{title}</span>
       <span className="text-muted-foreground text-xs">
         {label} ·{" "}
-        {run.model_name ? formatModelLabel(run.model_name) : "Model not recorded"}{" "}
-        · <span className="tabular-nums">{run.total_tokens.toLocaleString()}</span>{" "}
+        {run.model_name
+          ? formatModelLabel(run.model_name)
+          : "Model not recorded"}{" "}
+        ·{" "}
+        <span className="tabular-nums">
+          {run.total_tokens.toLocaleString()}
+        </span>{" "}
         tokens
       </span>
       {run.error && (

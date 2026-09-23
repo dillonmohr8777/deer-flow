@@ -47,8 +47,18 @@ const config = {
     return [
       { source: "/blog", destination: "/", permanent: false },
       { source: "/blog/:path*", destination: "/", permanent: false },
-      { source: "/:lang(en|zh)/docs", destination: "/", permanent: false, locale: false },
-      { source: "/:lang(en|zh)/docs/:path*", destination: "/", permanent: false, locale: false },
+      {
+        source: "/:lang(en|zh)/docs",
+        destination: "/",
+        permanent: false,
+        locale: false,
+      },
+      {
+        source: "/:lang(en|zh)/docs/:path*",
+        destination: "/",
+        permanent: false,
+        locale: false,
+      },
     ];
   },
   async rewrites() {

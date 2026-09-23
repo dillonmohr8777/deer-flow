@@ -539,8 +539,7 @@
 }
 .root[data-treatment="paper"] .runDetail {
   border-left-color: var(--line);
-  box-shadow: -12px 0 32px
-    color-mix(in srgb, var(--paper-ink) 14%, transparent);
+  box-shadow: -12px 0 32px color-mix(in srgb, var(--paper-ink) 14%, transparent);
 }
 
 .primary {

@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, rs } from "@rstest/core";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 
 import {
   useWorkspaceAppearance,
@@ -53,9 +59,9 @@ describe("WorkspaceAppearanceProvider coverage", () => {
     fireEvent.click(screen.getByText("Current"));
     await waitFor(() =>
       expect(
-        container.querySelector("[data-treatment]")?.getAttribute(
-          "data-treatment",
-        ),
+        container
+          .querySelector("[data-treatment]")
+          ?.getAttribute("data-treatment"),
       ).toBe("current"),
     );
     expect(document.documentElement.dataset.treatment).toBe("current");
@@ -74,7 +80,9 @@ describe("WorkspaceAppearanceProvider coverage", () => {
       </WorkspaceAppearanceProvider>,
     );
     const wrapper = container.querySelector("[data-treatment]");
-    await waitFor(() => expect(wrapper?.getAttribute("data-motion")).toBe("off"));
+    await waitFor(() =>
+      expect(wrapper?.getAttribute("data-motion")).toBe("off"),
+    );
     expect(document.documentElement.dataset.motion).toBe("off");
 
     unmount();

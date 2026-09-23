@@ -38,7 +38,8 @@
 
   /* Static starfield: a handful of hairline dots at fixed positions, no
      animation. Layered radial-gradients, each a single 1px point. */
-  --space-stars: radial-gradient(
+  --space-stars:
+    radial-gradient(
       1px 1px at 8% 14%,
       color-mix(in srgb, var(--space-cream) 70%, transparent),
       transparent

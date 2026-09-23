@@ -235,200 +235,205 @@ export default function LoginPage() {
           : "border-border/20 bg-background/5 rounded-3xl border p-8 backdrop-blur-sm",
       )}
     >
-        <div className="text-center">
-          <MomoBotLockup
-            className="mx-auto"
-            wordmarkClassName={cn(!paper && "dark:brightness-0 dark:invert")}
-          />
-          <h1
-            className={cn("mt-2", mutedClass, paper && "m-voice-serif text-lg")}
-            style={mutedStyle}
-          >
-            {isLogin ? t.login.signInTitle : t.login.createAccountTitle}
-          </h1>
-        </div>
+      <div className="text-center">
+        <MomoBotLockup
+          className="mx-auto"
+          wordmarkClassName={cn(!paper && "dark:brightness-0 dark:invert")}
+        />
+        <h1
+          className={cn("mt-2", mutedClass, paper && "m-voice-serif text-lg")}
+          style={mutedStyle}
+        >
+          {isLogin ? t.login.signInTitle : t.login.createAccountTitle}
+        </h1>
+      </div>
 
-        {showSetupStatusUnavailable && (
-          <div
-            role="status"
-            aria-live="polite"
-            className="border-l-2 border-amber-500 ps-3 text-sm"
-          >
-            <p className="font-medium">{t.login.serviceUnavailableTitle}</p>
-            <p className={cn("mt-1", mutedClass)} style={mutedStyle}>
-              {t.login.serviceUnavailableDescription}
-            </p>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="mt-3"
-              disabled={setupStatusPhase === "checking"}
-              onClick={() => {
-                setSetupStatusPhase("checking");
-                setSetupStatusAttempt((attempt) => attempt + 1);
-              }}
-            >
-              {setupStatusPhase === "checking"
-                ? t.login.pleaseWait
-                : t.login.retry}
-            </Button>
-          </div>
-        )}
-
-        {systemNeedsAdminSetup && (
-          <div className="border-l-2 border-blue-500 ps-3 text-sm">
-            <p className="font-medium">{t.login.adminSetupRequiredTitle}</p>
-            <p className={cn("mt-1", mutedClass)} style={mutedStyle}>
-              {t.login.adminSetupRequiredDescription}
-            </p>
-            <Link
-              href="/setup"
-              className={cn(
-                "mt-2 inline-block font-medium hover:underline",
-                linkClass,
-              )}
-              style={linkStyle}
-            >
-              {t.login.createAdminAccount}
-            </Link>
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="space-y-2">
-          <div className="flex flex-col space-y-1">
-            <label htmlFor="email" className="text-sm font-medium">
-              {t.login.email}
-            </label>
-            <Input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              onFocus={cueWave}
-              onMouseEnter={cueWave}
-              placeholder={t.login.emailPlaceholder}
-              required
-            />
-          </div>
-          <div className="flex flex-col space-y-1">
-            <label htmlFor="password" className="text-sm font-medium">
-              {t.login.password}
-            </label>
-            <Input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder={t.login.passwordPlaceholder}
-              required
-              minLength={isLogin ? 6 : 8}
-            />
-          </div>
-
-          <RememberSessionOption
-            checked={rememberMe}
-            onCheckedChange={setRememberMe}
-          />
-
-          {error && <p className="text-sm text-red-500">{error}</p>}
-
+      {showSetupStatusUnavailable && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="border-l-2 border-amber-500 ps-3 text-sm"
+        >
+          <p className="font-medium">{t.login.serviceUnavailableTitle}</p>
+          <p className={cn("mt-1", mutedClass)} style={mutedStyle}>
+            {t.login.serviceUnavailableDescription}
+          </p>
           <Button
-            type="submit"
-            className="w-full"
-            disabled={loading}
-            style={
-              paper
-                ? {
-                    background: "var(--paper-royal)",
-                    color: "var(--paper-cream-hi)",
-                  }
-                : undefined
-            }
+            type="button"
+            variant="outline"
+            size="sm"
+            className="mt-3"
+            disabled={setupStatusPhase === "checking"}
+            onClick={() => {
+              setSetupStatusPhase("checking");
+              setSetupStatusAttempt((attempt) => attempt + 1);
+            }}
           >
-            {loading
+            {setupStatusPhase === "checking"
               ? t.login.pleaseWait
-              : isLogin
-                ? t.login.signIn
-                : t.login.createAccount}
+              : t.login.retry}
           </Button>
-        </form>
+        </div>
+      )}
 
-        {ssoProviders.length > 0 && (
-          <div className="space-y-2">
-            {isLogin && (
-              <div className="relative my-4">
-                <div className="absolute inset-0 flex items-center">
-                  <span
-                    className="w-full border-t"
-                    style={paper ? { borderColor: "var(--paper-line)" } : undefined}
-                  />
-                </div>
-                <div className="relative flex justify-center text-xs uppercase">
-                  <span
-                    className={cn(
-                      "px-2",
-                      !paper && "bg-background text-muted-foreground",
-                    )}
-                    style={
-                      paper
-                        ? {
-                            background: "var(--paper-cream-hi)",
-                            color: "var(--paper-ink-muted)",
-                          }
-                        : undefined
-                    }
-                  >
-                    {t.login.orContinueWith}
-                  </span>
-                </div>
-              </div>
+      {systemNeedsAdminSetup && (
+        <div className="border-l-2 border-blue-500 ps-3 text-sm">
+          <p className="font-medium">{t.login.adminSetupRequiredTitle}</p>
+          <p className={cn("mt-1", mutedClass)} style={mutedStyle}>
+            {t.login.adminSetupRequiredDescription}
+          </p>
+          <Link
+            href="/setup"
+            className={cn(
+              "mt-2 inline-block font-medium hover:underline",
+              linkClass,
             )}
-            {showSsoHint && (
-              <p className={cn("text-center text-sm", mutedClass)} style={mutedStyle}>
-                {t.login.ssoHint}
-              </p>
-            )}
-            {ssoProviders.map((provider) => (
-              <Button
-                key={provider.id}
-                type="button"
-                variant="outline"
-                className="w-full"
-                disabled={loading}
-                onClick={() => {
-                  window.location.href = `/api/v1/auth/oauth/${provider.id}?next=${encodeURIComponent(redirectPath)}&remember_me=${String(rememberMe)}`;
-                }}
-              >
-                {t.login.continueWith(provider.display_name)}
-              </Button>
-            ))}
-          </div>
-        )}
-
-        {regularSignupAllowed && (
-          <div className="text-center text-sm">
-            <button
-              type="button"
-              onClick={() => {
-                setIsLogin(!isLogin);
-                setError("");
-                setShowSsoHint(false);
-              }}
-              className={cn("hover:underline", linkClass)}
-              style={linkStyle}
-            >
-              {isLogin ? t.login.noAccountSignUp : t.login.haveAccountSignIn}
-            </button>
-          </div>
-        )}
-
-        <div className={cn("text-center text-xs", mutedClass)} style={mutedStyle}>
-          <Link href="/" className="hover:underline">
-            {t.login.backToHome}
+            style={linkStyle}
+          >
+            {t.login.createAdminAccount}
           </Link>
         </div>
+      )}
+
+      <form onSubmit={handleSubmit} className="space-y-2">
+        <div className="flex flex-col space-y-1">
+          <label htmlFor="email" className="text-sm font-medium">
+            {t.login.email}
+          </label>
+          <Input
+            id="email"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            onFocus={cueWave}
+            onMouseEnter={cueWave}
+            placeholder={t.login.emailPlaceholder}
+            required
+          />
+        </div>
+        <div className="flex flex-col space-y-1">
+          <label htmlFor="password" className="text-sm font-medium">
+            {t.login.password}
+          </label>
+          <Input
+            id="password"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder={t.login.passwordPlaceholder}
+            required
+            minLength={isLogin ? 6 : 8}
+          />
+        </div>
+
+        <RememberSessionOption
+          checked={rememberMe}
+          onCheckedChange={setRememberMe}
+        />
+
+        {error && <p className="text-sm text-red-500">{error}</p>}
+
+        <Button
+          type="submit"
+          className="w-full"
+          disabled={loading}
+          style={
+            paper
+              ? {
+                  background: "var(--paper-royal)",
+                  color: "var(--paper-cream-hi)",
+                }
+              : undefined
+          }
+        >
+          {loading
+            ? t.login.pleaseWait
+            : isLogin
+              ? t.login.signIn
+              : t.login.createAccount}
+        </Button>
+      </form>
+
+      {ssoProviders.length > 0 && (
+        <div className="space-y-2">
+          {isLogin && (
+            <div className="relative my-4">
+              <div className="absolute inset-0 flex items-center">
+                <span
+                  className="w-full border-t"
+                  style={
+                    paper ? { borderColor: "var(--paper-line)" } : undefined
+                  }
+                />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span
+                  className={cn(
+                    "px-2",
+                    !paper && "bg-background text-muted-foreground",
+                  )}
+                  style={
+                    paper
+                      ? {
+                          background: "var(--paper-cream-hi)",
+                          color: "var(--paper-ink-muted)",
+                        }
+                      : undefined
+                  }
+                >
+                  {t.login.orContinueWith}
+                </span>
+              </div>
+            </div>
+          )}
+          {showSsoHint && (
+            <p
+              className={cn("text-center text-sm", mutedClass)}
+              style={mutedStyle}
+            >
+              {t.login.ssoHint}
+            </p>
+          )}
+          {ssoProviders.map((provider) => (
+            <Button
+              key={provider.id}
+              type="button"
+              variant="outline"
+              className="w-full"
+              disabled={loading}
+              onClick={() => {
+                window.location.href = `/api/v1/auth/oauth/${provider.id}?next=${encodeURIComponent(redirectPath)}&remember_me=${String(rememberMe)}`;
+              }}
+            >
+              {t.login.continueWith(provider.display_name)}
+            </Button>
+          ))}
+        </div>
+      )}
+
+      {regularSignupAllowed && (
+        <div className="text-center text-sm">
+          <button
+            type="button"
+            onClick={() => {
+              setIsLogin(!isLogin);
+              setError("");
+              setShowSsoHint(false);
+            }}
+            className={cn("hover:underline", linkClass)}
+            style={linkStyle}
+          >
+            {isLogin ? t.login.noAccountSignUp : t.login.haveAccountSignIn}
+          </button>
+        </div>
+      )}
+
+      <div className={cn("text-center text-xs", mutedClass)} style={mutedStyle}>
+        <Link href="/" className="hover:underline">
+          {t.login.backToHome}
+        </Link>
       </div>
+    </div>
   );
 
   return (

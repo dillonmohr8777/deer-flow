@@ -39,11 +39,14 @@ export function WorkspaceSelector() {
         },
         body: JSON.stringify({ workspace_id: workspaceId || null }),
       });
-      if (!response.ok) throw new Error("Could not switch workspace. Refresh and try again.");
+      if (!response.ok)
+        throw new Error("Could not switch workspace. Refresh and try again.");
       // A full navigation discards cached data from the previous workspace.
       window.location.assign("/workspace/command-center");
     } catch (cause: unknown) {
-      setError(cause instanceof Error ? cause.message : "Could not switch workspace.");
+      setError(
+        cause instanceof Error ? cause.message : "Could not switch workspace.",
+      );
       setBusy(false);
     }
   }
@@ -64,10 +67,16 @@ export function WorkspaceSelector() {
       >
         <option value="">My private workspace</option>
         {data?.workspaces.map((workspace) => (
-          <option key={workspace.id} value={workspace.id}>{workspace.name}</option>
+          <option key={workspace.id} value={workspace.id}>
+            {workspace.name}
+          </option>
         ))}
       </select>
-      {error && <p role="alert" className="text-destructive mx-2 mt-1 text-xs">{error}</p>}
+      {error && (
+        <p role="alert" className="text-destructive mx-2 mt-1 text-xs">
+          {error}
+        </p>
+      )}
     </div>
   );
 }

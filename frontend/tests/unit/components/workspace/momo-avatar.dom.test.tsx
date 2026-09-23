@@ -40,9 +40,13 @@ afterEach(cleanup);
 const KNOWN_AGENT = {
   name: "analytics-engineer",
   display_name: "Analytics Engineer",
-  description: "Builds independently reconciled metrics and client-ready analytics specifications.",
+  description:
+    "Builds independently reconciled metrics and client-ready analytics specifications.",
 };
-const UNKNOWN_AGENT = { name: "some-future-specialist", display_name: "Future Specialist" };
+const UNKNOWN_AGENT = {
+  name: "some-future-specialist",
+  display_name: "Future Specialist",
+};
 
 describe("MomoAvatar", () => {
   it("renders an <img> at the expected slug path for a known agent name", () => {
@@ -87,13 +91,31 @@ describe("MomoAvatar", () => {
     // file.
     const roster = [
       [KNOWN_AGENT, "analytics"],
-      [{ name: "data-migration-engineer", display_name: "Data Migration Engineer" }, "migration"],
-      [{ name: "independent-verifier", display_name: "Independent Verifier" }, "verifier"],
+      [
+        {
+          name: "data-migration-engineer",
+          display_name: "Data Migration Engineer",
+        },
+        "migration",
+      ],
+      [
+        { name: "independent-verifier", display_name: "Independent Verifier" },
+        "verifier",
+      ],
       [{ name: "fleet-scout", display_name: "Fleet Scout" }, "research"],
       [{ name: "fleet-builder", display_name: "Fleet Builder" }, "builder"],
       [{ name: "fleet-qa", display_name: "Fleet QA" }, "qa"],
-      [{ name: "fleet-reliability", display_name: "Fleet Reliability" }, "reliability"],
-      [{ name: "senior-software-engineer", display_name: "Senior Software Engineer" }, "engineer"],
+      [
+        { name: "fleet-reliability", display_name: "Fleet Reliability" },
+        "reliability",
+      ],
+      [
+        {
+          name: "senior-software-engineer",
+          display_name: "Senior Software Engineer",
+        },
+        "engineer",
+      ],
     ] as const;
 
     const { container } = render(
@@ -104,7 +126,9 @@ describe("MomoAvatar", () => {
       </>,
     );
 
-    expect(container.querySelectorAll("svg[data-momentum-glyph]")).toHaveLength(0);
+    expect(container.querySelectorAll("svg[data-momentum-glyph]")).toHaveLength(
+      0,
+    );
     const sources = [...container.querySelectorAll("img")].map((img) =>
       img.getAttribute("src"),
     );
@@ -133,14 +157,22 @@ describe("MomoAvatar", () => {
     const { container } = render(
       <>
         {live.map(([name]) => (
-          <MomoAvatar key={name} agent={{ name, display_name: name }} size={40} />
+          <MomoAvatar
+            key={name}
+            agent={{ name, display_name: name }}
+            size={40}
+          />
         ))}
       </>,
     );
 
-    expect(container.querySelectorAll("svg[data-momentum-glyph]")).toHaveLength(0);
+    expect(container.querySelectorAll("svg[data-momentum-glyph]")).toHaveLength(
+      0,
+    );
     expect(
-      [...container.querySelectorAll("img")].map((img) => img.getAttribute("src")),
+      [...container.querySelectorAll("img")].map((img) =>
+        img.getAttribute("src"),
+      ),
     ).toEqual(live.map(([, slug]) => `/momentum/momos/${slug}.svg`));
   });
 
@@ -156,12 +188,14 @@ describe("MomoAvatar", () => {
   });
 
   it("falls back to the glyph for an agent with no shipped Momo", () => {
-    const { container } = render(<MomoAvatar agent={UNKNOWN_AGENT} size={40} />);
+    const { container } = render(
+      <MomoAvatar agent={UNKNOWN_AGENT} size={40} />,
+    );
     expect(container.querySelector("img")).toBeNull();
     expect(container.querySelector("svg[data-momentum-glyph]")).toBeTruthy();
   });
 
-  it("marks itself data-size=\"sm\" at 48px and below", () => {
+  it('marks itself data-size="sm" at 48px and below', () => {
     const { container } = render(<MomoAvatar agent={KNOWN_AGENT} size={40} />);
     expect(
       container.querySelector('[role="img"]')?.getAttribute("data-size"),
@@ -173,7 +207,9 @@ describe("MomoAvatar", () => {
     // fallback (inline <svg>). Whichever one is inside, it must not be
     // announced separately from the wrapper.
     for (const agent of [KNOWN_AGENT, UNKNOWN_AGENT]) {
-      const { container, unmount } = render(<MomoAvatar agent={agent} size={40} />);
+      const { container, unmount } = render(
+        <MomoAvatar agent={agent} size={40} />,
+      );
       const decoration = container.querySelector("img, svg");
       expect(decoration).toBeTruthy();
       expect(decoration?.getAttribute("aria-hidden")).toBe("true");
@@ -202,8 +238,8 @@ describe("MomoAvatar", () => {
       />,
     );
     expect(idle.querySelector('[data-state="idle"]')).toBeTruthy();
-    const idleLayers = [...idle.querySelectorAll("img[data-depth]")].map((img) =>
-      img.getAttribute("src"),
+    const idleLayers = [...idle.querySelectorAll("img[data-depth]")].map(
+      (img) => img.getAttribute("src"),
     );
     expect(idleLayers).toEqual([
       "/momentum/brain/kraft.webp",

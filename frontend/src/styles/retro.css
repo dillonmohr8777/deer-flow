@@ -124,7 +124,11 @@
     :root:not(.dark)[data-treatment="retro"],
     :root:not(.dark) [data-workspace-shell][data-treatment="retro"]
   )
-  :is([data-slot="card"], [data-slot="dialog-content"], [data-slot="input-group"]) {
+  :is(
+    [data-slot="card"],
+    [data-slot="dialog-content"],
+    [data-slot="input-group"]
+  ) {
   border-width: 2px;
   border-color: var(--retro-amber-deep);
   background-color: var(--retro-navy-hi);

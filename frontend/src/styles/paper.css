@@ -83,8 +83,16 @@
    */
   --canvas: var(--paper-cream);
   --surface: var(--paper-cream-hi);
-  --surface-blue: color-mix(in srgb, var(--paper-royal) 8%, var(--paper-cream-hi));
-  --surface-violet: color-mix(in srgb, var(--paper-ink-muted) 8%, var(--paper-cream-hi));
+  --surface-blue: color-mix(
+    in srgb,
+    var(--paper-royal) 8%,
+    var(--paper-cream-hi)
+  );
+  --surface-violet: color-mix(
+    in srgb,
+    var(--paper-ink-muted) 8%,
+    var(--paper-cream-hi)
+  );
   --ink: var(--paper-ink);
   --muted: var(--paper-ink-muted);
   --line: var(--paper-line);
@@ -251,9 +259,7 @@
   mask-size:
     100% 24px,
     100% calc(100% - 23px);
-  mask-position:
-    top,
-    bottom;
+  mask-position: top, bottom;
   mask-repeat: no-repeat;
   mask-composite: add;
   border-radius: 2px 5px 3px 6px;
@@ -266,9 +272,7 @@
   mask-size:
     100% 24px,
     100% calc(100% - 23px);
-  mask-position:
-    top,
-    bottom;
+  mask-position: top, bottom;
   mask-repeat: no-repeat;
   mask-composite: add;
   border-radius: 5px 2px 6px 3px;
@@ -466,6 +470,7 @@
 [data-treatment="paper"] [data-slot="tabs-trigger"]:not([data-state="active"]) {
   color: var(--paper-ink-muted);
 }
-[data-treatment="paper"] [data-slot="tabs-trigger"]:not([data-state="active"]):hover {
+[data-treatment="paper"]
+  [data-slot="tabs-trigger"]:not([data-state="active"]):hover {
   color: var(--paper-ink);
 }

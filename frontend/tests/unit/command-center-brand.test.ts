@@ -37,7 +37,12 @@ describe("command center reading order", () => {
 describe("command center brand surfaces", () => {
   // .topologyLead::after (the old connector line) is gone; the specialist
   // card took its place as the fourth brand surface checked here.
-  for (const selector of [".primary", ".primary:hover", ".topologyLead", ".agent"]) {
+  for (const selector of [
+    ".primary",
+    ".primary:hover",
+    ".topologyLead",
+    ".agent",
+  ]) {
     it(`${selector} is a flat brand fill, not a violet gradient`, () => {
       const body = rule(selector);
       expect(body).not.toMatch(/gradient/);

@@ -308,11 +308,17 @@ describe("CommandCenter", () => {
       "Business Intelligence",
       "Artifact Library",
     ])
-      expect(screen.getByRole("button", { name: `${name} Preview` })).toBeDefined();
+      expect(
+        screen.getByRole("button", { name: `${name} Preview` }),
+      ).toBeDefined();
     expect(screen.queryByText(/not connected yet/)).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "Client Spaces Preview" }));
-    expect(screen.getByText(/Client spaces are not connected yet/)).toBeDefined();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Client Spaces Preview" }),
+    );
+    expect(
+      screen.getByText(/Client spaces are not connected yet/),
+    ).toBeDefined();
     expect(screen.getByTestId("client-spaces")).toBeDefined();
   });
 

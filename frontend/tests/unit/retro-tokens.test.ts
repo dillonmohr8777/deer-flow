@@ -81,9 +81,7 @@ describe("retro token palette (WCAG contrast)", () => {
       const [r, g, b] = hexToRgb(requireToken(name));
       const navy = b >= r && b >= g;
       const warm = r >= b && g >= b * 0.5;
-      expect(navy || warm, `${name} is outside the limited palette`).toBe(
-        true,
-      );
+      expect(navy || warm, `${name} is outside the limited palette`).toBe(true);
     }
   });
 

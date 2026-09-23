@@ -49,7 +49,12 @@ import {
 } from "./business-views";
 import { modelDisplayName } from "./model-label";
 import { MomentumGlyph } from "./momentum-glyph";
-import { BRAIN_ASPECT, BRAIN_FLAT, BRAIN_LAYERS, MomoAvatar } from "./momo-avatar";
+import {
+  BRAIN_ASPECT,
+  BRAIN_FLAT,
+  BRAIN_LAYERS,
+  MomoAvatar,
+} from "./momo-avatar";
 import { WorkspaceAppearance } from "./workspace-appearance";
 
 import styles from "./command-center.module.css";
@@ -497,11 +502,7 @@ export function CommandCenter() {
                 // Its box is sized by .heroMomo's own CSS (percentage width,
                 // aspect-ratio); PaperLayers fills it, [data-paper-layers]
                 // overriding its usual fixed pixel box for this one site.
-                <span
-                  key={slug}
-                  className={styles.heroMomo}
-                  data-crew={slug}
-                >
+                <span key={slug} className={styles.heroMomo} data-crew={slug}>
                   <PaperLayers
                     layers={BRAIN_LAYERS}
                     flatSrc={BRAIN_FLAT}
@@ -632,8 +633,7 @@ export function CommandCenter() {
                 Scheduled tasks <ArrowUpRight size={15} aria-hidden="true" />
               </Link>
               <Link href="/workspace/capabilities">
-                Capability Center{" "}
-                <ArrowUpRight size={15} aria-hidden="true" />
+                Capability Center <ArrowUpRight size={15} aria-hidden="true" />
               </Link>
             </nav>
           </>

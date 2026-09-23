@@ -33,7 +33,9 @@ function Controls() {
       </output>
       <output data-testid="persistence">{appearance.persistence}</output>
       <button
-        onClick={() => appearance.update({ treatment: "current", motion: true })}
+        onClick={() =>
+          appearance.update({ treatment: "current", motion: true })
+        }
       >
         Current
       </button>
