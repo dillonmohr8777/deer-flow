@@ -121,20 +121,6 @@
   background: #f5d369;
   transform: rotate(-6deg);
 }
-.signature[data-treatment="paper"][data-size="compact"] .brandPlane {
-  transform: rotate(-2deg);
-}
-.signature[data-treatment="paper"][data-size="compact"]::after {
-  content: "";
-  position: absolute;
-  bottom: -6px;
-  left: 12%;
-  right: 8%;
-  height: 3px;
-  border-radius: 2px;
-  background: #f5ca52;
-  transform: rotate(-2deg);
-}
 .signature[data-animated="true"] .brandPlane {
   animation: brand-current 7s cubic-bezier(0.22, 1, 0.36, 1) infinite;
 }
