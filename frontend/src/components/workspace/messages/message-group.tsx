@@ -15,7 +15,7 @@ import {
   SquareTerminalIcon,
   WrenchIcon,
 } from "lucide-react";
-import { memo, useEffect, useMemo, useState } from "react";
+import { memo, useContext, useEffect, useMemo, useState } from "react";
 
 import {
   ChainOfThought,
@@ -50,6 +50,11 @@ import { Tooltip } from "../tooltip";
 import { MarkdownContent } from "./markdown-content";
 import { isSafeHref, UnsafeLink } from "./markdown-link";
 import { ToolCallDetails } from "./tool-call-details";
+import {
+  DeepReasoning,
+  DeepReasoningContext,
+  deepReasoningFor,
+} from "./ultra-thinking";
 
 interface MessageGroupProps {
   className?: string;
@@ -71,6 +76,7 @@ function MessageGroupComponent({
   threadId,
 }: MessageGroupProps) {
   const { t } = useI18n();
+  const deepReasoningState = useContext(DeepReasoningContext);
   const [showAbove, setShowAbove] = useState(
     env.NEXT_PUBLIC_STATIC_WEBSITE_ONLY === "true",
   );
@@ -308,17 +314,26 @@ function MessageGroupComponent({
       ];
     }
     if (step.type === "reasoning") {
+      const deep = deepReasoningFor(deepReasoningState, step.messageId);
       return [
         renderDebugSummary(step.messageId, stepIndex),
-        <ChainOfThoughtStep
-          key={step.id}
-          label={
-            <MarkdownContent
-              content={step.reasoning ?? ""}
-              isLoading={isLoading}
-            />
-          }
-        ></ChainOfThoughtStep>,
+        deep ? (
+          <DeepReasoning
+            key={step.id}
+            reasoning={step.reasoning ?? ""}
+            {...deep}
+          />
+        ) : (
+          <ChainOfThoughtStep
+            key={step.id}
+            label={
+              <MarkdownContent
+                content={step.reasoning ?? ""}
+                isLoading={isLoading}
+              />
+            }
+          ></ChainOfThoughtStep>
+        ),
       ];
     }
 
@@ -332,6 +347,10 @@ function MessageGroupComponent({
     showTokenDebugSummaries && lastReasoningStep?.messageId
       ? debugStepByMessageId.get(lastReasoningStep.messageId)
       : undefined;
+  const lastReasoningDeep = deepReasoningFor(
+    deepReasoningState,
+    lastReasoningStep?.messageId,
+  );
 
   const processingPanel = (
     <ChainOfThought
@@ -406,55 +425,66 @@ function MessageGroupComponent({
             lastReasoningStep.messageId,
             stepIndexByStep.get(lastReasoningStep) ?? -1,
           )}
-          <Button
-            key={lastReasoningStep.id}
-            className="w-full items-start justify-start text-left"
-            variant="ghost"
-            onClick={() => setShowLastThinking(!showLastThinking)}
-          >
-            <div className="flex w-full items-center justify-between">
-              <ChainOfThoughtStep
-                className="font-normal"
-                label={
-                  <DebugStepLabel
-                    label={t.common.thinking}
-                    token={shouldInlineThinkingToken({
-                      debugStep: lastReasoningDebugStep,
-                      toolCallCount: lastReasoningStep.messageId
-                        ? (toolCallCountByMessageId.get(
-                            lastReasoningStep.messageId,
-                          ) ?? 0)
-                        : 0,
-                      enabled: showTokenDebugSummaries,
-                      thinkingLabel: t.common.thinking,
-                      t,
-                    })}
-                  />
-                }
-                icon={LightbulbIcon}
-              ></ChainOfThoughtStep>
-              <div>
-                <ChevronUp
-                  className={cn(
-                    "text-muted-foreground size-4",
-                    showLastThinking ? "" : "rotate-180",
-                  )}
-                />
-              </div>
-            </div>
-          </Button>
-          {showLastThinking && (
-            <ChainOfThoughtContent className="px-4 pb-2">
-              <ChainOfThoughtStep
+          {lastReasoningDeep ? (
+            <DeepReasoning
+              key={lastReasoningStep.id}
+              reasoning={lastReasoningStep.reasoning ?? ""}
+              framed={false}
+              {...lastReasoningDeep}
+            />
+          ) : (
+            <>
+              <Button
                 key={lastReasoningStep.id}
-                label={
-                  <MarkdownContent
-                    content={lastReasoningStep.reasoning ?? ""}
-                    isLoading={isLoading}
-                  />
-                }
-              ></ChainOfThoughtStep>
-            </ChainOfThoughtContent>
+                className="w-full items-start justify-start text-left"
+                variant="ghost"
+                onClick={() => setShowLastThinking(!showLastThinking)}
+              >
+                <div className="flex w-full items-center justify-between">
+                  <ChainOfThoughtStep
+                    className="font-normal"
+                    label={
+                      <DebugStepLabel
+                        label={t.common.thinking}
+                        token={shouldInlineThinkingToken({
+                          debugStep: lastReasoningDebugStep,
+                          toolCallCount: lastReasoningStep.messageId
+                            ? (toolCallCountByMessageId.get(
+                                lastReasoningStep.messageId,
+                              ) ?? 0)
+                            : 0,
+                          enabled: showTokenDebugSummaries,
+                          thinkingLabel: t.common.thinking,
+                          t,
+                        })}
+                      />
+                    }
+                    icon={LightbulbIcon}
+                  ></ChainOfThoughtStep>
+                  <div>
+                    <ChevronUp
+                      className={cn(
+                        "text-muted-foreground size-4",
+                        showLastThinking ? "" : "rotate-180",
+                      )}
+                    />
+                  </div>
+                </div>
+              </Button>
+              {showLastThinking && (
+                <ChainOfThoughtContent className="px-4 pb-2">
+                  <ChainOfThoughtStep
+                    key={lastReasoningStep.id}
+                    label={
+                      <MarkdownContent
+                        content={lastReasoningStep.reasoning ?? ""}
+                        isLoading={isLoading}
+                      />
+                    }
+                  ></ChainOfThoughtStep>
+                </ChainOfThoughtContent>
+              )}
+            </>
           )}
           {belowLastReasoningAssistantTextSteps.length > 0 && (
             <ChainOfThoughtContent className="px-4 pb-2">

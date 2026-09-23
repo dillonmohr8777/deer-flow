@@ -160,6 +160,8 @@ export interface Translations {
 
   runDuration: {
     reasoning: string;
+    thinkingDeeply: string;
+    thoughtFor: (duration: string) => string;
     working: string;
     completedIn: (duration: string) => string;
     description: string;

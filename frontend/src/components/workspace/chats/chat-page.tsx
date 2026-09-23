@@ -25,6 +25,7 @@ import {
   MESSAGE_LIST_DEFAULT_PADDING_BOTTOM,
 } from "@/components/workspace/messages";
 import { ThreadContext } from "@/components/workspace/messages/context";
+import { isDeepReasoningRun } from "@/components/workspace/messages/ultra-thinking";
 import {
   SidecarProvider,
   SidecarTrigger,
@@ -114,7 +115,7 @@ export default function ChatPage() {
   const [settings, setSettings] = useThreadSettings(threadId);
   const [localSettings, setLocalSettings] = useLocalSettings();
   const { enabled: browserControlEnabled } = useBrowserControlEnabled();
-  const { tokenUsageEnabled } = useModels();
+  const { models, tokenUsageEnabled } = useModels();
   const threadTokenUsage = useThreadTokenUsage(
     isNewThread || isMock ? undefined : threadId,
     { enabled: !isMock },
@@ -534,6 +535,12 @@ export default function ChatPage() {
                   testId="main-message-list"
                   threadId={threadId}
                   thread={thread}
+                  deepReasoning={isDeepReasoningRun(
+                    settings.context,
+                    models.find(
+                      (model) => model.name === settings.context.model_name,
+                    ),
+                  )}
                   enableConversationOutline
                   paddingBottom={MESSAGE_LIST_DEFAULT_PADDING_BOTTOM}
                   hasMoreHistory={hasMoreHistory}

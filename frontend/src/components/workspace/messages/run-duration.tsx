@@ -3,9 +3,10 @@
 import { Clock3Icon } from "lucide-react";
 import { useEffect, useState } from "react";
 
-import { Shimmer } from "@/components/ai-elements/shimmer";
 import { useI18n } from "@/core/i18n/hooks";
 import { formatRunDuration } from "@/core/messages/run-duration";
+
+import { WorkingSquares } from "./ultra-thinking";
 
 export function RunActivity({ startTime }: { startTime: number | null }) {
   const { t } = useI18n();
@@ -32,8 +33,10 @@ export function RunActivity({ startTime }: { startTime: number | null }) {
       className="text-muted-foreground flex items-center gap-2 text-sm"
       data-testid="run-activity"
     >
-      <Clock3Icon className="size-4" />
-      <Shimmer duration={1}>{t.runDuration.working}</Shimmer>
+      {/* Ticks in steps(3) over 1.2s; still under reduced motion. The word
+          says it too, so the squares stay decoration. */}
+      <WorkingSquares />
+      <span>{t.runDuration.working}</span>
       {formatted && <span aria-hidden="true">({formatted})</span>}
     </div>
   );

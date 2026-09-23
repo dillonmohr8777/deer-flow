@@ -107,6 +107,11 @@ import { RunActivity, RunDuration } from "./run-duration";
 import { MessageListSkeleton } from "./skeleton";
 import { SubtaskCard } from "./subtask-card";
 import {
+  DeepReasoningContext,
+  DeepReasoningStatus,
+  useDeepReasoningTracker,
+} from "./ultra-thinking";
+import {
   VirtualMessageList,
   type VirtualMessageListHandle,
 } from "./virtual-message-list";
@@ -304,6 +309,7 @@ export function MessageList({
   sidecarSurface = false,
   initialScroll = "smooth",
   resizeScroll = "smooth",
+  deepReasoning = false,
 }: {
   archiveDownloadsEnabled?: boolean;
   className?: string;
@@ -339,12 +345,23 @@ export function MessageList({
   sidecarSurface?: boolean;
   initialScroll?: ConversationProps["initial"];
   resizeScroll?: ConversationProps["resize"];
+  /**
+   * The thread's run setting asks for deep reasoning (isDeepReasoningRun).
+   * Read when each run starts, so changing the composer mid-run never
+   * restyles a run that is already streaming.
+   */
+  deepReasoning?: boolean;
 }) {
   const { t } = useI18n();
   const sidecar = useMaybeSidecar();
   const [selectionToolbar, setSelectionToolbar] =
     useState<SelectionToolbarState | null>(null);
   const messages = thread.messages;
+  const deepReasoningState = useDeepReasoningTracker(
+    messages,
+    thread.isLoading,
+    deepReasoning,
+  );
   const groupedMessages = useStableMessageGroups(messages, thread.isLoading);
   const chapters = useMemo(
     () =>
@@ -1083,7 +1100,7 @@ export function MessageList({
       </div>
     );
   };
-  return (
+  const conversation = (
     <KnowledgeSourcesProvider messages={thread.messages}>
       <Conversation
         className={cn("flex size-full flex-col justify-center", className)}
@@ -1474,6 +1491,7 @@ export function MessageList({
           <div style={{ height: `${paddingBottom}px` }} />
         </ConversationContent>
       </Conversation>
+      <DeepReasoningStatus state={deepReasoningState} />
       {conversationOutlineEnabled && (
         <ConversationOutline
           chapters={chapters}
@@ -1530,5 +1548,10 @@ export function MessageList({
         </div>
       )}
     </KnowledgeSourcesProvider>
+  );
+  return (
+    <DeepReasoningContext.Provider value={deepReasoningState}>
+      {conversation}
+    </DeepReasoningContext.Provider>
   );
 }
