@@ -19,11 +19,11 @@ export function AgentGallery() {
   };
 
   return (
-    <div className="flex size-full flex-col">
+    <div className="momentum-page flex size-full flex-col">
       {/* Page header */}
-      <div className="flex items-center justify-between border-b px-6 py-4">
-        <div>
-          <h1 className="text-xl font-semibold">{t.agents.title}</h1>
+      <div className="flex items-center justify-between gap-4 border-b px-4 py-4 sm:px-6">
+        <div className="min-w-0">
+          <h1 className="text-2xl">{t.agents.title}</h1>
           <p className="text-muted-foreground mt-0.5 text-sm">
             {t.agents.description}
           </p>
@@ -35,7 +35,7 @@ export function AgentGallery() {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto p-6">
+      <div className="flex-1 overflow-y-auto p-4 pb-28 sm:p-6 sm:pb-28">
         {isLoading ? (
           <div className="text-muted-foreground flex h-40 items-center justify-center text-sm">
             {t.common.loading}
@@ -57,7 +57,7 @@ export function AgentGallery() {
             </Button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-3">
             {agents.map((agent) => (
               <AgentCard key={agent.name} agent={agent} />
             ))}
