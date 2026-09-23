@@ -4,22 +4,40 @@ import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import and_, exists, or_, select, update
+from sqlalchemy import and_, delete, exists, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from deerflow.persistence.organizations.resolution import organization_from_owned_parent, private_organization_for_user
+from deerflow.persistence.organizations.delegation import ActiveDelegation, OrganizationDelegationRepository
+from deerflow.persistence.organizations.resolution import organization_for_write, organization_from_owned_parent, private_organization_for_user
 from deerflow.persistence.run import RunRepository
 from deerflow.persistence.run.model import RunRow
 from deerflow.persistence.scheduled_task_runs.model import ScheduledTaskRunRow
 from deerflow.persistence.scheduled_task_runs.projection import account_launch, can_project
 from deerflow.persistence.scheduled_tasks.model import ACTIVE_RUN_STATUSES, ONCE_TASK_STATUS_BY_RUN_STATUS, TERMINAL_RUN_STATUSES, ScheduledTaskRow
 from deerflow.persistence.thread_meta.model import ThreadMetaRow
+from deerflow.runtime.user_context import resolve_organization_id
 from deerflow.scheduler.schedules import next_run_at as compute_next_run_at
 from deerflow.utils.time import coerce_iso
 
 logger = logging.getLogger(__name__)
 
 TERMINAL_TASK_STATUSES: frozenset[str] = frozenset({"completed", "failed", "cancelled"})
+
+# Contract section 4: the scheduler starts a task's runs only through this
+# delegation. Starting a run, fresh thread included, needs only runs:create.
+DELEGATION_SUBJECT_TYPE = "scheduled_task"
+LAUNCH_SCOPE = "runs:create"
+
+
+def _organization_filter() -> tuple:
+    """The active organization beside the user filter; none for internal or background callers."""
+    active = resolve_organization_id()
+    return () if active is None else (ScheduledTaskRow.organization_id == active,)
+
+
+def _visible(row: ScheduledTaskRow | None, user_id: str) -> bool:
+    active = resolve_organization_id()
+    return row is not None and row.user_id == user_id and (active is None or row.organization_id == active)
 
 
 class ActiveScheduledTaskMutationConflict(Exception):
@@ -65,6 +83,7 @@ class ScheduledTaskRepository:
     ) -> None:
         self._sf = session_factory
         self._run_repository = run_repository or RunRepository(session_factory)
+        self._delegations = OrganizationDelegationRepository(session_factory)
 
     @staticmethod
     def _row_to_dict(row: ScheduledTaskRow) -> dict[str, Any]:
@@ -102,7 +121,15 @@ class ScheduledTaskRepository:
         schedule_spec: dict[str, Any],
         timezone: str,
         next_run_at: datetime | None,
+        delegation_owner_user_id: str | None = None,
     ) -> dict[str, Any]:
+        """Create a task owned by the storage principal ``user_id``.
+
+        The server-resolved organization wins and the thread (or the storage
+        principal) must match it, else :class:`OrganizationMismatchError`. With
+        ``delegation_owner_user_id`` (the acting member) the task is granted its
+        launch delegation, all or nothing.
+        """
         now = datetime.now(UTC)
         row = ScheduledTaskRow(
             id=task_id,
@@ -121,21 +148,46 @@ class ScheduledTaskRepository:
         )
         async with self._sf() as session:
             if thread_id is None:
-                row.organization_id = await private_organization_for_user(session, user_id)
+                parent_organization_id = await private_organization_for_user(session, user_id)
             else:
                 thread = (await session.execute(select(ThreadMetaRow).where(ThreadMetaRow.thread_id == thread_id).with_for_update())).scalar_one_or_none()
-                row.organization_id = organization_from_owned_parent(thread, user_id, parent_name="thread")
+                parent_organization_id = organization_from_owned_parent(thread, user_id, parent_name="thread")
+            row.organization_id = organization_for_write(resolve_organization_id(), parent_organization_id, user_id)
             session.add(row)
             await session.commit()
             await session.refresh(row)
-            return self._row_to_dict(row)
+            created = self._row_to_dict(row)
+        if delegation_owner_user_id is not None and created["organization_id"] is not None:
+            try:
+                await self._delegations.grant(
+                    organization_id=created["organization_id"],
+                    subject_type=DELEGATION_SUBJECT_TYPE,
+                    subject_id=task_id,
+                    owner_user_id=delegation_owner_user_id,
+                    scopes=[LAUNCH_SCOPE],
+                )
+            except Exception:
+                async with self._sf() as session:
+                    await session.execute(delete(ScheduledTaskRow).where(ScheduledTaskRow.id == task_id))
+                    await session.commit()
+                raise
+        return created
 
     async def get(self, task_id: str, *, user_id: str) -> dict[str, Any] | None:
         async with self._sf() as session:
             row = await session.get(ScheduledTaskRow, task_id)
-            if row is None or row.user_id != user_id:
+            if not _visible(row, user_id):
                 return None
             return self._row_to_dict(row)
+
+    async def resolve_launch_delegation(self, task: dict[str, Any]) -> ActiveDelegation | None:
+        """Re-read the task's delegation to start runs; ``None`` (revoked, expired, owner gone) denies."""
+        return await self._delegations.resolve_active_delegation(
+            subject_type=DELEGATION_SUBJECT_TYPE,
+            subject_id=task["id"],
+            organization_id=task.get("organization_id"),
+            scope=LAUNCH_SCOPE,
+        )
 
     async def get_internal(self, task_id: str) -> dict[str, Any] | None:
         """Load a task for the internal queue worker without an auth boundary."""
@@ -144,7 +196,7 @@ class ScheduledTaskRepository:
             return self._row_to_dict(row) if row is not None else None
 
     async def list_by_user(self, user_id: str) -> list[dict[str, Any]]:
-        stmt = select(ScheduledTaskRow).where(ScheduledTaskRow.user_id == user_id).order_by(ScheduledTaskRow.created_at.desc(), ScheduledTaskRow.id.desc())
+        stmt = select(ScheduledTaskRow).where(ScheduledTaskRow.user_id == user_id, *_organization_filter()).order_by(ScheduledTaskRow.created_at.desc(), ScheduledTaskRow.id.desc())
         async with self._sf() as session:
             result = await session.execute(stmt)
             return [self._row_to_dict(row) for row in result.scalars()]
@@ -172,7 +224,7 @@ class ScheduledTaskRepository:
         """Pause a task and cancel its waiting occurrence in one transaction."""
         async with self._sf() as session:
             task = await self._lock_task(session, task_id)
-            if task is None or task.user_id != user_id:
+            if not _visible(task, user_id):
                 await session.rollback()
                 return "not_found"
             run = (
@@ -214,10 +266,10 @@ class ScheduledTaskRepository:
         error: str,
         now: datetime,
     ) -> str:
-        """Delete a task only before queue execution begins."""
+        """Delete a task only before queue execution begins, then revoke its delegation."""
         async with self._sf() as session:
             task = await self._lock_task(session, task_id)
-            if task is None or task.user_id != user_id:
+            if not _visible(task, user_id):
                 await session.rollback()
                 return "not_found"
             run = (
@@ -246,7 +298,8 @@ class ScheduledTaskRepository:
                 run.lease_expires_at = None
             await session.delete(task)
             await session.commit()
-            return "deleted"
+        await self._delegations.revoke(subject_type=DELEGATION_SUBJECT_TYPE, subject_id=task_id)
+        return "deleted"
 
     async def update(
         self,
@@ -258,7 +311,7 @@ class ScheduledTaskRepository:
     ) -> dict[str, Any] | None:
         async with self._sf() as session:
             row = await self._lock_task(session, task_id) if require_mutable else await session.get(ScheduledTaskRow, task_id)
-            if row is None or row.user_id != user_id:
+            if not _visible(row, user_id):
                 return None
             if require_mutable:
                 if row.status == "running":
@@ -286,11 +339,12 @@ class ScheduledTaskRepository:
     async def delete(self, task_id: str, *, user_id: str) -> bool:
         async with self._sf() as session:
             row = await session.get(ScheduledTaskRow, task_id)
-            if row is None or row.user_id != user_id:
+            if not _visible(row, user_id):
                 return False
             await session.delete(row)
             await session.commit()
-            return True
+        await self._delegations.revoke(subject_type=DELEGATION_SUBJECT_TYPE, subject_id=task_id)
+        return True
 
     async def claim_due_tasks(
         self,
@@ -553,6 +607,7 @@ class ScheduledTaskRepository:
             .where(
                 ScheduledTaskRow.user_id == user_id,
                 ScheduledTaskRow.thread_id == thread_id,
+                *_organization_filter(),
             )
             .order_by(ScheduledTaskRow.created_at.desc(), ScheduledTaskRow.id.desc())
         )

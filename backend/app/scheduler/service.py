@@ -23,6 +23,7 @@ _ACTIVE_RUN_CONFLICT_ERROR = "task already has an active run"
 _RESTART_RECOVERY_ERROR = "interrupted: gateway restarted before the run reached a terminal state"
 _LEASE_RECOVERY_ERROR = "interrupted: the owning gateway stopped renewing its run lease"
 _QUEUE_TIMEOUT_ERROR = "scheduled task queue wait timeout exceeded"
+_NO_DELEGATION_ERROR = "scheduled task has no active delegation in its organization"
 
 
 class ScheduledTaskService:
@@ -263,6 +264,12 @@ class ScheduledTaskService:
         launched_thread_id: str | None = None
         launch_succeeded = False
         try:
+            # Contract section 4: an organization's task starts runs only through
+            # its owner's delegation, re-read here so a revoked owner fails the
+            # occurrence closed. NULL-organization (legacy) tasks keep the owner
+            # header path until lane 0 rejects header-only internal calls.
+            if task.get("organization_id") and await self._task_repo.resolve_launch_delegation(task) is None:
+                raise PermissionError(_NO_DELEGATION_ERROR)
             result = await self._launch_run(
                 thread_id=execution_thread_id,
                 assistant_id=task.get("assistant_id"),
