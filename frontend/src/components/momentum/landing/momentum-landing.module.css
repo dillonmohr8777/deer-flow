@@ -688,26 +688,52 @@
 }
 
 /*
- * The Momo intro film, pinned into the page as a scrapbook photo: cream
- * border, a slight hand-stuck tilt. It plays once and holds its last frame.
+ * Momo, pinned as a scrapbook photo in front of the moving collage: cream
+ * border, a brass pin, a hand-stuck tilt. The intro plays once, then his
+ * Hello loop stays. On wide screens he sits in the open space right of the
+ * hero copy, where the scrim thins; on narrow screens he follows the cards.
  */
 .paperMomos {
   position: relative;
-  width: min(100%, 40rem);
+  width: min(100%, 24rem);
   margin-top: clamp(2.5rem, 6vw, 4rem);
   padding: 0.55rem 0.55rem 1.6rem;
   background: var(--paper-cream-hi);
   box-shadow:
     0 1px 2px rgb(16 30 63 / 0.16),
     0 18px 36px -14px rgb(16 30 63 / 0.4);
-  transform: rotate(-1.2deg);
+  transform: rotate(2deg);
+}
+
+.paperMomos::after {
+  content: "";
+  position: absolute;
+  top: -0.35rem;
+  left: 50%;
+  width: 0.8rem;
+  height: 0.8rem;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #f3dc8b, #b8913a 60%, #7a5d1f);
+  box-shadow: 0 2px 3px rgb(0 0 0 / 0.35);
+  transform: translateX(-50%);
 }
 
 .paperMomos video {
   display: block;
   width: 100%;
-  aspect-ratio: 16 / 9;
+  aspect-ratio: 1;
   object-fit: cover;
+  object-position: 62% 50%;
+}
+
+@media (min-width: 64rem) {
+  .paperMomos {
+    position: absolute;
+    top: clamp(4rem, 9vw, 7rem);
+    left: calc(100% + clamp(2rem, 4vw, 4rem));
+    width: min(24rem, 100vw - 44rem - 8rem);
+    margin-top: 0;
+  }
 }
 
 .paperFooter {

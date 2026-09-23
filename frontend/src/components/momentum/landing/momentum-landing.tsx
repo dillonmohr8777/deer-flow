@@ -185,6 +185,9 @@ export function MomentumLanding() {
  */
 function PaperLanding() {
   const motion = useIntroMotion();
+  // Momo's intro plays once, then his Hello loop stays pinned in front of
+  // the moving collage for as long as the page is open.
+  const [introDone, setIntroDone] = useState(false);
   return (
     <div className={styles.paperPage} data-treatment="paper">
       <div className={styles.paperIntro}>
@@ -263,7 +266,13 @@ function PaperLanding() {
           </ul>
 
           <div className={styles.paperMomos} aria-hidden="true">
-            <MomoFilm name="momo-intro" live={motion.live} loop={false} />
+            <MomoFilm
+              key={introDone ? "hello" : "intro"}
+              name={introDone ? "momo-hello" : "momo-intro"}
+              live={motion.live}
+              loop={introDone}
+              onEnded={() => setIntroDone(true)}
+            />
           </div>
         </main>
 
