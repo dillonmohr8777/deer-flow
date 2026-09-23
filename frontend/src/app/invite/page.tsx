@@ -170,7 +170,7 @@ export default function InvitePage() {
       >
         <meta name="referrer" content="no-referrer" />
         <h1 className={`${styles.title} m-voice-serif-bold`}>
-          {info ? `You're invited to ${info.workspace_name}` : "Workspace invite"}
+          {info ? `You're invited to ${info.workspace_name} on MomoBot` : "Your MomoBot invite"}
         </h1>
         <p aria-live="polite" role="status" className={`${styles.status} m-voice-body`}>
           {status === "loading" ? "Loading invite…" : status === "accepting" ? "Accepting invite…" : status === "done" ? "Accepted. Redirecting…" : ""}

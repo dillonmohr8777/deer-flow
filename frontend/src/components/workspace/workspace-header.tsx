@@ -40,14 +40,17 @@ export function WorkspaceHeader({ className }: { className?: string }) {
           <div className="flex items-center justify-between gap-2">
             {env.NEXT_PUBLIC_STATIC_WEBSITE_ONLY === "true" ? (
               <Link href="/" className="text-primary ml-2 font-serif">
-                DeerFlow
+                MomoBot
               </Link>
             ) : (
               <Link
                 href="/workspace/command-center"
-                className="ml-2 min-w-0 flex-1"
-                aria-label="Momentum Command Center"
+                className="ml-2 flex min-w-0 flex-1 flex-col gap-0.5"
+                aria-label="MomoBot Command Center"
               >
+                <span className="text-primary font-serif text-sm leading-none font-semibold">
+                  MomoBot
+                </span>
                 <BrandSignature />
               </Link>
             )}

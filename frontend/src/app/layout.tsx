@@ -6,7 +6,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { DEFAULT_LOCALE } from "@/core/i18n/locale";
 
 export const metadata: Metadata = {
-  title: "Momentum Workspace",
+  title: "MomoBot by Momentum",
   description: "A private workspace where a team of agents takes on real work.",
 };
 

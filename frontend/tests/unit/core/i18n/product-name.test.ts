@@ -3,7 +3,7 @@ import { describe, expect, it } from "@rstest/core";
 import { enUS } from "@/core/i18n/locales/en-US";
 import { zhCN } from "@/core/i18n/locales/zh-CN";
 
-// The product is Momentum. "DeerFlow" may only name the upstream project,
+// The product is MomoBot (by Momentum). "DeerFlow" may only name the upstream project,
 // in the menu entries that link to its site, repository and About page.
 const UPSTREAM_LINKS = [
   "workspace.about",
