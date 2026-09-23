@@ -35,6 +35,7 @@ from app.gateway.routers import (
     mcp_tasks,
     memory,
     models,
+    plugins,
     project_documents,
     project_thread_files,
     projects,
@@ -556,6 +557,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 repository=batch_repo,
                 config=subagent_batches_config,
                 runtime_config=subagent_runtime_config,
+                extensions=getattr(app.state, "extensions", None),
             )
             app.state.subagent_batch_service = batch_service
             if subagent_batches_config.enabled:
@@ -982,6 +984,8 @@ This gateway provides runtime endpoints for agent runs plus custom endpoints for
 
     # Assistants compatibility API (LangGraph Platform stub)
     app.include_router(assistants_compat.router)
+
+    app.include_router(plugins.router)
 
     # Auth API is mounted at /api/v1/auth
     app.include_router(auth.router)
