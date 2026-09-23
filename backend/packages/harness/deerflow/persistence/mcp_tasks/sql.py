@@ -12,9 +12,10 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from deerflow.mcp.tasks import ATTENTION_TASK_STATUSES, POLLABLE_TASK_STATUSES, TERMINAL_TASK_STATUSES
 from deerflow.persistence.mcp_tasks.model import McpTaskRow
-from deerflow.persistence.organizations.resolution import organization_from_owned_parent
+from deerflow.persistence.organizations.resolution import organization_for_write, organization_from_owned_parent
 from deerflow.persistence.run.model import RunRow
 from deerflow.persistence.thread_meta.model import ThreadMetaRow
+from deerflow.runtime.user_context import resolve_organization_id
 from deerflow.utils.time import coerce_iso
 
 _POLLABLE_STATUS_VALUES = tuple(status.value for status in POLLABLE_TASK_STATUSES)
@@ -163,18 +164,24 @@ class McpTaskRepository:
         _record_event_if_changed(row, tracking_degraded=False, now=now)
         async with self._sf() as session:
             thread = await session.get(ThreadMetaRow, thread_id, with_for_update=session.get_bind().dialect.name != "sqlite")
-            row.organization_id = organization_from_owned_parent(thread, user_id, parent_name="thread")
+            if thread is not None and thread.user_id is None:
+                # An existing-but-ownerless thread (legacy/shared data) has no
+                # verifiable organization; a durable MCP task must not attach
+                # to it. A thread with no row at all keeps the pre-existing
+                # untracked-legacy-thread tolerance used elsewhere.
+                raise ValueError(f"thread {thread_id!r} has no owner; an MCP task cannot attach to it")
+            thread_organization_id = organization_from_owned_parent(thread, user_id, parent_name="thread")
+            row.organization_id = organization_for_write(resolve_organization_id(), thread_organization_id, user_id)
             if run_id is not None:
                 run = await session.get(RunRow, run_id, with_for_update=session.get_bind().dialect.name != "sqlite")
                 if run is not None:
                     if run.thread_id != thread_id:
                         raise ValueError("run belongs to a different thread")
                     run_organization_id = organization_from_owned_parent(run, user_id, parent_name="run")
-                    if row.organization_id is not None and run_organization_id != row.organization_id:
-                        raise ValueError("run has conflicting organization ownership")
+                    row.organization_id = organization_for_write(row.organization_id, run_organization_id, user_id)
             matching_thread = select(ThreadMetaRow.incarnation).where(
                 ThreadMetaRow.thread_id == thread_id,
-                or_(ThreadMetaRow.user_id == user_id, ThreadMetaRow.user_id.is_(None)),
+                ThreadMetaRow.user_id == user_id,
             )
             if session.get_bind().dialect.name == "sqlite":
                 # Keep lookup and write in one SQLite statement. A preliminary
@@ -197,9 +204,12 @@ class McpTaskRepository:
             return self._row_to_dict(row)
 
     async def get(self, task_id: str, *, user_id: str) -> dict[str, Any] | None:
+        active_organization_id = resolve_organization_id()
         async with self._sf() as session:
             row = await session.get(McpTaskRow, task_id)
             if row is None or row.user_id != user_id:
+                return None
+            if active_organization_id is not None and row.organization_id != active_organization_id:
                 return None
             return self._row_to_dict(row)
 
@@ -211,10 +221,13 @@ class McpTaskRepository:
         limit: int = 50,
         active_only: bool = False,
     ) -> list[dict[str, Any]]:
+        active_organization_id = resolve_organization_id()
         stmt = select(McpTaskRow).where(
             McpTaskRow.thread_id == thread_id,
             McpTaskRow.user_id == user_id,
         )
+        if active_organization_id is not None:
+            stmt = stmt.where(McpTaskRow.organization_id == active_organization_id)
         if active_only:
             stmt = stmt.where(McpTaskRow.status.in_(_POLLABLE_STATUS_VALUES))
         stmt = stmt.order_by(McpTaskRow.created_at.desc(), McpTaskRow.id.desc()).limit(limit)
@@ -402,16 +415,16 @@ class McpTaskRepository:
         requested_at: datetime,
     ) -> dict[str, Any] | None:
         """Persist a user-scoped cancellation request without exposing the remote id."""
+        active_organization_id = resolve_organization_id()
         async with self._sf() as session:
-            stmt = (
-                select(McpTaskRow)
-                .where(
-                    McpTaskRow.id == task_id,
-                    McpTaskRow.user_id == user_id,
-                    McpTaskRow.thread_id == thread_id,
-                )
-                .with_for_update()
+            stmt = select(McpTaskRow).where(
+                McpTaskRow.id == task_id,
+                McpTaskRow.user_id == user_id,
+                McpTaskRow.thread_id == thread_id,
             )
+            if active_organization_id is not None:
+                stmt = stmt.where(McpTaskRow.organization_id == active_organization_id)
+            stmt = stmt.with_for_update()
             row = (await session.execute(stmt)).scalar_one_or_none()
             if row is None:
                 return None
