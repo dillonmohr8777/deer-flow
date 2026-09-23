@@ -408,10 +408,6 @@
   }
 }
 @media (max-width: 640px) {
-  :global(body:has([data-appearance-open="true"])) .backgroundTray {
-    top: 5px;
-    bottom: auto;
-  }
   .panel {
     padding: 18px;
   }

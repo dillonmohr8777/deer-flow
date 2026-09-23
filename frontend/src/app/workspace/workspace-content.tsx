@@ -4,7 +4,6 @@ import { Toaster } from "sonner";
 import { QueryClientProvider } from "@/components/query-client-provider";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { WorkspaceAppearanceProvider } from "@/components/workspace/command-center/appearance-provider";
-import { BackgroundJobs } from "@/components/workspace/command-center/background-jobs";
 import { CommandPalette } from "@/components/workspace/command-palette";
 import { GatewayOfflineBanner } from "@/components/workspace/gateway-offline-banner";
 import { ModelLoadErrorBanner } from "@/components/workspace/model-load-error-banner";
@@ -61,7 +60,6 @@ export async function WorkspaceContent({
             </SidebarInset>
           </SidebarProvider>
           <CommandPalette />
-          <BackgroundJobs />
           <SettingsDialogHost />
           <WorkspaceSettingsDeepLink />
           <Toaster position="top-center" />
