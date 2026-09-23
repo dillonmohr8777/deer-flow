@@ -1227,9 +1227,9 @@ DeerFlow supports four HTTP identity sources. They share the same thread/run iso
 | Browser session | `access_token` cookie after login/register | Yes | `users.id` |
 | OIDC / SSO | OAuth callback → cookie | Yes | `users.id` (see [SSO.md](SSO.md)) |
 | IM channel binding | Connect code + `channel_connections` | Bound to registered user | `channel_connections.owner_user_id` |
-| **Internal Auth** | `X-DeerFlow-Internal-Token` + `X-DeerFlow-Owner-User-Id` | **No** | Owner string on `threads_meta.user_id` |
+| **Internal Auth** | `X-DeerFlow-Internal-Token` + `X-DeerFlow-Delegation-Id` | **No** (acts as the delegation owner) | The delegation organization's storage principal and `organization_id` |
 
-**IM channel binding** and **Internal Auth** are both *platform-trust* integrations: DeerFlow trusts the channel/platform to authenticate end users. IM bindings persist the mapping in `channel_connections` / `channel_conversations` and require a DeerFlow `users` row. Internal Auth lets a platform call the Gateway API directly with a deployment-shared token and a per-request owner header—no `users` row, but thread/run/checkpoint isolation works the same way.
+**IM channel binding** and **Internal Auth** are both *platform-trust* integrations. IM bindings persist the mapping in `channel_connections` / `channel_conversations` and require a DeerFlow `users` row. Every internal call, IM workers included, acts only through an active `organization_delegations` row that ties the caller to a real, active member of an active organization; a token plus an owner header alone is refused.
 
 ### Browser session (default)
 
@@ -1267,9 +1267,10 @@ export DEER_FLOW_INTERNAL_AUTH_TOKEN="<long-random-secret>"
 | Header | Required | Description |
 |---|---|---|
 | `X-DeerFlow-Internal-Token` | Yes | Must match `DEER_FLOW_INTERNAL_AUTH_TOKEN`; missing/invalid → `401` |
-| `X-DeerFlow-Owner-User-Id` | Yes for per-user isolation | Platform user id (e.g. `feishu_ou_alice`, `wecom_user_bob`); omit → `default` bucket |
+| `X-DeerFlow-Delegation-Id` | Yes | An active organization delegation granted to this caller |
+| `X-DeerFlow-Owner-User-Id` | No | If sent, must equal the delegation's owner |
 
-Does **not** use browser cookies or CSRF tokens. Does **not** insert into `users`; sets `threads_meta.user_id` / `runs.user_id` from the owner header. DeerFlow validates only the platform token—not whether the owner id represents a real end user; user validity is entirely the platform's responsibility. See [AUTH_DESIGN.md — Internal Auth](AUTH_DESIGN.md#internal-auth-direct-http) for trust boundaries, persistence, and security notes.
+Does **not** use browser cookies or CSRF tokens and does **not** insert into `users`. Every request re-validates the delegation: active, unexpired, owned by an active member of an active organization, and matching the owner header. A missing or failing delegation (including token plus owner header alone) is `403 Internal calls require an active organization delegation`. An admitted call acts as the delegation owner in its organization, on that organization's storage principal, with route permissions narrowed to the delegation scopes. See [AUTH_DESIGN.md](AUTH_DESIGN.md) for where delegations come from and how revocation works.
 
 Use the standard Gateway thread/run endpoints (`POST /api/threads`, `POST /api/threads/{thread_id}/runs/stream`, etc.) with the headers above on every request.
 

@@ -170,10 +170,9 @@ def test_stream_ownerless_thread_returns_404():
     create_or_reject.assert_not_awaited()
 
 
-def test_stream_internal_role_scoped_by_owner_header():
-    """IM channels run with the internal system role on behalf of the
-    connection owner named in X-DeerFlow-Owner-User-Id — the owner check is
-    scoped to that owner rather than bypassed."""
+def test_stream_internal_role_owner_header_alone_is_not_honored():
+    """The owner header counts only through a verified delegation (AuthMiddleware
+    refuses header-only calls outright); even past it, the header grants nothing."""
     from app.gateway.internal_auth import INTERNAL_OWNER_USER_ID_HEADER_NAME
 
     with _client(INTERNAL_USER) as (client, create_or_reject):
@@ -182,8 +181,8 @@ def test_stream_internal_role_scoped_by_owner_header():
             json=_body(THREAD_A),
             headers={INTERNAL_OWNER_USER_ID_HEADER_NAME: str(USER_A.id)},
         )
-    assert response.status_code == 409
-    create_or_reject.assert_awaited()
+    assert response.status_code == 404
+    create_or_reject.assert_not_awaited()
 
 
 def test_stream_internal_role_with_foreign_owner_header_returns_404():

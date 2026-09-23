@@ -15,6 +15,7 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import pytest
 import pytest_asyncio
+from org_isolation_fixtures import delegate_every_scheduled_task
 from sqlalchemy import event, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.schema import CreateSchema, DropSchema
@@ -360,3 +361,9 @@ async def test_completion_before_launch_return_accounts_once(occurrence_database
         with suppress(asyncio.CancelledError):
             await dispatch
         await restarted.stop()
+
+
+@pytest.fixture(autouse=True)
+def _tasks_are_delegated(monkeypatch):
+    """Queue mechanics only: every org-less test task resolves a launch delegation."""
+    delegate_every_scheduled_task(monkeypatch)

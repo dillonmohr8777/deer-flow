@@ -17,6 +17,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from org_isolation_fixtures import fake_delegation
 
 from app.channels.manager import ChannelManager
 from app.channels.message_bus import InboundMessage, MessageBus
@@ -53,6 +54,9 @@ class _StubTaskRepo:
     async def get_internal(self, task_id):
         row = next((item for item in self.rows if item["id"] == task_id), None)
         return dict(row) if row is not None else None
+
+    async def resolve_launch_delegation(self, task):
+        return fake_delegation(task["user_id"], subject_id=task["id"])
 
     async def update_after_launch(self, *_args, **_kwargs):
         return None
@@ -258,7 +262,7 @@ async def test_scheduled_launcher_binds_a_trace_context(_stub_app_config, launch
         thread_id="thread-sched",
         assistant_id="lead_agent",
         prompt="Summarize thread",
-        owner_user_id="user-1",
+        delegation=fake_delegation("user-1"),
         metadata={"scheduled_task_run_id": "run-row-1"},
     )
 
@@ -267,11 +271,16 @@ async def test_scheduled_launcher_binds_a_trace_context(_stub_app_config, launch
 
 
 @pytest.mark.asyncio
-async def test_mcp_notification_launcher_binds_a_trace_context(_stub_app_config, launcher_traces):
+async def test_mcp_notification_launcher_binds_a_trace_context(_stub_app_config, launcher_traces, monkeypatch):
     """Driven from the MCP task service's own background loop, so one scope per
     notification keeps every delivery attempt separately correlatable."""
+    from app.gateway import services
     from app.gateway.services import launch_mcp_task_notification_run
 
+    async def resolve(**_kwargs):
+        return fake_delegation("user-1", subject_type="mcp_task")
+
+    monkeypatch.setattr(services, "_resolve_launch_delegation", resolve)
     for attempt in (1, 2):
         await launch_mcp_task_notification_run(
             app=SimpleNamespace(),
@@ -301,7 +310,7 @@ async def test_launcher_keeps_the_requesting_trace(_stub_app_config, launcher_tr
             thread_id="thread-sched",
             assistant_id="lead_agent",
             prompt="Summarize thread",
-            owner_user_id="user-1",
+            delegation=fake_delegation("user-1"),
         )
 
     assert launcher_traces == ["gateway-request-1"]

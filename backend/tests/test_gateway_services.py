@@ -9,6 +9,7 @@ from contextlib import suppress
 from types import SimpleNamespace
 
 import pytest
+from org_isolation_fixtures import fake_delegation
 
 from app.gateway.auth_disabled import AUTH_SOURCE_INTERNAL
 from deerflow.config.app_config import AppConfig, reset_app_config, set_app_config
@@ -22,6 +23,26 @@ def _stub_app_config():
     set_app_config(AppConfig.model_validate({"sandbox": {"use": "deerflow.sandbox.local:LocalSandboxProvider"}}))
     yield
     reset_app_config()
+
+
+class _OwnedThreads:
+    """Every thread row is the caller's: seeding tests run past its ownership gate."""
+
+    async def get(self, thread_id, **_kwargs):
+        return {"thread_id": thread_id}
+
+
+_OWNED_THREADS = _OwnedThreads()
+
+
+@pytest.fixture
+def _mcp_delegated(monkeypatch):
+    """The MCP task's delegation resolves: launcher tests exercise what happens next."""
+
+    async def resolve(**_kwargs):
+        return fake_delegation("user-1", subject_type="mcp_task")
+
+    monkeypatch.setattr("app.gateway.services._resolve_launch_delegation", resolve)
 
 
 def _make_start_run_request(run_manager, *, thread_store=None, auth_source=None):
@@ -1568,6 +1589,7 @@ async def test_seeded_checkpoint_messages_precede_the_first_new_run_messages():
             state=SimpleNamespace(
                 checkpointer=checkpointer,
                 run_event_store=event_store,
+                thread_store=_OWNED_THREADS,
             )
         )
     )
@@ -1628,6 +1650,7 @@ async def test_checkpoint_history_seed_skips_new_thread_without_checkpoint():
             state=SimpleNamespace(
                 checkpointer=checkpointer,
                 run_event_store=event_store,
+                thread_store=_OWNED_THREADS,
             )
         )
     )
@@ -1655,7 +1678,7 @@ async def test_checkpoint_history_seed_is_skipped_when_journal_already_has_messa
         list_messages=AsyncMock(return_value=[{"seq": 1}]),
         put_batch=AsyncMock(),
     )
-    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(run_event_store=event_store)))
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(run_event_store=event_store, thread_store=_OWNED_THREADS)))
 
     with patch(
         "app.gateway.services.build_checkpoint_state_accessor",
@@ -1698,6 +1721,7 @@ async def test_checkpoint_history_seed_guard_tolerates_missing_user_context():
             state=SimpleNamespace(
                 checkpointer=checkpointer,
                 run_event_store=event_store,
+                thread_store=_OWNED_THREADS,
             )
         )
     )
@@ -1730,7 +1754,7 @@ async def test_checkpoint_history_seed_guard_is_thread_scoped_under_user_context
         return [{"seq": 1}]
 
     event_store = SimpleNamespace(list_messages=list_messages, put_batch=AsyncMock())
-    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(run_event_store=event_store)))
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(run_event_store=event_store, thread_store=_OWNED_THREADS)))
 
     with patch(
         "app.gateway.services.build_checkpoint_state_accessor",
@@ -1783,6 +1807,7 @@ async def test_checkpoint_history_seed_runs_exactly_once_across_principals(tmp_p
                 state=SimpleNamespace(
                     checkpointer=checkpointer,
                     run_event_store=event_store,
+                    thread_store=_OWNED_THREADS,
                 )
             )
         )
@@ -2863,17 +2888,16 @@ def test_start_run_preserves_internal_injection_markers(_stub_app_config):
     assert UNTRUSTED_INPUT_KEY not in graph_input["messages"][0].additional_kwargs
 
 
-def test_start_run_uses_internal_owner_header_for_persistence(_stub_app_config):
+def test_start_run_acts_for_the_delegation_owner_and_never_claims_a_legacy_thread(_stub_app_config):
     import asyncio
     from types import SimpleNamespace
     from unittest.mock import patch
 
+    from fastapi import HTTPException
     from langgraph.checkpoint.memory import InMemorySaver
     from langgraph.store.memory import InMemoryStore
 
-    from app.gateway.auth_disabled import AUTH_SOURCE_INTERNAL
-    from app.gateway.internal_auth import INTERNAL_OWNER_USER_ID_HEADER_NAME, INTERNAL_SYSTEM_ROLE
-    from app.gateway.services import start_run
+    from app.gateway.services import _delegated_internal_request, start_run
     from deerflow.persistence.thread_meta.memory import MemoryThreadMetaStore
     from deerflow.runtime import RunManager
     from deerflow.runtime.runs.store.memory import MemoryRunStore
@@ -2893,14 +2917,8 @@ def test_start_run_uses_internal_owner_header_for_persistence(_stub_app_config):
             run_events_config=None,
             thread_store=thread_store,
         )
-        request = SimpleNamespace(
-            headers={INTERNAL_OWNER_USER_ID_HEADER_NAME: "owner-1"},
-            state=SimpleNamespace(
-                auth_source=AUTH_SOURCE_INTERNAL,
-                user=SimpleNamespace(id="default", system_role=INTERNAL_SYSTEM_ROLE),
-            ),
-            app=SimpleNamespace(state=state),
-        )
+        # A delegated internal caller: the owner header is never trusted by itself.
+        request = _delegated_internal_request(SimpleNamespace(state=state), fake_delegation("owner-1"))
         body = SimpleNamespace(
             assistant_id="lead_agent",
             input={"messages": [{"role": "human", "content": "hi"}]},
@@ -2923,24 +2941,23 @@ def test_start_run_uses_internal_owner_header_for_persistence(_stub_app_config):
             patch("app.gateway.services.resolve_agent_factory", return_value=object()),
             patch("app.gateway.services.run_agent", side_effect=fake_run_agent),
         ):
-            record = await start_run(body, "channel-thread", request)
+            # A legacy default-owned thread is not the delegation owner's: never claimed.
+            with pytest.raises(HTTPException) as refused:
+                await start_run(body, "channel-thread", request)
+            assert refused.value.status_code == 404
+            await thread_store.create("owner-thread", user_id="owner-1", metadata={})
+            record = await start_run(body, "owner-thread", request)
             await record.task
 
         owner_run = await run_store.get(record.run_id, user_id="owner-1")
-        default_run = await run_store.get(record.run_id, user_id="default")
-        owner_thread = await thread_store.get("channel-thread", user_id="owner-1")
         default_thread = await thread_store.get("channel-thread", user_id="default")
-        return owner_run, default_run, owner_thread, default_thread, task_context
+        return owner_run, default_thread, task_context
 
-    owner_run, default_run, owner_thread, default_thread, task_context = asyncio.run(_scenario())
+    owner_run, default_thread, task_context = asyncio.run(_scenario())
 
     assert owner_run is not None
     assert owner_run["user_id"] == "owner-1"
-    assert default_run is None
-    assert owner_thread is not None
-    assert owner_thread["user_id"] == "owner-1"
-    assert owner_thread["metadata"] == {"legacy": True}
-    assert default_thread is None
+    assert default_thread is not None and default_thread["metadata"] == {"legacy": True}
     assert task_context["user_id"] == "owner-1"
 
 
@@ -2952,9 +2969,7 @@ def test_start_run_stamps_internal_owner_guardrail_attribution(_stub_app_config)
     from langgraph.checkpoint.memory import InMemorySaver
     from langgraph.store.memory import InMemoryStore
 
-    from app.gateway.auth_disabled import AUTH_SOURCE_INTERNAL
-    from app.gateway.internal_auth import INTERNAL_OWNER_USER_ID_HEADER_NAME, INTERNAL_SYSTEM_ROLE
-    from app.gateway.services import start_run
+    from app.gateway.services import _delegated_internal_request, start_run
     from deerflow.persistence.thread_meta.memory import MemoryThreadMetaStore
     from deerflow.runtime import RunManager
     from deerflow.runtime.runs.store.memory import MemoryRunStore
@@ -2982,14 +2997,8 @@ def test_start_run_stamps_internal_owner_guardrail_attribution(_stub_app_config)
             run_events_config=None,
             thread_store=thread_store,
         )
-        request = SimpleNamespace(
-            headers={INTERNAL_OWNER_USER_ID_HEADER_NAME: "owner-1"},
-            state=SimpleNamespace(
-                auth_source=AUTH_SOURCE_INTERNAL,
-                user=SimpleNamespace(id="default", system_role=INTERNAL_SYSTEM_ROLE),
-            ),
-            app=SimpleNamespace(state=state),
-        )
+        # A delegated internal caller: the owner header is never trusted by itself.
+        request = _delegated_internal_request(SimpleNamespace(state=state), fake_delegation("owner-1"))
         body = SimpleNamespace(
             assistant_id="lead_agent",
             input={"messages": [{"role": "human", "content": "hi"}]},
@@ -3417,7 +3426,7 @@ def test_launch_scheduled_thread_run_marks_context_non_interactive(_stub_app_con
                 assistant_id="lead_agent",
                 prompt="Run in background",
                 app=SimpleNamespace(state=SimpleNamespace()),
-                owner_user_id="user-1",
+                delegation=fake_delegation("user-1"),
                 metadata={
                     "scheduled_task_id": "task-1",
                     "scheduled_task_run_id": "task-run-1",
@@ -3472,7 +3481,7 @@ def test_launch_scheduled_thread_run_uses_configured_recursion_limit(_stub_app_c
                 assistant_id="lead_agent",
                 prompt="Run in background",
                 app=SimpleNamespace(state=SimpleNamespace()),
-                owner_user_id="user-1",
+                delegation=fake_delegation("user-1"),
             )
         return captured
 
@@ -3514,7 +3523,7 @@ def test_launch_scheduled_thread_run_recursion_limit_is_clamped_to_ceiling(_stub
                 assistant_id="lead_agent",
                 prompt="Run in background",
                 app=SimpleNamespace(state=SimpleNamespace()),
-                owner_user_id="user-1",
+                delegation=fake_delegation("user-1"),
             )
         return captured
 
@@ -3553,7 +3562,7 @@ def test_launch_scheduled_thread_run_falls_back_when_config_unloadable(_stub_app
                 assistant_id="lead_agent",
                 prompt="Run in background",
                 app=SimpleNamespace(state=SimpleNamespace()),
-                owner_user_id="user-1",
+                delegation=fake_delegation("user-1"),
             )
         return captured
 
@@ -3579,6 +3588,7 @@ def test_launch_scheduled_thread_run_rejects_legacy_auth_token():
                 assistant_id="lead_agent",
                 prompt="Run in background",
                 app=SimpleNamespace(state=SimpleNamespace()),
+                delegation=fake_delegation("user-1"),
                 metadata={"auth_token": "legacy-secret"},
             )
 
@@ -3602,7 +3612,7 @@ def test_mcp_task_notification_prompt_neutralizes_untrusted_event_payload():
     assert "[END USER INPUT]" in prompt
 
 
-def test_launch_mcp_task_notification_run_hides_internal_prompt(_stub_app_config):
+def test_launch_mcp_task_notification_run_hides_internal_prompt(_stub_app_config, _mcp_delegated):
     import asyncio
     from types import SimpleNamespace
     from unittest.mock import patch
@@ -3657,7 +3667,7 @@ def test_launch_mcp_task_notification_run_hides_internal_prompt(_stub_app_config
     assert result == {"run_id": "run-notification", "thread_id": "thread-notification"}
 
 
-def test_launch_mcp_task_notification_run_restores_busy_thread_conflict(_stub_app_config):
+def test_launch_mcp_task_notification_run_restores_busy_thread_conflict(_stub_app_config, _mcp_delegated):
     import asyncio
     from types import SimpleNamespace
     from unittest.mock import patch
@@ -3689,7 +3699,7 @@ def test_launch_mcp_task_notification_run_restores_busy_thread_conflict(_stub_ap
     asyncio.run(_scenario())
 
 
-def test_launch_mcp_task_notification_run_dead_letters_missing_thread(_stub_app_config):
+def test_launch_mcp_task_notification_run_dead_letters_missing_thread(_stub_app_config, _mcp_delegated):
     import asyncio
     from types import SimpleNamespace
     from unittest.mock import patch

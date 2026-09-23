@@ -1500,11 +1500,6 @@ async def ensure_checkpoint_history_seeded(
     the observability hook for that decision — when it stops appearing, the
     shim is dead.
     """
-    # Seed only a thread whose row the caller owns: a checkpoint that no row
-    # of theirs claims (orphan, ownerless, another organization's) is not
-    # their history to copy into a feed.
-    if await get_thread_store(request).get(thread_id) is None:
-        return
     event_store = request.app.state.run_event_store
     # The emptiness check is deliberately thread-scoped, never user-scoped:
     # seed rows may be stamped with a different principal (NULL for ownerless
@@ -1523,6 +1518,11 @@ async def ensure_checkpoint_history_seeded(
         }
     }
     if await get_checkpointer(request).aget_tuple(checkpoint_config) is None:
+        return
+    # Seed only a thread whose row the caller owns: a checkpoint that no row
+    # of theirs claims (orphan, ownerless, another organization's) is not
+    # their history to copy into a feed.
+    if await get_thread_store(request).get(thread_id) is None:
         return
 
     accessor, config = await abuild_checkpoint_state_accessor(
@@ -1784,8 +1784,9 @@ async def start_run(
             return await run_ctx.thread_store.get(thread_id) is not None
         caller = storage_user_id or str(user.id)
         allowed = await run_ctx.thread_store.check_access(thread_id, caller, require_existing=require_existing_thread)
-        if allowed and not require_existing_thread and run_ctx.checkpointer is not None and await run_ctx.thread_store.get(thread_id, user_id=caller) is None:
-            allowed = await run_ctx.checkpointer.aget_tuple({"configurable": {"thread_id": thread_id, "checkpoint_ns": ""}}) is None
+        checkpointer = getattr(run_ctx, "checkpointer", None)
+        if allowed and not require_existing_thread and checkpointer is not None and await checkpointer.aget_tuple({"configurable": {"thread_id": thread_id, "checkpoint_ns": ""}}) is not None:
+            allowed = await run_ctx.thread_store.get(thread_id, user_id=caller) is not None
         return allowed
 
     if not await thread_access_allowed():
@@ -2344,7 +2345,7 @@ async def _stream_viewer_still_admitted(request: Any) -> bool:
     """
     state = getattr(request, "state", None)
     organization_id = getattr(state, "organization_id", None)
-    if not organization_id:
+    if not isinstance(organization_id, str) or not organization_id:
         return True
     from deerflow.persistence.engine import get_session_factory
 
@@ -2353,7 +2354,7 @@ async def _stream_viewer_still_admitted(request: Any) -> bool:
         return False
     delegations = OrganizationDelegationRepository(session_factory)
     delegation_id = getattr(state, "delegation_id", None)
-    if delegation_id:
+    if isinstance(delegation_id, str) and delegation_id:
         return await delegations.resolve_delegation_by_id(delegation_id) is not None
     return await delegations.is_membership_active(user_id=getattr(state, "actor_user_id", None), organization_id=organization_id)
 

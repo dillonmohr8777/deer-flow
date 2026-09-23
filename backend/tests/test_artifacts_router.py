@@ -763,19 +763,32 @@ def test_get_artifact_download_true_forces_attachment_for_skill_archive(tmp_path
     assert response.headers.get("content-disposition", "").startswith("attachment;")
 
 
-def _make_internal_request(owner: str | None, *, system_role: str = INTERNAL_SYSTEM_ROLE) -> Request:
+def _make_internal_request(owner: str | None, *, system_role: str = INTERNAL_SYSTEM_ROLE, delegated: bool = True) -> Request:
     """A request as it arrives from a trusted internal caller.
 
     ``system_role`` is stamped onto ``request.state.user`` the way
     ``AuthMiddleware`` does after validating the internal token. When *owner*
-    is given it is carried in the owner-user-id header.
+    is given it is carried in the owner-user-id header and, when *delegated*,
+    the middleware's verified delegation identity is stamped as well.
     """
     headers: list[tuple[bytes, bytes]] = []
     if owner is not None:
         headers.append((INTERNAL_OWNER_USER_ID_HEADER_NAME.lower().encode(), owner.encode()))
     request = Request({"type": "http", "method": "GET", "path": "/", "headers": headers, "query_string": b""})
     request.state.user = SimpleNamespace(id="default", system_role=system_role)
+    if owner is not None and delegated:
+        request.state.delegation_id = "dlg-test"
+        request.state.storage_user_id = owner
     return request
+
+
+def test_get_artifact_ignores_an_owner_header_without_a_delegation(tmp_path, monkeypatch) -> None:
+    seen = _capture_resolved_user_id(monkeypatch, tmp_path)
+    request = _make_internal_request("owner-123", delegated=False)
+
+    asyncio.run(call_unwrapped(artifacts_router.get_artifact, "thread-1", "mnt/user-data/outputs/index.html", request))
+
+    assert seen["user_id"] is None
 
 
 def _capture_resolved_user_id(monkeypatch, tmp_path) -> dict:
