@@ -178,26 +178,46 @@
   background: var(--surface-blue);
   border-color: var(--blue);
 }
+/* The crew is one composition in percentages of this box, so a breakpoint
+   only changes the box's width. The lead is painted last, in front. */
 .heroArt {
   grid-area: art;
   position: relative;
   width: 300px;
-  height: 212px;
+  aspect-ratio: 300 / 212;
 }
 .heroScrap {
   position: absolute;
-  inset: 22px 0 0 44px;
+  inset: 10.4% 0 0 14.7%;
   border: 1px solid var(--line);
   border-radius: 16px;
   background: var(--surface-blue);
 }
 .heroMomo {
   position: absolute;
+  display: block;
+  height: auto;
+}
+.heroMomo[data-crew="lead"] {
   bottom: 0;
   left: 0;
-  display: block;
-  width: 184px;
-  height: 184px;
+  width: 50%;
+}
+/* The back row stands in an arc where the lead's spool lines run out. */
+.heroMomo[data-crew="growth"] {
+  top: 6%;
+  left: 38%;
+  width: 25%;
+}
+.heroMomo[data-crew="builder"] {
+  top: 1%;
+  left: 63%;
+  width: 29%;
+}
+.heroMomo[data-crew="research"] {
+  top: 50%;
+  left: 57%;
+  width: 29%;
 }
 .root[data-treatment="classic"] {
   background: var(--canvas);
@@ -285,11 +305,21 @@
   background-size: 28px 28px;
   transform: rotate(-2deg);
 }
-/* A hard offset with no blur: the cut-paper read, never a glow. */
+/* A hard offset with no blur: the cut-paper read, never a glow. The crew
+   stands a little askew on the scrap, as the landing's Momos do. */
 .root[data-treatment="paper"] .heroMomo {
   filter: drop-shadow(
     3px 4px 0 color-mix(in srgb, var(--paper-ink) 18%, transparent)
   );
+}
+.root[data-treatment="paper"] .heroMomo[data-crew="growth"] {
+  rotate: -6deg;
+}
+.root[data-treatment="paper"] .heroMomo[data-crew="builder"] {
+  rotate: 6deg;
+}
+.root[data-treatment="paper"] .heroMomo[data-crew="research"] {
+  rotate: -3deg;
 }
 .root[data-treatment="paper"] :is(.team, .jobs, .usage, .metrics) {
   border-radius: 4px;
@@ -338,17 +368,91 @@
   border-color: var(--strong);
   color: var(--paper-ink);
 }
-/* Specialists are small pinned cards. The brass pin is paper.css's .pinned;
-   this only centres it above the card's top edge. */
+/* Specialists are cards on the board. A brass pin (paper.css's .pinned)
+   means working, so only a specialist with an active run wears one; it
+   pierces the top edge, so no card keeps room for a pin it may never get. */
 .root[data-treatment="paper"] .agent {
   border-color: var(--strong);
   border-radius: 2px;
-  padding-top: 22px;
 }
 .agent:global(.pinned)::before {
-  top: 5px;
+  top: -7px;
   left: 50%;
   transform: translateX(-50%);
+}
+/* Pinned-board placement, not a spreadsheet: columns sit at uneven heights,
+   as the landing staggers its cards. `translate` composes with paper.css's
+   2px hover lift instead of replacing it, and heights stay equal per row. */
+@container topology (min-width: 440px) {
+  .root[data-treatment="paper"] .topologyRoster {
+    padding-bottom: 14px;
+  }
+  .root[data-treatment="paper"] .agent:nth-child(even) {
+    translate: 0 14px;
+  }
+}
+@container topology (min-width: 700px) {
+  .root[data-treatment="paper"] .agent:nth-child(n) {
+    translate: none;
+  }
+  .root[data-treatment="paper"] .agent:nth-child(3n + 2) {
+    translate: 0 14px;
+  }
+  .root[data-treatment="paper"] .agent:nth-child(3n) {
+    translate: 0 6px;
+  }
+}
+/* Three working squares: one strip of three 22px frames, the lit square
+   stepping left to right as paper.css's .paper-pixels ticks it in steps(3).
+   Objects, so royal; the words beside them carry the state. */
+.working {
+  display: none;
+}
+.root[data-treatment="paper"] .working {
+  --lit: var(--paper-royal);
+  --dim: color-mix(in srgb, var(--paper-royal) 28%, transparent);
+  display: inline-block;
+  width: 22px;
+  height: 6px;
+  flex: 0 0 auto;
+  background-image: linear-gradient(
+    to right,
+    var(--lit) 0 6px,
+    transparent 0 8px,
+    var(--dim) 0 14px,
+    transparent 0 16px,
+    var(--dim) 0 28px,
+    transparent 0 30px,
+    var(--lit) 0 36px,
+    transparent 0 38px,
+    var(--dim) 0 50px,
+    transparent 0 52px,
+    var(--dim) 0 58px,
+    transparent 0 60px,
+    var(--lit) 0 66px
+  );
+  background-repeat: repeat-x;
+  background-size: 300% 100%;
+}
+/* Held still, the squares read as one mark, never as a third of a bar. */
+@media (prefers-reduced-motion: reduce) {
+  .root[data-treatment="paper"] .working {
+    background-image: linear-gradient(
+      to right,
+      var(--lit) 0 6px,
+      transparent 0 8px,
+      var(--lit) 0 14px,
+      transparent 0 16px,
+      var(--lit) 0 22px
+    );
+    background-size: 100% 100%;
+  }
+}
+/* Forced colours drop the gradient; drop the box too, so the words sit flush. */
+@media (forced-colors: active) {
+  .root[data-treatment="paper"] .working {
+    display: none;
+  }
 }
 .root[data-treatment="paper"] .jobIcon {
   display: none;
@@ -522,8 +626,12 @@
   box-shadow: 0 14px 42px rgba(24, 84, 134, 0.08);
   padding: 22px;
 }
+/* A size container: the roster takes its column count from the width it
+   actually gets (the Mission Control column, the Agent Studio sheet, a
+   phone), not from the viewport. */
 .topology {
   position: relative;
+  container: topology / inline-size;
 }
 .topologyLead {
   position: relative;
@@ -589,25 +697,38 @@
   outline-color: var(--focus);
   box-shadow: none;
 }
-/* Small cards: the size step from the 160px lead to 40px specialists is the
-   hierarchy, so there are no connector lines. */
+/* Specialist cards say it as the lead card does, one size down: the Momo
+   beside the name. The step from the 160px lead to 56px specialists is the
+   hierarchy, so there are no connector lines. Grid rows keep every card in
+   a row the same height. */
 .topologyRoster {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 14px 12px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px 14px;
   margin-top: 22px;
+}
+@container topology (min-width: 440px) {
+  .topologyRoster {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    row-gap: 14px;
+  }
+}
+@container topology (min-width: 700px) {
+  .topologyRoster {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 .agent {
   position: relative;
-  display: flex;
+  display: grid;
   min-width: 0;
-  align-items: flex-start;
-  flex-direction: column;
-  gap: 6px;
+  grid-template-columns: 56px minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
   border: 1px solid var(--line);
   border-radius: 12px;
   background: var(--surface);
-  padding: 12px;
+  padding: 14px;
   text-align: left;
 }
 .agent:hover {
@@ -621,7 +742,19 @@
 }
 .agentMomo {
   display: grid;
-  place-items: center;
+  width: 56px;
+  height: 56px;
+}
+.agentMomo > span,
+.agentMomo :is(img, svg) {
+  width: 100%;
+  height: 100%;
+}
+.agentText {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
 }
 .agent strong {
   max-width: 100%;
@@ -639,10 +772,10 @@
   color: var(--muted);
   font-size: 12px;
 }
-.agentState > span:last-child {
+.agentState > span {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
 }
 .agent i {
   width: 6px;
@@ -1141,17 +1274,9 @@
   }
   .heroArt {
     width: 240px;
-    height: 172px;
-  }
-  .heroMomo {
-    width: 148px;
-    height: 148px;
   }
   .overview {
     grid-template-columns: 1fr;
-  }
-  .topologyRoster {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
 
@@ -1198,16 +1323,12 @@
   .heading p {
     font-size: 14px;
   }
+  /* Three of the crew at this size; a fourth would be crumbs. */
   .heroArt {
-    width: 108px;
-    height: 100px;
+    width: 136px;
   }
-  .heroScrap {
-    inset: 12px 0 0 16px;
-  }
-  .heroMomo {
-    width: 88px;
-    height: 88px;
+  .heroMomo[data-crew="growth"] {
+    display: none;
   }
   .headingActions {
     width: 100%;
@@ -1258,18 +1379,13 @@
   .metrics strong {
     font-size: 23px;
   }
+  /* No `order` here: the team and the assignments keep the source order at
+     every width, so the keyboard walks the page in the order it reads. */
   .team,
   .jobs,
   .usage {
     border-radius: 14px;
     padding: 17px;
-  }
-  .jobs {
-    order: -1;
-  }
-  .topologyRoster {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px 8px;
   }
   .filters {
     align-items: stretch;
@@ -1326,6 +1442,18 @@
   .topologyLead {
     gap: 12px;
     padding: 14px;
+  }
+}
+
+@media (max-width: 390px) {
+  .agent {
+    grid-template-columns: 40px minmax(0, 1fr);
+    gap: 12px;
+    padding: 12px;
+  }
+  .agentMomo {
+    width: 40px;
+    height: 40px;
   }
 }
 
