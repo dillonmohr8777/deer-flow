@@ -232,11 +232,13 @@
   --green: var(--paper-ok);
   --danger: var(--paper-danger);
   --focus: var(--paper-focus);
-  background: var(--paper-cream);
+  /* The shell's own paper canvas: cream with its 5% grain, so the page and
+     the sidebar read as one sheet. */
+  background: var(--paper-cream) var(--paper-grain);
 }
 .root[data-treatment="paper"] .topbar {
   border-bottom-color: var(--line);
-  background: var(--paper-cream);
+  background: var(--paper-cream) var(--paper-grain);
 }
 .root[data-treatment="paper"] .heading h1 {
   color: var(--paper-ink);

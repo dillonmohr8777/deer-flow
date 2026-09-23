@@ -835,7 +835,7 @@ export function CommandCenter() {
         ) : null}
         <footer className={styles.footer}>
           <span>Momentum · Built for the work ahead.</span>
-          <span>Powered by DeerFlow · No model calls from this dashboard</span>
+          <span>No model calls from this dashboard</span>
         </footer>
       </div>
       {selectedRun && (
