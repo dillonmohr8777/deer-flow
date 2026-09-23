@@ -859,6 +859,7 @@ export const zhCN: Translations = {
     emptyDescription: "创建你的第一个自定义智能体，设置专属系统提示词。",
     featureDisabledTitle: "智能体功能未启用",
     featureDisabledDescription: "该功能未在此服务器上启用，请联系管理员。",
+    loadFailed: "无法加载智能体。",
     chat: "对话",
     delete: "删除",
     deleteConfirm: "确定要删除该智能体吗？此操作不可撤销。",

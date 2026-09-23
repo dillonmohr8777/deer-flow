@@ -762,6 +762,7 @@ export interface Translations {
     emptyDescription: string;
     featureDisabledTitle: string;
     featureDisabledDescription: string;
+    loadFailed: string;
     chat: string;
     delete: string;
     deleteConfirm: string;

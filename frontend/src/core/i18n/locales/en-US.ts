@@ -917,6 +917,7 @@ export const enUS: Translations = {
     featureDisabledTitle: "Agents feature is not enabled",
     featureDisabledDescription:
       "This feature is not enabled on this server. Please contact your administrator.",
+    loadFailed: "Could not load agents.",
     chat: "Chat",
     delete: "Delete",
     deleteConfirm:
@@ -925,18 +926,17 @@ export const enUS: Translations = {
     newChat: "New chat",
     createPageTitle: "Design your Agent",
     createPageSubtitle:
-      "Describe the agent you want — I'll help you create it through conversation.",
+      "Describe the agent you want, and we will shape it together in conversation.",
     nameStepTitle: "Name your new Agent",
     nameStepHint:
-      "Letters, digits, and hyphens only — stored lowercase (e.g. code-reviewer)",
+      "Letters, digits and hyphens only, stored lowercase (for example code-reviewer)",
     nameStepPlaceholder: "e.g. code-reviewer",
     nameStepContinue: "Continue",
-    nameStepInvalidError:
-      "Invalid name — use only letters, digits, and hyphens",
+    nameStepInvalidError: "Invalid name. Use only letters, digits and hyphens.",
     nameStepAlreadyExistsError: "An agent with this name already exists",
     nameStepNetworkError:
-      "Network request failed — check your network or backend connection",
-    nameStepCheckError: "Could not verify name availability — please try again",
+      "Network request failed. Check your network or backend connection.",
+    nameStepCheckError: "Could not verify name availability. Please try again.",
     nameStepCheckErrorWithDetail: "Name check failed: {detail}",
     nameStepApiDisabledError:
       "Custom agent management is not enabled on this server. Please contact your administrator.",
