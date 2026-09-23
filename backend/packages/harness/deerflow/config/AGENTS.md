@@ -1,5 +1,13 @@
 ### Configuration System
 
+The user-profile management API stores ``USER.md`` under the active storage
+bucket at ``{base_dir}/users/{storage_user_id}/USER.md``. Private users resolve
+to their own bucket; members of an active shared workspace resolve to that
+workspace's dedicated storage principal. The legacy root ``{base_dir}/USER.md``
+is left untouched and is a read-side fallback, never a write target.
+This file-backed profile is management storage only; it does not define a
+runtime prompt injector.
+
 Custom Agent `AgentConfig.display_name` is an optional, whitespace-trimmed Unicode
 label of at most 100 Unicode code points. C0/C1 controls and bidirectional
 formatting controls (U+202A–U+202E, U+2066–U+2069) are rejected before trimming.
@@ -107,3 +115,26 @@ Extensions are optional only in the fallback *search* mode (priority 3-4 above):
 Gateway API endpoints and `DeerFlowClient` methods can modify MCP servers and skill state at runtime; their `extensions_config.json` writes use the shared atomic replacement helper, while `middlewares` remains an operator-controlled config-file extension point.
 
 Values beginning with `$` are resolved from the environment when the file is loaded, and an unset variable becomes `""`. Runtime writers (MCP router, skill toggle, `DeerFlowClient`) therefore read the raw file with `read_raw_extensions_config`, merge into it (`set_raw_skill_enabled` for skill state), check the candidate with `validate_raw_extensions_config`, and write that raw dict. They never serialize an `ExtensionsConfig` model back to disk: its resolved values would persist secrets in plaintext and erase the references. When the file does not exist yet, the Gateway skill toggle seeds only the cached skill states. `tests/test_extensions_config_raw_writes.py` and the placeholder tests in `tests/test_client.py` pin this.
+
+`AgentConfig.knowledge_scope` uses the versioned `KnowledgeScope` contract as a
+Gateway new-turn default. The API preserves omitted updates and clears explicit
+null; file and SQL stores persist it in the existing config document. Keep it
+outside `MANAGED_AGENT_CONFIG_FIELDS` so harness self-updates preserve it;
+`setup_agent` also preserves the binding when re-bootstrapping. Admission uses
+explicit message scope before this default and snapshots it onto the current
+human message. Resolve the executing agent with runtime context over configurable,
+including legacy callers using `context.agent_name`; bootstrap skips defaults.
+Recovery (including a legacy null scope) never reapplies defaults.
+The operator allowlist is still checked by retrieval; this is not authorization.
+
+Unscoped new runs persist pre-default request digests even for unbound agents.
+Digest-free legacy retries compare pre-default canonical input; explicit scopes
+and recovery are excluded. Retries preserve the original run across binding edits.
+
+The file-backed singleton entrypoints additionally merge administrator-managed shared
+models from the encrypted runtime-home catalog. YAML entries win name conflicts;
+managed changes create new effective snapshots and do not alter an active runtime
+or an explicitly injected AppConfig. See `../models/AGENTS.md` for storage and reload
+boundaries. `managed_model_providers.py` derives provider defaults from validated
+endpoints; `ManagedModel.runtime_config()` combines them with profile fields.
+`AppConfig.from_file()` remains YAML-only.

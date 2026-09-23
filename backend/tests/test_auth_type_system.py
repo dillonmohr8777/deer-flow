@@ -33,7 +33,7 @@ _TEST_SECRET = "test-secret-for-auth-type-system-tests-min32"
 
 
 @pytest.fixture(autouse=True)
-def _persistence_engine(tmp_path):
+def _persistence_engine(tmp_path, monkeypatch):
     """Initialise a per-test SQLite engine + reset cached provider singletons.
 
     The auth tests call real HTTP handlers that go through
@@ -44,10 +44,12 @@ def _persistence_engine(tmp_path):
     import asyncio
 
     from app.gateway import deps
+    from app.gateway.routers import auth as auth_router
     from deerflow.persistence.engine import close_engine, init_engine
 
     url = f"sqlite+aiosqlite:///{tmp_path}/auth_types.db"
     asyncio.run(init_engine("sqlite", url=url, sqlite_dir=str(tmp_path)))
+    monkeypatch.setattr(auth_router, "_local_registration_enabled", lambda: True)
     deps._cached_local_provider = None
     deps._cached_repo = None
     try:

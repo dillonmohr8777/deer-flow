@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 import sqlalchemy as sa
+from alembic import command
+from sqlalchemy.ext.asyncio import create_async_engine
 
+from deerflow.persistence.bootstrap import _get_alembic_config
 from deerflow.persistence.engine import close_engine, init_engine
 from deerflow.persistence.migrations import _helpers  # noqa: F401  (ensures helpers importable)
 
@@ -18,11 +23,11 @@ async def _fresh_db(tmp_path):
 
 
 async def test_0019_creates_projects_table(tmp_path):
-    await _fresh_db(tmp_path)
+    # Pin the schema to this revision: later migrations (0026 organization
+    # foundation) add columns to ``projects`` that 0019 does not own.
+    engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'test.db'}")
     try:
-        from deerflow.persistence.engine import get_engine
-
-        engine = get_engine()
+        await asyncio.to_thread(command.upgrade, _get_alembic_config(engine), "0019_projects")
         async with engine.connect() as conn:
 
             def _inspect(sync_conn):
@@ -45,7 +50,7 @@ async def test_0019_creates_projects_table(tmp_path):
 
             await conn.run_sync(_inspect)
     finally:
-        await close_engine()
+        await engine.dispose()
 
 
 async def test_0020_adds_project_id_column(tmp_path):

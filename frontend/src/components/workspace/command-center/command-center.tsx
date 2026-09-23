@@ -1,7 +1,9 @@
 "use client";
 
+import * as Dialog from "@radix-ui/react-dialog";
 import {
   ArrowDownToLine,
+  ArrowLeftRight,
   ArrowRight,
   ArrowUpRight,
   Bot,
@@ -13,15 +15,15 @@ import {
   Clock3,
   Layers3,
   Network,
+  Paintbrush,
   Plus,
   RefreshCw,
   Search,
   ShieldCheck,
   X,
 } from "lucide-react";
-import Image from "next/image";
 import Link from "next/link";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { ThreadSubagentBatches } from "@/components/workspace/thread-subagent-batches";
@@ -33,17 +35,22 @@ import {
   useConsoleRuns,
   useConsoleStats,
   useConsoleUsage,
+  useConsoleUsageLedger,
   type ConsoleRunItem,
 } from "@/core/console";
 import { useSubagents } from "@/core/subagents";
 import { pathOfThread } from "@/core/threads/utils";
 
 import { AgentTopology } from "./agent-topology";
+import { useWorkspaceAppearance } from "./appearance-provider";
+import { BrandSignature } from "./brand-signature";
 import {
   ArtifactLibraryView,
   ClientSpacesView,
   WorkflowsView,
 } from "./business-views";
+import { MomentumGlyph } from "./momentum-glyph";
+import { BrandMotionToggle, WorkspaceAppearance } from "./workspace-appearance";
 
 import styles from "./command-center.module.css";
 
@@ -81,6 +88,13 @@ function money(value: number | null | undefined, currency?: string | null) {
 }
 
 function Status({ status }: { status: string }) {
+  const label =
+    {
+      success: "Completed",
+      error: "Failed",
+      timeout: "Timed out",
+      interrupted: "Interrupted",
+    }[status] ?? status.charAt(0).toUpperCase() + status.slice(1);
   return (
     <span className={styles.status} data-status={status}>
       {status === "success" ? (
@@ -88,15 +102,16 @@ function Status({ status }: { status: string }) {
       ) : (
         <Circle size={9} fill="currentColor" />
       )}
-      {status === "success"
-        ? "Completed"
-        : status.charAt(0).toUpperCase() + status.slice(1)}
+      {label}
     </span>
   );
 }
 
 export function CommandCenter() {
   const { user } = useAuth();
+  const { preferences } = useWorkspaceAppearance();
+  const [appearanceOpen, setAppearanceOpen] = useState(false);
+  const appearanceTrigger = useRef<HTMLButtonElement>(null);
   const canReadRuns = Boolean(user) && hasPermission(user, "runs:read");
   const [view, setView] = useState<View>("Mission Control");
   const [filter, setFilter] = useState("");
@@ -106,10 +121,13 @@ export function CommandCenter() {
     null,
   );
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+  const receiptTrigger = useRef<HTMLElement | null>(null);
   const [cancelConfirm, setCancelConfirm] = useState(false);
   const stats = useConsoleStats();
   const runs = useConsoleRuns({ status: filter || undefined, offset });
+  const activityRuns = useConsoleRuns({});
   const usage = useConsoleUsage();
+  const usageLedger = useConsoleUsageLedger({ limit: 10 });
   const cancel = useCancelConsoleRun();
   const {
     subagents,
@@ -138,8 +156,14 @@ export function CommandCenter() {
     (agent) => agent.source === "managed",
   );
   const roster = displayedAgents.length ? displayedAgents : subagents;
+  const activeAgentNames =
+    activityRuns.data?.runs
+      .filter((run) => active(run.status))
+      .map((run) => run.assistant_id)
+      .filter((name): name is string => Boolean(name)) ?? null;
 
   function openRun(run: ConsoleRunItem) {
+    receiptTrigger.current = document.activeElement as HTMLElement | null;
     setSelectedRunId(run.run_id);
     setCancelConfirm(false);
     cancel.reset();
@@ -252,20 +276,19 @@ export function CommandCenter() {
               aria-pressed={selectedRunId === run.run_id}
               onClick={() => openRun(run)}
             >
-              <span className={styles.jobIcon}>
-                {active(run.status) ? (
-                  <Clock3 size={18} />
-                ) : run.status === "success" ? (
-                  <Check size={18} />
-                ) : (
-                  <CircleStop size={18} />
-                )}
+              <span className={styles.jobIcon} data-status={run.status}>
+                <MomentumGlyph seed={`thread:${run.thread_id}`} size={34} />
               </span>
               <span className={styles.jobName}>
                 <strong>{run.thread_title ?? "Untitled assignment"}</strong>
                 <small>
-                  {run.model_name ?? "Model not recorded"} ·{" "}
-                  {number(run.total_tokens)} tokens
+                  <span className={styles.metaModel}>
+                    {run.model_name ?? "Model not recorded"}
+                  </span>{" "}
+                  <span aria-hidden="true">·</span>{" "}
+                  <span className={styles.metaTokens}>
+                    {number(run.total_tokens)} tokens
+                  </span>
                 </small>
               </span>
               <Status status={run.status} />
@@ -318,12 +341,20 @@ export function CommandCenter() {
         selectedName={selectedAgentName}
         loading={agentsLoading}
         error={Boolean(agentsError)}
+        runtimeKnown={canReadRuns && activityRuns.isSuccess}
+        activeAgentNames={activeAgentNames}
         onSelect={setSelectedAgentName}
       />
       {selectedAgent ? (
         <div className={styles.agentDetail}>
           <div className={styles.sectionHead}>
-            <h3>{selectedAgent.display_name ?? selectedAgent.name}</h3>
+            <div className={styles.selectedIdentity}>
+              <MomentumGlyph seed={`agent:${selectedAgent.name}`} size={58} />
+              <div>
+                <h3>{selectedAgent.display_name ?? selectedAgent.name}</h3>
+                <span>Role &amp; working brief</span>
+              </div>
+            </div>
             <button
               className={styles.iconButton}
               aria-label="Close specialist details"
@@ -333,6 +364,14 @@ export function CommandCenter() {
             </button>
           </div>
           <p>{selectedAgent.description}</p>
+          {user?.system_role === "admin" && selectedAgent.editable && (
+            <Link
+              className={styles.textLink}
+              href="/workspace/command-center?settings=subagents"
+            >
+              Edit specialist brief <ArrowUpRight size={14} />
+            </Link>
+          )}
           <dl>
             <div>
               <dt>Model</dt>
@@ -364,19 +403,16 @@ export function CommandCenter() {
   );
 
   return (
-    <main className={styles.root}>
+    <main
+      className={styles.root}
+      data-live={stats.data?.active_runs ? "true" : "false"}
+      data-treatment={preferences.treatment}
+      data-appearance-open={appearanceOpen}
+    >
       <header className={styles.topbar}>
         <div className={styles.brand}>
           <SidebarTrigger />
-          <Image
-            src="/momentum/wordmark.png"
-            alt="Momentum"
-            width={800}
-            height={172}
-            style={{ height: "auto" }}
-            priority
-          />
-          <span>Command Center</span>
+          <span className={styles.appName}>Command Center</span>
         </div>
         <span className={styles.account}>Your workspace</span>
       </header>
@@ -384,13 +420,40 @@ export function CommandCenter() {
         <div className={styles.heading}>
           <div>
             <h1>{view}</h1>
-            <p>Give your ambition a team. Keep the work in view.</p>
+            <p className={styles.headingCopy}>
+              <span>Give your ambition a team.</span>{" "}
+              <span>Keep the work in view.</span>
+            </p>
+            <div className={styles.headingActions}>
+              <Link className={styles.primary} href={startPath}>
+                <Plus size={17} />
+                Start a mission
+              </Link>
+              <button
+                ref={appearanceTrigger}
+                className={styles.appearanceButton}
+                type="button"
+                aria-expanded={appearanceOpen}
+                aria-controls="workspace-appearance"
+                onClick={() => setAppearanceOpen(!appearanceOpen)}
+              >
+                <Paintbrush size={16} /> Appearance
+              </button>
+            </div>
           </div>
-          <Link className={styles.primary} href={startPath}>
-            <Plus size={17} />
-            Start a mission
-          </Link>
+          <div className={styles.brandStage}>
+            <BrandSignature size="hero" />
+            <BrandMotionToggle />
+          </div>
         </div>
+        {appearanceOpen && (
+          <WorkspaceAppearance
+            onClose={() => {
+              setAppearanceOpen(false);
+              appearanceTrigger.current?.focus();
+            }}
+          />
+        )}
         <nav className={styles.tabs} aria-label="Command Center views">
           {tabs.map((tab) => (
             <button
@@ -425,12 +488,22 @@ export function CommandCenter() {
               { label: "Errors & timeouts", value: stats.data?.failed_runs },
               { label: "Recorded tokens", value: stats.data?.total_tokens },
             ].map((metric) => (
-              <div key={metric.label}>
+              <div
+                key={metric.label}
+                data-exception={
+                  metric.label === "Errors & timeouts" &&
+                  Number(metric.value) > 0
+                }
+              >
                 <span>{metric.label}</span>
                 <strong>
-                  {stats.isLoading || metric.value === undefined
-                    ? "—"
-                    : number(metric.value)}
+                  {stats.isLoading ? (
+                    <span>Loading</span>
+                  ) : metric.value === undefined ? (
+                    <span>Unavailable</span>
+                  ) : (
+                    number(metric.value)
+                  )}
                 </strong>
               </div>
             ))}
@@ -502,10 +575,15 @@ export function CommandCenter() {
               <p role="status">Loading usage…</p>
             ) : (
               <>
+                <p className={styles.scrollHint}>
+                  <ArrowLeftRight size={14} aria-hidden="true" />
+                  Scroll charts and tables sideways to see all values.
+                </p>
                 <div
                   className={styles.usageChart}
                   role="img"
                   aria-label="Daily token usage for the last 14 days"
+                  tabIndex={0}
                 >
                   {usage.data?.days.map((day) => (
                     <div
@@ -522,7 +600,12 @@ export function CommandCenter() {
                     </div>
                   ))}
                 </div>
-                <div className={styles.tableWrap}>
+                <div
+                  className={styles.tableWrap}
+                  role="region"
+                  aria-label="Model usage table"
+                  tabIndex={0}
+                >
                   <table>
                     <caption>Model usage in this period</caption>
                     <thead>
@@ -555,6 +638,142 @@ export function CommandCenter() {
                   free; these figures are not your provider balance or invoice.
                   Client revenue, margins and billing are not connected.
                 </p>
+                <div className={styles.sectionHead}>
+                  <div>
+                    <h2>Provider attempt ledger</h2>
+                    <p>
+                      Read-only attempt and retry evidence; this view does not
+                      approve, block, or authorize provider spend.
+                    </p>
+                  </div>
+                  <button
+                    className={styles.iconButton}
+                    onClick={() => void usageLedger.refetch()}
+                    aria-label="Refresh provider attempt ledger"
+                    disabled={usageLedger.isFetching}
+                  >
+                    <RefreshCw
+                      size={17}
+                      className={
+                        usageLedger.isFetching ? styles.spin : undefined
+                      }
+                    />
+                  </button>
+                </div>
+                {usageLedger.isError ? (
+                  <div className={styles.empty} role="alert">
+                    <p>Provider attempt evidence could not be loaded.</p>
+                    <button onClick={() => void usageLedger.refetch()}>
+                      Try again
+                    </button>
+                  </div>
+                ) : usageLedger.isLoading ? (
+                  <p role="status">Loading provider attempts…</p>
+                ) : usageLedger.data?.attempts.length ? (
+                  <div
+                    className={styles.tableWrap}
+                    role="region"
+                    aria-label="Provider attempt ledger table"
+                    tabIndex={0}
+                  >
+                    <table className={styles.ledgerTable}>
+                      <caption>
+                        Latest provider attempts with tokens, status, latency
+                        and cost evidence
+                      </caption>
+                      <thead>
+                        <tr>
+                          <th>Attempt</th>
+                          <th>Status</th>
+                          <th>Provider / model</th>
+                          <th>Tokens</th>
+                          <th>Latency</th>
+                          <th>Provider cost</th>
+                          <th>Configured estimate</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {usageLedger.data.attempts.map((attempt) => (
+                          <tr key={attempt.event_id}>
+                            <th scope="row">
+                              {attempt.provider_attempt_id ??
+                                `Call ${attempt.llm_call_index ?? "?"}`}
+                              <span className={styles.meta}>
+                                {attempt.created_at
+                                  ? new Date(
+                                      attempt.created_at,
+                                    ).toLocaleString()
+                                  : "Time not recorded"}
+                              </span>
+                            </th>
+                            <td>
+                              <span
+                                className={styles.status}
+                                data-status={
+                                  attempt.attempt_status === "success"
+                                    ? "success"
+                                    : "error"
+                                }
+                              >
+                                {attempt.attempt_status}
+                              </span>
+                              {attempt.error_type && (
+                                <span className={styles.meta}>
+                                  {attempt.error_type}
+                                </span>
+                              )}
+                            </td>
+                            <td>
+                              {attempt.provider ?? "Provider not recorded"}
+                              <span className={styles.meta}>
+                                {attempt.resolved_model ??
+                                  attempt.requested_model ??
+                                  "Model not recorded"}
+                              </span>
+                            </td>
+                            <td>
+                              {number(attempt.total_tokens)}
+                              <span className={styles.meta}>
+                                {number(attempt.input_tokens)} in ·{" "}
+                                {number(attempt.output_tokens)} out
+                                {attempt.cache_read_tokens
+                                  ? ` · ${number(attempt.cache_read_tokens)} cached`
+                                  : ""}
+                              </span>
+                            </td>
+                            <td>
+                              {attempt.latency_ms == null
+                                ? "Not recorded"
+                                : `${number(attempt.latency_ms)}ms`}
+                            </td>
+                            <td>
+                              {money(
+                                attempt.provider_reported_cost,
+                                attempt.provider_reported_currency,
+                              )}
+                            </td>
+                            <td>
+                              {money(
+                                attempt.estimated_cost,
+                                attempt.estimated_currency,
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {usageLedger.data.has_more && (
+                      <p className={styles.diagramNote}>
+                        Showing the latest 10 attempts. The API has more
+                        evidence available for audit views.
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <p>
+                    No provider attempts were recorded in the latest ledger.
+                  </p>
+                )}
               </>
             )}
           </section>
@@ -565,106 +784,127 @@ export function CommandCenter() {
         </footer>
       </div>
       {selectedRun && (
-        <aside
-          className={styles.runDetail}
-          aria-labelledby="run-detail-heading"
+        <Dialog.Root
+          open
+          onOpenChange={(open) => !open && setSelectedRunId(null)}
         >
-          <div className={styles.sectionHead}>
-            <h2 id="run-detail-heading">Execution receipt</h2>
-            <button
-              className={styles.iconButton}
-              aria-label="Close execution receipt"
-              onClick={() => setSelectedRunId(null)}
+          <Dialog.Overlay className={styles.runBackdrop} />
+          <Dialog.Content
+            asChild
+            aria-describedby={undefined}
+            onCloseAutoFocus={(event) => {
+              event.preventDefault();
+              receiptTrigger.current?.focus();
+            }}
+          >
+            <aside
+              className={styles.runDetail}
+              aria-labelledby="run-detail-heading"
             >
-              <X size={20} />
-            </button>
-          </div>
-          <Status status={selectedRun.status} />
-          <h3>{selectedRun.thread_title ?? "Untitled assignment"}</h3>
-          <dl>
-            <div>
-              <dt>Model</dt>
-              <dd>{selectedRun.model_name ?? "Not recorded"}</dd>
-            </div>
-            <div>
-              <dt>Duration</dt>
-              <dd>{duration(selectedRun.duration_seconds)}</dd>
-            </div>
-            <div>
-              <dt>Tokens</dt>
-              <dd>{number(selectedRun.total_tokens)}</dd>
-            </div>
-            <div>
-              <dt>Estimated cost</dt>
-              <dd>{money(selectedRun.cost, stats.data?.currency)}</dd>
-            </div>
-            <div>
-              <dt>Run ID</dt>
-              <dd>{selectedRun.run_id}</dd>
-            </div>
-            <div>
-              <dt>Started</dt>
-              <dd>
-                {selectedRun.created_at
-                  ? new Date(selectedRun.created_at).toLocaleString()
-                  : "Not recorded"}
-              </dd>
-            </div>
-          </dl>
-          {selectedRun.error && (
-            <p className={styles.notice} role="alert">
-              {selectedRun.error}
-            </p>
-          )}
-          <Link className={styles.primary} href={runPath(selectedRun)}>
-            Open conversation &amp; artifacts <ArrowRight size={16} />
-          </Link>
-          <div className={styles.batchControls}>
-            <ThreadSubagentBatches threadId={selectedRun.thread_id} />
-          </div>
-          {active(selectedRun.status) &&
-            hasPermission(user, PERMISSIONS.RUNS_CANCEL) && (
-              <div className={styles.cancel}>
-                {cancelConfirm ? (
-                  <>
-                    <p>Stop this run? Completed tool actions will remain.</p>
-                    <button
-                      disabled={cancel.isPending}
-                      onClick={() =>
-                        cancel.mutate(
-                          {
-                            threadId: selectedRun.thread_id,
-                            runId: selectedRun.run_id,
-                          },
-                          { onSuccess: () => setCancelConfirm(false) },
-                        )
-                      }
-                    >
-                      <CircleStop size={16} />
-                      {cancel.isPending ? "Requesting stop…" : "Confirm stop"}
-                    </button>
-                    <button
-                      disabled={cancel.isPending}
-                      onClick={() => setCancelConfirm(false)}
-                    >
-                      Keep running
-                    </button>
-                  </>
-                ) : (
-                  <button onClick={() => setCancelConfirm(true)}>
-                    <CircleStop size={16} />
-                    Stop run
-                  </button>
-                )}
+              <div className={styles.sectionHead}>
+                <Dialog.Title asChild>
+                  <h2 id="run-detail-heading">Execution receipt</h2>
+                </Dialog.Title>
+                <button
+                  className={styles.iconButton}
+                  aria-label="Close execution receipt"
+                  onClick={() => setSelectedRunId(null)}
+                >
+                  <X size={20} />
+                </button>
               </div>
-            )}
-          {cancel.isError && <p role="alert">{cancel.error.message}</p>}
-          <p className={styles.diagramNote}>
-            <ArrowDownToLine size={14} /> Artifact downloads and complete task
-            timelines are available in the conversation. Batch pause/resume
-            appears when supported by the runtime.
-          </p>
-        </aside>
+              <Status status={selectedRun.status} />
+              <h3>{selectedRun.thread_title ?? "Untitled assignment"}</h3>
+              <dl>
+                <div>
+                  <dt>Model</dt>
+                  <dd>{selectedRun.model_name ?? "Not recorded"}</dd>
+                </div>
+                <div>
+                  <dt>Duration</dt>
+                  <dd>{duration(selectedRun.duration_seconds)}</dd>
+                </div>
+                <div>
+                  <dt>Tokens</dt>
+                  <dd>{number(selectedRun.total_tokens)}</dd>
+                </div>
+                <div>
+                  <dt>Estimated cost</dt>
+                  <dd>{money(selectedRun.cost, stats.data?.currency)}</dd>
+                </div>
+                <div>
+                  <dt>Run ID</dt>
+                  <dd>{selectedRun.run_id}</dd>
+                </div>
+                <div>
+                  <dt>Started</dt>
+                  <dd>
+                    {selectedRun.created_at
+                      ? new Date(selectedRun.created_at).toLocaleString()
+                      : "Not recorded"}
+                  </dd>
+                </div>
+              </dl>
+              {selectedRun.error && (
+                <p className={styles.notice} role="alert">
+                  {selectedRun.error}
+                </p>
+              )}
+              <Link className={styles.primary} href={runPath(selectedRun)}>
+                Open conversation &amp; artifacts <ArrowRight size={16} />
+              </Link>
+              <div className={styles.batchControls}>
+                <ThreadSubagentBatches threadId={selectedRun.thread_id} />
+              </div>
+              {active(selectedRun.status) &&
+                hasPermission(user, PERMISSIONS.RUNS_CANCEL) && (
+                  <div className={styles.cancel}>
+                    {cancelConfirm ? (
+                      <>
+                        <p>
+                          Stop this run? Completed tool actions will remain.
+                        </p>
+                        <button
+                          disabled={cancel.isPending}
+                          onClick={() =>
+                            cancel.mutate(
+                              {
+                                threadId: selectedRun.thread_id,
+                                runId: selectedRun.run_id,
+                              },
+                              { onSuccess: () => setCancelConfirm(false) },
+                            )
+                          }
+                        >
+                          <CircleStop size={16} />
+                          {cancel.isPending
+                            ? "Requesting stop…"
+                            : "Confirm stop"}
+                        </button>
+                        <button
+                          disabled={cancel.isPending}
+                          onClick={() => setCancelConfirm(false)}
+                        >
+                          Keep running
+                        </button>
+                      </>
+                    ) : (
+                      <button onClick={() => setCancelConfirm(true)}>
+                        <CircleStop size={16} />
+                        Stop run
+                      </button>
+                    )}
+                  </div>
+                )}
+              {cancel.isError && <p role="alert">{cancel.error.message}</p>}
+              <p className={styles.diagramNote}>
+                <ArrowDownToLine size={14} /> Artifact downloads and complete
+                task timelines are available in the conversation. Batch
+                pause/resume appears when supported by the runtime.
+              </p>
+            </aside>
+          </Dialog.Content>
+        </Dialog.Root>
       )}
     </main>
   );

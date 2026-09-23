@@ -3,13 +3,19 @@ import { Toaster } from "sonner";
 
 import { QueryClientProvider } from "@/components/query-client-provider";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
+import { WorkspaceAppearanceProvider } from "@/components/workspace/command-center/appearance-provider";
 import { BackgroundJobs } from "@/components/workspace/command-center/background-jobs";
 import { CommandPalette } from "@/components/workspace/command-palette";
 import { GatewayOfflineBanner } from "@/components/workspace/gateway-offline-banner";
 import { ModelLoadErrorBanner } from "@/components/workspace/model-load-error-banner";
 import { SettingsDialogHost } from "@/components/workspace/settings";
+import {
+  SkipToContent,
+  WORKSPACE_MAIN_ID,
+} from "@/components/workspace/skip-to-content";
 import { WorkspaceSettingsDeepLink } from "@/components/workspace/workspace-settings-deep-link";
 import { WorkspaceSidebar } from "@/components/workspace/workspace-sidebar";
+import { ExtensionPageBootstrap } from "@/core/extensions/hooks";
 import { UserPreferencesBoundary } from "@/core/settings/user-preferences-boundary";
 
 function parseSidebarOpenCookie(
@@ -35,19 +41,31 @@ export async function WorkspaceContent({
   return (
     <QueryClientProvider>
       <UserPreferencesBoundary>
-        <SidebarProvider className="h-screen" defaultOpen={initialSidebarOpen}>
-          <WorkspaceSidebar />
-          <SidebarInset className="min-w-0" style={{ width: "auto" }}>
-            <GatewayOfflineBanner gatewayUnavailable={gatewayUnavailable} />
-            <ModelLoadErrorBanner gatewayUnavailable={gatewayUnavailable} />
-            {children}
-          </SidebarInset>
-        </SidebarProvider>
-        <CommandPalette />
-        <BackgroundJobs />
-        <SettingsDialogHost />
-        <WorkspaceSettingsDeepLink />
-        <Toaster position="top-center" />
+        <ExtensionPageBootstrap />
+        <WorkspaceAppearanceProvider>
+          <SidebarProvider
+            className="h-screen"
+            defaultOpen={initialSidebarOpen}
+          >
+            <SkipToContent />
+            <WorkspaceSidebar />
+            <SidebarInset
+              id={WORKSPACE_MAIN_ID}
+              tabIndex={-1}
+              className="min-w-0 focus:outline-none"
+              style={{ width: "auto" }}
+            >
+              <GatewayOfflineBanner gatewayUnavailable={gatewayUnavailable} />
+              <ModelLoadErrorBanner gatewayUnavailable={gatewayUnavailable} />
+              {children}
+            </SidebarInset>
+          </SidebarProvider>
+          <CommandPalette />
+          <BackgroundJobs />
+          <SettingsDialogHost />
+          <WorkspaceSettingsDeepLink />
+          <Toaster position="top-center" />
+        </WorkspaceAppearanceProvider>
       </UserPreferencesBoundary>
     </QueryClientProvider>
   );

@@ -4,18 +4,16 @@ Mode: Operate. Route: /workspace/command-center.
 
 ## Direction contract
 
-FORM SEED: Operational ledger — a paper-and-ink control register with one deep lead-agent module and connected specialist topology.
+THESIS: Momentum Current makes real agent work feel alive without turning execution into theater. Actual runs, agents, artifacts, and receipts form one readable current.
 
-THESIS: Momentum's work is inspectable from one place. Lead with the team and actual assignments, not invented revenue or decorative metrics.
+OWN-WORLD: White and ice-blue fields carry Momentum cobalt, cyan, indigo, and violet. Controlled spectral color belongs to generated copy and recorded activity, never confetti. Every agent and conversation uses a deterministic Momentum vector glyph; no emoji or platform-dependent identity marks.
 
-OWN-WORLD: Reuse Momentum paper #FBF8F4, ink #14181B, deep #0E1417, blue #155E86, signal #E27113, light-surface signal text #A35309. Authentic Momentum wordmark. Nunito Sans UI and Archivo Black headings, with existing system fallbacks. Restrained, useful orange actions.
+FIRST VIEWPORT: A compact Momentum rail leads into Mission Control, a factual four-metric strip, live jobs, the lead agent, and connected specialists. On mobile, jobs come first and the metric strip becomes a swipeable rail.
 
-FIRST VIEWPORT: A compact branded workspace header; Mission Control title; actual run counters; an interactive agent roster diagram next to recent assignments. Definition links describe team structure, not observed dispatches.
+SIGNATURE INTERACTION: Selecting a run opens its evidence drawer without losing the wider system. Glow means live, selected, or focused state only; color never invents progress, cost, or success.
 
-OPERATIONAL REGISTER: The four counters are contract-required, account-scoped run facts in a compact ledger strip—not a marketing hero, decorative KPI set, or revenue claim.
+MOTION: Controls use 160ms transitions, the desktop live ring uses 1.9s, status pulse uses 1.8s, and ambient current uses 7s. Mobile keeps at most one continuous state loop. Reduced-motion removes all animation and transition.
 
-SIGNATURE INTERACTION: Select a specialist to inspect its real configuration; select a run to inspect the actual model, usage, error and conversation. Activity reflects API state. Ordinary jobs can be cancelled; durable batches retain existing dedicated controls.
+RESPONSIVE: Desktop operational columns collapse into ordered sections on mobile. Controls meet 44px touch targets, tabs remain horizontally scrollable, and background work stays clear of the composer.
 
-MOTION: Only active states pulse; respect reduced motion. No perpetual orbit, false progress, or simulated work.
-
-RESPONSIVE: Desktop operational grid collapses into ordered sections on mobile. Keyboard buttons, readable state labels, bounded lists, loading/error/empty states, and visible source scope remain intact.
+FINISH: Keyboard focus, forced colors, dark conversation surfaces, desktop/mobile captures, deterministic glyph tests, and truthful loading/error/empty states must be verified before release.

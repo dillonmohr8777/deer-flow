@@ -9,7 +9,7 @@ Core principle: use the real LLM from config.yaml, let config, middleware
 chain, tool registration, file I/O, and event serialization all run for real.
 Only DEER_FLOW_HOME is redirected to tmp_path for filesystem isolation.
 
-Tests that call the LLM are marked ``requires_llm`` and skipped in CI.
+Tests that call the LLM are marked ``live`` and require explicit opt-in.
 File-management tests (upload/list/delete) don't need LLM and run everywhere.
 """
 
@@ -33,8 +33,8 @@ load_dotenv(os.path.join(os.path.dirname(__file__), "../../.env"))
 # ---------------------------------------------------------------------------
 
 requires_llm = pytest.mark.skipif(
-    os.getenv("CI", "").lower() in ("true", "1") or not os.getenv("OPENAI_API_KEY"),
-    reason="Requires LLM API key — skipped in CI or when OPENAI_API_KEY is unset",
+    os.getenv("CI", "").lower() in ("true", "1") or os.getenv("DEER_FLOW_RUN_LIVE_TESTS") != "1" or not os.getenv("OPENAI_API_KEY"),
+    reason="Requires DEER_FLOW_RUN_LIVE_TESTS=1 and an LLM API key; skipped in CI",
 )
 
 
@@ -170,6 +170,7 @@ def client(e2e_env):
 class TestBasicChat:
     """Basic chat and streaming behavior with real LLM."""
 
+    @pytest.mark.live
     @requires_llm
     def test_basic_chat(self, client):
         """chat() returns a non-empty text response."""
@@ -177,6 +178,7 @@ class TestBasicChat:
         assert isinstance(result, str)
         assert len(result) > 0
 
+    @pytest.mark.live
     @requires_llm
     def test_stream_event_sequence(self, client):
         """stream() yields events: messages-tuple, values, and end."""
@@ -187,6 +189,7 @@ class TestBasicChat:
         assert "messages-tuple" in types
         assert "values" in types
 
+    @pytest.mark.live
     @requires_llm
     def test_stream_event_data_format(self, client):
         """Each event type has the expected data structure."""
@@ -207,6 +210,7 @@ class TestBasicChat:
                 # end event may contain usage stats after token tracking was added
                 assert isinstance(event.data, dict)
 
+    @pytest.mark.live
     @requires_llm
     def test_multi_turn_stateless(self, client):
         """Without checkpointer, two calls to the same thread_id are independent."""
@@ -231,6 +235,7 @@ class TestBasicChat:
 class TestToolCallFlow:
     """Verify the LLM actually invokes tools through the real agent pipeline."""
 
+    @pytest.mark.live
     @requires_llm
     def test_tool_call_produces_events(self, client):
         """When the LLM decides to use a tool, we see tool call + result events."""
@@ -246,6 +251,7 @@ class TestToolCallFlow:
         assert len(tool_call_events) >= 1, "Expected at least one tool_call event"
         assert len(tool_result_events) >= 1, "Expected at least one tool result event"
 
+    @pytest.mark.live
     @requires_llm
     def test_tool_call_event_structure(self, client):
         """Tool call events contain name, args, and id fields."""
@@ -327,6 +333,7 @@ class TestFileUploadIntegration:
         listing = c.list_uploads(tid)
         assert listing["count"] == 0
 
+    @pytest.mark.live
     @requires_llm
     def test_upload_then_chat(self, e2e_env, tmp_path):
         """Upload a file then ask the LLM about it — UploadsMiddleware injects file info."""
@@ -351,6 +358,7 @@ class TestFileUploadIntegration:
 class TestLifecycleAndConfig:
     """Agent recreation and configuration behavior."""
 
+    @pytest.mark.live
     @requires_llm
     def test_agent_recreation_on_config_change(self, client):
         """Changing thinking_enabled triggers agent recreation (different config key)."""
@@ -408,6 +416,7 @@ class TestLifecycleAndConfig:
 class TestMiddlewareChain:
     """Verify middleware side effects through real execution."""
 
+    @pytest.mark.live
     @requires_llm
     def test_thread_data_paths_in_state(self, client):
         """After streaming, thread directory paths are computed correctly."""
@@ -425,6 +434,7 @@ class TestMiddlewareChain:
         thread_dir = get_paths().thread_dir(tid)
         assert str(thread_dir).endswith(tid)
 
+    @pytest.mark.live
     @requires_llm
     def test_stream_completes_without_middleware_errors(self, client):
         """Full middleware chain (ThreadData, Uploads, Sandbox, DanglingToolCall,
@@ -475,6 +485,7 @@ class TestErrorAndBoundary:
         with pytest.raises(ValueError, match="not a file"):
             c.upload_files("test-thread", [d])
 
+    @pytest.mark.live
     @requires_llm
     def test_empty_message_still_gets_response(self, client):
         """Even an empty-ish message should produce a valid event stream."""

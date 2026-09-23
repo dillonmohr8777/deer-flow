@@ -159,7 +159,7 @@ def upgrade() -> None:
         for batch_id, owner_id, thread_id, run_id in bind.execute(sa.text("SELECT id, user_id, thread_id, run_id FROM subagent_batches WHERE organization_id IS NULL")):
             thread = thread_orgs.get(str(thread_id))
             run = run_orgs.get(str(run_id)) if run_id is not None else None
-            if thread is not None and thread[0] == str(owner_id) and thread[1] is not None and (run is None or (run[0] == str(owner_id) and run[1] == thread[1] and run[2] == str(thread_id))):
+            if thread is not None and thread[0] == str(owner_id) and thread[1] is not None and (run_id is None or (run is not None and run[0] == str(owner_id) and run[1] == thread[1] and run[2] == str(thread_id))):
                 _stamp(bind, "subagent_batches", "id", str(batch_id), thread[1])
 
     connection_orgs: dict[str, tuple[str, str | None]] = {}
@@ -176,7 +176,7 @@ def upgrade() -> None:
         for task_id, owner_id, thread_id, run_id in bind.execute(sa.text("SELECT id, user_id, thread_id, run_id FROM mcp_tasks WHERE organization_id IS NULL")):
             thread = thread_orgs.get(str(thread_id))
             run = run_orgs.get(str(run_id)) if run_id is not None else None
-            if thread is not None and thread[0] == str(owner_id) and thread[1] is not None and (run is None or (run[0] == str(owner_id) and run[1] == thread[1] and run[2] == str(thread_id))):
+            if thread is not None and thread[0] == str(owner_id) and thread[1] is not None and (run_id is None or (run is not None and run[0] == str(owner_id) and run[1] == thread[1] and run[2] == str(thread_id))):
                 _stamp(bind, "mcp_tasks", "id", str(task_id), thread[1])
     if _has_table(bind, "feedback"):
         for feedback_id, owner_id, thread_id, run_id in bind.execute(sa.text("SELECT feedback_id, user_id, thread_id, run_id FROM feedback WHERE organization_id IS NULL")):

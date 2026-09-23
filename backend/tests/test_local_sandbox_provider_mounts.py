@@ -534,25 +534,21 @@ class TestMultipleMounts:
             ],
         )
 
-        # Mock subprocess to capture the resolved command. The POSIX path runs
-        # commands via subprocess.Popen, so wrap that and still execute the real
-        # command.
         captured = {}
-        original_popen = __import__("subprocess").Popen
 
-        def mock_popen(*args, **kwargs):
-            if len(args) > 0:
-                captured["command"] = args[0]
-            return original_popen(*args, **kwargs)
+        def capture_command(args, *_args, **_kwargs):
+            captured["command"] = args
+            return "", "", 0, False
 
-        monkeypatch.setattr("deerflow.sandbox.local.local_sandbox.subprocess.Popen", mock_popen)
+        monkeypatch.setattr(sandbox, "_run_windows_command", capture_command)
+        monkeypatch.setattr(sandbox, "_run_posix_command", capture_command)
         monkeypatch.setattr("deerflow.sandbox.local.local_sandbox.LocalSandbox._get_shell", lambda self: "/bin/sh")
 
         sandbox.execute_command("cat /mnt/data/test.txt")
         # Verify the command received the resolved local path
         command = captured.get("command", [])
         assert isinstance(command, list) and len(command) >= 3
-        assert str(data_dir) in command[2]
+        assert str(data_dir).replace("\\", "/") in command[2]
 
     def test_reverse_resolve_path_does_not_match_partial_prefix(self, tmp_path):
         foo_dir = tmp_path / "foo"

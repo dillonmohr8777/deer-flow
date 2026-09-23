@@ -17,7 +17,36 @@ export const enUS: Translations = {
     localName: "English",
   },
 
+  extensions: {
+    title: "Extensions",
+    navigation: "Extensions",
+    search: "Search extensions by name or purpose",
+    loading: "Loading extensions…",
+    pageLoading: "Loading extension…",
+    unavailable: "Extensions unavailable.",
+    retry: "Retry",
+    reload: "Reload",
+    reloadAll: "Reload extensions (refresh page)",
+    all: "All extensions",
+    notInstalled: "This extension is not installed.",
+    enabledManaged: "Enabled · Managed by your administrator",
+    disabledManaged: "Disabled · Managed by your administrator",
+    deploymentHint:
+      "Interface and browser features update on manual reload. Installation, activation and configuration are managed through deployment configuration or the CLI.",
+    moduleUnavailable: "Page module unavailable",
+    noResults: "No matching installed extensions.",
+    pageUnavailable: "Extension page unavailable",
+    pageUnavailableHint:
+      "This page is not registered, or its plugin is disabled or unavailable.",
+    viewAll: "View extensions",
+    viewFailed: "Plugin view unavailable. Reload to retry.",
+    actionFailed: "Extension action unavailable. Try again.",
+    view: (name) => `View ${name}`,
+    open: (name) => `Open ${name}`,
+  },
+
   capabilities: {
+    toolsAndIntegrations: "Tools & integrations",
     icon: {
       title: "Plugin icon",
       upload: "Upload plugin icon",
@@ -60,7 +89,7 @@ export const enUS: Translations = {
       notice:
         "Discover integrations for your team. Connect accounts and configure access when you need them.",
       configured: "Configured",
-      nativeHint: "Supported by DeerFlow · requires deployment configuration",
+      nativeHint: "Supported by Momentum · requires deployment configuration",
       guideHint: "Setup reference · not connected",
       unknownStatus: "Status unavailable",
       notConnected: "Not connected",
@@ -68,7 +97,7 @@ export const enUS: Translations = {
     integrationSkills: "From plugins",
     sharedSkills: "Shared skills",
     title: "Capability Center",
-    description: "Add tools and skills that help DeerFlow work your way.",
+    description: "Add tools and skills that help Momentum work your way.",
     plugins: "Plugins",
     skills: "Skills",
     searchPlugins: "Search plugins by name or purpose",
@@ -178,11 +207,11 @@ export const enUS: Translations = {
   welcome: {
     greeting: "Hello, again!",
     description:
-      "Welcome to 🦌 DeerFlow, an open source super agent. With built-in and custom skills, DeerFlow helps you search on the web, analyze data, and generate artifacts like slides, web pages and do almost anything.",
+      "Tell Momentum what you need. The lead agent plans the work, hands parts to specialists, and every run leaves a record you can check.",
 
     createYourOwnSkill: "Create Your Own Skill",
     createYourOwnSkillDescription:
-      "Create your own skill to release the power of DeerFlow. With customized skills,\nDeerFlow can help you search on the web, analyze data, and generate\n artifacts like slides, web pages and do almost anything.",
+      "Create your own skill to release the power of Momentum. With customized skills,\nMomentum can help you search on the web, analyze data, and generate\n artifacts like slides, web pages and do almost anything.",
   },
 
   // Clipboard
@@ -305,7 +334,7 @@ export const enUS: Translations = {
   // Input Box
   inputBox: {
     placeholder: "How can I assist you today?",
-    disclaimer: "DeerFlow is AI and can make mistakes",
+    disclaimer: "Agents can make mistakes. Check the record.",
     createSkillPrompt:
       "We're going to build a new skill step by step with `skill-creator`. To start, what do you want this skill to do?",
     addAttachments: "Add attachments",
@@ -327,7 +356,7 @@ export const enUS: Translations = {
     voiceInputStartLabel: "Dictate with voice",
     voiceInputStopLabel: "Stop voice input",
     voiceInputStart:
-      "Dictate with voice. DeerFlow receives only transcribed text; audio is handled by your browser or system speech service.",
+      "Dictate with voice. Momentum receives only transcribed text; audio is handled by your browser or system speech service.",
     voiceInputStop: "Stop voice input",
     voiceInputListening: "Listening... Click to stop voice input.",
     voiceInputUnsupported:
@@ -445,6 +474,7 @@ export const enUS: Translations = {
     pleaseWaitStreaming: "Please wait for the current response to finish.",
     stopStreamingUnavailable:
       "Stopping the running turn is not permitted for your role.",
+    startTurnUnavailable: "Starting a new turn is not permitted for your role.",
   },
 
   // Sidebar
@@ -631,12 +661,12 @@ export const enUS: Translations = {
     cancelling: "Cancelling…",
     cancelFailed: "Failed to cancel task",
     cancellationRetrying: (attempt) =>
-      `Cancellation attempt ${attempt} failed; DeerFlow will keep retrying.`,
+      `Cancellation attempt ${attempt} failed; Momentum will keep retrying.`,
     notificationRetrying: (attempt) =>
-      `Chat notification attempt ${attempt} failed; DeerFlow will retry with backoff.`,
+      `Chat notification attempt ${attempt} failed; Momentum will retry with backoff.`,
     notificationStopped:
       "Chat notification delivery stopped after repeated or permanent failures.",
-    trackingDegraded: "Status checks are delayed; DeerFlow is still retrying.",
+    trackingDegraded: "Status checks are delayed; Momentum is still retrying.",
     viewDetails: "View details",
     hideDetails: "Hide details",
     detailsFailed: "Couldn't load task details",
@@ -747,7 +777,7 @@ export const enUS: Translations = {
       threadIdPlaceholder: "Thread ID",
       reuseNoticeTitle: "Uses this thread's conversation history",
       reuseNoticeDescription:
-        "If this thread has an active run at the scheduled time, DeerFlow queues this occurrence and starts it when the thread is available. It fails if the configured queue wait limit is exceeded.",
+        "If this thread has an active run at the scheduled time, Momentum queues this occurrence and starts it when the thread is available. It fails if the configured queue wait limit is exceeded.",
     },
     search: {
       placeholder: "Search task titles or prompts",
@@ -898,13 +928,13 @@ export const enUS: Translations = {
     save: "Save agent",
     saving: "Saving agent...",
     saveRequested:
-      "Save requested. DeerFlow is generating and saving an initial version now.",
+      "Save requested. Momentum is generating and saving an initial version now.",
     saveHint:
       "You can save this agent at any time from the top-right menu, even if this is only a first draft.",
     saveCommandMessage:
       "Please save this custom agent now based on everything we have discussed so far. Treat this as my explicit confirmation to save. If some details are still missing, make reasonable assumptions, generate a concise first SOUL.md in English, and call setup_agent immediately without asking me for more confirmation.",
     agentCreatedPendingRefresh:
-      "The agent was created, but DeerFlow could not load it yet. Please refresh this page in a moment.",
+      "The agent was created, but Momentum could not load it yet. Please refresh this page in a moment.",
     more: "More actions",
     agentCreated: "Agent created!",
     startChatting: "Start chatting",
@@ -918,6 +948,10 @@ export const enUS: Translations = {
       "Supports Unicode. Leave blank to use the agent identifier",
     settingsDescription:
       "Choose a display name and model defaults for this agent. Model changes take effect on the next message.",
+    settingsKnowledge: "Default knowledge",
+    settingsKnowledgeHint:
+      "New conversations use this knowledge scope. Individual messages can override it. Selecting all knowledge bases removes the binding.",
+    settingsKnowledgeReset: "Use all knowledge bases",
     settingsModel: "Default model",
     settingsModelDefault: "Use global default",
     settingsTemperature: "Temperature",
@@ -1046,26 +1080,91 @@ export const enUS: Translations = {
     unavailableShort: "Unavailable",
     setupTitle: (name: string) => `Connect ${name}`,
     setupEditTitle: (name: string) => `Modify ${name}`,
+    wechatQr: {
+      restart: "Scan again",
+      restartHint:
+        "Left the bot screen in WeChat? Start again with a new QR code.",
+      restartKeepCommand:
+        "The command you already copied stays valid until it expires.",
+      autoSave: "Your token will be saved automatically after confirmation.",
+      verifyTitle: "Enter the code shown in WeChat",
+      verifyDescription: "Enter the digits on your phone to finish connecting.",
+      verifyLabel: "Pairing code",
+      verifySubmit: "Continue connecting",
+      verifying: "Verifying…",
+      network: "WeChat is temporarily unreachable. Retrying automatically…",
+      invalid_response:
+        "WeChat returned an unexpected response. Refresh the QR code and try again.",
+      verification_rejected:
+        "The code did not match. Check the digits on your phone and try again.",
+      verification_blocked:
+        "Too many incorrect attempts. Wait a moment, then refresh the QR code.",
+      already_bound:
+        "WeChat says this bot is already linked. Close this dialog and check its connection, or choose a different bot on your phone.",
+      saved: "Token saved securely",
+      savedDescription:
+        "Momentum has saved your token on the server and started the WeChat channel.",
+      bindTitle: "One more step: link your account",
+      bindDescription:
+        "Send this command to the bot in WeChat to link it to your Momentum account.",
+      bindWaiting: "Waiting for your message in WeChat…",
+      bindLoading: "Preparing your account connection…",
+      bindFailed:
+        "Your token is saved, but account binding could not start. Try again.",
+      bindExpired:
+        "This binding code has expired. Generate a new one; no need to scan again.",
+      bindRetry: "Generate binding code",
+      copyCommand: "Copy command",
+      copied: "Copied",
+      copyFailed: "Could not copy. Select and copy the command above.",
+      connectedTitle: "WeChat is connected",
+      connectedDescription: "You can now send a message to your bot in WeChat.",
+      done: "Done",
+
+      login: "Scan QR code",
+      manual: "Use token",
+      description: "Connect WeChat to your Momentum workspace.",
+      loading: "Generating QR code…",
+      imageTitle: "WeChat login QR code",
+      scan: "Scan this code with WeChat, then confirm on your phone.",
+      scanned: "Code scanned. Confirm the login on your phone.",
+      expired: "This QR code has expired. Generate a new one.",
+      failed: "WeChat login failed or was cancelled. Try again.",
+      confirmed: "WeChat login confirmed.",
+      retry: "Refresh QR code",
+      methodLabel: "Connection method",
+      tokenTitle: "Connect with a bot token",
+      tokenDescription:
+        "Paste your existing WeChat iLink bot token to connect.",
+      tokenPlaceholder: "Paste your bot token",
+      tokenHint:
+        "Don’t have a token? Choose Scan QR code to connect with your phone.",
+      privacy: "Credentials are saved only on your server.",
+      waiting: "Waiting for scan",
+      scannedTitle: "Scan complete",
+      expiredTitle: "QR code expired",
+      failedTitle: "Unable to connect",
+    },
     setupDescription:
       "Enter the values needed by this server process. They are not written to config.yaml.",
     saveAndConnect: "Save and connect",
     saveChanges: "Save changes",
     descriptions: {
-      buzz: "Buzz channels and direct messages through your DeerFlow agent.",
-      telegram: "Telegram direct messages through your DeerFlow bot.",
+      buzz: "Buzz channels and direct messages through your Momentum agent.",
+      telegram: "Telegram direct messages through your Momentum bot.",
       slack: "Slack workspace messages and mentions.",
-      discord: "Discord server messages through your DeerFlow bot.",
-      feishu: "Feishu and Lark messages through your DeerFlow app.",
-      dingtalk: "DingTalk Stream Push messages through your DeerFlow bot.",
-      wechat: "WeChat iLink messages through your DeerFlow bot.",
-      wecom: "WeCom messages through your DeerFlow AI bot.",
+      discord: "Discord server messages through your Momentum bot.",
+      feishu: "Feishu and Lark messages through your Momentum app.",
+      dingtalk: "DingTalk Stream Push messages through your Momentum bot.",
+      wechat: "WeChat iLink messages through your Momentum bot.",
+      wecom: "WeCom messages through your Momentum AI bot.",
     },
     connectedAs: (name: string) => `Connected as ${name}.`,
   },
 
   // Page titles (document title)
   pages: {
-    appName: "DeerFlow",
+    appName: "Momentum",
     chats: "Chats",
     newChat: "New chat",
     untitled: "Untitled",
@@ -1101,7 +1200,7 @@ export const enUS: Translations = {
     writeFile: "Write file",
     clickToViewContent: "Click to view file content",
     writeTodos: "Update to-do list",
-    skillInstallTooltip: "Install skill and make it available to DeerFlow",
+    skillInstallTooltip: "Install skill and make it available to Momentum",
     browserNavigate: (url: string) => `Open ${url} in browser`,
     browserNavigateGeneric: "Open page in browser",
     browserClick: "Click element in browser",
@@ -1200,7 +1299,7 @@ export const enUS: Translations = {
     actions: "Actions",
     keyboardShortcuts: "Keyboard Shortcuts",
     keyboardShortcutsDescription:
-      "Navigate DeerFlow faster with keyboard shortcuts.",
+      "Navigate Momentum faster with keyboard shortcuts.",
     openCommandPalette: "Open Command Palette",
     toggleSidebar: "Toggle Sidebar",
   },
@@ -1208,8 +1307,51 @@ export const enUS: Translations = {
   // Settings
   settings: {
     title: "Settings",
-    description: "Adjust how DeerFlow looks and behaves for you.",
+    description: "Adjust how Momentum looks and behaves for you.",
+    models: {
+      title: "Models",
+      description:
+        "Manage shared models available to users. Models from the server configuration are read-only.",
+      adminOnly:
+        "Only administrators can manage shared models. This feature is unavailable in demos.",
+      add: "Add model",
+      loading: "Loading models…",
+      failed: "Could not complete the request.",
+      reload: "Reload",
+      empty: "No models configured.",
+      yaml: "Server configuration · read-only",
+      enabled: "Enabled",
+      disabled: "Disabled",
+      conflict: "This name is reserved by the server configuration.",
+      edit: "Edit model",
+      enable: "Enable",
+      disable: "Disable",
+      formDescription:
+        "Connect an OpenAI-compatible endpoint. Testing sends a short streaming tool-call request and may incur provider charges.",
+      provider: "Provider",
+      name: "Unique name",
+      displayName: "Display name",
+      endpoint: "Base URL",
+      modelId: "Model ID",
+      keepKey: "Leave blank to keep the saved key",
+      optionalKey: "Optional for endpoints without authentication",
+      clearKey: "Remove the saved API key",
+      contextWindow: "Context window (optional)",
+      maxTokens: "Maximum output tokens (optional)",
+      vision: "Supports image input",
+      cancel: "Cancel",
+      test: "Test connection",
+      working: "Working…",
+      save: "Save",
+      saved: "Model saved",
+      success: "Streaming and tool-call test passed.",
+      tool_call_missing:
+        "The endpoint responded, but did not return a tool call. Check the model’s tool support.",
+      connection_failed:
+        "Connection test failed. Check the endpoint, credentials, model ID and streaming/tool support.",
+    },
     sections: {
+      models: "Models",
       account: "Account",
       appearance: "Appearance",
       channels: "Channels",
@@ -1221,7 +1363,7 @@ export const enUS: Translations = {
     memory: {
       title: "Memory",
       description:
-        "DeerFlow automatically learns from your conversations in the background. These memories help DeerFlow understand you better and deliver a more personalized experience.",
+        "Momentum automatically learns from your conversations in the background. These memories help Momentum understand you better and deliver a more personalized experience.",
       empty: "No memory data to display.",
       rawJson: "Raw JSON",
       exportButton: "Export memory",
@@ -1393,7 +1535,7 @@ export const enUS: Translations = {
     channels: {
       title: "Channels",
       description:
-        "Connect IM accounts that can send messages to DeerFlow from outside the browser.",
+        "Connect IM accounts that can send messages to Momentum from outside the browser.",
       disabled:
         "Channel connections are not enabled on this server. Ask an administrator to enable channel_connections.",
     },
@@ -1447,7 +1589,7 @@ export const enUS: Translations = {
         changeAppButton: "Change Lark app",
         changeAppTitle: "Switch to a different Lark app",
         changeAppDescription:
-          "Point your DeerFlow account at a different Lark/Feishu app. This only affects your account; other users are not changed.",
+          "Point your Momentum account at a different Lark/Feishu app. This only affects your account; other users are not changed.",
         changeAppIdLabel: "App ID",
         changeAppSecretLabel: "App Secret",
         changeAppAuthResetNote:
@@ -1461,12 +1603,12 @@ export const enUS: Translations = {
         connectionStarted: "Connection link opened",
         connectionReady: "Connection is ready. Opening authorization...",
         authStarted:
-          "Authorization page opened. DeerFlow will detect completion automatically.",
+          "Authorization page opened. Momentum will detect completion automatically.",
         authorizationStillPending:
-          'Authorization is not complete yet. Finish it in the browser; DeerFlow keeps checking automatically. You can click "I completed authorization" if the page does not update.',
+          'Authorization is not complete yet. Finish it in the browser; Momentum keeps checking automatically. You can click "I completed authorization" if the page does not update.',
         permissionTitle: "Authorization scope",
         permissionDescription:
-          "By default, DeerFlow only completes the base sign-in and does not request any business permissions. Select the domains you need here; connected users can re-authorize to add more (scopes accumulate).",
+          "By default, Momentum only completes the base sign-in and does not request any business permissions. Select the domains you need here; connected users can re-authorize to add more (scopes accumulate).",
         authDomains: {
           calendar: {
             label: "Calendar",
@@ -1577,10 +1719,10 @@ export const enUS: Translations = {
           "The first connection needs one browser confirmation from Lark. Open the link below and finish the prompt, then return here to continue authorization.",
         openAuthLinkTitle: "Authorize Lark in your browser",
         openAuthLinkDescription:
-          "Open the link below to authorize. DeerFlow keeps checking automatically and will save the connection after approval.",
+          "Open the link below to authorize. Momentum keeps checking automatically and will save the connection after approval.",
         waitingAuthTitle: "Waiting for Lark authorization",
         waitingAuthDescription:
-          "Finish authorization in the browser page that just opened. DeerFlow will update this panel automatically; the button below is only a fallback.",
+          "Finish authorization in the browser page that just opened. Momentum will update this panel automatically; the button below is only a fallback.",
         openAuthLink: "Open link",
         copyAuthLink: "Copy link",
         completeAuth: "I completed authorization",
@@ -1606,7 +1748,7 @@ export const enUS: Translations = {
           "The current user's authorization was verified with Lark during this connection flow. Reconnect whenever you need to refresh it or add permissions.",
         authNextTitle: "Complete browser authorization next",
         authNextDescription:
-          "Click “Connect Lark”; DeerFlow checks the current status first and opens browser authorization only when disconnected or expired.",
+          "Click “Connect Lark”; Momentum checks the current status first and opens browser authorization only when disconnected or expired.",
       },
     },
     skills: {
@@ -1650,6 +1792,7 @@ export const enUS: Translations = {
       exportOptional: "optional",
       exportRequired: "required",
       exportUndeclared: "Not declared",
+      exportNone: "None",
       exportScope:
         "Includes all files inside this skill. Account settings, conversations and history outside the skill folder are excluded. Configure tools and credentials again on the destination.",
       exportWarnings: "Check package contents",
@@ -1671,7 +1814,7 @@ export const enUS: Translations = {
       createSkill: "Create skill",
       emptyTitle: "No agent skill yet",
       emptyDescription:
-        "Put your agent skill folders under the `/skills/custom` folder under the root folder of DeerFlow.",
+        "Put your agent skill folders under the `/skills/custom` folder under the root folder of Momentum.",
       emptyButton: "Create Your First Skill",
       adminRequired: "Admin privileges are required to manage agent skills.",
       installAdminRequired:
@@ -1685,12 +1828,12 @@ export const enUS: Translations = {
     notification: {
       title: "Notification",
       description:
-        "DeerFlow only sends a completion notification when the window is not active. This is especially useful for long-running tasks so you can switch to other work and get notified when done.",
+        "Momentum only sends a completion notification when the window is not active. This is especially useful for long-running tasks so you can switch to other work and get notified when done.",
       requestPermission: "Request notification permission",
       deniedHint:
         "Notification permission was denied. You can enable it in your browser's site settings to receive completion alerts.",
       testButton: "Send test notification",
-      testTitle: "DeerFlow",
+      testTitle: "Momentum",
       testBody: "This is a test notification.",
       notSupported: "Your browser does not support notifications.",
       disableNotification: "Disable notification",
@@ -1704,7 +1847,7 @@ export const enUS: Translations = {
       changePasswordDescription: "Update your account password.",
       ssoPasswordDescription: "Password is managed by your SSO provider.",
       ssoPasswordMessage:
-        "This account signs in with {provider}, so DeerFlow cannot manage or change its password here. Use your SSO provider's account settings instead.",
+        "This account signs in with {provider}, so Momentum cannot manage or change its password here. Use your SSO provider's account settings instead.",
       currentPassword: "Current password",
       newPassword: "New password",
       confirmNewPassword: "Confirm new password",
@@ -1730,14 +1873,14 @@ export const enUS: Translations = {
     passwordPlaceholder: "•••••••",
     rememberMe: "Keep me signed in",
     rememberMeDescription:
-      "Keep this browser session when possible. DeerFlow stores only your email, never your password.",
+      "Keep this browser session when possible. We store only your email, never your password.",
     pleaseWait: "Please wait...",
     signIn: "Sign In",
     createAccount: "Create Account",
     createAdminAccount: "Create admin account",
     adminSetupRequiredTitle: "Administrator setup is required",
     adminSetupRequiredDescription:
-      "DeerFlow needs an administrator account before new regular accounts can be created.",
+      "Momentum needs an administrator account before new regular accounts can be created.",
     orContinueWith: "Or continue with",
     ssoHint:
       "If your account uses single sign-on, sign in with the option below instead.",

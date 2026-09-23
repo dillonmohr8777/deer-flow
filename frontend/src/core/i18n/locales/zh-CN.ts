@@ -17,7 +17,35 @@ export const zhCN: Translations = {
     localName: "中文",
   },
 
+  extensions: {
+    title: "扩展插件",
+    navigation: "扩展",
+    search: "按名称或用途搜索扩展",
+    loading: "正在加载扩展…",
+    pageLoading: "正在加载扩展…",
+    unavailable: "扩展暂不可用。",
+    retry: "重试",
+    reload: "重新加载",
+    reloadAll: "重新加载扩展（刷新页面）",
+    all: "全部扩展",
+    notInstalled: "此扩展未安装或已移除。",
+    enabledManaged: "已启用 · 由管理员管理",
+    disabledManaged: "已停用 · 由管理员管理",
+    deploymentHint:
+      "界面和浏览器功能在手动刷新后更新；安装、启停和配置由部署管理员通过配置文件或 CLI 管理。",
+    moduleUnavailable: "当前页面加载失败",
+    noResults: "没有匹配的已安装扩展。",
+    pageUnavailable: "扩展页面不可用",
+    pageUnavailableHint: "此页面未注册，或插件已停用、未能加载。",
+    viewAll: "查看扩展",
+    viewFailed: "扩展界面加载失败，请刷新重试。",
+    actionFailed: "暂时无法执行扩展操作，请重试。",
+    view: (name) => `查看 ${name}`,
+    open: (name) => `打开 ${name}`,
+  },
+
   capabilities: {
+    toolsAndIntegrations: "工具与集成",
     icon: {
       title: "插件图标",
       upload: "上传插件图标",
@@ -58,7 +86,7 @@ export const zhCN: Translations = {
       setup: "接入方式",
       notice: "按工作场景发现插件，需要时再连接账号、配置权限。",
       configured: "已配置",
-      nativeHint: "DeerFlow 已支持 · 需按部署配置",
+      nativeHint: "Momentum 已支持 · 需按部署配置",
       guideHint: "接入参考 · 尚未连接",
       unknownStatus: "状态不可用",
       notConnected: "未连接",
@@ -66,7 +94,7 @@ export const zhCN: Translations = {
     integrationSkills: "来自插件",
     sharedSkills: "共享技能",
     title: "能力中心",
-    description: "为你的工作添加工具与技能，让 DeerFlow 更懂你的工作方式。",
+    description: "为你的工作添加工具与技能，让 Momentum 更懂你的工作方式。",
     plugins: "插件",
     skills: "技能",
     searchPlugins: "搜索插件名称或用途",
@@ -172,11 +200,11 @@ export const zhCN: Translations = {
   welcome: {
     greeting: "你好，欢迎回来！",
     description:
-      "欢迎使用 🦌 DeerFlow，一个完全开源的超级智能体。通过内置和自定义的 Skills，\nDeerFlow 可以帮你搜索网络、分析数据，还能为你生成幻灯片、\n图片、视频、播客及网页等，几乎可以做任何事情。",
+      "告诉 Momentum 你需要什么。主智能体会规划工作，把部分任务交给专家智能体，每次运行都会留下可核查的记录。",
 
     createYourOwnSkill: "创建你自己的 Agent SKill",
     createYourOwnSkillDescription:
-      "创建你的 Agent Skill 来释放 DeerFlow 的潜力。通过自定义技能，DeerFlow\n可以帮你搜索网络、分析数据，还能为你生成幻灯片、\n网页等作品，几乎可以做任何事情。",
+      "创建你的 Agent Skill 来释放 Momentum 的潜力。通过自定义技能，Momentum\n可以帮你搜索网络、分析数据，还能为你生成幻灯片、\n网页等作品，几乎可以做任何事情。",
   },
 
   // Clipboard
@@ -290,7 +318,7 @@ export const zhCN: Translations = {
   // Input Box
   inputBox: {
     placeholder: "今天我能为你做些什么？",
-    disclaimer: "内容由AI生成，重要信息请务必核查",
+    disclaimer: "智能体可能会出错，请核查记录。",
     createSkillPrompt:
       "我们一起用 skill-creator 技能来创建一个技能吧。先问问我希望这个技能能做什么。",
     addAttachments: "添加附件",
@@ -311,7 +339,7 @@ export const zhCN: Translations = {
     voiceInputStartLabel: "语音输入",
     voiceInputStopLabel: "停止语音输入",
     voiceInputStart:
-      "语音输入。DeerFlow 只接收转写文本，音频由浏览器或系统语音服务处理。",
+      "语音输入。Momentum 只接收转写文本，音频由浏览器或系统语音服务处理。",
     voiceInputStop: "停止语音输入",
     voiceInputListening: "正在聆听... 点击停止语音输入。",
     voiceInputUnsupported:
@@ -416,6 +444,7 @@ export const zhCN: Translations = {
     ],
     pleaseWaitStreaming: "请等待当前响应完成。",
     stopStreamingUnavailable: "你的角色无权停止正在运行的回合。",
+    startTurnUnavailable: "你的角色无权开启新的回合。",
   },
 
   // Sidebar
@@ -584,11 +613,11 @@ export const zhCN: Translations = {
     cancelling: "正在取消…",
     cancelFailed: "取消任务失败",
     cancellationRetrying: (attempt) =>
-      `第 ${attempt} 次取消失败；DeerFlow 将继续重试。`,
+      `第 ${attempt} 次取消失败；Momentum 将继续重试。`,
     notificationRetrying: (attempt) =>
-      `第 ${attempt} 次聊天通知失败；DeerFlow 将退避后重试。`,
+      `第 ${attempt} 次聊天通知失败；Momentum 将退避后重试。`,
     notificationStopped: "聊天通知因反复失败或永久拒绝，已停止重试。",
-    trackingDegraded: "状态检查有所延迟，DeerFlow 仍在重试。",
+    trackingDegraded: "状态检查有所延迟，Momentum 仍在重试。",
     viewDetails: "查看详情",
     hideDetails: "收起详情",
     detailsFailed: "无法加载任务详情",
@@ -697,7 +726,7 @@ export const zhCN: Translations = {
       threadIdPlaceholder: "线程 ID",
       reuseNoticeTitle: "使用该线程的历史对话",
       reuseNoticeDescription:
-        "如果触发时该线程正在运行，DeerFlow 会将本次执行排队，并在线程空闲后启动；超过配置的最长等待时间后会标记为失败。",
+        "如果触发时该线程正在运行，Momentum 会将本次执行排队，并在线程空闲后启动；超过配置的最长等待时间后会标记为失败。",
     },
     search: {
       placeholder: "搜索任务标题或提示词",
@@ -839,13 +868,13 @@ export const zhCN: Translations = {
     save: "保存智能体",
     saving: "正在保存智能体...",
     saveRequested:
-      "已提交保存请求，DeerFlow 正在根据当前对话生成并保存初版智能体。",
+      "已提交保存请求，Momentum 正在根据当前对话生成并保存初版智能体。",
     saveHint:
       "你可以在右上角的菜单里随时保存这个智能体，就算目前还只是初稿也可以。",
     saveCommandMessage:
       "请现在根据我们目前已经讨论的全部内容保存这个自定义智能体。这就是我明确的保存确认。如果仍有少量细节缺失，请根据上下文做出合理假设，生成一份简洁的英文初始 SOUL.md，并直接调用 setup_agent，不要再向我索要额外确认。",
     agentCreatedPendingRefresh:
-      "智能体已创建，但 DeerFlow 暂时还无法读取到它。请稍后刷新当前页面。",
+      "智能体已创建，但 Momentum 暂时还无法读取到它。请稍后刷新当前页面。",
     more: "更多操作",
     agentCreated: "智能体已创建！",
     startChatting: "开始对话",
@@ -857,6 +886,10 @@ export const zhCN: Translations = {
     settingsDisplayNameHint: "支持中文等 Unicode 字符，留空时使用智能体标识",
     settingsDescription:
       "为该智能体设置显示名称和默认模型，模型修改在下一条消息生效。",
+    settingsKnowledge: "默认知识库",
+    settingsKnowledgeHint:
+      "新对话默认使用此知识库范围，单条消息可以临时覆盖。选择全部知识库可解除绑定。",
+    settingsKnowledgeReset: "使用全部知识库",
     settingsModel: "默认模型",
     settingsModelDefault: "使用全局默认",
     settingsTemperature: "温度",
@@ -983,26 +1016,81 @@ export const zhCN: Translations = {
     unavailableShort: "不可用",
     setupTitle: (name: string) => `连接 ${name}`,
     setupEditTitle: (name: string) => `修改 ${name}`,
+    wechatQr: {
+      restart: "重新扫码",
+      restartHint: "离开了微信中的机器人页面？可以重新扫码继续连接。",
+      restartKeepCommand: "已复制的绑定指令在有效期内仍可使用。",
+      autoSave: "确认后将自动保存 Token，无需手动复制。",
+      verifyTitle: "输入微信显示的配对码",
+      verifyDescription: "填写手机微信页面显示的数字，继续连接。",
+      verifyLabel: "配对码",
+      verifySubmit: "继续连接",
+      verifying: "正在验证…",
+      network: "暂时无法连接微信，正在自动重试…",
+      invalid_response: "微信返回了异常状态，请刷新二维码重试。",
+      verification_rejected: "配对码不匹配，请检查手机上的数字后重试。",
+      verification_blocked: "配对码错误次数过多，请稍候再刷新二维码。",
+      already_bound:
+        "微信提示此机器人已连接。请关闭弹窗检查连接状态，或在手机上选择其他机器人。",
+      saved: "Token 已安全保存",
+      savedDescription: "Momentum 已在服务器保存 Token 并启动微信渠道。",
+      bindTitle: "最后一步：绑定你的账号",
+      bindDescription:
+        "将下方指令发送给微信中的机器人，即可绑定到你的 Momentum 账号。",
+      bindWaiting: "正在等待微信中的绑定消息…",
+      bindLoading: "正在准备账号绑定…",
+      bindFailed: "Token 已保存，但账号绑定暂时不可用，请重试。",
+      bindExpired: "绑定码已过期，请重新生成，无需再次扫码。",
+      bindRetry: "生成绑定码",
+      copyCommand: "复制指令",
+      copied: "已复制",
+      copyFailed: "复制失败，请选中上方指令手动复制。",
+      connectedTitle: "微信已连接",
+      connectedDescription: "现在可以在微信中向机器人发送消息了。",
+      done: "完成",
+
+      login: "扫码连接",
+      manual: "使用 Token",
+      description: "将微信连接到你的 Momentum 工作空间。",
+      loading: "正在生成二维码…",
+      imageTitle: "微信登录二维码",
+      scan: "请使用微信扫描二维码，并在手机上确认登录。",
+      scanned: "已扫码，请在手机上确认登录。",
+      expired: "二维码已过期，请重新生成。",
+      failed: "微信登录失败或已取消，请重试。",
+      confirmed: "微信登录已确认。",
+      retry: "刷新二维码",
+      methodLabel: "连接方式",
+      tokenTitle: "使用已有的机器人 Token",
+      tokenDescription: "粘贴微信 iLink 机器人的 Token 即可连接。",
+      tokenPlaceholder: "粘贴你的 Bot token",
+      tokenHint: "还没有 Token？选择「扫码连接」，用手机即可完成。",
+      privacy: "凭据仅保存在你的服务器上",
+      waiting: "等待微信扫码",
+      scannedTitle: "已扫码",
+      expiredTitle: "二维码已过期",
+      failedTitle: "连接未完成",
+    },
     setupDescription:
       "填写当前服务进程需要的配置值。这些内容不会写入 config.yaml。",
     saveAndConnect: "保存并连接",
     saveChanges: "保存修改",
     descriptions: {
-      buzz: "通过 DeerFlow 智能体接收 Buzz 频道消息和私聊。",
-      telegram: "通过 DeerFlow Bot 接收 Telegram 私聊消息。",
+      buzz: "通过 Momentum 智能体接收 Buzz 频道消息和私聊。",
+      telegram: "通过 Momentum Bot 接收 Telegram 私聊消息。",
       slack: "接收 Slack 工作区消息和提及。",
-      discord: "通过 DeerFlow Bot 接收 Discord 服务器消息。",
-      feishu: "通过 DeerFlow 应用接收飞书和 Lark 消息。",
-      dingtalk: "通过 DeerFlow Bot 接收钉钉 Stream Push 消息。",
-      wechat: "通过 DeerFlow Bot 接收微信 iLink 消息。",
-      wecom: "通过 DeerFlow AI Bot 接收企业微信消息。",
+      discord: "通过 Momentum Bot 接收 Discord 服务器消息。",
+      feishu: "通过 Momentum 应用接收飞书和 Lark 消息。",
+      dingtalk: "通过 Momentum Bot 接收钉钉 Stream Push 消息。",
+      wechat: "通过 Momentum Bot 接收微信 iLink 消息。",
+      wecom: "通过 Momentum AI Bot 接收企业微信消息。",
     },
     connectedAs: (name: string) => `已连接为 ${name}。`,
   },
 
   // Page titles (document title)
   pages: {
-    appName: "DeerFlow",
+    appName: "Momentum",
     chats: "对话",
     newChat: "新对话",
     untitled: "未命名",
@@ -1036,7 +1124,7 @@ export const zhCN: Translations = {
     writeFile: "写入文件",
     clickToViewContent: "点击查看文件内容",
     writeTodos: "更新 To-do 列表",
-    skillInstallTooltip: "安装技能并使其可在 DeerFlow 中使用",
+    skillInstallTooltip: "安装技能并使其可在 Momentum 中使用",
     browserNavigate: (url: string) => `在浏览器中打开 ${url}`,
     browserNavigateGeneric: "在浏览器中打开页面",
     browserClick: "在浏览器中点击元素",
@@ -1131,7 +1219,7 @@ export const zhCN: Translations = {
     noResults: "未找到结果。",
     actions: "操作",
     keyboardShortcuts: "键盘快捷键",
-    keyboardShortcutsDescription: "使用键盘快捷键更快地操作 DeerFlow。",
+    keyboardShortcutsDescription: "使用键盘快捷键更快地操作 Momentum。",
     openCommandPalette: "打开命令面板",
     toggleSidebar: "切换侧边栏",
   },
@@ -1139,8 +1227,49 @@ export const zhCN: Translations = {
   // Settings
   settings: {
     title: "设置",
-    description: "根据你的偏好调整 DeerFlow 的界面和行为。",
+    description: "根据你的偏好调整 Momentum 的界面和行为。",
+    models: {
+      title: "模型",
+      description: "管理供用户选择的共享模型。服务器配置中的模型为只读。",
+      adminOnly: "只有管理员可以管理共享模型，演示模式不支持此功能。",
+      add: "添加模型",
+      loading: "正在加载模型…",
+      failed: "请求未能完成。",
+      reload: "重新加载",
+      empty: "尚未配置模型。",
+      yaml: "服务器配置 · 只读",
+      enabled: "已启用",
+      disabled: "已停用",
+      conflict: "此名称已被服务器配置占用。",
+      edit: "编辑模型",
+      enable: "启用",
+      disable: "停用",
+      formDescription:
+        "接入 OpenAI 兼容接口。测试将发送简短的流式工具调用请求，可能产生模型调用费用。",
+      provider: "接口类型",
+      name: "唯一名称",
+      displayName: "显示名称",
+      endpoint: "接口基础地址",
+      modelId: "模型 ID",
+      keepKey: "留空以保留已保存的密钥",
+      optionalKey: "无认证接口可以留空",
+      clearKey: "移除已保存的 API Key",
+      contextWindow: "上下文窗口（可选）",
+      maxTokens: "最大输出 Token 数（可选）",
+      vision: "支持图片输入",
+      cancel: "取消",
+      test: "测试连接",
+      working: "处理中…",
+      save: "保存",
+      saved: "模型已保存",
+      success: "流式输出和工具调用测试通过。",
+      tool_call_missing:
+        "接口已响应，但未返回工具调用，请检查模型的工具调用能力。",
+      connection_failed:
+        "连接测试失败，请检查接口地址、凭据、模型 ID 以及流式输出和工具调用支持。",
+    },
     sections: {
+      models: "模型",
       account: "账号",
       appearance: "外观",
       channels: "渠道",
@@ -1152,7 +1281,7 @@ export const zhCN: Translations = {
     memory: {
       title: "记忆",
       description:
-        "DeerFlow 会在后台不断从你的对话中自动学习。这些记忆能帮助 DeerFlow 更好地理解你，并提供更个性化的体验。",
+        "Momentum 会在后台不断从你的对话中自动学习。这些记忆能帮助 Momentum 更好地理解你，并提供更个性化的体验。",
       empty: "暂无可展示的记忆数据。",
       rawJson: "原始 JSON",
       exportButton: "导出记忆",
@@ -1316,7 +1445,7 @@ export const zhCN: Translations = {
     },
     channels: {
       title: "渠道",
-      description: "连接可在浏览器外向 DeerFlow 发送消息的即时通讯账号。",
+      description: "连接可在浏览器外向 Momentum 发送消息的即时通讯账号。",
       disabled:
         "当前服务器未启用渠道连接。请联系管理员开启 channel_connections。",
     },
@@ -1367,7 +1496,7 @@ export const zhCN: Translations = {
         changeAppButton: "切换飞书 Bot",
         changeAppTitle: "切换到其他飞书 App",
         changeAppDescription:
-          "把你的 DeerFlow 账号指向另一个 Lark/飞书 App。只影响你自己的账号，不影响其他用户。",
+          "把你的 Momentum 账号指向另一个 Lark/飞书 App。只影响你自己的账号，不影响其他用户。",
         changeAppIdLabel: "App ID",
         changeAppSecretLabel: "App Secret",
         changeAppAuthResetNote:
@@ -1379,9 +1508,9 @@ export const zhCN: Translations = {
         brandLark: "Lark",
         connectionStarted: "连接链接已打开",
         connectionReady: "连接准备已完成，正在打开授权链接",
-        authStarted: "授权页已打开，DeerFlow 会自动检测授权结果。",
+        authStarted: "授权页已打开，Momentum 会自动检测授权结果。",
         authorizationStillPending:
-          "还没有检测到授权完成。请在浏览器完成授权；DeerFlow 会继续自动检测。如果页面没有更新，可点击“我已完成授权”。",
+          "还没有检测到授权完成。请在浏览器完成授权；Momentum 会继续自动检测。如果页面没有更新，可点击“我已完成授权”。",
         permissionTitle: "授权范围",
         permissionDescription:
           "默认只完成基础登录，不会申请任何业务权限。按需在这里勾选要授权的业务域；已连接用户可以重新授权继续追加（scope 会累积）。",
@@ -1485,10 +1614,10 @@ export const zhCN: Translations = {
           "首次连接需要在浏览器里完成一次飞书确认。打开下面的链接按提示完成；完成后回到这里继续授权。",
         openAuthLinkTitle: "在浏览器中完成飞书授权",
         openAuthLinkDescription:
-          "打开下面的链接完成授权。DeerFlow 会持续自动检测，并在授权通过后保存连接状态。",
+          "打开下面的链接完成授权。Momentum 会持续自动检测，并在授权通过后保存连接状态。",
         waitingAuthTitle: "等待飞书授权完成",
         waitingAuthDescription:
-          "请在刚打开的浏览器页面完成授权。DeerFlow 会自动更新这里的状态；下方按钮只是兜底操作。",
+          "请在刚打开的浏览器页面完成授权。Momentum 会自动更新这里的状态；下方按钮只是兜底操作。",
         openAuthLink: "打开链接",
         copyAuthLink: "复制链接",
         completeAuth: "我已完成授权",
@@ -1513,7 +1642,7 @@ export const zhCN: Translations = {
           "本次连接流程已向飞书验证当前用户授权。需要刷新授权或追加权限时，可重新连接。",
         authNextTitle: "下一步完成浏览器授权",
         authNextDescription:
-          "点击“连接飞书”后，DeerFlow 会先检查当前状态；未连接或授权过期时会拉起浏览器授权。",
+          "点击“连接飞书”后，Momentum 会先检查当前状态；未连接或授权过期时会拉起浏览器授权。",
       },
     },
     skills: {
@@ -1554,6 +1683,7 @@ export const zhCN: Translations = {
       exportOptional: "可选",
       exportRequired: "必需",
       exportUndeclared: "未声明",
+      exportNone: "无",
       exportScope:
         "包含此技能目录内的全部文件。账号配置、对话和目录外的历史不会导出；目标环境需重新配置工具与凭据。",
       exportWarnings: "请检查包内文件",
@@ -1573,7 +1703,7 @@ export const zhCN: Translations = {
       createSkill: "新建技能",
       emptyTitle: "还没有技能",
       emptyDescription:
-        "将你的 Agent Skill 文件夹放在 DeerFlow 根目录下的 `/skills/custom` 文件夹中。",
+        "将你的 Agent Skill 文件夹放在 Momentum 根目录下的 `/skills/custom` 文件夹中。",
       emptyButton: "创建你的第一个技能",
       adminRequired: "需要管理员权限才能管理 Agent Skill。",
       installAdminRequired: "需要管理员权限才能安装 Agent Skill。",
@@ -1586,12 +1716,12 @@ export const zhCN: Translations = {
     notification: {
       title: "通知",
       description:
-        "DeerFlow 只会在窗口不活跃时发送完成通知，特别适合长时间任务：你可以先去做别的事，完成后会收到提醒。",
+        "Momentum 只会在窗口不活跃时发送完成通知，特别适合长时间任务：你可以先去做别的事，完成后会收到提醒。",
       requestPermission: "请求通知权限",
       deniedHint:
         "通知权限已被拒绝。可在浏览器的网站设置中重新开启，以接收完成提醒。",
       testButton: "发送测试通知",
-      testTitle: "DeerFlow",
+      testTitle: "Momentum",
       testBody: "这是一条测试通知。",
       notSupported: "当前浏览器不支持通知功能。",
       disableNotification: "关闭通知",
@@ -1605,7 +1735,7 @@ export const zhCN: Translations = {
       changePasswordDescription: "更新你的账号密码。",
       ssoPasswordDescription: "密码由你的 SSO 提供商管理。",
       ssoPasswordMessage:
-        "此账号通过 {provider} 登录，DeerFlow 无法在此管理或修改密码。请前往你的 SSO 提供商账号设置中进行操作。",
+        "此账号通过 {provider} 登录，Momentum 无法在此管理或修改密码。请前往你的 SSO 提供商账号设置中进行操作。",
       currentPassword: "当前密码",
       newPassword: "新密码",
       confirmNewPassword: "确认新密码",
@@ -1631,14 +1761,14 @@ export const zhCN: Translations = {
     passwordPlaceholder: "•••••••",
     rememberMe: "保持登录",
     rememberMeDescription:
-      "下次打开 DeerFlow 时尽量保持当前会话，仅保存邮箱，不保存密码。",
+      "下次打开 Momentum 时尽量保持当前会话，仅保存邮箱，不保存密码。",
     pleaseWait: "请稍候...",
     signIn: "登录",
     createAccount: "创建账号",
     createAdminAccount: "创建管理员账号",
     adminSetupRequiredTitle: "需要先完成管理员初始化",
     adminSetupRequiredDescription:
-      "DeerFlow 需要先创建管理员账号，然后才能创建新的普通账号。",
+      "Momentum 需要先创建管理员账号，然后才能创建新的普通账号。",
     orContinueWith: "或使用以下方式登录",
     ssoHint: "如果你的账号使用单点登录（SSO），请改用下方的选项登录。",
     continueWith: (provider: string) => `使用 ${provider} 登录`,

@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48" role="presentation">
+  <style><![CDATA[
+    /* An img-embedded SVG gets a viewport equal to its rendered box, so this
+       matches the data-size="sm" bucket (48px and under) that module.css
+       names. Served as image/svg+xml it is parsed as strict XML, so this stays
+       in CDATA and free of raw angle brackets. */
+    @media (max-width: 48px) { .detail { display: none; } }
+  ]]></style>
+  <path d="M24.00 3.60L28.83 2.85L32.89 5.55L37.21 7.44L40.36 10.95L42.95 14.87L44.74 19.27L44.63 24.00L44.34 28.64L43.06 33.18L41.01 37.57L37.44 40.85L32.96 42.61L28.85 45.25L24.00 45.54L19.32 44.49L14.59 43.55L10.90 40.42L7.35 37.28L5.21 33.05L3.07 28.78L2.82 24.00L3.21 19.25L5.09 14.89L7.90 11.16L10.99 7.69L14.85 5.00L19.46 4.11Z" fill="#101e3f" />
+  <g>
+    <path d="M17 30.5v-4.6M24 30.5v-9.2M31 30.5v-6.4" fill="none" stroke="#fbf8f1" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" />
+    <path d="M15.5 19.5 21 15l4.5 3.6L32.5 13" fill="none" stroke="#fbf8f1" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" />
+  </g>
+  <g class="detail">
+    <circle cx="35.6" cy="11.4" r="2.5" fill="#c8a04a" />
+    <circle cx="34.9" cy="10.6" r="0.8" fill="#fbf8f1" opacity="0.55" />
+  </g>
+</svg>

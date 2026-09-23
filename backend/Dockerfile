@@ -99,6 +99,11 @@ ENV LANG=C.UTF-8
 ENV LC_ALL=C.UTF-8
 ENV PYTHONIOENCODING=utf-8
 
+# Python's platform MIME lookup needs the standard registry to classify XHTML
+# and other active document types consistently with non-minimal installations.
+RUN apt-get update && apt-get install -y --no-install-recommends media-types \
+    && rm -rf /var/lib/apt/lists/*
+
 # Copy Node.js runtime from builder (provides npx for MCP servers)
 COPY --from=builder /usr/bin/node /usr/bin/node
 COPY --from=builder /usr/lib/node_modules /usr/lib/node_modules

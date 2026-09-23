@@ -1,8 +1,10 @@
 .view {
-  color: #14181b;
-  background: #fbf8f4;
-  padding: 1.25rem;
-  border: 1px solid #dcd6cc;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.93);
+  padding: 1.35rem;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-shadow: 0 14px 42px rgba(24, 84, 134, 0.08);
 }
 .header {
   display: flex;
@@ -15,11 +17,15 @@
   margin: 0;
   font-size: clamp(1.25rem, 2vw, 1.6rem);
 }
+[data-treatment="paper"] .header h2 {
+  font-family: var(--m-font-serif);
+  font-weight: 700;
+}
 .subtle,
 .meta,
 .state,
 .truncated {
-  color: #636465;
+  color: var(--muted);
   font-size: 0.82rem;
 }
 .subtle {
@@ -28,13 +34,14 @@
 }
 .action,
 .textLink {
-  color: #155e86;
+  color: var(--blue);
   font-weight: 700;
   text-underline-offset: 3px;
 }
 .action {
-  border: 1px solid #8e8578;
-  border-radius: 6px;
+  border: 1px solid var(--strong);
+  border-radius: 9px;
+  background: white;
   padding: 0.5rem 0.7rem;
   white-space: nowrap;
 }
@@ -49,12 +56,12 @@
 .view th,
 .view td {
   padding: 0.7rem 0.55rem;
-  border-bottom: 1px solid #dcd6cc;
+  border-bottom: 1px solid var(--line);
   text-align: left;
   vertical-align: top;
 }
 .view th {
-  color: #636465;
+  color: var(--muted);
   font-size: 0.72rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -64,15 +71,15 @@
   display: block;
 }
 .status {
-  color: #636465;
+  color: var(--muted);
   text-transform: capitalize;
 }
 .status[data-status="enabled"],
 .status[data-status="running"] {
-  color: #155e86;
+  color: var(--blue);
 }
 .status[data-status="failed"] {
-  color: #a13525;
+  color: var(--danger);
 }
 .cards,
 .groups,
@@ -89,17 +96,18 @@
 .card,
 .group,
 .notice {
-  border: 1px solid #dcd6cc;
-  border-radius: 7px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
   padding: 0.75rem;
 }
 .card {
   display: flex;
   align-items: flex-start;
   gap: 0.7rem;
+  background: #fbfdff;
 }
 .card > svg {
-  color: #155e86;
+  color: var(--blue);
   flex: 0 0 auto;
 }
 .card > div,
@@ -113,17 +121,17 @@
 .selectLabel {
   display: block;
   margin-bottom: 0.3rem;
-  color: #636465;
+  color: var(--muted);
   font-size: 0.78rem;
   font-weight: 700;
 }
 .view select {
   width: min(100%, 28rem);
-  border: 1px solid #8e8578;
-  border-radius: 6px;
-  background: #fbf8f4;
+  border: 1px solid var(--strong);
+  border-radius: 9px;
+  background: white;
   padding: 0.55rem 0.6rem;
-  color: #14181b;
+  color: var(--ink);
   font: inherit;
 }
 .state {
@@ -134,18 +142,18 @@
   align-items: center;
   gap: 0.55rem;
   margin: 0.75rem 0;
-  background: #f0ece5;
+  background: var(--surface-blue);
 }
 .notice svg {
-  color: #a35309;
+  color: var(--danger);
   flex: 0 0 auto;
 }
 .linkButton,
 .loadMore {
-  color: #155e86;
-  border: 1px solid #8e8578;
-  border-radius: 5px;
-  background: transparent;
+  color: var(--blue);
+  border: 1px solid var(--strong);
+  border-radius: 8px;
+  background: white;
   padding: 0.35rem 0.55rem;
   font: inherit;
   cursor: pointer;
@@ -165,7 +173,7 @@
   display: flex;
   justify-content: space-between;
   gap: 0.75rem;
-  border-bottom: 1px solid #dcd6cc;
+  border-bottom: 1px solid var(--line);
   padding-bottom: 0.55rem;
 }
 .group ul {
@@ -176,14 +184,14 @@
   align-items: center;
   gap: 0.55rem;
   padding: 0.55rem 0;
-  border-bottom: 1px solid #dcd6cc;
+  border-bottom: 1px solid var(--line);
   min-width: 0;
 }
 .file:last-child {
   border-bottom: 0;
 }
 .file > svg {
-  color: #155e86;
+  color: var(--cyan);
   flex: 0 0 auto;
 }
 .fileName {

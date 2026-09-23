@@ -1,11 +1,6 @@
 "use client";
 
-import {
-  BotIcon,
-  MessageSquareIcon,
-  Settings2Icon,
-  Trash2Icon,
-} from "lucide-react";
+import { MessageSquareIcon, Settings2Icon, Trash2Icon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { type ComponentProps, type ReactElement, useState } from "react";
 import { toast } from "sonner";
@@ -33,6 +28,8 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { formatModelLabel } from "@/components/workspace/command-center/model-label";
+import { MomoAvatar } from "@/components/workspace/command-center/momo-avatar";
 import { useDeleteAgent } from "@/core/agents";
 import type { Agent } from "@/core/agents";
 import { useI18n } from "@/core/i18n/hooks";
@@ -133,13 +130,15 @@ export function AgentCard({ agent }: AgentCardProps) {
 
   return (
     <>
-      <Card className="group flex flex-col transition-shadow hover:shadow-md">
+      <Card className="group hover:border-primary/40 flex flex-col shadow-none transition-colors">
         <CardHeader className="pb-3">
           <div className="flex min-w-0 items-start justify-between gap-2">
             <div className="flex min-w-0 items-center gap-2">
-              <div className="bg-primary/10 text-primary flex h-9 w-9 shrink-0 items-center justify-center rounded-lg">
-                <BotIcon className="h-5 w-5" />
-              </div>
+              {/* Same identity as the Command Center roster; the name is
+                  already the card title, so the mark is decorative here. */}
+              <span aria-hidden="true" className="shrink-0">
+                <MomoAvatar agent={agent} size={40} />
+              </span>
               <div className="min-w-0">
                 <TruncatedTooltip text={displayName}>
                   <CardTitle className="truncate text-base">
@@ -148,7 +147,7 @@ export function AgentCard({ agent }: AgentCardProps) {
                 </TruncatedTooltip>
                 {agent.model && (
                   <TruncatedBadge
-                    label={agent.model}
+                    label={formatModelLabel(agent.model)}
                     variant="secondary"
                     className="mt-0.5 text-xs"
                   />
@@ -190,7 +189,14 @@ export function AgentCard({ agent }: AgentCardProps) {
         )}
 
         <CardFooter className="mt-auto flex items-center justify-between gap-2 pt-3">
-          <Button size="sm" className="flex-1" onClick={handleChat}>
+          {/* Outline, not filled: in a list of agents one filled button per
+              card is a wall of blue. "New Agent" stays the page's primary. */}
+          <Button
+            size="sm"
+            variant="outline"
+            className="text-primary flex-1"
+            onClick={handleChat}
+          >
             <MessageSquareIcon className="mr-1.5 h-3.5 w-3.5" />
             {t.agents.chat}
           </Button>
@@ -201,15 +207,17 @@ export function AgentCard({ agent }: AgentCardProps) {
               className="h-8 w-8 shrink-0"
               onClick={() => setSettingsOpen(true)}
               title={t.agents.settings}
+              aria-label={t.agents.settings}
             >
               <Settings2Icon className="h-3.5 w-3.5" />
             </Button>
             <Button
               size="icon"
               variant="ghost"
-              className="text-destructive hover:text-destructive h-8 w-8 shrink-0"
+              className="text-muted-foreground hover:text-destructive h-8 w-8 shrink-0"
               onClick={() => setDeleteOpen(true)}
               title={t.agents.delete}
+              aria-label={t.agents.delete}
             >
               <Trash2Icon className="h-3.5 w-3.5" />
             </Button>

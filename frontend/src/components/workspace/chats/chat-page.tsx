@@ -11,6 +11,7 @@ import { type PromptInputMessage } from "@/components/ai-elements/prompt-input";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { ArtifactTrigger } from "@/components/workspace/artifacts";
 import { BrowserTrigger } from "@/components/workspace/browser-view";
+import { MomentumGlyph } from "@/components/workspace/command-center/momentum-glyph";
 import { ContextUsageBadge } from "@/components/workspace/context-usage-badge";
 import { ExportTrigger } from "@/components/workspace/export-trigger";
 import { GoalStatus } from "@/components/workspace/goal-status";
@@ -30,6 +31,7 @@ import {
 } from "@/components/workspace/sidecar";
 import { ThreadArchiveStatus } from "@/components/workspace/thread-archive-status";
 import { ThreadBackgroundTasks } from "@/components/workspace/thread-background-tasks";
+import { ThreadExtensionActions } from "@/components/workspace/thread-extension-actions";
 import { ThreadScheduledTasksLink } from "@/components/workspace/thread-scheduled-tasks-link";
 import { ThreadSubagentBatches } from "@/components/workspace/thread-subagent-batches";
 import { ThreadTitle } from "@/components/workspace/thread-title";
@@ -86,6 +88,7 @@ export default function ChatPage() {
   const { t } = useI18n();
   const { user } = useAuth();
   const canStopStreaming = hasPermission(user, PERMISSIONS.RUNS_CANCEL);
+  const canCreateRuns = hasPermission(user, PERMISSIONS.RUNS_CREATE);
   const router = useRouter();
   const searchParams = useSearchParams();
   const { threadId, setThreadId, isNewThread, setIsNewThread, isMock } =
@@ -432,17 +435,19 @@ export default function ChatPage() {
         isMock={isMock}
       >
         <ChatBox threadId={threadId} browserEnabled={browserEnabled}>
-          <div className="relative flex size-full min-h-0 justify-between">
+          <div className="momentum-conversation-surface relative flex size-full min-h-0 justify-between">
             <header
               className={cn(
-                "absolute top-0 right-0 left-0 flex h-12 shrink-0 items-center gap-2 px-2 sm:px-4",
-                isWelcomeMode
-                  ? "bg-background/0 z-40 backdrop-blur-none"
-                  : "bg-background/80 z-30 shadow-xs backdrop-blur",
+                "border-border bg-card/80 absolute top-0 right-0 left-0 flex h-12 shrink-0 items-center gap-2 border-b px-2 shadow-xs backdrop-blur sm:px-4",
+                isWelcomeMode ? "z-40" : "z-30",
               )}
             >
               {!isMock && <SidebarTrigger className="md:hidden" />}
               <div className="flex min-w-0 flex-1 items-center gap-2 text-sm font-medium">
+                <MomentumGlyph
+                  className="size-6 shrink-0"
+                  seed={`thread:${threadId}`}
+                />
                 <ThreadTitle
                   threadId={threadId}
                   thread={thread}
@@ -460,7 +465,7 @@ export default function ChatPage() {
                   <ProjectAffiliationBadge projectId={affiliatedProjectId} />
                 )}
               </div>
-              <div className="flex shrink-0 items-center gap-2">
+              <div className="flex shrink-0 items-center gap-1 sm:gap-2">
                 {!isNewThread &&
                   !isMock &&
                   env.NEXT_PUBLIC_STATIC_WEBSITE_ONLY !== "true" && (
@@ -493,6 +498,7 @@ export default function ChatPage() {
                 <SidecarTrigger />
                 {browserEnabled && <BrowserTrigger />}
                 <ExportTrigger threadId={threadId} />
+                <ThreadExtensionActions threadId={threadId} />
                 <ArtifactTrigger />
               </div>
             </header>
@@ -636,6 +642,7 @@ export default function ChatPage() {
                       onSubmit={handleSubmit}
                       onStop={handleStop}
                       canStopStreaming={canStopStreaming}
+                      canCreateRuns={canCreateRuns}
                     />
                   ) : (
                     <div
@@ -647,7 +654,7 @@ export default function ChatPage() {
                     />
                   )}
                   {env.NEXT_PUBLIC_STATIC_WEBSITE_ONLY === "true" && (
-                    <div className="text-muted-foreground/67 w-full translate-y-12 text-center text-xs">
+                    <div className="text-muted-foreground w-full translate-y-12 text-center text-xs">
                       {t.common.notAvailableInDemoMode}
                     </div>
                   )}
@@ -674,7 +681,7 @@ function ProjectAffiliationBadge({ projectId }: { projectId: string }) {
   return (
     <Link
       href={`/workspace/projects/${encodeURIComponent(project.id)}`}
-      className="text-muted-foreground hover:text-foreground inline-flex max-w-40 shrink-0 items-center gap-1 truncate rounded-full border px-2 py-0.5 text-xs font-normal transition-colors"
+      className="text-muted-foreground hover:text-foreground focus-visible:text-foreground focus-visible:ring-ring hidden max-w-40 min-w-0 items-center gap-1 truncate rounded-full border px-2 py-0.5 text-xs font-normal transition-colors focus-visible:ring-1 focus-visible:outline-none sm:inline-flex"
     >
       <Folder className="size-3 shrink-0" />
       <span className="truncate">{project.name}</span>

@@ -1,0 +1,12 @@
+# Extra overlay for a side-by-side restore rehearsal: the base file hardcodes
+# container names, so a second project needs its own. Use with
+#   restart.ps1 -ProjectName deer-flow-rehearsal -Port 2027 -TailnetHost 127.0.0.1 -ExtraComposeFile <this file>
+services:
+  redis:
+    container_name: deer-flow-rehearsal-redis
+  nginx:
+    container_name: deer-flow-rehearsal-nginx
+  frontend:
+    container_name: deer-flow-rehearsal-frontend
+  gateway:
+    container_name: deer-flow-rehearsal-gateway

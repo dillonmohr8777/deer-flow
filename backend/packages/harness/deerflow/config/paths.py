@@ -113,7 +113,15 @@ class Paths:
     Directory layout (host side):
         {base_dir}/
         ├── memory.json
-        ├── USER.md          <-- global user profile (injected into all agents)
+        ├── USER.md          <-- legacy root profile (not used by the profile API)
+        ├── users/
+        │   └── {user_id}/
+        │       ├── USER.md  <-- workspace-scoped profile
+        │       └── agents/
+        │           └── {agent_name}/
+        │               ├── config.yaml
+        │               ├── SOUL.md
+        │               └── memory.json
         ├── agents/
         │   └── {agent_name}/
         │       ├── config.yaml
@@ -169,13 +177,37 @@ class Paths:
 
     @property
     def memory_file(self) -> Path:
-        """Path to the persisted memory file: `{base_dir}/memory.json`."""
+        """Legacy shared memory file: `{base_dir}/memory.json`.
+
+        New code should use :meth:`user_memory_file`. This path is
+        process-global — every user and every workspace resolves to the same
+        file — so a write through it is visible to all of them. It remains only
+        as a read-side fallback for installations that predate per-user
+        memory, mirroring :attr:`agents_dir`.
+        """
         return self.base_dir / "memory.json"
 
     @property
     def user_md_file(self) -> Path:
-        """Path to the global user profile file: `{base_dir}/USER.md`."""
+        """Legacy shared user profile file: `{base_dir}/USER.md`.
+
+        New code should use :meth:`user_md_file_for`. This path is
+        process-global — every user and every workspace resolves to the same
+        file — so a write through it is visible to all of them. It remains only
+        as a read-side fallback for installations that predate per-user
+        profiles, mirroring :attr:`agents_dir`.
+        """
         return self.base_dir / "USER.md"
+
+    def user_md_file_for(self, user_id: str) -> Path:
+        """Per-user profile file: `{base_dir}/users/{user_id}/USER.md`.
+
+        USER.md is injected into every custom agent, so a shared file lets any
+        caller who reaches the agents API rewrite the persona of every other
+        user's agents. Isolating it per user applies the same bucket strategy
+        :meth:`user_dir` already uses for agents and memory.
+        """
+        return self.user_dir(user_id) / "USER.md"
 
     @property
     def agents_dir(self) -> Path:
@@ -205,7 +237,14 @@ class Paths:
         return self.agents_dir / name.lower()
 
     def agent_memory_file(self, name: str) -> Path:
-        """Legacy per-agent memory file: `{base_dir}/agents/{name}/memory.json`."""
+        """Legacy per-agent memory file: `{base_dir}/agents/{name}/memory.json`.
+
+        New code should use :meth:`user_agent_memory_file`. This path is
+        process-global — every user resolves to the same file for a given
+        agent name — so a write through it is visible to all of them. It
+        remains only as a read-side fallback for installations that predate
+        per-user memory, mirroring :attr:`agents_dir`.
+        """
         return self.agent_dir(name) / "memory.json"
 
     def user_dir(self, user_id: str) -> Path:

@@ -21,12 +21,14 @@ from sqlalchemy.schema import CreateSchema, DropSchema
 
 from app.scheduler.service import ScheduledTaskService
 from deerflow.persistence.base import Base
+from deerflow.persistence.organizations.model import OrganizationRow
 from deerflow.persistence.run import RunRepository
 from deerflow.persistence.run.model import RunChangeClockRow, RunRow
 from deerflow.persistence.scheduled_task_runs import ScheduledTaskRunRepository
 from deerflow.persistence.scheduled_task_runs.model import ScheduledTaskRunRow
 from deerflow.persistence.scheduled_tasks import ScheduledTaskRepository
 from deerflow.persistence.scheduled_tasks.model import ScheduledTaskRow
+from deerflow.persistence.thread_meta.model import ThreadMetaRow
 from deerflow.runtime.runs.manager import RunRecord
 from deerflow.runtime.runs.schemas import DisconnectMode, RunStatus
 
@@ -76,6 +78,8 @@ async def occurrence_databases(request, tmp_path):
                 lambda sync: Base.metadata.create_all(
                     sync,
                     tables=[
+                        OrganizationRow.__table__,
+                        ThreadMetaRow.__table__,
                         ScheduledTaskRow.__table__,
                         ScheduledTaskRunRow.__table__,
                         RunRow.__table__,

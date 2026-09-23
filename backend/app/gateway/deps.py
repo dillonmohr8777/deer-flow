@@ -917,11 +917,18 @@ async def get_optional_user_from_request(request: Request):
 
 
 async def get_current_user(request: Request) -> str | None:
-    """Extract user_id from request cookie, or None if not authenticated.
+    """Return the verified content owner for repository and run filters.
 
-    Thin adapter that returns the string id for callers that only need
-    identification (e.g., ``feedback.py``). Full-user callers should use
-    ``get_current_user_from_request`` or ``get_optional_user_from_request``.
+    Account and credential callers use ``get_current_user_from_request`` to
+    retain the authenticated person's identity.
     """
+    user = await get_optional_user_from_request(request)
+    if user is None:
+        return None
+    return str(getattr(request.state, "storage_user_id", None) or user.id)
+
+
+async def get_current_actor_user_id(request: Request) -> str | None:
+    """Return the person for per-user feedback, independent of workspace."""
     user = await get_optional_user_from_request(request)
     return str(user.id) if user else None

@@ -20,6 +20,17 @@ export const DEFAULT_LOCAL_SETTINGS: LocalSettings = {
 export const LOCAL_SETTINGS_KEY = "deerflow.local-settings";
 export const THREAD_MODEL_KEY_PREFIX = "deerflow.thread-model.";
 
+export function getResolvedMode(
+  mode: LocalSettings["context"]["mode"],
+  supportsThinking: boolean,
+): NonNullable<LocalSettings["context"]["mode"]> {
+  // Planning and delegation do not require provider-controlled thinking.
+  if (!supportsThinking && mode === "thinking") {
+    return "flash";
+  }
+  return mode ?? (supportsThinking ? "pro" : "flash");
+}
+
 function isBrowser(): boolean {
   return typeof window !== "undefined";
 }

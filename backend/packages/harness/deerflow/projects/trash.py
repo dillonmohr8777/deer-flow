@@ -29,7 +29,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from deerflow.config.paths import Paths
-from deerflow.projects.documents import _content_intact, check_document_content, converted_markdown_path, original_file_path
+from deerflow.projects.documents import _content_intact, _filesystem_path, check_document_content, converted_markdown_path, original_file_path
 from deerflow.utils.file_io import await_drained, run_file_io
 from deerflow.utils.time import coerce_iso
 
@@ -63,7 +63,7 @@ def _unlink_document_files(paths: Paths, *, user_id: str, row: dict) -> None:
             path.unlink()
         except FileNotFoundError:
             pass
-    namespace = paths.project_document_path(user_id, row["stored_relpath"])
+    namespace = _filesystem_path(paths.project_document_path(user_id, row["stored_relpath"]))
     documents_dir = namespace.parents[2]
     for directory in (original.parent, derived.parent, namespace, namespace.parent, namespace.parent.parent):
         if directory != documents_dir:
@@ -86,7 +86,7 @@ def make_purge_file_remover(paths: Paths, *, user_id: str | None) -> Callable[[d
 
 def _remove_namespace_tree(paths: Paths, *, user_id: str, relpath: str) -> None:
     """Worker-thread: remove one document's whole namespace + empty parents."""
-    namespace = paths.project_document_path(user_id, relpath)
+    namespace = _filesystem_path(paths.project_document_path(user_id, relpath))
     shutil.rmtree(namespace, ignore_errors=True)
     documents_dir = namespace.parents[2]
     parent = namespace.parent

@@ -2,7 +2,7 @@ import copy
 from typing import get_type_hints
 
 import pytest
-from hypothesis import given
+from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 from langchain.agents import AgentState, create_agent
 from langchain.agents.middleware import AgentMiddleware
@@ -120,18 +120,18 @@ def test_merge_message_writes_is_batching_invariant(split: int) -> None:
     assert merge_message_writes(merge_message_writes(state, xs), ys) == merge_message_writes(state, writes)
 
 
-@given(case=_message_merge_cases(), data=st.data())
-def test_merge_message_writes_randomized_batching_invariance(case: tuple[list, list], data: st.DataObject) -> None:
+@given(case=_message_merge_cases())
+@settings(suppress_health_check=[HealthCheck.too_slow])
+def test_merge_message_writes_randomized_batching_invariance(case: tuple[list, list]) -> None:
     state, writes = case
-    split = data.draw(st.integers(min_value=0, max_value=len(writes)))
-
     expected = _outcome(lambda: merge_message_writes(copy.deepcopy(state), copy.deepcopy(writes)))
+    for split in range(len(writes) + 1):
 
-    def batched():
-        intermediate = merge_message_writes(copy.deepcopy(state), copy.deepcopy(writes[:split]))
-        return merge_message_writes(intermediate, copy.deepcopy(writes[split:]))
+        def batched():
+            intermediate = merge_message_writes(copy.deepcopy(state), copy.deepcopy(writes[:split]))
+            return merge_message_writes(intermediate, copy.deepcopy(writes[split:]))
 
-    assert _outcome(batched) == expected
+        assert _outcome(batched) == expected
 
 
 def test_merge_message_writes_matches_unknown_remove_error() -> None:

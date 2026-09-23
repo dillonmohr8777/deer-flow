@@ -3,6 +3,7 @@ import { afterEach, expect, rs, test } from "@rstest/core";
 import {
   DEFAULT_LOCAL_SETTINGS,
   getLocalSettings,
+  getResolvedMode,
   getThreadModelName,
   saveLocalSettings,
   saveThreadModelName,
@@ -10,6 +11,18 @@ import {
 
 afterEach(() => {
   rs.unstubAllGlobals();
+});
+
+test("planning and delegation stay selectable without provider thinking", () => {
+  for (const supportsThinking of [false, true]) {
+    for (const mode of ["flash", "pro", "ultra"] as const) {
+      expect(getResolvedMode(mode, supportsThinking)).toBe(mode);
+    }
+  }
+  expect(getResolvedMode("thinking", false)).toBe("flash");
+  expect(getResolvedMode("thinking", true)).toBe("thinking");
+  expect(getResolvedMode(undefined, false)).toBe("flash");
+  expect(getResolvedMode(undefined, true)).toBe("pro");
 });
 
 test("defaults token usage to header total plus per-turn breakdown", () => {

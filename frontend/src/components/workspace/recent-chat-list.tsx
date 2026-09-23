@@ -45,6 +45,8 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
+import { MomentumGlyph } from "@/components/workspace/command-center/momentum-glyph";
+import { ConversationExtensionActions } from "@/components/workspace/conversation-extension-actions";
 import { getAPIClient } from "@/core/api";
 import { useAuth } from "@/core/auth/AuthProvider";
 import { hasPermission, PERMISSIONS } from "@/core/auth/permissions";
@@ -247,6 +249,10 @@ export function ThreadSidebarItem({
               {branchEntry.isLastSibling ? "└─" : "├─"}
             </span>
           )}
+          <MomentumGlyph
+            className="size-4 shrink-0"
+            seed={`thread:${thread.thread_id}`}
+          />
           <ThreadChannelIcon source={channelSource} />
           {pinned && (
             <Pin
@@ -281,6 +287,10 @@ export function ThreadSidebarItem({
             side={"right"}
             align={"start"}
           >
+            <ConversationExtensionActions
+              context={{ thread }}
+              placement="menu"
+            />
             <DropdownMenuItem onSelect={handleTogglePin}>
               {pinned ? (
                 <PinOff className="text-muted-foreground" />

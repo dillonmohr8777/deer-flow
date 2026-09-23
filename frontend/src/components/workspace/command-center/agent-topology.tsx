@@ -1,5 +1,8 @@
-import { ArrowUpRight, Bot } from "lucide-react";
+import { ArrowUpRight } from "lucide-react";
 import Link from "next/link";
+
+import { formatModelLabel } from "./model-label";
+import { MomoAvatar } from "./momo-avatar";
 
 import styles from "./command-center.module.css";
 
@@ -7,6 +10,8 @@ export type AgentTopologyItem = {
   name: string;
   display_name?: string | null;
   enabled: boolean;
+  description?: string;
+  model?: string;
 };
 
 type AgentTopologyProps = {
@@ -38,7 +43,7 @@ export function AgentTopology({
     <div className={styles.topology}>
       <div className={styles.topologyLead}>
         <span className={styles.leadIcon}>
-          <Bot size={25} />
+          <MomoAvatar agent={{ name: `lead:${leadLabel}`, display_name: leadLabel }} size={160} />
         </span>
         <div>
           <strong>{leadLabel}</strong>
@@ -74,19 +79,24 @@ export function AgentTopology({
                 onClick={() => onSelect(agent.name)}
               >
                 <span className={styles.agentMonogram}>
-                  {(agent.display_name ?? agent.name)
-                    .replace(/^dillon[ -]/i, "")
-                    .slice(0, 2)
-                    .toUpperCase()}
+                  <MomoAvatar agent={agent} size={40} />
                 </span>
                 <strong>
                   {agent.display_name ?? agent.name.replace("dillon-", "")}
                 </strong>
+                {agent.description && (
+                  <span className={styles.agentRole}>{agent.description}</span>
+                )}
+                {agent.model && (
+                  <span className={styles.agentModel}>
+                    {formatModelLabel(agent.model)}
+                  </span>
+                )}
                 <span>
                   {runtimeKnown
                     ? hasActiveRun
                       ? "Active run recorded"
-                      : "No active run recorded"
+                      : "Idle"
                     : "Live state unknown"}
                 </span>
                 <span>

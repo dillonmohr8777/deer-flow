@@ -2106,9 +2106,10 @@ def _lark_cli_env_from_runtime(runtime: Runtime, command: str, *, sandbox_paths:
         return None
     try:
         from deerflow.integrations.lark_cli import lark_cli_env_overlay, sandbox_lark_broker_active
+        from deerflow.runtime.user_context import resolve_runtime_actor_user_id
 
         broker = sandbox_paths and sandbox_lark_broker_active()
-        return lark_cli_env_overlay(resolve_runtime_user_id(runtime), sandbox_paths=sandbox_paths, broker=broker)
+        return lark_cli_env_overlay(resolve_runtime_actor_user_id(runtime), sandbox_paths=sandbox_paths, broker=broker)
     except Exception:
         logger.warning("Could not build Lark CLI env overlay; running command without managed auth", exc_info=True)
         return None

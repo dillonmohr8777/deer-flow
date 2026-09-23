@@ -1,0 +1,733 @@
+/*
+ * Momentum front door.
+ *
+ * Deliberately self-contained: it borrows the --momentum-* custom properties
+ * that the Command Center already added to globals.css, so the signed-out and
+ * signed-in surfaces read as one system, but it imports no upstream landing
+ * component. Upstream owns src/components/landing/**; we do not touch it.
+ *
+ * The "/" route is pinned to dark by the theme provider, so the dark token
+ * values are the ones that render here. Light values are still honoured if
+ * that pin is ever lifted.
+ */
+
+@font-face {
+  font-family: "Momentum UI";
+  src: url("/momentum/nunito-sans.ttf") format("truetype");
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Momentum UI";
+  src: url("/momentum/nunito-sans-bold.ttf") format("truetype");
+  font-weight: 700;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Momentum Display";
+  src: url("/momentum/archivo-black.ttf") format("truetype");
+  font-weight: 400;
+  font-display: swap;
+}
+
+.page {
+  --ink: #e8f0ff;
+  --ink-soft: #a9bcd9;
+  --ink-faint: #7f93b3;
+  --edge: rgb(146 178 230 / 16%);
+  --edge-bright: rgb(146 178 230 / 34%);
+  --surface: #0b1220;
+  --surface-lift: rgb(255 255 255 / 3.5%);
+
+  min-height: 100vh;
+  width: 100%;
+  overflow-x: clip;
+  background:
+    radial-gradient(
+      90rem 48rem at 12% -12%,
+      rgb(49 87 213 / 26%),
+      transparent 62%
+    ),
+    radial-gradient(
+      64rem 40rem at 96% 4%,
+      rgb(89 56 220 / 20%),
+      transparent 58%
+    ),
+    var(--surface);
+  color: var(--ink);
+  font-family: "Momentum UI", "Nunito Sans", system-ui, sans-serif;
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+.shell {
+  width: min(72rem, 100% - 3rem);
+  margin-inline: auto;
+}
+
+@media (max-width: 40rem) {
+  .shell {
+    width: min(72rem, 100% - 2rem);
+  }
+}
+
+/* ---------- header ---------- */
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-block: 1.5rem;
+}
+
+.wordmark {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  text-decoration: none;
+  color: inherit;
+}
+
+.wordmarkImage {
+  height: 1.5rem;
+  width: auto;
+}
+
+.wordmarkNote {
+  font-size: 0.75rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  border-left: 1px solid var(--edge-bright);
+  padding-left: 0.625rem;
+}
+
+@media (max-width: 30rem) {
+  .wordmarkNote {
+    display: none;
+  }
+}
+
+/* ---------- hero ---------- */
+
+.hero {
+  padding-block: clamp(3.5rem, 11vw, 7.5rem) clamp(2.5rem, 7vw, 4.5rem);
+  max-width: 54rem;
+}
+
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  margin: 0 0 1.75rem;
+}
+
+.eyebrowDot {
+  width: 0.375rem;
+  height: 0.375rem;
+  border-radius: 50%;
+  background: var(--momentum-copy-heading-from, #7ec8ff);
+}
+
+.title {
+  font-family: "Momentum Display", "Archivo Black", system-ui, sans-serif;
+  font-weight: 400;
+  font-size: clamp(2.5rem, 7.2vw, 5rem);
+  line-height: 1.02;
+  letter-spacing: -0.02em;
+  margin: 0;
+  background: linear-gradient(
+    102deg,
+    var(--momentum-copy-heading-from, #7ec8ff) 0%,
+    var(--momentum-copy-heading-mid, #9ca3ff) 46%,
+    var(--momentum-copy-heading-to, #c4a7ff) 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/*
+ * Gradient text drops to a solid colour when the gradient cannot paint, and in
+ * forced-colours mode, so the headline is never invisible.
+ */
+@supports not ((-webkit-background-clip: text) or (background-clip: text)) {
+  .title {
+    background: none;
+    color: var(--momentum-copy-heading, #9fc8ff);
+  }
+}
+
+@media (forced-colors: active) {
+  .title {
+    background: none;
+    color: CanvasText;
+  }
+}
+
+.lede {
+  margin: 1.5rem 0 0;
+  max-width: 40rem;
+  font-size: clamp(1.0625rem, 1.6vw, 1.25rem);
+  color: var(--ink-soft);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.875rem;
+  margin-top: 2.5rem;
+}
+
+.primary,
+.secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 2.875rem;
+  padding: 0 1.5rem;
+  border-radius: 0.625rem;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  text-decoration: none;
+  transition:
+    transform 160ms ease,
+    box-shadow 160ms ease,
+    border-color 160ms ease;
+}
+
+/*
+ * Uses the Command Center's primary-button blue (#075bd8), NOT the
+ * --momentum-copy-rule-* tokens, which are divider/rule colours. The rule
+ * token #0b78e3 put this button's label at 4.10:1 against its own background;
+ * the label is 15px bold, which is not WCAG "large text", so 4.10 failed AA.
+ * #075bd8 measures 5.64:1, and the worst point along the whole gradient to
+ * #6a49df is 5.43:1 — passes AA across the entire sweep.
+ */
+.primary {
+  color: #f4f8ff;
+  background: linear-gradient(102deg, #075bd8, #6a49df);
+  box-shadow: 0 0.75rem 2rem rgb(7 91 216 / 28%);
+}
+
+.secondary {
+  color: var(--ink);
+  border: 1px solid var(--edge-bright);
+  background: var(--surface-lift);
+}
+
+.primary:hover,
+.secondary:hover {
+  transform: translateY(-1px);
+}
+
+.primary:hover {
+  box-shadow: 0 1rem 2.5rem rgb(11 120 227 / 36%);
+}
+
+.secondary:hover {
+  border-color: var(--momentum-copy-heading-from, #7ec8ff);
+}
+
+/* Keyboard users get the same affordance mouse users get. */
+.primary:focus-visible,
+.secondary:focus-visible,
+.wordmark:focus-visible,
+.footerLink:focus-visible {
+  outline: 2px solid var(--momentum-copy-heading-from, #7ec8ff);
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .primary,
+  .secondary {
+    transition: none;
+  }
+
+  .primary:hover,
+  .secondary:hover {
+    transform: none;
+  }
+}
+
+/* ---------- capability band ---------- */
+
+.band {
+  display: grid;
+  grid-template-columns: 1.35fr 1fr;
+  /* Panels size to their own content; stretching left it half empty. */
+  align-items: start;
+  gap: 1rem;
+  padding-bottom: clamp(3rem, 8vw, 5rem);
+}
+
+@media (max-width: 54rem) {
+  .band {
+    grid-template-columns: 1fr;
+  }
+}
+
+.panel {
+  border: 1px solid var(--edge);
+  border-radius: 1rem;
+  background: var(--surface-lift);
+  padding: clamp(1.5rem, 3vw, 2rem);
+}
+
+.panelLead {
+  display: grid;
+  gap: 1.25rem;
+  align-content: start;
+}
+
+.panelTitle {
+  font-family: "Momentum Display", "Archivo Black", system-ui, sans-serif;
+  font-weight: 400;
+  font-size: 1.25rem;
+  letter-spacing: -0.01em;
+  margin: 0;
+  color: var(--ink);
+}
+
+.panelBody {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.9375rem;
+}
+
+.rows {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.875rem;
+  align-items: baseline;
+  padding-block: 0.875rem;
+  border-top: 1px solid var(--edge);
+}
+
+.row:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.rowKey {
+  font-size: 0.6875rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.rowValue {
+  margin: 0;
+  font-size: 0.9375rem;
+  color: var(--ink-soft);
+}
+
+.rowValue strong {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+/* ---------- footer ---------- */
+
+.footer {
+  border-top: 1px solid var(--edge);
+  padding-block: 1.75rem 2.5rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.5rem;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--ink-faint);
+  font-size: 0.8125rem;
+}
+
+.footerLink {
+  color: var(--ink-soft);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+}
+
+.footerLink:hover {
+  border-bottom-color: var(--momentum-copy-link-line, #2e9dcc);
+}
+
+/* ==========================================================================
+   Paper cutout look — `?look=paper` only (resolveFunnelTreatment, S04 task D).
+   Every rule below scopes under [data-treatment="paper"] (via .paperPage,
+   which carries that attribute) so it wins over the `.dark` class the theme
+   provider pins on "/"; nothing here reads a --momentum- or shadcn token.
+   Canon: blue, white, grey, a hint of gold — gold stays on the pin.
+   ========================================================================== */
+
+.paperPage {
+  position: relative;
+  min-height: 100vh;
+  width: 100%;
+  overflow: clip; /* scraps never extend the scroll height past the sheet */
+  background: var(--paper-cream);
+  color: var(--paper-ink);
+  font-family: var(--m-font-text, "Nunito Sans", system-ui, sans-serif);
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+/*
+ * Two torn blueprint scraps behind the sheet content: royal paper with a
+ * faint cream drafting grid, deckled by paper.css's .paper-torn(-alt) mask,
+ * and placed where no copy sits — A in the empty right column beside the
+ * hero, B behind the Momos above the footer. Never under words: ink on royal
+ * fails contrast, and a scrap under text reads as a bug, not craft.
+ */
+.paperBlueprintA,
+.paperBlueprintB {
+  position: absolute;
+  pointer-events: none;
+  z-index: 0;
+  background-color: var(--paper-royal-deep);
+  background-image:
+    linear-gradient(
+      to right,
+      color-mix(in srgb, var(--paper-cream) 10%, transparent) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--paper-cream) 10%, transparent) 1px,
+      transparent 1px
+    );
+  background-size: 28px 28px;
+}
+
+.paperBlueprintA {
+  top: 7rem;
+  right: -4rem;
+  width: min(30rem, 38vw);
+  height: 24rem;
+  transform: rotate(-2.5deg);
+}
+
+.paperBlueprintB {
+  bottom: 8rem;
+  left: -5rem;
+  width: 26rem;
+  height: 14rem;
+  transform: rotate(1.5deg);
+  /* Kraft, not royal: a royal Momo on a royal scrap disappears. */
+  background-color: var(--paper-kraft);
+  background-image:
+    linear-gradient(
+      to right,
+      color-mix(in srgb, var(--paper-ink) 10%, transparent) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      to bottom,
+      color-mix(in srgb, var(--paper-ink) 10%, transparent) 1px,
+      transparent 1px
+    );
+}
+
+@media (max-width: 48rem) {
+  .paperBlueprintA {
+    display: none;
+  }
+
+  .paperBlueprintB {
+    width: 18rem;
+    height: 10rem;
+    left: -4rem;
+    bottom: 7rem;
+  }
+}
+
+.paperShell {
+  position: relative;
+  z-index: 1;
+  width: min(72rem, 100% - 3rem);
+  margin-inline: auto;
+}
+
+@media (max-width: 40rem) {
+  .paperShell {
+    width: min(72rem, 100% - 2rem);
+  }
+}
+
+.paperHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-block: 1.5rem;
+}
+
+.paperWordmark {
+  display: inline-flex;
+  align-items: center;
+}
+
+.paperSignIn {
+  color: var(--paper-ink);
+  font-weight: 700;
+  text-decoration: none;
+  border-bottom: 1px solid var(--paper-line);
+}
+
+.paperSignIn:hover,
+.paperSignIn:focus-visible {
+  border-bottom-color: var(--paper-royal);
+}
+
+.paperHero {
+  position: relative;
+  padding-block: clamp(2.5rem, 8vw, 5rem) clamp(3rem, 9vw, 6rem);
+  max-width: 44rem;
+}
+
+.paperScrap {
+  color: var(--paper-ink-muted);
+  font-size: 1.25rem;
+  transform: rotate(-3deg);
+  margin: 0 0 1rem;
+}
+
+.paperTitle {
+  margin: 0;
+  display: grid;
+  gap: 0.25rem;
+}
+
+.paperTitle > :global(.m-voice-serif) {
+  display: block;
+  font-size: clamp(1.5rem, 3.4vw, 2.25rem);
+  color: var(--paper-ink-muted);
+}
+
+.paperCutWord {
+  display: block;
+  font-size: clamp(3rem, 10vw, 6.5rem);
+  line-height: 1;
+  letter-spacing: -0.01em;
+}
+
+/*
+ * The brief's undegraded headline: the word knocked out of a torn navy paper
+ * collage. cut-paper.tsx shipped the degrade path (solid --paper-ink at
+ * 14.07:1) because no art existed that held contrast as TEXT; brass and cyan
+ * are object-only for exactly this reason.
+ *
+ * collage-navy.png is measured, not assumed: mean 13.02:1 on cream, worst
+ * pixel 4.52:1, zero pixels below AA large. The generated original had cream
+ * hairlines at 0.91:1 where a torn edge lifted, so its highlights were clamped
+ * to a 4.5:1 floor before shipping. Provenance in public/momentum/SOURCES.md.
+ *
+ * Behind @supports because without background-clip this would paint
+ * transparent text on cream and the headline would vanish. Unsupported
+ * browsers keep the solid-ink degrade, which is why the fill is only ever
+ * added here and never on .paperCutWord itself.
+ */
+/*
+ * The fill goes on each LETTER, not the wrapper. cut-paper.tsx gives every
+ * letter its own rotate() for the jitter, and a transform creates a stacking
+ * context, so a background-clip on the wrapper cannot paint through them: the
+ * word came out completely invisible, transparent letters over nothing.
+ * Per-letter is also the truer reading of the idea, since each letter becomes
+ * its own torn scrap rather than a window onto one shared sheet.
+ */
+@supports (background-clip: text) or (-webkit-background-clip: text) {
+  .paperCutLetter {
+    background-image: url("/momentum/collage-navy.png");
+    background-size: cover;
+    background-position: center;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  /* Forced-colours users get the system's own text colour, not a texture. */
+  @media (forced-colors: active) {
+    .paperCutLetter {
+      background-image: none;
+      color: CanvasText;
+    }
+  }
+}
+
+.paperLede {
+  margin: 1.5rem 0 0;
+  max-width: 34rem;
+  font-size: clamp(1rem, 1.5vw, 1.125rem);
+  color: var(--paper-ink-muted);
+}
+
+.paperActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1.5rem;
+  margin-top: 2.25rem;
+}
+
+.paperPrimary,
+.paperSecondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.875rem;
+  font-size: 0.9375rem;
+  text-decoration: none;
+}
+
+.paperPrimary {
+  padding: 0 1.5rem;
+  border-radius: 0.375rem;
+  font-weight: 700;
+  color: var(--paper-cream-hi);
+  background: var(--paper-royal);
+  /* Invisible normally; forced-colors paints it, so the only filled action
+     does not collapse into plain text beside the quiet secondary link. */
+  border: 2px solid transparent;
+}
+
+.paperPrimary:hover,
+.paperPrimary:focus-visible {
+  background: var(--paper-royal-deep);
+}
+
+/* Deliberately not a second button. An invited first-timer does not yet know
+   what a Command Center is, so two equal-weight buttons make them choose
+   between one thing they understand and one they do not. One filled action,
+   one quiet link. */
+.paperSecondary {
+  padding: 0 0.25rem;
+  font-weight: 500;
+  color: var(--paper-ink);
+  text-decoration: underline;
+  text-decoration-color: var(--paper-line);
+  text-underline-offset: 0.35em;
+}
+
+.paperSecondary:hover,
+.paperSecondary:focus-visible {
+  text-decoration-color: var(--paper-royal);
+}
+
+.paperPrimary:focus-visible,
+.paperSecondary:focus-visible,
+.paperSignIn:focus-visible,
+.paperFooterLink:focus-visible {
+  outline: 2px solid var(--paper-focus);
+  outline-offset: 3px;
+}
+
+/* Four pinned cards, staggered — never a three/four-equal-card row. */
+.paperCards {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(11rem, 1fr));
+  gap: 1.5rem 1.25rem;
+  margin: clamp(3rem, 7vw, 4.5rem) 0 0;
+  padding: 0;
+  list-style: none;
+  max-width: 34rem;
+}
+
+@media (max-width: 30rem) {
+  .paperCards {
+    grid-template-columns: 1fr;
+  }
+}
+
+.paperCard {
+  position: relative;
+  background: var(--paper-cream-hi);
+  border: 1px solid var(--paper-line);
+  padding: 1.5rem 1.25rem 1.25rem;
+}
+
+/*
+ * Re-centre paper.css's .pinned::before dome over the card's top edge.
+ * Matches [data-treatment="paper"] explicitly too so this rule's
+ * specificity (attribute + 2 classes + pseudo-element) beats paper.css's
+ * own (attribute + 1 class + pseudo-element) regardless of CSS load order.
+ */
+:global([data-treatment="paper"]) .paperCard:global(.pinned)::before {
+  top: 14px; /* below the 24px tear band, so the pin pierces paper */
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.paperCardKey {
+  display: block;
+  color: var(--paper-ink-muted);
+  margin-bottom: 0.5rem;
+}
+
+.paperCardBody {
+  margin: 0;
+  font-size: 0.9375rem;
+  color: var(--paper-ink);
+}
+
+.paperMomos {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.5rem;
+  margin-top: clamp(2.5rem, 6vw, 4rem);
+}
+
+.paperMomos svg {
+  display: block;
+  flex: 0 0 auto;
+  /* Kraft offset under the mark: the cut-paper read, no glow, no gradient. */
+  filter: drop-shadow(3px 4px 0 var(--paper-kraft));
+}
+
+@media (max-width: 34rem) {
+  .paperMomos svg {
+    width: 38%;
+    max-width: 112px;
+    height: auto;
+  }
+}
+
+.paperFooter {
+  position: relative;
+  border-top: 1px solid var(--paper-line);
+  padding-block: 1.75rem 2.5rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.5rem;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--paper-ink-muted);
+  font-size: 0.8125rem;
+}
+
+.paperFooterLink {
+  color: var(--paper-ink-muted);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+}
+
+.paperFooterLink:hover {
+  border-bottom-color: var(--paper-royal);
+}

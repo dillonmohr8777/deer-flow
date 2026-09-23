@@ -21,6 +21,7 @@ from deerflow.config.agents_config import (
 )
 from deerflow.config.app_config import get_app_config
 from deerflow.config.paths import get_paths
+from deerflow.knowledge_scope import KnowledgeScope, canonicalize_knowledge_scope
 from deerflow.persistence.agents import AgentDeleteOutcome, AgentExistsError, get_agent_store
 from deerflow.runtime.user_context import get_effective_user_id
 
@@ -46,6 +47,7 @@ class AgentResponse(BaseModel):
     model: str | None = Field(default=None, description="Optional model override")
     tool_groups: list[str] | None = Field(default=None, description="Optional tool group whitelist")
     mcp_plugins: list[str] | None = Field(default=None, description="MCP installation selection (None=all, []=none)")
+    knowledge_scope: KnowledgeScope | None = Field(default=None, description="Default RAGFlow scope for new turns; null inherits operator scope")
     skills: list[str] | None = Field(default=None, description="Optional skill whitelist (None=all, []=none)")
     allowed_subagents: list[str] | None = Field(default=None, description="Subagent allowlist (None=all enabled, []=none)")
     model_settings: AgentModelSettings | None = Field(default=None, description="Per-agent sampling overrides (temperature / max_tokens)")
@@ -70,6 +72,7 @@ class AgentCreateRequest(BaseModel):
     model: str | None = Field(default=None, description="Optional model override")
     tool_groups: list[str] | None = Field(default=None, description="Optional tool group whitelist")
     mcp_plugins: list[str] | None = Field(default=None, description="MCP installation selection (None=all, []=none)")
+    knowledge_scope: KnowledgeScope | None = Field(default=None, description="Default RAGFlow scope for new turns; null inherits operator scope")
     skills: list[str] | None = Field(default=None, description="Optional skill whitelist (None=all enabled, []=none)")
     allowed_subagents: list[str] | None = Field(default=None, description="Subagent allowlist (None=all enabled, []=none)")
     model_settings: AgentModelSettings | None = Field(default=None, description="Per-agent sampling overrides (temperature / max_tokens)")
@@ -87,6 +90,7 @@ class AgentUpdateRequest(BaseModel):
     model: str | None = Field(default=None, description="Updated model override")
     tool_groups: list[str] | None = Field(default=None, description="Updated tool group whitelist")
     mcp_plugins: list[str] | None = Field(default=None, description="MCP installation selection (None=all, []=none)")
+    knowledge_scope: KnowledgeScope | None = Field(default=None, description="Default RAGFlow scope for new turns; null inherits operator scope")
     skills: list[str] | None = Field(default=None, description="Updated skill whitelist (None=all, []=none)")
     allowed_subagents: list[str] | None = Field(default=None, description="Updated subagent allowlist (None=all, []=none)")
     model_settings: AgentModelSettings | None = Field(default=None, description="Updated per-agent sampling overrides")
@@ -205,6 +209,7 @@ def _agent_config_to_response(agent_cfg: AgentConfig, include_soul: bool = False
         tool_groups=agent_cfg.tool_groups,
         skills=agent_cfg.skills,
         mcp_plugins=agent_cfg.mcp_plugins,
+        knowledge_scope=agent_cfg.knowledge_scope,
         allowed_subagents=agent_cfg.allowed_subagents,
         model_settings=agent_cfg.model_settings,
         thinking_enabled=agent_cfg.thinking_enabled,
@@ -347,6 +352,8 @@ async def create_agent_endpoint(request: AgentCreateRequest) -> AgentResponse:
         config_data["description"] = request.description
     if request.tool_groups is not None:
         config_data["tool_groups"] = request.tool_groups
+    if request.knowledge_scope is not None:
+        config_data["knowledge_scope"] = canonicalize_knowledge_scope(request.knowledge_scope)
     if request.mcp_plugins is not None:
         config_data["mcp_plugins"] = request.mcp_plugins
     if request.skills is not None:
@@ -443,6 +450,7 @@ async def update_agent(name: str, request: AgentUpdateRequest) -> AgentResponse:
                     "tool_groups",
                     "skills",
                     "mcp_plugins",
+                    "knowledge_scope",
                     "allowed_subagents",
                     "memory_enabled",
                 }
@@ -462,6 +470,9 @@ async def update_agent(name: str, request: AgentUpdateRequest) -> AgentResponse:
             new_tool_groups = request.tool_groups if "tool_groups" in fields_set else agent_cfg.tool_groups
             if new_tool_groups is not None:
                 updated["tool_groups"] = new_tool_groups
+
+            if "knowledge_scope" in fields_set:
+                updated["knowledge_scope"] = canonicalize_knowledge_scope(request.knowledge_scope) if request.knowledge_scope is not None else None
 
             if "mcp_plugins" in fields_set:
                 updated["mcp_plugins"] = request.mcp_plugins
@@ -538,18 +549,28 @@ class UserProfileUpdateRequest(BaseModel):
     "/user-profile",
     response_model=UserProfileResponse,
     summary="Get User Profile",
-    description="Read the global USER.md file that is injected into all custom agents.",
+    description="Read the calling user's USER.md, which is injected into their custom agents.",
 )
 async def get_user_profile() -> UserProfileResponse:
-    """Return the current USER.md content.
+    """Return the calling user's USER.md content.
+
+    Reads `{base_dir}/users/{user_id}/USER.md`, falling back to the legacy
+    shared `{base_dir}/USER.md` when this user has no per-user file yet, so
+    installations that predate per-user profiles keep their existing content
+    until the first write migrates it.
 
     Returns:
-        UserProfileResponse with content=None if USER.md does not exist yet.
+        UserProfileResponse with content=None if neither file exists.
     """
     _require_agents_api_enabled()
+    user_id = get_effective_user_id()
 
     try:
-        user_md_path = get_paths().user_md_file
+        paths = get_paths()
+        user_md_path = paths.user_md_file_for(user_id)
+        if not user_md_path.exists():
+            # Read-side fallback only. Writes always go to the per-user path.
+            user_md_path = paths.user_md_file
         if not user_md_path.exists():
             return UserProfileResponse(content=None)
         raw = user_md_path.read_text(encoding="utf-8").strip()
@@ -563,10 +584,14 @@ async def get_user_profile() -> UserProfileResponse:
     "/user-profile",
     response_model=UserProfileResponse,
     summary="Update User Profile",
-    description="Write the global USER.md file that is injected into all custom agents.",
+    description="Write the calling user's USER.md, which is injected into their custom agents.",
 )
 async def update_user_profile(request: UserProfileUpdateRequest) -> UserProfileResponse:
-    """Create or overwrite the global USER.md.
+    """Create or overwrite the calling user's USER.md.
+
+    Writes `{base_dir}/users/{user_id}/USER.md` only. It never writes the
+    legacy shared file: USER.md is injected into custom agents, so a shared
+    write would rewrite the persona of every other user's agents.
 
     Args:
         request: The update request with the new USER.md content.
@@ -575,12 +600,13 @@ async def update_user_profile(request: UserProfileUpdateRequest) -> UserProfileR
         UserProfileResponse with the saved content.
     """
     _require_agents_api_enabled()
+    user_id = get_effective_user_id()
 
     try:
-        paths = get_paths()
-        paths.base_dir.mkdir(parents=True, exist_ok=True)
-        paths.user_md_file.write_text(request.content, encoding="utf-8")
-        logger.info(f"Updated USER.md at {paths.user_md_file}")
+        user_md_path = get_paths().user_md_file_for(user_id)
+        user_md_path.parent.mkdir(parents=True, exist_ok=True)
+        user_md_path.write_text(request.content, encoding="utf-8")
+        logger.info(f"Updated USER.md for user {user_id}")
         return UserProfileResponse(content=request.content or None)
     except Exception as e:
         logger.error(f"Failed to update user profile: {e}", exc_info=True)

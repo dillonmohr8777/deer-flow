@@ -17,6 +17,8 @@ import pytest
 from deerflow.integrations import lark_broker
 from deerflow.integrations.lark_broker import BrokerConfig, run_lark_cli, serve
 
+pytestmark = pytest.mark.skipif(os.name == "nt", reason="Lark broker sidecar and shim require POSIX process semantics")
+
 
 def _fake_lark_cli(tmp_path: Path) -> str:
     """A stub 'lark-cli' that echoes argv, stdin, and the credential env.

@@ -50,6 +50,9 @@ def _collect_live_tests(
         ),
         "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
     }
+    for name in ("SYSTEMROOT", "WINDIR", "COMSPEC", "TEMP", "TMP"):
+        if value := os.environ.get(name):
+            env[name] = value
     if opt_in:
         env[LIVE_OPT_IN] = "1"
     if ci:

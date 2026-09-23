@@ -29,11 +29,13 @@ from app.gateway.routers import (
     github_webhooks,
     input_polish,
     integrations,
+    invitations,
     knowledge,
     mcp,
     mcp_tasks,
     memory,
     models,
+    plugins,
     project_documents,
     project_thread_files,
     projects,
@@ -48,6 +50,8 @@ from app.gateway.routers import (
     trash,
     uploads,
     user_preferences,
+    workspace_branding,
+    workspaces,
 )
 from app.gateway.trace_middleware import TraceMiddleware
 from deerflow.config import app_config as deerflow_app_config
@@ -553,6 +557,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 repository=batch_repo,
                 config=subagent_batches_config,
                 runtime_config=subagent_runtime_config,
+                extensions=getattr(app.state, "extensions", None),
             )
             app.state.subagent_batch_service = batch_service
             if subagent_batches_config.enabled:
@@ -905,6 +910,9 @@ This gateway provides runtime endpoints for agent runs plus custom endpoints for
 
     # Include routers
     # Models API is mounted at /api/models
+    from app.gateway.routers import managed_models
+
+    app.include_router(managed_models.router)
     app.include_router(models.router)
 
     # Features API is mounted at /api/features
@@ -977,8 +985,13 @@ This gateway provides runtime endpoints for agent runs plus custom endpoints for
     # Assistants compatibility API (LangGraph Platform stub)
     app.include_router(assistants_compat.router)
 
+    app.include_router(plugins.router)
+
     # Auth API is mounted at /api/v1/auth
     app.include_router(auth.router)
+    app.include_router(invitations.router)
+    app.include_router(workspaces.router)
+    app.include_router(workspace_branding.router)
     app.include_router(user_preferences.router)
 
     # Feedback API is mounted at /api/threads/{thread_id}/runs/{run_id}/feedback

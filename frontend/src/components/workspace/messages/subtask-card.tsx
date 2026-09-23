@@ -14,7 +14,6 @@ import {
   ChainOfThoughtContent,
   ChainOfThoughtStep,
 } from "@/components/ai-elements/chain-of-thought";
-import { Shimmer } from "@/components/ai-elements/shimmer";
 import { Button } from "@/components/ui/button";
 import { ShineBorder } from "@/components/ui/shine-border";
 import { useI18n } from "@/core/i18n/hooks";
@@ -105,7 +104,7 @@ export function SubtaskCard({
     if (task.status === "completed") {
       return <CheckCircleIcon className="size-3" />;
     } else if (task.status === "failed") {
-      return <XCircleIcon className="size-3 text-red-500" />;
+      return <XCircleIcon className="size-3 text-red-500 dark:text-red-400" />;
     } else if (task.status === "in_progress") {
       return <Loader2Icon className="size-3 animate-spin" />;
     }
@@ -115,19 +114,15 @@ export function SubtaskCard({
       className={cn("relative w-full gap-2 rounded-lg border py-0", className)}
       open={!collapsed}
     >
-      <div
-        className={cn(
-          "ambilight z-[-1]",
-          task.status === "in_progress" ? "enabled" : "",
-        )}
-      ></div>
-      {task.status === "in_progress" && (
-        <>
-          <ShineBorder
-            borderWidth={1.5}
-            shineColor={["#A07CFE", "#FE8FB5", "#FFBE7B"]}
-          />
-        </>
+      {task.status === "in_progress" && !collapsed && (
+        <div className="ambilight enabled z-[-1]"></div>
+      )}
+      {task.status === "in_progress" && !collapsed && (
+        <ShineBorder
+          className="hidden sm:block"
+          borderWidth={1.5}
+          shineColor={["#075bd8", "#008fc9", "#5b3bd8"]}
+        />
       )}
       <div className="bg-background/95 flex w-full flex-col rounded-lg">
         <div className="flex w-full items-center justify-between p-0.5">
@@ -141,18 +136,7 @@ export function SubtaskCard({
                 className="min-w-24 flex-1 font-normal"
                 label={
                   <span className="block truncate" title={task.description}>
-                    {task.status === "in_progress" ? (
-                      <Shimmer
-                        as="span"
-                        className="inline"
-                        duration={3}
-                        spread={3}
-                      >
-                        {task.description}
-                      </Shimmer>
-                    ) : (
-                      task.description
-                    )}
+                    {task.description}
                   </span>
                 }
                 icon={<ClipboardListIcon />}
@@ -162,7 +146,9 @@ export function SubtaskCard({
                   <div
                     className={cn(
                       "text-muted-foreground flex min-w-0 items-center gap-1 text-xs font-normal",
-                      task.status === "failed" ? "text-red-500 opacity-67" : "",
+                      task.status === "failed"
+                        ? "text-red-600 dark:text-red-400"
+                        : "",
                     )}
                   >
                     {modelLabel && (
@@ -259,8 +245,14 @@ export function SubtaskCard({
           )}
           {task.status === "failed" && (
             <ChainOfThoughtStep
-              label={<div className="text-red-500">{task.error}</div>}
-              icon={<XCircleIcon className="size-4 text-red-500" />}
+              label={
+                <div className="text-red-600 dark:text-red-400">
+                  {task.error}
+                </div>
+              }
+              icon={
+                <XCircleIcon className="size-4 text-red-600 dark:text-red-400" />
+              }
             ></ChainOfThoughtStep>
           )}
         </ChainOfThoughtContent>

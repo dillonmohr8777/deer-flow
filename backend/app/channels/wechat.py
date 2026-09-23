@@ -767,11 +767,18 @@ class WechatChannel(Channel):
                 return False
             return bool(auth_state.get("bot_token"))
 
+    async def request_login_qrcode(self) -> dict[str, Any]:
+        """Request QR payload without changing the running channel's credentials."""
+        return await self._request_public_get_json("/ilink/bot/get_bot_qrcode", params={"bot_type": self._qrcode_bot_type})
+
+    async def request_login_status(self, qrcode: str, *, timeout: float | None = None, verify_code: str | None = None) -> dict[str, Any]:
+        params = {"qrcode": qrcode}
+        if verify_code:
+            params["verify_code"] = verify_code
+        return await self._request_public_get_json("/ilink/bot/get_qrcode_status", params=params, timeout=timeout)
+
     async def _bind_via_qrcode(self) -> dict[str, Any]:
-        qrcode_data = await self._request_public_get_json(
-            "/ilink/bot/get_bot_qrcode",
-            params={"bot_type": self._qrcode_bot_type},
-        )
+        qrcode_data = await self.request_login_qrcode()
         qrcode = str(qrcode_data.get("qrcode") or "").strip()
         if not qrcode:
             raise RuntimeError("iLink get_bot_qrcode did not return qrcode")
@@ -790,10 +797,7 @@ class WechatChannel(Channel):
 
         deadline = time.monotonic() + max(self._qrcode_poll_timeout, 1.0)
         while time.monotonic() < deadline:
-            status_data = await self._request_public_get_json(
-                "/ilink/bot/get_qrcode_status",
-                params={"qrcode": qrcode},
-            )
+            status_data = await self.request_login_status(qrcode)
             status = str(status_data.get("status") or "").strip().lower()
             if status == "confirmed":
                 token = str(status_data.get("bot_token") or "").strip()
@@ -1191,7 +1195,7 @@ class WechatChannel(Channel):
         if stored_path is None:
             return None
 
-        mime_type = detected_image[1] if detected_image else mimetypes.guess_type(filename)[0] or "image/jpeg"
+        mime_type = detected_image[1] if detected_image else "image/jpeg"
         return {
             "type": "image",
             "filename": stored_path.name,
@@ -1230,7 +1234,7 @@ class WechatChannel(Channel):
             return None
 
         filename = self._normalize_inbound_filename(file_item.get("file_name"), default_prefix="wechat-file", message_id=message_id, index=index)
-        mime_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
+        mime_type = (await asyncio.to_thread(mimetypes.guess_type, filename))[0] or "application/octet-stream"
         if not self._is_allowed_file_type(filename, mime_type):
             logger.warning("[WeChat] inbound file type blocked, skipping message_id=%s filename=%s", message_id, filename)
             return None

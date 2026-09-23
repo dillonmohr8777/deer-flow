@@ -1,7 +1,6 @@
 "use client";
 
 import { MessageSquarePlus } from "lucide-react";
-import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -12,6 +11,8 @@ import {
   SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
+import { BrandSignature } from "@/components/workspace/command-center/brand-signature";
+import { BrandMotionToggle } from "@/components/workspace/command-center/workspace-appearance";
 import { useI18n } from "@/core/i18n/hooks";
 import { env } from "@/env";
 import { cn } from "@/lib/utils";
@@ -44,18 +45,14 @@ export function WorkspaceHeader({ className }: { className?: string }) {
             ) : (
               <Link
                 href="/workspace/command-center"
-                className="ml-2"
+                className="ml-2 min-w-0 flex-1"
                 aria-label="Momentum Command Center"
               >
-                <Image
-                  src="/momentum/wordmark.png"
-                  alt="Momentum"
-                  width={800}
-                  height={172}
-                  style={{ width: 145, height: "auto" }}
-                  priority
-                />
+                <BrandSignature />
               </Link>
+            )}
+            {env.NEXT_PUBLIC_STATIC_WEBSITE_ONLY !== "true" && (
+              <BrandMotionToggle compact />
             )}
             <SidebarTrigger />
           </div>
