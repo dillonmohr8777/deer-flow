@@ -85,6 +85,16 @@ function AccountAppearance({
     };
   }, []);
 
+  // Dialogs, menus and the mobile sidebar sheet portal to <body>, outside the
+  // wrapper below; mirroring the treatment onto <html> lets paper.css reach them.
+  useEffect(() => {
+    const root = document.documentElement;
+    root.dataset.treatment = preferences.treatment;
+    return () => {
+      delete root.dataset.treatment;
+    };
+  }, [preferences.treatment]);
+
   useEffect(() => {
     if (!userId) {
       setPersistence("memory");
@@ -147,8 +157,14 @@ function AccountAppearance({
       }}
     >
       {/* display: contents keeps this wrapper out of the layout tree while
-          still letting [data-treatment="paper"] descendant rules match. */}
-      <div data-treatment={preferences.treatment} style={{ display: "contents" }}>
+          still letting [data-treatment="paper"] descendant rules match.
+          data-workspace-shell scopes paper.css's shell tokens to the
+          workspace, away from landing, login and invite. */}
+      <div
+        data-workspace-shell=""
+        data-treatment={preferences.treatment}
+        style={{ display: "contents" }}
+      >
         {children}
       </div>
     </AppearanceContext.Provider>

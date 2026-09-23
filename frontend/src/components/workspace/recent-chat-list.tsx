@@ -40,12 +40,10 @@ import {
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
-  SidebarMenu,
   SidebarMenuAction,
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import { MomentumGlyph } from "@/components/workspace/command-center/momentum-glyph";
 import { ConversationExtensionActions } from "@/components/workspace/conversation-extension-actions";
 import { getAPIClient } from "@/core/api";
 import { useAuth } from "@/core/auth/AuthProvider";
@@ -249,10 +247,8 @@ export function ThreadSidebarItem({
               {branchEntry.isLastSibling ? "└─" : "├─"}
             </span>
           )}
-          <MomentumGlyph
-            className="size-4 shrink-0"
-            seed={`thread:${thread.thread_id}`}
-          />
+          {/* Icons only where they carry meaning: channel source and pinned.
+              A per-thread glyph read as one identical dark dot at 16px. */}
           <ThreadChannelIcon source={channelSource} />
           {pinned && (
             <Pin
@@ -536,51 +532,51 @@ export function RecentChatList() {
           : t.sidebar.demoChats}
       </SidebarGroupLabel>
       <SidebarGroupContent className="group-data-[collapsible=icon]:pointer-events-none group-data-[collapsible=icon]:-mt-8 group-data-[collapsible=icon]:opacity-0">
-        <SidebarMenu>
-          {/* Keep pagination at the old list boundary when this switches to virtual rows. */}
-          <div
-            className="flex w-full flex-col gap-1"
-            style={{ overflowAnchor: "none" }}
-          >
-            <VirtualThreadList
-              estimateSize={36}
-              gap={4}
-              items={branchList.threads}
-              scrollParentSelector='[data-sidebar="content"]'
-              renderItem={(thread) => (
-                <ThreadSidebarItem
-                  key={thread.thread_id}
-                  thread={thread}
-                  isActive={pathOfThread(thread) === pathname}
-                  branchEntry={branchList.entriesById.get(thread.thread_id)}
-                  recentThreadId={threads[0]?.thread_id}
-                />
-              )}
-            />
-            {hasNextPage && threadListModel.canLoadMore && (
-              <>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="mx-2 my-1 w-[calc(100%-1rem)] justify-center text-xs"
-                  onClick={() => void fetchNextPage()}
-                  disabled={isFetchingNextPage}
-                  data-testid="recent-chat-list-load-more"
-                >
-                  {isFetchingNextPage
-                    ? t.chats.loadingMore
-                    : t.chats.loadOlderChats}
-                </Button>
-                <div
-                  ref={sentinelRef}
-                  aria-hidden="true"
-                  className="h-px w-full"
-                  data-testid="recent-chat-list-sentinel"
-                />
-              </>
+        {/* The rows are the list (role="list"); pagination sits after it
+            rather than inside a <ul>, which may only hold <li> children. */}
+        <div
+          className="flex w-full min-w-0 flex-col gap-1"
+          style={{ overflowAnchor: "none" }}
+        >
+          <VirtualThreadList
+            role="list"
+            estimateSize={36}
+            gap={4}
+            items={branchList.threads}
+            scrollParentSelector='[data-sidebar="content"]'
+            renderItem={(thread) => (
+              <ThreadSidebarItem
+                key={thread.thread_id}
+                thread={thread}
+                isActive={pathOfThread(thread) === pathname}
+                branchEntry={branchList.entriesById.get(thread.thread_id)}
+                recentThreadId={threads[0]?.thread_id}
+              />
             )}
-          </div>
-        </SidebarMenu>
+          />
+          {hasNextPage && threadListModel.canLoadMore && (
+            <>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="mx-2 my-1 w-[calc(100%-1rem)] justify-center text-xs"
+                onClick={() => void fetchNextPage()}
+                disabled={isFetchingNextPage}
+                data-testid="recent-chat-list-load-more"
+              >
+                {isFetchingNextPage
+                  ? t.chats.loadingMore
+                  : t.chats.loadOlderChats}
+              </Button>
+              <div
+                ref={sentinelRef}
+                aria-hidden="true"
+                className="h-px w-full"
+                data-testid="recent-chat-list-sentinel"
+              />
+            </>
+          )}
+        </div>
       </SidebarGroupContent>
     </SidebarGroup>
   );
