@@ -122,6 +122,10 @@ def _reset_process_singletons(monkeypatch: pytest.MonkeyPatch) -> None:
       ``DEER_FLOW_HOME`` at first access.
     - ``deerflow.persistence.engine`` caches the SQLAlchemy engine and
       session factory after the first call to ``init_engine_from_config``.
+    - ``app.gateway.deps`` caches the user repository bound to that session
+      factory. Left stale, ``/register`` writes the user and its private
+      organization into an earlier test's database while the organization
+      middleware reads this one, and the next request is refused with 403.
 
     ``raising=False`` keeps the fixture resilient if upstream renames or
     drops one of these attributes — the test will simply skip that reset
@@ -129,6 +133,7 @@ def _reset_process_singletons(monkeypatch: pytest.MonkeyPatch) -> None:
     to call ``get_app_config()``/``get_paths()`` will surface the real
     incompatibility loudly.
     """
+    from app.gateway import deps as deps_module
     from deerflow.config import app_config as app_config_module
     from deerflow.config import paths as paths_module
     from deerflow.persistence import engine as engine_module
@@ -140,6 +145,8 @@ def _reset_process_singletons(monkeypatch: pytest.MonkeyPatch) -> None:
         (paths_module, "_paths_singleton"),
         (engine_module, "_engine"),
         (engine_module, "_session_factory"),
+        (deps_module, "_cached_local_provider"),
+        (deps_module, "_cached_repo"),
     ):
         monkeypatch.setattr(module, attr, None, raising=False)
 
