@@ -95,7 +95,11 @@ export function AppearanceSettingsPage() {
             }
           }}
         >
-          <SelectTrigger className="w-[220px]">
+          {/* role="combobox" takes no name from its value text; name it. */}
+          <SelectTrigger
+            className="w-[220px]"
+            aria-label={t.settings.appearance.languageTitle}
+          >
             <SelectValue />
           </SelectTrigger>
           <SelectContent>

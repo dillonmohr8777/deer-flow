@@ -15,10 +15,29 @@ from deerflow.persistence.json_compat import json_match
 from deerflow.persistence.organizations.resolution import organization_from_owned_parent, private_organization_for_user
 from deerflow.persistence.thread_meta.base import PROJECT_FILTER_UNSET, THREAD_ARCHIVED_METADATA_KEY, THREAD_PINNED_METADATA_KEY, THREAD_PROJECT_METADATA_KEY, InvalidMetadataFilterError, ThreadMetaStore, _ProjectFilterUnset
 from deerflow.persistence.thread_meta.model import ThreadMetaRow
-from deerflow.runtime.user_context import AUTO, _AutoSentinel, resolve_user_id
+from deerflow.runtime.user_context import AUTO, _AutoSentinel, resolve_organization_id, resolve_user_id
 from deerflow.utils.time import coerce_iso
 
 logger = logging.getLogger(__name__)
+
+
+def _in_active_organization(model) -> tuple:
+    """SQL clause for the request's active organization; none without one (internal, CLI)."""
+    organization_id = resolve_organization_id()
+    return () if organization_id is None else (model.organization_id == organization_id,)
+
+
+def _visible(row: ThreadMetaRow | None, user_id: str | None) -> bool:
+    """Whether ``row`` passes the user filter (skipped for an explicit ``None``) and the organization filter.
+
+    The organization filter holds even past an explicit user bypass: a request with an
+    active organization never sees a row outside it, including one with no organization
+    (the quarantine marker).
+    """
+    if row is None or (user_id is not None and row.user_id != user_id):
+        return False
+    organization_id = resolve_organization_id()
+    return organization_id is None or row.organization_id == organization_id
 
 
 class ThreadMetaRepository(ThreadMetaStore):
@@ -73,6 +92,7 @@ class ThreadMetaRepository(ThreadMetaStore):
                         ProjectRow.id == project_id,
                         ProjectRow.user_id == resolved_user_id,
                         ProjectRow.status == "active",
+                        *_in_active_organization(ProjectRow),
                     )
                     .with_for_update()
                 )
@@ -148,6 +168,7 @@ class ThreadMetaRepository(ThreadMetaStore):
                         ProjectRow.id == project_id,
                         ProjectRow.user_id == resolved_user_id,
                         ProjectRow.status == "active",
+                        *_in_active_organization(ProjectRow),
                     )
                     .with_for_update()
                 )
@@ -159,7 +180,7 @@ class ThreadMetaRepository(ThreadMetaStore):
                 organization_id = await private_organization_for_user(session, resolved_user_id)
             stmt = (
                 update(ThreadMetaRow)
-                .where(ThreadMetaRow.thread_id == thread_id)
+                .where(ThreadMetaRow.thread_id == thread_id, *_in_active_organization(ThreadMetaRow))
                 .values(
                     project_id=project_id,
                     organization_id=organization_id,
@@ -183,42 +204,27 @@ class ThreadMetaRepository(ThreadMetaStore):
         resolved_user_id = resolve_user_id(user_id, method_name="ThreadMetaRepository.get")
         async with self._sf() as session:
             row = await session.get(ThreadMetaRow, thread_id)
-            if row is None:
-                return None
-            # Enforce owner filter unless explicitly bypassed (user_id=None).
-            if resolved_user_id is not None and row.user_id != resolved_user_id:
-                return None
-            return self._row_to_dict(row)
+            return self._row_to_dict(row) if _visible(row, resolved_user_id) else None
 
     async def check_access(self, thread_id: str, user_id: str, *, require_existing: bool = False) -> bool:
         """Check if ``user_id`` has access to ``thread_id``.
 
-        Two modes — one row, two distinct semantics depending on what
-        the caller is about to do:
+        An existing row passes only when ``row.user_id == user_id`` and it sits in
+        the request's active organization, when there is one. Ownerless rows
+        (``user_id`` NULL, legacy pre-auth data) fail closed for every caller:
+        nobody may read, write, delete or claim them (M3).
 
-        - ``require_existing=False`` (default, permissive):
-          Returns True for: row missing (untracked legacy thread),
-          ``row.user_id`` is None (shared / pre-auth data),
-          or ``row.user_id == user_id``. Use for **read-style**
-          decorators where treating an untracked thread as accessible
-          preserves backward-compat.
-
-        - ``require_existing=True`` (strict):
-          Returns True **only** when the row exists AND
-          (``row.user_id == user_id`` OR ``row.user_id is None``).
-          Use for **destructive / mutating** decorators (DELETE, PATCH,
-          state-update) so a thread that has *already been deleted*
-          cannot be re-targeted by any caller — closing the
-          delete-idempotence cross-user gap where the row vanishing
-          made every other user appear to "own" it.
+        A missing row passes only with ``require_existing=False``. Thread-scoped
+        routes require an existing row; the row-less exceptions are
+        upload-before-create, which writes only into the caller's own storage
+        bucket, and the creation paths (PUT goal, stateless run admission), which
+        must not create a row over another owner's checkpoint.
         """
         async with self._sf() as session:
             row = await session.get(ThreadMetaRow, thread_id)
             if row is None:
                 return not require_existing
-            if row.user_id is None:
-                return True
-            return row.user_id == user_id
+            return row.user_id is not None and _visible(row, user_id)
 
     async def search(
         self,
@@ -241,10 +247,14 @@ class ThreadMetaRepository(ThreadMetaStore):
             (json_match(ThreadMetaRow.metadata_json, THREAD_PINNED_METADATA_KEY, True), 1),
             else_=0,
         )
-        stmt = select(ThreadMetaRow).order_by(
-            pinned_order.desc(),
-            ThreadMetaRow.updated_at.desc(),
-            ThreadMetaRow.thread_id.desc(),
+        stmt = (
+            select(ThreadMetaRow)
+            .where(*_in_active_organization(ThreadMetaRow))
+            .order_by(
+                pinned_order.desc(),
+                ThreadMetaRow.updated_at.desc(),
+                ThreadMetaRow.thread_id.desc(),
+            )
         )
         if resolved_user_id is not None:
             stmt = stmt.where(ThreadMetaRow.user_id == resolved_user_id)
@@ -283,11 +293,8 @@ class ThreadMetaRepository(ThreadMetaStore):
             return [self._row_to_dict(r) for r in result.scalars()]
 
     async def _check_ownership(self, session: AsyncSession, thread_id: str, resolved_user_id: str | None) -> bool:
-        """Return True if the row exists and is owned (or filter bypassed)."""
-        if resolved_user_id is None:
-            return True  # explicit bypass
-        row = await session.get(ThreadMetaRow, thread_id)
-        return row is not None and row.user_id == resolved_user_id
+        """Return True if the row exists and is visible (see :func:`_visible`)."""
+        return _visible(await session.get(ThreadMetaRow, thread_id), resolved_user_id)
 
     async def update_display_name(
         self,
@@ -306,7 +313,7 @@ class ThreadMetaRepository(ThreadMetaStore):
             else:
                 result = await session.execute(select(ThreadMetaRow).where(ThreadMetaRow.thread_id == thread_id).with_for_update())
                 row = result.scalar_one_or_none()
-            if row is None or (resolved_user_id is not None and row.user_id != resolved_user_id):
+            if not _visible(row, resolved_user_id):
                 return
             row.display_name = display_name
             metadata = dict(row.metadata_json or {})
@@ -361,9 +368,7 @@ class ThreadMetaRepository(ThreadMetaStore):
             else:
                 result = await session.execute(select(ThreadMetaRow).where(ThreadMetaRow.thread_id == thread_id).with_for_update())
                 row = result.scalar_one_or_none()
-            if row is None:
-                return
-            if resolved_user_id is not None and row.user_id != resolved_user_id:
+            if not _visible(row, resolved_user_id):
                 return
             merged = dict(row.metadata_json or {})
             merged.update(metadata)
@@ -393,7 +398,7 @@ class ThreadMetaRepository(ThreadMetaStore):
                 row = await session.get(ThreadMetaRow, thread_id)
             else:
                 row = (await session.execute(select(ThreadMetaRow).where(ThreadMetaRow.thread_id == thread_id).with_for_update())).scalar_one_or_none()
-            if row is None or (resolved_user_id is not None and row.user_id != resolved_user_id):
+            if not _visible(row, resolved_user_id):
                 return
             row.user_id = owner_user_id
             if row.project_id is None:
@@ -419,7 +424,7 @@ class ThreadMetaRepository(ThreadMetaStore):
                 row = await session.get(ThreadMetaRow, thread_id)
             else:
                 row = (await session.execute(select(ThreadMetaRow).where(ThreadMetaRow.thread_id == thread_id).with_for_update())).scalar_one_or_none()
-            if row is None or (resolved_user_id is not None and row.user_id != resolved_user_id):
+            if not _visible(row, resolved_user_id):
                 return
             await session.delete(row)
             await session.commit()

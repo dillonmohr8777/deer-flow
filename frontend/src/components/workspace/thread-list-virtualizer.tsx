@@ -31,12 +31,15 @@ export function VirtualThreadList<T extends ThreadListRow>({
   items,
   renderItem,
   scrollParentSelector,
+  role,
 }: {
   estimateSize: number;
   gap?: number;
   items: readonly T[];
   renderItem: (item: T, index: number) => ReactNode;
   scrollParentSelector: string;
+  /** "list" when renderItem returns <li> rows, so they sit in a real list. */
+  role?: "list";
 }) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const getScrollElement = useCallback(
@@ -82,6 +85,7 @@ export function VirtualThreadList<T extends ThreadListRow>({
     return (
       <div
         ref={rootRef}
+        role={role}
         className="flex w-full flex-col"
         style={{ gap: `${gap}px` }}
       >
@@ -93,6 +97,7 @@ export function VirtualThreadList<T extends ThreadListRow>({
   return (
     <div
       ref={rootRef}
+      role={role}
       className="relative w-full"
       style={{ height: `${virtualizer.getTotalSize()}px` }}
     >
@@ -102,6 +107,8 @@ export function VirtualThreadList<T extends ThreadListRow>({
         return (
           <div
             key={virtualRow.key}
+            // Positioning wrapper only; keeps each <li> a direct list item.
+            role={role ? "none" : undefined}
             ref={virtualizer.measureElement}
             data-index={virtualRow.index}
             className="absolute top-0 left-0 w-full"

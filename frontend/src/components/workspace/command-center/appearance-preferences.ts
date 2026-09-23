@@ -8,8 +8,9 @@ export type AppearancePreferences = {
   label: string;
 };
 
+/** Paper is the product's look; "current" and "classic" stay selectable. */
 export const DEFAULT_APPEARANCE: AppearancePreferences = {
-  treatment: "current",
+  treatment: "paper",
   motion: false,
   logo: null,
   label: "",
@@ -28,10 +29,13 @@ export function parseAppearance(raw: string | null): AppearancePreferences {
       return { ...DEFAULT_APPEARANCE };
     const record = value as Record<string, unknown>;
     return {
+      // A saved choice always wins; only a missing or unknown one gets the default.
       treatment:
-        record.treatment === "classic" || record.treatment === "paper"
+        record.treatment === "classic" ||
+        record.treatment === "current" ||
+        record.treatment === "paper"
           ? record.treatment
-          : "current",
+          : DEFAULT_APPEARANCE.treatment,
       motion: record.motion === true,
       logo: safePluginIcon(record.logo) ?? null,
       label:

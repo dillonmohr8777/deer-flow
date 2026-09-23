@@ -34,6 +34,16 @@ const config = {
   },
   devIndicators: false,
   allowedDevOrigins: getAllowedDevOrigins(),
+  // Momentum does not publish upstream DeerFlow's blog or docs site. Redirect
+  // instead of deleting the routes so upstream merges stay conflict-free.
+  async redirects() {
+    return [
+      { source: "/blog", destination: "/", permanent: false },
+      { source: "/blog/:path*", destination: "/", permanent: false },
+      { source: "/:lang(en|zh)/docs", destination: "/", permanent: false, locale: false },
+      { source: "/:lang(en|zh)/docs/:path*", destination: "/", permanent: false, locale: false },
+    ];
+  },
   async rewrites() {
     const rewrites = [];
     const gatewayURL = getInternalServiceURL(

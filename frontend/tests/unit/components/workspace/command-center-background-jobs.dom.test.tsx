@@ -2,16 +2,12 @@ import { afterEach, describe, expect, it, rs } from "@rstest/core";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 
+import { SidebarProvider } from "@/components/ui/sidebar";
 import { BackgroundJobs } from "@/components/workspace/command-center/background-jobs";
 
 const mocks = rs.hoisted(() => ({
-  pathname: "/workspace/command-center",
   stats: { active_runs: 1 },
   statsError: false,
-}));
-
-rs.mock("next/navigation", () => ({
-  usePathname: () => mocks.pathname,
 }));
 
 rs.mock("next/link", () => {
@@ -50,7 +46,7 @@ rs.mock("@/core/console", () => ({
               thread_title: "Alpha",
               assistant_id: null,
               status: "running",
-              model_name: "model-a",
+              model_name: "openrouter-muse-spark-contributor",
               total_tokens: 1234,
               error: null,
             },
@@ -123,11 +119,18 @@ afterEach(() => {
   rs.clearAllMocks();
   mocks.stats = { active_runs: 1 };
   mocks.statsError = false;
-  mocks.pathname = "/workspace/command-center";
 });
 
+function renderDocked(variant?: "sidebar" | "header") {
+  return render(
+    <SidebarProvider>
+      <BackgroundJobs variant={variant} />
+    </SidebarProvider>,
+  );
+}
+
 function open() {
-  render(<BackgroundJobs />);
+  renderDocked();
   fireEvent.click(screen.getByRole("button", { name: /background work/i }));
 }
 
@@ -156,20 +159,38 @@ describe("BackgroundJobs", () => {
     expect(body).not.toMatch(/%/);
   });
 
-  it("stays hidden when stats are unavailable instead of claiming zero work", () => {
-    mocks.statsError = true;
-    render(<BackgroundJobs />);
-    expect(
-      screen.queryByRole("button", { name: /background work/i }),
-    ).toBeNull();
+  it("shows the model's display name, never the routing slug or tier word", () => {
+    open();
+    const body = document.body.textContent ?? "";
+    expect(body).toMatch(/Muse Spark 1\.3/);
+    expect(body).not.toMatch(/openrouter|contributor/i);
   });
 
-  it("clears the mobile composer on persisted conversation routes", () => {
-    mocks.pathname = "/workspace/chats/thread-1";
-    render(<BackgroundJobs />);
-    expect(
-      screen.getByRole("button", { name: /background work/i }).parentElement
-        ?.className,
-    ).toContain("bottom-48 sm:bottom-4");
+  it("says Unavailable when stats fail instead of claiming zero work", () => {
+    mocks.statsError = true;
+    renderDocked();
+    const button = screen.getByRole("button", {
+      name: "Background work, count unavailable",
+    });
+    expect(button.textContent).toContain("Unavailable");
+    expect(button.textContent).not.toMatch(/\d/);
+  });
+
+  it("docks in the sidebar and the header instead of floating over content", () => {
+    const { unmount } = renderDocked();
+    const row = screen.getByRole("button", {
+      name: "Background work, 1 queued or running jobs",
+    });
+    expect(row.closest('[data-sidebar="menu-item"]')).not.toBeNull();
+    for (let el: Element | null = row; el; el = el.parentElement)
+      expect(el.classList.contains("fixed")).toBe(false);
+    unmount();
+
+    renderDocked("header");
+    const icon = screen.getByRole("button", {
+      name: "Background work, 1 queued or running jobs",
+    });
+    expect(icon.textContent).toBe("1");
+    expect(icon.closest('[data-sidebar="menu-item"]')).toBeNull();
   });
 });

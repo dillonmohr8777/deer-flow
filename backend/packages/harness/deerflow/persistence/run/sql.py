@@ -15,7 +15,7 @@ from sqlalchemy import and_, case, delete, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from deerflow.persistence.organizations.resolution import organization_from_owned_parent
+from deerflow.persistence.organizations.resolution import organization_for_write, organization_from_owned_parent
 from deerflow.persistence.run.model import RunChangeClockRow, RunRow
 from deerflow.persistence.thread_meta.model import ThreadMetaRow
 from deerflow.runtime.runs.store.base import (
@@ -25,13 +25,38 @@ from deerflow.runtime.runs.store.base import (
     StatusFinalization,
     normalize_run_created_at_iso,
 )
-from deerflow.runtime.user_context import AUTO, _AutoSentinel, resolve_user_id
+from deerflow.runtime.user_context import AUTO, _AutoSentinel, resolve_organization_id, resolve_user_id
 from deerflow.utils.time import coerce_iso
 
 
 def _lease_expired_or_null(lease_col, cutoff: datetime):
     """SQLAlchemy filter: True when the lease is NULL or has expired past *cutoff*."""
     return or_(lease_col.is_(None), lease_col < cutoff)
+
+
+def _in_active_organization() -> tuple:
+    """SQL clause for the request's active organization; none without one (internal, CLI)."""
+    organization_id = resolve_organization_id()
+    return () if organization_id is None else (RunRow.organization_id == organization_id,)
+
+
+def _visible(row: RunRow | None, user_id: str | None) -> bool:
+    """User filter (skipped for an explicit ``None``) plus the active organization filter."""
+    if row is None or (user_id is not None and row.user_id != user_id):
+        return False
+    organization_id = resolve_organization_id()
+    return organization_id is None or row.organization_id == organization_id
+
+
+def _organization_for_run(thread: ThreadMetaRow | None, user_id: str | None) -> str | None:
+    """Stamp from the thread, else the server-resolved organization; a mismatch raises.
+
+    A stateless run is admitted before its thread row exists, so without the active
+    organization it would be written with NULL. ``user_id`` is the storage principal
+    the run is written under; an explicit ``None`` (migration) keeps the thread's stamp.
+    """
+    parent = organization_from_owned_parent(thread, user_id, parent_name="thread")
+    return organization_for_write(resolve_organization_id(), parent, user_id) if user_id is not None else parent
 
 
 class RunRepository(RunStore):
@@ -159,7 +184,7 @@ class RunRepository(RunStore):
         async with self._sf() as session:
             values["change_seq"] = await self._next_change_seq(session)
             thread = (await session.execute(select(ThreadMetaRow).where(ThreadMetaRow.thread_id == thread_id).with_for_update())).scalar_one_or_none()
-            organization_id = organization_from_owned_parent(thread, resolved_user_id, parent_name="thread")
+            organization_id = _organization_for_run(thread, resolved_user_id)
             row = await session.get(RunRow, run_id)
             if row is None:
                 session.add(RunRow(run_id=run_id, created_at=created, organization_id=organization_id, **values))
@@ -181,11 +206,7 @@ class RunRepository(RunStore):
         resolved_user_id = resolve_user_id(user_id, method_name="RunRepository.get")
         async with self._sf() as session:
             row = await session.get(RunRow, run_id)
-            if row is None:
-                return None
-            if resolved_user_id is not None and row.user_id != resolved_user_id:
-                return None
-            return self._row_to_dict(row)
+            return self._row_to_dict(row) if _visible(row, resolved_user_id) else None
 
     async def list_changed(
         self,
@@ -202,6 +223,7 @@ class RunRepository(RunStore):
                 RunRow.change_seq > after_change_seq,
                 and_(RunRow.change_seq == after_change_seq, RunRow.run_id > after_run_id),
             ),
+            *_in_active_organization(),
         )
         if resolved_user_id is not None:
             stmt = stmt.where(RunRow.user_id == resolved_user_id)
@@ -220,7 +242,7 @@ class RunRepository(RunStore):
         before_run_id: str | None = None,
     ):
         resolved_user_id = resolve_user_id(user_id, method_name="RunRepository.list_by_thread")
-        stmt = select(RunRow).where(RunRow.thread_id == thread_id, RunRow.operation_kind == "run")
+        stmt = select(RunRow).where(RunRow.thread_id == thread_id, RunRow.operation_kind == "run", *_in_active_organization())
         if resolved_user_id is not None:
             stmt = stmt.where(RunRow.user_id == resolved_user_id)
         if before_created_at and before_run_id:
@@ -258,6 +280,7 @@ class RunRepository(RunStore):
             RunRow.status == "success",
             source.is_not(None),
             source != "",
+            *_in_active_organization(),
         )
         if resolved_user_id is not None:
             stmt = stmt.where(RunRow.user_id == resolved_user_id)
@@ -279,6 +302,7 @@ class RunRepository(RunStore):
             replay_kind == "edit",
             source.is_not(None),
             source != "",
+            *_in_active_organization(),
         )
         if resolved_user_id is not None:
             stmt = stmt.where(RunRow.user_id == resolved_user_id)
@@ -297,7 +321,7 @@ class RunRepository(RunStore):
         if not run_ids:
             return {}
         resolved_user_id = resolve_user_id(user_id, method_name="RunRepository.get_many_by_thread")
-        stmt = select(RunRow).where(RunRow.thread_id == thread_id, RunRow.operation_kind == "run", RunRow.run_id.in_(run_ids))
+        stmt = select(RunRow).where(RunRow.thread_id == thread_id, RunRow.operation_kind == "run", RunRow.run_id.in_(run_ids), *_in_active_organization())
         if resolved_user_id is not None:
             stmt = stmt.where(RunRow.user_id == resolved_user_id)
         async with self._sf() as session:
@@ -359,9 +383,7 @@ class RunRepository(RunStore):
         resolved_user_id = resolve_user_id(user_id, method_name="RunRepository.delete")
         async with self._sf() as session:
             row = await session.get(RunRow, run_id)
-            if row is None:
-                return
-            if resolved_user_id is not None and row.user_id != resolved_user_id:
+            if not _visible(row, resolved_user_id):
                 return
             await session.delete(row)
             await session.commit()
@@ -393,6 +415,7 @@ class RunRepository(RunStore):
         conditions = [
             RunRow.thread_id == thread_id,
             RunRow.operation_kind == "run",
+            *_in_active_organization(),
         ]
         if resolved_user_id is not None:
             conditions.append(RunRow.user_id == resolved_user_id)
@@ -576,7 +599,7 @@ class RunRepository(RunStore):
             RunRow.subagent_tokens,
             RunRow.middleware_tokens,
             RunRow.token_usage_by_model,
-        ).where(_thread, _run_operation, _completed)
+        ).where(_thread, _run_operation, _completed, *_in_active_organization())
         if resolved_user_id is not None:
             stmt = stmt.where(RunRow.user_id == resolved_user_id)
 
@@ -865,7 +888,7 @@ class RunRepository(RunStore):
             # provides deterministic ordering within the position.
             change_seq = await self._next_change_seq(session)
             thread = (await session.execute(select(ThreadMetaRow).where(ThreadMetaRow.thread_id == thread_id).with_for_update())).scalar_one_or_none()
-            values["organization_id"] = organization_from_owned_parent(thread, resolved_user_id, parent_name="thread")
+            values["organization_id"] = _organization_for_run(thread, resolved_user_id)
             claimed: list[dict[str, Any]] = []
 
             if multitask_strategy in ("interrupt", "rollback"):
