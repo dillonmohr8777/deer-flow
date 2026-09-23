@@ -240,27 +240,15 @@ async def test_legacy_task_writer_leaves_thread_incarnation_null(tmp_path):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("thread_owner", "expected_incarnation"),
-    [
-        ("user-1", "matching-owner"),
-        (None, "shared-thread"),
-    ],
-)
-async def test_create_atomically_copies_accessible_thread_incarnation(
-    tmp_path,
-    thread_owner,
-    expected_incarnation,
-):
+async def test_create_atomically_copies_accessible_thread_incarnation(tmp_path):
     repo = await _make_repo(tmp_path)
     now = datetime.now(UTC)
-    incarnation = expected_incarnation or "different-owner"
     async with repo._sf() as session:
         session.add(
             ThreadMetaRow(
                 thread_id="thread-1",
-                incarnation=incarnation,
-                user_id=thread_owner,
+                incarnation="matching-owner",
+                user_id="user-1",
                 metadata_json={},
                 created_at=now,
                 updated_at=now,
@@ -274,7 +262,39 @@ async def test_create_atomically_copies_accessible_thread_incarnation(
     async with repo._sf() as session:
         row = await session.get(McpTaskRow, "new-writer")
     assert row is not None
-    assert row.thread_incarnation == expected_incarnation
+    assert row.thread_incarnation == "matching-owner"
+
+
+@pytest.mark.asyncio
+async def test_create_rejects_thread_with_no_owner(tmp_path):
+    """M3: an existing-but-ownerless thread (shared/legacy data) has no
+    verifiable organization, so a durable MCP task must not attach to it.
+
+    This used to be accepted (the ownerless thread's incarnation was copied
+    onto the task, treating it as accessible to any caller); the M3 org
+    isolation gate closes that hole. A thread with no row at all keeps the
+    separate, pre-existing untracked-legacy-thread tolerance.
+    """
+    repo = await _make_repo(tmp_path)
+    now = datetime.now(UTC)
+    async with repo._sf() as session:
+        session.add(
+            ThreadMetaRow(
+                thread_id="thread-1",
+                incarnation="shared-thread",
+                user_id=None,
+                metadata_json={},
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        await session.commit()
+
+    with pytest.raises(ValueError, match="no owner"):
+        await _create_working_task(repo, task_id="new-writer", now=now)
+
+    async with repo._sf() as session:
+        assert await session.get(McpTaskRow, "new-writer") is None
 
 
 @pytest.mark.asyncio
