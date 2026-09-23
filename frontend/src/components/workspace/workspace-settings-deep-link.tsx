@@ -17,6 +17,7 @@ const SETTINGS_SECTIONS = new Set<SettingsSection>([
   "memory",
   "subagents",
   "notification",
+  "experience",
   "about",
 ]);
 
