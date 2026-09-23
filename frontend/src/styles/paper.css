@@ -460,3 +460,12 @@
      (.signature[data-animated="true"]), already gated the same way. Left
      alone, per instruction — nothing to add here. */
 }
+
+/* Inactive tabs are foreground at 60% opacity upstream, about 4.2:1 on cream.
+   Paper uses the muted ink token instead (7.59:1); hover returns to full ink. */
+[data-treatment="paper"] [data-slot="tabs-trigger"]:not([data-state="active"]) {
+  color: var(--paper-ink-muted);
+}
+[data-treatment="paper"] [data-slot="tabs-trigger"]:not([data-state="active"]):hover {
+  color: var(--paper-ink);
+}
