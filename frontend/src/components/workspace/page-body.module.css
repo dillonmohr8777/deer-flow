@@ -2,52 +2,12 @@
  * Page bodies: Capability Center, Agents, Scheduled tasks, Projects, Trash.
  *
  * Structure here works in both treatments. Everything that belongs only to
- * the paper treatment is scoped under [data-treatment="paper"], which
- * WorkspaceAppearanceProvider sets on a display:contents wrapper around the
- * whole workspace. Portaled dialogs and menus sit outside that wrapper, so
- * none of this reaches them.
+ * the paper treatment is scoped under [data-treatment="paper"]. The shell's
+ * paper skin (paper.css) already maps the shadcn tokens, the canvas and
+ * dialogs; .page only adds what a page body needs on top of it.
  */
 
 /* ---------- Paper: page frame ---------- */
-
-/*
- * Map the shadcn tokens these pages use onto the paper palette, for this
- * subtree only. Literal paper tokens (measured in paper.css), no new hues.
- * --muted is reset on purpose: paper.css repurposes --muted as the Command
- * Center's muted TEXT colour, which otherwise turns every bg-muted chip on
- * these pages into a dark slate block (axe color-contrast x8 to x26).
- */
-:global([data-treatment="paper"]) .page {
-  --background: var(--paper-cream-hi);
-  --foreground: var(--paper-ink);
-  --card: var(--paper-cream-hi);
-  --card-foreground: var(--paper-ink);
-  --primary: var(--paper-royal);
-  --primary-foreground: var(--paper-cream-hi);
-  --secondary: var(--paper-cream);
-  --secondary-foreground: var(--paper-ink);
-  --muted: var(--paper-cream);
-  --muted-foreground: var(--paper-ink-muted);
-  /* Hover and selection: a light kraft wash, so it shows on cream. Only ink
-     sits on it, and ink clears 9.56:1 even on full kraft. */
-  --accent: color-mix(in srgb, var(--paper-kraft) 35%, var(--paper-cream-hi));
-  --accent-foreground: var(--paper-ink);
-  --destructive: var(--paper-danger);
-  --border: var(--paper-line);
-  --input: var(--paper-line);
-  --ring: var(--paper-focus);
-  background: var(--paper-cream);
-  color: var(--paper-ink);
-  font-family: var(--m-font-text);
-}
-
-/* globals.css .momentum-page re-declares --primary as the current
-   treatment's cobalt (specificity 0,2,1); in paper the royal token wins. */
-:global([data-treatment="paper"]) .page:global(.momentum-page),
-:global([data-treatment="paper"]) .page :global(.momentum-page) {
-  --primary: var(--paper-royal);
-  --primary-foreground: var(--paper-cream-hi);
-}
 
 /* Fraunces for page and section headings; row titles stay Nunito Sans. */
 :global([data-treatment="paper"]) .page :is(h1, h2) {
@@ -175,6 +135,9 @@
 }
 
 .ledgerRow {
+  /* Contains the sr-only action labels: absolutely positioned text inside a
+     scroll area otherwise overflows the page, not the scroller. */
+  position: relative;
   padding: 0.625rem 0;
 }
 
@@ -238,9 +201,11 @@
 }
 
 @media (min-width: 48rem) {
+  /* Fixed action width: head and rows are separate grids, and an auto
+     column would size to nothing in the head and shift its labels. */
   .ledgerHead,
   .ledgerRow {
-    grid-template-columns: 1.75rem minmax(0, 1fr) 9rem 7rem 5rem auto;
+    grid-template-columns: 1.75rem minmax(0, 1fr) 9rem 7rem 5rem 11.5rem;
     grid-template-areas: "mark name source date size actions";
     column-gap: 1rem;
   }

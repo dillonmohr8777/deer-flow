@@ -7,7 +7,9 @@ import {
   within,
 } from "@testing-library/react";
 
+import { SidebarProvider } from "@/components/ui/sidebar";
 import { AgentCard } from "@/components/workspace/agents/agent-card";
+import { AgentGallery } from "@/components/workspace/agents/agent-gallery";
 import type { Agent } from "@/core/agents";
 import { enUS } from "@/core/i18n/locales/en-US";
 
@@ -15,6 +17,12 @@ rs.mock("next/navigation", () => ({
   useRouter: () => ({ push: rs.fn(), replace: rs.fn(), refresh: rs.fn() }),
 }));
 rs.mock("@/core/agents", () => ({
+  useAgents: () => ({
+    agents: [],
+    isLoading: false,
+    error: null,
+    refetch: rs.fn(),
+  }),
   useDeleteAgent: () => ({ mutateAsync: rs.fn(), isPending: false }),
   useUpdateAgent: () => ({ mutateAsync: rs.fn(), isPending: false }),
 }));
@@ -74,4 +82,17 @@ it("keeps delete one step back, inside the agent's settings", () => {
   const dialog = screen.getByRole("dialog", { name: "Agent settings" });
   fireEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
   expect(screen.getByText(enUS.agents.deleteConfirm)).toBeDefined();
+});
+
+it("gives phones the sidebar menu trigger the other workspace pages carry", () => {
+  render(
+    <SidebarProvider>
+      <AgentGallery />
+    </SidebarProvider>,
+  );
+  const trigger = screen.getByRole("button", { name: "Toggle Sidebar" });
+  expect(trigger.className).toContain("md:hidden");
+  expect(
+    screen.getByRole("heading", { level: 1, name: "Agents" }),
+  ).toBeDefined();
 });

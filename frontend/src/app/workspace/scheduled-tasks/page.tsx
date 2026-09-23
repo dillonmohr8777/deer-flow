@@ -609,11 +609,12 @@ export default function ScheduledTasksPage() {
                 </ul>
               )}
             </div>
-            <section
-              className={cn("rounded-lg border p-4 sm:p-5", pageStyles.sheet)}
-              data-testid="scheduled-task-detail"
-            >
-              {selectedTask ? (
+            {/* No task, no detail sheet: the list already says why. */}
+            {selectedTask ? (
+              <section
+                className={cn("rounded-lg border p-4 sm:p-5", pageStyles.sheet)}
+                data-testid="scheduled-task-detail"
+              >
                 <div className="flex flex-col gap-4">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -916,12 +917,8 @@ export default function ScheduledTasksPage() {
                     ) : null}
                   </div>
                 </div>
-              ) : (
-                <p className="text-muted-foreground text-sm">
-                  {st.detail.noSelection}
-                </p>
-              )}
-            </section>
+              </section>
+            ) : null}
           </div>
         </div>
       </WorkspaceBody>

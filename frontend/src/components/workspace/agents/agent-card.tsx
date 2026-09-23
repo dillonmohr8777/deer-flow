@@ -61,7 +61,7 @@ export function AgentCard({ agent }: AgentCardProps) {
   }
 
   return (
-    <li className="flex flex-wrap items-start gap-x-4 gap-y-3 py-5">
+    <li className="relative flex flex-wrap items-start gap-x-4 gap-y-3 py-5">
       {/* Same identity as the Command Center roster; the name is the row
           heading, so the mark is decorative here. */}
       <span aria-hidden="true" className="shrink-0">
@@ -99,7 +99,7 @@ export function AgentCard({ agent }: AgentCardProps) {
           </ul>
         )}
       </div>
-      <div className="ml-auto flex shrink-0 items-center gap-1 pl-16 sm:pl-0">
+      <div className="flex shrink-0 items-center gap-1 pl-16 sm:ml-auto sm:pl-0">
         <Button size="sm" variant="outline" onClick={handleChat}>
           <MessageSquareIcon className="size-3.5" />
           {t.agents.chat}

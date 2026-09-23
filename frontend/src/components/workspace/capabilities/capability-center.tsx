@@ -57,12 +57,7 @@ export function CapabilityCenter() {
         ? t.capabilities.searchSkills
         : t.capabilities.searchPlugins;
   return (
-    <div
-      className={cn(
-        "bg-background flex h-full min-h-0 flex-col",
-        pageStyles.page,
-      )}
-    >
+    <div className={cn("flex h-full min-h-0 flex-col", pageStyles.page)}>
       <div className="text-muted-foreground flex h-14 shrink-0 items-center gap-3 border-b px-4 text-xs md:px-8">
         <SidebarTrigger className="md:hidden" />
         <span>{t.breadcrumb.workspace}</span>
@@ -95,17 +90,19 @@ export function CapabilityCenter() {
           {/* Every trigger owns a real panel: aria-controls on the selected
               tab must resolve, or axe flags aria-valid-attr-value. */}
           <Tabs value={tab} onValueChange={changeTab} className="gap-0">
+            {/* On a phone the icons step aside so all three tabs fit; a
+                clipped last tab reads as if it did not exist. */}
             <div className="mb-7 border-b">
-              <TabsList variant="line" className="h-12 gap-7">
+              <TabsList variant="line" className="h-12 gap-5 md:gap-7">
                 <TabsTrigger
                   value="plugins"
                   className="gap-2 px-1 pb-4 text-sm"
                 >
-                  <BlocksIcon className="size-4" />
+                  <BlocksIcon className="hidden size-4 sm:block" />
                   {t.capabilities.toolsAndIntegrations}
                 </TabsTrigger>
                 <TabsTrigger value="skills" className="gap-2 px-1 pb-4 text-sm">
-                  <SparklesIcon className="size-4" />
+                  <SparklesIcon className="hidden size-4 sm:block" />
                   {t.capabilities.skills}
                 </TabsTrigger>
                 <TabsTrigger

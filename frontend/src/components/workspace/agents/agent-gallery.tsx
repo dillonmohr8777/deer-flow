@@ -4,6 +4,7 @@ import { PlusIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 import {
   EmptyState,
   ErrorState,
@@ -29,10 +30,14 @@ export function AgentGallery() {
     <div
       className={cn("momentum-page flex size-full flex-col", pageStyles.page)}
     >
-      {/* Page header */}
+      {/* Page header. Agents has no WorkspaceHeader, so it carries the same
+          phone-only sidebar trigger the other workspace pages do. */}
       <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3 border-b px-4 py-5 sm:px-8">
         <div className="min-w-0">
-          <h1 className="text-2xl">{t.agents.title}</h1>
+          <div className="flex items-center gap-2">
+            <SidebarTrigger className="-ml-2 md:hidden" />
+            <h1 className="text-2xl">{t.agents.title}</h1>
+          </div>
           <p className={cn(pageStyles.lede, "mt-1")}>{t.agents.description}</p>
         </div>
         <Button onClick={handleNewAgent}>

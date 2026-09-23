@@ -98,7 +98,7 @@ export default function ProjectPage() {
                   onValueChange={setTab}
                   className="flex flex-col gap-7"
                 >
-                  <div className="overflow-x-auto border-b">
+                  <div className="border-b">
                     <TabsList
                       variant="line"
                       aria-label={project.name}
