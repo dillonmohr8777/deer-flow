@@ -88,7 +88,10 @@ describe("MomoAvatar", () => {
     const live = [
       ["lead", "lead"],
       ["dillon-builder", "builder"],
+      ["dillon-client-operations", "client-success"],
       ["dillon-critic", "qa"],
+      ["dillon-growth", "growth"],
+      ["dillon-revenue", "revenue"],
       ["dillon-reliability", "reliability"],
       ["dillon-intelligence", "research"],
       ["momentum-independent-verifier", "verifier"],
@@ -111,12 +114,8 @@ describe("MomoAvatar", () => {
     ).toEqual(live.map(([, slug]) => `/momentum/momos/${slug}.svg`));
   });
 
-  it("keeps the glyph for live specialists that have no artwork yet", () => {
-    for (const name of [
-      "dillon-client-operations",
-      "dillon-revenue",
-      "dillon-growth",
-    ]) {
+  it("still gives an unmapped dillon- or momentum- name the glyph, not a guess", () => {
+    for (const name of ["dillon-someone-new", "momentum-someone-new"]) {
       const { container, unmount } = render(
         <MomoAvatar agent={{ name, display_name: name }} size={40} />,
       );

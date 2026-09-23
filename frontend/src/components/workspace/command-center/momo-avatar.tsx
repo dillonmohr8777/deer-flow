@@ -22,9 +22,8 @@ export type MomoSizeBucket = "sm" | "md" | "lg";
  * Two rosters feed this: the fleet definitions in fleet/agents/*\/config.yaml
  * and the managed subagents the Command Center lists from /api/subagents
  * (dillon-* and momentum-*). "lead" is not a roster name: the Command Center
- * seeds the lead card with it, whichever agent is leading. dillon-client-
- * operations, dillon-revenue and dillon-growth have no artwork yet and keep
- * the glyph on purpose.
+ * seeds the lead card with it, whichever agent is leading. Every known name
+ * has canon art; only names nobody has mapped yet fall back to the glyph.
  */
 const SLUG_MAP: Record<string, string> = {
   "analytics-engineer": "analytics",
@@ -37,7 +36,10 @@ const SLUG_MAP: Record<string, string> = {
   "senior-software-engineer": "engineer",
   lead: "lead",
   "dillon-builder": "builder",
+  "dillon-client-operations": "client-success",
   "dillon-critic": "qa",
+  "dillon-growth": "growth",
+  "dillon-revenue": "revenue",
   "dillon-reliability": "reliability",
   "dillon-intelligence": "research",
   "momentum-independent-verifier": "verifier",
@@ -54,12 +56,15 @@ const SLUG_MAP: Record<string, string> = {
 const AVAILABLE_MOMO_SLUGS: ReadonlySet<string> = new Set([
   "analytics",
   "builder",
+  "client-success",
   "engineer",
+  "growth",
   "lead",
   "migration",
   "qa",
   "reliability",
   "research",
+  "revenue",
   "verifier",
 ]);
 
