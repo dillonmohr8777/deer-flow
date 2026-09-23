@@ -6,20 +6,17 @@ import {
   ArrowLeftRight,
   ArrowRight,
   ArrowUpRight,
-  Bot,
   Check,
   ChevronLeft,
   ChevronRight,
   Circle,
   CircleStop,
-  Clock3,
   Layers3,
   Network,
   Paintbrush,
   Plus,
   RefreshCw,
   Search,
-  ShieldCheck,
   X,
 } from "lucide-react";
 import Link from "next/link";
@@ -38,19 +35,21 @@ import {
   useConsoleUsageLedger,
   type ConsoleRunItem,
 } from "@/core/console";
+import { useModels } from "@/core/models/hooks";
 import { useSubagents } from "@/core/subagents";
 import { pathOfThread } from "@/core/threads/utils";
 
-import { AgentTopology } from "./agent-topology";
+import { AgentTopology, LEAD_MOMO_SRC } from "./agent-topology";
 import { useWorkspaceAppearance } from "./appearance-provider";
-import { BrandSignature } from "./brand-signature";
 import {
   ArtifactLibraryView,
   ClientSpacesView,
   WorkflowsView,
 } from "./business-views";
+import { modelDisplayName } from "./model-label";
 import { MomentumGlyph } from "./momentum-glyph";
-import { BrandMotionToggle, WorkspaceAppearance } from "./workspace-appearance";
+import { MomoAvatar } from "./momo-avatar";
+import { WorkspaceAppearance } from "./workspace-appearance";
 
 import styles from "./command-center.module.css";
 
@@ -66,6 +65,21 @@ const tabs = [
   "Artifact Library",
 ] as const;
 type View = (typeof tabs)[number];
+
+/*
+ * Every tab's endpoint answers (checked on the rehearsal stack 2026-09-22),
+ * but three of them promise more than the backend has: there is no client
+ * tenancy, no revenue or billing feed, and no workspace-wide artifact index.
+ * Those tabs say so instead of implying it.
+ */
+const PREVIEW_NOTES: Partial<Record<View, string>> = {
+  "Client Spaces":
+    "Client spaces are not connected yet. Until they are, this lists your active projects, and a project is not a verified client.",
+  "Business Intelligence":
+    "Token usage and provider attempts are recorded here. Revenue, margins and billing are not connected yet.",
+  "Artifact Library":
+    "There is no workspace-wide artifact index yet. Choose a project to browse the files its conversations produced.",
+};
 
 function duration(seconds: number | null) {
   if (seconds === null) return "Not recorded";
@@ -135,6 +149,9 @@ export function CommandCenter() {
     error: agentsError,
   } = useSubagents();
   const { agents } = useAgents();
+  const { models } = useModels();
+  const modelName = (slug: string | null | undefined) =>
+    modelDisplayName(slug, models);
   const lead =
     agents.find((agent) => agent.name === "dillon-brain") ?? agents[0];
   const startPath = lead
@@ -148,10 +165,38 @@ export function CommandCenter() {
   );
   const visibleRuns =
     runs.data?.runs.filter((run) =>
-      `${run.thread_title ?? ""} ${run.model_name ?? ""} ${run.run_id}`
+      `${run.thread_title ?? ""} ${modelName(run.model_name)} ${run.run_id}`
         .toLowerCase()
         .includes(search.toLowerCase()),
     ) ?? [];
+  // Two provider IDs can share one display name (the Contributor tier and
+  // the plain model), so usage rows are merged by the name people see.
+  const usageRows = Object.values(
+    Object.entries(usage.data?.by_model ?? {}).reduce<
+      Record<
+        string,
+        { model: string; tokens: number; runs: number; cost: number | null }
+      >
+    >((rows, [id, item]) => {
+      const model = modelName(id) || "Model not recorded";
+      const row = (rows[model] ??= { model, tokens: 0, runs: 0, cost: null });
+      row.tokens += item.tokens;
+      row.runs += item.runs;
+      if (item.cost != null) row.cost = (row.cost ?? 0) + item.cost;
+      return rows;
+    }, {}),
+  );
+  const failedRuns = stats.data?.failed_runs;
+  // Colour is state only: danger for a real failure, ok once runs exist and
+  // none failed, plain ink otherwise.
+  const errorState =
+    failedRuns == null
+      ? undefined
+      : failedRuns > 0
+        ? "danger"
+        : stats.data?.total_runs
+          ? "ok"
+          : undefined;
   const displayedAgents = subagents.filter(
     (agent) => agent.source === "managed",
   );
@@ -283,7 +328,7 @@ export function CommandCenter() {
                 <strong>{run.thread_title ?? "Untitled assignment"}</strong>
                 <small>
                   <span className={styles.metaModel}>
-                    {run.model_name ?? "Model not recorded"}
+                    {modelName(run.model_name) || "Model not recorded"}
                   </span>{" "}
                   <span aria-hidden="true">·</span>{" "}
                   <span className={styles.metaTokens}>
@@ -349,7 +394,9 @@ export function CommandCenter() {
         <div className={styles.agentDetail}>
           <div className={styles.sectionHead}>
             <div className={styles.selectedIdentity}>
-              <MomentumGlyph seed={`agent:${selectedAgent.name}`} size={58} />
+              <span aria-hidden="true">
+                <MomoAvatar agent={selectedAgent} size={40} />
+              </span>
               <div>
                 <h3>{selectedAgent.display_name ?? selectedAgent.name}</h3>
                 <span>Role &amp; working brief</span>
@@ -378,7 +425,7 @@ export function CommandCenter() {
               <dd>
                 {selectedAgent.model === "inherit"
                   ? "Inherits lead model"
-                  : selectedAgent.model}
+                  : modelName(selectedAgent.model) || "Not recorded"}
               </dd>
             </div>
             <div>
@@ -403,7 +450,10 @@ export function CommandCenter() {
   );
 
   return (
-    <main
+    // A div, not <main>: the workspace shell's SidebarInset is already the
+    // page's main landmark, and a second one nested inside it confuses
+    // landmark navigation.
+    <div
       className={styles.root}
       data-live={stats.data?.active_runs ? "true" : "false"}
       data-treatment={preferences.treatment}
@@ -418,32 +468,39 @@ export function CommandCenter() {
       </header>
       <div className={styles.content}>
         <div className={styles.heading}>
-          <div>
+          <div className={styles.headingText}>
             <h1>{view}</h1>
             <p className={styles.headingCopy}>
-              <span>Give your ambition a team.</span>{" "}
-              <span>Keep the work in view.</span>
+              <span>Give your ambition a team.</span> Keep the work in view.
             </p>
-            <div className={styles.headingActions}>
-              <Link className={styles.primary} href={startPath}>
-                <Plus size={17} />
-                Start a mission
-              </Link>
-              <button
-                ref={appearanceTrigger}
-                className={styles.appearanceButton}
-                type="button"
-                aria-expanded={appearanceOpen}
-                aria-controls="workspace-appearance"
-                onClick={() => setAppearanceOpen(!appearanceOpen)}
-              >
-                <Paintbrush size={16} /> Appearance
-              </button>
-            </div>
           </div>
-          <div className={styles.brandStage}>
-            <BrandSignature size="hero" />
-            <BrandMotionToggle />
+          {/* The page's one loud moment: the lead Momo on a kraft scrap, as on
+              the landing. The sidebar already carries the wordmark. */}
+          <div className={styles.heroArt} aria-hidden="true">
+            <span className={`${styles.heroScrap} paper-torn`} />
+            <img
+              className={styles.heroMomo}
+              src={LEAD_MOMO_SRC}
+              alt=""
+              width={184}
+              height={184}
+            />
+          </div>
+          <div className={styles.headingActions}>
+            <Link className={styles.primary} href={startPath}>
+              <Plus size={17} />
+              Start a mission
+            </Link>
+            <button
+              ref={appearanceTrigger}
+              className={styles.appearanceButton}
+              type="button"
+              aria-expanded={appearanceOpen}
+              aria-controls="workspace-appearance"
+              onClick={() => setAppearanceOpen(!appearanceOpen)}
+            >
+              <Paintbrush size={16} /> Appearance
+            </button>
           </div>
         </div>
         {appearanceOpen && (
@@ -465,6 +522,12 @@ export function CommandCenter() {
               }}
             >
               {tab}
+              {PREVIEW_NOTES[tab] && (
+                <>
+                  {" "}
+                  <span className={styles.previewTag}>Preview</span>
+                </>
+              )}
             </button>
           ))}
         </nav>
@@ -478,28 +541,30 @@ export function CommandCenter() {
             <button onClick={() => void stats.refetch()}>Retry</button>
           </div>
         ) : (
+          // A labelled, focusable region: below 640px this row scrolls
+          // sideways, and a scroller has to be reachable from the keyboard.
           <div
             className={styles.metrics}
+            role="region"
             aria-label="Recorded workspace totals"
+            tabIndex={0}
           >
             {[
               { label: "Active runs", value: stats.data?.active_runs },
               { label: "Recorded runs", value: stats.data?.total_runs },
-              { label: "Errors & timeouts", value: stats.data?.failed_runs },
+              {
+                label: "Errors & timeouts",
+                value: failedRuns,
+                state: errorState,
+              },
               { label: "Recorded tokens", value: stats.data?.total_tokens },
             ].map((metric) => (
-              <div
-                key={metric.label}
-                data-exception={
-                  metric.label === "Errors & timeouts" &&
-                  Number(metric.value) > 0
-                }
-              >
+              <div key={metric.label} data-state={metric.state}>
                 <span>{metric.label}</span>
                 <strong>
                   {stats.isLoading ? (
                     <span>Loading</span>
-                  ) : metric.value === undefined ? (
+                  ) : metric.value == null ? (
                     <span>Unavailable</span>
                   ) : (
                     number(metric.value)
@@ -509,41 +574,31 @@ export function CommandCenter() {
             ))}
           </div>
         )}
+        {PREVIEW_NOTES[view] && (
+          <p className={styles.previewNote}>
+            <span className={styles.previewTag}>Preview</span>{" "}
+            {PREVIEW_NOTES[view]}
+          </p>
+        )}
         {view === "Mission Control" ? (
           <>
             <div className={styles.overview}>
               {team}
               {jobList}
             </div>
-            <section
-              className={styles.destinations}
-              aria-label="Workspace tools"
-            >
+            <nav className={styles.destinations} aria-label="Workspace tools">
+              <span>Also in your workspace</span>
               <Link href="/workspace/agents">
-                <Bot size={20} />
-                <div>
-                  <strong>Agent workspace</strong>
-                  <span>Configure your lead agents</span>
-                </div>
-                <ArrowUpRight size={17} />
+                Agents <ArrowUpRight size={15} aria-hidden="true" />
               </Link>
               <Link href="/workspace/scheduled-tasks">
-                <Clock3 size={20} />
-                <div>
-                  <strong>Scheduled work</strong>
-                  <span>Inspect schedules and run history</span>
-                </div>
-                <ArrowUpRight size={17} />
+                Scheduled tasks <ArrowUpRight size={15} aria-hidden="true" />
               </Link>
               <Link href="/workspace/capabilities">
-                <ShieldCheck size={20} />
-                <div>
-                  <strong>Connected capabilities</strong>
-                  <span>Manage skills and integrations</span>
-                </div>
-                <ArrowUpRight size={17} />
+                Capability Center{" "}
+                <ArrowUpRight size={15} aria-hidden="true" />
               </Link>
-            </section>
+            </nav>
           </>
         ) : null}
         {view === "Agent Studio" ? (
@@ -617,28 +672,25 @@ export function CommandCenter() {
                       </tr>
                     </thead>
                     <tbody>
-                      {Object.entries(usage.data?.by_model ?? {}).map(
-                        ([model, item]) => (
-                          <tr key={model}>
-                            <th scope="row">{model}</th>
-                            <td>{number(item.tokens)}</td>
-                            <td>{number(item.runs)}</td>
-                            <td>{money(item.cost, usage.data?.currency)}</td>
-                          </tr>
-                        ),
-                      )}
+                      {usageRows.map((row) => (
+                        <tr key={row.model}>
+                          <th scope="row">{row.model}</th>
+                          <td>{number(row.tokens)}</td>
+                          <td>{number(row.runs)}</td>
+                          <td>{money(row.cost, usage.data?.currency)}</td>
+                        </tr>
+                      ))}
                     </tbody>
                   </table>
                 </div>
-                {Object.keys(usage.data?.by_model ?? {}).length === 0 && (
+                {usageRows.length === 0 && (
                   <p>No model usage was recorded in this period.</p>
                 )}
                 <p className={styles.diagramNote}>
                   Cost estimates cover priced models only. Unpriced usage is not
                   free; these figures are not your provider balance or invoice.
-                  Client revenue, margins and billing are not connected.
                 </p>
-                <div className={styles.sectionHead}>
+                <div className={`${styles.sectionHead} ${styles.ledgerHead}`}>
                   <div>
                     <h2>Provider attempt ledger</h2>
                     <p>
@@ -726,9 +778,10 @@ export function CommandCenter() {
                             <td>
                               {attempt.provider ?? "Provider not recorded"}
                               <span className={styles.meta}>
-                                {attempt.resolved_model ??
-                                  attempt.requested_model ??
-                                  "Model not recorded"}
+                                {modelName(
+                                  attempt.resolved_model ??
+                                    attempt.requested_model,
+                                ) || "Model not recorded"}
                               </span>
                             </td>
                             <td>
@@ -818,7 +871,7 @@ export function CommandCenter() {
               <dl>
                 <div>
                   <dt>Model</dt>
-                  <dd>{selectedRun.model_name ?? "Not recorded"}</dd>
+                  <dd>{modelName(selectedRun.model_name) || "Not recorded"}</dd>
                 </div>
                 <div>
                   <dt>Duration</dt>
@@ -906,6 +959,6 @@ export function CommandCenter() {
           </Dialog.Content>
         </Dialog.Root>
       )}
-    </main>
+    </div>
   );
 }

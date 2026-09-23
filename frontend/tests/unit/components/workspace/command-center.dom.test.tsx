@@ -17,7 +17,23 @@ const baseStats = {
 const mocks = rs.hoisted(() => ({
   stats: undefined as unknown,
   statsLoading: false,
+  runs: [] as unknown[],
 }));
+const contributorRun = {
+  run_id: "run-7",
+  thread_id: "thread-7",
+  thread_title: "Audit the landing page",
+  assistant_id: "lead",
+  status: "success",
+  model_name: "openrouter-muse-spark-contributor",
+  created_at: "2026-09-21T01:02:03.000Z",
+  updated_at: "2026-09-21T01:03:03.000Z",
+  duration_seconds: 42,
+  total_tokens: 1234,
+  message_count: 4,
+  cost: null,
+  error: null,
+};
 
 rs.mock("next/image", () => ({
   default: ({
@@ -56,6 +72,24 @@ rs.mock("@/components/workspace/thread-subagent-batches", () => ({
 
 rs.mock("@/components/workspace/command-center/agent-topology", () => ({
   AgentTopology: () => <div data-testid="agent-topology" />,
+  LEAD_MOMO_SRC: "/momentum/momos/lead.svg",
+}));
+
+rs.mock("@/components/workspace/command-center/business-views", () => ({
+  ArtifactLibraryView: () => <div data-testid="artifact-library" />,
+  ClientSpacesView: () => <div data-testid="client-spaces" />,
+  WorkflowsView: () => <div data-testid="workflows" />,
+}));
+
+rs.mock("@/core/models/hooks", () => ({
+  useModels: () => ({
+    models: [
+      {
+        name: "openrouter-muse-spark-contributor",
+        display_name: "Muse Spark 1.3 Contributor (OpenRouter)",
+      },
+    ],
+  }),
 }));
 
 rs.mock("@/core/auth/AuthProvider", () => ({
@@ -87,7 +121,7 @@ rs.mock("@/core/console", () => ({
     reset: rs.fn(),
   }),
   useConsoleRuns: () => ({
-    data: { runs: [], has_more: false },
+    data: { runs: mocks.runs, has_more: false },
     error: null,
     isError: false,
     isFetching: false,
@@ -103,7 +137,23 @@ rs.mock("@/core/console", () => ({
   }),
   useConsoleUsage: () => ({
     data: {
-      by_model: {},
+      // The ledger records these IDs doubled; both are one model to a person.
+      by_model: {
+        "meta/muse-spark-1.3meta/muse-spark-1.3": {
+          tokens: 1000,
+          runs: 1,
+          cost: null,
+          input_tokens: 900,
+          cache_read_tokens: 0,
+        },
+        "meta/muse-spark-1.3-contributormeta/muse-spark-1.3-contributor": {
+          tokens: 2000,
+          runs: 2,
+          cost: 0.5,
+          input_tokens: 1800,
+          cache_read_tokens: 0,
+        },
+      },
       currency: "USD",
       days: [],
       total_cost: 0.004,
@@ -155,6 +205,7 @@ rs.mock("@/core/console", () => ({
 beforeEach(() => {
   mocks.stats = { ...baseStats };
   mocks.statsLoading = false;
+  mocks.runs = [];
 });
 
 afterEach(() => {
@@ -167,13 +218,77 @@ function metric(label: string) {
 }
 
 describe("CommandCenter", () => {
-  it("marks errors as an exception only when failures were recorded", () => {
-    const { unmount } = render(<CommandCenter />);
-    expect(metric("Errors & timeouts").dataset.exception).toBe("false");
-    unmount();
+  it("colours the error count for state only: danger, ok, or plain ink", () => {
+    mocks.stats = { ...baseStats, total_runs: 0 };
+    const first = render(<CommandCenter />);
+    expect(metric("Errors & timeouts").dataset.state).toBeUndefined();
+    first.unmount();
+    mocks.stats = { ...baseStats };
+    const second = render(<CommandCenter />);
+    expect(metric("Errors & timeouts").dataset.state).toBe("ok");
+    second.unmount();
     mocks.stats = { ...baseStats, failed_runs: 2 };
     render(<CommandCenter />);
-    expect(metric("Errors & timeouts").dataset.exception).toBe("true");
+    expect(metric("Errors & timeouts").dataset.state).toBe("danger");
+    // No other numeral carries a state colour.
+    expect(metric("Recorded tokens").dataset.state).toBeUndefined();
+  });
+
+  it("makes the totals rail a labelled region the keyboard can reach", () => {
+    render(<CommandCenter />);
+    const rail = screen.getByRole("region", {
+      name: "Recorded workspace totals",
+    });
+    expect(rail.tabIndex).toBe(0);
+  });
+
+  it("keeps the brand card and motion switch out of the hero; motion lives in Appearance", () => {
+    render(<CommandCenter />);
+    expect(screen.queryByRole("switch", { name: "Brand motion" })).toBeNull();
+    expect(screen.queryByAltText("Momentum")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Appearance" }));
+    expect(screen.getByRole("switch", { name: "Brand motion" })).toBeDefined();
+  });
+
+  it("names models by display name, never the slug or the Contributor tier", () => {
+    mocks.runs = [contributorRun];
+    render(<CommandCenter />);
+    expect(screen.getByText("Muse Spark 1.3")).toBeDefined();
+    fireEvent.click(
+      screen.getByRole("button", { name: /Audit the landing page/ }),
+    );
+    expect(screen.getByRole("dialog")).toBeDefined();
+    expect(screen.getAllByText("Muse Spark 1.3").length).toBe(2);
+    expect(document.body.textContent).not.toMatch(/contributor/i);
+    expect(document.body.textContent).not.toContain("openrouter-");
+  });
+
+  it("labels the tabs the backend only partly supports as Preview", () => {
+    render(<CommandCenter />);
+    for (const name of ["Mission Control", "Agent Studio", "Jobs", "Workflows"])
+      expect(screen.getByRole("button", { name })).toBeDefined();
+    for (const name of [
+      "Client Spaces",
+      "Business Intelligence",
+      "Artifact Library",
+    ])
+      expect(screen.getByRole("button", { name: `${name} Preview` })).toBeDefined();
+    expect(screen.queryByText(/not connected yet/)).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Client Spaces Preview" }));
+    expect(screen.getByText(/Client spaces are not connected yet/)).toBeDefined();
+    expect(screen.getByTestId("client-spaces")).toBeDefined();
+  });
+
+  it("merges usage rows that share a display name", () => {
+    render(<CommandCenter />);
+    fireEvent.click(
+      screen.getByRole("button", { name: /^Business Intelligence/ }),
+    );
+    const rows = screen.getAllByRole("row", { name: /Muse Spark 1\.3/ });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.textContent).toContain("3,000");
+    expect(rows[0]!.textContent).toContain("$0.50");
   });
 
   it("says loading or unavailable instead of printing a number or a dash", () => {
@@ -195,7 +310,7 @@ describe("CommandCenter", () => {
   it("surfaces provider attempt receipts without presenting estimates as invoices", () => {
     render(<CommandCenter />);
     fireEvent.click(
-      screen.getByRole("button", { name: "Business Intelligence" }),
+      screen.getByRole("button", { name: /^Business Intelligence/ }),
     );
 
     expect(screen.getByText("Provider attempt ledger")).toBeDefined();
