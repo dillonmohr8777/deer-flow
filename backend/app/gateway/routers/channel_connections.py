@@ -22,6 +22,8 @@ from app.gateway.deps import require_admin_user
 from deerflow.config.channel_connections_config import ChannelConnectionsConfig
 from deerflow.persistence.channel_connections import ChannelConnectionRepository
 from deerflow.persistence.engine import get_session_factory
+from deerflow.persistence.organizations.resolution import OrganizationMismatchError
+from deerflow.runtime.user_context import resolve_organization_id
 
 router = APIRouter(prefix="/api/channels", tags=["channel-connections"])
 logger = logging.getLogger(__name__)
@@ -152,6 +154,10 @@ _RUNTIME_REQUIREMENTS: dict[str, tuple[str, ...]] = {
 
 
 def _get_user_id(request: Request) -> str:
+    # Channels are personal during M3: the owner is the signed-in person, never a
+    # shared workspace's storage principal, and every connection and connect code
+    # lives in that person's private organization. Routes also pass the active
+    # organization, so a shared workspace or another organization sees nothing.
     user = getattr(request.state, "user", None)
     if user is None:
         raise HTTPException(status_code=401, detail="Authentication required")
@@ -349,14 +355,18 @@ async def _create_state(
     state = _new_binding_code()
     # Atomic delete-expired + count + insert so concurrent connect POSTs from one
     # owner cannot each see count < cap and all insert past the cap.
-    inserted = await repo.create_oauth_state_within_cap(
-        owner_user_id=owner_user_id,
-        provider=provider,
-        state=state,
-        expires_at=now + timedelta(seconds=_STATE_TTL_SECONDS),
-        max_pending=_MAX_PENDING_CONNECT_CODES_PER_PROVIDER,
-        now=now,
-    )
+    try:
+        inserted = await repo.create_oauth_state_within_cap(
+            owner_user_id=owner_user_id,
+            provider=provider,
+            state=state,
+            expires_at=now + timedelta(seconds=_STATE_TTL_SECONDS),
+            max_pending=_MAX_PENDING_CONNECT_CODES_PER_PROVIDER,
+            now=now,
+            organization_id=resolve_organization_id(),
+        )
+    except OrganizationMismatchError:
+        raise HTTPException(status_code=404, detail="Channel connections are managed from your personal workspace") from None
     if not inserted:
         raise HTTPException(
             status_code=429,
@@ -538,7 +548,7 @@ async def get_channel_providers(request: Request) -> ChannelProvidersResponse:
             if exc.status_code != 503:
                 raise
     owner_user_id = _get_user_id(request)
-    connections = await repo.list_connections(owner_user_id) if repo is not None else []
+    connections = await repo.list_connections(owner_user_id, organization_id=resolve_organization_id()) if repo is not None else []
     by_provider = _newest_connection_by_provider(connections)
 
     enabled_providers = [provider for provider in _PROVIDER_META if config.provider_status(provider)["enabled"]]
@@ -562,7 +572,7 @@ async def get_channel_connections(request: Request) -> ChannelConnectionsRespons
     if not config.enabled:
         return ChannelConnectionsResponse(connections=[])
     repo = _get_repository(request, config)
-    rows = await repo.list_connections(_get_user_id(request))
+    rows = await repo.list_connections(_get_user_id(request), organization_id=resolve_organization_id())
     return ChannelConnectionsResponse(connections=[ChannelConnectionResponse(**row) for row in rows])
 
 
@@ -576,6 +586,7 @@ async def disconnect_channel_connection(connection_id: str, request: Request) ->
     disconnected = await repo.disconnect_connection(
         connection_id=connection_id,
         owner_user_id=_get_user_id(request),
+        organization_id=resolve_organization_id(),
     )
     if not disconnected:
         raise HTTPException(status_code=404, detail="Channel connection not found")
