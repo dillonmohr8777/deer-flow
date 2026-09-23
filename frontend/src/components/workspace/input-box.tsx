@@ -2490,7 +2490,8 @@ export function InputBox({
         </div>
         <PromptInputFooter className="flex flex-wrap gap-2 sm:flex-nowrap">
           {/* Phones: the tools take a full row and the model and Send the
-              next, so the composer stays two rows tall. */}
+              next, at the right edge by the thumb, so the composer stays
+              two rows tall. */}
           <PromptInputTools className="min-w-0 flex-1 basis-full flex-wrap sm:basis-auto">
             <AddAttachmentsButton
               className="px-2!"
@@ -2835,7 +2836,7 @@ export function InputBox({
               </PromptInputActionMenu>
             )}
           </PromptInputTools>
-          <PromptInputTools className="min-w-0 justify-end">
+          <PromptInputTools className="ml-auto min-w-0 justify-end">
             {goalObjectiveCounter && (
               <span
                 aria-label={t.inputBox.goalLengthCounter
