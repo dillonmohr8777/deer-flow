@@ -1,9 +1,39 @@
-import { afterEach, describe, expect, it } from "@rstest/core";
+import { afterEach, beforeEach, describe, expect, it, rs } from "@rstest/core";
 import { cleanup, render, screen } from "@testing-library/react";
 
 import { MomentumGlyph } from "@/components/workspace/command-center/momentum-glyph";
 import { MomoAvatar } from "@/components/workspace/command-center/momo-avatar";
 
+// Dillon Brain's pulse reads appearance state; every other slug ignores it.
+const appearance = rs.hoisted(() => ({
+  value: {
+    preferences: {
+      treatment: "paper" as const,
+      motion: true,
+      logo: null,
+      label: "",
+    },
+    reducedMotion: false,
+    visible: true,
+  },
+}));
+
+rs.mock("@/components/workspace/command-center/appearance-provider", () => ({
+  useWorkspaceAppearance: () => appearance.value,
+}));
+
+function motion(allowed: { motion?: boolean; reducedMotion?: boolean }) {
+  appearance.value = {
+    ...appearance.value,
+    preferences: {
+      ...appearance.value.preferences,
+      motion: allowed.motion ?? true,
+    },
+    reducedMotion: allowed.reducedMotion ?? false,
+  };
+}
+
+beforeEach(() => motion({}));
 afterEach(cleanup);
 
 // Same live roster this repo actually has (fleet/agents/*/config.yaml).
@@ -147,6 +177,54 @@ describe("MomoAvatar", () => {
       const decoration = container.querySelector("img, svg");
       expect(decoration).toBeTruthy();
       expect(decoration?.getAttribute("aria-hidden")).toBe("true");
+      unmount();
+    }
+  });
+
+  it("renders the pulsing Dillon Brain for the lead agent dillon-brain, faster and stronger while active", () => {
+    const { container: gentle } = render(
+      <MomoAvatar
+        agent={{ name: "dillon-brain", display_name: "Dillon Brain" }}
+        size={160}
+      />,
+    );
+    const gentleImg = gentle.querySelector("img");
+    expect(gentleImg?.getAttribute("src")).toBe(
+      "/momentum/momos/dillon-brain.svg",
+    );
+    expect(gentleImg?.getAttribute("data-motion")).toBe("on");
+    // Not told the lead has an active run: the gentle pulse only.
+    expect(gentleImg?.getAttribute("data-active")).toBeNull();
+
+    const { container: active } = render(
+      <MomoAvatar
+        agent={{ name: "dillon-brain", display_name: "Dillon Brain" }}
+        size={160}
+        active
+      />,
+    );
+    const activeImg = active.querySelector("img");
+    expect(activeImg?.getAttribute("data-motion")).toBe("on");
+    expect(activeImg?.getAttribute("data-active")).toBe("true");
+  });
+
+  it("holds the Dillon Brain fully static under reduced motion or the app motion switch off", () => {
+    for (const setting of [
+      { reducedMotion: true },
+      { motion: false },
+    ] as const) {
+      motion(setting);
+      const { container, unmount } = render(
+        <MomoAvatar
+          agent={{ name: "dillon-brain", display_name: "Dillon Brain" }}
+          size={160}
+          active
+        />,
+      );
+      const img = container.querySelector("img");
+      expect(img?.getAttribute("src")).toBe("/momentum/momos/dillon-brain.svg");
+      expect(img?.getAttribute("data-motion")).toBeNull();
+      expect(img?.getAttribute("data-active")).toBeNull();
       unmount();
     }
   });

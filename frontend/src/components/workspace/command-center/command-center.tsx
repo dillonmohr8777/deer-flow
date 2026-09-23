@@ -58,7 +58,7 @@ import styles from "./command-center.module.css";
  * canon Momos by path (never copied; their lane owns the files), in paint
  * order, so the lead is drawn last and stands in front.
  */
-const HERO_CREW = ["growth", "builder", "research", "lead"] as const;
+const HERO_CREW = ["growth", "builder", "research", "dillon-brain"] as const;
 const number = (value: number) => new Intl.NumberFormat("en-US").format(value);
 const active = (status: string) => status === "pending" || status === "running";
 const tabs = [

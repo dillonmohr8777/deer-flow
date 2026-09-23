@@ -405,9 +405,6 @@ describe("DeepReasoning", () => {
     expect(
       block.querySelector(`.${styles.ghost}`)?.getAttribute("aria-hidden"),
     ).toBe("true");
-    expect(
-      block.querySelector(`.${styles.rain}`)?.getAttribute("aria-hidden"),
-    ).toBe("true");
     // Labels across the view shimmer only while it streams.
     expect(document.documentElement.classList.contains(styles.live!)).toBe(
       true,
@@ -442,8 +439,6 @@ describe("DeepReasoning", () => {
       for (const layer of [
         styles.ghost,
         styles.titleGhost,
-        styles.rain,
-        styles.sweep,
         styles.hot,
         styles.caret,
       ]) {
@@ -455,6 +450,35 @@ describe("DeepReasoning", () => {
       );
     });
   }
+
+  it("keeps the acid on the glyphs only: no box-level sweep, rain, halftone or registration marks", () => {
+    const { container } = render(
+      withI18n(
+        <DeepReasoning
+          messageId="block-glyph-only"
+          reasoning={REASONING}
+          live
+          seconds={null}
+        />,
+      ),
+    );
+    const block = container.querySelector("details")!;
+    expect(block.dataset.motion).toBe("on");
+    // Glyph-level misregistration and streaming stay: the cyan drum, the
+    // misregistered label duplicate, the hot printing word and its caret.
+    expect(block.querySelector(`.${styles.ghost}`)).not.toBeNull();
+    expect(block.querySelector(`.${styles.titleGhost}`)).not.toBeNull();
+    expect(block.querySelector(`.${styles.hot}`)).not.toBeNull();
+    expect(block.querySelector(`.${styles.caret}`)).not.toBeNull();
+    // Box-level print layers are gone from the module entirely, not merely
+    // unrendered: there is no class left for a scanline sweep, token rain,
+    // or animated registration marks to hang off.
+    expect(styles.sweep).toBeUndefined();
+    expect(styles.rain).toBeUndefined();
+    expect(styles.reg).toBeUndefined();
+    expect(styles.regB).toBeUndefined();
+    expect(styles.regC).toBeUndefined();
+  });
 
   it("settles into a calm block with a Thought for receipt", () => {
     const { container, rerender } = render(

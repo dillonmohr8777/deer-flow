@@ -22,6 +22,12 @@ import styles from "./ultra-thinking.module.css";
  * "Ultra thinking": the reasoning block of a deep run while its reasoning
  * streams, then a calm settled block with a "Thought for Ns" receipt.
  * Approved prototype: block-shots/2026-09-22-design/acid (variants B and D).
+ *
+ * The acid lives in the glyphs only: the cyan drum (misregistered duplicate
+ * text), the hot/caret print, and the one-time overclock jolt (scrambled
+ * glyph overlay). 2026-09-23: the block-level print layers (scanline sweep,
+ * token rain, background halftone/grain, animated registration marks) were
+ * removed; nothing but text moves or misregisters now.
  */
 
 const DEEP_EFFORTS: ReadonlySet<string> = new Set(["high", "xhigh"]);
@@ -306,8 +312,6 @@ export function DeepReasoning({
         )}
         <ChevronDownIcon className={styles.chevron} aria-hidden="true" />
       </summary>
-      <RegistrationMarks />
-      {motion && <span className={styles.sweep} aria-hidden="true" />}
       <div className={styles.body}>
         <div className={styles.print}>
           <div className={styles.stack}>
@@ -321,7 +325,6 @@ export function DeepReasoning({
             )}
           </div>
         </div>
-        {motion && <TokenRain text={reasoning} />}
       </div>
     </details>
   );
@@ -355,65 +358,6 @@ function Ink({ text, printing }: { text: string; printing: boolean }) {
       <span className={styles.caret} aria-hidden="true" />
     </>
   );
-}
-
-/**
- * The newest words, newest first, in two columns. A word's column comes from
- * its offset in the text, so words keep their column as more stream in.
- */
-export function tokenRainColumns(text: string, limit = 48) {
-  const base = Math.max(0, text.length - 480);
-  const columns: { at: number; word: string }[][] = [[], []];
-  const words = [...text.slice(base).matchAll(/\S+/g)];
-  for (
-    let index = words.length - 1, taken = 0;
-    index >= 0 && taken < limit;
-    index--, taken++
-  ) {
-    const match = words[index]!;
-    if (index === 0 && base > 0) {
-      break; // may be the cut-off tail of a longer word
-    }
-    const at = base + match.index;
-    columns[at % 2]!.push({ at, word: match[0].slice(0, 12) });
-  }
-  return columns;
-}
-
-function TokenRain({ text }: { text: string }) {
-  return (
-    <div className={styles.rain} aria-hidden="true">
-      {tokenRainColumns(text).map((words, column) => (
-        <div key={column}>
-          {words.map(({ at, word }) => (
-            <span key={at}>{word}</span>
-          ))}
-        </div>
-      ))}
-    </div>
-  );
-}
-
-const CORNERS = ["tl", "tr", "bl", "br"] as const;
-
-function RegistrationMarks() {
-  return CORNERS.map((corner) => (
-    <svg
-      key={corner}
-      className={styles.reg}
-      data-corner={corner}
-      viewBox="0 0 16 16"
-      aria-hidden="true"
-      focusable="false"
-    >
-      {[styles.regC, styles.regB].map((plate) => (
-        <g key={plate} className={plate}>
-          <circle cx="8" cy="8" r="3.5" />
-          <path d="M8 1v14M1 8h14" />
-        </g>
-      ))}
-    </svg>
-  ));
 }
 
 const JOLT_MS = 520;

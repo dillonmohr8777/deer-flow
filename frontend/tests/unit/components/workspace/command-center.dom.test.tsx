@@ -266,10 +266,10 @@ describe("CommandCenter", () => {
       expect(img.getAttribute("alt")).toBe("");
       expect(img.closest('[aria-hidden="true"]')).not.toBeNull();
     }
-    // One lead, painted last so it stands in front of the crew.
+    // One lead (Dillon Brain), painted last so it stands in front of the crew.
     const slugs = crew.map((img) => img.getAttribute("data-crew"));
-    expect(slugs.filter((slug) => slug === "lead")).toHaveLength(1);
-    expect(slugs.at(-1)).toBe("lead");
+    expect(slugs.filter((slug) => slug === "dillon-brain")).toHaveLength(1);
+    expect(slugs.at(-1)).toBe("dillon-brain");
     expect(new Set(slugs).size).toBe(slugs.length);
   });
 
