@@ -103,10 +103,52 @@ Each step checks health, both logins, 94 documents, run count, empty audit query
 
 Defaults proposed in chat 2026-09-22; record answers here.
 
-1. F4: freeze new invitations until M3 lands; keep Melissa's seat.
+1. F4: freeze invitation creation AND acceptance of existing tokens until M3 lands; keep Melissa's seat.
 2. F1: reject header-only internal calls at deploy 3; rotate the internal token then.
 3. Ownerless/orphan threads: hide (fail closed) and list them for claiming.
 4. Channels stay personal (private org) during M3.
 5. Parent/child consistency via repository checks plus audit query; DB guards (0033)
    deferred until team mode.
-6. Revocation applies to new requests; an open SSE stream finishes.
+6. Revocation applies to new requests and closes open streams (changed after review; see 7).
+
+## 7. Review amendments (Astra, adversarial read-only review, 2026-09-22)
+
+These supersede the sections above where they conflict.
+
+- **Deploy order (highest risk).** Org filtering must not ship before undelegated internal
+  callers are rejected (contract section 4). Merge deploys 2 and 3: filtering, fail-closed
+  threads, delegation grants and header-only rejection ship together, proven on a restored
+  0030 copy (browser, PAT and internal denial; orphan-claim rejection; revocation; storage).
+- **F2 raised to High where legacy data exists.** Ownerless threads pass destructive checks,
+  not only reads (`H/persistence/thread_meta/sql.py:193-221`), including checkpoint
+  modification and deletion.
+- **F4 narrowed.** Invitees get workspace `admin`, not global admin: new accounts get
+  `system_role="user"` (`G/routers/invitations.py:328,365`); global admin checks
+  `system_role` (`G/deps.py:888-894`). Still a contract deviation.
+- **Orphan claiming paths to close (lane B):** PUT goal creates ownership metadata over an
+  existing checkpoint (`G/routers/threads.py:687-695`, `H/runtime/goal.py:442-445`); POST
+  threads accepts caller-chosen IDs (`G/routers/threads.py:879-900`); checkpoint seeding
+  reads messages with `user_id=None` (`G/services.py:1501-1540`).
+- **Memory and disk (new lane G, or lane 0 phase 2):** memory router trusts the internal
+  owner override (`G/routers/memory.py:34-37`); DeerMem has a shared fallback when user_id
+  is missing (`.../deermem/core/paths.py:72-102`); artifact paths use the owner override
+  (`G/routers/artifacts.py:379-431`). SQL filters do not protect filesystem buckets or
+  background consumers; prove disk isolation separately.
+- **Invitation freeze covers acceptance.** Existing tokens still accept and reactivate
+  non-owner memberships (`G/routers/invitations.py:269-300,371-374`).
+- **SSE revocation.** Admission is checked once before subscribing
+  (`G/routers/thread_runs.py:1304-1316`, `G/services.py:2324`). Letting open streams finish
+  contradicts contract 7.2 ("revocation invalidates access"). Decision 6 changes: open
+  streams re-check membership and close on revocation.
+- **`G/services.py` has one owner: lane 0.** Lanes B, C and F supply interface requirements
+  and tests; lane 0 edits run admission (~1749-1792), scheduler launcher (~2127-2149), MCP
+  launcher (~2210-2234) and SSE (~2272).
+- **0031 constraints.** Skip synthetic workspace storage users for membership creation
+  (`G/routers/workspaces.py:149-184`); avoid nullable `NOT IN` exclusions (the 0029:50
+  pitfall); preserve existing roles and statuses; quarantine conflicting parents; quiesce
+  writers before migrating (bootstrap's lock is process-local, `H/persistence/bootstrap.py:566-590`;
+  the volume snapshot is not atomic across DB and files). A no-op downgrade cannot repair
+  wrong stamps, so rehearse on a copy and keep the pre-deploy backup.
+- **PAT narrowing already exists** (`G/auth_middleware.py:204-213,285-290`); preserve it.
+  Managed-catalog GET is readable by non-admins with prompts redacted
+  (`G/routers/subagents.py:163-167`); confirm that is intended.
