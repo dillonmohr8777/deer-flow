@@ -109,6 +109,8 @@ export const enUS: Translations = {
     skillHint:
       "Turn useful methods into skills, ready to use in any conversation.",
     noResults: "No matches found",
+    noResultsHint: "Try a shorter search, or choose All categories.",
+    skillsLoadFailed: "Could not load skills.",
     larkName: "Lark / Feishu",
     larkDescription:
       "Work with documents, messages, calendars, and multidimensional tables in your conversations.",
@@ -128,6 +130,7 @@ export const enUS: Translations = {
   // Common
   common: {
     home: "Home",
+    tryAgain: "Try again",
     settings: "Settings",
     delete: "Delete",
     edit: "Edit",
@@ -549,7 +552,7 @@ export const enUS: Translations = {
     previewUnsupported:
       "This file type can't be previewed in the browser. Download it to view it.",
     archivedDocumentsBanner:
-      "This project is archived. Documents are read-only — upload, save to project, and trash are unavailable.",
+      "This project is archived. Documents are read-only: upload, save to project and trash are unavailable.",
     conversationFiles: "Conversation files",
     conversationFilesEmpty: "No files in this project's chats yet.",
     threadFilesTruncated: (count) =>
@@ -560,6 +563,18 @@ export const enUS: Translations = {
     savedToProject: (name) => `Saved "${name}" to the shelf`,
     shelfNameLabel: "Shelf name",
     viewTrash: "Trash",
+    openTrash: "Open trash",
+    trashNote: (days) =>
+      `Removed documents wait in the trash for ${days} days before they are deleted.`,
+    documentColumnName: "Document",
+    documentColumnSource: "Source",
+    documentColumnAdded: "Added",
+    documentColumnSize: "Size",
+    documentSourceSlack: "Slack channel",
+    documentSourceUpload: "Uploaded",
+    notFoundHint:
+      "It may have been deleted, or it belongs to another workspace.",
+    backToChats: "Back to chats",
     documentsLoadFailed: "Couldn't load project documents",
     threadFilesLoadFailed: "Couldn't load conversation files",
     interimMemoryNotice:
@@ -569,6 +584,8 @@ export const enUS: Translations = {
   trash: {
     title: "Trash",
     empty: "Trash is empty.",
+    emptyHint:
+      "Anything you move to the trash from a project's Documents tab waits here.",
     loadFailed: "Couldn't load trash",
     retry: "Try again",
     originProject: (projectName) => `from ${projectName}`,
@@ -579,11 +596,13 @@ export const enUS: Translations = {
         : days === 1
           ? "1 day left"
           : `${days} days left`,
+    retentionNote: (days) =>
+      `Documents you remove from a project wait here for ${days} days, then they are deleted for good.`,
     restore: "Restore",
     restoreFailed: "Failed to restore document",
     restoredToast: (name) => `Restored "${name}"`,
     restoreMergedToast: (name) =>
-      `"${name}" matched existing shelf content — merged.`,
+      `"${name}" matched existing shelf content, so it was merged.`,
     restoreConflict:
       "This document's content is missing or damaged, so it stays in the trash.",
     restorePickProjectTitle: "Choose a project",
@@ -677,6 +696,9 @@ export const enUS: Translations = {
 
   // Scheduled tasks
   scheduledTasks: {
+    lede: "Prompts that run on a clock. Every run leaves a record below.",
+    empty:
+      "Nothing is scheduled yet. Pick a recipe above, or write a prompt and choose when it runs.",
     scheduleType: {
       cron: "Recurring",
       once: "One-time",
@@ -741,6 +763,8 @@ export const enUS: Translations = {
       noResults: "No tasks match your search and filters.",
     },
     filters: {
+      status: "Status",
+      type: "Type",
       allStatuses: "All statuses",
       enabled: "Enabled",
       paused: "Paused",
@@ -767,6 +791,9 @@ export const enUS: Translations = {
       noSelection: "No scheduled task selected",
       filteredByThread: "Filtered by thread: {id}",
       loadFailed: "Failed to load scheduled tasks",
+      notScheduled: "Not scheduled",
+      never: "Never",
+      none: "None",
     },
     actions: {
       edit: "Edit",
@@ -856,6 +883,7 @@ export const enUS: Translations = {
     featureDisabledTitle: "Agents feature is not enabled",
     featureDisabledDescription:
       "This feature is not enabled on this server. Please contact your administrator.",
+    loadFailed: "Could not load agents.",
     chat: "Chat",
     delete: "Delete",
     deleteConfirm:
@@ -864,18 +892,17 @@ export const enUS: Translations = {
     newChat: "New chat",
     createPageTitle: "Design your Agent",
     createPageSubtitle:
-      "Describe the agent you want — I'll help you create it through conversation.",
+      "Describe the agent you want, and we will shape it together in conversation.",
     nameStepTitle: "Name your new Agent",
     nameStepHint:
-      "Letters, digits, and hyphens only — stored lowercase (e.g. code-reviewer)",
+      "Letters, digits and hyphens only, stored lowercase (for example code-reviewer)",
     nameStepPlaceholder: "e.g. code-reviewer",
     nameStepContinue: "Continue",
-    nameStepInvalidError:
-      "Invalid name — use only letters, digits, and hyphens",
+    nameStepInvalidError: "Invalid name. Use only letters, digits and hyphens.",
     nameStepAlreadyExistsError: "An agent with this name already exists",
     nameStepNetworkError:
-      "Network request failed — check your network or backend connection",
-    nameStepCheckError: "Could not verify name availability — please try again",
+      "Network request failed. Check your network or backend connection.",
+    nameStepCheckError: "Could not verify name availability. Please try again.",
     nameStepCheckErrorWithDetail: "Name check failed: {detail}",
     nameStepApiDisabledError:
       "Custom agent management is not enabled on this server. Please contact your administrator.",

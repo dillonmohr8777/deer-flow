@@ -2,7 +2,9 @@
 
 import { type ReactNode } from "react";
 
+import { EmptyState, pageStyles } from "@/components/workspace/page-body";
 import { useI18n } from "@/core/i18n/hooks";
+import { cn } from "@/lib/utils";
 
 import { pluginCategories, type PluginCategory } from "./plugin-catalog";
 
@@ -14,6 +16,10 @@ export type PluginDirectoryEntry = {
   node: ReactNode;
 };
 
+/**
+ * One catalog line: mark, name with its state, one line of purpose, one
+ * action. `label` is the state, usually a StatusTag.
+ */
 export function PluginRow({
   name,
   description,
@@ -32,11 +38,11 @@ export function PluginRow({
   children: ReactNode;
 }) {
   return (
-    <article className="hover:bg-muted/40 group flex min-w-0 items-center gap-4 rounded-xl px-3 py-5 transition-colors">
+    <article className="flex h-full min-w-0 items-center gap-3.5 py-4">
       {icon}
       <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <h3 className="text-sm font-semibold">
+        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+          <h3 className="text-sm font-bold">
             {onDetails ? (
               <button
                 className="text-left underline-offset-4 hover:underline"
@@ -49,13 +55,9 @@ export function PluginRow({
               name
             )}
           </h3>
-          {label && (
-            <span className="text-muted-foreground bg-muted/60 rounded px-1.5 py-0.5 text-[10px] leading-4">
-              {label}
-            </span>
-          )}
+          {label}
         </div>
-        <p className="text-muted-foreground mt-1.5 line-clamp-2 text-xs leading-5">
+        <p className="text-muted-foreground mt-1 line-clamp-2 text-[13px] leading-5">
           {description}
         </p>
       </div>
@@ -85,15 +87,12 @@ export function PluginDirectory({
   );
   if (!visible.length)
     return (
-      <p
-        className="text-muted-foreground py-12 text-center text-sm"
-        role="status"
-      >
-        {t.capabilities.noResults}
-      </p>
+      <div role="status">
+        <EmptyState momo="research">{t.capabilities.noResults}</EmptyState>
+      </div>
     );
   return (
-    <div className="space-y-7">
+    <div className="space-y-9">
       {pluginCategories.map((key) => {
         const items = visible.filter((entry) => entry.category === key);
         if (!items.length) return null;
@@ -106,16 +105,26 @@ export function PluginDirectory({
               >
                 {copy.categories[key]}
               </h2>
-              <span className="text-muted-foreground/70 text-xs">
+              <span
+                className={cn(
+                  pageStyles.figure,
+                  "text-muted-foreground text-xs",
+                )}
+              >
                 {items.length}
               </span>
               <span className="text-muted-foreground ml-auto hidden text-xs lg:block">
                 {copy.hints[key]}
               </span>
             </div>
-            <div className="grid grid-cols-1 gap-x-9 lg:grid-cols-2">
+            <div
+              className={cn(
+                "grid grid-cols-1 gap-x-10 lg:grid-cols-2",
+                pageStyles.rows,
+              )}
+            >
               {items.map((entry) => (
-                <div key={entry.id} className="min-w-0">
+                <div key={entry.id} className="min-w-0 border-b">
                   {entry.node}
                 </div>
               ))}

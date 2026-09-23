@@ -14,6 +14,20 @@ function getDateFnsLocale(locale: Locale) {
   }
 }
 
+/** A calendar day for lists and ledgers: "Sep 21, 2026", or null if unknown. */
+export function formatDay(
+  date: Date | string | number,
+  locale: string,
+): string | null {
+  const parsed = date instanceof Date ? date : new Date(date);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return new Intl.DateTimeFormat(locale === "zh-CN" ? "zh-CN" : "en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  }).format(parsed);
+}
+
 export function formatTimeAgo(date: Date | string | number, locale?: Locale) {
   const effectiveLocale =
     locale ??

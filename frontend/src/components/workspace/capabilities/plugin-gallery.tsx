@@ -13,18 +13,21 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  ErrorState,
+  FilterGroup,
+  StatusTag,
+  WorkingState,
+} from "@/components/workspace/page-body";
 import { useAuth } from "@/core/auth/AuthProvider";
 import { capabilityCopy } from "@/core/capabilities/copy";
 import {
   installationQuery,
   useCapabilityCatalog,
 } from "@/core/capabilities/hooks";
-import type { CapabilityInstallation } from "@/core/capabilities/types";
 import { useI18n } from "@/core/i18n/hooks";
 import type { Translations } from "@/core/i18n/locales/types";
 import { isStaticWebsiteOnly } from "@/core/static-mode";
-import { cn } from "@/lib/utils";
 
 import { MCPPluginManager } from "./mcp-plugin-manager";
 import { pluginSettingsAdapters } from "./plugin-adapters";
@@ -39,25 +42,7 @@ import {
   type PluginDirectoryEntry,
 } from "./plugin-directory";
 import { PluginIcon } from "./plugin-icon";
-
-function getPluginStatusLabel(
-  adapter: string,
-  status: CapabilityInstallation | undefined,
-  unavailable: boolean | undefined,
-  t: Translations,
-  labels: ReturnType<typeof capabilityCopy>,
-) {
-  if (unavailable) return labels.adapterError;
-  if (status) {
-    if (status.auth_status === "connected") return labels.connected;
-    if (status.auth_status === "required") return labels.required;
-    if (status.auth_status === "configured") return labels.configured;
-    return labels.installed;
-  }
-  if (adapter === "guide") return t.capabilities.directory.candidate;
-  if (adapter === "lark") return t.capabilities.notInstalled;
-  return labels.notConfigured;
-}
+import { getPluginStatus } from "./plugin-status";
 
 function getPluginActionLabel(
   adapter: string,
@@ -88,7 +73,7 @@ export function PluginGallery({ query }: { query: string }) {
   ];
   const states = useQueries({ queries: adapterNames.map(installationQuery) });
   const client = useQueryClient();
-  const [filter, setFilter] = useState("all");
+  const [filter, setFilter] = useState<"all" | "installed">("all");
   const [category, setCategory] = useState<PluginCategory | "all">("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const params = useSearchParams();
@@ -126,6 +111,13 @@ export function PluginGallery({ query }: { query: string }) {
         (item) => item.plugin_id === plugin.id && item.installed,
       );
       const unavailable = states[adapterNames.indexOf(plugin.adapter)]?.isError;
+      const state = getPluginStatus(
+        plugin.adapter,
+        status,
+        unavailable,
+        t,
+        labels,
+      );
       return {
         id: plugin.id,
         category: plugin.category,
@@ -142,13 +134,7 @@ export function PluginGallery({ query }: { query: string }) {
                 capabilityId={plugin.id}
               />
             }
-            label={getPluginStatusLabel(
-              plugin.adapter,
-              status,
-              unavailable,
-              t,
-              labels,
-            )}
+            label={<StatusTag tone={state.tone}>{state.label}</StatusTag>}
             onDetails={() => setSelectedId(plugin.id)}
             detailsLabel={`${t.capabilities.details} ${catalogText(plugin.name, locale)}`}
           >
@@ -189,11 +175,13 @@ export function PluginGallery({ query }: { query: string }) {
               />
             }
             label={
-              item.selectable === false
-                ? labels.unavailable
-                : item.enabled
-                  ? t.capabilities.enabled
-                  : t.capabilities.disabled
+              item.selectable === false ? (
+                <StatusTag tone="unknown">{labels.unavailable}</StatusTag>
+              ) : item.enabled ? (
+                <StatusTag tone="ok">{t.capabilities.enabled}</StatusTag>
+              ) : (
+                <StatusTag tone="idle">{t.capabilities.disabled}</StatusTag>
+              )
             }
           >
             <span className="text-muted-foreground text-xs">
@@ -207,49 +195,52 @@ export function PluginGallery({ query }: { query: string }) {
         ),
       });
     }
+  // A filter over one list, not tabs: there is no second panel to control.
   const toolbar = (
-    <Tabs value={filter} onValueChange={setFilter}>
-      <TabsList>
-        <TabsTrigger value="all">{t.capabilities.allPlugins}</TabsTrigger>
-        <TabsTrigger value="installed">{t.capabilities.installed}</TabsTrigger>
-      </TabsList>
-    </Tabs>
+    <FilterGroup
+      label={t.capabilities.plugins}
+      value={filter}
+      onChange={setFilter}
+      options={[
+        { value: "all", label: t.capabilities.allPlugins },
+        { value: "installed", label: t.capabilities.installed },
+      ]}
+    />
   );
   const Settings = selected
     ? pluginSettingsAdapters[selected.adapter]
     : undefined;
   return (
     <div className="space-y-6">
-      <div
-        className="flex flex-wrap gap-1"
-        role="group"
-        aria-label={copy.allCategories}
-      >
-        {(
+      <FilterGroup
+        label={copy.allCategories}
+        value={category}
+        onChange={setCategory}
+        options={(
           [
             "all",
             ...pluginCategories.filter((key) => key !== "custom"),
           ] as const
-        ).map((key) => (
-          <Button
-            key={key}
-            variant="ghost"
-            size="sm"
-            aria-pressed={category === key}
-            onClick={() => setCategory(key)}
-            className={cn(
-              "rounded-lg px-3 text-xs font-normal",
-              category === key
-                ? "bg-muted text-foreground font-medium"
-                : "text-muted-foreground",
-            )}
-          >
-            {key === "all" ? copy.allCategories : copy.categories[key]}
-          </Button>
-        ))}
-      </div>
-      {directory.isError && <p role="alert">{labels.catalogError}</p>}
-      {directory.isLoading && <p role="status">{t.common.loading}</p>}
+        ).map((key) => ({
+          value: key,
+          label: key === "all" ? copy.allCategories : copy.categories[key],
+        }))}
+      />
+      {directory.isError && (
+        <ErrorState
+          message={labels.catalogError}
+          action={
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => void directory.refetch()}
+            >
+              {t.common.tryAgain}
+            </Button>
+          }
+        />
+      )}
+      {directory.isLoading && <WorkingState label={t.common.loading} />}
       {canManage ? (
         <MCPPluginManager
           query={query}

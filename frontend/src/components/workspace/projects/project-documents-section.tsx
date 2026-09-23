@@ -2,7 +2,8 @@
 
 import {
   Archive,
-  FileText,
+  Download,
+  HashIcon,
   LoaderIcon,
   Paperclip,
   Trash2,
@@ -13,7 +14,6 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -23,19 +23,19 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "@/components/ui/empty";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import {
   ArtifactFilePreview,
   formatArtifactBytes,
 } from "@/components/workspace/artifacts/artifact-file-preview";
+import {
+  EmptyState,
+  ErrorState,
+  pageStyles,
+  StatusTag,
+  WorkingState,
+} from "@/components/workspace/page-body";
 import { getTabularDelimiter } from "@/core/artifacts/preview";
 import {
   resolveArtifactOpenURL,
@@ -61,6 +61,10 @@ import {
   type ProjectThreadFileGroup,
 } from "@/core/projects";
 import { stageProjectAttachment } from "@/core/projects/composer-attach";
+import {
+  projectDocumentSource,
+  projectDocumentTitle,
+} from "@/core/projects/document-source";
 import { useInfiniteThreads } from "@/core/threads/hooks";
 import type { AgentThread } from "@/core/threads/types";
 import {
@@ -68,7 +72,7 @@ import {
   pathOfThread,
   titleOfThread,
 } from "@/core/threads/utils";
-import { formatTimeAgo } from "@/core/utils/datetime";
+import { formatDay, formatTimeAgo } from "@/core/utils/datetime";
 import { getFileIcon } from "@/core/utils/files";
 import { env } from "@/env";
 import { cn } from "@/lib/utils";
@@ -92,8 +96,11 @@ export function ProjectDocumentsSection({
 }) {
   const { t } = useI18n();
   const isArchived = project.status === "archived";
+  const trashRetentionDays =
+    useProjectsConfig().data?.trash_retention_days ??
+    PROJECTS_CONFIG_DEFAULT.trash_retention_days;
   return (
-    <section className="flex flex-col gap-6">
+    <section className="flex flex-col gap-8">
       {isArchived && (
         <div
           role="status"
@@ -107,6 +114,23 @@ export function ProjectDocumentsSection({
       <ProjectDocumentShelf project={project} threads={threads} />
       <Separator />
       <ProjectConversationFiles project={project} />
+      {/* Trash is its own place: this strip names the rule and points there,
+          apart from the shelf and its actions. */}
+      <div
+        className={cn(
+          "text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1 pt-4 text-sm",
+          pageStyles.trashStrip,
+        )}
+      >
+        <Trash2 className="size-4 shrink-0" aria-hidden="true" />
+        <p>{t.projects.trashNote(trashRetentionDays)}</p>
+        <Link
+          href="/workspace/trash"
+          className="text-foreground font-bold underline underline-offset-4"
+        >
+          {t.projects.openTrash}
+        </Link>
+      </div>
     </section>
   );
 }
@@ -206,24 +230,26 @@ function ProjectDocumentShelf({
       }
       data-testid="project-documents-shelf"
     >
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-col">
-          <h2 className="text-muted-foreground text-sm font-medium">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div className="flex flex-col gap-0.5">
+          <h2 className="flex items-baseline gap-2.5 text-lg font-semibold">
             {t.projects.documentsShelf}
+            {documentsQuery.data ? (
+              <span
+                className={cn(
+                  pageStyles.figure,
+                  "text-muted-foreground font-sans text-xs font-normal",
+                )}
+              >
+                {documentsTotal}
+              </span>
+            ) : null}
           </h2>
           {!isArchived && (
-            <p className="text-muted-foreground text-xs">
-              {t.projects.documentsShelfHint}
-            </p>
+            <p className={pageStyles.lede}>{t.projects.documentsShelfHint}</p>
           )}
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="sm" asChild>
-            <Link href="/workspace/trash">
-              <Trash2 className="size-4" />
-              {t.projects.viewTrash}
-            </Link>
-          </Button>
           {!isArchived && (
             <>
               <input
@@ -259,59 +285,78 @@ function ProjectDocumentShelf({
       </div>
 
       {documentsQuery.isError ? (
-        <div role="alert" className="p-4 text-center text-sm">
-          <p>{t.projects.documentsLoadFailed}</p>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void documentsQuery.refetch()}
-          >
-            {t.trash.retry}
-          </Button>
-        </div>
-      ) : !documentsQuery.isLoading && documents.length === 0 ? (
-        <Empty className="border py-12">
-          <EmptyHeader>
-            <EmptyMedia variant="icon">
-              <FileText />
-            </EmptyMedia>
-            <EmptyTitle>{t.projects.documentsEmptyTitle}</EmptyTitle>
-            <EmptyDescription>{t.projects.documentsEmptyHint}</EmptyDescription>
-            <EmptyDescription>
-              {t.projects.interimMemoryNotice}
-            </EmptyDescription>
-          </EmptyHeader>
-        </Empty>
+        <ErrorState
+          message={t.projects.documentsLoadFailed}
+          action={
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void documentsQuery.refetch()}
+            >
+              {t.common.tryAgain}
+            </Button>
+          }
+        />
+      ) : documentsQuery.isLoading ? (
+        <WorkingState label={t.common.loading} />
+      ) : documents.length === 0 ? (
+        <EmptyState momo="research" title={t.projects.documentsEmptyTitle}>
+          {t.projects.documentsEmptyHint} {t.projects.interimMemoryNotice}
+        </EmptyState>
       ) : (
-        <ul className="flex w-full flex-col gap-2">
-          {documents.map((document) => (
-            <ProjectDocumentRow
-              key={document.id}
-              project={project}
-              document={document}
-              isArchived={isArchived}
-              provenance={
-                document.source_thread_id
-                  ? t.projects.documentFromThread(
-                      threadNameById.get(document.source_thread_id) ??
-                        t.projects.untitled,
-                      document.source_kind === "output"
-                        ? t.projects.documentKindOutput
-                        : t.projects.documentKindUpload,
-                    )
-                  : null
-              }
-              onPreview={() => setPreviewDoc(document)}
-              onAttach={() => setAttachDoc(document)}
-              onTrash={() => setTrashDoc(document)}
-            />
-          ))}
-        </ul>
+        <div>
+          <div
+            className={cn(pageStyles.ledgerHead, pageStyles.eyebrow)}
+            aria-hidden="true"
+          >
+            <span className={pageStyles.ledgerName}>
+              {t.projects.documentColumnName}
+            </span>
+            <span className={pageStyles.ledgerSource}>
+              {t.projects.documentColumnSource}
+            </span>
+            <span className={pageStyles.ledgerDate}>
+              {t.projects.documentColumnAdded}
+            </span>
+            <span className={cn(pageStyles.ledgerSize, "text-right")}>
+              {t.projects.documentColumnSize}
+            </span>
+          </div>
+          <ul
+            className={cn(
+              "flex w-full flex-col divide-y border-y",
+              pageStyles.rows,
+            )}
+          >
+            {documents.map((document) => (
+              <ProjectDocumentRow
+                key={document.id}
+                project={project}
+                document={document}
+                isArchived={isArchived}
+                provenance={
+                  document.source_thread_id
+                    ? t.projects.documentFromThread(
+                        threadNameById.get(document.source_thread_id) ??
+                          t.projects.untitled,
+                        document.source_kind === "output"
+                          ? t.projects.documentKindOutput
+                          : t.projects.documentKindUpload,
+                      )
+                    : null
+                }
+                onPreview={() => setPreviewDoc(document)}
+                onAttach={() => setAttachDoc(document)}
+                onTrash={() => setTrashDoc(document)}
+              />
+            ))}
+          </ul>
+        </div>
       )}
 
       {!documentsQuery.isError && documents.length > 0 && (
         <div className="flex flex-col items-center gap-1">
-          <p className="text-muted-foreground text-xs">
+          <p className={cn(pageStyles.figure, "text-muted-foreground text-xs")}>
             {t.common.showingOf(documents.length, documentsTotal)}
           </p>
           {documentsQuery.hasNextPage && (
@@ -411,52 +456,91 @@ function ProjectDocumentRow({
   onAttach: () => void;
   onTrash: () => void;
 }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
+  const source = projectDocumentSource(document);
+  const title = projectDocumentTitle(document);
+  const mark =
+    source.kind === "slack" ? (
+      <HashIcon className="size-5" aria-hidden="true" />
+    ) : (
+      getFileIcon(document.name, "size-5")
+    );
+  const name = (
+    <div className={pageStyles.ledgerName}>
+      <span className="block truncate text-sm font-bold">{title}</span>
+      {title !== document.name ? (
+        <span className="text-muted-foreground block truncate font-mono text-xs">
+          {document.name}
+        </span>
+      ) : null}
+    </div>
+  );
+  const trashAction = !isArchived ? (
+    <Button
+      variant="ghost"
+      size="icon-sm"
+      onClick={onTrash}
+      title={t.projects.moveDocumentToTrash}
+    >
+      <Trash2 className="size-4" aria-hidden="true" />
+      <span className="sr-only">{t.projects.moveDocumentToTrash}</span>
+    </Button>
+  ) : null;
   if (document.content_missing) {
     // §11: the list response's server-side integrity flag is authoritative —
     // a row whose bytes are gone renders as content missing at list render,
     // with move-to-trash as its only document action in active projects.
     return (
-      <li className="flex items-center gap-3 rounded-md border p-3">
-        {getFileIcon(document.name, "size-5 shrink-0")}
-        <div className="flex min-w-0 flex-1 items-center gap-2">
-          <span className="truncate text-sm">{document.name}</span>
-          <Badge variant="destructive" data-testid="content-missing-badge">
-            {t.projects.contentMissing}
-          </Badge>
+      <li className={pageStyles.ledgerRow}>
+        <span className={pageStyles.ledgerMark}>{mark}</span>
+        {name}
+        <div className={pageStyles.ledgerMeta}>
+          <span
+            className={pageStyles.ledgerSource}
+            data-testid="content-missing-badge"
+          >
+            <StatusTag tone="danger">{t.projects.contentMissing}</StatusTag>
+          </span>
         </div>
-        {!isArchived && (
-          <Button variant="ghost" size="sm" onClick={onTrash}>
-            <Trash2 className="size-4" />
-            {t.projects.moveDocumentToTrash}
-          </Button>
-        )}
+        <div className={pageStyles.ledgerActions}>{trashAction}</div>
       </li>
     );
   }
+  const added = formatDay(document.created_at, locale);
   return (
-    <li className="flex items-center gap-3 rounded-md border p-3">
-      {getFileIcon(document.name, "size-5 shrink-0")}
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <div className="flex min-w-0 items-center gap-2">
-          <span className="truncate text-sm font-medium">{document.name}</span>
-          {provenance && (
-            <Badge variant="secondary" className="shrink-0">
-              {provenance}
-            </Badge>
-          )}
-        </div>
-        <div className="text-muted-foreground text-xs">
+    <li className={pageStyles.ledgerRow}>
+      <span className={pageStyles.ledgerMark}>{mark}</span>
+      {name}
+      <div className={pageStyles.ledgerMeta}>
+        <span className={pageStyles.ledgerSource}>
+          {source.kind === "thread"
+            ? provenance
+            : source.kind === "slack"
+              ? t.projects.documentSourceSlack
+              : t.projects.documentSourceUpload}
+        </span>
+        {added ? (
+          <time
+            className={pageStyles.ledgerDate}
+            dateTime={document.created_at}
+          >
+            {added}
+          </time>
+        ) : null}
+        <span className={pageStyles.ledgerSize}>
           {formatArtifactBytes(document.size_bytes)}
-          {" · "}
-          {formatTimeAgo(document.updated_at)}
-        </div>
+        </span>
       </div>
-      <div className="flex shrink-0 items-center gap-1">
+      <div className={pageStyles.ledgerActions}>
         <Button variant="ghost" size="sm" onClick={onPreview}>
           {t.common.preview}
         </Button>
-        <Button variant="ghost" size="sm" asChild>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          asChild
+          title={t.common.download}
+        >
           <a
             href={urlOfProjectDocumentContent(project.id, document.id, {
               download: true,
@@ -464,19 +548,20 @@ function ProjectDocumentRow({
             target="_blank"
             rel="noopener noreferrer"
           >
-            {t.common.download}
+            <Download className="size-4" aria-hidden="true" />
+            <span className="sr-only">{t.common.download}</span>
           </a>
         </Button>
-        <Button variant="ghost" size="sm" onClick={onAttach}>
-          <Paperclip className="size-4" />
-          {t.projects.attachToThread}
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          onClick={onAttach}
+          title={t.projects.attachToThread}
+        >
+          <Paperclip className="size-4" aria-hidden="true" />
+          <span className="sr-only">{t.projects.attachToThread}</span>
         </Button>
-        {!isArchived && (
-          <Button variant="ghost" size="sm" onClick={onTrash}>
-            <Trash2 className="size-4" />
-            {t.projects.moveDocumentToTrash}
-          </Button>
-        )}
+        {trashAction}
       </div>
     </li>
   );
@@ -759,26 +844,26 @@ function ProjectConversationFiles({ project }: { project: Project }) {
 
   return (
     <div className="flex flex-col gap-3" data-testid="project-thread-files">
-      <h2 className="text-muted-foreground text-sm font-medium">
-        {t.projects.conversationFiles}
-      </h2>
+      <h2 className="text-lg font-semibold">{t.projects.conversationFiles}</h2>
       {threadFilesQuery.isError ? (
-        <div role="alert" className="p-4 text-center text-sm">
-          <p>{t.projects.threadFilesLoadFailed}</p>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void threadFilesQuery.refetch()}
-          >
-            {t.trash.retry}
-          </Button>
-        </div>
-      ) : !threadFilesQuery.isLoading && groups.length === 0 ? (
-        <p className="text-muted-foreground p-4 text-sm">
-          {t.projects.conversationFilesEmpty}
-        </p>
+        <ErrorState
+          message={t.projects.threadFilesLoadFailed}
+          action={
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void threadFilesQuery.refetch()}
+            >
+              {t.common.tryAgain}
+            </Button>
+          }
+        />
+      ) : threadFilesQuery.isLoading ? (
+        <WorkingState label={t.common.loading} />
+      ) : groups.length === 0 ? (
+        <p className={pageStyles.lede}>{t.projects.conversationFilesEmpty}</p>
       ) : (
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-6">
           {groups.map((group) => (
             <ConversationFileGroup
               key={group.thread_id}
@@ -854,8 +939,8 @@ function ConversationFileGroup({
 
   return (
     <div className="flex flex-col gap-1">
-      <div className="text-sm font-medium">{group.display_name}</div>
-      <ul className="flex w-full flex-col gap-1">
+      <div className={pageStyles.eyebrow}>{group.display_name}</div>
+      <ul className={cn("flex w-full flex-col divide-y", pageStyles.rows)}>
         {group.files.map((file) => {
           const previewUrl = resolveArtifactOpenURL({
             filepath: `/mnt/user-data/${file.kind === "upload" ? "uploads" : "outputs"}/${file.name}`,
@@ -864,11 +949,13 @@ function ConversationFileGroup({
           return (
             <li
               key={`${file.kind}:${file.name}`}
-              className="flex items-center gap-3 rounded-md border p-2"
+              className="flex items-center gap-3 py-2"
             >
-              {getFileIcon(file.name, "size-5 shrink-0")}
+              <span className="text-muted-foreground shrink-0">
+                {getFileIcon(file.name, "size-5")}
+              </span>
               <div className="flex min-w-0 flex-1 flex-col">
-                <span className="truncate text-sm">{file.name}</span>
+                <span className="truncate text-sm font-bold">{file.name}</span>
                 <span className="text-muted-foreground text-xs">
                   {formatArtifactBytes(file.size_bytes)}
                   {" · "}

@@ -104,6 +104,8 @@ export const zhCN: Translations = {
     pluginHint: "连接常用应用，让 Agent 直接访问资料、处理工作。",
     skillHint: "把常用方法变成技能，在对话中按需使用。",
     noResults: "没有找到匹配的内容",
+    noResultsHint: "试试更短的关键词，或选择全部分类。",
+    skillsLoadFailed: "无法加载技能。",
     larkName: "飞书 / Lark",
     larkDescription: "连接飞书文档、消息、日历与多维表格，在对话中协同办公。",
     larkTag: "办公协作",
@@ -122,6 +124,7 @@ export const zhCN: Translations = {
   // Common
   common: {
     home: "首页",
+    tryAgain: "重试",
     settings: "设置",
     delete: "删除",
     edit: "编辑",
@@ -521,6 +524,16 @@ export const zhCN: Translations = {
     savedToProject: (name) => `已将「${name}」保存到文件架`,
     shelfNameLabel: "文件架名称",
     viewTrash: "回收站",
+    openTrash: "打开回收站",
+    trashNote: (days) => `移入回收站的文档可在 ${days} 天内恢复。`,
+    documentColumnName: "文档",
+    documentColumnSource: "来源",
+    documentColumnAdded: "添加时间",
+    documentColumnSize: "大小",
+    documentSourceSlack: "Slack 频道",
+    documentSourceUpload: "上传",
+    notFoundHint: "它可能已被删除，或属于其他工作区。",
+    backToChats: "返回对话",
     documentsLoadFailed: "无法加载项目文档",
     threadFilesLoadFailed: "无法加载对话文件",
     interimMemoryNotice:
@@ -530,12 +543,15 @@ export const zhCN: Translations = {
   trash: {
     title: "回收站",
     empty: "回收站为空。",
+    emptyHint: "从项目“文档”页移入回收站的内容会在这里等待。",
     loadFailed: "无法加载回收站",
     retry: "重试",
     originProject: (projectName) => `来自 ${projectName}`,
     unknownProject: "未知项目",
     retentionLeft: (days) =>
       days <= 0 ? "保留期不足 1 天" : `剩余 ${days} 天`,
+    retentionNote: (days) =>
+      `从项目中移除的文档会在这里保留 ${days} 天，之后将被永久删除。`,
     restore: "恢复",
     restoreFailed: "恢复文档失败",
     restoredToast: (name) => `已恢复「${name}」`,
@@ -628,6 +644,8 @@ export const zhCN: Translations = {
 
   // 定时任务
   scheduledTasks: {
+    lede: "按时运行的提示词。每次运行都会在下方留下记录。",
+    empty: "还没有定时任务。选择上方的模板，或写下提示词并设定运行时间。",
     scheduleType: {
       cron: "重复",
       once: "单次",
@@ -691,6 +709,8 @@ export const zhCN: Translations = {
       noResults: "没有符合搜索内容和筛选条件的任务。",
     },
     filters: {
+      status: "状态",
+      type: "类型",
       allStatuses: "全部状态",
       enabled: "已启用",
       paused: "已暂停",
@@ -717,6 +737,9 @@ export const zhCN: Translations = {
       noSelection: "未选择定时任务",
       filteredByThread: "按线程筛选：{id}",
       loadFailed: "加载定时任务失败",
+      notScheduled: "未安排",
+      never: "从未",
+      none: "无",
     },
     actions: {
       edit: "编辑",
@@ -801,6 +824,7 @@ export const zhCN: Translations = {
     emptyDescription: "创建你的第一个自定义智能体，设置专属系统提示词。",
     featureDisabledTitle: "智能体功能未启用",
     featureDisabledDescription: "该功能未在此服务器上启用，请联系管理员。",
+    loadFailed: "无法加载智能体。",
     chat: "对话",
     delete: "删除",
     deleteConfirm: "确定要删除该智能体吗？此操作不可撤销。",
