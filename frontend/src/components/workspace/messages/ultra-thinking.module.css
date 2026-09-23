@@ -4,10 +4,12 @@
  * approved prototype inside the block, Variant D across the view:
  * block-shots/2026-09-22-design/acid/acid-prototype.html.
  *
- * Reading text is always the real DOM text, never a pseudo-element. Every
- * print layer (cyan drum, token rain, scanline, registration marks, the
- * overclock glyphs) is an aria-hidden duplicate or decoration. Brass is only
- * dots and thin rules; cyan never carries reading text.
+ * 2026-09-23: the acid lives in the glyphs only. Every print layer left here
+ * (cyan drum, the overclock glyphs) is an aria-hidden duplicate or decoration
+ * of TEXT, never the block itself: no scanline sweep, token rain, background
+ * halftone/grain or animated registration marks on the box. Reading text is
+ * always the real DOM text, never a pseudo-element. Cyan never carries
+ * reading text.
  *
  * Motion is gated twice: data-motion="on" (set from brandMotionAllowed, so
  * the appearance motion switch and reduced motion both turn it off) and
@@ -15,8 +17,7 @@
  * transform, opacity or filter only.
  *
  * Reading contrast, paper light (text on --paper-cream-hi): live royal 7.8:1,
- * newest word cream-hi on royal 7.8:1, settled ink-muted 8.3:1. Worst pixel
- * under the 45-degree halftone stays above 6:1.
+ * newest word cream-hi on royal 7.8:1, settled ink-muted 8.3:1.
  */
 
 .block {
@@ -28,7 +29,6 @@
   --ur-muted: var(--muted-foreground);
   --ur-line: var(--border);
   --ur-cyan: color-mix(in srgb, var(--muted-foreground) 55%, transparent);
-  --ur-cyan-text: var(--muted-foreground);
   --ur-brass: var(--border);
 
   position: relative;
@@ -50,7 +50,6 @@
   --ur-key-deep: var(--paper-royal-deep);
   --ur-muted: var(--paper-ink-muted);
   --ur-cyan: var(--paper-cyan);
-  --ur-cyan-text: var(--paper-cyan-text);
   --ur-brass: var(--paper-brass);
 }
 
@@ -61,41 +60,6 @@
   border-radius: 6px;
 }
 
-/* Paper grain, always (an undefined token outside paper draws nothing). */
-.block::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: 3;
-  pointer-events: none;
-  background: var(--paper-grain) 0 0 / 180px 180px;
-  mix-blend-mode: multiply;
-}
-
-/* Riso halftone at 45 degrees, only while the press runs. */
-.block[data-motion="on"]::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: 3;
-  pointer-events: none;
-  opacity: 0.7;
-  mix-blend-mode: multiply;
-  background:
-    radial-gradient(
-        circle,
-        color-mix(in srgb, var(--ur-key) 20%, transparent) 0.8px,
-        transparent 1.3px
-      )
-      0 0 / 5px 5px,
-    radial-gradient(
-        circle,
-        color-mix(in srgb, var(--ur-key) 20%, transparent) 0.8px,
-        transparent 1.3px
-      )
-      2.5px 2.5px / 5px 5px;
-}
-
 /* ---------- Head: the disclosure's summary ---------- */
 
 .head {
@@ -103,7 +67,6 @@
   align-items: center;
   gap: 10px;
   min-height: 44px;
-  /* 24px inline clears the 16px registration marks set 3px in. */
   padding: 10px 24px;
   cursor: pointer;
   list-style: none;
@@ -175,10 +138,6 @@
   grid-template-columns: minmax(0, 1fr);
   gap: 12px;
   padding: 12px 24px 16px;
-}
-
-.block[data-motion="on"] .body {
-  grid-template-columns: minmax(0, 1fr) clamp(32px, 12%, 60px);
 }
 
 .print {
@@ -253,96 +212,6 @@
 .ghost .hot {
   background: none;
   color: transparent;
-}
-
-/* Token rain: the newest words, down a narrow brass-dotted gutter. */
-.rain {
-  contain: size;
-  overflow: hidden;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 2px;
-  padding-left: 9px;
-  font: 10px/12px var(--m-font-mono);
-  user-select: none;
-  background: radial-gradient(circle, var(--ur-brass) 1px, transparent 1.5px) 0
-    0 / 3px 6px repeat-y;
-  -webkit-mask-image: linear-gradient(#000 55%, transparent);
-  mask-image: linear-gradient(#000 55%, transparent);
-}
-
-.rain > div {
-  overflow: hidden;
-  min-width: 0;
-}
-
-.rain span {
-  display: block;
-  white-space: nowrap;
-  color: var(--ur-key);
-}
-
-.rain > div + div span {
-  color: var(--ur-cyan-text);
-}
-
-/* Registration marks: brass rules, a cyan plate that drifts off register. */
-.reg {
-  position: absolute;
-  z-index: 4;
-  width: 16px;
-  height: 16px;
-  fill: none;
-  stroke-width: 1;
-  pointer-events: none;
-}
-
-.reg[data-corner="tl"] {
-  top: 3px;
-  left: 3px;
-}
-
-.reg[data-corner="tr"] {
-  top: 3px;
-  right: 3px;
-}
-
-.reg[data-corner="bl"] {
-  bottom: 3px;
-  left: 3px;
-}
-
-.reg[data-corner="br"] {
-  right: 3px;
-  bottom: 3px;
-}
-
-.regB {
-  stroke: var(--ur-brass);
-}
-
-.regC {
-  stroke: var(--ur-cyan);
-}
-
-.block[data-motion="on"] .regC {
-  transform: translate(1.5px, -1px);
-}
-
-/* A stepped scanline band, top to bottom, then a rest. */
-.sweep {
-  position: absolute;
-  inset: 0;
-  z-index: 5;
-  pointer-events: none;
-  transform: translateY(-100%);
-  mix-blend-mode: multiply;
-  background: repeating-linear-gradient(
-      to bottom,
-      color-mix(in srgb, var(--ur-cyan) 30%, transparent) 0 1px,
-      transparent 1px 3px
-    )
-    0 100% / 100% 26px no-repeat;
 }
 
 /* ---------- Working squares: three, ticking in steps(3) over 1.2s ---------- */
@@ -446,16 +315,8 @@
     animation: ur-label-b 280ms steps(1, end) infinite;
   }
 
-  .block[data-motion="on"] .regC {
-    animation: ur-misreg-a 350ms steps(1, end) infinite;
-  }
-
   .block[data-motion="on"] .caret {
     animation: ur-blink 700ms steps(1, end) infinite;
-  }
-
-  .block[data-motion="on"] .sweep {
-    animation: ur-sweep 2.3s infinite;
   }
 
   .overclock {
@@ -510,27 +371,6 @@
   }
 }
 
-@keyframes ur-misreg-a {
-  0% {
-    transform: translate(1px, 1px);
-  }
-  20% {
-    transform: translate(2px, 0);
-  }
-  40% {
-    transform: translate(1px, -1px);
-  }
-  60% {
-    transform: translate(2px, 1px);
-  }
-  80% {
-    transform: translate(0, 2px);
-  }
-  100% {
-    transform: translate(1px, 1px);
-  }
-}
-
 @keyframes ur-misreg-b {
   0% {
     transform: translate(3px, -1px);
@@ -573,17 +413,6 @@
 @keyframes ur-blink {
   50% {
     opacity: 0;
-  }
-}
-
-@keyframes ur-sweep {
-  0% {
-    transform: translateY(-100%);
-    animation-timing-function: steps(14, end);
-  }
-  36%,
-  100% {
-    transform: translateY(26px);
   }
 }
 
@@ -675,29 +504,12 @@
   .body {
     padding: 10px 22px 14px;
   }
-
-  .block[data-motion="on"] .body {
-    grid-template-columns: minmax(0, 1fr) 30px;
-  }
-
-  .rain {
-    grid-template-columns: 1fr;
-  }
-
-  .rain > div + div {
-    display: none;
-  }
 }
 
 /* Print layers carry nothing a high-contrast palette needs. */
 @media (forced-colors: active) {
-  .block::before,
-  .block::after,
-  .reg,
-  .sweep,
   .ghost,
   .titleGhost,
-  .rain,
   .squares,
   .overclock {
     display: none;
