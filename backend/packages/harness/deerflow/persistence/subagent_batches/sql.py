@@ -552,7 +552,7 @@ class SubagentBatchRepository:
         now = datetime.now(UTC)
         async with self._sf() as session:
             batch = await session.get(SubagentBatchRow, batch_id, with_for_update=True)
-            if batch is None or batch.user_id != user_id:
+            if batch is None or batch.user_id != user_id or not _batch_organization_visible(batch):
                 return None
             if action == "pause" and batch.status in ("queued", "running"):
                 batch.status = "paused"

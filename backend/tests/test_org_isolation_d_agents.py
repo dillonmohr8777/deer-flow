@@ -273,6 +273,16 @@ async def test_subagent_batch_reads_excluded_across_orgs(org_world) -> None:  # 
     with acting_as(USER_A):
         assert await repo.get_batch(batch_id, user_id=USER_A) is not None
 
+    # Controls follow the same visibility as reads: the owning user_id under
+    # the wrong active organization can't pause, resume or cancel.
+    with acting_as(USER_B):
+        assert await repo.pause_batch(batch_id, user_id=USER_A) is None
+        assert await repo.cancel_batch(batch_id, user_id=USER_A) is None
+    with acting_as(USER_A):
+        assert (await repo.get_batch(batch_id, user_id=USER_A))["status"] not in ("paused", "cancelled")
+        assert (await repo.pause_batch(batch_id, user_id=USER_A))["status"] == "paused"
+        assert (await repo.resume_batch(batch_id, user_id=USER_A))["status"] == "queued"
+
 
 # ---------------------------------------------------------------------------
 # 3. Managed subagents (deployment-global catalog) stay global, admin-only
