@@ -577,8 +577,11 @@ def _helper_request(*, user, auth_source: str, run_store, event_store, owner_hea
     """Minimal Request stand-in: the helpers touch state, app.state and headers."""
     app_state = SimpleNamespace(run_manager=RunManager(store=run_store), run_event_store=event_store)
     headers = {INTERNAL_OWNER_USER_ID_HEADER_NAME: owner_header} if owner_header else {}
+    state = SimpleNamespace(user=user, auth_source=auth_source)
+    if owner_header and auth_source == AUTH_SOURCE_INTERNAL:
+        state.delegation_id, state.storage_user_id = "dlg-test", owner_header  # a verified delegation
     return SimpleNamespace(
-        state=SimpleNamespace(user=user, auth_source=auth_source),
+        state=state,
         app=SimpleNamespace(state=app_state),
         headers=headers,
     )
