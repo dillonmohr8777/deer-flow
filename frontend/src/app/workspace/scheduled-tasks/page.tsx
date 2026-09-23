@@ -303,8 +303,8 @@ export default function ScheduledTasksPage() {
     <WorkspaceContainer>
       <WorkspaceHeader />
       <WorkspaceBody>
-        <div className="mx-auto flex w-full max-w-(--container-width-md) flex-col gap-4 p-6">
-          <h1 className="text-2xl font-semibold">{t.sidebar.scheduledTasks}</h1>
+        <div className="momentum-page mx-auto flex w-full max-w-(--container-width-md) flex-col gap-4 p-4 pb-28 sm:p-6 sm:pb-28">
+          <h1 className="text-2xl">{t.sidebar.scheduledTasks}</h1>
           <div
             ref={createFormRef}
             className="grid gap-2 rounded-lg border p-4"
@@ -325,7 +325,6 @@ export default function ScheduledTasksPage() {
                   size="sm"
                   onClick={() => applyRecipe(recipe)}
                 >
-                  <span aria-hidden>{recipe.icon}</span>
                   {st.recipes[recipe.titleKey].title}
                 </Button>
               ))}
@@ -335,6 +334,7 @@ export default function ScheduledTasksPage() {
                 variant={
                   contextMode === "fresh_thread_per_run" ? "default" : "outline"
                 }
+                aria-pressed={contextMode === "fresh_thread_per_run"}
                 size="sm"
                 onClick={() => setContextMode("fresh_thread_per_run")}
               >
@@ -342,6 +342,7 @@ export default function ScheduledTasksPage() {
               </Button>
               <Button
                 variant={contextMode === "reuse_thread" ? "default" : "outline"}
+                aria-pressed={contextMode === "reuse_thread"}
                 size="sm"
                 onClick={() => setContextMode("reuse_thread")}
               >
@@ -486,6 +487,7 @@ export default function ScheduledTasksPage() {
           <div className="flex flex-wrap gap-2">
             <Button
               variant={statusFilter === "all" ? "default" : "outline"}
+              aria-pressed={statusFilter === "all"}
               size="sm"
               onClick={() => setStatusFilter("all")}
             >
@@ -493,6 +495,7 @@ export default function ScheduledTasksPage() {
             </Button>
             <Button
               variant={statusFilter === "enabled" ? "default" : "outline"}
+              aria-pressed={statusFilter === "enabled"}
               size="sm"
               onClick={() => setStatusFilter("enabled")}
             >
@@ -500,6 +503,7 @@ export default function ScheduledTasksPage() {
             </Button>
             <Button
               variant={statusFilter === "paused" ? "default" : "outline"}
+              aria-pressed={statusFilter === "paused"}
               size="sm"
               onClick={() => setStatusFilter("paused")}
             >
@@ -507,6 +511,7 @@ export default function ScheduledTasksPage() {
             </Button>
             <Button
               variant={statusFilter === "completed" ? "default" : "outline"}
+              aria-pressed={statusFilter === "completed"}
               size="sm"
               onClick={() => setStatusFilter("completed")}
             >
@@ -514,6 +519,7 @@ export default function ScheduledTasksPage() {
             </Button>
             <Button
               variant={statusFilter === "failed" ? "default" : "outline"}
+              aria-pressed={statusFilter === "failed"}
               size="sm"
               onClick={() => setStatusFilter("failed")}
             >
@@ -521,6 +527,7 @@ export default function ScheduledTasksPage() {
             </Button>
             <Button
               variant={typeFilter === "all" ? "default" : "outline"}
+              aria-pressed={typeFilter === "all"}
               size="sm"
               onClick={() => setTypeFilter("all")}
             >
@@ -528,6 +535,7 @@ export default function ScheduledTasksPage() {
             </Button>
             <Button
               variant={typeFilter === "cron" ? "default" : "outline"}
+              aria-pressed={typeFilter === "cron"}
               size="sm"
               onClick={() => setTypeFilter("cron")}
             >
@@ -535,6 +543,7 @@ export default function ScheduledTasksPage() {
             </Button>
             <Button
               variant={typeFilter === "once" ? "default" : "outline"}
+              aria-pressed={typeFilter === "once"}
               size="sm"
               onClick={() => setTypeFilter("once")}
             >
@@ -542,6 +551,7 @@ export default function ScheduledTasksPage() {
             </Button>
             <Button
               variant={typeFilter === "interval" ? "default" : "outline"}
+              aria-pressed={typeFilter === "interval"}
               size="sm"
               onClick={() => setTypeFilter("interval")}
             >
@@ -572,10 +582,13 @@ export default function ScheduledTasksPage() {
                     type="button"
                     key={task.id}
                     onClick={() => setSelectedTaskId(task.id)}
+                    aria-pressed={isSelected}
                     data-testid={`scheduled-task-item-${task.id}`}
                     className={cn(
-                      "rounded-lg border p-4 text-left",
-                      isSelected ? "border-foreground" : "border-border",
+                      "rounded-lg border p-4 text-left transition-colors",
+                      isSelected
+                        ? "border-primary bg-primary/5"
+                        : "border-border hover:bg-muted/60",
                     )}
                   >
                     <div className="font-medium">{task.title}</div>
