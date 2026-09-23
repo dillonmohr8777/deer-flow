@@ -162,4 +162,20 @@ describe("ProjectsSection grouped-mode nested menus", () => {
     expect(rootMenus).toHaveLength(1);
     expect(rootMenus[0]?.classList.contains("w-full")).toBe(true);
   });
+
+  // axe `list` / `listitem`: a <ul> may hold only <li>s, and every nested list
+  // must live inside a list item, not beside it in a Collapsible <div>.
+  it("keeps list semantics valid when groups nest", async () => {
+    const { container } = renderGroupedSection();
+    fireEvent.click(screen.getByRole("button", { name: "Archived" }));
+    await screen.findAllByRole("button", { name: "More" });
+    for (const list of container.querySelectorAll("ul"))
+      for (const child of list.children) expect(child.tagName).toBe("LI");
+    for (const item of container.querySelectorAll("li"))
+      expect(item.parentElement?.tagName).toBe("UL");
+    // Hovering one row must not reveal every row's menu: only thread rows
+    // carry the group class that SidebarMenuAction's showOnHover keys on.
+    for (const group of container.querySelectorAll(".group\\/menu-item"))
+      expect(group.querySelector(".group\\/menu-item")).toBeNull();
+  });
 });

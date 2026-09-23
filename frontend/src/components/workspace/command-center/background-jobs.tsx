@@ -1,21 +1,27 @@
 "use client";
 
-import { ArrowUpRight, X } from "lucide-react";
+import * as PopoverPrimitive from "@radix-ui/react-popover";
+import { Activity, ArrowUpRight } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useState } from "react";
 
+import { Button } from "@/components/ui/button";
+import {
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  useSidebar,
+} from "@/components/ui/sidebar";
 import { useAgents } from "@/core/agents";
 import {
   useConsoleRuns,
   useConsoleStats,
   type ConsoleRunItem,
 } from "@/core/console";
+import { isStaticWebsiteOnly } from "@/core/static-mode";
 import { pathOfThread } from "@/core/threads/utils";
+import { cn } from "@/lib/utils";
 
-import { MomentumGlyph } from "./momentum-glyph";
-
-import appearanceStyles from "./workspace-appearance.module.css";
+import { formatModelLabel } from "./model-label";
 
 const STATUS_LABEL: Record<string, string> = {
   pending: "Queued",
@@ -34,64 +40,141 @@ function isTerminal(status: string) {
   return status !== "pending" && status !== "running";
 }
 
-export function BackgroundJobs() {
-  const [open, setOpen] = useState(false);
-  const pathname = usePathname();
+/**
+ * Background work, docked where it never covers content: a row in the sidebar
+ * footer (desktop, and the sidebar sheet on phones) or a compact icon in a
+ * page header. The count is live; a count that failed to load says
+ * "Unavailable" instead of a reassuring zero.
+ */
+export function BackgroundJobs({
+  variant = "sidebar",
+}: {
+  variant?: "sidebar" | "header";
+}) {
   const stats = useConsoleStats();
-  // Never turn a loading/error response into a reassuring zero-work count.
-  if (!stats.data || stats.isError) return null;
+  if (isStaticWebsiteOnly()) return null;
+  // undefined: still loading. null: failed, so unknown rather than 0.
+  const count = stats.isError ? null : stats.data?.active_runs;
+  const name =
+    count === undefined
+      ? "Background work, loading"
+      : count === null
+        ? "Background work, count unavailable"
+        : `Background work, ${count} queued or running jobs`;
+
+  if (variant === "header")
+    return (
+      <PopoverPrimitive.Root>
+        <PopoverPrimitive.Trigger asChild>
+          <Button variant="ghost" size="sm" aria-label={name}>
+            <Activity />
+            <Count count={count} />
+          </Button>
+        </PopoverPrimitive.Trigger>
+        <Panel count={count} side="bottom" />
+      </PopoverPrimitive.Root>
+    );
+  return <SidebarRow count={count} name={name} />;
+}
+
+function SidebarRow({
+  count,
+  name,
+}: {
+  count: number | null | undefined;
+  name: string;
+}) {
+  const { isMobile } = useSidebar();
   return (
-    <div
-      className={`${appearanceStyles.backgroundTray} fixed right-4 z-40 max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl border border-[#91b7d6] bg-white text-[#07172f] shadow-[0_16px_44px_rgba(24,84,134,0.18)] ${pathname.includes("/chats/") ? "bottom-48 sm:bottom-4" : "bottom-4"} sm:w-72 ${open ? "w-72" : "w-auto"}`}
-    >
-      <button
-        type="button"
-        onClick={() => setOpen(!open)}
-        aria-expanded={open}
-        aria-controls="momentum-background-jobs"
-        aria-label={`Background work, ${stats.data.active_runs} queued or running jobs`}
-        className="flex w-full items-center gap-3 rounded-2xl bg-[linear-gradient(105deg,#f8fcff,#edf7ff)] px-4 py-3 text-left text-sm font-bold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#003da5]"
-      >
-        <MomentumGlyph seed="system:background-work" size={24} />
-        <span className={open ? "flex-1" : "hidden sm:block sm:flex-1"}>
-          Background work
-        </span>
-        <span className="tabular-nums" aria-hidden="true">
-          {stats.data.active_runs}
-        </span>
-        {open && <X size={15} />}
-      </button>
-      {open && (
-        <div
-          id="momentum-background-jobs"
-          className="max-h-[50dvh] overflow-y-auto border-t border-[#d2e3f2] px-4 pb-4 sm:max-h-80"
-        >
-          {stats.data.active_runs === 0 ? (
-            <p className="py-4 text-sm text-[#50657b]">
-              No pending or running jobs.
-            </p>
-          ) : (
-            <>
-              <h3 className="pt-3 text-xs font-bold tracking-wide text-[#50657b] uppercase">
-                Active work
-              </h3>
-              <ActiveJobs status="running" />
-              <ActiveJobs status="pending" />
-            </>
-          )}
-          <h3 className="pt-3 text-xs font-bold tracking-wide text-[#50657b] uppercase">
-            Latest receipts
-          </h3>
-          <RecentReceipts />
-          <Link
-            className="mt-3 flex items-center gap-2 text-sm font-bold text-[#075bd8] underline underline-offset-4"
-            href="/workspace/command-center"
-          >
-            Open Command Center <ArrowUpRight size={14} />
-          </Link>
-        </div>
+    <PopoverPrimitive.Root>
+      <SidebarMenu>
+        <SidebarMenuItem>
+          <SidebarMenuButton asChild tooltip={name}>
+            <PopoverPrimitive.Trigger aria-label={name}>
+              <Activity />
+              <span>Background work</span>
+              <Count count={count} />
+            </PopoverPrimitive.Trigger>
+          </SidebarMenuButton>
+          {/* Collapsed sidebar: the label and count are clipped, so live work
+              shows as a dot on the icon (the tooltip and name carry the number). */}
+          {count ? (
+            <span
+              aria-hidden="true"
+              className="bg-primary absolute top-1 right-1 hidden size-2 rounded-full group-data-[collapsible=icon]:block"
+            />
+          ) : null}
+        </SidebarMenuItem>
+      </SidebarMenu>
+      <Panel count={count} side={isMobile ? "top" : "right"} />
+    </PopoverPrimitive.Root>
+  );
+}
+
+/** Visible count. Colour only when there is live work: state, not decoration. */
+function Count({ count }: { count: number | null | undefined }) {
+  if (count === undefined) return null;
+  if (count === null)
+    return (
+      <span aria-hidden="true" className="text-muted-foreground ml-auto text-xs">
+        Unavailable
+      </span>
+    );
+  return (
+    <span
+      aria-hidden="true"
+      className={cn(
+        "ml-auto min-w-5 rounded-full px-1.5 text-center text-xs font-bold tabular-nums",
+        count > 0 ? "bg-primary text-primary-foreground" : "text-muted-foreground",
       )}
-    </div>
+    >
+      {count}
+    </span>
+  );
+}
+
+function Panel({
+  count,
+  side,
+}: {
+  count: number | null | undefined;
+  side: "top" | "right" | "bottom";
+}) {
+  return (
+    <PopoverPrimitive.Portal>
+      <PopoverPrimitive.Content
+        side={side}
+        align="end"
+        sideOffset={8}
+        collisionPadding={16}
+        aria-label="Background work"
+        className="bg-popover text-popover-foreground z-50 max-h-(--radix-popover-content-available-height) w-80 max-w-[calc(100vw-2rem)] overflow-y-auto rounded-lg border px-4 pb-4 shadow-md"
+      >
+        {count === 0 ? (
+          <p className="text-muted-foreground py-4 text-sm">
+            No pending or running jobs.
+          </p>
+        ) : (
+          <>
+            <h3 className="text-muted-foreground pt-3 text-xs font-bold tracking-wide uppercase">
+              Active work
+            </h3>
+            <ActiveJobs status="running" />
+            <ActiveJobs status="pending" />
+          </>
+        )}
+        <h3 className="text-muted-foreground pt-3 text-xs font-bold tracking-wide uppercase">
+          Latest receipts
+        </h3>
+        <RecentReceipts />
+        <Link
+          className="text-primary mt-3 flex items-center gap-2 text-sm font-bold underline underline-offset-4"
+          href="/workspace/command-center"
+        >
+          Open Command Center <ArrowUpRight size={14} />
+        </Link>
+      </PopoverPrimitive.Content>
+    </PopoverPrimitive.Portal>
   );
 }
 
@@ -113,7 +196,7 @@ function ActiveJobs({ status }: { status: "running" | "pending" }) {
     );
   if (!query.data || query.data.runs.length === 0)
     return (
-      <p className="py-3 text-sm text-[#50657b]">
+      <p className="text-muted-foreground py-3 text-sm">
         No {statusLabel(status).toLowerCase()} jobs right now.
       </p>
     );
@@ -123,7 +206,7 @@ function ActiveJobs({ status }: { status: "running" | "pending" }) {
         <RunRow key={run.run_id} run={run} agents={agents} />
       ))}
       {query.data?.has_more && (
-        <p className="pt-2 text-xs text-[#50657b]">
+        <p className="text-muted-foreground pt-2 text-xs">
           Showing the latest 20 {statusLabel(status).toLowerCase()} jobs.
         </p>
       )}
@@ -151,7 +234,7 @@ function RecentReceipts() {
   );
   if (receipts.length === 0)
     return (
-      <p className="py-3 text-sm text-[#50657b]">
+      <p className="text-muted-foreground py-3 text-sm">
         No completed, failed, timed-out, or interrupted runs in the latest 20.
       </p>
     );
@@ -164,6 +247,7 @@ function RecentReceipts() {
   );
 }
 
+/** A receipt: plain text on purpose, the least decorated thing on screen. */
 function RunRow({
   run,
   agents,
@@ -178,33 +262,25 @@ function RunRow({
   const label = statusLabel(run.status);
   return (
     <Link
-      key={run.run_id}
       href={pathOfThread(
         run.thread_id,
         agentName ? { agent_name: agentName } : undefined,
       )}
       aria-label={`${title}, ${label}`}
-      className="flex gap-2 border-b border-[#d2e3f2] py-3 text-sm hover:bg-[#edf7ff] focus-visible:outline-2 focus-visible:outline-[#003da5]"
+      className="hover:bg-accent block border-b py-2.5 text-sm"
     >
-      <MomentumGlyph seed={`thread:${run.thread_id}`} size={28} />
-      <span className="min-w-0 flex-1">
-        <span className="block truncate font-bold text-[#092a57]">{title}</span>
-        <span className="text-xs text-[#50657b]">
-          {label} ·{" "}
-          <span className="font-bold text-[#00668e]">
-            {run.model_name ?? "Model not recorded"}
-          </span>{" "}
-          ·{" "}
-          <span className="font-bold text-[#5b3bd8]">
-            {run.total_tokens.toLocaleString()} tokens
-          </span>
-        </span>
-        {run.error && (
-          <span className="block truncate text-xs text-[#b4233e]">
-            Error: {run.error}
-          </span>
-        )}
+      <span className="block truncate font-bold">{title}</span>
+      <span className="text-muted-foreground text-xs">
+        {label} ·{" "}
+        {run.model_name ? formatModelLabel(run.model_name) : "Model not recorded"}{" "}
+        · <span className="tabular-nums">{run.total_tokens.toLocaleString()}</span>{" "}
+        tokens
       </span>
+      {run.error && (
+        <span className="text-destructive block truncate text-xs">
+          Error: {run.error}
+        </span>
+      )}
     </Link>
   );
 }

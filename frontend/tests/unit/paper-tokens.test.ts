@@ -68,6 +68,7 @@ describe("paper token palette (WCAG contrast)", () => {
     for (const name of [
       "paper-cream",
       "paper-cream-hi",
+      "paper-cream-lo",
       "paper-kraft",
       "paper-royal",
       "paper-royal-deep",
@@ -90,6 +91,11 @@ describe("paper token palette (WCAG contrast)", () => {
     ["paper-cream", "paper-ink", "cream vs ink", 14.07],
     ["paper-cream-hi", "paper-ink", "cream-hi vs ink", 15.47],
     ["paper-kraft", "paper-ink", "kraft vs ink", 9.56],
+    // cream-lo is the shell's hover and quiet-fill surface (bg-muted,
+    // bg-accent, the user's message bubble): muted text and hairlines sit on it.
+    ["paper-cream-lo", "paper-ink", "cream-lo vs ink", 12.34],
+    ["paper-ink-muted", "paper-cream-lo", "ink-muted on cream-lo", 6.66],
+    ["paper-line", "paper-cream-lo", "line on cream-lo (UI, not text)", 3.12],
     ["paper-royal", "paper-cream", "royal on cream", 7.07],
     // The spec table rounds this pairing to 10.49; the precise WCAG figure
     // for the approved hexes (#F2EDE3 on #14346E) is ~10.31 — still AAA for

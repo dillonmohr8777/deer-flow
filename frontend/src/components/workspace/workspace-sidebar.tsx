@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/sidebar";
 
 import { WorkspaceChannelsList } from "./channels/workspace-channels-list";
+import { BackgroundJobs } from "./command-center/background-jobs";
 import { PluginNavigation } from "./plugin-navigation";
 import { ProjectsSection } from "./projects-section";
 import { RecentChatList } from "./recent-chat-list";
@@ -42,6 +43,8 @@ export function WorkspaceSidebar({
           )}
         </SidebarContent>
         <SidebarFooter>
+          {/* Docked, not floating: it used to cover the composer and lists. */}
+          <BackgroundJobs />
           <WorkspaceNavMenu />
         </SidebarFooter>
         <SidebarRail />

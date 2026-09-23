@@ -13,6 +13,7 @@ import {
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
 import { SidebarTrigger } from "@/components/ui/sidebar";
+import { BackgroundJobs } from "@/components/workspace/command-center/background-jobs";
 import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
 
@@ -52,7 +53,7 @@ export function WorkspaceHeader({
   return (
     <header
       className={cn(
-        "top-0 right-0 left-0 z-20 flex h-16 shrink-0 items-center justify-between gap-2 border-b backdrop-blur-sm transition-[width,height] ease-out group-has-data-[collapsible=icon]/sidebar-wrapper:h-12",
+        "top-0 right-0 left-0 z-20 flex h-16 shrink-0 items-center justify-between gap-2 border-b transition-[width,height] ease-out group-has-data-[collapsible=icon]/sidebar-wrapper:h-12",
         className,
       )}
       {...props}
@@ -97,6 +98,11 @@ export function WorkspaceHeader({
           </BreadcrumbList>
         </Breadcrumb>
       </div>
+      {/* Phones: the sidebar footer is behind the menu, so the header carries
+          the live Background work count as a compact icon. */}
+      <div className="shrink-0 px-2 md:hidden">
+        <BackgroundJobs variant="header" />
+      </div>
     </header>
   );
 }
@@ -119,12 +125,23 @@ export function WorkspaceBody({
   );
 }
 
-function nameOfSegment(
+export function nameOfSegment(
   segment: string | undefined,
   t: ReturnType<typeof useI18n>["t"],
 ) {
   if (!segment) return t.common.home;
-  if (segment === "workspace") return t.breadcrumb.workspace;
-  if (segment === "chats") return t.breadcrumb.chats;
-  return segment[0]?.toUpperCase() + segment.slice(1);
+  const named: Record<string, string> = {
+    workspace: t.breadcrumb.workspace,
+    chats: t.breadcrumb.chats,
+    agents: t.sidebar.agents,
+    "scheduled-tasks": t.sidebar.scheduledTasks,
+    capabilities: t.capabilities.title,
+    projects: t.projects.title,
+    trash: t.trash.title,
+    "command-center": "Command Center",
+  };
+  // Unknown sections read as words in sentence case, never as a raw slug
+  // ("Scheduled-tasks" was the old fallback).
+  const words = segment.replace(/[-_]+/g, " ").trim();
+  return named[segment] ?? words.charAt(0).toUpperCase() + words.slice(1);
 }
