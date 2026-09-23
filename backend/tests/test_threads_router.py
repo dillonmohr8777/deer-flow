@@ -46,7 +46,9 @@ class _PermissiveThreadMetaStore(MemoryThreadMetaStore):
     stub auth middleware in ``_router_auth_helpers`` stamps a fresh UUID
     on every request, so the production filtering would reject every
     pre-seeded record. Bypass that filter so the test can focus on the
-    timestamp wire format.
+    timestamp wire format. The owner gate is bypassed entirely, existence
+    included: those semantics are pinned in ``test_thread_meta_repo.py`` and
+    ``test_org_isolation_b_threads.py``.
     """
 
     async def _get_owned_record(self, thread_id, user_id, method_name):  # type: ignore[override]
@@ -54,9 +56,6 @@ class _PermissiveThreadMetaStore(MemoryThreadMetaStore):
         return dict(item.value) if item is not None else None
 
     async def check_access(self, thread_id, user_id, *, require_existing=False):  # type: ignore[override]
-        item = await self._store.aget(THREADS_NS, thread_id)
-        if item is None:
-            return not require_existing
         return True
 
     async def create(self, thread_id, *, assistant_id=None, user_id=None, display_name=None, metadata=None, project_id=None):  # type: ignore[override]
@@ -910,14 +909,12 @@ def test_create_thread_returns_existing_when_insert_loses_race() -> None:
     assert body["metadata"] == {"k": "v"}
 
 
-def test_insert_race_recovery_claims_unscoped_row_for_trusted_owner() -> None:
-    """The insert-race recovery mirrors the fast path's owner reconciliation.
+def test_insert_race_recovery_never_claims_an_unscoped_row() -> None:
+    """Losing the insert race to an ownerless row answers 404 and claims nothing (M3).
 
     When a competing request commits a legacy unscoped (``user_id=None``) row
-    between our idempotency read and our insert, and our insert then loses the
-    duplicate-key race, a trusted internal owner must still claim the row rather
-    than return it unowned — otherwise ownership of the same thread would depend
-    on whether the fast path or the recovery path resolved it.
+    between our idempotency read and our insert, even a trusted internal owner
+    must not take it over: ownerless threads are nobody's.
     """
     import asyncio
 
@@ -951,69 +948,20 @@ def test_insert_race_recovery_claims_unscoped_row_for_trusted_owner() -> None:
     )
 
     async def _scenario():
-        response = await threads.create_thread(
-            threads.ThreadCreateRequest(thread_id="channel-thread", metadata={"k": "v"}),
-            request,
-        )
-        owner_row = await thread_store.get("channel-thread", user_id="owner-1")
-        unscoped_lookup = await thread_store.get("channel-thread", user_id=None)
-        return response, owner_row, unscoped_lookup
-
-    response, owner_row, unscoped_lookup = asyncio.run(_scenario())
-
-    assert response.thread_id == "channel-thread"
-    # Recovery claimed the legacy row for the trusted owner, same as the fast path.
-    assert owner_row is not None
-    assert owner_row["user_id"] == "owner-1"
-    assert unscoped_lookup["user_id"] == "owner-1"
-
-
-def test_fast_path_concurrent_trusted_claims_have_one_winner() -> None:
-    thread_store = MemoryThreadMetaStore(InMemoryStore())
-
-    async def _scenario():
-        await thread_store.create("legacy-fast-race", user_id=None)
-        owners = ("owner-a", "owner-b")
-        outcomes = await asyncio.gather(
-            *(
-                threads._resolve_existing_thread(
-                    thread_store,
-                    "legacy-fast-race",
-                    owner,
-                    {"user_id": owner},
-                )
-                for owner in owners
+        with pytest.raises(HTTPException) as exc_info:
+            await threads.create_thread(
+                threads.ThreadCreateRequest(thread_id="channel-thread", metadata={"k": "v"}),
+                request,
             )
-        )
-        return owners, outcomes, await thread_store.get("legacy-fast-race", user_id=None)
+        return exc_info.value, await thread_store.get("channel-thread", user_id=None)
 
-    owners, outcomes, final_record = asyncio.run(_scenario())
+    error, unscoped_lookup = asyncio.run(_scenario())
 
-    winners = [owner for owner, outcome in zip(owners, outcomes, strict=True) if outcome is not None]
-    assert winners == [final_record["user_id"]]
-    assert final_record["user_id"] in owners
+    assert error.status_code == 404
+    assert unscoped_lookup["user_id"] is None
 
 
-def test_fast_path_trusted_claim_does_not_take_over_owned_row() -> None:
-    thread_store = MemoryThreadMetaStore(InMemoryStore())
-
-    async def _scenario():
-        await thread_store.create("already-owned", user_id="owner-a")
-        outcome = await threads._resolve_existing_thread(
-            thread_store,
-            "already-owned",
-            "owner-b",
-            {"user_id": "owner-b"},
-        )
-        return outcome, await thread_store.get("already-owned", user_id=None)
-
-    outcome, final_record = asyncio.run(_scenario())
-
-    assert outcome is None
-    assert final_record["user_id"] == "owner-a"
-
-
-def test_insert_race_concurrent_trusted_claims_have_one_winner() -> None:
+def test_insert_race_concurrent_trusted_creates_claim_nothing() -> None:
     from sqlalchemy.exc import IntegrityError
 
     from app.gateway.auth_disabled import AUTH_SOURCE_INTERNAL
@@ -1050,27 +998,23 @@ def test_insert_race_concurrent_trusted_claims_have_one_winner() -> None:
         )
 
     async def _scenario():
-        owners = ("owner-a", "owner-b")
         outcomes = await asyncio.gather(
             *(
                 threads.create_thread(
                     threads.ThreadCreateRequest(thread_id="legacy-insert-race"),
                     _request(owner),
                 )
-                for owner in owners
+                for owner in ("owner-a", "owner-b")
             ),
             return_exceptions=True,
         )
-        return owners, outcomes, await thread_store.get("legacy-insert-race", user_id=None)
+        return outcomes, await thread_store.get("legacy-insert-race", user_id=None)
 
-    owners, outcomes, final_record = asyncio.run(_scenario())
+    outcomes, final_record = asyncio.run(_scenario())
 
-    winners = [owner for owner, outcome in zip(owners, outcomes, strict=True) if isinstance(outcome, threads.ThreadResponse)]
-    failures = [outcome for outcome in outcomes if isinstance(outcome, HTTPException)]
-    assert winners == [final_record["user_id"]]
-    assert final_record["user_id"] in owners
-    assert len(failures) == 1
-    assert failures[0].status_code == 500
+    # Neither trusted owner may take over the ownerless row both inserts lost to.
+    assert [getattr(outcome, "status_code", None) for outcome in outcomes] == [404, 404]
+    assert final_record["user_id"] is None
 
 
 def test_create_thread_maps_memory_owner_conflict_to_404() -> None:

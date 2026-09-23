@@ -157,10 +157,9 @@ class MemoryThreadMetaStore(ThreadMetaStore):
         item = await self._store.aget(THREADS_NS, thread_id)
         if item is None:
             return not require_existing
+        # Ownerless legacy records fail closed for every caller, as in the SQL store.
         record_user_id = item.value.get("user_id")
-        if record_user_id is None:
-            return True
-        return record_user_id == user_id
+        return record_user_id is not None and record_user_id == user_id
 
     async def update_display_name(
         self,

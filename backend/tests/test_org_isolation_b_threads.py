@@ -266,6 +266,9 @@ async def test_create_and_goal_cannot_claim_an_existing_checkpoint_or_row(world)
             assert created.status_code == 404, (thread_id, created.status_code, created.text)
             goal = await world.request(None, "PUT", f"/api/threads/{thread_id}/goal", {"objective": "claim"}, headers=headers)
             assert goal.status_code == 404, (thread_id, goal.status_code, goal.text)
+    # Upload-before-create does not extend to an existing ownerless row.
+    for method, path, body in [probe for probe in PROBES if "/uploads" in probe[1]]:
+        assert (await world.request(USER_A, method, _fill(path, T_NULL, R_A), body)).status_code == 404, path
     assert await world.snapshot() == before
     assert (await world.threads.get(T_NULL, user_id=None))["user_id"] is None
     assert await world.threads.get(T_ORPHAN, user_id=None) is None

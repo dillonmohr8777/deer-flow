@@ -334,16 +334,17 @@ def test_browser_session_messages_keep_per_user_filter(mixed_owner_store: Memory
 # ---------------------------------------------------------------------------
 
 
-def test_missing_thread_meta_keeps_owner_isolation_for_internal_callers() -> None:
-    """owner_check also authorizes missing-meta (legacy shared) threads.
+def test_missing_thread_meta_fails_closed_for_internal_callers() -> None:
+    """Missing-meta (legacy) threads answer 404 on every run read (M3).
 
-    There, unfiltered reads would expose other users' persisted runs to the
-    acting owner's internal caller, so the raw trusted owner stays the filter
-    — the exact value ``start_run`` stamps on run rows (#5448 review P1).
+    Before M3 ``owner_check`` authorized them and the raw trusted owner stayed
+    the data filter (#5448 review P1); now no caller, not even the owner whose
+    stamp is on a run, reads a thread without an owned row.
     """
     thread_store = MemoryThreadMetaStore(InMemoryStore())  # no metadata row at all
     run_store = _RecordingRunStore()
     _seed_run(run_store, "run-other-user", user_id=str(BROWSER_USER_ID), status="success")
+    _seed_run(run_store, "run-own-owner-stamp", user_id=OWNER_RAW, status="success")
 
     client = _make_app(
         user=_internal_user(OWNER_RAW),
@@ -353,45 +354,13 @@ def test_missing_thread_meta_keeps_owner_isolation_for_internal_callers() -> Non
     )
 
     with client:
-        listed = client.get(
-            f"/api/threads/{THREAD_ID}/runs",
-            headers={INTERNAL_OWNER_USER_ID_HEADER_NAME: OWNER_RAW},
-        )
-        page = client.get(
-            f"/api/threads/{THREAD_ID}/runs/page",
-            headers={INTERNAL_OWNER_USER_ID_HEADER_NAME: OWNER_RAW},
-        )
-        single = client.get(
-            f"/api/threads/{THREAD_ID}/runs/run-other-user",
-            headers={INTERNAL_OWNER_USER_ID_HEADER_NAME: OWNER_RAW},
-        )
-
-    assert listed.status_code == 200
-    assert listed.json() == []
-    assert page.status_code == 200
-    assert page.json()["data"] == []
-    assert single.status_code == 404
-    # The acting owner's own raw-stamped runs remain visible: seed one and
-    # confirm it comes back through the same endpoints.
-    owned_store = _RecordingRunStore()
-    _seed_run(owned_store, "run-own-owner-stamp", user_id=OWNER_RAW, status="success")
-    client = _make_app(
-        user=_internal_user(OWNER_RAW),
-        auth_source=AUTH_SOURCE_INTERNAL,
-        run_store=owned_store,
-        thread_store=thread_store,
-    )
-    with client:
-        own = client.get(
-            f"/api/threads/{THREAD_ID}/runs/run-own-owner-stamp",
-            headers={INTERNAL_OWNER_USER_ID_HEADER_NAME: OWNER_RAW},
-        )
-    assert own.status_code == 200
-    assert own.json()["run_id"] == "run-own-owner-stamp"
+        for path in ("runs", "runs/page", "runs/run-other-user", "runs/run-own-owner-stamp"):
+            response = client.get(f"/api/threads/{THREAD_ID}/{path}", headers={INTERNAL_OWNER_USER_ID_HEADER_NAME: OWNER_RAW})
+            assert response.status_code == 404, (path, response.text)
 
 
-def test_null_owner_thread_meta_keeps_owner_isolation_for_internal_callers() -> None:
-    """NULL-owner meta rows (shared/pre-auth data) isolate by raw owner too."""
+def test_null_owner_thread_meta_fails_closed_for_internal_callers() -> None:
+    """NULL-owner meta rows (legacy pre-auth data) are nobody's: 404 (M3)."""
     thread_store = MemoryThreadMetaStore(InMemoryStore())
     asyncio.run(
         thread_store.create(
@@ -420,8 +389,7 @@ def test_null_owner_thread_meta_keeps_owner_isolation_for_internal_callers() -> 
             headers={INTERNAL_OWNER_USER_ID_HEADER_NAME: OWNER_RAW},
         )
 
-    assert listed.status_code == 200
-    assert listed.json() == []
+    assert listed.status_code == 404
     assert single.status_code == 404
 
 
@@ -450,12 +418,8 @@ def test_established_ownership_still_reads_thread_runs_unfiltered(mixed_owner_st
     assert {row["run_id"] for row in response.json()} == {RUN_OWNER, "run-legacy-default"}
 
 
-def test_ownerless_internal_caller_default_filter_on_missing_meta() -> None:
-    """Without an owner header the synthetic "default" identity is the filter.
-
-    Pins the owner-less fallback branch of ``_run_scope_user_id``: a run
-    stamped with another owner's raw id stays hidden on missing-meta threads.
-    """
+def test_ownerless_internal_caller_is_denied_on_missing_meta() -> None:
+    """Without an owner header an internal caller also gets 404 on a missing-meta thread."""
     thread_store = MemoryThreadMetaStore(InMemoryStore())  # no meta row
     run_store = _RecordingRunStore()
     _seed_run(run_store, "run-owner-777", user_id=OWNER_RAW, status="success")
@@ -470,17 +434,15 @@ def test_ownerless_internal_caller_default_filter_on_missing_meta() -> None:
     with client:
         response = client.get(f"/api/threads/{THREAD_ID}/runs")
 
-    assert response.status_code == 200
-    assert response.json() == []
+    assert response.status_code == 404
 
 
-def test_subresource_reads_stay_owner_isolated_without_meta() -> None:
-    """Run-scoped sub-resources must respect the acting owner's stamp.
+def test_subresource_reads_fail_closed_without_meta() -> None:
+    """Run-scoped sub-resources of a missing-meta thread answer 404 to everyone.
 
     These reads query by ``(thread_id, run_id)`` with no per-user filter of
-    their own; on missing-meta threads an internal caller acting for owner A
-    could otherwise read owner B's run content by id (#5448 review P1
-    follow-up).
+    their own. Before M3 the acting owner's stamp gated them (#5448 review P1
+    follow-up); now a thread without an owned row is closed even to that owner.
     """
     thread_store = MemoryThreadMetaStore(InMemoryStore())  # no meta row
     run_store = _RecordingRunStore()
@@ -517,10 +479,8 @@ def test_subresource_reads_stay_owner_isolated_without_meta() -> None:
         messages = owner_client.get(base + "/messages", headers=owner_headers)
         events = owner_client.get(base + "/events", headers=owner_headers)
 
-    assert messages.status_code == 200
-    assert [row["content"]["id"] for row in messages.json()["data"]] == ["msg-owner-run"]
-    assert events.status_code == 200
-    assert any(event.get("run_id") == "run-owner-777" for event in events.json())
+    assert messages.status_code == 404
+    assert events.status_code == 404
 
 
 def test_null_owner_thread_gates_cancel_and_archive_for_internal_callers() -> None:
@@ -564,8 +524,8 @@ def test_null_owner_thread_gates_cancel_and_archive_for_internal_callers() -> No
     assert archive.status_code == 404
 
 
-def test_null_owner_thread_matching_owner_cancels_and_reads_manifest() -> None:
-    """The acting owner keeps cancel and archive access on shared threads."""
+def test_null_owner_thread_denies_even_the_matching_owner() -> None:
+    """NULL-owner threads are nobody's: cancel and archive 404 even for the run's stamp (M3)."""
     thread_store = MemoryThreadMetaStore(InMemoryStore())
     asyncio.run(thread_store.create(THREAD_ID, assistant_id=None, user_id=None))
     run_store = _RecordingRunStore()
@@ -599,11 +559,8 @@ def test_null_owner_thread_matching_owner_cancels_and_reads_manifest() -> None:
             headers={INTERNAL_OWNER_USER_ID_HEADER_NAME: OWNER_RAW},
         )
 
-    assert manifest.status_code == 200
-    assert manifest.json() == {"file_count": 2}
-    # A terminal run cannot be cancelled again: the acting owner reaches the
-    # real conflict path instead of a 404 anti-enumeration answer.
-    assert cancel.status_code == 409
+    assert manifest.status_code == 404
+    assert cancel.status_code == 404
 
 
 # edit/regenerate helper fallback paths (#5482)
@@ -689,8 +646,8 @@ def test_helper_fallback_paths_keep_per_user_filter_for_browser_sessions() -> No
     assert store.get_user_ids[-1] == str(BROWSER_USER_ID)
 
 
-def test_token_usage_isolated_without_meta_for_internal_callers() -> None:
-    """Token-usage aggregate honors the acting owner's raw stamp (#5484 r4)."""
+def test_token_usage_denied_without_meta_for_internal_callers() -> None:
+    """A missing-meta thread's token usage answers 404 (M3), not an owner-filtered aggregate."""
     thread_store = MemoryThreadMetaStore(InMemoryStore())  # no meta row
     run_store = _RecordingRunStore()
     _seed_run(run_store, "run-owner-777", user_id=OWNER_RAW, status="success")
@@ -713,14 +670,11 @@ def test_token_usage_isolated_without_meta_for_internal_callers() -> None:
             headers={INTERNAL_OWNER_USER_ID_HEADER_NAME: OWNER_RAW},
         )
 
-    assert response.status_code == 200
-    body = response.json()
-    assert body["total_tokens"] == 111
-    assert body["total_runs"] == 1
+    assert response.status_code == 404
 
 
-def test_token_usage_narrowed_for_browser_sessions_without_meta() -> None:
-    """Browser sessions on shared threads see only their own spend too."""
+def test_token_usage_denied_for_browser_sessions_without_meta() -> None:
+    """Browser sessions get 404 on a missing-meta thread's spend too (M3)."""
     thread_store = MemoryThreadMetaStore(InMemoryStore())  # no meta row
     run_store = _RecordingRunStore()
     _seed_run(run_store, "run-owner-777", user_id=OWNER_RAW, status="success")
@@ -740,8 +694,7 @@ def test_token_usage_narrowed_for_browser_sessions_without_meta() -> None:
     with client:
         response = client.get(f"/api/threads/{THREAD_ID}/token-usage")
 
-    assert response.status_code == 200
-    assert response.json()["total_tokens"] == 222
+    assert response.status_code == 404
 
 
 def test_token_usage_unfiltered_on_established_ownership_for_internal_callers() -> None:
