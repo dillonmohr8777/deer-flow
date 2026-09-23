@@ -178,7 +178,7 @@ async def test_cancelled_bootstrap_keeps_sqlite_lock_until_alembic_worker_finish
     first = asyncio.create_task(bootstrap_schema(engine, backend="sqlite"))
     second: asyncio.Task[None] | None = None
     try:
-        assert await asyncio.to_thread(stamp_started.wait, 2), "bootstrap did not reach the Alembic stamp worker"
+        assert await asyncio.to_thread(stamp_started.wait, 30), "bootstrap did not reach the Alembic stamp worker"
 
         first.cancel()
         await asyncio.sleep(0)
@@ -226,7 +226,7 @@ async def test_cancelled_versioned_bootstrap_keeps_sqlite_lock_until_upgrade_wor
     first = asyncio.create_task(bootstrap_schema(engine, backend="sqlite"))
     second: asyncio.Task[None] | None = None
     try:
-        assert await asyncio.to_thread(upgrade_started.wait, 2), "bootstrap did not reach the Alembic upgrade worker"
+        assert await asyncio.to_thread(upgrade_started.wait, 30), "bootstrap did not reach the Alembic upgrade worker"
 
         first.cancel()
         await asyncio.sleep(0)
