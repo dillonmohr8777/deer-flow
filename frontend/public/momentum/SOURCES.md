@@ -18,3 +18,4 @@
   have put light speckles inside the letterforms. Measured after processing:
   mean 13.02:1, worst pixel 4.52:1, zero pixels below AA large. No text, marks
   or third-party imagery in the generated content.
+- momo-mark.svg: newly authored flat vector interpretation of the blue face, white pill eyes and yellow antenna in Dillon's existing 29-second `C:/Users/dillo/Downloads/momentum-momo.mp4` ("Momentum built a bot. It watches the money."). This is a new interpretation from the inspected film, not a recovered original SVG. It is used as a brand character, not an agent activity indicator. Paper depth is informed by the recovered `Momo - First Assignment.dc.html` and `Momo - Living Portfolio Film.dc.html` references; no claims from the films are copied into product state.

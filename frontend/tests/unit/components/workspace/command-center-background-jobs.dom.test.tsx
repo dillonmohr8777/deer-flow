@@ -170,6 +170,6 @@ describe("BackgroundJobs", () => {
     expect(
       screen.getByRole("button", { name: /background work/i }).parentElement
         ?.className,
-    ).toContain("bottom-32 sm:bottom-4");
+    ).toContain("bottom-48 sm:bottom-4");
   });
 });

@@ -27,7 +27,7 @@ describe("MomentumGlyph", () => {
     );
   });
 
-  it("keeps decorative glyphs silent and gradient ids unique", () => {
+  it("keeps decorative glyphs silent and draws no gradients", () => {
     const { container } = render(
       <>
         <MomentumGlyph seed="thread:alpha" size={24} />
@@ -44,7 +44,8 @@ describe("MomentumGlyph", () => {
       screen.getByRole("img", { name: "Alpha conversation" }),
     ).toBeDefined();
 
-    const gradients = container.querySelectorAll("linearGradient");
-    expect(gradients[0]?.id).not.toBe(gradients[1]?.id);
+    // 6faebd2b replaced gradient strokes with flat ink and cream; no gradient
+    // ids exist to collide, and none should come back.
+    expect(container.querySelectorAll("linearGradient")).toHaveLength(0);
   });
 });

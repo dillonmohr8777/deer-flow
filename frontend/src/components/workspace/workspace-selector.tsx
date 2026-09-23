@@ -28,7 +28,7 @@ export function WorkspaceSelector() {
     setBusy(true);
     setError("");
     try {
-      const csrf = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]+)/)?.[1];
+      const csrf = /(?:^|;\s*)csrf_token=([^;]+)/.exec(document.cookie)?.[1];
       const response = await fetch("/api/workspaces/select", {
         method: "POST",
         headers: {

@@ -28,6 +28,16 @@ describe("workspace invitations", () => {
     expect(fetcher.mock.calls.some(([path]) => path === "/api/v1/auth/invitations/accept")).toBe(false);
   });
 
+  it("gives a missing-token visitor a way out instead of a dead end", async () => {
+    const fetcher = rs.spyOn(globalThis, "fetch");
+    render(<InvitePage />);
+    await screen.findByText(/Missing invite token/);
+    expect(
+      screen.getByRole("link", { name: "Sign in instead" }).getAttribute("href"),
+    ).toBe("/login");
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
   it("accepts an existing account password without imposing the new-account length rule", async () => {
     window.history.replaceState(null, "", "/invite#token=existing-invite");
     const fetcher = rs.spyOn(globalThis, "fetch").mockResolvedValueOnce(
@@ -38,7 +48,7 @@ describe("workspace invitations", () => {
     fireEvent.change(password, { target: { value: "valid123" } });
     fireEvent.submit(screen.getByRole("button", { name: "Accept invite" }).closest("form")!);
     await waitFor(() => expect(fetcher.mock.calls.length).toBe(2));
-    expect(JSON.parse(String(fetcher.mock.calls[1]?.[1]?.body))).toEqual({ token: "existing-invite", password: "valid123" });
+    expect(JSON.parse(fetcher.mock.calls[1]?.[1]?.body as string)).toEqual({ token: "existing-invite", password: "valid123" });
     await screen.findByText("Expired invitation");
   });
 });
