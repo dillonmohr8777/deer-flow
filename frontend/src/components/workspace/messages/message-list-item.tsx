@@ -249,7 +249,9 @@ export function MessageListItem({
             isHuman
               ? "absolute right-0 -bottom-9 left-0 justify-end"
               : "absolute right-0 bottom-0 left-0",
-            "z-20 opacity-0 transition-opacity delay-200 duration-300 group-hover/conversation-message:opacity-100",
+            // Revealed on hover, on keyboard focus (a Tab into an invisible
+            // toolbar is a lost focus ring), and always on touch screens.
+            "z-20 opacity-0 transition-opacity delay-200 duration-300 group-focus-within/conversation-message:opacity-100 group-hover/conversation-message:opacity-100 [@media(hover:none)]:opacity-100",
           )}
         >
           <div className="pointer-events-auto flex gap-1">
@@ -590,7 +592,10 @@ function MessageContent_({
             </div>
           </div>
         ) : contentToDisplay ? (
-          <AIElementMessageContent className="w-full max-w-full">
+          <AIElementMessageContent
+            className="w-full max-w-full"
+            data-human-message=""
+          >
             <HumanMessageText content={contentToDisplay} />
           </AIElementMessageContent>
         ) : null}

@@ -7,7 +7,7 @@
  * Update this pattern whenever new placeholder tokens are added to templates.
  */
 export const SUGGESTION_TEMPLATE_PLACEHOLDER_PATTERN =
-  /\[(?:主题|来源|topic|source)\]/i;
+  /\[(?:主题|来源|客户|topic|source|client)\]/i;
 
 /**
  * Locates an unreplaced suggestion template placeholder in the given text.

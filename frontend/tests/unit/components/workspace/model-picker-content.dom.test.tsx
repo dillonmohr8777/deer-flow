@@ -36,8 +36,9 @@ rs.mock("@/core/i18n/hooks", () => ({
         favorites: "Favorites",
         otherModels: "Other models",
         noModels: "No models available",
-        favoriteModel: (displayName: string, name: string) =>
-          `Favorite ${displayName} (${name})`,
+        favoriteModel: (label: string) => `Favorite ${label}`,
+        repeatedName: (position: number, total: number) =>
+          `${position} of ${total}`,
         sessionOnly: "Favorites are stored for this session only.",
       },
     },
@@ -155,9 +156,21 @@ function modelButtons() {
   );
 }
 
+// Repeated display names are told apart by position in API order, never by
+// the routing slug in `name`.
+const LABELS = new Map([
+  [MODELS[0]!.name, "Shared label, 1 of 2"],
+  [MODELS[1]!.name, "Shared label, 2 of 2"],
+  [MODELS[2]!.name, "Gamma"],
+]);
+
+function labelOf(model: Model) {
+  return LABELS.get(model.name)!;
+}
+
 function favoriteButton(model: Model) {
   return screen.getByRole("button", {
-    name: `Favorite ${model.display_name} (${model.name})`,
+    name: `Favorite ${labelOf(model)}`,
   });
 }
 
@@ -199,16 +212,35 @@ describe("ModelPickerContent anchored selection", () => {
     const favorites = await screen.findByRole("group", { name: "Favorites" });
     const others = screen.getByRole("group", { name: "Other models" });
     expect(
-      within(favorites).getByText("beta-api").closest("li"),
+      within(favorites).getByRole("button", { name: labelOf(MODELS[1]!) }),
     ).not.toBeNull();
     expect(
       within(others)
         .getAllByRole("listitem")
         .map((row) => row.textContent),
     ).toEqual([
-      expect.stringContaining("alpha-api"),
-      expect.stringContaining("gamma-api"),
+      expect.stringContaining("1 of 2"),
+      expect.stringContaining("Gamma"),
     ]);
+  });
+
+  it("never shows a routing slug or provider model id", async () => {
+    render(<StatefulPicker />);
+
+    const dialog = await screen.findByRole("dialog");
+    const named = [dialog, ...dialog.querySelectorAll("[aria-label]")]
+      .map((node) => node.getAttribute("aria-label") ?? "")
+      .join(" ");
+    for (const model of MODELS) {
+      expect(dialog.textContent).not.toContain(model.model);
+      expect(dialog.textContent).not.toContain(model.name.trim());
+      expect(named).not.toContain(model.model);
+      expect(named).not.toContain(model.name.trim());
+    }
+    // Gamma's name is unique, so it carries no ordinal.
+    expect(
+      screen.getByRole("button", { name: labelOf(MODELS[2]!) }).textContent,
+    ).toBe("Gamma");
   });
 
   it("omits the empty favorites heading without filtering the model list", async () => {
@@ -246,7 +278,7 @@ describe("ModelPickerContent anchored selection", () => {
     render(<StatefulPicker selectedModelName={MODELS[1]!.name} />);
 
     const current = await screen.findByRole("button", {
-      name: `Shared label (${MODELS[1]!.name})`,
+      name: labelOf(MODELS[1]!),
     });
     expect(current.getAttribute("aria-current")).toBe("true");
     expect(current.getAttribute("data-current-model")).toBe("true");
@@ -259,10 +291,10 @@ describe("ModelPickerContent anchored selection", () => {
   it("focuses the current model and moves between rows with arrows", async () => {
     render(<StatefulPicker />);
     const current = await screen.findByRole("button", {
-      name: `Shared label (${MODELS[0]!.name})`,
+      name: labelOf(MODELS[0]!),
     });
     const gamma = screen.getByRole("button", {
-      name: `Gamma (${MODELS[2]!.name})`,
+      name: labelOf(MODELS[2]!),
     });
 
     await waitFor(() => expect(document.activeElement).toBe(current));
@@ -275,13 +307,13 @@ describe("ModelPickerContent anchored selection", () => {
   it("moves from favorite stars to adjacent model rows with arrows", async () => {
     render(<StatefulPicker />);
     const betaStar = await screen.findByRole("button", {
-      name: `Favorite ${MODELS[1]!.display_name} (${MODELS[1]!.name})`,
+      name: `Favorite ${labelOf(MODELS[1]!)}`,
     });
     const alpha = screen.getByRole("button", {
-      name: `Shared label (${MODELS[0]!.name})`,
+      name: labelOf(MODELS[0]!),
     });
     const gamma = screen.getByRole("button", {
-      name: `Gamma (${MODELS[2]!.name})`,
+      name: labelOf(MODELS[2]!),
     });
 
     betaStar.focus();
@@ -299,7 +331,7 @@ describe("ModelPickerContent favorite actions", () => {
     const onModelSelect = rs.fn();
     render(<StatefulPicker onModelSelect={onModelSelect} />);
     const betaStar = await screen.findByRole("button", {
-      name: `Favorite ${MODELS[1]!.display_name} (${MODELS[1]!.name})`,
+      name: `Favorite ${labelOf(MODELS[1]!)}`,
     });
 
     expect(betaStar.getAttribute("aria-pressed")).toBe("true");
@@ -315,7 +347,7 @@ describe("ModelPickerContent favorite actions", () => {
     favoriteNames = [];
     const { rerender } = render(<ControlledPicker open />);
     const betaStar = await screen.findByRole("button", {
-      name: `Favorite ${MODELS[1]!.display_name} (${MODELS[1]!.name})`,
+      name: `Favorite ${labelOf(MODELS[1]!)}`,
     });
     betaStar.focus();
     fireEvent.click(betaStar);
@@ -333,7 +365,7 @@ describe("ModelPickerContent favorite actions", () => {
       <ControlledPicker open selectedModelName={MODELS[0]!.name} />,
     );
     const beta = await screen.findByRole("button", {
-      name: `Shared label (${MODELS[1]!.name})`,
+      name: labelOf(MODELS[1]!),
     });
     beta.focus();
     expect(document.activeElement).toBe(beta);
@@ -344,7 +376,7 @@ describe("ModelPickerContent favorite actions", () => {
     await waitFor(() =>
       expect(document.activeElement).toBe(
         screen.getByRole("button", {
-          name: `Shared label (${MODELS[1]!.name})`,
+          name: labelOf(MODELS[1]!),
         }),
       ),
     );
@@ -378,7 +410,7 @@ describe("ModelPickerContent favorite actions", () => {
       <ControlledPicker open models={mutableModels} />,
     );
     const alphaStar = await screen.findByRole("button", {
-      name: `Favorite ${MODELS[0]!.display_name} (${MODELS[0]!.name})`,
+      name: `Favorite ${labelOf(MODELS[0]!)}`,
     });
 
     authLoading = true;
@@ -414,7 +446,7 @@ describe("ModelPickerContent popover lifecycle", () => {
       <ControlledPicker open selectedModelName={MODELS[2]!.name} />,
     );
     const current = await screen.findByRole("button", {
-      name: `Gamma (${MODELS[2]!.name})`,
+      name: labelOf(MODELS[2]!),
     });
     await waitFor(() => expect(document.activeElement).toBe(current));
 
@@ -427,7 +459,7 @@ describe("ModelPickerContent popover lifecycle", () => {
     await waitFor(() =>
       expect(document.activeElement).toBe(
         screen.getByRole("button", {
-          name: `Gamma (${MODELS[2]!.name})`,
+          name: labelOf(MODELS[2]!),
         }),
       ),
     );

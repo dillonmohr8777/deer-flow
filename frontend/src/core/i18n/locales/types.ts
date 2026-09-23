@@ -1,5 +1,3 @@
-import type { LucideIcon } from "lucide-react";
-
 export interface Translations {
   // Locale meta
   locale: {
@@ -180,7 +178,6 @@ export interface Translations {
   // Welcome
   welcome: {
     greeting: string;
-    description: string;
     createYourOwnSkill: string;
     createYourOwnSkillDescription: string;
   };
@@ -247,7 +244,8 @@ export interface Translations {
     favorites: string;
     otherModels: string;
     noModels: string;
-    favoriteModel: (displayName: string, name: string) => string;
+    favoriteModel: (label: string) => string;
+    repeatedName: (position: number, total: number) => string;
     sessionOnly: string;
   };
 
@@ -335,8 +333,6 @@ export interface Translations {
     reasoningEffortMediumDescription: string;
     reasoningEffortHigh: string;
     reasoningEffortHighDescription: string;
-    surpriseMe: string;
-    surpriseMePrompt: string;
     followupLoading: string;
     followupConfirmTitle: string;
     followupConfirmDescription: string;
@@ -358,24 +354,15 @@ export interface Translations {
     compactSuccess: string;
     compactSkipped: string;
     compactFailed: string;
-    suggestions: {
-      suggestion: string;
-      prompt: string;
-      icon: LucideIcon;
-    }[];
-    suggestionsCreate: (
-      | {
-          suggestion: string;
-          prompt: string;
-          icon: LucideIcon;
-        }
-      | {
-          type: "separator";
-        }
-    )[];
+    startersLabel: string;
+    /** Empty-thread prompts. Each prompt carries one bracketed placeholder
+     *  that core/suggestions/placeholders.ts recognises. */
+    starters: { label: string; prompt: string }[];
     pleaseWaitStreaming: string;
     stopStreamingUnavailable: string;
     startTurnUnavailable: string;
+    send: string;
+    stopRun: string;
   };
 
   // Sidebar

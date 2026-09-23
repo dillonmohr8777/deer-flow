@@ -49,6 +49,7 @@ export function RunDuration({ durationSeconds }: { durationSeconds: number }) {
   return (
     <div
       className="text-muted-foreground flex items-center gap-2 text-sm"
+      data-receipt=""
       data-testid="run-duration"
       title={t.runDuration.description}
     >

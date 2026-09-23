@@ -1,3 +1,4 @@
+import { formatModelLabel } from "@/components/workspace/command-center/model-label";
 import { formatTokenCount, type TokenUsage } from "@/core/messages/usage";
 import type { Model } from "@/core/models/types";
 
@@ -24,8 +25,10 @@ export function resolveSubtaskModelLabel(
   if (!modelName) {
     return undefined;
   }
+  // A model the viewer cannot list still gets a name, never its routing slug.
   return (
-    models.find((model) => model.name === modelName)?.display_name ?? modelName
+    models.find((model) => model.name === modelName)?.display_name ??
+    formatModelLabel(modelName)
   );
 }
 

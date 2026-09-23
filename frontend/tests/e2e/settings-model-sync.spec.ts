@@ -93,14 +93,14 @@ for (const agent of [false, true]) {
       ).toBeVisible();
       await expect(
         page.getByRole("button", {
-          name: "Reasoning Effort: Medium",
+          name: "Reasoning effort Medium",
           exact: true,
         }),
       ).toBeVisible();
       if (field === "effort") {
         await page
           .getByRole("button", {
-            name: "Reasoning Effort: Medium",
+            name: "Reasoning effort Medium",
             exact: true,
           })
           .click();

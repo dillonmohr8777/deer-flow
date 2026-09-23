@@ -10,7 +10,6 @@ import {
   Loader2Icon,
   MicIcon,
   PaperclipIcon,
-  PlusIcon,
   RocketIcon,
   SparklesIcon,
   SquareIcon,
@@ -54,7 +53,6 @@ import {
   type PromptInputMessage,
 } from "@/components/ai-elements/prompt-input";
 import { Button } from "@/components/ui/button";
-import { ConfettiButton } from "@/components/ui/confetti-button";
 import {
   Dialog,
   DialogContent,
@@ -66,7 +64,6 @@ import {
 import {
   DropdownMenuGroup,
   DropdownMenuLabel,
-  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { fetch } from "@/core/api/fetcher";
 import { useAuth } from "@/core/auth/AuthProvider";
@@ -126,12 +123,6 @@ import { isIMEComposing } from "@/lib/ime";
 import { cn } from "@/lib/utils";
 
 import { Suggestion, Suggestions } from "../ai-elements/suggestion";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "../ui/dropdown-menu";
 
 import { ConversationReferenceChip } from "./conversation-references/conversation-reference-chip";
 import { ReferenceConversationsButton } from "./conversation-references/reference-conversations-button";
@@ -2340,6 +2331,7 @@ export function InputBox({
             "shadow-primary/10 ring-primary/25 shadow-lg ring-1",
           className,
         )}
+        data-chat-composer=""
         disabled={composerLocked}
         globalDrop
         multiple
@@ -2497,7 +2489,10 @@ export function InputBox({
           )}
         </div>
         <PromptInputFooter className="flex flex-wrap gap-2 sm:flex-nowrap">
-          <PromptInputTools className="min-w-0 flex-1 flex-wrap">
+          {/* Phones: the tools take a full row and the model and Send the
+              next, at the right edge by the thumb, so the composer stays
+              two rows tall. */}
+          <PromptInputTools className="min-w-0 flex-1 basis-full flex-wrap sm:basis-auto">
             <AddAttachmentsButton
               className="px-2!"
               disabled={composerLocked}
@@ -2573,15 +2568,12 @@ export function InputBox({
                       <GraduationCapIcon className="size-3" />
                     )}
                     {context.mode === "ultra" && (
-                      <RocketIcon className="size-3 text-[#dabb5e]" />
+                      <RocketIcon className="size-3" />
                     )}
                   </div>
-                  <div
-                    className={cn(
-                      "truncate text-xs font-normal",
-                      context.mode === "ultra" ? "golden-text" : "",
-                    )}
-                  >
+                  {/* Ink like every other mode: brass is for objects, and
+                      the word carries the mode, not its colour. */}
+                  <div className="truncate text-xs font-normal">
                     {(context.mode === "flash" && t.inputBox.flashMode) ||
                       (context.mode === "thinking" &&
                         t.inputBox.reasoningMode) ||
@@ -2698,16 +2690,11 @@ export function InputBox({
                           <RocketIcon
                             className={cn(
                               "mr-2 size-4",
-                              context.mode === "ultra" && "text-[#dabb5e]",
+                              context.mode === "ultra" &&
+                                "text-accent-foreground",
                             )}
                           />
-                          <div
-                            className={cn(
-                              context.mode === "ultra" && "golden-text",
-                            )}
-                          >
-                            {t.inputBox.ultraMode}
-                          </div>
+                          {t.inputBox.ultraMode}
                         </div>
                         <div className="pl-7 text-xs">
                           {t.inputBox.ultraModeDescription}
@@ -2726,22 +2713,26 @@ export function InputBox({
             {knowledgeScopeControl}
             {supportReasoningEffort && context.mode !== "flash" && (
               <PromptInputActionMenu>
+                {/* Shown at every width: phones set effort too. The label
+                    is quiet and the chosen level carries the weight. */}
                 <PromptInputActionMenuTrigger
-                  className="hidden gap-1! px-2! sm:inline-flex"
+                  className="gap-1! px-2!"
                   disabled={composerLocked}
                 >
-                  <div className="text-xs font-normal">
-                    {t.inputBox.reasoningEffort}:
-                    {context.reasoning_effort === "minimal" &&
-                      " " + t.inputBox.reasoningEffortMinimal}
-                    {context.reasoning_effort === "low" &&
-                      " " + t.inputBox.reasoningEffortLow}
-                    {(context.reasoning_effort === "medium" ||
-                      !context.reasoning_effort) &&
-                      " " + t.inputBox.reasoningEffortMedium}
-                    {context.reasoning_effort === "high" &&
-                      " " + t.inputBox.reasoningEffortHigh}
-                  </div>
+                  <span className="text-xs font-normal">
+                    <span className="text-muted-foreground">
+                      {t.inputBox.reasoningEffort}
+                    </span>{" "}
+                    <span className="font-semibold">
+                      {context.reasoning_effort === "minimal"
+                        ? t.inputBox.reasoningEffortMinimal
+                        : context.reasoning_effort === "low"
+                          ? t.inputBox.reasoningEffortLow
+                          : context.reasoning_effort === "high"
+                            ? t.inputBox.reasoningEffortHigh
+                            : t.inputBox.reasoningEffortMedium}
+                    </span>
+                  </span>
                 </PromptInputActionMenuTrigger>
                 <PromptInputActionMenuContent className="w-70">
                   <DropdownMenuGroup>
@@ -2845,7 +2836,7 @@ export function InputBox({
               </PromptInputActionMenu>
             )}
           </PromptInputTools>
-          <PromptInputTools className="min-w-0 justify-end">
+          <PromptInputTools className="ml-auto min-w-0 justify-end">
             {goalObjectiveCounter && (
               <span
                 aria-label={t.inputBox.goalLengthCounter
@@ -2894,10 +2885,9 @@ export function InputBox({
               status={status}
               // A bare disabled square reads as a broken composer; explain
               // the permission boundary (native title, since a Radix
-              // tooltip won't fire on a disabled button). Spread
-              // conditionally: an explicitly-undefined aria-label would
-              // clobber PromptInputSubmit's default aria-label="Submit"
-              // and strip the submit control's accessible name.
+              // tooltip won't fire on a disabled button). Otherwise name
+              // what the button does now: while a turn streams it stops
+              // the run, and a generic "Submit" would hide that.
               {...(stopDenied
                 ? {
                     "aria-label": t.inputBox.stopStreamingUnavailable,
@@ -2908,7 +2898,12 @@ export function InputBox({
                       "aria-label": t.inputBox.startTurnUnavailable,
                       title: t.inputBox.startTurnUnavailable,
                     }
-                  : {})}
+                  : {
+                      "aria-label":
+                        status === "streaming"
+                          ? t.inputBox.stopRun
+                          : t.inputBox.send,
+                    })}
               onClick={(e) => {
                 if (status === "streaming") {
                   e.preventDefault();
@@ -2927,14 +2922,13 @@ export function InputBox({
         searchParams.get("mode") !== "skill" &&
         !selectedSlashSkill &&
         !showSkillSuggestions && (
-          <div className="flex items-center justify-center pt-2">
-            <SuggestionList onSelectPlaceholder={onSelectPlaceholder} />
-          </div>
+          <StarterPrompts onSelectPlaceholder={onSelectPlaceholder} />
         )}
 
       <p
         className={cn(
-          "text-muted-foreground/67 z-10 px-4 text-center text-xs leading-4",
+          // Full muted ink: at 67% it measured 3.4:1 on cream paper.
+          "text-muted-foreground z-10 px-4 text-center text-xs leading-4",
           !isWelcomeMode && "absolute top-full right-0 left-0",
         )}
       >
@@ -3010,64 +3004,37 @@ function VoiceInputButton({
   );
 }
 
-function SuggestionList({
+/**
+ * Three honest ways into Momentum's work. Choosing one fills the composer and
+ * selects its [placeholder]; nothing is sent until the person edits and
+ * submits. No stagger reveal: the motion vocabulary drops cascades.
+ */
+function StarterPrompts({
   onSelectPlaceholder,
 }: {
   onSelectPlaceholder: (newText: string) => void;
 }) {
   const { t } = useI18n();
   const { textInput } = usePromptInputController();
-  const handleSuggestionClick = useCallback(
-    (prompt: string | undefined) => {
-      if (!prompt) return;
-      textInput.setInput(prompt);
-      onSelectPlaceholder(prompt);
-    },
-    [textInput, onSelectPlaceholder],
-  );
   return (
-    <Suggestions className="min-h-16 w-full max-w-full justify-center px-4 sm:w-fit sm:px-0">
-      <ConfettiButton
-        className="text-muted-foreground cursor-pointer rounded-full px-4 text-xs font-normal"
-        variant="outline"
-        size="sm"
-        onClick={() => handleSuggestionClick(t.inputBox.surpriseMePrompt)}
-      >
-        <SparklesIcon className="size-4" /> {t.inputBox.surpriseMe}
-      </ConfettiButton>
-      {t.inputBox.suggestions.map((suggestion) => (
+    <div
+      role="group"
+      aria-label={t.inputBox.startersLabel}
+      className="flex w-full max-w-full flex-wrap items-center justify-center gap-2 px-4 pt-2 sm:px-0"
+      data-chat-starters=""
+    >
+      {t.inputBox.starters.map((starter) => (
         <Suggestion
-          key={suggestion.suggestion}
-          icon={suggestion.icon}
-          suggestion={suggestion.suggestion}
-          onClick={() => handleSuggestionClick(suggestion.prompt)}
+          key={starter.label}
+          className="paper-card text-foreground text-xs sm:text-sm"
+          suggestion={starter.label}
+          onClick={() => {
+            textInput.setInput(starter.prompt);
+            onSelectPlaceholder(starter.prompt);
+          }}
         />
       ))}
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Suggestion icon={PlusIcon} suggestion={t.common.create} />
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start">
-          <DropdownMenuGroup>
-            {t.inputBox.suggestionsCreate.map((suggestion, index) =>
-              "type" in suggestion && suggestion.type === "separator" ? (
-                <DropdownMenuSeparator key={index} />
-              ) : (
-                !("type" in suggestion) && (
-                  <DropdownMenuItem
-                    key={suggestion.suggestion}
-                    onClick={() => handleSuggestionClick(suggestion.prompt)}
-                  >
-                    {suggestion.icon && <suggestion.icon className="size-4" />}
-                    {suggestion.suggestion}
-                  </DropdownMenuItem>
-                )
-              ),
-            )}
-          </DropdownMenuGroup>
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </Suggestions>
+    </div>
   );
 }
 

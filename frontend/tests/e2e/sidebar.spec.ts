@@ -97,9 +97,11 @@ test.describe("Sidebar navigation", () => {
       expect(box!.x + box!.width).toBeLessThanOrEqual(viewportWidth + 1);
     };
 
-    await expectInsideViewport(page.getByText(/欢迎使用 🦌 DeerFlow/).first());
+    await expectInsideViewport(
+      page.getByText("要让团队接手什么工作？").first(),
+    );
     await expectInsideViewport(page.getByRole("textbox").first());
-    await expectInsideViewport(page.locator("[data-slot='suggestions-list']"));
+    await expectInsideViewport(page.locator("[data-chat-starters]"));
 
     const mobileSidebarTrigger = page
       .locator("[data-sidebar='trigger']:visible")

@@ -1,14 +1,3 @@
-import {
-  CompassIcon,
-  GraduationCapIcon,
-  ImageIcon,
-  MicroscopeIcon,
-  PenLineIcon,
-  ShapesIcon,
-  SparklesIcon,
-  VideoIcon,
-} from "lucide-react";
-
 import type { Translations } from "./types";
 
 export const enUS: Translations = {
@@ -205,10 +194,7 @@ export const enUS: Translations = {
 
   // Welcome
   welcome: {
-    greeting: "Hello, again!",
-    description:
-      "Tell Momentum what you need. The lead agent plans the work, hands parts to specialists, and every run leaves a record you can check.",
-
+    greeting: "What should the team take on?",
     createYourOwnSkill: "Create Your Own Skill",
     createYourOwnSkillDescription:
       "Create your own skill to release the power of Momentum. With customized skills,\nMomentum can help you search on the web, analyze data, and generate\n artifacts like slides, web pages and do almost anything.",
@@ -288,7 +274,8 @@ export const enUS: Translations = {
     favorites: "Favorites",
     otherModels: "Other models",
     noModels: "No models available",
-    favoriteModel: (displayName, name) => `Favorite ${displayName} (${name})`,
+    favoriteModel: (label) => `Favorite ${label}`,
+    repeatedName: (position, total) => `${position} of ${total}`,
     sessionOnly: "Favorites are stored for this session only.",
   },
 
@@ -383,7 +370,7 @@ export const enUS: Translations = {
     ultraMode: "Ultra",
     ultraModeDescription:
       "Pro mode with subagents to divide work; best for complex multi-step tasks",
-    reasoningEffort: "Reasoning Effort",
+    reasoningEffort: "Reasoning effort",
     reasoningEffortMinimal: "Minimal",
     reasoningEffortMinimalDescription: "Retrieval + Direct Output",
     reasoningEffortLow: "Low",
@@ -394,8 +381,6 @@ export const enUS: Translations = {
     reasoningEffortHigh: "High",
     reasoningEffortHighDescription:
       "Full-dimensional Logic Deduction + Multi-path Verification + Backward Check",
-    surpriseMe: "Surprise",
-    surpriseMePrompt: "Surprise me",
     followupLoading: "Generating follow-up questions...",
     followupConfirmTitle: "Send suggestion?",
     followupConfirmDescription:
@@ -422,59 +407,30 @@ export const enUS: Translations = {
       "Earlier context compacted. The full chat remains visible; future model calls will use the summary and recent messages.",
     compactSkipped: "The current context does not need compaction yet.",
     compactFailed: "Context compaction failed.",
-    suggestions: [
+    startersLabel: "Start from",
+    starters: [
       {
-        suggestion: "Write",
-        prompt: "Write a blog post about the latest trends on [topic]",
-        icon: PenLineIcon,
-      },
-      {
-        suggestion: "Research",
+        label: "Plan a client delivery",
         prompt:
-          "Conduct a deep dive research on [topic], and summarize the findings.",
-        icon: MicroscopeIcon,
+          "Plan this month's delivery for [client]: what we owe them, who owns each piece, and what is blocked. Ask me for anything you cannot find.",
       },
       {
-        suggestion: "Collect",
-        prompt: "Collect data from [source] and create a report.",
-        icon: ShapesIcon,
-      },
-      {
-        suggestion: "Learn",
-        prompt: "Learn about [topic] and create a tutorial.",
-        icon: GraduationCapIcon,
-      },
-    ],
-    suggestionsCreate: [
-      {
-        suggestion: "Webpage",
-        prompt: "Create a webpage about [topic]",
-        icon: CompassIcon,
-      },
-      {
-        suggestion: "Image",
-        prompt: "Create an image about [topic]",
-        icon: ImageIcon,
-      },
-      {
-        suggestion: "Video",
-        prompt: "Create a video about [topic]",
-        icon: VideoIcon,
-      },
-      {
-        type: "separator",
-      },
-      {
-        suggestion: "Skill",
+        label: "Research with sources",
         prompt:
-          "We're going to build a new skill step by step with `skill-creator`. To start, what do you want this skill to do?",
-        icon: SparklesIcon,
+          "Research [topic] and bring back sources I can check. Keep what is confirmed apart from what is still open.",
+      },
+      {
+        label: "Draft a client report",
+        prompt:
+          "Draft this month's report for [client]: results, spend, and next steps. Mark every number you could not verify.",
       },
     ],
     pleaseWaitStreaming: "Please wait for the current response to finish.",
     stopStreamingUnavailable:
       "Stopping the running turn is not permitted for your role.",
     startTurnUnavailable: "Starting a new turn is not permitted for your role.",
+    send: "Send",
+    stopRun: "Stop the running turn",
   },
 
   // Sidebar

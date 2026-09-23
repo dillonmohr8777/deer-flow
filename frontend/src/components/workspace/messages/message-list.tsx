@@ -890,7 +890,8 @@ export function MessageList({
       }
 
       return (
-        <div className="mt-2 flex justify-start gap-1 opacity-0 transition-opacity delay-200 duration-300 group-hover/assistant-turn:opacity-100">
+        // Revealed on hover, on keyboard focus, and always on touch screens.
+        <div className="mt-2 flex justify-start gap-1 opacity-0 transition-opacity delay-200 duration-300 group-focus-within/assistant-turn:opacity-100 group-hover/assistant-turn:opacity-100 [@media(hover:none)]:opacity-100">
           {clipboardData && <CopyButton clipboardData={clipboardData} />}
           {enableBranchForTurn &&
             !isStreaming &&

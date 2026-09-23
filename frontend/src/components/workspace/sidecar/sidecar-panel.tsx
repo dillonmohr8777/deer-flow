@@ -755,16 +755,9 @@ function SidecarModeMenu({
             {mode === "flash" && <ZapIcon className="size-3" />}
             {mode === "thinking" && <LightbulbIcon className="size-3" />}
             {mode === "pro" && <GraduationCapIcon className="size-3" />}
-            {mode === "ultra" && (
-              <RocketIcon className="size-3 text-[#dabb5e]" />
-            )}
+            {mode === "ultra" && <RocketIcon className="size-3" />}
           </div>
-          <div
-            className={cn(
-              "truncate text-xs font-normal",
-              mode === "ultra" && "golden-text",
-            )}
-          >
+          <div className="truncate text-xs font-normal">
             {(mode === "flash" && t.inputBox.flashMode) ||
               (mode === "thinking" && t.inputBox.reasoningMode) ||
               (mode === "pro" && t.inputBox.proMode) ||
@@ -876,12 +869,10 @@ function SidecarModeMenu({
                 <RocketIcon
                   className={cn(
                     "mr-2 size-4",
-                    mode === "ultra" && "text-[#dabb5e]",
+                    mode === "ultra" && "text-accent-foreground",
                   )}
                 />
-                <div className={cn(mode === "ultra" && "golden-text")}>
-                  {t.inputBox.ultraMode}
-                </div>
+                {t.inputBox.ultraMode}
               </div>
               <div className="pl-7 text-xs">
                 {t.inputBox.ultraModeDescription}
