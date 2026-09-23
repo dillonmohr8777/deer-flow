@@ -686,6 +686,8 @@ export const zhCN: Translations = {
 
   // 定时任务
   scheduledTasks: {
+    lede: "按时运行的提示词。每次运行都会在下方留下记录。",
+    empty: "还没有定时任务。选择上方的模板，或写下提示词并设定运行时间。",
     scheduleType: {
       cron: "重复",
       once: "单次",
@@ -749,6 +751,8 @@ export const zhCN: Translations = {
       noResults: "没有符合搜索内容和筛选条件的任务。",
     },
     filters: {
+      status: "状态",
+      type: "类型",
       allStatuses: "全部状态",
       enabled: "已启用",
       paused: "已暂停",
@@ -775,6 +779,9 @@ export const zhCN: Translations = {
       noSelection: "未选择定时任务",
       filteredByThread: "按线程筛选：{id}",
       loadFailed: "加载定时任务失败",
+      notScheduled: "未安排",
+      never: "从未",
+      none: "无",
     },
     actions: {
       edit: "编辑",

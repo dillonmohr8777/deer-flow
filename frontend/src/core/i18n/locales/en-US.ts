@@ -738,6 +738,9 @@ export const enUS: Translations = {
 
   // Scheduled tasks
   scheduledTasks: {
+    lede: "Prompts that run on a clock. Every run leaves a record below.",
+    empty:
+      "Nothing is scheduled yet. Pick a recipe above, or write a prompt and choose when it runs.",
     scheduleType: {
       cron: "Recurring",
       once: "One-time",
@@ -802,6 +805,8 @@ export const enUS: Translations = {
       noResults: "No tasks match your search and filters.",
     },
     filters: {
+      status: "Status",
+      type: "Type",
       allStatuses: "All statuses",
       enabled: "Enabled",
       paused: "Paused",
@@ -828,6 +833,9 @@ export const enUS: Translations = {
       noSelection: "No scheduled task selected",
       filteredByThread: "Filtered by thread: {id}",
       loadFailed: "Failed to load scheduled tasks",
+      notScheduled: "Not scheduled",
+      never: "Never",
+      none: "None",
     },
     actions: {
       edit: "Edit",

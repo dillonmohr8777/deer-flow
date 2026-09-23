@@ -610,6 +610,8 @@ export interface Translations {
 
   // Scheduled tasks
   scheduledTasks: {
+    lede: string;
+    empty: string;
     scheduleType: { cron: string; once: string; interval: string };
     preset: {
       label: string;
@@ -664,6 +666,8 @@ export interface Translations {
     };
     search: { placeholder: string; clear: string; noResults: string };
     filters: {
+      status: string;
+      type: string;
       allStatuses: string;
       enabled: string;
       paused: string;
@@ -690,6 +694,9 @@ export interface Translations {
       noSelection: string;
       filteredByThread: string;
       loadFailed: string;
+      notScheduled: string;
+      never: string;
+      none: string;
     };
     actions: {
       edit: string;
