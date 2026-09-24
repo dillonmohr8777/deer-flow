@@ -25,7 +25,9 @@ export function WorkspaceHeader({ className }: { className?: string }) {
     <>
       <div
         className={cn(
-          "group/workspace-header flex h-12 flex-col justify-center",
+          // min-h, not h: the expanded header stacks the MomoBot label over
+          // the brand signature, which is taller than 48px and was clipped.
+          "group/workspace-header flex min-h-12 flex-col justify-center py-1.5",
           className,
         )}
       >
