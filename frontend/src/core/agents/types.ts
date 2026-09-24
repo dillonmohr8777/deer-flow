@@ -21,6 +21,12 @@ export interface Agent {
   thinking_enabled?: boolean | null;
   reasoning_effort?: ReasoningEffort | null;
   soul?: string | null;
+  /** Client this agent was stamped for, if any (fleet templates). */
+  client_id?: string | null;
+  /** Fleet template this agent was stamped from, if any. */
+  template_id?: string | null;
+  /** Version of the fleet template this agent was stamped from, if any. */
+  template_version?: string | null;
 }
 
 export interface CreateAgentRequest {
