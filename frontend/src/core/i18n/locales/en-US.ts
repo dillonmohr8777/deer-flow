@@ -747,10 +747,11 @@ export const enUS: Translations = {
     cronHelp: "Open crontab.guru",
     create: {
       title: "Create scheduled task",
+      newTask: "New scheduled task",
       taskTitle: "Task title",
       prompt: "Prompt",
       agent: "Agent",
-      leadAgent: "Default agent (lead_agent)",
+      leadAgent: "Default agent",
       submit: "Create",
       fillRequired: "Fill all required fields",
     },
@@ -1001,6 +1002,8 @@ export const enUS: Translations = {
       `Delete “${title}”? This will delete the conversation and its files. This action can't be undone.`,
     deleteFailed: "Failed to delete chat. Please try again.",
     noActiveChats: "No recent chats",
+    noActiveChatsHint:
+      "Conversations you start with the team show up here, newest first.",
     activeChats: "Recent chats",
     archivedChats: "Archived",
     archiveChat: "Archive chat",

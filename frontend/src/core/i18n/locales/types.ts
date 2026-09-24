@@ -643,6 +643,7 @@ export interface Translations {
     cronHelp: string;
     create: {
       title: string;
+      newTask: string;
       taskTitle: string;
       prompt: string;
       agent: string;
@@ -856,6 +857,7 @@ export interface Translations {
     deleteConfirm: (title: string) => string;
     deleteFailed: string;
     noActiveChats: string;
+    noActiveChatsHint: string;
     activeChats: string;
     archivedChats: string;
     archiveChat: string;
