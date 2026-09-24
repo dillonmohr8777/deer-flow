@@ -8,7 +8,7 @@ from typing import Any, Literal
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field, ValidationError
 
-from app.gateway.deps import is_admin_user, require_admin_user
+from app.gateway.deps import audit_actor_id, is_admin_user, record_audit_event, require_admin_user
 from deerflow.config.app_config import get_app_config
 from deerflow.persistence.managed_subagents import (
     ManagedSubagentDefinition,
@@ -183,6 +183,7 @@ async def create_managed_subagent(request: Request, body: ManagedSubagentCreateR
         await asyncio.to_thread(store.create, definition)
     except ManagedSubagentExistsError:
         raise HTTPException(status_code=409, detail=f"Managed subagent '{definition.name}' already exists")
+    await record_audit_event(request, action="managed_subagent.created", outcome="success", actor_user_id=audit_actor_id(request), target_type="managed_subagent", target_id=definition.name)
     return SubagentResponse(
         **definition.model_dump(exclude={"system_prompt"}),
         system_prompt=definition.system_prompt,
@@ -218,6 +219,7 @@ async def update_managed_subagent(name: str, request: Request, body: ManagedSuba
         # leaking that race as a 500.
         raise HTTPException(status_code=404, detail=f"Managed subagent '{name}' not found")
     conflict = updated.name in BUILTIN_SUBAGENTS or updated.name in app_config.subagents.custom_agents
+    await record_audit_event(request, action="managed_subagent.updated", outcome="success", actor_user_id=audit_actor_id(request), target_type="managed_subagent", target_id=name)
     return SubagentResponse(
         **updated.model_dump(exclude={"system_prompt"}),
         system_prompt=updated.system_prompt,
@@ -236,3 +238,4 @@ async def delete_managed_subagent(name: str, request: Request) -> None:
     store = get_managed_subagent_store(app_config)
     if not await asyncio.to_thread(store.delete, name):
         raise HTTPException(status_code=404, detail=f"Managed subagent '{name}' not found")
+    await record_audit_event(request, action="managed_subagent.deleted", outcome="success", actor_user_id=audit_actor_id(request), target_type="managed_subagent", target_id=name)

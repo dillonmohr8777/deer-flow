@@ -67,6 +67,10 @@ class UserRow(Base):
     # Auth lifecycle flags
     needs_setup: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     token_version: Mapped[int] = mapped_column(nullable=False, default=0)
+    # Set by POST /api/admin/users/{id}/disable; a disabled user cannot log in
+    # and its existing sessions stop validating (checked in
+    # get_current_user_from_request). Cleared by .../enable.
+    disabled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (
         # sqlite_where alone is a SQLAlchemy dialect-specific kwarg -- it

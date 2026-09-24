@@ -108,11 +108,11 @@ async def _seed_workspace(session_factory, *, owner_id: str = "owner-1") -> str:
     return organization_id
 
 
-async def _create(monkeypatch, session_factory, organization_id: str, *, owner_id: str = "owner-1", email: str = "Jesse@example.com"):
+async def _create(monkeypatch, session_factory, organization_id: str, *, owner_id: str = "owner-1", email: str = "Jesse@example.com", role: str = "member"):
     actor = SimpleNamespace(id=owner_id)
     monkeypatch.setattr(invitations, "get_current_user_from_request", lambda request: _async_value(actor))
     return await invitations.create_invitation(
-        invitations.CreateInvitationRequest(organization_id=organization_id, email=email),
+        invitations.CreateInvitationRequest(organization_id=organization_id, email=email, role=role),
         _request(user=actor, source=AUTH_SOURCE_SESSION),
         Response(),
     )
@@ -150,7 +150,7 @@ async def test_new_recipient_is_created_and_token_is_single_use(invitation_db, m
         user = await session.scalar(select(UserRow).where(UserRow.email == "jesse@example.com"))
         assert user is not None
         membership = await session.get(OrganizationMemberRow, {"organization_id": organization_id, "user_id": user.id})
-        assert membership is not None and membership.role == "admin" and membership.status == "active"
+        assert membership is not None and membership.role == "member" and membership.status == "active"
         invitation = await session.get(InvitationRow, created.id)
         assert invitation is not None and invitation.consumed_at is not None
 
@@ -161,6 +161,57 @@ async def test_new_recipient_is_created_and_token_is_single_use(invitation_db, m
             Response(),
         )
     assert getattr(replay.value, "status_code", None) == 403
+
+
+def test_create_invitation_request_defaults_role_to_member():
+    """Least privilege by default (#audit-admin): admin stays opt-in."""
+    request = invitations.CreateInvitationRequest(organization_id="workspace-1", email="new@example.com")
+    assert request.role == "member"
+
+
+@pytest.mark.asyncio
+async def test_inviter_can_explicitly_choose_admin_role(invitation_db, monkeypatch):
+    organization_id = await _seed_workspace(invitation_db)
+    created = await _create(monkeypatch, invitation_db, organization_id, email="chosen-admin@example.com", role="admin")
+
+    accepted = await invitations.accept_invitation(
+        invitations.AcceptInvitationRequest(token=created.token, password="A-longer-new-password!"),
+        _request(),
+        Response(),
+    )
+    assert accepted.workspace_id == organization_id
+    async with invitation_db() as session:
+        user = await session.scalar(select(UserRow).where(UserRow.email == "chosen-admin@example.com"))
+        membership = await session.get(OrganizationMemberRow, {"organization_id": organization_id, "user_id": user.id})
+        assert membership is not None and membership.role == "admin"
+
+
+@pytest.mark.asyncio
+async def test_member_role_cannot_create_invitation(invitation_db, monkeypatch):
+    """Least privilege: a plain "member" (not owner/admin) cannot invite others."""
+    organization_id = await _seed_workspace(invitation_db)
+    now = datetime.now(UTC)
+    async with invitation_db() as session:
+        async with session.begin():
+            session.add(
+                OrganizationMemberRow(
+                    organization_id=organization_id,
+                    user_id="member-user",
+                    role="member",
+                    status="active",
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+    actor = SimpleNamespace(id="member-user")
+    monkeypatch.setattr(invitations, "get_current_user_from_request", lambda request: _async_value(actor))
+    with pytest.raises(Exception) as unauthorized:
+        await invitations.create_invitation(
+            invitations.CreateInvitationRequest(organization_id=organization_id, email="blocked@example.com"),
+            _request(user=actor, source=AUTH_SOURCE_SESSION),
+            Response(),
+        )
+    assert getattr(unauthorized.value, "status_code", None) == 403
 
 
 @pytest.mark.asyncio

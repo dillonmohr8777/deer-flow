@@ -475,12 +475,14 @@ async def langgraph_runtime(app: FastAPI, startup_config: AppConfig) -> AsyncGen
         # Initialize repositories — one get_session_factory() call for all.
         sf = get_session_factory()
         if sf is not None:
+            from deerflow.persistence.audit_events import AuditEventRepository
             from deerflow.persistence.feedback import FeedbackRepository
             from deerflow.persistence.personal_access_tokens import PersonalAccessTokenRepository
             from deerflow.persistence.run import RunRepository
 
             app.state.run_store = RunRepository(sf)
             app.state.feedback_repo = FeedbackRepository(sf)
+            app.state.audit_repo = AuditEventRepository(sf)
             from app.gateway.auth.pat import PAT_LAST_USED_WRITE_INTERVAL_SECONDS
 
             app.state.pat_repo = PersonalAccessTokenRepository(sf, last_used_write_interval_seconds=PAT_LAST_USED_WRITE_INTERVAL_SECONDS)
@@ -489,6 +491,7 @@ async def langgraph_runtime(app: FastAPI, startup_config: AppConfig) -> AsyncGen
 
             app.state.run_store = MemoryRunStore()
             app.state.feedback_repo = None
+            app.state.audit_repo = None
             # Memory backend has no durable PAT store, so Bearer credentials
             # cannot be validated there and are rejected by the middleware.
             app.state.pat_repo = None
@@ -801,6 +804,55 @@ def get_local_provider() -> LocalAuthProvider:
     return _cached_local_provider
 
 
+def get_audit_repo(request: Request):
+    """Return the audit event repository, or raise 503 when unavailable.
+
+    For the admin read endpoint (``GET /api/admin/audit-events``), which
+    cannot serve anything meaningful without a durable store. Call sites that
+    only *write* an audit row should use :func:`record_audit_event` instead,
+    which no-ops rather than failing the action being audited.
+    """
+    audit_repo = getattr(request.app.state, "audit_repo", None)
+    if audit_repo is None:
+        raise HTTPException(status_code=503, detail="Audit log requires a configured database")
+    return audit_repo
+
+
+def audit_actor_id(request: Request) -> str | None:
+    """Best-effort acting-user id for an audit row, from ``request.state.user``.
+
+    Reads the identity ``AuthMiddleware`` already stamped rather than calling
+    :func:`get_current_user_from_request` again: that function also accepts a
+    bare cookie with no ``request.state`` set up (the "middleware-less test
+    composition" case its own docstring describes), which several existing
+    router-level tests exercise with a minimal fake ``Request`` that has no
+    ``.cookies`` at all. Returns ``None`` on that same fallback path, which
+    only means the audit row's ``actor_user_id`` is left blank.
+    """
+    user = getattr(request.state, "user", None)
+    user_id = getattr(user, "id", None)
+    return str(user_id) if user_id is not None else None
+
+
+async def record_audit_event(request: Request, **kwargs: Any) -> None:
+    """Best-effort one-line audit call for routers.
+
+    No-ops when the audit repo is unavailable (memory backend), and also
+    when *request* carries no real ``app`` (several router-level tests in
+    this codebase call an endpoint function directly against a lightweight
+    fake ``Request``, matching the pattern ``test_mcp_config_secrets.py``
+    uses for other admin routes). The repository's own ``record()`` already
+    swallows and logs any write failure; catching broadly here extends that
+    same "never break the audited action" guarantee to a malformed caller.
+    """
+    try:
+        audit_repo = request.app.state.audit_repo
+    except Exception:
+        return
+    if audit_repo is not None:
+        await audit_repo.record(**kwargs)
+
+
 def get_pat_repo(request: Request):
     """Return the personal-access-token repository from app state.
 
@@ -856,11 +908,20 @@ async def get_current_user_from_request(request: Request):
             detail=AuthErrorResponse(code=AuthErrorCode.USER_NOT_FOUND, message="User not found").model_dump(),
         )
 
-    # Token version mismatch → password was changed, token is stale
+    # Token version mismatch → password was changed, token is stale, or an
+    # admin forced a logout by bumping token_version directly.
     if user.token_version != payload.ver:
         raise HTTPException(
             status_code=401,
             detail=AuthErrorResponse(code=AuthErrorCode.TOKEN_INVALID, message="Token revoked (password changed)").model_dump(),
+        )
+
+    # getattr, not a direct attribute access: several existing tests build a
+    # minimal user double (SimpleNamespace) that predates this field.
+    if getattr(user, "disabled_at", None) is not None:
+        raise HTTPException(
+            status_code=401,
+            detail=AuthErrorResponse(code=AuthErrorCode.USER_DISABLED, message="This account has been disabled").model_dump(),
         )
 
     return user
