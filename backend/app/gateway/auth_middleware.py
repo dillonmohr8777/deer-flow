@@ -18,6 +18,7 @@ from starlette.responses import JSONResponse
 from starlette.types import ASGIApp
 
 from app.gateway.auth.errors import AuthErrorCode, AuthErrorResponse
+from app.gateway.auth.session_cookie import ACCESS_TOKEN_COOKIE_NAME
 from app.gateway.auth_disabled import (
     AUTH_SOURCE_AUTH_DISABLED,
     AUTH_SOURCE_INTERNAL,
@@ -238,7 +239,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 internal_user = get_internal_user(owner_user_id=delegation.owner_user_id)
 
         auth_source = AUTH_SOURCE_SESSION
-        access_token = request.cookies.get("access_token")
+        access_token = request.cookies.get(ACCESS_TOKEN_COOKIE_NAME)
         authorization = request.headers.get("authorization")
         pat_scopes: frozenset[str] = frozenset()
         pat_organization_id: str | None = None
