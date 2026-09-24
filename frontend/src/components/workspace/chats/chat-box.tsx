@@ -384,7 +384,12 @@ const ChatBox: React.FC<{
                 Browse the side panel for this conversation.
               </SheetDescription>
             </SheetHeader>
-            <div className="min-h-0 flex-1 p-3 pt-10">{rightPanelContent}</div>
+            {/* Right-edge sheet: bottom/right can sit under a notch or the
+                home indicator in landscape, so pad by whichever is larger,
+                matching the existing command-center run-detail pattern. */}
+            <div className="min-h-0 flex-1 p-3 pt-10 pr-[max(0.75rem,env(safe-area-inset-right))] pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+              {rightPanelContent}
+            </div>
           </SheetContent>
         </Sheet>
       </>
