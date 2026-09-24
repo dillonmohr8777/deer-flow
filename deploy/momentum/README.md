@@ -13,6 +13,9 @@ loader runs were both removed.
 | `load-secrets.ps1` | Loads service credentials stored in the gateway volume. Never prints them. |
 | `backup_volume.py` | Consistent snapshot of the gateway volume into an empty volume, safe while live. |
 | `compose.rehearsal.yaml` | Container names for a side-by-side restore rehearsal. |
+| `compose.postgres.yaml` | Overlay adding a Postgres service and pointing the gateway at it. No published port; needs `POSTGRES_PASSWORD` in `.env`. |
+| `workspace.config.postgres.yaml` | Same as `workspace.config.yaml` except `database:` (backend: postgres). Pair with `compose.postgres.yaml` via `restart.ps1 -ConfigPath`. |
+| `POSTGRES-REHEARSAL.md` | SQLite -> Postgres migration receipt and the cutover/rollback runbook for live. |
 
 Needs, outside git: `.env`, `frontend/.env`, `extensions_config.json`, and the
 `<project>_gateway-data` volume (holds the DB, `.jwt_secret`, service credentials).

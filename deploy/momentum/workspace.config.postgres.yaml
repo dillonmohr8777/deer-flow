@@ -1,3 +1,7 @@
+# Postgres-backend variant of workspace.config.yaml -- identical except for
+# the `database:` block. Used with compose.postgres.yaml for a Postgres
+# rehearsal or cutover; keep every other key in sync with workspace.config.yaml
+# (test_momentum_postgres_rehearsal.py fails the build if they drift).
 config_version: 46
 log_level: info
 logging:
@@ -700,7 +704,7 @@ memory:
   backend_config:
     storage_path: ''
     storage_class: file
-    strict_user_scope: true
+    strict_user_scope: false
     manifest_filename: memory.json
     file_lock_timeout_seconds: 10
     retrieval_adapter: fts5
@@ -743,8 +747,8 @@ skill_evolution:
   moderation_model_name: null
   security_fail_closed: true
 database:
-  backend: sqlite
-  sqlite_dir: .deer-flow/data
+  backend: postgres
+  postgres_url: $DATABASE_URL
   pool_recycle: 300
   command_timeout: 30
   checkpoint_channel_mode: full
