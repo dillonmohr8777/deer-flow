@@ -8,6 +8,7 @@ import {
   BrainIcon,
   GraduationCapIcon,
   PaletteIcon,
+  ShieldCheckIcon,
   UsersRoundIcon,
   UserIcon,
 } from "lucide-react";
@@ -93,6 +94,11 @@ const AboutSettingsPage = dynamic(
     import("./about-settings-page").then((module) => module.AboutSettingsPage),
   { loading: SettingsPageLoading },
 );
+const AuditSettingsPage = dynamic(
+  () =>
+    import("./audit-settings-page").then((module) => module.AuditSettingsPage),
+  { loading: SettingsPageLoading },
+);
 
 export type SettingsSection =
   | "models"
@@ -103,6 +109,7 @@ export type SettingsSection =
   | "subagents"
   | "notification"
   | "experience"
+  | "audit"
   | "about";
 
 type SettingsDialogProps = React.ComponentProps<typeof Dialog> & {
@@ -162,6 +169,11 @@ export function SettingsDialog(props: SettingsDialogProps) {
         label: t.settings.sections.subagents,
         icon: UsersRoundIcon,
       },
+      {
+        id: "audit",
+        label: t.settings.sections.audit,
+        icon: ShieldCheckIcon,
+      },
       { id: "about", label: t.settings.sections.about, icon: InfoIcon },
     ],
     [
@@ -173,6 +185,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
       t.settings.sections.subagents,
       t.settings.sections.notification,
       t.settings.sections.experience,
+      t.settings.sections.audit,
       t.settings.sections.about,
     ],
   );
@@ -243,6 +256,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
               {activeSection === "notification" && <NotificationSettingsPage />}
               {activeSection === "experience" && <ExperienceSettingsPage />}
               {activeSection === "channels" && <ChannelsSettingsPage />}
+              {activeSection === "audit" && <AuditSettingsPage />}
               {activeSection === "about" && <AboutSettingsPage />}
             </div>
           </ScrollArea>

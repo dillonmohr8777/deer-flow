@@ -57,7 +57,8 @@ graph TB
 | `password_hash` | bcrypt hash，OAuth 用户可为空 |
 | `system_role` | `admin` 或 `user` |
 | `needs_setup` | reset 后要求用户完成邮箱 / 密码设置 |
-| `token_version` | 改密码或 reset 时递增，用于废弃旧 JWT |
+| `token_version` | 改密码或 reset 时递增，用于废弃旧 JWT；管理员强制登出也走这个字段 |
+| `disabled_at` | 管理员禁用该账号的时间，为空表示账号可用 |
 
 ### 运行时身份
 
@@ -413,6 +414,17 @@ PYTHONPATH=. python scripts/migrate_user_isolation.py --user-id <target-user-id>
 - 只有迁移脚本和 admin CLI 可以显式传 `user_id=None` 绕过隔离。
 - 本地文件路径必须通过 `Paths` 和 sandbox path validation 解析，不能拼接未校验的用户输入。
 - 捕获认证、迁移、后台任务异常必须记录日志；不能空 catch。
+- `disabled_at` 非空的账号必须同时在登录（`LocalAuthProvider.authenticate`）和已有 session 校验（`get_current_user_from_request`）两处被拒绝。
+
+## 审计日志与管理员操作
+
+SOC 2 风格的最小控制集，为向外部客户开放做准备。
+
+- **`audit_events` 表**（append only，迁移 `0033_audit_events`）记录 `occurred_at` / `actor_user_id` / `organization_id` / `action`（形如 `auth.login.succeeded` 的点分字符串）/ `target_type` / `target_id` / `outcome`（`success` / `denied` / `failed`）/ `ip` / `user_agent` / `details`（JSON）。`AuditEventRepository.record()` 永远不向请求路径抛异常：写入失败只记日志，不能让被审计的动作本身失败。
+- `details` 在写入前统一走 `deerflow.persistence.audit_events.redact_audit_details`：键名包含 password / token / secret / cookie / api_key / authorization / credential / private_key / access_key / client_secret 等字样的值一律替换为 `"[redacted]"`。
+- 已接入 `record`（一行调用，见 `app.gateway.deps.record_audit_event`）的动作：本地登录成功 / 失败、登出、改密码、PAT 创建 / 撤销、邀请创建 / 接受 / 撤销（含成员角色变更）、MCP 配置写入、managed model 保存、managed subagent 增改删、run 取消，以及下面三个管理员动作本身。
+- **管理员操作**（`app/gateway/routers/admin.py`，`/api/admin/*`，`require_admin_user` 门禁，与 Models / MCP 配置同一断言）：`POST /users/{id}/disable`、`POST /users/{id}/enable`、`POST /users/{id}/force-logout`（复用已有的 `token_version` 机制），以及只读的 `GET /audit-events`（按 action 前缀 / actor / since / until 过滤，游标分页，跨组织，供系统管理员纵览整个部署）。
+- 共享工作区邀请默认角色已改为 `member`（最小权限：不能管理成员、不能改组织设置），邀请人可显式选择 `admin`；见 `app/gateway/routers/invitations.py` 的 `CreateInvitationRequest.role`。
 
 ## 已知边界
 
@@ -443,6 +455,9 @@ PYTHONPATH=. python scripts/migrate_user_isolation.py --user-id <target-user-id>
 | `app/gateway/auth/reset_admin.py` | 密码 reset CLI |
 | `app/gateway/auth/credential_file.py` | 0600 凭据文件写入 |
 | `app/gateway/authz.py` | 路由权限与 owner check |
+| `app/gateway/routers/admin.py` | 管理员禁用 / 启用 / 强制登出用户、只读审计日志列表 |
+| `deerflow/persistence/audit_events/` | `AuditEventRow` / `AuditEventRepository`（record 不抛异常、游标分页）/ `redact_audit_details` |
+| `packages/harness/deerflow/persistence/migrations/versions/0033_audit_events.py` | `audit_events` 建表、`users.disabled_at` 加列 |
 | `deerflow/runtime/user_context.py` | 当前用户 ContextVar 与 `AUTO` sentinel |
 | `deerflow/persistence/thread_meta/` | thread metadata owner filter |
 | `deerflow/config/paths.py` | per-user filesystem layout |

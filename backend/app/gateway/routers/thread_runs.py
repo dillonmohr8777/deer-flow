@@ -47,7 +47,7 @@ from app.gateway.conversation_reader import (
 from app.gateway.conversation_reader import (
     scan_visible_thread_messages as _scan_visible_thread_messages,
 )
-from app.gateway.deps import get_current_user, get_feedback_repo, get_run_event_store, get_run_manager, get_run_store, get_stream_bridge
+from app.gateway.deps import get_current_user, get_feedback_repo, get_run_event_store, get_run_manager, get_run_store, get_stream_bridge, record_audit_event
 from app.gateway.internal_auth import INTERNAL_SYSTEM_ROLE, get_trusted_internal_owner_user_id
 from app.gateway.pagination import trim_run_message_page
 from app.gateway.run_models import RunCreateRequest
@@ -1272,6 +1272,7 @@ async def cancel_run(
         CancelOutcome.requested,
         CancelOutcome.taken_over,
     ):
+        await record_audit_event(request, action="run.cancelled", outcome="success", actor_user_id=await get_current_user(request), target_type="run", target_id=run_id, details={"cancel_action": action, "outcome": outcome.value})
         if wait and record.task is not None:
             try:
                 await record.task

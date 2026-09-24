@@ -36,7 +36,7 @@ from app.gateway.auth.session_cookie import ACCESS_TOKEN_COOKIE_NAME, SESSION_PE
 from app.gateway.auth.session_cookie_state import SKIP_AUTH_CSRF_COOKIE_STATE_ATTR
 from app.gateway.auth.user_provisioning import get_or_provision_oidc_user
 from app.gateway.csrf_middleware import CSRF_COOKIE_NAME, _request_origin, auth_csrf_cookie_settings, generate_csrf_token, is_secure_request
-from app.gateway.deps import get_current_user_from_request, get_local_provider
+from app.gateway.deps import get_current_user_from_request, get_local_provider, record_audit_event
 from deerflow.config.auth_config import OIDCProviderConfig
 
 logger = logging.getLogger(__name__)
@@ -414,6 +414,7 @@ async def login_local(
 
     if user is None:
         await _record_login_failure(client_ip)
+        await record_audit_event(request, action="auth.login.failed", outcome="denied", ip=client_ip, user_agent=request.headers.get("user-agent"), details={"email": form_data.username})
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=AuthErrorResponse(code=AuthErrorCode.INVALID_CREDENTIALS, message="Incorrect email or password").model_dump(),
@@ -422,6 +423,7 @@ async def login_local(
     _record_login_success(client_ip)
     token = create_access_token(str(user.id), token_version=user.token_version)
     _set_session_cookie(response, token, request, remember_me=remember_me)
+    await record_audit_event(request, action="auth.login.succeeded", outcome="success", actor_user_id=str(user.id), ip=client_ip, user_agent=request.headers.get("user-agent"))
 
     return LoginResponse(
         expires_in=get_auth_config().token_expiry_days * 24 * 3600,
@@ -491,6 +493,9 @@ async def logout(request: Request, response: Response):
     response.delete_cookie(key=CSRF_COOKIE_NAME, secure=is_https, samesite="strict")
     response.delete_cookie(key=SESSION_PERSISTENCE_COOKIE_NAME, secure=is_https, samesite="lax")
     setattr(request.state, SKIP_AUTH_CSRF_COOKIE_STATE_ATTR, True)
+    actor = getattr(request.state, "user", None)
+    if actor is not None:
+        await record_audit_event(request, action="auth.logout", outcome="success", actor_user_id=str(actor.id))
     return MessageResponse(message="Successfully logged out")
 
 
@@ -554,6 +559,7 @@ async def change_password(request: Request, response: Response, body: ChangePass
     token = create_access_token(str(user.id), token_version=user.token_version)
     _set_session_cookie(response, token, request, remember_me=body.remember_me)
     _set_csrf_cookie(response, request)
+    await record_audit_event(request, action="auth.password_changed", outcome="success", actor_user_id=str(user.id))
 
     return MessageResponse(message="Password changed successfully")
 
@@ -675,6 +681,7 @@ async def create_pat(request: Request, body: PATCreateRequest):
         token_digest=pat_token_digest(token),
         expires_at=expires_at,
     )
+    await record_audit_event(request, action="auth.pat.created", outcome="success", actor_user_id=str(user.id), target_type="personal_access_token", target_id=str(record["id"]), details={"name": body.name.strip(), "scopes": scopes})
     return PATCreatedResponse(
         id=str(record["id"]),
         name=str(record["name"]),
@@ -704,6 +711,7 @@ async def revoke_pat(request: Request, pat_id: str):
     revoked = await get_pat_repo(request).revoke(pat_id, str(user.id))
     if not revoked:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Token not found")
+    await record_audit_event(request, action="auth.pat.revoked", outcome="success", actor_user_id=str(user.id), target_type="personal_access_token", target_id=pat_id)
     return MessageResponse(message="Token revoked")
 
 

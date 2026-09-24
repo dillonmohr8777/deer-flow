@@ -9,7 +9,7 @@ from typing import Any, Literal, NamedTuple, NoReturn
 from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
-from app.gateway.deps import require_admin_user
+from app.gateway.deps import audit_actor_id, record_audit_event, require_admin_user
 from deerflow.config.extensions_config import (
     ExtensionsConfig,
     McpRoutingConfig,
@@ -1513,6 +1513,7 @@ async def update_mcp_configuration(request: Request, body: McpConfigUpdateReques
 
         servers = {name: _mask_server_config(McpServerConfigResponse(**server.model_dump())) for name, server in reloaded_servers.items()}
         reset_mcp_tools_cache()
+        await record_audit_event(request, action="mcp.config.updated", outcome="success", actor_user_id=audit_actor_id(request), target_type="mcp_config", details={"server_names": sorted(servers)})
         return McpConfigResponse(mcp_servers=servers)
 
     except HTTPException:
@@ -1537,6 +1538,7 @@ async def create_mcp_servers(request: Request, body: McpConfigUpdateRequest) -> 
 
         servers = {name: _mask_server_config(McpServerConfigResponse(**server.model_dump())) for name, server in reloaded_servers.items()}
         reset_mcp_tools_cache()
+        await record_audit_event(request, action="mcp.servers.created", outcome="success", actor_user_id=audit_actor_id(request), target_type="mcp_config", details={"server_names": sorted(body.mcp_servers)})
         return McpConfigResponse(mcp_servers=servers)
     except HTTPException:
         raise
@@ -1563,6 +1565,7 @@ async def update_mcp_server(request: Request, body: McpServerConfigUpdateRequest
 
         servers = {name: _mask_server_config(McpServerConfigResponse(**server.model_dump())) for name, server in reloaded_servers.items()}
         reset_mcp_tools_cache()
+        await record_audit_event(request, action="mcp.server.updated", outcome="success", actor_user_id=audit_actor_id(request), target_type="mcp_server", target_id=body.server_name)
         return McpConfigResponse(mcp_servers=servers)
     except HTTPException:
         raise
@@ -1585,6 +1588,7 @@ async def delete_mcp_server(request: Request, server_name: str) -> McpConfigResp
 
         servers = {name: _mask_server_config(McpServerConfigResponse(**server.model_dump())) for name, server in reloaded_servers.items()}
         reset_mcp_tools_cache()
+        await record_audit_event(request, action="mcp.server.deleted", outcome="success", actor_user_id=audit_actor_id(request), target_type="mcp_server", target_id=server_name)
         return McpConfigResponse(mcp_servers=servers)
     except HTTPException:
         raise
@@ -1607,6 +1611,7 @@ async def update_mcp_server_state(request: Request, body: McpServerStateUpdateRe
 
         servers = {name: _mask_server_config(McpServerConfigResponse(**server.model_dump())) for name, server in reloaded_servers.items()}
         reset_mcp_tools_cache()
+        await record_audit_event(request, action="mcp.server.state_updated", outcome="success", actor_user_id=audit_actor_id(request), target_type="mcp_server", target_id=body.server_name, details={"enabled": body.enabled})
         return McpConfigResponse(mcp_servers=servers)
     except HTTPException:
         raise

@@ -1200,6 +1200,91 @@ GET /api/threads/{thread_id}/artifacts/{path}
 
 ---
 
+### Admin Controls
+
+Base URL: `/api/admin`
+
+Every endpoint here requires the caller's `system_role` to be `admin`
+(`require_admin_user`, the same predicate the Models and MCP Configuration
+routes use), and each is itself written to the audit log. See AUTH_DESIGN.md
+"Audit log and admin controls" for the underlying model.
+
+#### Disable a user
+
+```http
+POST /api/admin/users/{user_id}/disable
+```
+
+The target user can no longer log in, and any of its live sessions stop
+validating on their next request.
+
+#### Enable a user
+
+```http
+POST /api/admin/users/{user_id}/enable
+```
+
+Clears a previous disable.
+
+#### Force logout
+
+```http
+POST /api/admin/users/{user_id}/force-logout
+```
+
+Bumps the target user's `token_version`, invalidating every JWT already
+issued to that account without touching its password or disabled state.
+
+**Response (all three, `200`):**
+```json
+{
+  "id": "0f0c6e6a-...",
+  "email": "person@example.com",
+  "disabled_at": null,
+  "token_version": 4
+}
+```
+
+#### List audit events
+
+```http
+GET /api/admin/audit-events?action_prefix=auth.login.&actor={user_id}&since=2026-09-01T00:00:00Z&until=2026-09-30T00:00:00Z&limit=50&cursor={opaque_cursor}
+```
+
+Every filter is optional. Results are cross-organization (a system admin's
+view of the whole deployment, not one tenant) and ordered newest first.
+`limit` is clamped to `1..200`; `cursor` is the opaque `next_cursor` from a
+previous page, and its absence means there is nothing more to page through.
+
+**Response:**
+```json
+{
+  "events": [
+    {
+      "id": "b6b0...",
+      "occurred_at": "2026-09-23T18:06:37.123456+00:00",
+      "actor_user_id": "0f0c6e6a-...",
+      "organization_id": "org-abc",
+      "action": "auth.login.succeeded",
+      "target_type": null,
+      "target_id": null,
+      "outcome": "success",
+      "ip": "203.0.113.4",
+      "user_agent": "Mozilla/5.0 ...",
+      "details": null
+    }
+  ],
+  "next_cursor": null
+}
+```
+
+`details` is redacted server-side before it is ever written: a key whose
+name looks like a credential (password, token, secret, cookie, api_key,
+authorization, credential, private_key, access_key, client_secret) always
+comes back as `"[redacted]"`.
+
+---
+
 ## Error Responses
 
 All APIs return errors in a consistent format:

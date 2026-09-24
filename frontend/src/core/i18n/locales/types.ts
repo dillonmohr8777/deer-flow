@@ -1168,6 +1168,28 @@ export interface Translations {
       notification: string;
       experience: string;
       about: string;
+      audit: string;
+    };
+    audit: {
+      title: string;
+      description: string;
+      adminOnly: string;
+      loading: string;
+      failed: string;
+      empty: string;
+      loadMore: string;
+      filterActionPrefix: string;
+      filterActor: string;
+      filterSince: string;
+      filterUntil: string;
+      apply: string;
+      clear: string;
+      columnTime: string;
+      columnAction: string;
+      columnActor: string;
+      columnTarget: string;
+      columnOutcome: string;
+      columnIp: string;
     };
     memory: {
       title: string;

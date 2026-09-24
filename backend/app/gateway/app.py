@@ -15,6 +15,7 @@ from app.gateway.csrf_middleware import CORS_EXPOSED_HEADERS, CSRFMiddleware, ge
 from app.gateway.deps import langgraph_runtime
 from app.gateway.health import READINESS_CHECKPOINTER_CONFIG_ATTR, readiness_payload
 from app.gateway.routers import (
+    admin,
     agents,
     artifacts,
     assistants_compat,
@@ -993,6 +994,10 @@ This gateway provides runtime endpoints for agent runs plus custom endpoints for
     app.include_router(workspaces.router)
     app.include_router(workspace_branding.router)
     app.include_router(user_preferences.router)
+
+    # System-admin controls (user disable/enable/force-logout, audit log) are
+    # mounted at /api/admin
+    app.include_router(admin.router)
 
     # Feedback API is mounted at /api/threads/{thread_id}/runs/{run_id}/feedback
     app.include_router(feedback.router)
