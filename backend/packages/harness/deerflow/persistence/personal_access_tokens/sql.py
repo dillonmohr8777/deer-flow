@@ -3,6 +3,18 @@
 Each method acquires its own short-lived session. The raw ``dfp_…`` token is
 generated and returned by the caller (the app layer) exactly once; this
 repository only ever persists the SHA-256 digest passed to :meth:`create`.
+
+``organization_id`` (migration 0037_pat_organization) is stamped at creation
+time from the request's active organization, the same
+``organization_for_write`` pattern as ``FleetBindingRepository`` (`AGENTS.md`
+"Organization isolation (M3)"). :meth:`list_for_user` and :meth:`revoke` add
+an ``organization_id == active`` filter beside the existing ``user_id``
+filter, only when :func:`resolve_organization_id` is non-null.
+:meth:`get_active_by_digest` deliberately does not scope by organization --
+it runs during PAT *authentication*, before any request-scoped organization
+is resolved; the caller (``AuthMiddleware``) uses the returned row's own
+``organization_id`` to resolve the token's organization and fails closed if
+the owner is no longer an active member of it.
 """
 
 from __future__ import annotations
@@ -16,7 +28,9 @@ from typing import Any
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from deerflow.persistence.organizations.resolution import organization_for_write
 from deerflow.persistence.personal_access_tokens.model import PersonalAccessTokenRow
+from deerflow.runtime.user_context import AUTO, resolve_organization_id, resolve_user_id
 from deerflow.utils.time import coerce_iso
 
 logger = logging.getLogger(__name__)
@@ -27,6 +41,12 @@ class PersonalAccessTokenRepository:
         self._sf = session_factory
         self._last_used_write_interval = last_used_write_interval_seconds
         self._last_used_written_at: dict[str, float] = {}
+
+    @staticmethod
+    def _scope(stmt: Any, organization_id: str | None) -> Any:
+        if organization_id is not None:
+            return stmt.where(PersonalAccessTokenRow.organization_id == organization_id)
+        return stmt
 
     @staticmethod
     def _row_to_dict(row: PersonalAccessTokenRow) -> dict[str, Any]:
@@ -56,6 +76,7 @@ class PersonalAccessTokenRepository:
             expires_at=expires_at,
             created_at=datetime.now(UTC),
         )
+        row.organization_id = organization_for_write(resolve_organization_id(), None, resolve_user_id(AUTO, method_name="PersonalAccessTokenRepository.create"))
         async with self._sf() as session:
             session.add(row)
             await session.commit()
@@ -82,22 +103,22 @@ class PersonalAccessTokenRepository:
             return self._row_to_dict(row)
 
     async def list_for_user(self, user_id: str) -> list[dict[str, Any]]:
+        stmt = self._scope(select(PersonalAccessTokenRow).where(PersonalAccessTokenRow.user_id == user_id), resolve_organization_id())
+        stmt = stmt.order_by(PersonalAccessTokenRow.created_at.desc())
         async with self._sf() as session:
-            rows = (await session.execute(select(PersonalAccessTokenRow).where(PersonalAccessTokenRow.user_id == user_id).order_by(PersonalAccessTokenRow.created_at.desc()))).scalars()
+            rows = (await session.execute(stmt)).scalars()
             return [self._row_to_dict(row) for row in rows]
 
     async def revoke(self, pat_id: str, user_id: str) -> bool:
         """Revoke one of *user_id*'s tokens; returns False if not owned/absent."""
+        stmt = update(PersonalAccessTokenRow).where(
+            PersonalAccessTokenRow.id == pat_id,
+            PersonalAccessTokenRow.user_id == user_id,
+            PersonalAccessTokenRow.revoked_at.is_(None),
+        )
+        stmt = self._scope(stmt, resolve_organization_id()).values(revoked_at=datetime.now(UTC))
         async with self._sf() as session:
-            result = await session.execute(
-                update(PersonalAccessTokenRow)
-                .where(
-                    PersonalAccessTokenRow.id == pat_id,
-                    PersonalAccessTokenRow.user_id == user_id,
-                    PersonalAccessTokenRow.revoked_at.is_(None),
-                )
-                .values(revoked_at=datetime.now(UTC))
-            )
+            result = await session.execute(stmt)
             await session.commit()
             return result.rowcount != 0
 

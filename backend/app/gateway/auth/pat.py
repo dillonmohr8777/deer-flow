@@ -197,12 +197,21 @@ def extract_bearer_token(authorization: str | None) -> str | None:
     return value.strip()
 
 
-async def authenticate_pat(app: Any, authorization: str | None) -> tuple[Any, frozenset[str]]:
+async def authenticate_pat(app: Any, authorization: str | None) -> tuple[Any, frozenset[str], str | None]:
     """Validate the Bearer credential and resolve its owning user.
 
-    Returns ``(user, scopes)``. Every token-verdict failure mode — malformed
-    token, unknown/revoked/expired token, PAT store not configured, missing
-    owning user — raises the same generic 401 so responses cannot serve as an
+    Returns ``(user, scopes, organization_id)``. ``organization_id`` is the
+    PAT's own stamped organization (migration 0037_pat_organization) — the
+    organization active when the token was minted, ``None`` for a
+    pre-migration row the backfill could not prove. The caller
+    (``AuthMiddleware``) resolves the request's active organization from
+    this value rather than from any workspace-selection cookie, and fails
+    closed if the owner is no longer an active member of it: this is the
+    isolation boundary that stops a PAT minted in one organization from
+    acting in another (`persistence/AGENTS.md` "Organization isolation
+    (M3)"). Every token-verdict failure mode — malformed token,
+    unknown/revoked/expired token, PAT store not configured, missing owning
+    user — raises the same generic 401 so responses cannot serve as an
     oracle on which check failed. Infrastructure errors (store I/O failures)
     propagate and fail closed; they are not part of the token verdict.
     """
@@ -226,7 +235,8 @@ async def authenticate_pat(app: Any, authorization: str | None) -> tuple[Any, fr
         # their PATs, without needing a FK cascade).
         raise HTTPException(status_code=401, detail="Invalid token")
     await pat_repo.touch_last_used(str(record["id"]))
-    return user, frozenset(record.get("scopes") or ())
+    organization_id = record.get("organization_id")
+    return user, frozenset(record.get("scopes") or ()), str(organization_id) if organization_id else None
 
 
 def validate_scopes(scopes: list[str]) -> list[str]:

@@ -136,8 +136,8 @@ async def test_authenticate_pat_rejects_disabled_owner(monkeypatch):
     monkeypatch.setattr(deps, "get_local_provider", lambda: _Provider())
     app = SimpleNamespace(state=SimpleNamespace(pat_repo=_PatRepo()))
 
-    user, scopes = await authenticate_pat(app, f"Bearer {token}")
-    assert str(user.id) == user_id and scopes == frozenset({"threads:read"})
+    user, scopes, organization_id = await authenticate_pat(app, f"Bearer {token}")
+    assert str(user.id) == user_id and scopes == frozenset({"threads:read"}) and organization_id is None
 
     owner.disabled_at = datetime.now(UTC)
     with pytest.raises(HTTPException) as exc_info:
