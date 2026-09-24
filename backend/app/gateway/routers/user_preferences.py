@@ -20,6 +20,7 @@ class Preferences(BaseModel):
     mode: Literal["flash", "thinking", "pro", "ultra"] | None = None
     reasoning_effort: Literal["minimal", "low", "medium", "high"] | None = None
     experience_mode: Literal["easy", "medium", "hard"] | None = None
+    welcome_clients_dismissed: bool | None = None
 
 
 async def _owner(request: Request, expected_user: str) -> str:

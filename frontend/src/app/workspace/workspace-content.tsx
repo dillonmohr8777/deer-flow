@@ -14,6 +14,7 @@ import {
   SkipToContent,
   WORKSPACE_MAIN_ID,
 } from "@/components/workspace/skip-to-content";
+import { WelcomeClientsCard } from "@/components/workspace/welcome-clients-card";
 import { WorkspaceSettingsDeepLink } from "@/components/workspace/workspace-settings-deep-link";
 import { WorkspaceSidebar } from "@/components/workspace/workspace-sidebar";
 import { ExtensionPageBootstrap } from "@/core/extensions/hooks";
@@ -58,6 +59,7 @@ export async function WorkspaceContent({
             >
               <GatewayOfflineBanner gatewayUnavailable={gatewayUnavailable} />
               <ModelLoadErrorBanner gatewayUnavailable={gatewayUnavailable} />
+              <WelcomeClientsCard />
               {children}
             </SidebarInset>
           </SidebarProvider>

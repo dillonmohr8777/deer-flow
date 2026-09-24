@@ -980,6 +980,11 @@ export const enUS: Translations = {
       "Models couldn't be loaded. Model selection and token usage may be unavailable.",
     modelLoadRetry: "Retry",
     modelLoadRetrying: "Retrying…",
+    welcomeClientsCardTitle: "Set up my clients",
+    welcomeClientsCardBody:
+      "Momo can draft a profile from your assigned clients, confirm the list with you, and set each one up.",
+    welcomeClientsCardCta: "Get started",
+    welcomeClientsCardDismiss: "Dismiss",
   },
 
   // Conversation

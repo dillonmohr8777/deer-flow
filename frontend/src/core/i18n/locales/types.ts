@@ -837,6 +837,10 @@ export interface Translations {
     modelLoadFailed: string;
     modelLoadRetry: string;
     modelLoadRetrying: string;
+    welcomeClientsCardTitle: string;
+    welcomeClientsCardBody: string;
+    welcomeClientsCardCta: string;
+    welcomeClientsCardDismiss: string;
   };
 
   // Conversation

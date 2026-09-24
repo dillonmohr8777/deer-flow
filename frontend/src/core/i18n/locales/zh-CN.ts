@@ -914,6 +914,11 @@ export const zhCN: Translations = {
       "模型列表加载失败，模型选择和 Token 用量信息可能暂时不可用。",
     modelLoadRetry: "重试",
     modelLoadRetrying: "正在重试…",
+    welcomeClientsCardTitle: "设置我的客户",
+    welcomeClientsCardBody:
+      "Momo 可以根据你负责的客户起草资料，与你确认后自动为每个客户完成设置。",
+    welcomeClientsCardCta: "开始设置",
+    welcomeClientsCardDismiss: "关闭",
   },
 
   // Conversation

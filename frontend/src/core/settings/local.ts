@@ -15,6 +15,7 @@ export const DEFAULT_LOCAL_SETTINGS: LocalSettings = {
     mode: undefined,
     reasoning_effort: undefined,
     experience_mode: undefined,
+    welcomeClientsCardDismissed: undefined,
   },
 };
 
@@ -98,6 +99,10 @@ export interface LocalSettings {
     mode: "flash" | "thinking" | "pro" | "ultra" | undefined;
     reasoning_effort?: "minimal" | "low" | "medium" | "high";
     experience_mode?: "easy" | "medium" | "hard" | undefined;
+    /** Local mirror of the server-side `welcome_clients_dismissed` preference
+     * (see `welcome-clients-card.tsx`); falls back to this alone for
+     * static/anonymous sessions with no server preference to read. */
+    welcomeClientsCardDismissed?: boolean | undefined;
   };
 }
 

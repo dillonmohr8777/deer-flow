@@ -78,14 +78,14 @@ async def test_preferences_api_partial_patch_reset_and_owner_isolation(api):
     path = "/api/v1/auth/preferences"
     assert (await client.patch(path, json={"notification_enabled": False, "mode": "pro"})).status_code == 204
     assert (await client.patch(path, json={"model_name": "model-a"})).status_code == 204
-    assert (await client.get(path)).json() == {"notification_enabled": False, "model_name": "model-a", "mode": "pro", "reasoning_effort": None, "experience_mode": None}
+    assert (await client.get(path)).json() == {"notification_enabled": False, "model_name": "model-a", "mode": "pro", "reasoning_effort": None, "experience_mode": None, "welcome_clients_dismissed": None}
     assert (await client.patch(path, json={"mode": None})).status_code == 204
     identity.id = "bob"
     # A stale tab with Alice's expected identity must not write using Bob's cookie.
     assert (await client.patch(path, json={"mode": "ultra"})).status_code == 409
     assert (await client.get(path)).status_code == 409
     client.headers["X-Expected-User-Id"] = "bob"
-    assert (await client.get(path)).json() == {"notification_enabled": None, "model_name": None, "mode": None, "reasoning_effort": None, "experience_mode": None}
+    assert (await client.get(path)).json() == {"notification_enabled": None, "model_name": None, "mode": None, "reasoning_effort": None, "experience_mode": None, "welcome_clients_dismissed": None}
     identity.id = "alice"
     client.headers["X-Expected-User-Id"] = "alice"
     assert (await client.get(path)).json()["notification_enabled"] is False
@@ -122,7 +122,7 @@ async def test_preferences_requires_authentication_and_expected_identity(api):
 async def test_preferences_read_discards_only_malformed_fields(api, preference_repo):
     client, _ = api
     await preference_repo.patch("alice", {"notification_enabled": False, "mode": "invalid", "unknown": "ignored"})
-    assert (await client.get("/api/v1/auth/preferences")).json() == {"notification_enabled": False, "model_name": None, "mode": None, "reasoning_effort": None, "experience_mode": None}
+    assert (await client.get("/api/v1/auth/preferences")).json() == {"notification_enabled": False, "model_name": None, "mode": None, "reasoning_effort": None, "experience_mode": None, "welcome_clients_dismissed": None}
 
 
 @pytest.mark.anyio
@@ -135,6 +135,17 @@ async def test_experience_mode_round_trips_and_rejects_invalid_value(api):
     assert (await client.patch(path, json={"experience_mode": "hard"})).status_code == 204
     assert (await client.get(path)).json()["experience_mode"] == "hard"
     assert (await client.patch(path, json={"experience_mode": "extreme"})).status_code == 422
+
+
+@pytest.mark.anyio
+async def test_welcome_clients_dismissed_round_trips_and_rejects_invalid_value(api):
+    """The 'Set up my clients' card (welcome-clients-card.tsx) reads/writes this flag."""
+    client, _ = api
+    path = "/api/v1/auth/preferences"
+    assert (await client.get(path)).json()["welcome_clients_dismissed"] is None
+    assert (await client.patch(path, json={"welcome_clients_dismissed": True})).status_code == 204
+    assert (await client.get(path)).json()["welcome_clients_dismissed"] is True
+    assert (await client.patch(path, json={"welcome_clients_dismissed": "yes"})).status_code == 422
 
 
 def test_preferences_migration_preserves_existing_users_and_downgrades(tmp_path):
