@@ -51,11 +51,19 @@ scoped — see "What's left" below for what a2 should become instead.
 ## Suite run
 
 Command: `cd backend && make test` (`pytest -m "not live" --ignore=tests/blocking_io tests/`).
-Result: **PASS_PLACEHOLDER** — see the exact tail below.
+Result: **1 failed, 19046 passed, 182 skipped, 20 deselected** in 886s.
 
 ```
-SUITE_OUTPUT_PLACEHOLDER
+FAILED tests/test_client_langfuse_metadata.py::test_stream_abandoned_generator_cleanup_stays_inside_trace_binding
+1 failed, 19046 passed, 182 skipped, 20 deselected, 58 warnings in 886.24s (0:14:46)
 ```
+
+The one failure is unrelated to M3/org-isolation: this run made zero code changes (docs
+only), and re-running that single test in isolation reproduces the same
+`AssertionError: assert None == '<trace_id>'` in `test_client_langfuse_metadata.py`
+(Langfuse trace-binding cleanup on an abandoned generator) — a pre-existing issue on
+`lane/momo-week`'s baseline, not something this audit touched. Every isolation-relevant
+test named in the gap table above passed.
 
 ## What's left (for whoever picks up `a2` next)
 
