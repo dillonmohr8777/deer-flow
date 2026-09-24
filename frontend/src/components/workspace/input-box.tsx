@@ -2996,7 +2996,7 @@ export function InputBox({
         className={cn(
           // Full muted ink: at 67% it measured 3.4:1 on cream paper.
           "text-muted-foreground z-10 px-4 text-center text-xs leading-4",
-          !isWelcomeMode && "absolute top-full right-0 left-0",
+          !isWelcomeMode && "absolute top-full right-0 left-0 pt-1.5",
         )}
       >
         {t.inputBox.disclaimer}

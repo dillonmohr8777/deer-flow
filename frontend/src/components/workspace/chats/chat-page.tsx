@@ -585,7 +585,11 @@ export default function ChatPage() {
               <div
                 className={cn(
                   "right-0 bottom-0 left-0 z-30 flex justify-center px-3 sm:px-4",
-                  isWelcomeMode ? "absolute" : "relative shrink-0 pb-4",
+                  // The disclaimer hangs below the composer (top-full); the
+                  // padding keeps it clear of the bottom edge and home bar.
+                  isWelcomeMode
+                    ? "absolute"
+                    : "relative shrink-0 pb-[max(1.75rem,env(safe-area-inset-bottom))]",
                 )}
               >
                 {/* Welcome lifts the composer toward the middle; the min()
@@ -595,7 +599,7 @@ export default function ChatPage() {
                   className={cn(
                     "relative w-full",
                     isWelcomeMode &&
-                      "-translate-y-[min(calc(50vh_-_100px),calc(100vh_-_500px))] sm:-translate-y-[min(calc(50vh_-_96px),calc(100vh_-_430px))]",
+                      "-translate-y-[min(calc(50vh_-_100px),calc(100vh_-_560px))] sm:-translate-y-[min(calc(50vh_-_96px),calc(100vh_-_430px))]",
                     isWelcomeMode
                       ? "max-w-(--container-width-sm)"
                       : "max-w-(--container-width-md)",
