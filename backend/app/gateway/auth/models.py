@@ -45,3 +45,4 @@ class UserResponse(BaseModel):
         None,
         description=("Effective route permissions granted to this credential (RFC #4063 Phase 4). Only GET /api/v1/auth/me resolves them; credential-creation responses leave it None."),
     )
+    mfa_enabled: bool = Field(default=False, description="Whether TOTP two-factor authentication is enabled for this account. Only GET /api/v1/auth/me resolves it; credential-creation responses leave it at the default.")

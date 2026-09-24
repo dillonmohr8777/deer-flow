@@ -479,10 +479,12 @@ async def langgraph_runtime(app: FastAPI, startup_config: AppConfig) -> AsyncGen
             from deerflow.persistence.feedback import FeedbackRepository
             from deerflow.persistence.personal_access_tokens import PersonalAccessTokenRepository
             from deerflow.persistence.run import RunRepository
+            from deerflow.persistence.user_mfa import UserMfaRepository
 
             app.state.run_store = RunRepository(sf)
             app.state.feedback_repo = FeedbackRepository(sf)
             app.state.audit_repo = AuditEventRepository(sf)
+            app.state.mfa_repo = UserMfaRepository(sf)
             from app.gateway.auth.pat import PAT_LAST_USED_WRITE_INTERVAL_SECONDS
 
             app.state.pat_repo = PersonalAccessTokenRepository(sf, last_used_write_interval_seconds=PAT_LAST_USED_WRITE_INTERVAL_SECONDS)
@@ -492,9 +494,11 @@ async def langgraph_runtime(app: FastAPI, startup_config: AppConfig) -> AsyncGen
             app.state.run_store = MemoryRunStore()
             app.state.feedback_repo = None
             app.state.audit_repo = None
-            # Memory backend has no durable PAT store, so Bearer credentials
-            # cannot be validated there and are rejected by the middleware.
+            # Memory backend has no durable PAT / MFA store, so Bearer
+            # credentials cannot be validated and MFA cannot be enrolled;
+            # both are rejected explicitly rather than silently no-oping.
             app.state.pat_repo = None
+            app.state.mfa_repo = None
 
         # Evidence readers are available to Gateway-lifetime extension services,
         # so the configured event store must exist before those services start.
@@ -868,6 +872,23 @@ def get_pat_repo(request: Request):
     if pat_repo is None:
         raise HTTPException(status_code=503, detail="Personal access tokens require a configured database")
     return pat_repo
+
+
+def get_mfa_repo(request: Request):
+    """Return the two-factor-authentication repository from app state.
+
+    Raises 503 on the memory backend (no durable MFA storage), so enroll /
+    confirm / disable routes fail explicitly instead of silently accepting
+    an enrollment nobody could ever complete. The login path itself reads
+    ``request.app.state.mfa_repo`` directly and treats ``None`` as "nobody
+    has MFA enabled" -- a missing repo there must not break plain password
+    login, since without durable storage no enrollment could ever have
+    succeeded in the first place.
+    """
+    mfa_repo = getattr(request.app.state, "mfa_repo", None)
+    if mfa_repo is None:
+        raise HTTPException(status_code=503, detail="Two-factor authentication requires a configured database")
+    return mfa_repo
 
 
 async def get_current_user_from_request(request: Request):
