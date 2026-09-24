@@ -231,6 +231,15 @@
   font-family: var(--m-font-serif);
   font-weight: 700;
 }
+/* Upstream centres dialog headers below 640px while every field below them
+   stays left-aligned; a sheet reads from its top-left corner at every width. */
+:is(
+    :root:not(.dark)[data-treatment="paper"],
+    :root:not(.dark) [data-workspace-shell][data-treatment="paper"]
+  )
+  [data-slot="dialog-header"] {
+  text-align: left;
+}
 
 /*
  * Torn deckle edge — an aria-hidden decoration for a "sheet" element.

@@ -133,6 +133,14 @@ export function SettingsDialog(props: SettingsDialogProps) {
   const navRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
+    // On phones the sections are a sideways rail: keep the selected one in
+    // view, or a deep link can land on a tab scrolled off the right edge.
+    navRef.current
+      ?.querySelector<HTMLElement>(`[data-section="${activeSection}"]`)
+      ?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+  }, [activeSection]);
+
+  useEffect(() => {
     // When opening the dialog, ensure the active section follows the caller's intent.
     // This allows triggers like "About" to open the dialog directly on that page.
     if (dialogProps.open) {
@@ -227,7 +235,9 @@ export function SettingsDialog(props: SettingsDialogProps) {
             {t.settings.description}
           </p>
         </DialogHeader>
-        <div className="grid min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)] gap-3 md:grid-cols-[220px_minmax(0,1fr)] md:grid-rows-1 md:gap-4">
+        {/* minmax(0,1fr), not the implicit auto column: on phones the panel
+            otherwise grows to its widest child and runs past the dialog. */}
+        <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)] gap-3 md:grid-cols-[220px_minmax(0,1fr)] md:grid-rows-1 md:gap-4">
           <nav
             ref={navRef}
             aria-label={t.settings.title}
