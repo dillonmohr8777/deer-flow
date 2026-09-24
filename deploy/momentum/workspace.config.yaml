@@ -700,7 +700,7 @@ memory:
   backend_config:
     storage_path: ''
     storage_class: file
-    strict_user_scope: false
+    strict_user_scope: true
     manifest_filename: memory.json
     file_lock_timeout_seconds: 10
     retrieval_adapter: fts5
