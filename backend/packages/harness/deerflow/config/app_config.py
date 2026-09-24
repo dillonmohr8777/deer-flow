@@ -76,6 +76,15 @@ class CircuitBreakerConfig(BaseModel):
     recovery_timeout_sec: int = Field(default=60, description="Time in seconds before attempting to recover the circuit")
 
 
+class PrivateWorkspaceConfig(BaseModel):
+    """Switches that belong only to the owner's private instance."""
+
+    enabled: bool = Field(
+        default=False,
+        description="Marks this instance as the owner's private workspace and turns on the Desk home. Leave false on every client-facing MomoBot.",
+    )
+
+
 class LlmCallConfig(BaseModel):
     """Configuration for LLM call execution (concurrency / rate shaping).
 
@@ -252,6 +261,7 @@ class AppConfig(BaseModel):
         description="Provider-agnostic knowledge capability and custom-agent scope-selection configuration",
     )
     agents_api: AgentsApiConfig = Field(default_factory=AgentsApiConfig, description="Custom-agent management API configuration")
+    private_workspace: PrivateWorkspaceConfig = Field(default_factory=PrivateWorkspaceConfig, description="Owner-only private workspace switches (the Desk home)")
     acp_agents: dict[str, ACPAgentConfig] = Field(default_factory=dict, description="ACP-compatible agent configuration")
     subagents: SubagentsAppConfig = Field(default_factory=SubagentsAppConfig, description="Subagent runtime configuration")
     guardrails: GuardrailsConfig = Field(default_factory=GuardrailsConfig, description="Guardrail middleware configuration")

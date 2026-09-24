@@ -5,6 +5,7 @@ import {
   CalendarClock,
   MessagesSquare,
   BlocksIcon,
+  LampDesk,
   Network,
   Newspaper,
 } from "lucide-react";
@@ -23,15 +24,31 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useAgentsApiEnabled } from "@/core/agents";
+import { useDeskEnabled } from "@/core/features";
 import { useI18n } from "@/core/i18n/hooks";
 
 export function WorkspaceNavChatList() {
   const { t } = useI18n();
   const pathname = usePathname();
   const { enabled: agentsEnabled } = useAgentsApiEnabled();
+  const { enabled: deskEnabled } = useDeskEnabled();
   return (
     <SidebarGroup className="pt-1">
       <SidebarMenu>
+        {/* Owner-only: exists solely on the private instance. */}
+        {deskEnabled && (
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              isActive={pathname === "/workspace/desk"}
+              asChild
+            >
+              <Link className="text-muted-foreground" href="/workspace/desk">
+                <LampDesk />
+                <span>Desk</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        )}
         <SidebarMenuItem>
           <SidebarMenuButton
             isActive={pathname === "/workspace/command-center"}
