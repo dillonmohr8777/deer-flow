@@ -7,6 +7,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 
+import LoginPage from "@/app/(auth)/login/page";
 import { enUS } from "@/core/i18n/locales/en-US";
 
 const mocks = rs.hoisted(() => ({
@@ -24,8 +25,6 @@ rs.mock("@/core/auth/AuthProvider", () => ({
   useAuth: () => ({ isAuthenticated: false }),
 }));
 rs.mock("@/core/i18n/hooks", () => ({ useI18n: () => ({ t: enUS }) }));
-
-import LoginPage from "@/app/(auth)/login/page";
 
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status });
