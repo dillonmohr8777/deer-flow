@@ -31,6 +31,21 @@ const treatments: {
     name: "Paper cutout",
     description: "Ivory layers. Cobalt character.",
   },
+  {
+    value: "space",
+    name: "Space",
+    description: "Navy void. Cyan focus. Quiet stars.",
+  },
+  {
+    value: "future",
+    name: "Future",
+    description: "Chrome and graphite. Geometric headings.",
+  },
+  {
+    value: "retro",
+    name: "Retro 16-bit",
+    description: "Pixel type. Chunky borders. Square corners.",
+  },
 ];
 
 export function BrandMotionToggle({ compact = false }: { compact?: boolean }) {
@@ -111,7 +126,7 @@ export function WorkspaceAppearance({ onClose }: { onClose: () => void }) {
         setError(
           failure instanceof PluginIconError && failure.code === "size"
             ? "Choose a PNG, JPEG or WebP smaller than 2 MB."
-            : "That image could not be used. Choose a valid PNG, JPEG or WebP; SVG and remote URLs are not supported.",
+            : "That image couldn't be used. Choose a valid PNG, JPEG or WebP; SVG and remote URLs aren't supported.",
         );
     } finally {
       if (generation.current === current) setBusy(false);
@@ -184,12 +199,13 @@ export function WorkspaceAppearance({ onClose }: { onClose: () => void }) {
               ? "Reduced motion is enabled on your device. The selected style stays visible without movement."
               : "Brand motion is optional. Your agents’ recorded activity always stays separate."}
           </p>
+          <BrandMotionToggle />
         </fieldset>
         <div className={styles.personalBrand}>
           <h3>Your brand, locally.</h3>
           <p>
-            Preview a client or team logo in this browser. This does not change
-            the shared workspace.
+            Preview a client or team logo in this browser. This doesn&apos;t
+            change the shared workspace.
           </p>
           <label htmlFor={`${id}-name`}>Brand name</label>
           <input

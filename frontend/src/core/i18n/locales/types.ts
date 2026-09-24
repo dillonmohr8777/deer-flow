@@ -1,5 +1,3 @@
-import type { LucideIcon } from "lucide-react";
-
 export interface Translations {
   // Locale meta
   locale: {
@@ -99,6 +97,8 @@ export interface Translations {
     pluginHint: string;
     skillHint: string;
     noResults: string;
+    noResultsHint: string;
+    skillsLoadFailed: string;
     larkName: string;
     larkDescription: string;
     larkTag: string;
@@ -116,6 +116,7 @@ export interface Translations {
   // Common
   common: {
     home: string;
+    tryAgain: string;
     settings: string;
     delete: string;
     edit: string;
@@ -162,6 +163,8 @@ export interface Translations {
 
   runDuration: {
     reasoning: string;
+    thinkingDeeply: string;
+    thoughtFor: (duration: string) => string;
     working: string;
     completedIn: (duration: string) => string;
     description: string;
@@ -180,7 +183,6 @@ export interface Translations {
   // Welcome
   welcome: {
     greeting: string;
-    description: string;
     createYourOwnSkill: string;
     createYourOwnSkillDescription: string;
   };
@@ -247,7 +249,8 @@ export interface Translations {
     favorites: string;
     otherModels: string;
     noModels: string;
-    favoriteModel: (displayName: string, name: string) => string;
+    favoriteModel: (label: string) => string;
+    repeatedName: (position: number, total: number) => string;
     sessionOnly: string;
   };
 
@@ -335,9 +338,10 @@ export interface Translations {
     reasoningEffortMediumDescription: string;
     reasoningEffortHigh: string;
     reasoningEffortHighDescription: string;
-    surpriseMe: string;
-    surpriseMePrompt: string;
     followupLoading: string;
+    easyStarterHelp: string;
+    easyStarterExplain: string;
+    easyStarterPlan: string;
     followupConfirmTitle: string;
     followupConfirmDescription: string;
     followupConfirmAppend: string;
@@ -358,24 +362,15 @@ export interface Translations {
     compactSuccess: string;
     compactSkipped: string;
     compactFailed: string;
-    suggestions: {
-      suggestion: string;
-      prompt: string;
-      icon: LucideIcon;
-    }[];
-    suggestionsCreate: (
-      | {
-          suggestion: string;
-          prompt: string;
-          icon: LucideIcon;
-        }
-      | {
-          type: "separator";
-        }
-    )[];
+    startersLabel: string;
+    /** Empty-thread prompts. Each prompt carries one bracketed placeholder
+     *  that core/suggestions/placeholders.ts recognises. */
+    starters: { label: string; prompt: string }[];
     pleaseWaitStreaming: string;
     stopStreamingUnavailable: string;
     startTurnUnavailable: string;
+    send: string;
+    stopRun: string;
   };
 
   // Sidebar
@@ -461,6 +456,16 @@ export interface Translations {
     savedToProject: (name: string) => string;
     shelfNameLabel: string;
     viewTrash: string;
+    openTrash: string;
+    trashNote: (days: number) => string;
+    documentColumnName: string;
+    documentColumnSource: string;
+    documentColumnAdded: string;
+    documentColumnSize: string;
+    documentSourceSlack: string;
+    documentSourceUpload: string;
+    notFoundHint: string;
+    backToChats: string;
     documentsLoadFailed: string;
     threadFilesLoadFailed: string;
     interimMemoryNotice: string;
@@ -470,11 +475,13 @@ export interface Translations {
   trash: {
     title: string;
     empty: string;
+    emptyHint: string;
     loadFailed: string;
     retry: string;
     originProject: (projectName: string) => string;
     unknownProject: string;
     retentionLeft: (days: number) => string;
+    retentionNote: (days: number) => string;
     restore: string;
     restoreFailed: string;
     restoredToast: (name: string) => string;
@@ -596,6 +603,8 @@ export interface Translations {
 
   // Scheduled tasks
   scheduledTasks: {
+    lede: string;
+    empty: string;
     scheduleType: { cron: string; once: string; interval: string };
     preset: {
       label: string;
@@ -634,6 +643,7 @@ export interface Translations {
     cronHelp: string;
     create: {
       title: string;
+      newTask: string;
       taskTitle: string;
       prompt: string;
       agent: string;
@@ -650,6 +660,8 @@ export interface Translations {
     };
     search: { placeholder: string; clear: string; noResults: string };
     filters: {
+      status: string;
+      type: string;
       allStatuses: string;
       enabled: string;
       paused: string;
@@ -676,6 +688,9 @@ export interface Translations {
       noSelection: string;
       filteredByThread: string;
       loadFailed: string;
+      notScheduled: string;
+      never: string;
+      none: string;
     };
     actions: {
       edit: string;
@@ -732,10 +747,11 @@ export interface Translations {
     };
     recipes: {
       label: string;
-      trending: { title: string; desc: string };
-      news: { title: string; desc: string };
-      issues: { title: string; desc: string };
-      weekly: { title: string; desc: string };
+      morningBrief: { title: string; desc: string };
+      clientReport: { title: string; desc: string };
+      siteWatch: { title: string; desc: string };
+      visibility: { title: string; desc: string };
+      pipeline: { title: string; desc: string };
     };
   };
 
@@ -748,6 +764,7 @@ export interface Translations {
     emptyDescription: string;
     featureDisabledTitle: string;
     featureDisabledDescription: string;
+    loadFailed: string;
     chat: string;
     delete: string;
     deleteConfirm: string;
@@ -841,6 +858,7 @@ export interface Translations {
     deleteConfirm: (title: string) => string;
     deleteFailed: string;
     noActiveChats: string;
+    noActiveChatsHint: string;
     activeChats: string;
     archivedChats: string;
     archiveChat: string;
@@ -1146,12 +1164,36 @@ export interface Translations {
     sections: {
       models: string;
       account: string;
+      security: string;
       appearance: string;
       channels: string;
       memory: string;
       subagents: string;
       notification: string;
+      experience: string;
       about: string;
+      audit: string;
+    };
+    audit: {
+      title: string;
+      description: string;
+      adminOnly: string;
+      loading: string;
+      failed: string;
+      empty: string;
+      loadMore: string;
+      filterActionPrefix: string;
+      filterActor: string;
+      filterSince: string;
+      filterUntil: string;
+      apply: string;
+      clear: string;
+      columnTime: string;
+      columnAction: string;
+      columnActor: string;
+      columnTarget: string;
+      columnOutcome: string;
+      columnIp: string;
     };
     memory: {
       title: string;
@@ -1472,6 +1514,23 @@ export interface Translations {
       notSupported: string;
       disableNotification: string;
     };
+    experience: {
+      title: string;
+      description: string;
+      easyLabel: string;
+      easyTagline: string;
+      easyDescription: string;
+      mediumLabel: string;
+      mediumTagline: string;
+      mediumDescription: string;
+      hardLabel: string;
+      hardTagline: string;
+      hardDescription: string;
+      chooserTitle: string;
+      chooserSubtitle: string;
+      chooserSkip: string;
+      saved: string;
+    };
     account: {
       profileTitle: string;
       email: string;
@@ -1491,6 +1550,37 @@ export interface Translations {
       updating: string;
       updatePassword: string;
       signOut: string;
+    };
+    security: {
+      title: string;
+      description: string;
+      statusEnabled: string;
+      statusDisabledDescription: string;
+      enableButton: string;
+      disableButton: string;
+      enrollScanTitle: string;
+      enrollScanInstructions: string;
+      enrollManualEntryLabel: string;
+      enrollCodeLabel: string;
+      enrollCodePlaceholder: string;
+      enrollConfirmButton: string;
+      enrollCancelButton: string;
+      enrollInvalidCode: string;
+      recoveryCodesTitle: string;
+      recoveryCodesDescription: string;
+      recoveryCodesCopyButton: string;
+      recoveryCodesCopied: string;
+      recoveryCodesDoneButton: string;
+      disableTitle: string;
+      disablePasswordLabel: string;
+      disableCodeLabel: string;
+      disableRecoveryCodeLabel: string;
+      disableUseRecoveryCodeLink: string;
+      disableUseCodeLink: string;
+      disableSubmitButton: string;
+      disableCancelButton: string;
+      disableIncorrect: string;
+      networkError: string;
     };
     acknowledge: {
       emptyTitle: string;
@@ -1530,6 +1620,28 @@ export interface Translations {
       sso_cancelled: string;
       sso_account_exists: string;
       sso_not_allowed: string;
+    };
+    mfaTitle: string;
+    mfaDescription: string;
+    mfaCodePlaceholder: string;
+    mfaRecoveryCodePlaceholder: string;
+    mfaUseRecoveryCode: string;
+    mfaUseCode: string;
+    mfaVerifyButton: string;
+    mfaBackToLogin: string;
+    mfaInvalidCode: string;
+  };
+
+  // Command Center: Client Spaces stamped agents (fleet templates)
+  commandCenter: {
+    clientAgents: {
+      title: string;
+      loading: string;
+      empty: string;
+      selectPlaceholder: string;
+      add: string;
+      adding: string;
+      addError: string;
     };
   };
 }

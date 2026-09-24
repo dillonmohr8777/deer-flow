@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTheme } from "next-themes";
@@ -8,6 +7,16 @@ import { useEffect, useState } from "react";
 
 import inviteStyles from "@/app/invite/invite.module.css";
 import { RememberSessionOption } from "@/components/auth/remember-session-option";
+import { MomoFilm } from "@/components/momentum/momo-film";
+import { BouncingMomo } from "@/components/momentum/momobot/bouncing-momo";
+import { useIntroMotion } from "@/components/momentum/momobot/intro-motion";
+import {
+  MomentumMark,
+  MomoBotLockup,
+  MomoBotWordmark,
+} from "@/components/momentum/momobot/lockup";
+import momoStyles from "@/components/momentum/momobot/momobot.module.css";
+import { ScrapbookBackdrop } from "@/components/momentum/momobot/scrapbook-backdrop";
 import { resolveFunnelTreatment } from "@/components/momentum/treatment";
 import { Button } from "@/components/ui/button";
 import { FlickeringGrid } from "@/components/ui/flickering-grid";
@@ -63,6 +72,14 @@ export default function LoginPage() {
   // Nudge the user toward the SSO buttons without confirming the account exists.
   const [showSsoHint, setShowSsoHint] = useState(false);
   const [loading, setLoading] = useState(false);
+  // Set once password login returns mfa_required; the challenge is
+  // single-use and short-lived, exchanged at POST /login/mfa below.
+  const [mfaChallenge, setMfaChallenge] = useState<string | null>(null);
+  const [mfaCode, setMfaCode] = useState("");
+  const [mfaUseRecoveryCode, setMfaUseRecoveryCode] = useState(false);
+  // Momo's Hello film plays while motion is allowed (reduced motion, hidden
+  // tab and pause are decided inside) and holds its poster otherwise.
+  const introMotion = useIntroMotion();
 
   // Get next parameter for validated redirect
   const nextParam = searchParams.get("next");
@@ -192,9 +209,54 @@ export default function LoginPage() {
         return;
       }
 
+      const data = (await res.json()) as {
+        mfa_required?: boolean;
+        challenge?: string;
+      };
+      if (isLogin && data.mfa_required && data.challenge) {
+        // Password verified but the account has MFA enabled: no session yet,
+        // just the single-use challenge for the second step below.
+        setMfaChallenge(data.challenge);
+        return;
+      }
+
       saveRememberLoginPreference({ email, rememberMe });
 
       // Both login and register set a cookie — redirect to workspace
+      router.push(redirectPath);
+    } catch {
+      setError(t.login.networkError);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleMfaSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+
+    try {
+      const res = await fetch("/api/v1/auth/login/mfa", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          challenge: mfaChallenge,
+          remember_me: rememberMe,
+          ...(mfaUseRecoveryCode
+            ? { recovery_code: mfaCode }
+            : { code: mfaCode }),
+        }),
+        credentials: "include",
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        setError(parseAuthError(data).message || t.login.mfaInvalidCode);
+        return;
+      }
+
+      saveRememberLoginPreference({ email, rememberMe });
       router.push(redirectPath);
     } catch {
       setError(t.login.networkError);
@@ -212,6 +274,9 @@ export default function LoginPage() {
   const mutedStyle = paper ? { color: "var(--paper-ink-muted)" } : undefined;
   const linkClass = paper ? undefined : "text-blue-500";
   const linkStyle = paper ? { color: "var(--paper-focus)" } : undefined;
+  // red-500 measured 3.55:1 on cream and fails AA for small error text.
+  const errorClass = paper ? "text-sm" : "text-sm text-red-500";
+  const errorStyle = paper ? { color: "var(--paper-danger)" } : undefined;
 
   // Paper: the sign-in is the same physical object as the invite — one
   // deckled cream sheet pinned on the blueprint field (invite.module.css
@@ -226,205 +291,284 @@ export default function LoginPage() {
           : "border-border/20 bg-background/5 rounded-3xl border p-8 backdrop-blur-sm",
       )}
     >
-        <div className="text-center">
-          <Image
-            className={cn(
-              "mx-auto h-7 w-auto",
-              !paper && "dark:brightness-0 dark:invert",
-            )}
-            src="/momentum/wordmark.png"
-            alt="Momentum"
-            width={154}
-            height={28}
-            priority
+      <div className="text-center">
+        {paper ? (
+          // Paper splits the lockup: the product name leads the sheet and
+          // the Momentum mark signs the page's top-right corner.
+          <MomoBotWordmark className="block" />
+        ) : (
+          <MomoBotLockup
+            className="mx-auto"
+            wordmarkClassName="dark:brightness-0 dark:invert"
           />
-          <p
-            className={cn("mt-2", mutedClass, paper && "m-voice-serif text-lg")}
-            style={mutedStyle}
-          >
-            {isLogin ? t.login.signInTitle : t.login.createAccountTitle}
+        )}
+        <h1
+          className={cn("mt-2", mutedClass, paper && "m-voice-serif text-lg")}
+          style={mutedStyle}
+        >
+          {mfaChallenge
+            ? t.login.mfaTitle
+            : isLogin
+              ? t.login.signInTitle
+              : t.login.createAccountTitle}
+        </h1>
+      </div>
+
+      {mfaChallenge && (
+        <form onSubmit={handleMfaSubmit} className="space-y-2">
+          <p className={cn("text-sm", mutedClass)} style={mutedStyle}>
+            {t.login.mfaDescription}
           </p>
-        </div>
-
-        {showSetupStatusUnavailable && (
-          <div
-            role="status"
-            aria-live="polite"
-            className="border-l-2 border-amber-500 ps-3 text-sm"
-          >
-            <p className="font-medium">{t.login.serviceUnavailableTitle}</p>
-            <p className={cn("mt-1", mutedClass)} style={mutedStyle}>
-              {t.login.serviceUnavailableDescription}
-            </p>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="mt-3"
-              disabled={setupStatusPhase === "checking"}
-              onClick={() => {
-                setSetupStatusPhase("checking");
-                setSetupStatusAttempt((attempt) => attempt + 1);
-              }}
-            >
-              {setupStatusPhase === "checking"
-                ? t.login.pleaseWait
-                : t.login.retry}
-            </Button>
-          </div>
-        )}
-
-        {systemNeedsAdminSetup && (
-          <div className="border-l-2 border-blue-500 ps-3 text-sm">
-            <p className="font-medium">{t.login.adminSetupRequiredTitle}</p>
-            <p className={cn("mt-1", mutedClass)} style={mutedStyle}>
-              {t.login.adminSetupRequiredDescription}
-            </p>
-            <Link
-              href="/setup"
-              className={cn(
-                "mt-2 inline-block font-medium hover:underline",
-                linkClass,
-              )}
-              style={linkStyle}
-            >
-              {t.login.createAdminAccount}
-            </Link>
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="space-y-2">
-          <div className="flex flex-col space-y-1">
-            <label htmlFor="email" className="text-sm font-medium">
-              {t.login.email}
-            </label>
-            <Input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder={t.login.emailPlaceholder}
-              required
-            />
-          </div>
-          <div className="flex flex-col space-y-1">
-            <label htmlFor="password" className="text-sm font-medium">
-              {t.login.password}
-            </label>
-            <Input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder={t.login.passwordPlaceholder}
-              required
-              minLength={isLogin ? 6 : 8}
-            />
-          </div>
-
-          <RememberSessionOption
-            checked={rememberMe}
-            onCheckedChange={setRememberMe}
-          />
-
-          {error && <p className="text-sm text-red-500">{error}</p>}
-
-          <Button
-            type="submit"
-            className="w-full"
-            disabled={loading}
-            style={
-              paper
-                ? {
-                    background: "var(--paper-royal)",
-                    color: "var(--paper-cream-hi)",
-                  }
-                : undefined
+          <Input
+            type="text"
+            inputMode={mfaUseRecoveryCode ? "text" : "numeric"}
+            placeholder={
+              mfaUseRecoveryCode
+                ? t.login.mfaRecoveryCodePlaceholder
+                : t.login.mfaCodePlaceholder
             }
-          >
-            {loading
-              ? t.login.pleaseWait
-              : isLogin
-                ? t.login.signIn
-                : t.login.createAccount}
+            value={mfaCode}
+            onChange={(e) => setMfaCode(e.target.value)}
+            required
+            autoFocus
+          />
+          {error && (
+            <p className={errorClass} style={errorStyle}>
+              {error}
+            </p>
+          )}
+          <Button type="submit" className="w-full" disabled={loading}>
+            {loading ? t.login.pleaseWait : t.login.mfaVerifyButton}
           </Button>
-        </form>
-
-        {ssoProviders.length > 0 && (
-          <div className="space-y-2">
-            {isLogin && (
-              <div className="relative my-4">
-                <div className="absolute inset-0 flex items-center">
-                  <span
-                    className="w-full border-t"
-                    style={paper ? { borderColor: "var(--paper-line)" } : undefined}
-                  />
-                </div>
-                <div className="relative flex justify-center text-xs uppercase">
-                  <span
-                    className={cn(
-                      "px-2",
-                      !paper && "bg-background text-muted-foreground",
-                    )}
-                    style={
-                      paper
-                        ? {
-                            background: "var(--paper-cream-hi)",
-                            color: "var(--paper-ink-muted)",
-                          }
-                        : undefined
-                    }
-                  >
-                    {t.login.orContinueWith}
-                  </span>
-                </div>
-              </div>
-            )}
-            {showSsoHint && (
-              <p className={cn("text-center text-sm", mutedClass)} style={mutedStyle}>
-                {t.login.ssoHint}
-              </p>
-            )}
-            {ssoProviders.map((provider) => (
-              <Button
-                key={provider.id}
-                type="button"
-                variant="outline"
-                className="w-full"
-                disabled={loading}
-                onClick={() => {
-                  window.location.href = `/api/v1/auth/oauth/${provider.id}?next=${encodeURIComponent(redirectPath)}&remember_me=${String(rememberMe)}`;
-                }}
-              >
-                {t.login.continueWith(provider.display_name)}
-              </Button>
-            ))}
-          </div>
-        )}
-
-        {regularSignupAllowed && (
-          <div className="text-center text-sm">
+          <div className="flex items-center justify-between text-sm">
             <button
               type="button"
               onClick={() => {
-                setIsLogin(!isLogin);
+                setMfaUseRecoveryCode(!mfaUseRecoveryCode);
+                setMfaCode("");
                 setError("");
-                setShowSsoHint(false);
               }}
               className={cn("hover:underline", linkClass)}
               style={linkStyle}
             >
-              {isLogin ? t.login.noAccountSignUp : t.login.haveAccountSignIn}
+              {mfaUseRecoveryCode
+                ? t.login.mfaUseCode
+                : t.login.mfaUseRecoveryCode}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setMfaChallenge(null);
+                setMfaCode("");
+                setPassword("");
+                setError("");
+              }}
+              className={cn(mutedClass, "hover:underline")}
+              style={mutedStyle}
+            >
+              {t.login.mfaBackToLogin}
             </button>
           </div>
-        )}
+        </form>
+      )}
 
-        <div className={cn("text-center text-xs", mutedClass)} style={mutedStyle}>
-          <Link href="/" className="hover:underline">
-            {t.login.backToHome}
+      {!mfaChallenge && showSetupStatusUnavailable && (
+        <div
+          role="status"
+          aria-live="polite"
+          className={cn(
+            "border-l-2 ps-3 text-sm",
+            !paper && "border-amber-500",
+          )}
+          // Paper keeps gold to a hint: the text-safe brass, not amber-500.
+          style={paper ? { borderColor: "var(--paper-brass-text)" } : undefined}
+        >
+          <p className="font-medium">{t.login.serviceUnavailableTitle}</p>
+          <p className={cn("mt-1", mutedClass)} style={mutedStyle}>
+            {t.login.serviceUnavailableDescription}
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="mt-3"
+            disabled={setupStatusPhase === "checking"}
+            onClick={() => {
+              setSetupStatusPhase("checking");
+              setSetupStatusAttempt((attempt) => attempt + 1);
+            }}
+          >
+            {setupStatusPhase === "checking"
+              ? t.login.pleaseWait
+              : t.login.retry}
+          </Button>
+        </div>
+      )}
+
+      {!mfaChallenge && systemNeedsAdminSetup && (
+        <div className="border-l-2 border-blue-500 ps-3 text-sm">
+          <p className="font-medium">{t.login.adminSetupRequiredTitle}</p>
+          <p className={cn("mt-1", mutedClass)} style={mutedStyle}>
+            {t.login.adminSetupRequiredDescription}
+          </p>
+          <Link
+            href="/setup"
+            className={cn(
+              "mt-2 inline-block font-medium hover:underline",
+              linkClass,
+            )}
+            style={linkStyle}
+          >
+            {t.login.createAdminAccount}
           </Link>
         </div>
+      )}
+
+      {!mfaChallenge && (
+        <>
+          <form onSubmit={handleSubmit} className="space-y-2">
+            <div className="flex flex-col space-y-1">
+              <label htmlFor="email" className="text-sm font-medium">
+                {t.login.email}
+              </label>
+              <Input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder={t.login.emailPlaceholder}
+                required
+              />
+            </div>
+            <div className="flex flex-col space-y-1">
+              <label htmlFor="password" className="text-sm font-medium">
+                {t.login.password}
+              </label>
+              <Input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder={t.login.passwordPlaceholder}
+                required
+                minLength={isLogin ? 6 : 8}
+              />
+            </div>
+
+            <RememberSessionOption
+              checked={rememberMe}
+              onCheckedChange={setRememberMe}
+            />
+
+            {error && (
+              <p className={errorClass} style={errorStyle}>
+                {error}
+              </p>
+            )}
+
+            <Button
+              type="submit"
+              className="w-full"
+              disabled={loading}
+              style={
+                paper
+                  ? {
+                      background: "var(--paper-royal)",
+                      color: "var(--paper-cream-hi)",
+                    }
+                  : undefined
+              }
+            >
+              {loading
+                ? t.login.pleaseWait
+                : isLogin
+                  ? t.login.signIn
+                  : t.login.createAccount}
+            </Button>
+          </form>
+
+          {ssoProviders.length > 0 && (
+            <div className="space-y-2">
+              {isLogin && (
+                <div className="relative my-4">
+                  <div className="absolute inset-0 flex items-center">
+                    <span
+                      className="w-full border-t"
+                      style={
+                        paper ? { borderColor: "var(--paper-line)" } : undefined
+                      }
+                    />
+                  </div>
+                  <div className="relative flex justify-center text-xs uppercase">
+                    <span
+                      className={cn(
+                        "px-2",
+                        !paper && "bg-background text-muted-foreground",
+                      )}
+                      style={
+                        paper
+                          ? {
+                              background: "var(--paper-cream-hi)",
+                              color: "var(--paper-ink-muted)",
+                            }
+                          : undefined
+                      }
+                    >
+                      {t.login.orContinueWith}
+                    </span>
+                  </div>
+                </div>
+              )}
+              {showSsoHint && (
+                <p
+                  className={cn("text-center text-sm", mutedClass)}
+                  style={mutedStyle}
+                >
+                  {t.login.ssoHint}
+                </p>
+              )}
+              {ssoProviders.map((provider) => (
+                <Button
+                  key={provider.id}
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  disabled={loading}
+                  onClick={() => {
+                    window.location.href = `/api/v1/auth/oauth/${provider.id}?next=${encodeURIComponent(redirectPath)}&remember_me=${String(rememberMe)}`;
+                  }}
+                >
+                  {t.login.continueWith(provider.display_name)}
+                </Button>
+              ))}
+            </div>
+          )}
+
+          {regularSignupAllowed && (
+            <div className="text-center text-sm">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsLogin(!isLogin);
+                  setError("");
+                  setShowSsoHint(false);
+                }}
+                className={cn("hover:underline", linkClass)}
+                style={linkStyle}
+              >
+                {isLogin ? t.login.noAccountSignUp : t.login.haveAccountSignIn}
+              </button>
+            </div>
+          )}
+        </>
+      )}
+
+      <div className={cn("text-center text-xs", mutedClass)} style={mutedStyle}>
+        <Link href="/" className="hover:underline">
+          {t.login.backToHome}
+        </Link>
       </div>
+    </div>
   );
 
   return (
@@ -438,7 +582,19 @@ export default function LoginPage() {
       data-treatment={paper ? "paper" : "current"}
     >
       {paper ? (
-        <div className={cn(inviteStyles.frame, "pinned")}>{card}</div>
+        <>
+          <ScrapbookBackdrop motion={introMotion} tone="royal" />
+          <MomentumMark className={momoStyles.cornerMark} />
+          <div className={momoStyles.signInStage}>
+            <BouncingMomo
+              live={introMotion.live}
+              className={momoStyles.signInMomo}
+            >
+              <MomoFilm name="momo-hello" live={introMotion.live} />
+            </BouncingMomo>
+            <div className={cn(inviteStyles.frame, "pinned")}>{card}</div>
+          </div>
+        </>
       ) : (
         <>
           <FlickeringGrid

@@ -15,9 +15,22 @@ from app.gateway.auth.session_cookie_state import (
 )
 from app.gateway.csrf_middleware import is_secure_request
 
-ACCESS_TOKEN_COOKIE_NAME = "access_token"
-SESSION_PERSISTENCE_COOKIE_NAME = "deerflow_session_persistent"
 ALLOW_INSECURE_PERSISTENT_COOKIE_ENV = "DEER_FLOW_AUTH_ALLOW_INSECURE_PERSISTENT_COOKIE"
+# Multiple DeerFlow instances (e.g. a private workspace alongside the main
+# deployment) can share one browser cookie jar when they're reachable on the
+# same hostname but different ports — cookies are host-scoped, not
+# port-scoped. Setting this env var per-instance gives each deployment its
+# own cookie names so sessions don't clobber each other. Empty (default)
+# preserves the original names for existing deployments.
+COOKIE_PREFIX_ENV = "DEER_FLOW_AUTH_COOKIE_PREFIX"
+
+
+def _cookie_prefix() -> str:
+    return os.environ.get(COOKIE_PREFIX_ENV, "").strip()
+
+
+ACCESS_TOKEN_COOKIE_NAME = f"{_cookie_prefix()}access_token"
+SESSION_PERSISTENCE_COOKIE_NAME = f"{_cookie_prefix()}deerflow_session_persistent"
 
 logger = logging.getLogger(__name__)
 

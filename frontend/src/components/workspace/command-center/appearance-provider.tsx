@@ -13,6 +13,7 @@ import { useAuth } from "@/core/auth/AuthProvider";
 
 import {
   appearanceKey,
+  brandMotionAllowed,
   DEFAULT_APPEARANCE,
   parseAppearance,
   type AppearancePreferences,
@@ -22,6 +23,8 @@ type AppearanceContextValue = {
   preferences: AppearancePreferences;
   reducedMotion: boolean;
   visible: boolean;
+  /** brandMotionAllowed({ motion: preferences.motion, reducedMotion, visible, inView: true }) */
+  motionOn: boolean;
   persistence: "loading" | "local" | "memory";
   canCustomize: boolean;
   update: (patch: Partial<AppearancePreferences>) => void;
@@ -32,6 +35,7 @@ const AppearanceContext = createContext<AppearanceContextValue>({
   preferences: DEFAULT_APPEARANCE,
   reducedMotion: true,
   visible: false,
+  motionOn: false,
   persistence: "loading",
   canCustomize: false,
   update: () => undefined,
@@ -84,6 +88,33 @@ function AccountAppearance({
       document.removeEventListener("visibilitychange", readVisibility);
     };
   }, []);
+
+  // Dialogs, menus and the mobile sidebar sheet portal to <body>, outside the
+  // wrapper below; mirroring the treatment onto <html> lets paper.css reach them.
+  useEffect(() => {
+    const root = document.documentElement;
+    root.dataset.treatment = preferences.treatment;
+    return () => {
+      delete root.dataset.treatment;
+    };
+  }, [preferences.treatment]);
+
+  // Same mirroring for the app's one motion switch: components that gate a
+  // treatment's decorative animation off a plain CSS selector (future's H1
+  // echo) read this instead of recomputing brandMotionAllowed per element.
+  const motionOn = brandMotionAllowed({
+    motion: preferences.motion,
+    reducedMotion,
+    visible,
+    inView: true,
+  });
+  useEffect(() => {
+    const root = document.documentElement;
+    root.dataset.motion = motionOn ? "on" : "off";
+    return () => {
+      delete root.dataset.motion;
+    };
+  }, [motionOn]);
 
   useEffect(() => {
     if (!userId) {
@@ -140,6 +171,7 @@ function AccountAppearance({
         preferences,
         reducedMotion,
         visible,
+        motionOn,
         persistence,
         canCustomize: Boolean(userId) && persistence !== "loading",
         update,
@@ -147,8 +179,15 @@ function AccountAppearance({
       }}
     >
       {/* display: contents keeps this wrapper out of the layout tree while
-          still letting [data-treatment="paper"] descendant rules match. */}
-      <div data-treatment={preferences.treatment} style={{ display: "contents" }}>
+          still letting [data-treatment="paper"] descendant rules match.
+          data-workspace-shell scopes paper.css's shell tokens to the
+          workspace, away from landing, login and invite. */}
+      <div
+        data-workspace-shell=""
+        data-treatment={preferences.treatment}
+        data-motion={motionOn ? "on" : "off"}
+        style={{ display: "contents" }}
+      >
         {children}
       </div>
     </AppearanceContext.Provider>

@@ -35,7 +35,7 @@ from deerflow.persistence.agents.base import (
 )
 from deerflow.persistence.agents.model import AgentRow
 from deerflow.persistence.organizations.resolution import private_organization_for_user_sync
-from deerflow.runtime.user_context import get_effective_user_id
+from deerflow.runtime.user_context import get_effective_user_id, resolve_organization_id
 
 logger = logging.getLogger(__name__)
 
@@ -99,12 +99,34 @@ def _config_document(config: dict) -> dict:
     return {k: v for k, v in config.items() if k != "name"}
 
 
+def _scope_to_active_organization(stmt):
+    """Add ``organization_id == active`` beside a read's existing user filter.
+
+    Contract section 4 / ``persistence/AGENTS.md``: the explicit organization
+    filter is added only when :func:`resolve_organization_id` is non-null.
+    ``user_id`` here is already the workspace storage principal
+    (``get_effective_user_id()``), so it alone determines the organization for
+    every session/PAT caller; this filter is the required defense-in-depth
+    beside it, not a replacement -- it also protects a row whose
+    ``organization_id`` was mis-stamped (e.g. an older write, or a future
+    backfill edge case) even though its ``user_id`` matches. Internal callers
+    (the GitHub registry's ``list_all`` scan, graph-subprocess tool calls with
+    no request context) see ``None`` here and keep the plain user filter,
+    matching every other M3 repository.
+    """
+    organization_id = resolve_organization_id()
+    if organization_id is not None:
+        stmt = stmt.where(AgentRow.organization_id == organization_id)
+    return stmt
+
+
 class SqlAgentStore(AgentStore):
     def __init__(self, url: str) -> None:
         self._Session = get_sync_sessionmaker(url)
 
     def _row(self, session: Session, name: str, user_id: str) -> AgentRow | None:
         stmt = select(AgentRow).where(AgentRow.user_id == user_id, AgentRow.name == name.lower())
+        stmt = _scope_to_active_organization(stmt)
         return session.execute(stmt).scalar_one_or_none()
 
     def get(self, name: str, *, user_id: str | None = None) -> AgentConfig:
@@ -131,11 +153,17 @@ class SqlAgentStore(AgentStore):
     def list(self, *, user_id: str | None = None) -> list[AgentConfig]:
         effective_user = user_id or get_effective_user_id()
         stmt = select(AgentRow).where(AgentRow.user_id == effective_user).order_by(AgentRow.name.asc())
+        stmt = _scope_to_active_organization(stmt)
         with self._Session() as session:
             rows = list(session.execute(stmt).scalars())
         return [parse_agent_config(r.config or {}, r.name) for r in rows]
 
     def list_all(self) -> list[tuple[str, AgentConfig]]:
+        # Deliberately NOT organization-scoped: this is the cross-owner scan
+        # documented on AgentStore.list_all -- the GitHub registry's only
+        # caller (build_github_agent_registry) needs every owner's agents to
+        # index webhook bindings. It must never be called from an org-scoped
+        # route; test_org_isolation_d_agents.py pins that no router does.
         stmt = select(AgentRow).order_by(AgentRow.user_id.asc(), AgentRow.name.asc())
         with self._Session() as session:
             rows = list(session.execute(stmt).scalars())
@@ -205,7 +233,8 @@ class SqlAgentStore(AgentStore):
     def delete(self, name: str, *, user_id: str | None = None) -> AgentDeleteOutcome:
         effective_user = user_id or get_effective_user_id()
         with self._Session() as session:
-            result = session.execute(delete(AgentRow).where(AgentRow.user_id == effective_user, AgentRow.name == name.lower()))
+            stmt = _scope_to_active_organization(delete(AgentRow).where(AgentRow.user_id == effective_user, AgentRow.name == name.lower()))
+            result = session.execute(stmt)
             session.commit()
             row_deleted = result.rowcount > 0
         agent_dir = get_paths().user_agent_dir(effective_user, name)

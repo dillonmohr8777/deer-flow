@@ -482,6 +482,15 @@ def _make_gateway_app(saver: Any, mode: str, store: Any) -> Any:
     """Minimal authed gateway app, mirroring tests/_router_auth_helpers.py.
 
     Reimplemented inline: benchmark scripts must not import from tests/.
+
+    Every request authenticates as the same stub user (``app.state.bench_user_id``),
+    not a fresh one per call: the M3 owner check in ``require_permission``
+    (app/gateway/authz.py, ``owner_check=True``) compares each request's identity
+    against the thread_meta row's ``user_id``, so a stable identity is required for
+    the caller to register the thread once (see ``_read_phase``) and have every
+    subsequent cold/warm request still match. No organization is set up here
+    (``set_storage_context`` is never called), so ``resolve_organization_id()``
+    resolves to ``None`` for this app, same as any other no-workspace caller.
     """
     from unittest.mock import MagicMock
     from uuid import uuid4
@@ -496,15 +505,15 @@ def _make_gateway_app(saver: Any, mode: str, store: Any) -> Any:
     from deerflow.runtime.user_context import reset_current_user, set_current_user
 
     permissions = [Permissions.THREADS_READ, Permissions.THREADS_WRITE, Permissions.THREADS_DELETE]
+    bench_user = User(email="bench@example.com", password_hash="x", system_role="user", id=uuid4())
 
     class _StubAuthMiddleware(BaseHTTPMiddleware):
         async def dispatch(self, request: Request, call_next: Any) -> Response:
-            user = User(email="bench@example.com", password_hash="x", system_role="user", id=uuid4())
-            request.state.user = user
-            request.state.auth = AuthContext(user=user, permissions=list(permissions))
+            request.state.user = bench_user
+            request.state.auth = AuthContext(user=bench_user, permissions=list(permissions))
             # Mirror the production AuthMiddleware: the user contextvar must be
             # set or thread-meta lookups hit user_id=AUTO and raise per request.
-            token = set_current_user(user)
+            token = set_current_user(bench_user)
             try:
                 return await call_next(request)
             finally:
@@ -517,6 +526,7 @@ def _make_gateway_app(saver: Any, mode: str, store: Any) -> Any:
     app.state.thread_store = MemoryThreadMetaStore(store)
     app.state.checkpoint_channel_mode = mode
     app.state.run_event_store = MagicMock()
+    app.state.bench_user_id = str(bench_user.id)
     app.include_router(threads.router)
     return app
 
@@ -565,6 +575,20 @@ async def _read_phase(case: ProductionCase, saver: Any, timing: _TimingSaver) ->
         return model
 
     thread_id = _thread_id(case)
+
+    # M3 organization isolation (plans/momentum-m3-isolation-plan.md section 3
+    # gap 3, section 7) makes threads:read fail closed with 404 when no
+    # thread_meta row owns the thread. The run phase above writes checkpoints
+    # directly through the saver and never calls POST /api/threads, so without
+    # this the reads below would 404. Register it the same way the product
+    # does for its owner: through the thread_meta store this app is wired
+    # with, owned by the identity _StubAuthMiddleware authenticates every
+    # request as. This is metadata-only (unlike the product's create_thread
+    # route): it must not touch the checkpointer, which already holds the
+    # seeded conversation. It runs before the cold sample and outside
+    # _timed_request, so it is not measured.
+    await app.state.thread_store.create(thread_id, user_id=app.state.bench_user_id, metadata={})
+
     transport = httpx.ASGITransport(app=app)
     result: dict[str, Any] = {}
     try:

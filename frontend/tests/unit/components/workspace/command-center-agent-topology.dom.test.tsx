@@ -60,7 +60,63 @@ describe("AgentTopology", () => {
     expect(screen.getByText("Disabled")).toBeTruthy();
   });
 
-  it("renders the lead and every specialist through MomoAvatar's procedural glyph fallback, with no <img> and no empty box (momos/ ships empty)", () => {
+  it("pins only a specialist with an active run, with the working squares", () => {
+    const roster = [
+      { name: "dillon-reviewer", display_name: "Reviewer", enabled: true },
+      { name: "dillon-writer", display_name: "Writer", enabled: true },
+    ];
+    const { rerender } = render(
+      <AgentTopology
+        leadLabel="Dillon Brain"
+        leadHref="/workspace/chats/new"
+        selectedName={null}
+        runtimeKnown
+        activeAgentNames={["dillon-reviewer"]}
+        onSelect={rs.fn()}
+        roster={roster}
+      />,
+    );
+
+    const working = screen.getByRole("button", { name: /Reviewer/ });
+    const idle = screen.getByRole("button", { name: /Writer/ });
+    expect(working.classList.contains("pinned")).toBe(true);
+    const squares = working.querySelector(".paper-pixels");
+    expect(squares?.getAttribute("data-active")).toBe("true");
+    expect(squares?.getAttribute("aria-hidden")).toBe("true");
+    // An idle card is not pinned: a pin says something is happening.
+    expect(idle.classList.contains("pinned")).toBe(false);
+    expect(idle.querySelector(".paper-pixels")).toBeNull();
+
+    // Nobody is working: no pins anywhere, however many specialists exist.
+    rerender(
+      <AgentTopology
+        leadLabel="Dillon Brain"
+        leadHref="/workspace/chats/new"
+        selectedName={null}
+        runtimeKnown
+        activeAgentNames={[]}
+        onSelect={rs.fn()}
+        roster={roster}
+      />,
+    );
+    expect(document.querySelectorAll(".pinned, .paper-pixels")).toHaveLength(0);
+
+    // Unknown live state is not activity either, even for a listed name.
+    rerender(
+      <AgentTopology
+        leadLabel="Dillon Brain"
+        leadHref="/workspace/chats/new"
+        selectedName={null}
+        runtimeKnown={false}
+        activeAgentNames={["dillon-reviewer"]}
+        onSelect={rs.fn()}
+        roster={roster}
+      />,
+    );
+    expect(document.querySelectorAll(".pinned, .paper-pixels")).toHaveLength(0);
+  });
+
+  it("draws the lead as Dillon Brain's PaperLayers art at 160 and specialists at 56, not a lettered monogram", () => {
     const { container } = render(
       <AgentTopology
         leadLabel="Dillon Brain"
@@ -74,11 +130,23 @@ describe("AgentTopology", () => {
       />,
     );
 
-    // No <img> anywhere: AVAILABLE_MOMO_SLUGS is empty, so both the lead
-    // and every specialist call site must fall through to the procedural
-    // MomentumGlyph fallback inside MomoAvatar - no 404 request, no flash.
-    expect(container.querySelectorAll("img")).toHaveLength(0);
-    // Lead + 2 specialists = 3 rendered glyphs, none of them an empty box.
-    expect(container.querySelectorAll("svg[data-momentum-glyph]")).toHaveLength(3);
+    // No appearance mock here: the context default (motion off) holds
+    // PaperLayers to its flattened fallback, decorative beside the name.
+    const lead = container.querySelector(
+      'img[src="/momentum/brain/flat.webp"]',
+    );
+    expect(lead?.getAttribute("width")).toBe("160");
+    expect(lead?.getAttribute("alt")).toBe("");
+    // Specialists without a mapped Momo fall back to MomoAvatar's glyph, at
+    // the 56px specialist size (CSS draws it at 40 on phones); the lead no
+    // longer renders a glyph at all.
+    const glyphs = container.querySelectorAll("svg[data-momentum-glyph]");
+    expect(glyphs).toHaveLength(2);
+    for (const glyph of glyphs) expect(glyph.getAttribute("width")).toBe("56");
+    // The avatar is hidden from assistive tech: the card's name says it once.
+    expect(
+      screen.getByRole("button", { name: /Reviewer/ }).textContent,
+    ).toContain("Reviewer");
+    expect(screen.queryAllByRole("img")).toHaveLength(0);
   });
 });

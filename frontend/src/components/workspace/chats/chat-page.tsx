@@ -25,6 +25,7 @@ import {
   MESSAGE_LIST_DEFAULT_PADDING_BOTTOM,
 } from "@/components/workspace/messages";
 import { ThreadContext } from "@/components/workspace/messages/context";
+import { isDeepReasoningRun } from "@/components/workspace/messages/ultra-thinking";
 import {
   SidecarProvider,
   SidecarTrigger,
@@ -84,6 +85,8 @@ import { ChatBox } from "./chat-box";
 import { useSpecificChatMode } from "./use-chat-mode";
 import { useThreadChat } from "./use-thread-chat";
 
+import styles from "./chat-paper.module.css";
+
 export default function ChatPage() {
   const { t } = useI18n();
   const { user } = useAuth();
@@ -112,7 +115,7 @@ export default function ChatPage() {
   const [settings, setSettings] = useThreadSettings(threadId);
   const [localSettings, setLocalSettings] = useLocalSettings();
   const { enabled: browserControlEnabled } = useBrowserControlEnabled();
-  const { tokenUsageEnabled } = useModels();
+  const { models, tokenUsageEnabled } = useModels();
   const threadTokenUsage = useThreadTokenUsage(
     isNewThread || isMock ? undefined : threadId,
     { enabled: !isMock },
@@ -130,14 +133,6 @@ export default function ChatPage() {
   useEffect(() => {
     mountedRef.current = true;
   }, []);
-
-  // Keep welcome layout in sync when navigating between threads (sidebar
-  // clicks, "new chat" button).  Submitting in /chats/new flips the layout
-  // via onSend below — `isNewThread` stays true until onStart, so this effect
-  // is harmless during the submit transition.
-  useEffect(() => {
-    setIsWelcomeMode(isNewThread);
-  }, [isNewThread]);
 
   const { showNotification } = useNotification();
   const { scopeSelectionEnabled } = useKnowledgeBaseEnabled();
@@ -222,6 +217,27 @@ export default function ChatPage() {
   });
 
   const hasThreadMessages = thread.messages.length > 0;
+  // A thread that exists but holds nothing yet (a channel thread, a project
+  // pre-create) gets the new-chat empty state instead of a blank wash. Only
+  // once everything has loaded, so a slow history never flashes it.
+  const isEmptyThread =
+    !isNewThread &&
+    !isMock &&
+    threadMetadata.data != null &&
+    !thread.isThreadLoading &&
+    !thread.isLoading &&
+    !isHistoryLoading &&
+    !hasMoreHistory &&
+    !hasThreadMessages;
+  const showsEmptyState = isNewThread || isEmptyThread;
+
+  // Keep welcome layout in sync when navigating between threads (sidebar
+  // clicks, "new chat" button) and when an existing thread loads empty.
+  // Submitting flips the layout via onSend above; `showsEmptyState` holds
+  // until the first message lands, so this effect is harmless meanwhile.
+  useEffect(() => {
+    setIsWelcomeMode(showsEmptyState);
+  }, [showsEmptyState]);
 
   useEffect(() => {
     if (
@@ -435,8 +451,14 @@ export default function ChatPage() {
         isMock={isMock}
       >
         <ChatBox threadId={threadId} browserEnabled={browserEnabled}>
-          <div className="momentum-conversation-surface relative flex size-full min-h-0 justify-between">
+          <div
+            className={cn(
+              "momentum-conversation-surface relative flex size-full min-h-0 justify-between",
+              styles.surface,
+            )}
+          >
             <header
+              data-chat-header=""
               className={cn(
                 "border-border bg-card/80 absolute top-0 right-0 left-0 flex h-12 shrink-0 items-center gap-2 border-b px-2 shadow-xs backdrop-blur sm:px-4",
                 isWelcomeMode ? "z-40" : "z-30",
@@ -444,8 +466,9 @@ export default function ChatPage() {
             >
               {!isMock && <SidebarTrigger className="md:hidden" />}
               <div className="flex min-w-0 flex-1 items-center gap-2 text-sm font-medium">
+                {/* Decorative; below sm its 32px go to the thread title. */}
                 <MomentumGlyph
-                  className="size-6 shrink-0"
+                  className="hidden size-6 shrink-0 sm:block"
                   seed={`thread:${threadId}`}
                 />
                 <ThreadTitle
@@ -512,6 +535,12 @@ export default function ChatPage() {
                   testId="main-message-list"
                   threadId={threadId}
                   thread={thread}
+                  deepReasoning={isDeepReasoningRun(
+                    settings.context,
+                    models.find(
+                      (model) => model.name === settings.context.model_name,
+                    ),
+                  )}
                   enableConversationOutline
                   paddingBottom={MESSAGE_LIST_DEFAULT_PADDING_BOTTOM}
                   hasMoreHistory={hasMoreHistory}
@@ -556,14 +585,21 @@ export default function ChatPage() {
               <div
                 className={cn(
                   "right-0 bottom-0 left-0 z-30 flex justify-center px-3 sm:px-4",
-                  isWelcomeMode ? "absolute" : "relative shrink-0 pb-4",
+                  // The disclaimer hangs below the composer (top-full); the
+                  // padding keeps it clear of the bottom edge and home bar.
+                  isWelcomeMode
+                    ? "absolute"
+                    : "relative shrink-0 pb-[max(1.75rem,env(safe-area-inset-bottom))]",
                 )}
               >
+                {/* Welcome lifts the composer toward the middle; the min()
+                    stops short screens from pushing the Momo and its line
+                    up under the header. */}
                 <div
                   className={cn(
                     "relative w-full",
                     isWelcomeMode &&
-                      "-translate-y-[calc(50vh-48px)] sm:-translate-y-[calc(50vh-96px)]",
+                      "-translate-y-[min(calc(50vh_-_100px),calc(100vh_-_560px))] sm:-translate-y-[min(calc(50vh_-_96px),calc(100vh_-_430px))]",
                     isWelcomeMode
                       ? "max-w-(--container-width-sm)"
                       : "max-w-(--container-width-md)",

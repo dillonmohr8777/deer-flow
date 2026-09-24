@@ -170,7 +170,7 @@ describe("InputBox send gating (runs:create)", () => {
       submitForm(container, "/goal finish all tests");
       await waitFor(() =>
         expect(info).toHaveBeenCalledWith(
-          expect.stringContaining("not permitted"),
+          expect.stringContaining("isn't permitted"),
         ),
       );
 
@@ -228,7 +228,7 @@ describe("InputBox send gating (runs:create)", () => {
     expect(onSubmit).not.toHaveBeenCalled();
     expect(onPrepareThread).not.toHaveBeenCalled();
     expect(info).not.toHaveBeenCalledWith(
-      expect.stringContaining("not permitted"),
+      expect.stringContaining("isn't permitted"),
     );
   });
 
@@ -273,8 +273,8 @@ describe("InputBox send gating (runs:create)", () => {
     });
 
     const submit = getSubmitButton(container);
-    expect(submit.getAttribute("aria-label")).toContain("not permitted");
-    expect(submit.title).toContain("not permitted");
+    expect(submit.getAttribute("aria-label")).toContain("isn't permitted");
+    expect(submit.title).toContain("isn't permitted");
   });
 
   it("keeps send enabled for an unresolved permission list (default)", async () => {
@@ -293,13 +293,12 @@ describe("InputBox send gating (runs:create)", () => {
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
   });
 
-  it("keeps the base Submit accessible name when send is not denied", () => {
-    // Mirror of the stop-gating regression: the aria-label must be spread
-    // conditionally, never explicitly-undefined, or it clobbers
-    // PromptInputSubmit's default aria-label="Submit".
+  it("names the submit control Send when send is not denied", () => {
+    // Mirror of the stop-gating regression: the control must never lose its
+    // accessible name, and it now says what it does rather than "Submit".
     renderComposer({ onSubmit: rs.fn() });
 
-    const submit = screen.getByRole("button", { name: "Submit" });
-    expect(submit.tagName).toBe("BUTTON");
+    const submit = screen.getByRole("button", { name: "Send" });
+    expect(submit.getAttribute("type")).toBe("submit");
   });
 });

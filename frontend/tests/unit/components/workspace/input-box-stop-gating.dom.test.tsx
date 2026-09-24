@@ -103,8 +103,8 @@ describe("InputBox stop gating (runs:cancel)", () => {
     });
 
     const submit = getSubmitButton(container);
-    expect(submit.getAttribute("aria-label")).toContain("not permitted");
-    expect(submit.title).toContain("not permitted");
+    expect(submit.getAttribute("aria-label")).toContain("isn't permitted");
+    expect(submit.title).toContain("isn't permitted");
   });
 
   it("keeps stop enabled for an unresolved permission list (default)", () => {
@@ -118,18 +118,17 @@ describe("InputBox stop gating (runs:cancel)", () => {
     expect(onStop).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps the base Submit accessible name when stop is not denied", () => {
-    // Regression: passing an explicitly-undefined aria-label clobbered
-    // PromptInputSubmit's default aria-label="Submit" via JSX spread,
-    // stripping the submit control's accessible name in every
-    // non-denied state (e2e locates the button by that name). Query by
-    // role + name so the assertion resolves the accessible name the
+  it("names the streaming control for stopping when stop is not denied", () => {
+    // Regression: passing an explicitly-undefined aria-label once stripped
+    // the submit control's accessible name in every non-denied state. While
+    // a turn streams the same button stops the run, so its name says so.
+    // Query by role + name so the assertion resolves the accessible name the
     // same way e2e and assistive tech do, not via the raw attribute.
     renderComposer({ onStop: rs.fn() });
 
-    // getByRole throws when no button exposes the "Submit" accessible
-    // name, which is exactly the regression being guarded.
-    const submit = screen.getByRole("button", { name: "Submit" });
-    expect(submit.tagName).toBe("BUTTON");
+    const submit = screen.getByRole("button", {
+      name: "Stop the running turn",
+    });
+    expect(submit.getAttribute("type")).toBe("submit");
   });
 });

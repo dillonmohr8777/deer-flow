@@ -5,7 +5,9 @@ import {
   CalendarClock,
   MessagesSquare,
   BlocksIcon,
+  LampDesk,
   Network,
+  Newspaper,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -22,15 +24,31 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useAgentsApiEnabled } from "@/core/agents";
+import { useDeskEnabled } from "@/core/features";
 import { useI18n } from "@/core/i18n/hooks";
 
 export function WorkspaceNavChatList() {
   const { t } = useI18n();
   const pathname = usePathname();
   const { enabled: agentsEnabled } = useAgentsApiEnabled();
+  const { enabled: deskEnabled } = useDeskEnabled();
   return (
     <SidebarGroup className="pt-1">
       <SidebarMenu>
+        {/* Owner-only: exists solely on the private instance. */}
+        {deskEnabled && (
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              isActive={pathname === "/workspace/desk"}
+              asChild
+            >
+              <Link className="text-muted-foreground" href="/workspace/desk">
+                <LampDesk />
+                <span>Desk</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        )}
         <SidebarMenuItem>
           <SidebarMenuButton
             isActive={pathname === "/workspace/command-center"}
@@ -120,6 +138,14 @@ export function WorkspaceNavChatList() {
             >
               <BlocksIcon />
               <span>{t.capabilities.title}</span>
+            </Link>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+        <SidebarMenuItem>
+          <SidebarMenuButton isActive={pathname.startsWith("/daily")} asChild>
+            <Link className="text-muted-foreground" href="/daily">
+              <Newspaper />
+              <span>The Momo Daily</span>
             </Link>
           </SidebarMenuButton>
         </SidebarMenuItem>

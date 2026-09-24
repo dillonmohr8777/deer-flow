@@ -13,6 +13,7 @@ EXPECTED_GUIDANCE_PATHS = {
     "backend/tests/AGENTS.md",
     "frontend/AGENTS.md",
     "backend/app/gateway/AGENTS.md",
+    "backend/app/gateway/auth/AGENTS.md",
     "backend/app/channels/AGENTS.md",
     "backend/packages/harness/deerflow/AGENTS.md",
     "backend/packages/harness/deerflow/agents/AGENTS.md",
@@ -23,6 +24,7 @@ EXPECTED_GUIDANCE_PATHS = {
     "backend/packages/harness/deerflow/community/e2b_sandbox/AGENTS.md",
     "backend/packages/harness/deerflow/config/AGENTS.md",
     "backend/packages/harness/deerflow/extensions/AGENTS.md",
+    "backend/packages/harness/deerflow/fleet/AGENTS.md",
     "backend/packages/harness/deerflow/runtime/AGENTS.md",
     "backend/packages/harness/deerflow/sandbox/AGENTS.md",
     "backend/packages/harness/deerflow/mcp/AGENTS.md",
@@ -30,6 +32,7 @@ EXPECTED_GUIDANCE_PATHS = {
     "backend/packages/harness/deerflow/persistence/AGENTS.md",
     "backend/packages/harness/deerflow/persistence/migrations/AGENTS.md",
     "backend/packages/harness/deerflow/persistence/user/AGENTS.md",
+    "backend/packages/harness/deerflow/projects/AGENTS.md",
     "backend/packages/harness/deerflow/reflection/AGENTS.md",
     "backend/packages/harness/deerflow/skills/AGENTS.md",
     "backend/packages/harness/deerflow/subagents/AGENTS.md",
@@ -38,6 +41,7 @@ EXPECTED_GUIDANCE_PATHS = {
     "backend/packages/harness/deerflow/tui/AGENTS.md",
     "backend/packages/harness/deerflow/utils/AGENTS.md",
     "frontend/src/AGENTS.md",
+    "frontend/src/core/auth/AGENTS.md",
     "scripts/AGENTS.md",
 }
 

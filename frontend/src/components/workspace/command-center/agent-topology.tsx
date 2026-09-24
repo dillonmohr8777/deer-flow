@@ -1,7 +1,8 @@
 import { ArrowUpRight } from "lucide-react";
 import Link from "next/link";
 
-import { formatModelLabel } from "./model-label";
+import { cn } from "@/lib/utils";
+
 import { MomoAvatar } from "./momo-avatar";
 
 import styles from "./command-center.module.css";
@@ -39,11 +40,23 @@ export function AgentTopology({
   activeAgentNames = null,
   onSelect,
 }: AgentTopologyProps) {
+  // Only meaningful when runtimeKnown: an unknown live state must never
+  // read as an accelerated pulse.
+  const leadActive =
+    runtimeKnown && (activeAgentNames ?? []).includes("dillon-brain");
+
   return (
     <div className={styles.topology}>
       <div className={styles.topologyLead}>
-        <span className={styles.leadIcon}>
-          <MomoAvatar agent={{ name: `lead:${leadLabel}`, display_name: leadLabel }} size={160} />
+        {/* The lead is Dillon Brain (agent name "dillon-brain"), a pulsing
+            brain rather than a robot Momo. Hidden from assistive tech: the
+            name beside it says who this is. */}
+        <span className={styles.leadMomo} aria-hidden="true">
+          <MomoAvatar
+            agent={{ name: "dillon-brain", display_name: leadLabel }}
+            size={160}
+            active={leadActive}
+          />
         </span>
         <div>
           <strong>{leadLabel}</strong>
@@ -55,6 +68,7 @@ export function AgentTopology({
       </div>
       <div
         className={styles.topologyRoster}
+        role="group"
         aria-label={
           runtimeKnown
             ? "Specialist definitions with recorded live state"
@@ -64,7 +78,7 @@ export function AgentTopology({
         {loading ? (
           <p role="status">Loading agent definitions…</p>
         ) : error ? (
-          <p role="alert">The specialist catalog could not be loaded.</p>
+          <p role="alert">The specialist catalog couldn&apos;t be loaded.</p>
         ) : roster.length === 0 ? (
           <p>No specialist definitions are available to this account.</p>
         ) : (
@@ -72,36 +86,48 @@ export function AgentTopology({
             const hasActiveRun =
               runtimeKnown && (activeAgentNames ?? []).includes(agent.name);
             return (
+              // "paper-card" (2px hover lift), "pinned" (brass pin) and
+              // "paper-pixels" (steps(3) tick) are paper.css hooks, inert
+              // outside the paper treatment. A pin means working: only a
+              // specialist with an active recorded run wears one, with the
+              // three working squares. The words carry the state either way.
               <button
                 key={agent.name}
-                className={styles.agent}
+                className={cn(
+                  styles.agent,
+                  "paper-card",
+                  hasActiveRun && "pinned",
+                )}
                 aria-pressed={selectedName === agent.name}
                 onClick={() => onSelect(agent.name)}
               >
-                <span className={styles.agentMonogram}>
-                  <MomoAvatar agent={agent} size={40} />
+                <span className={styles.agentMomo} aria-hidden="true">
+                  <MomoAvatar agent={agent} size={56} />
                 </span>
-                <strong>
-                  {agent.display_name ?? agent.name.replace("dillon-", "")}
-                </strong>
-                {agent.description && (
-                  <span className={styles.agentRole}>{agent.description}</span>
-                )}
-                {agent.model && (
-                  <span className={styles.agentModel}>
-                    {formatModelLabel(agent.model)}
+                <span className={styles.agentText}>
+                  <strong>
+                    {agent.display_name ?? agent.name.replace("dillon-", "")}
+                  </strong>
+                  <span className={styles.agentState}>
+                    <span>
+                      {hasActiveRun && (
+                        <span
+                          className={`${styles.working} paper-pixels`}
+                          data-active="true"
+                          aria-hidden="true"
+                        />
+                      )}
+                      {runtimeKnown
+                        ? hasActiveRun
+                          ? "Active run recorded"
+                          : "Idle"
+                        : "Live state unknown"}
+                    </span>
+                    <span>
+                      <i data-enabled={agent.enabled} />
+                      {agent.enabled ? "Enabled" : "Disabled"}
+                    </span>
                   </span>
-                )}
-                <span>
-                  {runtimeKnown
-                    ? hasActiveRun
-                      ? "Active run recorded"
-                      : "Idle"
-                    : "Live state unknown"}
-                </span>
-                <span>
-                  <i data-enabled={agent.enabled} />
-                  {agent.enabled ? "Enabled" : "Disabled"}
                 </span>
               </button>
             );
@@ -110,8 +136,8 @@ export function AgentTopology({
       </div>
       <p className={styles.diagramNote}>
         {runtimeKnown
-          ? "Definitions above; live state from recorded runs. Connections do not indicate active dispatch."
-          : "Definitions above; live state unknown - run history unavailable. Connections do not indicate active dispatch."}
+          ? "Definitions above; live state from recorded runs."
+          : "Definitions above; live state is unknown because run history is unavailable."}
       </p>
     </div>
   );

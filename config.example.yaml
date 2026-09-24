@@ -2271,6 +2271,16 @@ agents_api:
   enabled: false
 
 # ============================================================================
+# Private Workspace
+# ============================================================================
+# true only on the owner's private instance: it turns on the Desk home
+# (/workspace/desk) and the PAT-callable fleet/agents/scheduled-task creation
+# routes (backend/app/gateway/auth/pat.py). Every client-facing MomoBot
+# leaves this false.
+private_workspace:
+  enabled: false
+
+# ============================================================================
 # Skill Self-Evolution Configuration
 # ============================================================================
 # Allow the agent to autonomously create and improve skills in skills/custom/.
@@ -2907,6 +2917,9 @@ run_ownership:
 #           skills: {allow: []}      # no skills visible in the listing
 authorization:
   enabled: false
+  # Shared-workspace invitations (create, inspect, accept) answer 403 while
+  # true; existing memberships are unaffected. Default: true.
+  # invitations_frozen: true
 
 # ============================================================================
 # Circuit Breaker Configuration
@@ -3047,6 +3060,34 @@ authorization:
 #         # Security features (enabled by default):
 #         pkce_enabled: true               # PKCE (S256) for authorization code flow
 #         nonce_enabled: true              # Nonce validation in ID tokens
+#
+#       # Sign in with Google (Google Workspace or plain Google accounts).
+#       # Google's discovery endpoint is issuer + /.well-known/openid-configuration,
+#       # so the plain OIDC issuer below is all that is needed; there are no
+#       # endpoint overrides to set. See backend/docs/AUTH_DESIGN.md for the
+#       # Google Cloud console steps that produce the client id/secret.
+#       google:
+#         display_name: Google
+#         issuer: https://accounts.google.com
+#         client_id: $GOOGLE_OAUTH_CLIENT_ID
+#         client_secret: $GOOGLE_OAUTH_CLIENT_SECRET
+#         # redirect_uri: https://deerflow.example.com/api/v1/auth/callback/google
+#         scopes:
+#           - openid
+#           - email
+#           - profile
+#         token_endpoint_auth_method: client_secret_post
+#
+#         auto_create_users: true
+#         require_verified_email: true
+#         # Restrict sign-in to a Google Workspace domain (leave unset to allow
+#         # any Google account, including personal gmail.com addresses):
+#         # allowed_email_domains:
+#         #   - example.com
+#         admin_emails: []
+#
+#         pkce_enabled: true
+#         nonce_enabled: true
 
 # --- Plugins ----------------------------------------------------------------
 # Extension packages, loaded once at startup in the order listed here. Each

@@ -11,6 +11,7 @@ import {
 import {
   memo,
   useCallback,
+  useContext,
   useMemo,
   useState,
   type ImgHTMLAttributes,
@@ -73,6 +74,11 @@ import { Tooltip } from "../tooltip";
 import { KnowledgeScopeSummary } from "./knowledge-scope-summary";
 import { MarkdownContent } from "./markdown-content";
 import { createMarkdownLinkComponent } from "./markdown-link";
+import {
+  DeepReasoning,
+  DeepReasoningContext,
+  deepReasoningFor,
+} from "./ultra-thinking";
 
 function FeedbackButtons({
   threadId,
@@ -249,7 +255,9 @@ export function MessageListItem({
             isHuman
               ? "absolute right-0 -bottom-9 left-0 justify-end"
               : "absolute right-0 bottom-0 left-0",
-            "z-20 opacity-0 transition-opacity delay-200 duration-300 group-hover/conversation-message:opacity-100",
+            // Revealed on hover, on keyboard focus (a Tab into an invisible
+            // toolbar is a lost focus ring), and always on touch screens.
+            "z-20 opacity-0 transition-opacity delay-200 duration-300 group-focus-within/conversation-message:opacity-100 group-hover/conversation-message:opacity-100 [@media(hover:none)]:opacity-100",
           )}
         >
           <div className="pointer-events-auto flex gap-1">
@@ -426,6 +434,18 @@ function MessageContent_({
 
   const rawContent = extractContentFromMessage(message);
   const reasoningContent = extractReasoningContentFromMessage(message);
+  const deepReasoningState = useContext(DeepReasoningContext);
+  const deepReasoning = deepReasoningFor(deepReasoningState, message.id);
+  const reasoning = reasoningContent ? (
+    deepReasoning ? (
+      <DeepReasoning reasoning={reasoningContent} {...deepReasoning} />
+    ) : (
+      <Reasoning isStreaming={isLoading}>
+        <ReasoningTrigger getThinkingMessage={getReasoningMessage} />
+        <SafeReasoningContent>{reasoningContent}</SafeReasoningContent>
+      </Reasoning>
+    )
+  ) : null;
 
   const files = useMemo(() => {
     const files = message.additional_kwargs?.files;
@@ -497,10 +517,7 @@ function MessageContent_({
   if (!isHuman && reasoningContent && !rawContent) {
     return (
       <AIElementMessageContent className={className}>
-        <Reasoning isStreaming={isLoading}>
-          <ReasoningTrigger getThinkingMessage={getReasoningMessage} />
-          <SafeReasoningContent>{reasoningContent}</SafeReasoningContent>
-        </Reasoning>
+        {reasoning}
       </AIElementMessageContent>
     );
   }
@@ -590,7 +607,10 @@ function MessageContent_({
             </div>
           </div>
         ) : contentToDisplay ? (
-          <AIElementMessageContent className="w-full max-w-full">
+          <AIElementMessageContent
+            className="w-full max-w-full"
+            data-human-message=""
+          >
             <HumanMessageText content={contentToDisplay} />
           </AIElementMessageContent>
         ) : null}
@@ -606,12 +626,7 @@ function MessageContent_({
   return (
     <AIElementMessageContent className={className}>
       {filesList}
-      {reasoningContent && (
-        <Reasoning isStreaming={isLoading}>
-          <ReasoningTrigger getThinkingMessage={getReasoningMessage} />
-          <SafeReasoningContent>{reasoningContent}</SafeReasoningContent>
-        </Reasoning>
-      )}
+      {reasoning}
       <MarkdownContent
         content={contentToDisplay}
         isLoading={isLoading}
@@ -678,7 +693,7 @@ function isImageFile(filename: string): boolean {
  * Format bytes to human-readable size string
  */
 function formatBytes(bytes: number): string {
-  if (bytes === 0) return "—";
+  if (bytes === 0) return "N/A";
   const kb = bytes / 1024;
   if (kb < 1024) return `${kb.toFixed(1)} KB`;
   return `${(kb / 1024).toFixed(1)} MB`;

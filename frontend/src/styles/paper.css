@@ -4,10 +4,10 @@
  * Canon: "blue, white, grey, with a hint of gold." Grey hardware, gold
  * accent only. Restraint is the craft.
  *
- * Scope: everything here lives under [data-treatment="paper"], the
- * attribute command-center.tsx sets on its root element when the user picks
- * the "Paper cutout" appearance (workspace-appearance.tsx). Nothing here
- * changes the default "current" treatment.
+ * Scope: everything here lives under [data-treatment="paper"], which
+ * WorkspaceAppearanceProvider sets on the workspace wrapper and on <html>
+ * (appearance-provider.tsx), and which Command Center, landing, login and
+ * invite set on their own roots. Nothing here changes the "current" treatment.
  *
  * Ratios below are the ones proven by tests/unit/paper-tokens.test.ts,
  * which parses this file's own token values and computes WCAG contrast —
@@ -15,6 +15,7 @@
  *
  *   --paper-cream       #F2EDE3  vs ink            14.07
  *   --paper-cream-hi    #FBF8F1  vs ink            15.47
+ *   --paper-cream-lo    #E9DECC  vs ink            12.34  (kraft 35% over cream)
  *   --paper-kraft       #D8C3A0  vs ink             9.56
  *   --paper-royal       #1B4B9E  on cream           7.07
  *   --paper-royal-deep  #14346E  cream-ink on it    10.49
@@ -35,7 +36,12 @@
   /* Paper */
   --paper-cream: #f2ede3;
   --paper-cream-hi: #fbf8f1;
+  /* Hover and quiet fills: visible on cream and on cream-hi sheets. */
+  --paper-cream-lo: #e9decc;
   --paper-kraft: #d8c3a0;
+
+  /* The landing's 5% grain as a background tile, so it sits under content. */
+  --paper-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E");
 
   /* Ink */
   --paper-ink: #101e3f;
@@ -68,11 +74,23 @@
    * the tokens above instead of carrying its own paper hexes. No new
    * off-canon hues: violet/rose fold into the blue/ink family, cyan/surface
    * tints are restrained mixes of the tokens above, not fresh colours.
+   *
+   * Measured 2026-09-22 on the rehearsal build: the module stylesheet loads
+   * after this one, so .root's own declarations win and Command Center reads
+   * its module values, not these. shadcn no longer reads --muted
+   * (globals.css binds bg-muted to --muted-surface), so this block cannot
+   * darken shell surfaces either.
    */
   --canvas: var(--paper-cream);
   --surface: var(--paper-cream-hi);
-  --surface-blue: color-mix(in srgb, var(--paper-royal) 8%, var(--paper-cream-hi));
-  --surface-violet: color-mix(in srgb, var(--paper-ink-muted) 8%, var(--paper-cream-hi));
+  /* Royal at 8% over cream-hi measured #e9eaea, a dead grey. Quiet fills
+     are cream-lo everywhere else in paper. */
+  --surface-blue: var(--paper-cream-lo);
+  --surface-violet: color-mix(
+    in srgb,
+    var(--paper-ink-muted) 8%,
+    var(--paper-cream-hi)
+  );
   --ink: var(--paper-ink);
   --muted: var(--paper-ink-muted);
   --line: var(--paper-line);
@@ -86,6 +104,141 @@
   --green: var(--paper-ok);
   --danger: var(--paper-danger);
   --focus: var(--paper-focus);
+}
+
+/*
+ * Workspace shell skin: sidebar, headers, page canvas, dialogs, menus.
+ *
+ * Matches on the appearance provider's wrapper ([data-workspace-shell]) and on
+ * <html>, which the provider mirrors the treatment onto so portalled dialogs,
+ * menus and the mobile sidebar sheet get it too. Landing, login and invite set
+ * data-treatment on their own roots and keep their own components: nothing
+ * here reaches them. Light theme only; a dark-theme choice is respected.
+ *
+ * Cream canvas, cream-hi sheets, hairline --paper-line borders, cream-lo for
+ * hover and quiet fills. Colour carries state: royal marks the selected thing.
+ */
+:root:not(.dark)[data-treatment="paper"],
+:root:not(.dark) [data-workspace-shell][data-treatment="paper"] {
+  --background: var(--paper-cream);
+  --foreground: var(--paper-ink);
+  --card: var(--paper-cream-hi);
+  --card-foreground: var(--paper-ink);
+  --popover: var(--paper-cream-hi);
+  --popover-foreground: var(--paper-ink);
+  --primary: var(--paper-royal);
+  --primary-foreground: var(--paper-cream-hi);
+  --secondary: var(--paper-cream-lo);
+  --secondary-foreground: var(--paper-ink);
+  --muted-surface: var(--paper-cream-lo);
+  --muted-foreground: var(--paper-ink-muted);
+  --accent: var(--paper-cream-lo);
+  --accent-foreground: var(--paper-ink);
+  --destructive: var(--paper-danger);
+  --border: var(--paper-line);
+  --input: var(--paper-line);
+  --ring: var(--paper-focus);
+  --sidebar: var(--paper-cream);
+  --sidebar-foreground: var(--paper-ink);
+  --sidebar-primary: var(--paper-royal);
+  --sidebar-primary-foreground: var(--paper-cream-hi);
+  --sidebar-accent: var(--paper-cream-lo);
+  --sidebar-accent-foreground: var(--paper-ink);
+  --sidebar-border: var(--paper-line);
+  --sidebar-ring: var(--paper-focus);
+  font-family: var(--m-font-text);
+}
+
+/*
+ * Rules below match under either holder: the wrapper, which is server
+ * rendered (no first-paint flash), or <html>, which reaches the portalled
+ * dialogs and the mobile sidebar sheet.
+ */
+
+/* Flat cream canvas with grain. Replaces the blue and violet washes. */
+:is(
+    :root:not(.dark)[data-treatment="paper"],
+    :root:not(.dark) [data-workspace-shell][data-treatment="paper"]
+  )
+  :is(
+    [data-slot="sidebar-inner"],
+    [data-slot="sidebar-inset"],
+    [data-slot="sidebar"][data-mobile="true"],
+    .momentum-conversation-surface
+  ) {
+  background-color: var(--paper-cream);
+  background-image: var(--paper-grain);
+  color: var(--paper-ink);
+}
+
+/* The selected row is a cream-hi sheet on a hairline, like the landing's cards. */
+:is(
+    :root:not(.dark)[data-treatment="paper"],
+    :root:not(.dark) [data-workspace-shell][data-treatment="paper"]
+  )
+  [data-sidebar="menu-button"][data-active="true"] {
+  background-color: var(--paper-cream-hi);
+  box-shadow: inset 0 0 0 1px var(--paper-line);
+  font-weight: 700;
+}
+
+/* Section labels take the landing's label voice (AGENTS, RUNS). */
+:is(
+    :root:not(.dark)[data-treatment="paper"],
+    :root:not(.dark) [data-workspace-shell][data-treatment="paper"]
+  )
+  [data-sidebar="group-label"] {
+  color: var(--paper-ink-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+/* Agents and Scheduled tasks pin a cobalt primary for the current look
+   (globals.css .momentum-page); in paper their primary is royal too. */
+:is(
+    :root:not(.dark)[data-treatment="paper"],
+    :root:not(.dark) [data-workspace-shell][data-treatment="paper"]
+  )
+  .momentum-page {
+  --primary: var(--paper-royal);
+  --primary-foreground: var(--paper-cream-hi);
+  --ring: var(--paper-focus);
+}
+
+/* Dialogs are cream-hi sheets with a hard kraft offset, printed not glowing. */
+:is(
+    :root:not(.dark)[data-treatment="paper"],
+    :root:not(.dark) [data-workspace-shell][data-treatment="paper"]
+  )
+  :is([data-slot="dialog-overlay"], [data-slot="sheet-overlay"]) {
+  background-color: color-mix(in srgb, var(--paper-ink) 45%, transparent);
+}
+:is(
+    :root:not(.dark)[data-treatment="paper"],
+    :root:not(.dark) [data-workspace-shell][data-treatment="paper"]
+  )
+  [data-slot="dialog-content"] {
+  background-color: var(--paper-cream-hi);
+  box-shadow: 8px 10px 0 var(--paper-kraft);
+}
+:is(
+    :root:not(.dark)[data-treatment="paper"],
+    :root:not(.dark) [data-workspace-shell][data-treatment="paper"]
+  )
+  [data-slot="dialog-title"] {
+  font-family: var(--m-font-serif);
+  font-weight: 700;
+}
+/* Upstream centres dialog headers below 640px while every field below them
+   stays left-aligned; a sheet reads from its top-left corner at every width. */
+:is(
+    :root:not(.dark)[data-treatment="paper"],
+    :root:not(.dark) [data-workspace-shell][data-treatment="paper"]
+  )
+  [data-slot="dialog-header"] {
+  text-align: left;
 }
 
 /*
@@ -113,9 +266,7 @@
   mask-size:
     100% 24px,
     100% calc(100% - 23px);
-  mask-position:
-    top,
-    bottom;
+  mask-position: top, bottom;
   mask-repeat: no-repeat;
   mask-composite: add;
   border-radius: 2px 5px 3px 6px;
@@ -128,9 +279,7 @@
   mask-size:
     100% 24px,
     100% calc(100% - 23px);
-  mask-position:
-    top,
-    bottom;
+  mask-position: top, bottom;
   mask-repeat: no-repeat;
   mask-composite: add;
   border-radius: 5px 2px 6px 3px;
@@ -199,6 +348,8 @@
 
 /*
  * Paper motion layer — the five-item product motion list, and no more.
+ * (A sixth item, the front-door Momo bounce, lives with its component in
+ * components/momentum/momobot/momobot.module.css; see DESIGN.md, Motion.)
  * Source: C:\Users\dillo\Documents\Qwen\block-shots\W0-motion-vocabulary.md
  * (ad analysis). Vocabulary borrowed: fast-start, ease-to-rest slide/settle.
  * Vocabulary dropped on purpose: the ad's repeated spring overshoot-bounce,
@@ -321,4 +472,14 @@
   /* 5 — BrandSignature drift already exists in workspace-appearance.module.css
      (.signature[data-animated="true"]), already gated the same way. Left
      alone, per instruction — nothing to add here. */
+}
+
+/* Inactive tabs are foreground at 60% opacity upstream, about 4.2:1 on cream.
+   Paper uses the muted ink token instead (7.59:1); hover returns to full ink. */
+[data-treatment="paper"] [data-slot="tabs-trigger"]:not([data-state="active"]) {
+  color: var(--paper-ink-muted);
+}
+[data-treatment="paper"]
+  [data-slot="tabs-trigger"]:not([data-state="active"]):hover {
+  color: var(--paper-ink);
 }

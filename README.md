@@ -2077,6 +2077,17 @@ Current MVP capabilities:
 - Execute scheduled work through the normal DeerFlow run lifecycle
 - Browse execution history in pages of 50; older pages pause automatic refresh, with an explicit return to the latest runs. Counts appear only after a successful read; loading and failed reads are not reported as zero runs.
 
+### Fleet template acceptance prompts
+
+Fleet templates can declare `acceptance_criteria`. When a template is stamped,
+those criteria are appended to the agent's rendered `SOUL.md` after the
+`{client_name}` placeholder is filled. The appended instructions ask the agent
+to check each criterion against concrete evidence, retain unmet criteria as
+`UNVERIFIED`, and repair within its authorized scope and budget when possible.
+This is prompt propagation only: scheduled-task and subagent completion
+statuses still describe execution completion and remain separate from
+deliverable acceptance.
+
 **Filter execution history through the API**
 
 To inspect failures without downloading every successful occurrence, authenticated clients with `threads:read` can request `GET /api/scheduled-tasks/{task_id}/runs?status=failed&limit=50&offset=0` for an owned task. The optional `status` accepts `queued`, `launching`, `running`, `success`, `failed`, `skipped`, or `interrupted`; these are occurrence statuses, so task statuses such as `completed` are invalid (422).

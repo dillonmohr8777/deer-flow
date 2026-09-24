@@ -57,7 +57,8 @@ graph TB
 | `password_hash` | bcrypt hash，OAuth 用户可为空 |
 | `system_role` | `admin` 或 `user` |
 | `needs_setup` | reset 后要求用户完成邮箱 / 密码设置 |
-| `token_version` | 改密码或 reset 时递增，用于废弃旧 JWT |
+| `token_version` | 改密码或 reset 时递增，用于废弃旧 JWT；管理员强制登出也走这个字段 |
+| `disabled_at` | 管理员禁用该账号的时间，为空表示账号可用 |
 
 ### 运行时身份
 
@@ -111,6 +112,27 @@ enum UserScope:
 - 响应体只返回 `expires_in` 和 `needs_setup`，不返回 token。
 
 登录失败会按客户端 IP 计数。IP 解析只在 TCP peer 属于 `AUTH_TRUSTED_PROXIES` 时信任 `X-Real-IP`，不使用 `X-Forwarded-For`。阈值与锁定时长可通过 `auth.local.max_login_attempts`（默认 5）和 `auth.local.lockout_seconds`（默认 300 秒）配置，按次实时读取，改配置后下一次登录即生效，无需重启 Gateway（`max_login_attempts` 最小为 2：单次失败不得锁定 IP。时长热改按方向生效：下调可提前释放进行中的锁定、收紧阈值会保留已计数的失败；上调只延长仍在锁定期内的锁定，不会复活已服满原时长的锁定）。
+
+### 双因素认证（TOTP MFA）
+
+密码账号可以额外启用基于时间的一次性密码（TOTP，RFC 6238），标准 30 秒步长、6 位数字，校验时允许当前步前后各一步的时钟漂移。实现只用标准库（`hmac`、`hashlib`、`base64`），未引入第三方 TOTP 依赖，见 `app/gateway/auth/totp.py`，并用 RFC 6238 附录 B 的官方测试向量校验（`tests/test_totp.py`）。
+
+新表 `user_mfa`（迁移 `0036_user_mfa`，`down_revision` 为 `0035_fleet_agent_bindings`）：每个用户一行，`user_id` 外键指向 `users.id`（级联删除）；`secret_encrypted` 是加密后的 TOTP 密钥；`enabled_at` 为空表示已开始但尚未确认的注册流程；`recovery_codes` 是一个 JSON 列表，保存十个一次性恢复码的哈希（含各自的 `used_at`），原始恢复码只在确认注册时展示一次，不落库。
+
+密钥加密：`app/gateway/auth/mfa_crypto.py` 用部署已有的 JWT 密钥（`AUTH_JWT_SECRET`，或回退到持久化的 `.jwt_secret` 文件）通过 HMAC-SHA256 派生一把独立的 Fernet 密钥，不需要再单独配置和备份一份 MFA 专用密钥；派生方式和 `ChannelCredentialCipher.from_key` 已有的 sha256 摘要派生 Fernet key 的做法一致。
+
+流程：
+
+1. `POST /api/v1/auth/mfa/enroll/start`（需要交互式 session，PAT 不可用）：生成新密钥并以未确认状态持久化，返回 `otpauth://` URI 和明文密钥供手动输入。重复调用会覆盖上一次未确认的密钥。
+2. `POST /api/v1/auth/mfa/enroll/confirm`：提交一次有效验证码后，标记 `enabled_at`，生成十个恢复码并一次性返回（`app/gateway/auth/recovery_codes.py`：`secrets` 生成、哈希持久化、`hmac.compare_digest` 常量时间比对）。
+3. `POST /api/v1/auth/mfa/disable`：需要账号密码加一个验证码或恢复码，成功后整行删除（重新启用需要重新走一遍注册流程）。
+4. 登录：`POST /api/v1/auth/login/local` 密码验证通过后，如果该账号已启用 MFA，不签发 session，而是返回 `{"mfa_required": true, "challenge": "..."}`；`challenge` 是一个短期（5 分钟）、签名、单次有效的 JWT（`typ=mfa_challenge`，与普通 access token 用同一密钥签名但 `typ` 声明不同，二者不能互相冒用）。`POST /api/v1/auth/login/mfa` 用 `challenge` 加验证码或恢复码换取真正的 session。
+
+限速：`challenge` 本身在进程内按 `jti` 记录尝试次数，超过 5 次或过期即失效，必须重新登录密码；同时复用登录页已有的按 IP 限速桶，以及一个跨 `login/mfa`、`enroll/confirm`、`disable` 共享的按用户限速桶（`mfa:{user_id}`），避免绕过某一个端点的限速重新获得尝试预算。和登录限速一样，这些计数器是进程内字典，多 worker 部署下只是近似限速。
+
+审计：`mfa.enabled`、`mfa.disabled`、`mfa.challenge.failed`、`mfa.recovery_code.used` 均走 `record_audit_event`。`disabled_at` 非空的账号在 `login/mfa` 换取 session 时会被显式拒绝（`get_local_provider().get_user()` 之后重新检查一次），管理端点（enroll/disable）则复用 `get_current_user_from_request` 已有的 disabled 检查。
+
+前端：Settings 的 Security 标签页提供注册（含二维码，用已安装的 `qrcode.react`，同时展示 `otpauth://` 链接和密钥供手动输入）、确认、恢复码复制、关闭四个环节；登录页在收到 `mfa_required` 后展示第二步，接受 6 位验证码或恢复码。
 
 ### 注册
 
@@ -268,7 +290,7 @@ DeerFlow 支持四类彼此独立的 HTTP 身份来源。它们共享同一套 *
 | **浏览器本地账号** | `POST /api/v1/auth/login/local` 或 `/register` → `access_token` cookie | 是 | 邮箱即 DeerFlow `users.id` | `threads_meta.user_id = users.id` |
 | **OIDC / SSO** | `GET /api/v1/auth/oauth/{provider}` → callback → cookie | 是（自动创建或关联） | IdP `sub` → `users.oauth_id` | 同上 |
 | **IM Channel 绑定** | Settings 里 Connect + 平台侧 `/connect <code>` | 绑定到**已注册** DeerFlow 用户 | `channel_connections` / `channel_conversations` | `owner_user_id` → `users.id` |
-| **Internal Auth（直接 HTTP）** | `X-DeerFlow-Internal-Token` + `X-DeerFlow-Owner-User-Id` | **否**（合成 internal 用户） | 平台在 header 中自声明 owner 字符串 | `threads_meta.user_id = owner`（经 `make_safe_user_id` 规范化） |
+| **Internal Auth（组织委托）** | `X-DeerFlow-Internal-Token` + `X-DeerFlow-Delegation-Id` | **否**（合成 internal 用户，以委托 owner 行事） | `organization_delegations` 把调用方绑定到一个 active 成员 | 委托组织的 storage principal 与 `organization_id` |
 
 ```mermaid
 graph TB
@@ -279,7 +301,7 @@ graph TB
   Browser["浏览器会话<br/>cookie JWT"]:::browser
   OIDC["OIDC / SSO<br/>OAuth callback"]:::browser
   IM["IM Channel 绑定<br/>connect code"]:::platform
-  Internal["Internal Auth<br/>共享平台密钥 + Owner header"]:::platform
+  Internal["Internal Auth<br/>内部密钥 + 组织委托"]:::platform
   Users[("users 表")]:::store
   Threads[("threads_meta / runs / checkpoints")]:::store
   Bindings[("channel_connections<br/>channel_conversations")]:::store
@@ -293,84 +315,97 @@ graph TB
 
 OIDC 细节见 [SSO.md](SSO.md)。IM 绑定细节见 [IM_CHANNEL_CONNECTIONS.md](IM_CHANNEL_CONNECTIONS.md)。
 
+## Google 单点登录配置
+
+Google 走的是完全通用的 OIDC 流程（`app/gateway/auth/oidc.py`），代码层面不需要为 Google 单独写任何分支；`allowed_email_domains`、`auto_create_users`、`require_verified_email`、`admin_emails` 这些用户准入策略对所有 provider 都一样生效，包括限定到某个 Google Workspace 域名。登录页会在 `GET /api/v1/auth/providers` 返回启用的 provider 后自动展示对应按钮（`t.login.continueWith(display_name)`），前端不需要为 Google 单独改代码。
+
+在 Google Cloud Console 完成以下步骤，拿到 `client_id` 和 `client_secret`：
+
+1. 打开 [Google Cloud Console](https://console.cloud.google.com/)，新建或选择一个项目。
+2. 进入“API 和服务”下的“OAuth 同意屏幕”，选择用户类型（选“内部”仅允许本组织的 Google Workspace 账号登录；选“外部”允许任意 Google 账号，可以再用 `allowed_email_domains` 收紧到指定域名），填写应用名称和支持邮箱等必填信息。
+3. 进入“API 和服务”下的“凭据”，点击“创建凭据”，选择“OAuth 客户端 ID”，应用类型选“Web 应用”。
+4. 在“已获授权的重定向 URI”中加入：
+
+   ```text
+   https://<你的部署域名>/api/v1/auth/callback/google
+   ```
+
+   本地开发再加一条：
+
+   ```text
+   http://localhost:2026/api/v1/auth/callback/google
+   ```
+
+5. 创建后会拿到一个客户端 ID 和一个客户端密钥。密钥只显示一次，立即保存。
+6. 把客户端密钥放进环境变量，不要写进 `config.yaml` 明文：
+
+   ```bash
+   export GOOGLE_OAUTH_CLIENT_ID="<客户端 ID>"
+   export GOOGLE_OAUTH_CLIENT_SECRET="<客户端密钥>"
+   ```
+
+7. 在 `config.yaml` 里把 `auth.oidc.enabled` 设为 `true`，按 `config.example.yaml` 里注释掉的 `google:` 示例块打开一份，`client_id` 填 `$GOOGLE_OAUTH_CLIENT_ID`，`client_secret` 填 `$GOOGLE_OAUTH_CLIENT_SECRET`；只允许某个 Workspace 域名登录时设置 `allowed_email_domains`。`issuer` 填 `https://accounts.google.com` 即可，Google 的 discovery 端点是标准的 `https://accounts.google.com/.well-known/openid-configuration`，不需要再单独配置 `authorization_endpoint`、`token_endpoint`、`jwks_uri`。
+8. 重启 Gateway 使配置生效。
+
+本仓库不会创建也不会持有任何真实的 Google OAuth 客户端凭据；以上步骤由部署者在自己的 Google Cloud 项目中完成。
+
 ## 平台信任接入
 
 **IM Channel 绑定** 与 **Internal Auth** 可归为同一大类：**平台信任模型**——DeerFlow 把渠道/合作平台视为已认证边界，由平台把“自己的用户”映射到 DeerFlow 的运行时身份，而不是让每个终端用户再走 DeerFlow 注册登录。
 
-| 维度 | IM Channel 绑定（子类 A） | Internal Auth 直接 HTTP（子类 B） |
+| 维度 | IM Channel 绑定（子类 A） | Internal Auth 组织委托（子类 B） |
 |---|---|---|
-| 平台凭证 | `channels.*` 机器人配置 + Gateway 内部调用 | 部署级 `DEER_FLOW_INTERNAL_AUTH_TOKEN` |
-| DeerFlow 用户来源 | 必须绑定到 `users` 表中的真实账号 | **不创建** `users` 行；使用合成 `system_role=internal` 用户 |
-| 外部身份登记 | `channel_connections` + `channel_conversations`（可审计、可撤销） | 请求头 `X-DeerFlow-Owner-User-Id`（平台自声明，如 `feishu_ou_alice`） |
-| 典型调用方 | DeerFlow 内置 IM worker（飞书 / 企业微信 / Slack / Telegram …） | 合作方后端（如飞书或企业微信自建应用网关） |
-| 身份可信度 | Connect code 一次性绑定，DB 唯一约束保证单 owner | 完全信任平台对 `Owner-User-Id` 的正确性 |
-| 用户 / thread 隔离 | 有（按绑定的 `owner_user_id`） | 有（按 header 中的 owner 字符串） |
-| 本地文件布局 | `.deer-flow/users/{owner}/threads/{thread_id}/...` | 同上 |
+| 平台凭证 | `channels.*` 机器人配置 + Gateway 内部调用 + 连接委托 | 部署级 `DEER_FLOW_INTERNAL_AUTH_TOKEN` + 委托 id |
+| DeerFlow 用户来源 | 必须绑定到 `users` 表中的真实账号 | 委托 owner 必须是 active 组织中的 active 成员 |
+| 外部身份登记 | `channel_connections` + `channel_conversations`（可审计、可撤销） | `organization_delegations`（可审计、可撤销、可过期） |
+| 典型调用方 | DeerFlow 内置 IM worker（飞书 / 企业微信 / Slack / Telegram …） | scheduler、MCP 通知、经授权的合作方后端 |
+| 身份可信度 | Connect code 一次性绑定，DB 唯一约束保证单 owner | 每次请求重新校验委托与 owner 成员身份；owner header 只能与委托一致 |
+| 用户 / thread 隔离 | 有（按绑定 owner 的私有组织） | 有（按委托组织的 storage principal 与 `organization_id`） |
+| 本地文件布局 | `.deer-flow/users/{owner}/threads/{thread_id}/...` | `.deer-flow/users/{storage principal}/threads/{thread_id}/...` |
 
-两类接入在 run 生命周期上共用同一持久化面：`threads_meta`、`runs`、`run_events`、`checkpoints`、`checkpoint_blobs` 都按解析后的 `user_id` 做隔离；差异只在 owner 是否来自 `users.id` 还是平台声明的字符串。
+两类接入在 run 生命周期上共用同一持久化面：`threads_meta`、`runs`、`run_events`、`checkpoints`、`checkpoint_blobs` 都按解析后的 storage principal 与 `organization_id` 做隔离。
 
-### Internal Auth (direct HTTP)
+### Internal Auth：只经由组织委托（delegation）
 
-适用于“平台后端代替终端用户调用 DeerFlow API”的集成：平台持有共享密钥，替每个业务用户附带 owner 标识。类似飞书或企业微信机器人网关把已认证用户代理到 DeerFlow，但**不经过** IM connect-code 绑定表。
+企业运行时契约第 4 节：内部 token 加 `X-DeerFlow-Owner-User-Id` **本身永远不够**。每个内部调用方（定时任务、MCP 任务、IM 连接等）都必须出示一条持久化、处于 active 状态的 `organization_delegations` 记录，把该调用方绑定到某个组织中的一个真实 owner。
 
 #### 配置
-
-Gateway 启动时设置环境变量：
 
 ```bash
 export DEER_FLOW_INTERNAL_AUTH_TOKEN="<long-random-secret>"
 ```
 
-未配置时 Gateway 会为每个 worker 进程生成随机 token（不利于多副本或与集成方对齐）；生产环境应显式配置并仅在内网可达的调用链中分发。
+未配置时 Gateway 会为每个 worker 进程生成随机 token；生产环境应显式配置，并仅在内网调用链中分发。token 只证明调用方是 Gateway 自己的内部组件，不授予任何用户或组织身份。
 
 #### 请求头
 
 | Header | 必填 | 说明 |
 |---|---|---|
-| `X-DeerFlow-Internal-Token` | 是 | 必须等于 Gateway 的 `DEER_FLOW_INTERNAL_AUTH_TOKEN`；缺失或错误 → `401` |
-| `X-DeerFlow-Owner-User-Id` | 需要用户隔离时必填 | 平台侧用户标识，如 `feishu_ou_alice`（飞书 `open_id`）或 `wecom_user_bob`（企业微信成员 id）；同一用户的建 thread / 续聊应保持一致。缺失时落到 `default` 用户桶 |
+| `X-DeerFlow-Internal-Token` | 是 | 必须等于 `DEER_FLOW_INTERNAL_AUTH_TOKEN` |
+| `X-DeerFlow-Delegation-Id` | 是 | 调用方的委托 id（`create_internal_auth_headers(delegation_id=...)`） |
+| `X-DeerFlow-Owner-User-Id` | 否 | 若发送，必须等于委托的 owner；不一致即拒绝 |
 
-Internal Auth **不使用**浏览器 `access_token` cookie，也**不参与**前端 CSRF double-submit cookie 流程。DeerFlow 内置 IM worker 在进程内同时附带 Internal Token 与 CSRF cookie/header；第三方平台做 server-to-server HTTP 集成时通常只发送 Internal 相关 header。
+`AuthMiddleware` 每次请求都按 id 重新读取委托（`OrganizationDelegationRepository.resolve_delegation_by_id`），并要求：状态为 active、未过期、scopes 非空、owner 在一个 active 组织中拥有 active 成员身份、owner header（如有）一致。任一不满足，或根本没有委托（只有 token，或 token 加 owner header），都返回 `403 Internal calls require an active organization delegation` 并记录一条 `Rejected internal call without a matching active delegation` 日志。
 
-合成用户由 `get_internal_user()` 构造：`system_role="internal"`，`id` 为 `make_safe_user_id(owner)` 或 `default`。**不会**向 `users` 表插入记录。
+通过后，请求以委托 owner 的身份（`actor_user_id`）在委托所属组织（`organization_id`）内、以该组织的 storage principal（私有组织为 owner 本人，共享工作区为其 storage 用户）执行，与浏览器会话完全相同的组织过滤随之生效；路由权限再与委托 scopes 取交集，和 PAT scopes 一样只能收窄。`get_trusted_internal_owner_user_id()` 只对已验证委托的请求返回其 storage principal，owner header 本身从不被信任；artifact、memory、线程 owner check 均不再有 header 兜底。仅在显式 auth-disabled 模式（开发/E2E）下保留旧的合成内部身份。
 
-#### 数据落库与隔离
+#### 委托来源
 
-| 存储 | Internal Auth 行为 |
-|---|---|
-| `users` | 不写入 |
-| `threads_meta.user_id` | `X-DeerFlow-Owner-User-Id`（规范化后） |
-| `runs.user_id` | 同上 |
-| `run_events` / `checkpoints` / `checkpoint_blobs` | 随 thread / run 归属，与浏览器用户相同隔离规则 |
-| 本地目录 | `.deer-flow/users/{owner}/threads/{thread_id}/user-data/...` |
+| 调用方 | subject_type / subject_id | scopes | 授予 / 撤销 |
+|---|---|---|---|
+| 定时任务 | `scheduled_task` / 任务 id | `runs:create` | 创建时授予创建者；删除时撤销 |
+| MCP 任务通知 | `mcp_task` / 任务 id | `runs:create` | 创建时授予当前操作成员 |
+| IM 连接 worker | `channel_connection` / 连接 id | `threads:read`、`threads:write`、`runs:create`、`runs:read` | 连接（connect）时授予；断开、转移、provider 移除时撤销 |
 
-`threads/search`、thread owner check、文件路径解析均按上述 `user_id` 过滤；不同 owner 之间 thread 互不可见。
+迁移 `0032_org_delegation_backfill` 为已有的、带组织戳的上述对象补发委托（id 前缀 `dlg0032-`，downgrade 只删除这些行）。没有 active owner 的对象保持无委托，fail closed。
 
-#### 信任边界与 DeerFlow 职责
+进程内启动器（scheduler、MCP 通知）不走 HTTP，但构造完全相同的身份：`services._delegated_internal_request()` 从已解析的委托设置 `organization_id` / `storage_user_id` / `actor_user_id` / `delegation_id`，不发送 owner header，并在同一 storage context 中调用 `start_run`。storage principal 与委托 owner 不同（共享工作区）时，同样要求隔离的 AIO sandbox。
 
-Internal Auth 是**平台信任模型**，不是终端用户认证：
+撤销立即生效：新请求被拒绝；已打开的 SSE 流在每次心跳时重新检查成员身份（内部调用方则重新检查整个委托），一旦失效即关闭。
 
-- DeerFlow **只校验**调用方是否持有有效的 `X-DeerFlow-Internal-Token`（平台级共享密钥）。
-- DeerFlow **不校验** `X-DeerFlow-Owner-User-Id` 是否对应真实、活跃、已授权的业务用户；该字段仅作为运行时隔离键使用。
-- DeerFlow **不管理**这类用户的注册、登录、登出、密码、禁用或吊销；终端用户的有效性、会话与权限**全部由渠道/平台自行维护**。
-- DeerFlow **不写入** `users` 表，不为 Internal Auth 用户签发 JWT，也不提供面向终端的账号生命周期 API。
+#### 集成方式
 
-因此，DeerFlow 与渠道之间的契约是：**信任渠道已经替终端用户完成认证，并诚实地在每次请求中标注 owner**。若共享 token 泄露给终端，或平台未校验用户身份就转发请求，DeerFlow 无法阻止 `Owner-User-Id` 被伪造。
-
-#### 对接方式
-
-接入方使用与普通 Gateway API **相同的** thread / run 端点，在每次请求中附带 Internal 相关 header 即可，例如：
-
-1. `POST /api/threads` — 创建会话（`thread_id`、`metadata` 等 body 字段语义不变）
-2. `POST /api/threads/{thread_id}/runs/stream` — 流式对话；续聊时保持同一 `thread_id` 与同一 `X-DeerFlow-Owner-User-Id`
-
-具体路径、请求体与 `stream_mode` 等参数见 [API.md](API.md) 与 [STREAMING.md](STREAMING.md)。本文档不展开 curl 测试用例。
-
-#### 安全建议
-
-- **推荐**：平台后端持有 `DEER_FLOW_INTERNAL_AUTH_TOKEN`，按已认证业务用户设置 `X-DeerFlow-Owner-User-Id`。
-- **不推荐**：把共享 token 直接发给每个终端用户自行调用——此时终端用户只需伪造 `Owner-User-Id` 即可冒充他人，DeerFlow 无法验证平台侧身份。
-- Token 应视为部署密钥：不进 git、不写入前端、仅通过内网或 mTLS 保护的后端链路传输。
+第三方平台不再能以“共享 token + 自声明 owner”方式直接调用。需要代表用户调用时，应由 DeerFlow 为该集成授予一条委托（owner 必须是真实的 active 成员），平台随每次请求出示该委托 id；委托可随时撤销，owner 失去成员身份也会使其失效。
 
 ### IM Channel 绑定（子类 A）
 
@@ -378,7 +413,9 @@ IM worker 通过 Gateway 内部 HTTP 调用 agent runtime，并携带：
 
 - `X-DeerFlow-Internal-Token`
 - 匹配的 CSRF cookie / `X-CSRF-Token`（进程内生成，供 worker 使用）
-- 绑定成功后附带 `X-DeerFlow-Owner-User-Id`（来自 `channel_connections.owner_user_id`，对应 `users.id`）
+- 绑定成功后附带连接的委托 id（`X-DeerFlow-Delegation-Id`）与 `X-DeerFlow-Owner-User-Id`（来自 `channel_connections.owner_user_id`，对应 `users.id`）；未绑定或委托已撤销的消息会被 Gateway 拒绝
+
+渠道后台任务在空的 ContextVar 上下文中启动（`ChannelService._start_channel`），因此即使重启发生在某个 HTTP 请求内，也不会继承该请求的用户身份；每条消息只以其自身的 owner 与委托行事。
 
 与 Internal Auth 直接 HTTP 相比，IM 路径多了 **connect-code 绑定** 与 **`users` 表关联**，外部身份可追溯、可撤销。配置与运维见 [IM_CHANNEL_CONNECTIONS.md](IM_CHANNEL_CONNECTIONS.md)。
 
@@ -432,16 +469,32 @@ PYTHONPATH=. python scripts/migrate_user_isolation.py --user-id <target-user-id>
 - 只有迁移脚本和 admin CLI 可以显式传 `user_id=None` 绕过隔离。
 - 本地文件路径必须通过 `Paths` 和 sandbox path validation 解析，不能拼接未校验的用户输入。
 - 捕获认证、迁移、后台任务异常必须记录日志；不能空 catch。
+- `disabled_at` 非空的账号必须同时在登录（`LocalAuthProvider.authenticate`）和已有 session 校验（`get_current_user_from_request`）两处被拒绝；`disabled_at` 非空的账号在 `login/mfa` 换取 session 时也要被拒绝。
+- MFA 验证码和恢复码必须常量时间比较（`verify_totp_code`、`recovery_code_matches`），且一次成功验证之后不能复用同一个恢复码或同一个 `challenge`。
+- MFA 密钥必须加密存储，恢复码只能以哈希形式持久化；任何失败响应都不能透露具体是密码、验证码还是 `challenge` 本身出了问题。
+
+## 审计日志与管理员操作
+
+SOC 2 风格的最小控制集，为向外部客户开放做准备。
+
+- **`audit_events` 表**（append only，迁移 `0033_audit_events`）记录 `occurred_at` / `actor_user_id` / `organization_id` / `action`（形如 `auth.login.succeeded` 的点分字符串）/ `target_type` / `target_id` / `outcome`（`success` / `denied` / `failed`）/ `ip` / `user_agent` / `details`（JSON）。`AuditEventRepository.record()` 永远不向请求路径抛异常：写入失败只记日志，不能让被审计的动作本身失败。
+- `details` 在写入前统一走 `deerflow.persistence.audit_events.redact_audit_details`：键名包含 password / token / secret / cookie / api_key / authorization / credential / private_key / access_key / client_secret 等字样的值一律替换为 `"[redacted]"`。
+- 已接入 `record`（一行调用，见 `app.gateway.deps.record_audit_event`）的动作：本地登录成功 / 失败、登出、改密码、PAT 创建 / 撤销、邀请创建 / 接受 / 撤销（含成员角色变更）、MCP 配置写入、managed model 保存、managed subagent 增改删、run 取消、MFA 启用 / 关闭 / 验证失败 / 恢复码使用（`mfa.enabled` / `mfa.disabled` / `mfa.challenge.failed` / `mfa.recovery_code.used`），以及下面三个管理员动作本身。
+- **管理员操作**（`app/gateway/routers/admin.py`，`/api/admin/*`，`require_admin_user` 门禁，与 Models / MCP 配置同一断言）：`POST /users/{id}/disable`、`POST /users/{id}/enable`、`POST /users/{id}/force-logout`（复用已有的 `token_version` 机制），以及只读的 `GET /audit-events`（按 action 前缀 / actor / since / until 过滤，游标分页，跨组织，供系统管理员纵览整个部署）。
+- 共享工作区邀请默认角色已改为 `member`（最小权限：不能管理成员、不能改组织设置），邀请人可显式选择 `admin`；见 `app/gateway/routers/invitations.py` 的 `CreateInvitationRequest.role`。
 
 ## 已知边界
 
 | 边界 | 当前行为 | 后续方向 |
 |---|---|---|
 | 无 admin 时注册普通用户 | 允许注册普通 `user` | 如产品要求先初始化 admin，给 `/register` 加 gate |
-| 登录限速 | 进程内 dict，单 worker 精确，多 worker 近似 | Redis / DB-backed rate limiter |
-| OAuth / OIDC | 已实现通用 OIDC SSO（Keycloak, Google, Azure AD, Okta 等），支持 PKCE + nonce、auto-provisioning、email domain 限制（详见 [SSO.md](SSO.md)） | 支持 RP-initiated logout、自定义 scope 映射 |
+| 登录限速 | 进程内 dict，单 worker 精确，多 worker 近似；MFA 的 challenge 尝试次数、按用户限速桶用同一进程内机制 | Redis / DB-backed rate limiter |
+| OAuth / OIDC | 已实现通用 OIDC SSO（Keycloak, Google, Azure AD, Okta 等），支持 PKCE + nonce、auto-provisioning、email domain 限制（详见 [SSO.md](SSO.md)，Google Cloud Console 配置步骤见本文上方） | 支持 RP-initiated logout、自定义 scope 映射 |
+| MFA | 仅支持密码账号的 TOTP；恢复码固定十个，用完需关闭重开 MFA 才能重新生成 | Sign in with Apple（App Store 阶段再做）、passkeys、WebAuthn |
 | IM 用户隔离 | `channel_connections` 绑定到 `users.id`；未绑定消息在 `require_bound_identity: true` 时被拒绝 | 更多渠道与审计能力 |
-| Internal Auth 终端直持 token | 平台可把共享密钥下发给终端，导致 `Owner-User-Id` 可伪造 | 仅平台后端持 token；终端走平台自己的认证 |
+| Internal Auth 泄露 token | token 加 owner header 不再足够；仍需一条 active 委托，且 owner header 必须与之一致 | 部署时轮换 token；委托 id 视为敏感标识，按需撤销 |
+| 共享工作区邀请 | `authorization.invitations_frozen`（默认 true）下创建、查看、接受邀请均为 403；已有成员不受影响 | M3 隔离门禁完成、角色矩阵获批后再开放 |
+| 无主 / 孤儿 thread | 对所有调用方 fail closed（404）；admin 可在 `GET /api/console/ownerless-threads` 只读列出其 id | 提供认领（claim）流程 |
 | 绝对 memory path | 显式共享 memory | UI / docs 明确提示 opt-out 风险 |
 
 ## 相关文件
@@ -451,7 +504,12 @@ PYTHONPATH=. python scripts/migrate_user_isolation.py --user-id <target-user-id>
 | `app/gateway/auth_middleware.py` | 全局认证门、JWT 严格验证、写入 user context |
 | `app/gateway/csrf_middleware.py` | CSRF double-submit 和 auth Origin 校验 |
 | `app/gateway/routers/auth.py` | initialize/login/register/logout/me/change-password + SSO OIDC 端点（providers/oauth/callback） |
-| `app/gateway/auth/jwt.py` | JWT 创建与解析 |
+| `app/gateway/auth/jwt.py` | JWT 创建与解析；同时定义 MFA challenge token（`typ=mfa_challenge`） |
+| `app/gateway/auth/totp.py` | 标准库 TOTP（RFC 6238）：生成密钥、算码、常量时间校验、`otpauth://` URI |
+| `app/gateway/auth/mfa_crypto.py` | 从已有 JWT 密钥派生的 MFA 密钥 Fernet 加解密 |
+| `app/gateway/auth/recovery_codes.py` | 恢复码生成、哈希、常量时间比对 |
+| `deerflow/persistence/user_mfa/` | `UserMfaRow` / `UserMfaRepository`（enroll/confirm/disable、恢复码单次使用） |
+| `packages/harness/deerflow/persistence/migrations/versions/0036_user_mfa.py` | `user_mfa` 建表 |
 | `app/gateway/auth/oidc.py` | OIDC 核心服务：discovery、token exchange、ID token 验证、userinfo |
 | `app/gateway/auth/oidc_state.py` | OIDC state 管理：signed cookie 存储 state/nonce/code_verifier |
 | `app/gateway/auth/user_provisioning.py` | OIDC 用户自动创建、email linking、domain 限制 |
@@ -460,6 +518,9 @@ PYTHONPATH=. python scripts/migrate_user_isolation.py --user-id <target-user-id>
 | `app/gateway/auth/reset_admin.py` | 密码 reset CLI |
 | `app/gateway/auth/credential_file.py` | 0600 凭据文件写入 |
 | `app/gateway/authz.py` | 路由权限与 owner check |
+| `app/gateway/routers/admin.py` | 管理员禁用 / 启用 / 强制登出用户、只读审计日志列表 |
+| `deerflow/persistence/audit_events/` | `AuditEventRow` / `AuditEventRepository`（record 不抛异常、游标分页）/ `redact_audit_details` |
+| `packages/harness/deerflow/persistence/migrations/versions/0033_audit_events.py` | `audit_events` 建表、`users.disabled_at` 加列 |
 | `deerflow/runtime/user_context.py` | 当前用户 ContextVar 与 `AUTO` sentinel |
 | `deerflow/persistence/thread_meta/` | thread metadata owner filter |
 | `deerflow/config/paths.py` | per-user filesystem layout |

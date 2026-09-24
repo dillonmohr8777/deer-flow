@@ -475,12 +475,16 @@ async def langgraph_runtime(app: FastAPI, startup_config: AppConfig) -> AsyncGen
         # Initialize repositories — one get_session_factory() call for all.
         sf = get_session_factory()
         if sf is not None:
+            from deerflow.persistence.audit_events import AuditEventRepository
             from deerflow.persistence.feedback import FeedbackRepository
             from deerflow.persistence.personal_access_tokens import PersonalAccessTokenRepository
             from deerflow.persistence.run import RunRepository
+            from deerflow.persistence.user_mfa import UserMfaRepository
 
             app.state.run_store = RunRepository(sf)
             app.state.feedback_repo = FeedbackRepository(sf)
+            app.state.audit_repo = AuditEventRepository(sf)
+            app.state.mfa_repo = UserMfaRepository(sf)
             from app.gateway.auth.pat import PAT_LAST_USED_WRITE_INTERVAL_SECONDS
 
             app.state.pat_repo = PersonalAccessTokenRepository(sf, last_used_write_interval_seconds=PAT_LAST_USED_WRITE_INTERVAL_SECONDS)
@@ -489,9 +493,12 @@ async def langgraph_runtime(app: FastAPI, startup_config: AppConfig) -> AsyncGen
 
             app.state.run_store = MemoryRunStore()
             app.state.feedback_repo = None
-            # Memory backend has no durable PAT store, so Bearer credentials
-            # cannot be validated there and are rejected by the middleware.
+            app.state.audit_repo = None
+            # Memory backend has no durable PAT / MFA store, so Bearer
+            # credentials cannot be validated and MFA cannot be enrolled;
+            # both are rejected explicitly rather than silently no-oping.
             app.state.pat_repo = None
+            app.state.mfa_repo = None
 
         # Evidence readers are available to Gateway-lifetime extension services,
         # so the configured event store must exist before those services start.
@@ -546,6 +553,8 @@ async def langgraph_runtime(app: FastAPI, startup_config: AppConfig) -> AsyncGen
 
         app.state.thread_store = make_thread_store(sf, app.state.store)
         if sf is not None:
+            from deerflow.persistence.clients import ClientRepository
+            from deerflow.persistence.fleet import FleetBindingRepository
             from deerflow.persistence.mcp_tasks import McpTaskRepository
             from deerflow.persistence.projects import ProjectDocumentRepository, ProjectRepository
             from deerflow.persistence.scheduled_task_runs import (
@@ -556,6 +565,8 @@ async def langgraph_runtime(app: FastAPI, startup_config: AppConfig) -> AsyncGen
 
             app.state.project_repo = ProjectRepository(sf)
             app.state.project_document_repo = ProjectDocumentRepository(sf)
+            app.state.client_repo = ClientRepository(sf)
+            app.state.fleet_binding_repo = FleetBindingRepository(sf)
             app.state.scheduled_task_repo = ScheduledTaskRepository(
                 sf,
                 run_repository=app.state.run_store,
@@ -570,6 +581,7 @@ async def langgraph_runtime(app: FastAPI, startup_config: AppConfig) -> AsyncGen
             app.state.mcp_task_repo = None
             app.state.project_repo = None
             app.state.project_document_repo = None
+            app.state.client_repo = None
             app.state.subagent_batch_repo = None
             app.state.scheduled_task_repo = None
             app.state.scheduled_task_run_repo = None
@@ -681,6 +693,8 @@ get_feedback_repo: Callable[[Request], FeedbackRepository] = _require("feedback_
 get_run_store: Callable[[Request], RunStore] = _require("run_store", "Run store")
 get_project_repo = _require("project_repo", "Projects")
 get_project_document_repo = _require("project_document_repo", "Projects")
+get_client_repo = _require("client_repo", "Clients")
+get_fleet_binding_repo = _require("fleet_binding_repo", "Fleet")
 
 
 def get_store(request: Request):
@@ -801,6 +815,56 @@ def get_local_provider() -> LocalAuthProvider:
     return _cached_local_provider
 
 
+def get_audit_repo(request: Request):
+    """Return the audit event repository, or raise 503 when unavailable.
+
+    For the admin read endpoint (``GET /api/admin/audit-events``), which
+    cannot serve anything meaningful without a durable store. Call sites that
+    only *write* an audit row should use :func:`record_audit_event` instead,
+    which no-ops rather than failing the action being audited.
+    """
+    audit_repo = getattr(request.app.state, "audit_repo", None)
+    if audit_repo is None:
+        raise HTTPException(status_code=503, detail="Audit log requires a configured database")
+    return audit_repo
+
+
+def audit_actor_id(request: Request) -> str | None:
+    """Best-effort acting-user id for an audit row, from ``request.state.user``.
+
+    Reads the identity ``AuthMiddleware`` already stamped rather than calling
+    :func:`get_current_user_from_request` again: that function also accepts a
+    bare cookie with no ``request.state`` set up (the "middleware-less test
+    composition" case its own docstring describes), which several existing
+    router-level tests exercise with a minimal fake ``Request`` that has no
+    ``.cookies`` at all. Returns ``None`` on that same fallback path, which
+    only means the audit row's ``actor_user_id`` is left blank.
+    """
+    # Handlers called directly (blocking-I/O tests) may pass request=None.
+    user = getattr(getattr(request, "state", None), "user", None)
+    user_id = getattr(user, "id", None)
+    return str(user_id) if user_id is not None else None
+
+
+async def record_audit_event(request: Request, **kwargs: Any) -> None:
+    """Best-effort one-line audit call for routers.
+
+    No-ops when the audit repo is unavailable (memory backend), and also
+    when *request* carries no real ``app`` (several router-level tests in
+    this codebase call an endpoint function directly against a lightweight
+    fake ``Request``, matching the pattern ``test_mcp_config_secrets.py``
+    uses for other admin routes). The repository's own ``record()`` already
+    swallows and logs any write failure; catching broadly here extends that
+    same "never break the audited action" guarantee to a malformed caller.
+    """
+    try:
+        audit_repo = request.app.state.audit_repo
+    except Exception:
+        return
+    if audit_repo is not None:
+        await audit_repo.record(**kwargs)
+
+
 def get_pat_repo(request: Request):
     """Return the personal-access-token repository from app state.
 
@@ -812,6 +876,23 @@ def get_pat_repo(request: Request):
     if pat_repo is None:
         raise HTTPException(status_code=503, detail="Personal access tokens require a configured database")
     return pat_repo
+
+
+def get_mfa_repo(request: Request):
+    """Return the two-factor-authentication repository from app state.
+
+    Raises 503 on the memory backend (no durable MFA storage), so enroll /
+    confirm / disable routes fail explicitly instead of silently accepting
+    an enrollment nobody could ever complete. The login path itself reads
+    ``request.app.state.mfa_repo`` directly and treats ``None`` as "nobody
+    has MFA enabled" -- a missing repo there must not break plain password
+    login, since without durable storage no enrollment could ever have
+    succeeded in the first place.
+    """
+    mfa_repo = getattr(request.app.state, "mfa_repo", None)
+    if mfa_repo is None:
+        raise HTTPException(status_code=503, detail="Two-factor authentication requires a configured database")
+    return mfa_repo
 
 
 async def get_current_user_from_request(request: Request):
@@ -833,8 +914,9 @@ async def get_current_user_from_request(request: Request):
 
     from app.gateway.auth import decode_token
     from app.gateway.auth.errors import AuthErrorCode, AuthErrorResponse, TokenError, token_error_to_code
+    from app.gateway.auth.session_cookie import ACCESS_TOKEN_COOKIE_NAME
 
-    access_token = request.cookies.get("access_token")
+    access_token = request.cookies.get(ACCESS_TOKEN_COOKIE_NAME)
     if not access_token:
         raise HTTPException(
             status_code=401,
@@ -856,11 +938,20 @@ async def get_current_user_from_request(request: Request):
             detail=AuthErrorResponse(code=AuthErrorCode.USER_NOT_FOUND, message="User not found").model_dump(),
         )
 
-    # Token version mismatch → password was changed, token is stale
+    # Token version mismatch → password was changed, token is stale, or an
+    # admin forced a logout by bumping token_version directly.
     if user.token_version != payload.ver:
         raise HTTPException(
             status_code=401,
             detail=AuthErrorResponse(code=AuthErrorCode.TOKEN_INVALID, message="Token revoked (password changed)").model_dump(),
+        )
+
+    # getattr, not a direct attribute access: several existing tests build a
+    # minimal user double (SimpleNamespace) that predates this field.
+    if getattr(user, "disabled_at", None) is not None:
+        raise HTTPException(
+            status_code=401,
+            detail=AuthErrorResponse(code=AuthErrorCode.USER_DISABLED, message="This account has been disabled").model_dump(),
         )
 
     return user

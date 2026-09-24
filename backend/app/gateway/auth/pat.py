@@ -36,6 +36,9 @@ PAT_ALLOWED_SCOPES: frozenset[str] = frozenset(
         "projects:read",
         "projects:write",
         "projects:delete",
+        "clients:read",
+        "clients:write",
+        "clients:delete",
     }
 )
 
@@ -120,17 +123,58 @@ _PAT_ROUTE_RULES: tuple[tuple[frozenset[str], re.Pattern[str]], ...] = (
     (frozenset({"GET"}), re.compile(r"^/api/console/usage-ledger$")),
 )
 
+# Fleet template catalog, custom-agent create/list, and scheduled-task
+# create/list/pause/resume (Dillon workspace seed script, 2026-09-24): a
+# PAT-driven seeding script stamps fleet templates into real agents and
+# schedules with no browser session available. Enumerated per implemented
+# route, same no-dead-methods discipline as the rest of this policy: ``GET
+# /api/agents/check`` stays denied (name-availability probe, not needed by
+# the script), and agent delete/update plus scheduled-task delete/trigger/
+# runs stay PAT-denied until a script actually needs them. Every admitted
+# route here is already gated by ``threads``/``runs`` permissions already in
+# ``PAT_ALLOWED_SCOPES`` (scheduled-tasks) or by no ``@require_permission``
+# at all (agents), so no scope-enum change is needed alongside this route
+# widening.
+#
+# Kept in a SEPARATE tuple, gated behind ``config.private_workspace.enabled``
+# (default false -- see ``deerflow.config.app_config.PrivateWorkspaceConfig``),
+# not merged into ``_PAT_ROUTE_RULES`` above. ``POST /api/agents`` carries no
+# ``@require_permission`` at all, so on a client-facing MomoBot a leaked
+# client PAT holding nothing but ``threads:read`` could otherwise create
+# persistent custom agents and schedule them to run unattended -- catastrophic
+# on the app every real client logs into, harmless on the owner-only private
+# workspace these routes exist for. Master review, 2026-09-24 (PR #14).
+_PRIVATE_WORKSPACE_PAT_ROUTE_RULES: tuple[tuple[frozenset[str], re.Pattern[str]], ...] = (
+    (frozenset({"GET"}), re.compile(r"^/api/fleet/templates$")),
+    (frozenset({"GET", "POST"}), re.compile(r"^/api/agents$")),
+    (frozenset({"GET"}), re.compile(r"^/api/agents/(?!check$)[^/]+$")),
+    (frozenset({"GET", "POST"}), re.compile(r"^/api/scheduled-tasks$")),
+    (frozenset({"GET"}), re.compile(r"^/api/scheduled-tasks/[^/]+$")),
+    (frozenset({"POST"}), re.compile(r"^/api/scheduled-tasks/[^/]+/(pause|resume)$")),
+)
+
 _BASE62_ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 
 
-def is_pat_allowed_route(method: str, path: str) -> bool:
+def is_pat_allowed_route(method: str, path: str, *, private_workspace_enabled: bool = False) -> bool:
     """Return whether the PAT route policy admits *method* + *path*.
 
     Trailing slashes are normalized away so the mounted route and its
     redirect-style twin resolve identically.
+
+    ``private_workspace_enabled`` gates ``_PRIVATE_WORKSPACE_PAT_ROUTE_RULES``
+    (fleet/agents/scheduled-task creation) on top of the always-on
+    ``_PAT_ROUTE_RULES`` base policy. Defaults to false -- the safe,
+    client-facing-MomoBot behavior -- so every pre-existing call site (and
+    every test written before this flag existed) keeps its exact prior
+    behavior unless it explicitly opts in. The one real call site
+    (``auth_middleware.py``) passes ``get_app_config().private_workspace.enabled``;
+    this function stays a pure, config-free predicate so it never has to load
+    a config file itself, including inside a bare unit test.
     """
     normalized = path.rstrip("/") or "/"
-    return any(method in methods and pattern.match(normalized) for methods, pattern in _PAT_ROUTE_RULES)
+    rules = _PAT_ROUTE_RULES + _PRIVATE_WORKSPACE_PAT_ROUTE_RULES if private_workspace_enabled else _PAT_ROUTE_RULES
+    return any(method in methods and pattern.match(normalized) for methods, pattern in rules)
 
 
 @functools.cache
@@ -194,12 +238,21 @@ def extract_bearer_token(authorization: str | None) -> str | None:
     return value.strip()
 
 
-async def authenticate_pat(app: Any, authorization: str | None) -> tuple[Any, frozenset[str]]:
+async def authenticate_pat(app: Any, authorization: str | None) -> tuple[Any, frozenset[str], str | None]:
     """Validate the Bearer credential and resolve its owning user.
 
-    Returns ``(user, scopes)``. Every token-verdict failure mode — malformed
-    token, unknown/revoked/expired token, PAT store not configured, missing
-    owning user — raises the same generic 401 so responses cannot serve as an
+    Returns ``(user, scopes, organization_id)``. ``organization_id`` is the
+    PAT's own stamped organization (migration 0037_pat_organization) — the
+    organization active when the token was minted, ``None`` for a
+    pre-migration row the backfill could not prove. The caller
+    (``AuthMiddleware``) resolves the request's active organization from
+    this value rather than from any workspace-selection cookie, and fails
+    closed if the owner is no longer an active member of it: this is the
+    isolation boundary that stops a PAT minted in one organization from
+    acting in another (`persistence/AGENTS.md` "Organization isolation
+    (M3)"). Every token-verdict failure mode — malformed token,
+    unknown/revoked/expired token, PAT store not configured, missing owning
+    user — raises the same generic 401 so responses cannot serve as an
     oracle on which check failed. Infrastructure errors (store I/O failures)
     propagate and fail closed; they are not part of the token verdict.
     """
@@ -217,13 +270,14 @@ async def authenticate_pat(app: Any, authorization: str | None) -> tuple[Any, fr
     from app.gateway.deps import get_local_provider
 
     user = await get_local_provider().get_user(str(record["user_id"]))
-    if user is None:
-        # The owning user was deleted or became unresolvable; the token is
-        # dead even though its row survives (deleting a user revokes their
-        # PATs, without needing a FK cascade).
+    if user is None or getattr(user, "disabled_at", None) is not None:
+        # The owning user was deleted, disabled, or became unresolvable; the
+        # token is dead even though its row survives (deleting a user revokes
+        # their PATs, without needing a FK cascade).
         raise HTTPException(status_code=401, detail="Invalid token")
     await pat_repo.touch_last_used(str(record["id"]))
-    return user, frozenset(record.get("scopes") or ())
+    organization_id = record.get("organization_id")
+    return user, frozenset(record.get("scopes") or ()), str(organization_id) if organization_id else None
 
 
 def validate_scopes(scopes: list[str]) -> list[str]:

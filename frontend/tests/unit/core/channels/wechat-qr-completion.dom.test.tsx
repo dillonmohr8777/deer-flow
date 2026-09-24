@@ -156,7 +156,7 @@ it("retries account binding without asking the user to scan again", async () => 
   );
   mount();
   await screen.findByText(
-    "Your token is saved, but account binding could not start. Try again.",
+    "Your token is saved, but account binding couldn't start. Try again.",
   );
   fireEvent.click(
     screen.getByRole("button", { name: "Generate binding code" }),

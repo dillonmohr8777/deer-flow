@@ -84,6 +84,31 @@ models:
     input_per_million: 5.0
     output_per_million: 25.0
     input_cache_hit_per_million: 0.5
+- name: openrouter-opus-5.5
+  display_name: Claude Opus 5.5 (OpenRouter)
+  use: langchain_openai:ChatOpenAI
+  model: anthropic/claude-opus-5.5
+  supports_thinking: true
+  supports_reasoning_effort: true
+  when_thinking_disabled:
+    reasoning_effort: minimal
+  api_key: $OPENROUTER_API_KEY
+  base_url: https://openrouter.ai/api/v1
+  request_timeout: 600.0
+  max_retries: 2
+  max_tokens: 128000
+  context_window: 1000000
+  temperature: 0.7
+  supports_vision: true
+  extra_body:
+    provider:
+      zdr: true
+      data_collection: deny
+  pricing:
+    currency: USD
+    input_per_million: 4.0
+    output_per_million: 20.0
+    input_cache_hit_per_million: 0.4
 - name: openrouter-sonnet-5
   display_name: Claude Sonnet 5 (OpenRouter)
   use: langchain_openai:ChatOpenAI
@@ -317,7 +342,7 @@ models:
   temperature: 0.7
   supports_vision: true
 - name: openrouter-muse-spark-contributor
-  display_name: Muse Spark 1.3 Contributor (OpenRouter)
+  display_name: Muse Spark 1.3 Early Access (OpenRouter)
   use: langchain_openai:ChatOpenAI
   model: meta/muse-spark-1.3-contributor
   supports_thinking: true
@@ -675,7 +700,7 @@ memory:
   backend_config:
     storage_path: ''
     storage_class: file
-    strict_user_scope: false
+    strict_user_scope: true
     manifest_filename: memory.json
     file_lock_timeout_seconds: 10
     retrieval_adapter: fts5

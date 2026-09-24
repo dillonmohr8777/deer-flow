@@ -21,7 +21,7 @@ describe("resolveSubtaskDescription", () => {
 });
 
 describe("resolveSubtaskModelLabel", () => {
-  it("prefers the configured display name and falls back to the model identifier", () => {
+  it("prefers the configured display name and never falls back to a routing slug", () => {
     expect(
       resolveSubtaskModelLabel("claude-3-7-sonnet", [
         {
@@ -34,8 +34,11 @@ describe("resolveSubtaskModelLabel", () => {
     ).toBe("Claude 3.7 Sonnet");
 
     expect(resolveSubtaskModelLabel("unlisted-model", [])).toBe(
-      "unlisted-model",
+      "Unlisted Model",
     );
+    expect(
+      resolveSubtaskModelLabel("openrouter-muse-spark-contributor", []),
+    ).toBe("Muse Spark 1.3");
   });
 
   it("formats only reported cumulative token usage", () => {

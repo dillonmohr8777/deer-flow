@@ -18,4 +18,15 @@
   have put light speckles inside the letterforms. Measured after processing:
   mean 13.02:1, worst pixel 4.52:1, zero pixels below AA large. No text, marks
   or third-party imagery in the generated content.
+- `momos/*.svg`: the canon Momo crew, hand-authored vector written by
+  `scripts/generate-momos.mjs` (re-run it rather than editing the files). Body
+  geometry is momo-mark.svg and the 2026-09-22 celebration paper kit, per the
+  canon Dillon re-locked 2026-09-21: royal sphere, white pill eyes, grey
+  hardware, gold only on the antenna ball and one rivet. Each role adds one grey
+  tool. No generated imagery, no third-party artwork; the manifest test pins
+  every file to the canon palette and 8 KB.
 - momo-mark.svg: newly authored flat vector interpretation of the blue face, white pill eyes and yellow antenna in Dillon's existing 29-second `C:/Users/dillo/Downloads/momentum-momo.mp4` ("Momentum built a bot. It watches the money."). This is a new interpretation from the inspected film, not a recovered original SVG. It is used as a brand character, not an agent activity indicator. Paper depth is informed by the recovered `Momo - First Assignment.dc.html` and `Momo - Living Portfolio Film.dc.html` references; no claims from the films are copied into product state.
+- Appearance treatments (space/future/retro), added 2026-09-23. All three via Google Fonts CSS2 API, latin subset, self-hosted unchanged woff2, OFL 1.1:
+  - space-mono.woff2 (16,520 bytes, weight 400) and space-mono-bold.woff2 (16,724 bytes, weight 700): Space Mono. Used for the "space" treatment's headings and code (`--space-font` in `src/styles/space.css`).
+  - orbitron-bold.woff2 (6,528 bytes, weight 700): Orbitron. Used for the "future" treatment's headings only (`--future-font` in `src/styles/future.css`); body text stays on the existing self-hosted Nunito Sans.
+  - press-start-2p.woff2 (12,512 bytes, weight 400, the only weight Press Start 2P ships): Press Start 2P. Used for the "retro" treatment's headings, labels and code (`--retro-pixel-font` in `src/styles/retro.css`); long body text stays on the existing self-hosted Nunito Sans for readability.

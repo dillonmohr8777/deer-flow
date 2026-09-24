@@ -21,6 +21,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { formatModelLabel } from "@/components/workspace/command-center/model-label";
+import { MomoAvatar } from "@/components/workspace/command-center/momo-avatar";
 import { useUpdateAgent } from "@/core/agents";
 import type { Agent, ReasoningEffort } from "@/core/agents";
 import { useKnowledgeBaseEnabled } from "@/core/features";
@@ -64,6 +66,8 @@ interface AgentSettingsDialogProps {
   agent: Agent;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Deleting lives here, one step back from the roster row. */
+  onDelete?: () => void;
 }
 
 /**
@@ -76,6 +80,7 @@ export function AgentSettingsDialog({
   agent,
   open,
   onOpenChange,
+  onDelete,
 }: AgentSettingsDialogProps) {
   const { t } = useI18n();
   const { models } = useModels();
@@ -211,6 +216,22 @@ export function AgentSettingsDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[calc(100dvh-2rem)] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden">
         <DialogHeader className="pr-6">
+          {/* Whose settings these are: the roster identity, not a generic form. */}
+          <div className="flex min-w-0 items-center gap-3 pb-1">
+            <span aria-hidden="true" className="shrink-0">
+              <MomoAvatar agent={agent} size={40} />
+            </span>
+            <div className="min-w-0 text-left">
+              <p className="truncate text-sm font-bold">
+                {agent.display_name?.length ? agent.display_name : agent.name}
+              </p>
+              {agent.model ? (
+                <p className="text-muted-foreground truncate text-xs">
+                  {formatModelLabel(agent.model)}
+                </p>
+              ) : null}
+            </div>
+          </div>
           <DialogTitle>{t.agents.settingsTitle}</DialogTitle>
           <DialogDescription>{t.agents.settingsDescription}</DialogDescription>
         </DialogHeader>
@@ -297,7 +318,10 @@ export function AgentSettingsDialog({
               {t.agents.settingsModel}
             </span>
             <Select value={model} onValueChange={setModel}>
-              <SelectTrigger className="w-full">
+              <SelectTrigger
+                className="w-full"
+                aria-label={t.agents.settingsModel}
+              >
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -358,7 +382,10 @@ export function AgentSettingsDialog({
                 value={thinking}
                 onValueChange={(value) => setThinking(value as typeof thinking)}
               >
-                <SelectTrigger className="w-full">
+                <SelectTrigger
+                  className="w-full"
+                  aria-label={t.agents.settingsThinking}
+                >
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -386,7 +413,10 @@ export function AgentSettingsDialog({
                 value={reasoningEffort}
                 onValueChange={setReasoningEffort}
               >
-                <SelectTrigger className="w-full">
+                <SelectTrigger
+                  className="w-full"
+                  aria-label={t.agents.settingsReasoningEffort}
+                >
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -418,7 +448,10 @@ export function AgentSettingsDialog({
                 setSubagentAccess(value as SubagentAccessSelection)
               }
             >
-              <SelectTrigger className="w-full">
+              <SelectTrigger
+                className="w-full"
+                aria-label={t.settings.subagents.bindingTitle}
+              >
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -517,6 +550,16 @@ export function AgentSettingsDialog({
         </div>
 
         <DialogFooter>
+          {onDelete ? (
+            <Button
+              variant="ghost"
+              className="text-destructive hover:text-destructive sm:mr-auto"
+              onClick={onDelete}
+              disabled={updateAgent.isPending}
+            >
+              {t.agents.delete}
+            </Button>
+          ) : null}
           <Button
             variant="outline"
             onClick={() => onOpenChange(false)}

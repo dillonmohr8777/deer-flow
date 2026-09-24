@@ -42,7 +42,8 @@ Webpack is the default development bundler. Use `DEER_FLOW_DEV_BUNDLER=turbo` wi
 
 Rstest runs them as two projects (`rstest.config.ts`). `*.test.ts` / `*.test.tsx` run in a plain **node** environment — that is nearly the whole suite, and it is the default for anything that is pure logic. `*.dom.test.ts` / `*.dom.test.tsx` run in **happy-dom**, for tests that need a document: hooks driven through `renderHook` from `@testing-library/react`, and components. Keep the split — a DOM environment costs roughly 3x the runtime of the node suite, so tests that do not render should not opt into it. A hook whose behavior only exists under real React (effect ordering, cleanup on unmount, re-render on store change) belongs in a `.dom.test.*` file rather than a node test that mocks `react` itself.
 
-E2E tests live under `tests/e2e/` and use Playwright with Chromium. They mock all backend APIs via `page.route()` network interception and test real page interactions (navigation, chat input, streaming responses). Config: `playwright.config.ts`. The real-backend auth contract in `tests/e2e-real-backend/auth-disabled-contract.spec.ts` and `backend/tests/test_auth_me_permissions.py` pin the complete route-permission list; update both when adding registered permissions (including `projects:read/write/delete`).
+E2E tests live under `tests/e2e/` and use Playwright with Chromium. They mock all backend APIs via `page.route()` network interception and test real page interactions (navigation, chat input, streaming responses). Config: `playwright.config.ts`.
+`tests/e2e/design-surfaces.spec.ts` is an opt-in design-review harness, skipped unless `DESIGN_SHOTS=1`: it captures the signed-in surfaces at 1440×900 and 390×844 into `DESIGN_SHOTS_DIR` against the mocked API. `/login` needs a second server started with `DEER_FLOW_AUTH_DISABLED=0` and an unreachable gateway, passed as `DESIGN_SIGNED_OUT_URL`; `DESIGN_SHOTS_DEBUG=1` logs unmocked API calls. The real-backend auth contract in `tests/e2e-real-backend/auth-disabled-contract.spec.ts` and `backend/tests/test_auth_me_permissions.py` pin the complete route-permission list; update both when adding registered permissions (including `projects:read/write/delete`).
 
 The dedicated `run-history.ts` hook replaces the unpaged runs hook. Show counts
 only after a successful history read, never during initial loading or errors.
@@ -210,6 +211,7 @@ mutation permissions, and cache ownership remain in the existing hooks. Skill di
 metadata; runtime names and full descriptions remain unchanged. Public, custom,
 integration, and legacy sources must stay distinct. Community currently offers
 archive import, not a remote marketplace. Screenshot E2E fixtures are demo data.
+
 ## Momentum Command Center
 
 `/workspace/command-center` is the default non-static workspace entry. Reuse the
@@ -220,6 +222,16 @@ or invoices. The global background tray observes work; it does not start model
 calls. Stop actions require confirmation and the existing run-cancel permission.
 Keep project grouping distinct from verified client tenancy. Stage independently
 with `NEXT_BUILD_DIR=.next-momentum`; do not overwrite a running server's build.
+Momo films (`public/momentum/films/`, provenance in its SOURCES.md) render only
+through `components/momentum/momo-film.tsx`: muted, `preload="none"`, poster-only
+when motion is off (workspace `motionOn`, front door `useIntroMotion().live`).
+Scrapbook scraps (`public/momentum/scraps/`, provenance in its SOURCES.md) render
+only through `components/momentum/scraps.tsx`'s `Scraps` component: the sidebar
+footer, empty states (`page-body.tsx`'s `EmptyState`), and the Momo Daily front
+page margins at desktop widths. They stay out of chat threads, forms, dialogs, and
+dense tables, where a moving decoration would distract rather than help. `data-live`
+(the same `motionOn`/`useDailyMotion()` switch as Momo films) pauses their sway, and
+they are hidden entirely under the future and retro treatments.
 
 `backend/packages/harness/deerflow/capabilities/builtin.json` owns localized
 catalog manifests. Refresh the generated demo snapshot with `pnpm catalog:sync`
@@ -253,6 +265,20 @@ metadata support; it must never enter transport parameters. Preserve sibling
 presentation fields and masked credentials; cancel/reset/unmount must fence stale
 image-decoding results. Uploaded remote URLs and SVG are never rendered. Existing
 shared-MCP administrator checks remain authoritative; this adds no personal scope.
+
+## Desk (private instance only)
+
+`/workspace/desk` is the owner's home on the private instance. It exists only when
+`/api/features` reports `desk.enabled`, which the Gateway derives from
+`config.yaml -> private_workspace.enabled` (default false). With the flag on,
+`/workspace` redirects to Desk (`core/features/server.ts`, fail closed) and the
+sidebar gains a Desk link; with it off, the route replaces itself with Command
+Center before rendering anything Desk-shaped. Desk only reads existing APIs
+(scheduled tasks, clients and their fleet bindings, fleet templates, console
+usage); department grouping and schedule matching live in
+`components/workspace/desk/desk-data.ts`. There is no approval queue API yet, so
+the Approvals panel says "Not wired". `tests/e2e/desk.spec.ts` proves both flag
+states and the fresh-instance empty states.
 
 <!-- BEGIN:nextjs-agent-rules -->
 

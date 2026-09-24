@@ -4,6 +4,7 @@ import asyncio
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from org_isolation_fixtures import delegate_every_scheduled_task
 
 from app.scheduler.service import ScheduledTaskService
 from deerflow.config.database_config import DatabaseConfig
@@ -1052,3 +1053,9 @@ async def test_expired_launch_claim_attaches_existing_run_instead_of_relaunching
         assert (await task_repo.get("task-attached", user_id="user-1"))["run_count"] == 1
     finally:
         await close_engine()
+
+
+@pytest.fixture(autouse=True)
+def _tasks_are_delegated(monkeypatch):
+    """Queue mechanics only: every org-less test task resolves a launch delegation."""
+    delegate_every_scheduled_task(monkeypatch)

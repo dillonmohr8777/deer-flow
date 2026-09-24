@@ -21,7 +21,9 @@ from deerflow.persistence.channel_connections.model import (
     ChannelCredentialRow,
     ChannelOAuthStateRow,
 )
+from deerflow.persistence.clients.model import ClientAssignmentRow, ClientRow
 from deerflow.persistence.feedback.model import FeedbackRow
+from deerflow.persistence.fleet.model import FleetAgentBindingRow
 from deerflow.persistence.managed_subagents.model import ManagedSubagentRow
 from deerflow.persistence.mcp_tasks.model import McpTaskRow
 from deerflow.persistence.models.run_event import RunEventRow
@@ -36,6 +38,7 @@ from deerflow.persistence.scheduled_tasks.model import ScheduledTaskRow
 from deerflow.persistence.subagent_batches.model import SubagentBatchItemRow, SubagentBatchRow
 from deerflow.persistence.thread_meta.model import ThreadMetaRow
 from deerflow.persistence.user.model import UserPreferenceRow, UserRow
+from deerflow.persistence.user_mfa.model import UserMfaRow
 from deerflow.persistence.webhook_delivery.model import WebhookDeliveryRow
 
 __all__ = [
@@ -44,7 +47,10 @@ __all__ = [
     "ChannelConversationRow",
     "ChannelCredentialRow",
     "ChannelOAuthStateRow",
+    "ClientAssignmentRow",
+    "ClientRow",
     "FeedbackRow",
+    "FleetAgentBindingRow",
     "InvitationRow",
     "McpTaskRow",
     "ManagedSubagentRow",
@@ -63,6 +69,7 @@ __all__ = [
     "SubagentBatchRow",
     "SubagentBatchItemRow",
     "ThreadMetaRow",
+    "UserMfaRow",
     "UserPreferenceRow",
     "UserRow",
     "WebhookDeliveryRow",

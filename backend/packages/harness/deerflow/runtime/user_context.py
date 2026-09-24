@@ -196,6 +196,19 @@ def get_effective_actor_user_id() -> str:
     return get_workspace_actor_user_id() or DEFAULT_USER_ID
 
 
+def resolve_organization_id() -> str | None:
+    """Return the request's server-resolved active organization, if any.
+
+    Only ``AuthMiddleware`` sets it, after proving the session or PAT caller's
+    active membership, so no request field can choose it. ``None`` (internal
+    callers, auth-disabled mode, work outside a request) means no organization
+    boundary was established: keep the user filter and add no organization
+    filter.
+    """
+    context = _storage_context.get()
+    return context.organization_id if context is not None else None
+
+
 def _storage_user_id_from_auth_identity(identity: object | None) -> str | None:
     """Return a stable storage-safe ID for a LangGraph auth identity."""
     if not isinstance(identity, str) or not identity:

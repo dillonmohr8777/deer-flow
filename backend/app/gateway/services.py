@@ -27,9 +27,8 @@ from langgraph.types import Command
 
 from app.gateway.auth_disabled import AUTH_SOURCE_INTERNAL
 from app.gateway.authz import require_cancel_permission_if
-from app.gateway.deps import get_checkpointer, get_local_provider, get_run_context, get_run_manager, get_stream_bridge
+from app.gateway.deps import get_checkpointer, get_local_provider, get_run_context, get_run_manager, get_stream_bridge, get_thread_store
 from app.gateway.internal_auth import (
-    INTERNAL_OWNER_USER_ID_HEADER_NAME,
     INTERNAL_SYSTEM_ROLE,
     get_internal_user,
     get_trusted_internal_owner_user_id,
@@ -49,6 +48,8 @@ from deerflow.config.agents_config import load_agent_config
 from deerflow.config.app_config import get_app_config
 from deerflow.config.database_config import resolve_checkpoint_graph_cache_max
 from deerflow.knowledge_scope import KNOWLEDGE_SCOPE_KEY, KNOWLEDGE_SCOPE_RUNTIME_KEY
+from deerflow.persistence.organizations.delegation import ActiveDelegation, OrganizationDelegationRepository
+from deerflow.persistence.organizations.resolution import storage_user_id_for_organization
 from deerflow.projects.context import PROJECT_CONTEXT_MESSAGE_MARKER, resolve_project_context
 from deerflow.runtime import (
     END_SENTINEL,
@@ -91,8 +92,11 @@ from deerflow.runtime.user_context import (
     AUTHENTICATED_CONTEXT_MARKER,
     AUTHENTICATED_CONTEXT_MARKER_KEY,
     WORKSPACE_IDENTITY_CONTEXT_KEYS,
+    WorkspaceStorageContext,
     reset_current_user,
+    reset_storage_context,
     set_current_user,
+    set_storage_context,
 )
 from deerflow.sandbox.lease import SANDBOX_SERVER_OWNED_CONTEXT_KEYS
 from deerflow.subagents.status_contract import SUBAGENT_ACCEPTANCE_VERDICT_KEY, SUBAGENT_RECEIPT_VERDICT_KEY, SUBAGENT_TOOL_RECEIPTS_KEY
@@ -210,18 +214,16 @@ async def _ensure_thread_metadata(
     run_ctx: RunContext,
     record: RunRecord,
     *,
-    owner_user_id: str | None,
     require_existing_thread: bool = False,
 ) -> None:
-    """Ensure an admitted run's thread exists without delaying task attachment."""
+    """Ensure an admitted run's thread exists without delaying task attachment.
+
+    Never re-owns an existing row: admission already refused threads the
+    caller does not own, and claiming someone else's (or nobody's) row is how
+    an internal caller used to take a thread over.
+    """
     thread_store = run_ctx.thread_store
     existing = await thread_store.get(record.thread_id)
-    if existing is None and owner_user_id:
-        unscoped = await thread_store.get(record.thread_id, user_id=None)
-        if unscoped is not None:
-            if unscoped.get("user_id") != owner_user_id:
-                await thread_store.update_owner(record.thread_id, owner_user_id, user_id=None)
-            existing = await thread_store.get(record.thread_id)
     if existing is None:
         if require_existing_thread:
             raise LookupError(f"Thread {record.thread_id} was deleted during run admission")
@@ -1517,6 +1519,11 @@ async def ensure_checkpoint_history_seeded(
     }
     if await get_checkpointer(request).aget_tuple(checkpoint_config) is None:
         return
+    # Seed only a thread whose row the caller owns: a checkpoint that no row
+    # of theirs claims (orphan, ownerless, another organization's) is not
+    # their history to copy into a feed.
+    if await get_thread_store(request).get(thread_id) is None:
+        return
 
     accessor, config = await abuild_checkpoint_state_accessor(
         request,
@@ -1746,23 +1753,26 @@ async def start_run(
                 detail=f"Model {model_name!r} is not in the configured model allowlist",
             )
 
+    # Set only for a delegated internal caller (verified by AuthMiddleware or an
+    # in-process launcher): the delegation organization's storage principal.
     owner_user_id = get_trusted_internal_owner_user_id(request)
     # Stateless run endpoints carry thread_id in the request *body*, so the
     # @require_permission(owner_check=True) decorator -- which resolves ownership
     # from the path param -- cannot protect them. Enforce thread ownership here,
-    # before any run is created, so one user cannot start runs on (or read /wait
-    # checkpoint state from) another user's thread. Missing rows (auto-created
-    # temp threads) and NULL-owner rows (shared / pre-auth data) stay accessible
-    # via check_access; only a thread already owned by another user is rejected
-    # with 404, matching thread_runs.py's anti-enumeration behaviour. Internal
-    # channel runs act on behalf of the connection owner carried in
-    # X-DeerFlow-Owner-User-Id, so they are scoped to that owner instead of
-    # bypassing the check -- a leaked internal token must not grant cross-user
-    # thread access.
+    # before any run is created and before checkpoint history is seeded: a row
+    # owned by someone else answers 404, and so does a checkpoint that no row of
+    # the caller's claims (orphan or ownerless history), because admitting it
+    # would let _ensure_thread_metadata create ownership over it. A missing row
+    # with no checkpoint is a fresh thread and stays admissible.
     user = getattr(request.state, "user", None)
+    storage_user_id = getattr(request.state, "storage_user_id", None)
+    actor_user_id = getattr(request.state, "actor_user_id", None) or (str(user.id) if user is not None else None)
 
-    content_user_id = owner_user_id or getattr(request.state, "storage_user_id", None) or (str(user.id) if user is not None else None)
-    if user is not None and content_user_id != str(user.id) and not owner_user_id:
+    content_user_id = owner_user_id or storage_user_id or (str(user.id) if user is not None else None)
+    # Shared-workspace content (the storage principal differs from the acting
+    # person or the delegation owner) needs the isolated sandbox, for delegated
+    # internal launches exactly as for browser sessions.
+    if user is not None and content_user_id != actor_user_id:
         sandbox_config = get_app_config().sandbox
         if sandbox_config.use != "deerflow.community.aio_sandbox:AioSandboxProvider" or sandbox_config.network.mode == "open":
             raise HTTPException(status_code=503, detail="Shared workspace tools require the isolated workspace sandbox")
@@ -1772,20 +1782,11 @@ async def start_run(
             if not require_existing_thread:
                 return True
             return await run_ctx.thread_store.get(thread_id) is not None
-        allowed = await run_ctx.thread_store.check_access(
-            thread_id,
-            getattr(request.state, "storage_user_id", None) or str(user.id),
-            require_existing=require_existing_thread,
-        )
-        if not allowed and owner_user_id and getattr(user, "system_role", None) == INTERNAL_SYSTEM_ROLE:
-            # Channel workers may also act for the connection owner named in
-            # the trusted header (e.g. claiming a legacy default-owned channel
-            # thread for its real owner).
-            allowed = await run_ctx.thread_store.check_access(
-                thread_id,
-                owner_user_id,
-                require_existing=require_existing_thread,
-            )
+        caller = storage_user_id or str(user.id)
+        allowed = await run_ctx.thread_store.check_access(thread_id, caller, require_existing=require_existing_thread)
+        checkpointer = getattr(run_ctx, "checkpointer", None)
+        if allowed and not require_existing_thread and checkpointer is not None and await checkpointer.aget_tuple({"configurable": {"thread_id": thread_id, "checkpoint_ns": ""}}) is not None:
+            allowed = await run_ctx.thread_store.get(thread_id, user_id=caller) is not None
         return allowed
 
     if not await thread_access_allowed():
@@ -1888,7 +1889,8 @@ async def start_run(
             )
         run_record_input = _canonical_run_record_input(body.input, graph_input)
 
-        internal_owner_user = await resolve_trusted_internal_owner_for_attribution(request, owner_user_id)
+        # Attribution names the delegation owner (a person), never the storage principal.
+        internal_owner_user = await resolve_trusted_internal_owner_for_attribution(request, actor_user_id if owner_user_id else None)
         inject_authenticated_user_context(
             config,
             request,
@@ -1952,7 +1954,6 @@ async def start_run(
                 _ensure_thread_metadata(
                     run_ctx,
                     record,
-                    owner_user_id=owner_user_id,
                     require_existing_thread=require_existing_thread,
                 )
             )
@@ -2114,28 +2115,87 @@ async def start_run(
             reset_current_user(owner_context_token)
 
 
+def _delegated_internal_request(app: Any, delegation: ActiveDelegation) -> SimpleNamespace:
+    """The in-process twin of a delegated internal HTTP request.
+
+    Identity comes only from the resolved delegation, exactly as AuthMiddleware
+    stamps it: the owner acts, in the delegation's organization, on that
+    organization's storage principal. No owner header is sent.
+    """
+    organization = delegation.organization
+    storage_user_id = storage_user_id_for_organization(organization, delegation.owner_user_id)
+    if not storage_user_id:
+        raise PermissionError("the delegation's organization has no storage principal")
+    return SimpleNamespace(
+        app=app,
+        headers={},
+        cookies={},
+        state=SimpleNamespace(
+            user=get_internal_user(owner_user_id=delegation.owner_user_id),
+            auth_source=AUTH_SOURCE_INTERNAL,
+            organization_id=organization.id,
+            organization_role=organization.role,
+            actor_user_id=delegation.owner_user_id,
+            storage_user_id=storage_user_id,
+            delegation_id=delegation.id,
+        ),
+    )
+
+
+async def _start_delegated_run(body: RunCreateRequest, thread_id: str, request: Any, **kwargs: Any) -> RunRecord:
+    """start_run under the storage context AuthMiddleware would have set.
+
+    The run worker is created inside and inherits it, so the run and its
+    thread are stamped with the delegation's organization.
+    """
+    state = request.state
+    token = set_storage_context(
+        WorkspaceStorageContext(
+            actor_user_id=state.actor_user_id,
+            organization_id=state.organization_id,
+            storage_user_id=state.storage_user_id,
+            role=state.organization_role,
+        )
+    )
+    try:
+        return await start_run(body, thread_id, request, **kwargs)
+    finally:
+        reset_storage_context(token)
+
+
+async def _resolve_launch_delegation(*, subject_type: str, subject_id: str, organization_id: str | None) -> ActiveDelegation | None:
+    """Re-read a background subject's delegation to start runs; ``None`` denies."""
+    from deerflow.persistence.engine import get_session_factory
+
+    session_factory = get_session_factory()
+    if session_factory is None or not organization_id:
+        return None
+    return await OrganizationDelegationRepository(session_factory).resolve_active_delegation(
+        subject_type=subject_type,
+        subject_id=subject_id,
+        organization_id=organization_id,
+        scope="runs:create",
+    )
+
+
 async def launch_scheduled_thread_run(
     *,
     thread_id: str,
     assistant_id: str | None,
     prompt: str,
-    request: Request | None = None,
-    app: Any | None = None,
-    owner_user_id: str | None = None,
+    app: Any,
+    delegation: ActiveDelegation | None = None,
     metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    if request is None:
-        if app is None:
-            raise ValueError("launch_scheduled_thread_run requires request or app")
-        request = SimpleNamespace(
-            app=app,
-            headers=({INTERNAL_OWNER_USER_ID_HEADER_NAME: owner_user_id} if owner_user_id else {}),
-            state=SimpleNamespace(
-                user=get_internal_user(),
-                auth_source=AUTH_SOURCE_INTERNAL,
-            ),
-            cookies={},
-        )
+    """Launch one scheduled occurrence, acting only through the task's delegation.
+
+    The scheduler resolves the delegation immediately before launching; a task
+    without one (absent, revoked, expired, owner gone) never starts a run.
+    """
+    if delegation is None:
+        raise PermissionError("scheduled task has no active delegation in its organization")
+    request = _delegated_internal_request(app, delegation)
+    owner_user_id = delegation.owner_user_id
     body = RunCreateRequest(
         assistant_id=assistant_id,
         input={"messages": [{"role": "user", "content": prompt}]},
@@ -2146,7 +2206,7 @@ async def launch_scheduled_thread_run(
         # runtime-context consumers without a ContextVar fallback (e.g.
         # user-scoped GuardrailMiddleware providers) see the owning user;
         # ``inject_authenticated_user_context`` skips the internal user.
-        context=({"non_interactive": True, "user_id": owner_user_id} if owner_user_id else {"non_interactive": True}),
+        context={"non_interactive": True, "user_id": owner_user_id},
         webhook=None,
         checkpoint_id=None,
         checkpoint=None,
@@ -2171,7 +2231,7 @@ async def launch_scheduled_thread_run(
     # scheduler service's own per-occurrence scope -- ensure_trace_context
     # keeps that trace instead of minting a competing one.
     with ensure_trace_context():
-        record = await start_run(
+        record = await _start_delegated_run(
             body,
             thread_id,
             request,
@@ -2203,14 +2263,20 @@ async def launch_mcp_task_notification_run(
     dispatch_version: int,
     dispatch_attempt: int,
     event: dict[str, Any],
+    organization_id: str | None = None,
 ) -> dict[str, Any]:
-    """Idempotently launch the Agent run that delivers one task event."""
-    request = SimpleNamespace(
-        app=app,
-        headers={INTERNAL_OWNER_USER_ID_HEADER_NAME: owner_user_id},
-        state=SimpleNamespace(user=get_internal_user(), auth_source=AUTH_SOURCE_INTERNAL),
-        cookies={},
-    )
+    """Idempotently launch the Agent run that delivers one task event.
+
+    Acts only through the task's ``mcp_task`` delegation in its organization,
+    re-read here: absent, revoked or expired (or an owner who lost their
+    membership) raises ``PermissionError`` before any run starts.
+    ``owner_user_id`` (the task's storage principal) is never trusted alone.
+    """
+    delegation = await _resolve_launch_delegation(subject_type="mcp_task", subject_id=task_id, organization_id=organization_id)
+    if delegation is None:
+        logger.warning("Refused MCP task notification without an active delegation: task=%s", sanitize_log_param(task_id))
+        raise PermissionError("MCP task has no active delegation in its organization")
+    request = _delegated_internal_request(app, delegation)
     body = RunCreateRequest(
         assistant_id=assistant_id,
         input={
@@ -2231,7 +2297,7 @@ async def launch_mcp_task_notification_run(
             }
         },
         config=None,
-        context={"non_interactive": True, "user_id": owner_user_id},
+        context={"non_interactive": True, "user_id": delegation.owner_user_id},
         webhook=None,
         checkpoint_id=None,
         checkpoint=None,
@@ -2253,7 +2319,7 @@ async def launch_mcp_task_notification_run(
     # notification keeps every delivery attempt separately correlatable.
     try:
         with ensure_trace_context():
-            record = await start_run(
+            record = await _start_delegated_run(
                 body,
                 thread_id,
                 request,
@@ -2267,6 +2333,30 @@ async def launch_mcp_task_notification_run(
             raise PermanentNotificationError(str(exc.detail)) from exc
         raise
     return {"run_id": record.run_id, "thread_id": record.thread_id}
+
+
+async def _stream_viewer_still_admitted(request: Any) -> bool:
+    """Re-check an open stream's admission (decision 6: revocation closes streams).
+
+    Admission was checked once before subscribing; each heartbeat re-reads the
+    viewer's active membership (or, for a delegated internal caller, the whole
+    delegation). Requests with no organization boundary (auth-disabled mode,
+    test compositions) have nothing to re-check.
+    """
+    state = getattr(request, "state", None)
+    organization_id = getattr(state, "organization_id", None)
+    if not isinstance(organization_id, str) or not organization_id:
+        return True
+    from deerflow.persistence.engine import get_session_factory
+
+    session_factory = get_session_factory()
+    if session_factory is None:
+        return False
+    delegations = OrganizationDelegationRepository(session_factory)
+    delegation_id = getattr(state, "delegation_id", None)
+    if isinstance(delegation_id, str) and delegation_id:
+        return await delegations.resolve_delegation_by_id(delegation_id) is not None
+    return await delegations.is_membership_active(user_id=getattr(state, "actor_user_id", None), organization_id=organization_id)
 
 
 async def sse_consumer(
@@ -2343,6 +2433,9 @@ async def sse_consumer(
             if entry is HEARTBEAT_SENTINEL:
                 if await _orphan_recovery_observed_after_heartbeat(record, run_mgr):
                     yield format_sse("end", None)
+                    return
+                if not await _stream_viewer_still_admitted(request):
+                    logger.info("Closing run stream %s: the viewer's membership or delegation was revoked", sanitize_log_param(record.run_id))
                     return
                 yield ": heartbeat\n\n"
                 continue

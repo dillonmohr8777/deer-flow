@@ -33,9 +33,14 @@ function Controls() {
       </output>
       <output data-testid="persistence">{appearance.persistence}</output>
       <button
-        onClick={() => appearance.update({ treatment: "paper", motion: true })}
+        onClick={() =>
+          appearance.update({ treatment: "current", motion: true })
+        }
       >
-        Paper
+        Current
+      </button>
+      <button onClick={() => appearance.update({ treatment: "space" })}>
+        Space
       </button>
       <button onClick={appearance.reset}>Reset</button>
     </>
@@ -57,6 +62,18 @@ describe("workspace appearance", () => {
       ),
     ).toEqual(DEFAULT_APPEARANCE);
     expect(parseAppearance("broken")).toEqual(DEFAULT_APPEARANCE);
+    expect(DEFAULT_APPEARANCE.treatment).toBe("paper");
+    for (const saved of [
+      "current",
+      "classic",
+      "paper",
+      "space",
+      "future",
+      "retro",
+    ] as const)
+      expect(
+        parseAppearance(JSON.stringify({ treatment: saved })).treatment,
+      ).toBe(saved);
     expect(
       parseAppearance(JSON.stringify({ label: "x".repeat(200) })).label,
     ).toHaveLength(40);
@@ -70,11 +87,13 @@ describe("workspace appearance", () => {
     await waitFor(() =>
       expect(screen.getByTestId("persistence").textContent).toBe("local"),
     );
-    fireEvent.click(screen.getByText("Paper"));
+    // Paper is the default; "current" stays selectable and is saved.
+    expect(screen.getByTestId("preference").textContent).toBe("paper");
+    fireEvent.click(screen.getByText("Current"));
     expect(
       parseAppearance(window.localStorage.getItem(appearanceKey("account-a")))
         .treatment,
-    ).toBe("paper");
+    ).toBe("current");
 
     userId = "account-b";
     view.rerender(
@@ -83,7 +102,7 @@ describe("workspace appearance", () => {
       </WorkspaceAppearanceProvider>,
     );
     await waitFor(() =>
-      expect(screen.getByTestId("preference").textContent).toBe("current"),
+      expect(screen.getByTestId("preference").textContent).toBe("paper"),
     );
     expect(window.localStorage.getItem(appearanceKey("account-b"))).toBeNull();
     userId = "account-a";
@@ -92,12 +111,23 @@ describe("workspace appearance", () => {
         <Controls />
       </WorkspaceAppearanceProvider>,
     );
+    // The saved choice is respected over the new default.
     await waitFor(() =>
-      expect(screen.getByTestId("preference").textContent).toBe("paper"),
+      expect(screen.getByTestId("preference").textContent).toBe("current"),
     );
+
+    // A new treatment (space/future/retro) persists exactly like the
+    // existing ones.
+    fireEvent.click(screen.getByText("Space"));
+    expect(screen.getByTestId("preference").textContent).toBe("space");
+    expect(
+      parseAppearance(window.localStorage.getItem(appearanceKey("account-a")))
+        .treatment,
+    ).toBe("space");
+
     fireEvent.click(screen.getByText("Reset"));
     expect(window.localStorage.getItem(appearanceKey("account-a"))).toBeNull();
-    expect(screen.getByTestId("preference").textContent).toBe("current");
+    expect(screen.getByTestId("preference").textContent).toBe("paper");
 
     const enabled = {
       motion: true,

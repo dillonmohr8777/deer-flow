@@ -6,7 +6,10 @@ import {
   CableIcon,
   InfoIcon,
   BrainIcon,
+  GraduationCapIcon,
+  KeyRoundIcon,
   PaletteIcon,
+  ShieldCheckIcon,
   UsersRoundIcon,
   UserIcon,
 } from "lucide-react";
@@ -23,6 +26,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
 
+import styles from "./settings-dialog.module.css";
+
 function SettingsPageLoading() {
   return (
     <p role="status" className="text-muted-foreground py-8 text-center text-sm">
@@ -35,6 +40,13 @@ const AccountSettingsPage = dynamic(
   () =>
     import("./account-settings-page").then(
       (module) => module.AccountSettingsPage,
+    ),
+  { loading: SettingsPageLoading },
+);
+const SecuritySettingsPage = dynamic(
+  () =>
+    import("./security-settings-page").then(
+      (module) => module.SecuritySettingsPage,
     ),
   { loading: SettingsPageLoading },
 );
@@ -66,6 +78,13 @@ const NotificationSettingsPage = dynamic(
     ),
   { loading: SettingsPageLoading },
 );
+const ExperienceSettingsPage = dynamic(
+  () =>
+    import("./experience-settings-page").then(
+      (module) => module.ExperienceSettingsPage,
+    ),
+  { loading: SettingsPageLoading },
+);
 const SubagentSettingsPage = dynamic(
   () =>
     import("./subagent-settings-page").then(
@@ -83,15 +102,23 @@ const AboutSettingsPage = dynamic(
     import("./about-settings-page").then((module) => module.AboutSettingsPage),
   { loading: SettingsPageLoading },
 );
+const AuditSettingsPage = dynamic(
+  () =>
+    import("./audit-settings-page").then((module) => module.AuditSettingsPage),
+  { loading: SettingsPageLoading },
+);
 
 export type SettingsSection =
   | "models"
   | "account"
+  | "security"
   | "appearance"
   | "channels"
   | "memory"
   | "subagents"
   | "notification"
+  | "experience"
+  | "audit"
   | "about";
 
 type SettingsDialogProps = React.ComponentProps<typeof Dialog> & {
@@ -104,6 +131,26 @@ export function SettingsDialog(props: SettingsDialogProps) {
   const [activeSection, setActiveSection] =
     useState<SettingsSection>(defaultSection);
   const navRef = useRef<HTMLElement>(null);
+
+  const { open } = dialogProps;
+  useEffect(() => {
+    // On phones the sections are a sideways rail: centre the selected one,
+    // or a deep link lands on a tab scrolled off the right edge. Measured a
+    // frame after open, once the rail has its real width.
+    if (!open) return;
+    const frame = requestAnimationFrame(() => {
+      const nav = navRef.current;
+      const tab = nav?.querySelector<HTMLElement>(
+        `[data-section="${activeSection}"]`,
+      );
+      if (!nav || !tab || nav.scrollWidth <= nav.clientWidth) return;
+      const navBox = nav.getBoundingClientRect();
+      const tabBox = tab.getBoundingClientRect();
+      nav.scrollLeft +=
+        tabBox.left - navBox.left - (navBox.width - tabBox.width) / 2;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [activeSection, open]);
 
   useEffect(() => {
     // When opening the dialog, ensure the active section follows the caller's intent.
@@ -122,6 +169,11 @@ export function SettingsDialog(props: SettingsDialogProps) {
         icon: UserIcon,
       },
       {
+        id: "security",
+        label: t.settings.sections.security,
+        icon: KeyRoundIcon,
+      },
+      {
         id: "appearance",
         label: t.settings.sections.appearance,
         icon: PaletteIcon,
@@ -130,6 +182,11 @@ export function SettingsDialog(props: SettingsDialogProps) {
         id: "notification",
         label: t.settings.sections.notification,
         icon: BellIcon,
+      },
+      {
+        id: "experience",
+        label: t.settings.sections.experience,
+        icon: GraduationCapIcon,
       },
       {
         id: "channels",
@@ -146,16 +203,24 @@ export function SettingsDialog(props: SettingsDialogProps) {
         label: t.settings.sections.subagents,
         icon: UsersRoundIcon,
       },
+      {
+        id: "audit",
+        label: t.settings.sections.audit,
+        icon: ShieldCheckIcon,
+      },
       { id: "about", label: t.settings.sections.about, icon: InfoIcon },
     ],
     [
       t.settings.sections.models,
       t.settings.sections.account,
+      t.settings.sections.security,
       t.settings.sections.appearance,
       t.settings.sections.channels,
       t.settings.sections.memory,
       t.settings.sections.subagents,
       t.settings.sections.notification,
+      t.settings.sections.experience,
+      t.settings.sections.audit,
       t.settings.sections.about,
     ],
   );
@@ -182,11 +247,19 @@ export function SettingsDialog(props: SettingsDialogProps) {
             {t.settings.description}
           </p>
         </DialogHeader>
-        <div className="grid min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)] gap-3 md:grid-cols-[220px_minmax(0,1fr)] md:grid-rows-1 md:gap-4">
+        {/* minmax(0,1fr), not the implicit auto column, plus min-w-0 on
+            both items: on phones they otherwise grow to their widest child
+            and run past the dialog. */}
+        <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)] gap-3 md:grid-cols-[220px_minmax(0,1fr)] md:grid-rows-1 md:gap-4">
           <nav
             ref={navRef}
             aria-label={t.settings.title}
-            className="bg-sidebar min-h-0 overflow-x-auto rounded-lg border p-1.5 md:overflow-y-auto md:p-2"
+            className={cn(
+              // min-w-0: a grid item defaults to its min-content width, so
+              // without it the rail never scrolls and runs off the dialog.
+              "bg-sidebar min-h-0 min-w-0 overflow-x-auto rounded-lg border p-1.5 md:overflow-y-auto md:p-2",
+              styles.tabFade,
+            )}
           >
             <ul className="flex gap-1 md:block md:space-y-1 md:pr-1">
               {sections.map(({ id, label, icon: Icon }) => {
@@ -213,15 +286,23 @@ export function SettingsDialog(props: SettingsDialogProps) {
               })}
             </ul>
           </nav>
-          <ScrollArea className="h-full min-h-0 rounded-lg border">
+          <ScrollArea
+            className={cn(
+              "h-full min-h-0 min-w-0 rounded-lg border",
+              styles.panel,
+            )}
+          >
             <div className="space-y-8 p-4 sm:p-6">
               {activeSection === "models" && <ModelSettingsPage />}
               {activeSection === "account" && <AccountSettingsPage />}
+              {activeSection === "security" && <SecuritySettingsPage />}
               {activeSection === "appearance" && <AppearanceSettingsPage />}
               {activeSection === "memory" && <MemorySettingsPage />}
               {activeSection === "subagents" && <SubagentSettingsPage />}
               {activeSection === "notification" && <NotificationSettingsPage />}
+              {activeSection === "experience" && <ExperienceSettingsPage />}
               {activeSection === "channels" && <ChannelsSettingsPage />}
+              {activeSection === "audit" && <AuditSettingsPage />}
               {activeSection === "about" && <AboutSettingsPage />}
             </div>
           </ScrollArea>

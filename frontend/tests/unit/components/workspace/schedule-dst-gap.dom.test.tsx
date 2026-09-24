@@ -13,7 +13,7 @@ afterEach(() => {
 });
 
 test.each([
-  ["en-US", "This local time does not exist"],
+  ["en-US", "This local time doesn't exist"],
   ["zh-CN", "所选时区中不存在这个本地时间"],
 ] as const)(
   "invalid wall time clears the spec and recovers in %s",

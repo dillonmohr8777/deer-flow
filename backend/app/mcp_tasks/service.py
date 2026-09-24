@@ -923,6 +923,7 @@ class McpTaskService:
                 dispatch_version=dispatch_version,
                 dispatch_attempt=int(record.get("dispatch_attempt") or 0),
                 event=dict(record.get("dispatch_event") or {}),
+                organization_id=record.get("organization_id"),
             )
         except PermanentNotificationError as exc:
             await self._repository.dead_letter_notification(

@@ -407,11 +407,13 @@ def test_pat_stamps_active_private_organization(monkeypatch):
     from types import SimpleNamespace
 
     async def fake_authenticate_pat(app, authorization):
-        return SimpleNamespace(id="pat-user", email="pat@test.local", system_role="user"), frozenset({"threads:read"})
+        # organization_id=None: a pre-migration/quarantined PAT falls back to
+        # the owner's private organization, same as before 0037_pat_organization.
+        return SimpleNamespace(id="pat-user", email="pat@test.local", system_role="user"), frozenset({"threads:read"}), None
 
     monkeypatch.setenv("DEER_FLOW_AUTH_DISABLED", "")
     monkeypatch.setattr("app.gateway.auth.pat.authenticate_pat", fake_authenticate_pat)
-    monkeypatch.setattr("app.gateway.auth.pat.is_pat_allowed_route", lambda method, path: True)
+    monkeypatch.setattr("app.gateway.auth.pat.is_pat_allowed_route", lambda method, path, **kwargs: True)
 
     response = TestClient(_make_app()).get("/api/tenant-context", headers={"Authorization": "Bearer dfp_test"})
 
@@ -508,18 +510,17 @@ def test_mcp_cache_reset_post_no_cookie_returns_401(client):
     assert res.status_code == 401
 
 
-def test_protected_post_with_internal_auth_header_passes():
+def test_protected_post_with_internal_token_alone_is_refused():
+    """Contract section 4: the internal token (plus owner header) needs a delegation."""
     from app.gateway.internal_auth import create_internal_auth_headers
 
     app = _make_app()
     client = TestClient(app)
 
-    res = client.post(
-        "/api/threads/abc/runs/stream",
-        headers=create_internal_auth_headers(),
-    )
-
-    assert res.status_code == 200
+    for headers in (create_internal_auth_headers(), create_internal_auth_headers(owner_user_id="owner-1")):
+        res = client.post("/api/threads/abc/runs/stream", headers=headers)
+        assert res.status_code == 403
+        assert res.json() == {"detail": "Internal calls require an active organization delegation"}
 
 
 # ── Method matrix: PUT/DELETE/PATCH also protected ────────────────────────

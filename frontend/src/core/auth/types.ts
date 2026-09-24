@@ -13,10 +13,21 @@ export const userSchema = z.object({
   // never resolved them — both are consumed as "permissive, unresolved", see
   // hasPermission() in ./permissions.
   permissions: z.array(z.string()).nullable().optional(),
+  // Only GET /api/v1/auth/me resolves this; credential-creation responses
+  // (login/register/initialize) leave it at the schema default.
+  mfa_enabled: z.boolean().optional().default(false),
 });
 
-export type User = Omit<z.infer<typeof userSchema>, "oauth_provider"> & {
+export type User = Omit<
+  z.infer<typeof userSchema>,
+  "oauth_provider" | "mfa_enabled"
+> & {
   oauth_provider?: string | null;
+  // Optional in the type (unlike needs_setup) so the many existing test
+  // fixtures that predate this field don't all need updating; parsing a
+  // real API response through userSchema still fills in the runtime
+  // default (false) either way.
+  mfa_enabled?: boolean;
 };
 
 // ── SSR auth result (tagged union) ────────────────────────────────

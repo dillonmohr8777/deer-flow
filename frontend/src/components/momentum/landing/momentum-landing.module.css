@@ -390,13 +390,11 @@
 }
 
 /*
- * Two torn blueprint scraps behind the sheet content: royal paper with a
- * faint cream drafting grid, deckled by paper.css's .paper-torn(-alt) mask,
- * and placed where no copy sits — A in the empty right column beside the
- * hero, B behind the Momos above the footer. Never under words: ink on royal
+ * A torn blueprint scrap behind the sheet content, deckled by paper.css's
+ * .paper-torn-alt mask and placed where no copy sits: behind the Momos above
+ * the footer. Never under words: ink on royal
  * fails contrast, and a scrap under text reads as a bug, not craft.
  */
-.paperBlueprintA,
 .paperBlueprintB {
   position: absolute;
   pointer-events: none;
@@ -416,12 +414,18 @@
   background-size: 28px 28px;
 }
 
-.paperBlueprintA {
-  top: 7rem;
-  right: -4rem;
-  width: min(30rem, 38vw);
-  height: 24rem;
-  transform: rotate(-2.5deg);
+/*
+ * The MomoBot scrapbook collage (momobot/scrapbook-backdrop.tsx) fills the
+ * hero band in place of the old right-column blueprint scrap. Its cream
+ * scrim keeps every word in the hero column at 4.5:1 or better.
+ */
+.paperIntro {
+  position: absolute;
+  inset: 0 0 auto;
+  height: min(100vh, 54rem);
+  z-index: 0;
+  /* The collage fades out into the page instead of ending on a hard line. */
+  mask-image: linear-gradient(to bottom, #000 78%, transparent);
 }
 
 .paperBlueprintB {
@@ -446,10 +450,6 @@
 }
 
 @media (max-width: 48rem) {
-  .paperBlueprintA {
-    display: none;
-  }
-
   .paperBlueprintB {
     width: 18rem;
     height: 10rem;
@@ -461,13 +461,15 @@
 .paperShell {
   position: relative;
   z-index: 1;
-  width: min(72rem, 100% - 3rem);
+  /* 80rem, not 72: room for the headline column and a large Momo beside it
+     without Momo running past the header's right edge. */
+  width: min(80rem, 100% - 3rem);
   margin-inline: auto;
 }
 
 @media (max-width: 40rem) {
   .paperShell {
-    width: min(72rem, 100% - 2rem);
+    width: min(80rem, 100% - 2rem);
   }
 }
 
@@ -482,6 +484,45 @@
 .paperWordmark {
   display: inline-flex;
   align-items: center;
+}
+
+/*
+ * The right end of the header is a cream tab: the collage behind it has no
+ * scrim that far right, so the sign-in link and the Momentum mark carry
+ * their own paper, and their contrast no longer depends on the film frame.
+ */
+.paperHeaderEnd {
+  display: flex;
+  align-items: center;
+  gap: clamp(0.875rem, 2.5vw, 1.25rem);
+  padding: 0.45rem 0.85rem;
+  border: 1px solid var(--paper-line);
+  background: var(--paper-cream-hi);
+  box-shadow: 0 8px 16px -10px rgb(16 30 63 / 0.55);
+}
+
+/* A hairline between the one action and the maker's mark. */
+.paperMaker {
+  padding-left: clamp(0.875rem, 2.5vw, 1.25rem);
+  border-left: 1px solid var(--paper-line);
+}
+
+/* Phones: the hero's Enter the workspace button is the sign-in path, so the
+   header keeps only the two names, as far apart as the row allows. */
+@media (max-width: 40rem) {
+  .paperHeaderEnd .paperSignIn {
+    display: none;
+  }
+
+  .paperMaker {
+    padding-left: 0;
+    border-left: 0;
+  }
+}
+
+.paperWordmark:focus-visible {
+  outline: 2px solid var(--paper-focus);
+  outline-offset: 4px;
 }
 
 .paperSignIn {
@@ -517,13 +558,13 @@
 
 .paperTitle > :global(.m-voice-serif) {
   display: block;
-  font-size: clamp(1.5rem, 3.4vw, 2.25rem);
+  font-size: clamp(1.75rem, 3.6vw, 2.75rem);
   color: var(--paper-ink-muted);
 }
 
 .paperCutWord {
   display: block;
-  font-size: clamp(3rem, 10vw, 6.5rem);
+  font-size: clamp(3.25rem, 11vw, 7.5rem);
   line-height: 1;
   letter-spacing: -0.01em;
 }
@@ -687,25 +728,36 @@
   color: var(--paper-ink);
 }
 
-.paperMomos {
-  display: flex;
-  align-items: flex-end;
-  gap: 0.5rem;
-  margin-top: clamp(2.5rem, 6vw, 4rem);
+/*
+ * Momo, pinned as a scrapbook photo in front of the moving collage: cream
+ * border, a brass pin, a hand-stuck tilt. The intro plays once, then his
+ * Hello loop stays. On wide screens he sits in the open space right of the
+ * hero copy, where the scrim thins; on narrow screens he follows the cards.
+ */
+/*
+ * Momo, the page's focal point (bouncing-momo.tsx owns the photo, the 3D
+ * bounce and the ground shadow). Phones and tablets meet him first, centred
+ * above the headline; from 72rem he stands beside it, as large as the
+ * shell's spare width allows.
+ */
+.paperHero .paperMomos {
+  width: min(100%, 15rem);
+  margin: 0 auto clamp(0.5rem, 3vw, 1.5rem);
 }
 
-.paperMomos svg {
-  display: block;
-  flex: 0 0 auto;
-  /* Kraft offset under the mark: the cut-paper read, no glow, no gradient. */
-  filter: drop-shadow(3px 4px 0 var(--paper-kraft));
+@media (min-width: 40rem) {
+  .paperHero .paperMomos {
+    width: 20rem;
+  }
 }
 
-@media (max-width: 34rem) {
-  .paperMomos svg {
-    width: 38%;
-    max-width: 112px;
-    height: auto;
+@media (min-width: 72rem) {
+  .paperHero .paperMomos {
+    position: absolute;
+    top: clamp(1rem, 3vw, 2.5rem);
+    left: calc(100% + clamp(2rem, 4vw, 4rem));
+    width: clamp(18rem, 100vw - 56rem, 30rem);
+    margin: 0;
   }
 }
 

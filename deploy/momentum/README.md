@@ -10,9 +10,13 @@ loader runs were both removed.
 | `workspace.config.yaml` | Live gateway config, byte-identical to the mounted one on 2026-09-22. Real keys are `$OPENROUTER_API_KEY` / `$AI_GATEWAY_API_KEY` from `.env`; the Ollama `api_key: ollama` values are placeholders. |
 | `compose.momentum.yaml` | Overlay on `docker/docker-compose.yaml` + `docker-compose.dood.yaml`: pinned image tags, tailnet listener. |
 | `restart.ps1` | Start or restart the stack. `-WhatIfOnly` renders config and changes nothing. |
+| `health.ps1` | Daily and at-logon check: Docker, UI and `/health/ready` on 2026, backup receipt under 26 h. Re-publishes nginx once if Docker beat Tailscale to the 100.x address after an unclean shutdown. Receipts append to `%LOCALAPPDATA%MomoBothealth.jsonl`; exit 1 means look. |
 | `load-secrets.ps1` | Loads service credentials stored in the gateway volume. Never prints them. |
 | `backup_volume.py` | Consistent snapshot of the gateway volume into an empty volume, safe while live. |
 | `compose.rehearsal.yaml` | Container names for a side-by-side restore rehearsal. |
+| `compose.postgres.yaml` | Overlay adding a Postgres service and pointing the gateway at it. No published port; needs `POSTGRES_PASSWORD` in `.env`. |
+| `workspace.config.postgres.yaml` | Same as `workspace.config.yaml` except `database:` (backend: postgres). Pair with `compose.postgres.yaml` via `restart.ps1 -ConfigPath`. |
+| `POSTGRES-REHEARSAL.md` | SQLite -> Postgres migration receipt and the cutover/rollback runbook for live. |
 
 Needs, outside git: `.env`, `frontend/.env`, `extensions_config.json`, and the
 `<project>_gateway-data` volume (holds the DB, `.jwt_secret`, service credentials).
@@ -43,3 +47,17 @@ project-document rows (hash), 9 users, 156 user files (hash), JWT secret
 
 Before starting a rehearsal, confirm the copy cannot act: no rows in
 `channel_connections`, no pending runs or batches, `scheduler.enabled: false`.
+
+## Encrypted off-machine backup (nightly)
+
+`offsite_backup.py` snapshots `deer-flow_gateway-data` with `backup_volume.py`, then:
+
+- tars the snapshot and encrypts it with AES-256-GCM;
+- writes `gateway-data-<stamp>.tgz.enc` plus a receipt to `OneDrive\MomoBot-Backups`, which syncs off the machine;
+- reads the file back and decrypts it to confirm the hash, then keeps the newest 14.
+
+The key is 32 random bytes at `C:\Users\dillo\Documents\Qwen\.secrets\momobot-backup.key`. It's outside every synced folder and never printed. Keep a second copy in a password manager: without it, the backups can't be restored.
+
+**Restore:** `python offsite_backup.py --restore <file.enc>` decrypts to a local temp `.tgz`, never into the synced folder. Then extract it into an empty volume and rehearse on `:2027` before touching live.
+
+**Schedule:** a Windows scheduled task named "MomoBot offsite backup" runs daily at 03:15 using `pythonw`, so no window opens. It needs Docker Desktop running.

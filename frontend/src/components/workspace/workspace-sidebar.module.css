@@ -1,0 +1,34 @@
+/*
+ * The sidebar's permanent scrap cluster: compass, twine and sunflowers,
+ * overlapping a little, docked above Background work. A short viewport
+ * (a small laptop, a split screen) needs every footer row it can get, so
+ * the cluster drops out below 820px of height.
+ */
+.scraps {
+  padding: 0 6px;
+}
+
+.scraps > span + span {
+  margin-left: -18px;
+}
+
+/* [data-live] (Scraps always sets it) keeps this specific enough to win
+   over scraps.module.css's own unconditional .scraps rule regardless of
+   stylesheet bundling order. */
+@media (max-height: 820px) {
+  .scraps[data-live] {
+    display: none;
+  }
+}
+
+/* The Momentum signature closes the footer, right-aligned and small, so the
+   MomoBot name at the top of the sidebar stands alone. */
+.signature {
+  display: flex;
+  justify-content: flex-end;
+  padding: 2px 8px 2px 0;
+}
+
+.signature [data-size="compact"] {
+  width: 104px;
+}

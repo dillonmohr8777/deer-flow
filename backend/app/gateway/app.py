@@ -15,6 +15,7 @@ from app.gateway.csrf_middleware import CORS_EXPOSED_HEADERS, CSRFMiddleware, ge
 from app.gateway.deps import langgraph_runtime
 from app.gateway.health import READINESS_CHECKPOINTER_CONFIG_ATTR, readiness_payload
 from app.gateway.routers import (
+    admin,
     agents,
     artifacts,
     assistants_compat,
@@ -23,9 +24,11 @@ from app.gateway.routers import (
     capabilities,
     channel_connections,
     channels,
+    clients,
     console,
     features,
     feedback,
+    fleet,
     github_webhooks,
     input_polish,
     integrations,
@@ -966,6 +969,10 @@ This gateway provides runtime endpoints for agent runs plus custom endpoints for
     app.include_router(project_thread_files.router)
     # Trash API is mounted at /api/trash
     app.include_router(trash.router)
+    # Client roster API (+ admin registry import) is mounted at /api/clients
+    app.include_router(clients.router)
+    # Fleet template catalog (read-only) is mounted at /api/fleet
+    app.include_router(fleet.router)
 
     # Deployment-level subagent catalog and admin management.
     app.include_router(subagents.router)
@@ -993,6 +1000,10 @@ This gateway provides runtime endpoints for agent runs plus custom endpoints for
     app.include_router(workspaces.router)
     app.include_router(workspace_branding.router)
     app.include_router(user_preferences.router)
+
+    # System-admin controls (user disable/enable/force-logout, audit log) are
+    # mounted at /api/admin
+    app.include_router(admin.router)
 
     # Feedback API is mounted at /api/threads/{thread_id}/runs/{run_id}/feedback
     app.include_router(feedback.router)

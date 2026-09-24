@@ -68,7 +68,7 @@ test("custom export previews, handles stale content and downloads only after ref
       .getByRole("button", { name: "Export", exact: true }),
   ).toHaveCount(0);
   await page.keyboard.press("Escape");
-  await page.getByRole("tab", { name: "My skills", exact: true }).click();
+  await page.getByRole("button", { name: "My skills", exact: true }).click();
   await page
     .getByRole("button", { name: "View details demo", exact: true })
     .click();
@@ -133,7 +133,7 @@ test("mobile manifest blockers are readable and cannot download", async ({
     }),
   );
   await page.goto("/workspace/capabilities?tab=skills");
-  await page.getByRole("tab", { name: "My skills", exact: true }).click();
+  await page.getByRole("button", { name: "My skills", exact: true }).click();
   await page
     .getByRole("button", { name: "View details demo", exact: true })
     .click();
@@ -143,7 +143,7 @@ test("mobile manifest blockers are readable and cannot download", async ({
     exact: true,
   });
   await expect(
-    dialog.getByText("This package cannot be exported"),
+    dialog.getByText("This package can't be exported"),
   ).toBeVisible();
   await expect(
     dialog.getByRole("button", { name: "Download .skill" }),

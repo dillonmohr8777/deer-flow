@@ -1,0 +1,34 @@
+/* Phone-width scroll shadows on the tab strip. The `local` covers scroll with
+   the tabs and hide the fixed `scroll` shadows at each real edge, so a shadow
+   only shows where more tabs sit off-screen. */
+@media (max-width: 767px) {
+  .tabFade {
+    background:
+      linear-gradient(to right, var(--color-sidebar) 30%, transparent) left /
+        24px 100%,
+      linear-gradient(to left, var(--color-sidebar) 30%, transparent) right /
+        24px 100%,
+      linear-gradient(
+          to right,
+          color-mix(in oklab, var(--color-foreground) 16%, transparent),
+          transparent
+        )
+        left / 12px 100%,
+      linear-gradient(
+          to left,
+          color-mix(in oklab, var(--color-foreground) 16%, transparent),
+          transparent
+        )
+        right / 12px 100%;
+    background-color: var(--color-sidebar);
+    background-repeat: no-repeat;
+    background-attachment: local, local, scroll, scroll;
+  }
+}
+
+/* Radix ScrollArea wraps content in display: table (inline style), which
+   sizes the panel to its widest child; the theme previews then pushed the
+   whole section past a phone-width dialog. Block layout fits the column. */
+.panel [data-radix-scroll-area-viewport] > div {
+  display: block !important;
+}

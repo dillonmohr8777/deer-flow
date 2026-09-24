@@ -67,7 +67,8 @@ def _run_gateway_flow(mode: str, monkeypatch: pytest.MonkeyPatch) -> dict[str, A
     checkpointer = InMemorySaver()
     app.state.store = store
     app.state.checkpointer = checkpointer
-    app.state.thread_store = MemoryThreadMetaStore(store)
+    # The thread row exists (read routes require one); owner checks are stubbed.
+    app.state.thread_store.get = AsyncMock(return_value={"thread_id": _THREAD_ID, "status": "idle"})
     app.state.checkpoint_channel_mode = mode
     app.state.run_event_store = SimpleNamespace()
     app.include_router(threads.router)
@@ -169,7 +170,7 @@ def test_full_mode_gateway_rejects_delta_thread_with_409(_stub_app_config, monke
     checkpointer = InMemorySaver()
     app.state.store = store
     app.state.checkpointer = checkpointer
-    app.state.thread_store.get = AsyncMock(return_value=None)
+    app.state.thread_store.get = AsyncMock(return_value={"thread_id": _THREAD_ID, "status": "idle"})
     app.state.checkpoint_channel_mode = "full"
     app.state.run_event_store = SimpleNamespace()
     app.state.run_manager = RunManager(store=MemoryRunStore())

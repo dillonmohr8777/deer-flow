@@ -13,6 +13,7 @@ from deerflow.persistence.organizations.resolution import organization_from_owne
 from deerflow.persistence.run.model import RunRow
 from deerflow.persistence.subagent_batches.model import SubagentBatchItemRow, SubagentBatchRow
 from deerflow.persistence.thread_meta.model import ThreadMetaRow
+from deerflow.runtime.user_context import resolve_organization_id
 from deerflow.subagents.acceptance_checks import AcceptanceVerdict, validate_acceptance_verdict
 from deerflow.subagents.batch_runtime import BatchItemInput
 from deerflow.subagents.report_contract import normalize_acceptance_criteria
@@ -57,6 +58,21 @@ _ITEM_PUBLIC_FIELDS = (
     "updated_at",
 )
 _ITEM_TIMESTAMP_FIELDS = ("started_at", "completed_at", "created_at", "updated_at")
+
+
+def _batch_organization_visible(batch: SubagentBatchRow) -> bool:
+    """Defense-in-depth beside every existing ``user_id`` ownership check.
+
+    ``persistence/AGENTS.md``: add the organization filter only when
+    :func:`resolve_organization_id` is non-null (internal callers, the batch
+    worker's recovery/claim loop, and background work keep the plain
+    ``user_id`` filter alone). Strict equality intentionally excludes a
+    NULL-organization (quarantined, pre-rebackfill) row even when its
+    ``user_id`` matches -- the same quarantine semantics ``organization_for_write``
+    and the M3 migration strategy use elsewhere.
+    """
+    organization_id = resolve_organization_id()
+    return organization_id is None or batch.organization_id == organization_id
 
 
 class SubagentBatchRepository:
@@ -197,25 +213,21 @@ class SubagentBatchRepository:
     async def get_batch(self, batch_id: str, *, user_id: str) -> dict[str, Any] | None:
         async with self._sf() as session:
             batch = await session.get(SubagentBatchRow, batch_id)
-            if batch is None or batch.user_id != user_id:
+            if batch is None or batch.user_id != user_id or not _batch_organization_visible(batch):
                 return None
             return await self._with_counts(session, batch)
 
     async def list_by_thread(self, thread_id: str, *, user_id: str, limit: int = 20) -> list[dict[str, Any]]:
         async with self._sf() as session:
-            rows = list(
-                (
-                    await session.execute(
-                        select(SubagentBatchRow)
-                        .where(
-                            SubagentBatchRow.thread_id == thread_id,
-                            SubagentBatchRow.user_id == user_id,
-                        )
-                        .order_by(SubagentBatchRow.created_at.desc(), SubagentBatchRow.id.desc())
-                        .limit(limit)
-                    )
-                ).scalars()
+            stmt = select(SubagentBatchRow).where(
+                SubagentBatchRow.thread_id == thread_id,
+                SubagentBatchRow.user_id == user_id,
             )
+            organization_id = resolve_organization_id()
+            if organization_id is not None:
+                stmt = stmt.where(SubagentBatchRow.organization_id == organization_id)
+            stmt = stmt.order_by(SubagentBatchRow.created_at.desc(), SubagentBatchRow.id.desc()).limit(limit)
+            rows = list((await session.execute(stmt)).scalars())
             return [await self._with_counts(session, row) for row in rows]
 
     async def list_items(
@@ -231,7 +243,7 @@ class SubagentBatchRepository:
     ) -> list[dict[str, Any]] | None:
         async with self._sf() as session:
             batch = await session.get(SubagentBatchRow, batch_id)
-            if batch is None or batch.user_id != user_id:
+            if batch is None or batch.user_id != user_id or not _batch_organization_visible(batch):
                 return None
             stmt = select(SubagentBatchItemRow).where(SubagentBatchItemRow.batch_id == batch_id)
             if status is not None:
@@ -540,7 +552,7 @@ class SubagentBatchRepository:
         now = datetime.now(UTC)
         async with self._sf() as session:
             batch = await session.get(SubagentBatchRow, batch_id, with_for_update=True)
-            if batch is None or batch.user_id != user_id:
+            if batch is None or batch.user_id != user_id or not _batch_organization_visible(batch):
                 return None
             if action == "pause" and batch.status in ("queued", "running"):
                 batch.status = "paused"

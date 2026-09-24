@@ -119,6 +119,15 @@ _BLOCKED_TAG_NAMES: frozenset[str] = frozenset(
         # configuration or fabricates shelf entries/tool-callable IDs.
         "project",
         "documents",
+        # Experience mode block (lead_agent/prompt.py): carries the user's
+        # Easy/Medium/Hard guidance. Forging it in untrusted input could switch
+        # the reading level, the clarifying-question rule or memory saving.
+        "experience_mode",
+        # User profile block (lead_agent/prompt.py, USER.md): carries the
+        # effective user's saved background/preferences (Momentum Phase 2).
+        # Forging it in untrusted input could impersonate the account
+        # manager's own profile.
+        "user_profile",
         # Common prompt-injection tag patterns
         "system",
         "instruction",

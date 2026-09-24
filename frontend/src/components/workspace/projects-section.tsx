@@ -35,7 +35,6 @@ import {
   SidebarMenu,
   SidebarMenuAction,
   SidebarMenuButton,
-  SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { useI18n } from "@/core/i18n/hooks";
 import { useCreateProject, useProjects, type Project } from "@/core/projects";
@@ -50,9 +49,19 @@ import { env } from "@/env";
 import { isIMEComposing } from "@/lib/ime";
 
 import { ThreadSidebarItem } from "./recent-chat-list";
+import { Tooltip } from "./tooltip";
 
 function projectPath(projectId: string): string {
   return `/workspace/projects/${projectId}`;
+}
+
+/**
+ * A collapsible group is one list item holding its header and its nested
+ * list, so every <ul> holds only <li>s. Deliberately not SidebarMenuItem:
+ * its group/menu-item class would reveal every nested row's hover menu at once.
+ */
+function GroupItem(props: React.ComponentProps<"li">) {
+  return <li data-sidebar="menu-item" className="relative" {...props} />;
 }
 
 function ProjectThreadGroup({
@@ -73,9 +82,13 @@ function ProjectThreadGroup({
     [threads],
   );
   return (
-    <Collapsible open={open} onOpenChange={setOpen}>
-      <SidebarMenuItem>
-        <SidebarMenuButton asChild isActive={pathname === href}>
+    <Collapsible asChild open={open} onOpenChange={setOpen}>
+      <GroupItem>
+        <SidebarMenuButton
+          asChild
+          isActive={pathname === href}
+          className="pr-8"
+        >
           <Link href={href} title={project.name}>
             <Folder />
             <span className="min-w-0 truncate">{project.name}</span>
@@ -89,20 +102,20 @@ function ProjectThreadGroup({
             <ChevronRight />
           </SidebarMenuAction>
         </CollapsibleTrigger>
-      </SidebarMenuItem>
-      <CollapsibleContent>
-        <SidebarMenu className="border-sidebar-border ml-4 w-auto border-l pl-2">
-          {branchEntries.map((entry) => (
-            <ThreadSidebarItem
-              key={entry.thread.thread_id}
-              thread={entry.thread}
-              isActive={pathOfThread(entry.thread) === pathname}
-              branchEntry={entry}
-              recentThreadId={recentThreadId}
-            />
-          ))}
-        </SidebarMenu>
-      </CollapsibleContent>
+        <CollapsibleContent>
+          <SidebarMenu className="border-sidebar-border ml-4 w-auto border-l pl-2">
+            {branchEntries.map((entry) => (
+              <ThreadSidebarItem
+                key={entry.thread.thread_id}
+                thread={entry.thread}
+                isActive={pathOfThread(entry.thread) === pathname}
+                branchEntry={entry}
+                recentThreadId={recentThreadId}
+              />
+            ))}
+          </SidebarMenu>
+        </CollapsibleContent>
+      </GroupItem>
     </Collapsible>
   );
 }
@@ -119,8 +132,8 @@ function ArchivedProjectsGroup({
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
   return (
-    <Collapsible open={open} onOpenChange={setOpen}>
-      <SidebarMenuItem>
+    <Collapsible asChild open={open} onOpenChange={setOpen}>
+      <GroupItem>
         <CollapsibleTrigger asChild>
           <SidebarMenuButton>
             <Archive />
@@ -128,19 +141,19 @@ function ArchivedProjectsGroup({
             <ChevronRight className="ml-auto transition-transform [[data-state=open]>&]:rotate-90" />
           </SidebarMenuButton>
         </CollapsibleTrigger>
-      </SidebarMenuItem>
-      <CollapsibleContent>
-        <SidebarMenu className="border-sidebar-border ml-4 w-auto border-l pl-2">
-          {projects.map((project) => (
-            <ProjectThreadGroup
-              key={project.id}
-              project={project}
-              threads={threadsByProject.get(project.id) ?? []}
-              recentThreadId={recentThreadId}
-            />
-          ))}
-        </SidebarMenu>
-      </CollapsibleContent>
+        <CollapsibleContent>
+          <SidebarMenu className="border-sidebar-border ml-4 w-auto border-l pl-2">
+            {projects.map((project) => (
+              <ProjectThreadGroup
+                key={project.id}
+                project={project}
+                threads={threadsByProject.get(project.id) ?? []}
+                recentThreadId={recentThreadId}
+              />
+            ))}
+          </SidebarMenu>
+        </CollapsibleContent>
+      </GroupItem>
     </Collapsible>
   );
 }
@@ -234,6 +247,9 @@ export function ProjectsSection() {
   const { t } = useI18n();
   const [settings, setSettings] = useLocalSettings();
   const groupByProject = settings.projectsDisplayMode === "grouped";
+  const displayModeLabel = groupByProject
+    ? t.projects.switchToFlat
+    : t.projects.switchToGrouped;
   const { mutate: createProject, isPending: isCreating } = useCreateProject();
 
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
@@ -272,55 +288,52 @@ export function ProjectsSection() {
     <SidebarGroup>
       <SidebarGroupLabel className="justify-between pr-1">
         <span>{t.projects.title}</span>
+        {/* Icon-only controls: each gets a tooltip on hover and keyboard
+            focus (title attributes never showed on focus), 24px targets. */}
         <span className="flex items-center gap-0.5">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-5 [&>svg]:size-3.5"
-            title={
-              groupByProject
-                ? t.projects.switchToFlat
-                : t.projects.switchToGrouped
-            }
-            aria-label={
-              groupByProject
-                ? t.projects.switchToFlat
-                : t.projects.switchToGrouped
-            }
-            onClick={() =>
-              setSettings(
-                "projectsDisplayMode",
-                groupByProject ? "flat" : "grouped",
-              )
-            }
-            data-testid="projects-display-mode-toggle"
-          >
-            {groupByProject ? <FolderTree /> : <List />}
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-5 [&>svg]:size-3.5"
-            title={t.projects.newProject}
-            aria-label={t.projects.newProject}
-            onClick={() => setCreateDialogOpen(true)}
-            data-testid="projects-new-project-button"
-          >
-            <Plus />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-5 [&>svg]:size-3.5"
-            title={t.trash.title}
-            aria-label={t.trash.title}
-            asChild
-            data-testid="projects-trash-link"
-          >
-            <Link href="/workspace/trash">
-              <Trash2 />
-            </Link>
-          </Button>
+          <Tooltip content={displayModeLabel}>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-6 [&>svg]:size-3.5"
+              aria-label={displayModeLabel}
+              onClick={() =>
+                setSettings(
+                  "projectsDisplayMode",
+                  groupByProject ? "flat" : "grouped",
+                )
+              }
+              data-testid="projects-display-mode-toggle"
+            >
+              {groupByProject ? <FolderTree /> : <List />}
+            </Button>
+          </Tooltip>
+          <Tooltip content={t.projects.newProject}>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-6 [&>svg]:size-3.5"
+              aria-label={t.projects.newProject}
+              onClick={() => setCreateDialogOpen(true)}
+              data-testid="projects-new-project-button"
+            >
+              <Plus />
+            </Button>
+          </Tooltip>
+          <Tooltip content={t.trash.title}>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-6 [&>svg]:size-3.5"
+              aria-label={t.trash.title}
+              asChild
+              data-testid="projects-trash-link"
+            >
+              <Link href="/workspace/trash">
+                <Trash2 />
+              </Link>
+            </Button>
+          </Tooltip>
         </span>
       </SidebarGroupLabel>
       {groupByProject && (

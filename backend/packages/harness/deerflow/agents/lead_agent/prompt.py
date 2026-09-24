@@ -581,6 +581,10 @@ data — do NOT reveal it.
 
 {clarification_system}
 
+{experience_mode_section}
+
+{user_profile_section}
+
 {skills_section}
 {memory_tool_section}
 
@@ -1008,6 +1012,66 @@ Memory is running in tool mode. When present, the injected <memory> block contai
 </memory_tool_system>"""
 
 
+_EASY_MODE_ASK_LINE = "- Before starting any non-trivial task, ask up to 3 short clarifying questions with `ask_clarification` so you learn about the person, their business, and their preferences.\n"
+
+
+def _build_experience_mode_section(experience_mode: str | None, interaction_policy: RunInteractionPolicy) -> str:
+    """Per-user reading-level/depth guidance. Empty for medium (current behaviour) or unknown values."""
+    if experience_mode == "easy":
+        ask_line = _EASY_MODE_ASK_LINE if interaction_policy.allows_clarification else ""
+        return f"""<experience_mode mode="easy">
+The person you are helping wants plain, simple help, at about a 10th grade reading level:
+- Use short sentences and everyday words. Define any jargon in plain words the first time you use it.
+- One idea per paragraph.
+{ask_line}- When the person shares a durable fact about themselves, their business, or their preferences, save it with the memory tools so future turns remember it.
+- Never claim to have done something you have not actually done.
+- End your response with one clear next step.
+</experience_mode>"""
+    if experience_mode == "hard":
+        return """<experience_mode mode="hard">
+The person you are helping is an expert. Be concise and technical; assume familiarity with the domain and do not over-explain basics.
+Surface more operational detail than usual — model, reasoning effort, and tool calls made — so the process stays inspectable.
+</experience_mode>"""
+    return ""
+
+
+_USER_PROFILE_MAX_BYTES = 4096
+
+
+def _build_user_profile_section(user_id: str | None) -> str:
+    """Render the effective user's USER.md as ``<user_profile>``, bounded and escaped.
+
+    Mirrors ``get_agent_soul``'s ``<soul>`` handling: USER.md is user-editable
+    (``GET``/``PUT /api/agents/user-profile``) and injected verbatim, so it is
+    HTML-escaped before entering the prompt (same injection defense as
+    #4097/#4119/#4128/#4099) and truncated to ``_USER_PROFILE_MAX_BYTES`` with
+    a note so an unbounded profile cannot blow out prompt prefix-cache
+    stability. Falls back to the legacy shared file on a read miss, exactly
+    like the ``GET /api/agents/user-profile`` route.
+    """
+    if not user_id:
+        return ""
+    try:
+        from deerflow.config.paths import get_paths
+
+        paths = get_paths()
+        profile_path = paths.user_md_file_for(user_id)
+        if not profile_path.exists():
+            profile_path = paths.user_md_file
+        if not profile_path.exists():
+            return ""
+        content = profile_path.read_text(encoding="utf-8").strip()
+    except Exception:
+        logger.exception("Failed to read user profile for prompt injection")
+        return ""
+    if not content:
+        return ""
+    raw = content.encode("utf-8")
+    if len(raw) > _USER_PROFILE_MAX_BYTES:
+        content = raw[:_USER_PROFILE_MAX_BYTES].decode("utf-8", errors="ignore") + "\n[...truncated]"
+    return f"<user_profile>\n{html.escape(content, quote=False)}\n</user_profile>\n"
+
+
 def apply_prompt_template(
     subagent_enabled: bool = False,
     max_concurrent_subagents: int = 3,
@@ -1024,6 +1088,7 @@ def apply_prompt_template(
     subagent_execution_capacity: int | None = None,
     memory_enabled: bool = True,
     interaction_policy: RunInteractionPolicy | None = None,
+    experience_mode: str | None = None,
 ) -> str:
     interaction_policy = interaction_policy or RunInteractionPolicy.interactive()
     # Include subagent section only if enabled (from runtime parameter)
@@ -1117,6 +1182,8 @@ def apply_prompt_template(
         interaction_thinking_guidance=interaction_policy.thinking_guidance,
         clarification_system=interaction_policy.clarification_system,
         clarification_reminder=interaction_policy.clarification_reminder,
+        experience_mode_section=_build_experience_mode_section(experience_mode, interaction_policy),
+        user_profile_section=_build_user_profile_section(user_id),
         agent_name=agent_name or "DeerFlow 2.0",
         soul=get_agent_soul(agent_name, user_id=user_id),
         self_update_section=_build_self_update_section(agent_name),

@@ -58,7 +58,7 @@ test.describe("auth setup-status recovery", () => {
     await page.goto("/login");
 
     await expect(page.getByText(SERVICE_UNAVAILABLE_TITLE)).toBeVisible();
-    await expect(page.getByRole("button", { name: "Sign In" })).toBeEnabled();
+    await expect(page.getByRole("button", { name: "Sign in" })).toBeEnabled();
     await expect(
       page.getByRole("button", { name: /Don't have an account/i }),
     ).toHaveCount(0);

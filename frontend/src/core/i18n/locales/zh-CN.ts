@@ -1,14 +1,3 @@
-import {
-  CompassIcon,
-  GraduationCapIcon,
-  ImageIcon,
-  MicroscopeIcon,
-  PenLineIcon,
-  ShapesIcon,
-  SparklesIcon,
-  VideoIcon,
-} from "lucide-react";
-
 import type { Translations } from "./types";
 
 export const zhCN: Translations = {
@@ -86,7 +75,7 @@ export const zhCN: Translations = {
       setup: "接入方式",
       notice: "按工作场景发现插件，需要时再连接账号、配置权限。",
       configured: "已配置",
-      nativeHint: "Momentum 已支持 · 需按部署配置",
+      nativeHint: "MomoBot 已支持 · 需按部署配置",
       guideHint: "接入参考 · 尚未连接",
       unknownStatus: "状态不可用",
       notConnected: "未连接",
@@ -94,7 +83,7 @@ export const zhCN: Translations = {
     integrationSkills: "来自插件",
     sharedSkills: "共享技能",
     title: "能力中心",
-    description: "为你的工作添加工具与技能，让 Momentum 更懂你的工作方式。",
+    description: "为你的工作添加工具与技能，让 MomoBot 更懂你的工作方式。",
     plugins: "插件",
     skills: "技能",
     searchPlugins: "搜索插件名称或用途",
@@ -115,6 +104,8 @@ export const zhCN: Translations = {
     pluginHint: "连接常用应用，让 Agent 直接访问资料、处理工作。",
     skillHint: "把常用方法变成技能，在对话中按需使用。",
     noResults: "没有找到匹配的内容",
+    noResultsHint: "试试更短的关键词，或选择全部分类。",
+    skillsLoadFailed: "无法加载技能。",
     larkName: "飞书 / Lark",
     larkDescription: "连接飞书文档、消息、日历与多维表格，在对话中协同办公。",
     larkTag: "办公协作",
@@ -133,6 +124,7 @@ export const zhCN: Translations = {
   // Common
   common: {
     home: "首页",
+    tryAgain: "重试",
     settings: "设置",
     delete: "删除",
     edit: "编辑",
@@ -180,6 +172,8 @@ export const zhCN: Translations = {
 
   runDuration: {
     reasoning: "思考过程",
+    thinkingDeeply: "深度思考中",
+    thoughtFor: (duration) => `思考用时 ${duration}`,
     working: "执行中…",
     completedIn: (duration) => `本次任务耗时 ${duration}`,
     description: "任务总耗时，包括模型推理、工具调用和等待时间。",
@@ -198,13 +192,10 @@ export const zhCN: Translations = {
 
   // Welcome
   welcome: {
-    greeting: "你好，欢迎回来！",
-    description:
-      "告诉 Momentum 你需要什么。主智能体会规划工作，把部分任务交给专家智能体，每次运行都会留下可核查的记录。",
-
+    greeting: "要让团队接手什么工作？",
     createYourOwnSkill: "创建你自己的 Agent SKill",
     createYourOwnSkillDescription:
-      "创建你的 Agent Skill 来释放 Momentum 的潜力。通过自定义技能，Momentum\n可以帮你搜索网络、分析数据，还能为你生成幻灯片、\n网页等作品，几乎可以做任何事情。",
+      "创建你的 Agent Skill 来释放 MomoBot 的潜力。通过自定义技能，MomoBot\n可以帮你搜索网络、分析数据，还能为你生成幻灯片、\n网页等作品，几乎可以做任何事情。",
   },
 
   // Clipboard
@@ -274,7 +265,8 @@ export const zhCN: Translations = {
     favorites: "收藏",
     otherModels: "其他模型",
     noModels: "暂无可用模型",
-    favoriteModel: (displayName, name) => `收藏 ${displayName}（${name}）`,
+    favoriteModel: (label) => `收藏 ${label}`,
+    repeatedName: (position, total) => `第 ${position} 个，共 ${total} 个`,
     sessionOnly: "收藏仅在本次会话中保留。",
   },
 
@@ -339,7 +331,7 @@ export const zhCN: Translations = {
     voiceInputStartLabel: "语音输入",
     voiceInputStopLabel: "停止语音输入",
     voiceInputStart:
-      "语音输入。Momentum 只接收转写文本，音频由浏览器或系统语音服务处理。",
+      "语音输入。MomoBot 只接收转写文本，音频由浏览器或系统语音服务处理。",
     voiceInputStop: "停止语音输入",
     voiceInputListening: "正在聆听... 点击停止语音输入。",
     voiceInputUnsupported:
@@ -369,9 +361,10 @@ export const zhCN: Translations = {
     reasoningEffortMediumDescription: "多层逻辑分析 + 基础验证",
     reasoningEffortHigh: "高",
     reasoningEffortHighDescription: "全维度逻辑推演 + 多路径验证 + 反推校验",
-    surpriseMe: "小惊喜",
-    surpriseMePrompt: "给我一个小惊喜吧",
     followupLoading: "正在生成可能的后续问题...",
+    easyStarterHelp: "一步一步地帮我做一件事",
+    easyStarterExplain: "用简单的话解释一下",
+    easyStarterPlan: "接下来我该做什么？",
     followupConfirmTitle: "发送建议问题？",
     followupConfirmDescription: "当前输入框已有内容，选择发送方式。",
     followupConfirmAppend: "追加并发送",
@@ -394,57 +387,29 @@ export const zhCN: Translations = {
       "已压缩早期上下文。完整聊天记录仍保留，后续模型将基于摘要和最近消息继续。",
     compactSkipped: "当前上下文还不需要压缩。",
     compactFailed: "上下文压缩失败。",
-    suggestions: [
+    startersLabel: "从这里开始",
+    starters: [
       {
-        suggestion: "写作",
-        prompt: "撰写一篇关于[主题]的博客文章",
-        icon: PenLineIcon,
-      },
-      {
-        suggestion: "研究",
-        prompt: "深入浅出的研究一下[主题]，并总结发现。",
-        icon: MicroscopeIcon,
-      },
-      {
-        suggestion: "收集",
-        prompt: "从[来源]收集数据并创建报告。",
-        icon: ShapesIcon,
-      },
-      {
-        suggestion: "学习",
-        prompt: "学习关于[主题]并创建教程。",
-        icon: GraduationCapIcon,
-      },
-    ],
-    suggestionsCreate: [
-      {
-        suggestion: "网页",
-        prompt: "生成一个关于[主题]的网页",
-        icon: CompassIcon,
-      },
-      {
-        suggestion: "图片",
-        prompt: "生成一个关于[主题]的图片",
-        icon: ImageIcon,
-      },
-      {
-        suggestion: "视频",
-        prompt: "生成一个关于[主题]的视频",
-        icon: VideoIcon,
-      },
-      {
-        type: "separator",
-      },
-      {
-        suggestion: "技能",
+        label: "规划客户交付",
         prompt:
-          "我们一起用 skill-creator 技能来创建一个技能吧。先问问我希望这个技能能做什么。",
-        icon: SparklesIcon,
+          "规划 [客户] 本月的交付：我们欠他们什么、每一项由谁负责、哪些被卡住。找不到的信息请直接问我。",
+      },
+      {
+        label: "带来源的调研",
+        prompt:
+          "调研 [主题]，带回我可以核对的来源。把已确认的内容和仍待确认的内容分开。",
+      },
+      {
+        label: "起草客户报告",
+        prompt:
+          "起草 [客户] 本月的报告：成果、花费和下一步。凡是无法核实的数字都要标出来。",
       },
     ],
     pleaseWaitStreaming: "请等待当前响应完成。",
     stopStreamingUnavailable: "你的角色无权停止正在运行的回合。",
     startTurnUnavailable: "你的角色无权开启新的回合。",
+    send: "发送",
+    stopRun: "停止当前回合",
   },
 
   // Sidebar
@@ -564,6 +529,16 @@ export const zhCN: Translations = {
     savedToProject: (name) => `已将「${name}」保存到文件架`,
     shelfNameLabel: "文件架名称",
     viewTrash: "回收站",
+    openTrash: "打开回收站",
+    trashNote: (days) => `移入回收站的文档可在 ${days} 天内恢复。`,
+    documentColumnName: "文档",
+    documentColumnSource: "来源",
+    documentColumnAdded: "添加时间",
+    documentColumnSize: "大小",
+    documentSourceSlack: "Slack 频道",
+    documentSourceUpload: "上传",
+    notFoundHint: "它可能已被删除，或属于其他工作区。",
+    backToChats: "返回对话",
     documentsLoadFailed: "无法加载项目文档",
     threadFilesLoadFailed: "无法加载对话文件",
     interimMemoryNotice:
@@ -573,12 +548,15 @@ export const zhCN: Translations = {
   trash: {
     title: "回收站",
     empty: "回收站为空。",
+    emptyHint: "从项目“文档”页移入回收站的内容会在这里等待。",
     loadFailed: "无法加载回收站",
     retry: "重试",
     originProject: (projectName) => `来自 ${projectName}`,
     unknownProject: "未知项目",
     retentionLeft: (days) =>
       days <= 0 ? "保留期不足 1 天" : `剩余 ${days} 天`,
+    retentionNote: (days) =>
+      `从项目中移除的文档会在这里保留 ${days} 天，之后将被永久删除。`,
     restore: "恢复",
     restoreFailed: "恢复文档失败",
     restoredToast: (name) => `已恢复「${name}」`,
@@ -613,11 +591,11 @@ export const zhCN: Translations = {
     cancelling: "正在取消…",
     cancelFailed: "取消任务失败",
     cancellationRetrying: (attempt) =>
-      `第 ${attempt} 次取消失败；Momentum 将继续重试。`,
+      `第 ${attempt} 次取消失败；MomoBot 将继续重试。`,
     notificationRetrying: (attempt) =>
-      `第 ${attempt} 次聊天通知失败；Momentum 将退避后重试。`,
+      `第 ${attempt} 次聊天通知失败；MomoBot 将退避后重试。`,
     notificationStopped: "聊天通知因反复失败或永久拒绝，已停止重试。",
-    trackingDegraded: "状态检查有所延迟，Momentum 仍在重试。",
+    trackingDegraded: "状态检查有所延迟，MomoBot 仍在重试。",
     viewDetails: "查看详情",
     hideDetails: "收起详情",
     detailsFailed: "无法加载任务详情",
@@ -671,6 +649,8 @@ export const zhCN: Translations = {
 
   // 定时任务
   scheduledTasks: {
+    lede: "按时运行的提示词。每次运行都会在下方留下记录。",
+    empty: "还没有定时任务。选择上方的模板，或写下提示词并设定运行时间。",
     scheduleType: {
       cron: "重复",
       once: "单次",
@@ -713,10 +693,11 @@ export const zhCN: Translations = {
     cronHelp: "打开 crontab.guru",
     create: {
       title: "创建定时任务",
+      newTask: "新建定时任务",
       taskTitle: "任务标题",
       prompt: "提示词",
       agent: "Agent",
-      leadAgent: "默认 Agent（lead_agent）",
+      leadAgent: "默认 Agent",
       submit: "创建",
       fillRequired: "请填写所有必填项",
     },
@@ -726,7 +707,7 @@ export const zhCN: Translations = {
       threadIdPlaceholder: "线程 ID",
       reuseNoticeTitle: "使用该线程的历史对话",
       reuseNoticeDescription:
-        "如果触发时该线程正在运行，Momentum 会将本次执行排队，并在线程空闲后启动；超过配置的最长等待时间后会标记为失败。",
+        "如果触发时该线程正在运行，MomoBot 会将本次执行排队，并在线程空闲后启动；超过配置的最长等待时间后会标记为失败。",
     },
     search: {
       placeholder: "搜索任务标题或提示词",
@@ -734,6 +715,8 @@ export const zhCN: Translations = {
       noResults: "没有符合搜索内容和筛选条件的任务。",
     },
     filters: {
+      status: "状态",
+      type: "类型",
       allStatuses: "全部状态",
       enabled: "已启用",
       paused: "已暂停",
@@ -760,6 +743,9 @@ export const zhCN: Translations = {
       noSelection: "未选择定时任务",
       filteredByThread: "按线程筛选：{id}",
       loadFailed: "加载定时任务失败",
+      notScheduled: "未安排",
+      never: "从未",
+      none: "无",
     },
     actions: {
       edit: "编辑",
@@ -816,21 +802,25 @@ export const zhCN: Translations = {
     },
     recipes: {
       label: "快速创建",
-      trending: {
-        title: "GitHub Trending 日榜",
-        desc: "总结今日 Trending 前十仓库",
+      morningBrief: {
+        title: "每日客户晨报",
+        desc: "工作日早上：按客户列出待回复、待审批和停滞的工作",
       },
-      news: {
-        title: "每日科技新闻摘要",
-        desc: "收集并总结当日科技要闻",
+      clientReport: {
+        title: "每周客户报告草稿",
+        desc: "每周五下午：为一位客户起草附带来源的报告，供审阅",
       },
-      issues: {
-        title: "GitHub Issue 分诊",
-        desc: "分诊某仓库的 open issues（填入 {{repo}}）",
+      siteWatch: {
+        title: "每日网站巡检",
+        desc: "每天早上：哪些客户网站无法访问或有变化",
       },
-      weekly: {
-        title: "每周周报",
-        desc: "每周一汇总一周工作",
+      visibility: {
+        title: "每周 SEO 与 AI 答案检查",
+        desc: "每周三：搜索排名与 AI 答案提及情况，并给出改进建议",
+      },
+      pipeline: {
+        title: "周一销售管道与跟进",
+        desc: "每周一：在谈项目、逾期线索和跟进草稿",
       },
     },
   },
@@ -844,6 +834,7 @@ export const zhCN: Translations = {
     emptyDescription: "创建你的第一个自定义智能体，设置专属系统提示词。",
     featureDisabledTitle: "智能体功能未启用",
     featureDisabledDescription: "该功能未在此服务器上启用，请联系管理员。",
+    loadFailed: "无法加载智能体。",
     chat: "对话",
     delete: "删除",
     deleteConfirm: "确定要删除该智能体吗？此操作不可撤销。",
@@ -868,13 +859,13 @@ export const zhCN: Translations = {
     save: "保存智能体",
     saving: "正在保存智能体...",
     saveRequested:
-      "已提交保存请求，Momentum 正在根据当前对话生成并保存初版智能体。",
+      "已提交保存请求，MomoBot 正在根据当前对话生成并保存初版智能体。",
     saveHint:
       "你可以在右上角的菜单里随时保存这个智能体，就算目前还只是初稿也可以。",
     saveCommandMessage:
       "请现在根据我们目前已经讨论的全部内容保存这个自定义智能体。这就是我明确的保存确认。如果仍有少量细节缺失，请根据上下文做出合理假设，生成一份简洁的英文初始 SOUL.md，并直接调用 setup_agent，不要再向我索要额外确认。",
     agentCreatedPendingRefresh:
-      "智能体已创建，但 Momentum 暂时还无法读取到它。请稍后刷新当前页面。",
+      "智能体已创建，但 MomoBot 暂时还无法读取到它。请稍后刷新当前页面。",
     more: "更多操作",
     agentCreated: "智能体已创建！",
     startChatting: "开始对话",
@@ -948,6 +939,7 @@ export const zhCN: Translations = {
       `确定删除“${title}”吗？这将删除对话及其文件，此操作不可撤销。`,
     deleteFailed: "删除对话失败，请重试。",
     noActiveChats: "暂无近期会话",
+    noActiveChatsHint: "你与团队开启的会话会显示在这里，最新的在最前。",
     activeChats: "近期会话",
     archivedChats: "已归档",
     archiveChat: "归档",
@@ -1033,10 +1025,10 @@ export const zhCN: Translations = {
       already_bound:
         "微信提示此机器人已连接。请关闭弹窗检查连接状态，或在手机上选择其他机器人。",
       saved: "Token 已安全保存",
-      savedDescription: "Momentum 已在服务器保存 Token 并启动微信渠道。",
+      savedDescription: "MomoBot 已在服务器保存 Token 并启动微信渠道。",
       bindTitle: "最后一步：绑定你的账号",
       bindDescription:
-        "将下方指令发送给微信中的机器人，即可绑定到你的 Momentum 账号。",
+        "将下方指令发送给微信中的机器人，即可绑定到你的 MomoBot 账号。",
       bindWaiting: "正在等待微信中的绑定消息…",
       bindLoading: "正在准备账号绑定…",
       bindFailed: "Token 已保存，但账号绑定暂时不可用，请重试。",
@@ -1051,7 +1043,7 @@ export const zhCN: Translations = {
 
       login: "扫码连接",
       manual: "使用 Token",
-      description: "将微信连接到你的 Momentum 工作空间。",
+      description: "将微信连接到你的 MomoBot 工作空间。",
       loading: "正在生成二维码…",
       imageTitle: "微信登录二维码",
       scan: "请使用微信扫描二维码，并在手机上确认登录。",
@@ -1076,21 +1068,21 @@ export const zhCN: Translations = {
     saveAndConnect: "保存并连接",
     saveChanges: "保存修改",
     descriptions: {
-      buzz: "通过 Momentum 智能体接收 Buzz 频道消息和私聊。",
-      telegram: "通过 Momentum Bot 接收 Telegram 私聊消息。",
+      buzz: "通过 MomoBot 智能体接收 Buzz 频道消息和私聊。",
+      telegram: "通过 MomoBot Bot 接收 Telegram 私聊消息。",
       slack: "接收 Slack 工作区消息和提及。",
-      discord: "通过 Momentum Bot 接收 Discord 服务器消息。",
-      feishu: "通过 Momentum 应用接收飞书和 Lark 消息。",
-      dingtalk: "通过 Momentum Bot 接收钉钉 Stream Push 消息。",
-      wechat: "通过 Momentum Bot 接收微信 iLink 消息。",
-      wecom: "通过 Momentum AI Bot 接收企业微信消息。",
+      discord: "通过 MomoBot Bot 接收 Discord 服务器消息。",
+      feishu: "通过 MomoBot 应用接收飞书和 Lark 消息。",
+      dingtalk: "通过 MomoBot Bot 接收钉钉 Stream Push 消息。",
+      wechat: "通过 MomoBot Bot 接收微信 iLink 消息。",
+      wecom: "通过 MomoBot AI Bot 接收企业微信消息。",
     },
     connectedAs: (name: string) => `已连接为 ${name}。`,
   },
 
   // Page titles (document title)
   pages: {
-    appName: "Momentum",
+    appName: "MomoBot",
     chats: "对话",
     newChat: "新对话",
     untitled: "未命名",
@@ -1124,7 +1116,7 @@ export const zhCN: Translations = {
     writeFile: "写入文件",
     clickToViewContent: "点击查看文件内容",
     writeTodos: "更新 To-do 列表",
-    skillInstallTooltip: "安装技能并使其可在 Momentum 中使用",
+    skillInstallTooltip: "安装技能并使其可在 MomoBot 中使用",
     browserNavigate: (url: string) => `在浏览器中打开 ${url}`,
     browserNavigateGeneric: "在浏览器中打开页面",
     browserClick: "在浏览器中点击元素",
@@ -1219,7 +1211,7 @@ export const zhCN: Translations = {
     noResults: "未找到结果。",
     actions: "操作",
     keyboardShortcuts: "键盘快捷键",
-    keyboardShortcutsDescription: "使用键盘快捷键更快地操作 Momentum。",
+    keyboardShortcutsDescription: "使用键盘快捷键更快地操作 MomoBot。",
     openCommandPalette: "打开命令面板",
     toggleSidebar: "切换侧边栏",
   },
@@ -1227,7 +1219,7 @@ export const zhCN: Translations = {
   // Settings
   settings: {
     title: "设置",
-    description: "根据你的偏好调整 Momentum 的界面和行为。",
+    description: "根据你的偏好调整 MomoBot 的界面和行为。",
     models: {
       title: "模型",
       description: "管理供用户选择的共享模型。服务器配置中的模型为只读。",
@@ -1271,17 +1263,41 @@ export const zhCN: Translations = {
     sections: {
       models: "模型",
       account: "账号",
+      security: "安全",
       appearance: "外观",
       channels: "渠道",
       memory: "记忆",
       subagents: "子智能体",
       notification: "通知",
+      experience: "使用模式",
+      audit: "审计",
       about: "关于",
+    },
+    audit: {
+      title: "审计日志",
+      description: "整个部署范围内的安全和管理操作记录，只读。",
+      adminOnly: "只有管理员可以查看审计日志。",
+      loading: "正在加载审计事件…",
+      failed: "无法加载审计事件。",
+      empty: "暂无审计事件。",
+      loadMore: "加载更多",
+      filterActionPrefix: "操作前缀",
+      filterActor: "操作人",
+      filterSince: "起始时间",
+      filterUntil: "结束时间",
+      apply: "应用",
+      clear: "清除",
+      columnTime: "时间",
+      columnAction: "操作",
+      columnActor: "操作人",
+      columnTarget: "对象",
+      columnOutcome: "结果",
+      columnIp: "IP",
     },
     memory: {
       title: "记忆",
       description:
-        "Momentum 会在后台不断从你的对话中自动学习。这些记忆能帮助 Momentum 更好地理解你，并提供更个性化的体验。",
+        "MomoBot 会在后台不断从你的对话中自动学习。这些记忆能帮助 MomoBot 更好地理解你，并提供更个性化的体验。",
       empty: "暂无可展示的记忆数据。",
       rawJson: "原始 JSON",
       exportButton: "导出记忆",
@@ -1445,7 +1461,7 @@ export const zhCN: Translations = {
     },
     channels: {
       title: "渠道",
-      description: "连接可在浏览器外向 Momentum 发送消息的即时通讯账号。",
+      description: "连接可在浏览器外向 MomoBot 发送消息的即时通讯账号。",
       disabled:
         "当前服务器未启用渠道连接。请联系管理员开启 channel_connections。",
     },
@@ -1496,7 +1512,7 @@ export const zhCN: Translations = {
         changeAppButton: "切换飞书 Bot",
         changeAppTitle: "切换到其他飞书 App",
         changeAppDescription:
-          "把你的 Momentum 账号指向另一个 Lark/飞书 App。只影响你自己的账号，不影响其他用户。",
+          "把你的 MomoBot 账号指向另一个 Lark/飞书 App。只影响你自己的账号，不影响其他用户。",
         changeAppIdLabel: "App ID",
         changeAppSecretLabel: "App Secret",
         changeAppAuthResetNote:
@@ -1508,9 +1524,9 @@ export const zhCN: Translations = {
         brandLark: "Lark",
         connectionStarted: "连接链接已打开",
         connectionReady: "连接准备已完成，正在打开授权链接",
-        authStarted: "授权页已打开，Momentum 会自动检测授权结果。",
+        authStarted: "授权页已打开，MomoBot 会自动检测授权结果。",
         authorizationStillPending:
-          "还没有检测到授权完成。请在浏览器完成授权；Momentum 会继续自动检测。如果页面没有更新，可点击“我已完成授权”。",
+          "还没有检测到授权完成。请在浏览器完成授权；MomoBot 会继续自动检测。如果页面没有更新，可点击“我已完成授权”。",
         permissionTitle: "授权范围",
         permissionDescription:
           "默认只完成基础登录，不会申请任何业务权限。按需在这里勾选要授权的业务域；已连接用户可以重新授权继续追加（scope 会累积）。",
@@ -1614,10 +1630,10 @@ export const zhCN: Translations = {
           "首次连接需要在浏览器里完成一次飞书确认。打开下面的链接按提示完成；完成后回到这里继续授权。",
         openAuthLinkTitle: "在浏览器中完成飞书授权",
         openAuthLinkDescription:
-          "打开下面的链接完成授权。Momentum 会持续自动检测，并在授权通过后保存连接状态。",
+          "打开下面的链接完成授权。MomoBot 会持续自动检测，并在授权通过后保存连接状态。",
         waitingAuthTitle: "等待飞书授权完成",
         waitingAuthDescription:
-          "请在刚打开的浏览器页面完成授权。Momentum 会自动更新这里的状态；下方按钮只是兜底操作。",
+          "请在刚打开的浏览器页面完成授权。MomoBot 会自动更新这里的状态；下方按钮只是兜底操作。",
         openAuthLink: "打开链接",
         copyAuthLink: "复制链接",
         completeAuth: "我已完成授权",
@@ -1642,7 +1658,7 @@ export const zhCN: Translations = {
           "本次连接流程已向飞书验证当前用户授权。需要刷新授权或追加权限时，可重新连接。",
         authNextTitle: "下一步完成浏览器授权",
         authNextDescription:
-          "点击“连接飞书”后，Momentum 会先检查当前状态；未连接或授权过期时会拉起浏览器授权。",
+          "点击“连接飞书”后，MomoBot 会先检查当前状态；未连接或授权过期时会拉起浏览器授权。",
       },
     },
     skills: {
@@ -1703,7 +1719,7 @@ export const zhCN: Translations = {
       createSkill: "新建技能",
       emptyTitle: "还没有技能",
       emptyDescription:
-        "将你的 Agent Skill 文件夹放在 Momentum 根目录下的 `/skills/custom` 文件夹中。",
+        "将你的 Agent Skill 文件夹放在 MomoBot 根目录下的 `/skills/custom` 文件夹中。",
       emptyButton: "创建你的第一个技能",
       adminRequired: "需要管理员权限才能管理 Agent Skill。",
       installAdminRequired: "需要管理员权限才能安装 Agent Skill。",
@@ -1716,15 +1732,33 @@ export const zhCN: Translations = {
     notification: {
       title: "通知",
       description:
-        "Momentum 只会在窗口不活跃时发送完成通知，特别适合长时间任务：你可以先去做别的事，完成后会收到提醒。",
+        "MomoBot 只会在窗口不活跃时发送完成通知，特别适合长时间任务：你可以先去做别的事，完成后会收到提醒。",
       requestPermission: "请求通知权限",
       deniedHint:
         "通知权限已被拒绝。可在浏览器的网站设置中重新开启，以接收完成提醒。",
       testButton: "发送测试通知",
-      testTitle: "Momentum",
+      testTitle: "MomoBot",
       testBody: "这是一条测试通知。",
       notSupported: "当前浏览器不支持通知功能。",
       disableNotification: "关闭通知",
+    },
+    experience: {
+      title: "使用模式",
+      description:
+        "选择 MomoBot 与你交流的方式，以及它会问多少问题。随时可以更改。",
+      easyLabel: "简单",
+      easyTagline: "引导我",
+      easyDescription: "用简单的语言、简短的回答，并通过几个小问题更了解你。",
+      mediumLabel: "均衡",
+      mediumTagline: "均衡",
+      mediumDescription: "当前的 MomoBot 体验，保持不变。",
+      hardLabel: "专家",
+      hardTagline: "专家",
+      hardDescription: "简洁、专业，展示更多模型和工具使用的细节。",
+      chooserTitle: "你喜欢哪种工作方式？",
+      chooserSubtitle: "先选一个开始。之后可以在设置中更改。",
+      chooserSkip: "暂时跳过",
+      saved: "已保存",
     },
     account: {
       profileTitle: "个人信息",
@@ -1735,7 +1769,7 @@ export const zhCN: Translations = {
       changePasswordDescription: "更新你的账号密码。",
       ssoPasswordDescription: "密码由你的 SSO 提供商管理。",
       ssoPasswordMessage:
-        "此账号通过 {provider} 登录，Momentum 无法在此管理或修改密码。请前往你的 SSO 提供商账号设置中进行操作。",
+        "此账号通过 {provider} 登录，MomoBot 无法在此管理或修改密码。请前往你的 SSO 提供商账号设置中进行操作。",
       currentPassword: "当前密码",
       newPassword: "新密码",
       confirmNewPassword: "确认新密码",
@@ -1747,28 +1781,60 @@ export const zhCN: Translations = {
       updatePassword: "修改密码",
       signOut: "退出登录",
     },
+    security: {
+      title: "双因素认证",
+      description: "使用验证器应用，在密码登录之外再加一道验证。",
+      statusEnabled: "双因素认证已开启。",
+      statusDisabledDescription: "当前未开启。开启后可以多一层保护。",
+      enableButton: "开启双因素认证",
+      disableButton: "关闭双因素认证",
+      enrollScanTitle: "扫描这个二维码",
+      enrollScanInstructions: "用验证器应用扫描二维码，或手动输入密钥。",
+      enrollManualEntryLabel: "无法扫描？手动输入这个密钥：",
+      enrollCodeLabel: "输入应用里的 6 位验证码",
+      enrollCodePlaceholder: "123456",
+      enrollConfirmButton: "确认并开启",
+      enrollCancelButton: "取消",
+      enrollInvalidCode: "验证码不正确，请检查应用后重试。",
+      recoveryCodesTitle: "保存好你的恢复码",
+      recoveryCodesDescription:
+        "每个恢复码只能用一次，在无法使用验证器应用时可以用来登录。请妥善保存，之后不会再显示。",
+      recoveryCodesCopyButton: "复制恢复码",
+      recoveryCodesCopied: "已复制",
+      recoveryCodesDoneButton: "我已保存",
+      disableTitle: "关闭双因素认证",
+      disablePasswordLabel: "密码",
+      disableCodeLabel: "6 位验证码",
+      disableRecoveryCodeLabel: "恢复码",
+      disableUseRecoveryCodeLink: "改用恢复码",
+      disableUseCodeLink: "改用验证器应用",
+      disableSubmitButton: "关闭",
+      disableCancelButton: "取消",
+      disableIncorrect: "密码或验证码不正确。",
+      networkError: "网络错误，请重试。",
+    },
     acknowledge: {
       emptyTitle: "致谢",
       emptyDescription: "相关的致谢信息会展示在这里。",
     },
   },
   login: {
-    signInTitle: "登录你的账号",
-    createAccountTitle: "创建新账号",
+    signInTitle: "登录 MomoBot",
+    createAccountTitle: "创建你的 MomoBot 账号",
     email: "邮箱",
     emailPlaceholder: "you@example.com",
     password: "密码",
     passwordPlaceholder: "•••••••",
     rememberMe: "保持登录",
     rememberMeDescription:
-      "下次打开 Momentum 时尽量保持当前会话，仅保存邮箱，不保存密码。",
+      "下次打开 MomoBot 时尽量保持当前会话，仅保存邮箱，不保存密码。",
     pleaseWait: "请稍候...",
     signIn: "登录",
     createAccount: "创建账号",
     createAdminAccount: "创建管理员账号",
     adminSetupRequiredTitle: "需要先完成管理员初始化",
     adminSetupRequiredDescription:
-      "Momentum 需要先创建管理员账号，然后才能创建新的普通账号。",
+      "MomoBot 需要先创建管理员账号，然后才能创建新的普通账号。",
     orContinueWith: "或使用以下方式登录",
     ssoHint: "如果你的账号使用单点登录（SSO），请改用下方的选项登录。",
     continueWith: (provider: string) => `使用 ${provider} 登录`,
@@ -1787,6 +1853,26 @@ export const zhCN: Translations = {
       sso_account_exists:
         "该邮箱对应的账号已存在。请使用密码登录或联系管理员。",
       sso_not_allowed: "你的账号不允许使用 SSO 登录。请联系管理员。",
+    },
+    mfaTitle: "双因素验证",
+    mfaDescription: "输入验证器应用中的 6 位验证码。",
+    mfaCodePlaceholder: "123456",
+    mfaRecoveryCodePlaceholder: "xxxxx-xxxxx",
+    mfaUseRecoveryCode: "改用恢复码",
+    mfaUseCode: "改用验证器应用",
+    mfaVerifyButton: "验证",
+    mfaBackToLogin: "返回登录",
+    mfaInvalidCode: "验证码不正确，请重试。",
+  },
+  commandCenter: {
+    clientAgents: {
+      title: "智能体",
+      loading: "正在加载智能体…",
+      empty: "还没有智能体。",
+      selectPlaceholder: "从模板添加…",
+      add: "添加",
+      adding: "添加中…",
+      addError: "添加失败，请重试。",
     },
   },
 };

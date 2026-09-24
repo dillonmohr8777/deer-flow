@@ -1,0 +1,84 @@
+{
+  "title": "How to write pages that answer engines want to quote",
+  "dek": "The structure and habits that make a page easy for an AI system to find, trust and repeat word for word.",
+  "slug": "write-pages-answer-engines-quote",
+  "date": "2026-09-20",
+  "author": { "name": "Dillon Mohr", "title": "AI Marketing Director" },
+  "keywords": [
+    "how to write for AI search",
+    "quotable content",
+    "answer engine content",
+    "AI friendly writing",
+    "content structure SEO"
+  ],
+  "summary": "Pages that get quoted by AI systems share a shape: a plain answer in the first few sentences, headings phrased as real questions, specific facts instead of vague claims, and a named author with a date. Write for the person skimming first, then let the AI system follow the same clear structure to the same answer.",
+  "section": "Search and Growth",
+  "hero": {
+    "src": "/momentum/daily/art/write-pages-answer-engines-quote.webp",
+    "alt": "Momo the blue robot mascot as a noir newspaper editor marking up a manuscript with a pencil under a desk lamp, in dramatic ink and halftone on cream newsprint"
+  },
+  "status": "draft",
+  "body": [
+    {
+      "heading": "What should the first sentence of a page actually do?",
+      "paragraphs": [
+        "The first sentence, or at most the first short paragraph, should answer the question the page is about, in plain language, with no throat clearing. If the page is about a return policy, the first line should state the policy, not welcome the reader or describe the company's history first. A reader, and an AI system, should never have to hunt for it.",
+        "This single habit does more for both readers and AI systems than any other change. A person scanning the page gets their answer immediately and can decide whether to read further. An AI system gets a clean, extractable sentence it can quote directly, which is exactly what it is looking for."
+      ]
+    },
+    {
+      "heading": "How should headings be written?",
+      "paragraphs": [
+        "Headings work best when they are phrased the way a real person would ask, in a search bar or out loud. How much does this cost pulls more weight than Pricing Overview, because it matches the actual question behind the click, and it gives an AI system a heading it can match almost word for word to a user's question.",
+        "This does not mean every heading needs a question mark. It means the heading should describe the specific thing a reader wants to know, not a vague category label. A quick test: read only the headings on a page, top to bottom. If they alone give a reader a reasonable sense of the answer, the page is doing its job."
+      ]
+    },
+    {
+      "heading": "What kind of detail belongs below the answer?",
+      "paragraphs": [
+        "Once the direct answer is stated, the rest of the page can and should go deeper: exceptions, examples, numbers specific to your business, and the reasoning behind the answer. This is where real expertise shows, and it is also where a page earns trust, because it demonstrates the author actually knows the subject rather than repeating a generic summary.",
+        "Specifics beat generalities here. A vague sentence like we offer flexible options tells an AI system nothing it can quote with confidence. A specific sentence that names the actual options gives it something solid to work with.",
+        "This is also where a business can safely show its personality and expertise without hurting how quotable the page is. Voice belongs in the supporting detail, once the plain answer has already been given. A reader who wants the facts gets them immediately, and a reader who wants the full story can keep going."
+      ]
+    },
+    {
+      "heading": "Why does authorship matter this much?",
+      "paragraphs": [
+        "A page with a named author, a real job title, and a clear publisher is easier for an AI system to trust than an anonymous page saying the same thing, because trust is exactly the problem these systems are trying to solve before they repeat something to a user. An unnamed claim is a risk the system has to weigh; a named, credentialed claim is not.",
+        "A visible publish date and an update date, kept honest, tell the system and the reader how current the answer is. Stale, undated pages read as a small red flag either way."
+      ]
+    },
+    {
+      "heading": "What mistakes make a page hard to quote?",
+      "paragraphs": [
+        "The most common mistake is burying the answer under introductory paragraphs, whether that is company background, a story, or marketing language before the substance arrives. A close second is writing headings as clever phrases instead of clear questions. A third is stating claims without any specific detail behind them, which leaves nothing for a system, or a skeptical reader, to actually verify.",
+        "None of these mistakes are hard to fix. They usually come from writing a page in the order it makes sense to write it, top down from introduction to detail, instead of the order a reader actually needs it."
+      ]
+    },
+    {
+      "heading": "How do you keep a page quotable over time?",
+      "paragraphs": [
+        "Treat quotable pages as living documents, not finished projects. Revisit the ones tied to something that changes, pricing, hours, policies, on a regular schedule, and update the date when you do. A page that stays accurate keeps earning trust; one that quietly goes stale eventually stops getting quoted, even if it once did well. It is the standard every piece on The Momo Daily tries to hold itself to.",
+        "A short quarterly pass, ten or fifteen minutes per priority page, is usually enough: reread the direct answer, confirm the specifics still hold, and update the date. That small habit compounds, and it costs far less than the occasional full rewrite most sites end up needing instead."
+      ]
+    }
+  ],
+  "faq": [
+    {
+      "question": "Does page length matter for getting quoted?",
+      "answer": "Not directly. What matters is where the direct answer sits. A long page with the answer buried at the bottom performs worse than a short page that leads with it."
+    },
+    {
+      "question": "Should I write differently for AI systems than for readers?",
+      "answer": "No. The habits that make a page easy for a person to scan, a clear answer up top and honest specifics, are the same habits that make it easy for an AI system to quote."
+    },
+    {
+      "question": "Do I need a byline on every page?",
+      "answer": "It helps. A named author with a real title is one of the clearest trust signals a page can carry, for both readers and AI systems."
+    },
+    {
+      "question": "How often should a quotable page be updated?",
+      "answer": "Whenever a fact on it changes, and at least a light review every few months for anything tied to pricing, policy, or availability."
+    }
+  ]
+}

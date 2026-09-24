@@ -1,0 +1,84 @@
+{
+  "title": "AI agents versus chatbots: what actually changes for a small business",
+  "dek": "Chatbots answer questions. AI agents can complete a task on their own. Here is what that means for a small business.",
+  "slug": "ai-agents-vs-chatbots",
+  "date": "2026-09-21",
+  "author": { "name": "Dillon Mohr", "title": "AI Marketing Director" },
+  "keywords": [
+    "AI agents vs chatbots",
+    "AI agents for small business",
+    "business automation",
+    "AI agent workflow",
+    "chatbot vs agent"
+  ],
+  "summary": "A chatbot answers a question inside a conversation. An AI agent can also take the next step: booking the appointment, updating the record, drafting the email, without a person doing each click. For a small business, the real change is not smarter answers. It is fewer manual handoffs between asking and getting something done.",
+  "section": "Business",
+  "hero": {
+    "src": "/momentum/daily/art/ai-agents-vs-chatbots.webp",
+    "alt": "Momo the blue robot mascot as a noir office clerk at a busy switchboard desk, pulling levers and stamping documents at once, in dramatic ink and halftone on cream newsprint"
+  },
+  "status": "draft",
+  "body": [
+    {
+      "heading": "What is the actual difference between a chatbot and an agent?",
+      "paragraphs": [
+        "A chatbot has a conversation. Someone types a question, it answers from a script or a knowledge base, and the exchange ends there. Even a good one, powered by a large language model, is still fundamentally reactive: it responds to what it is asked and stops.",
+        "An AI agent goes further. It can look at a goal, break it into steps, use tools such as a calendar, a database, or an email account, and carry the task through to completion, checking its own work along the way. The chatbot describes what you could do. The agent can do it."
+      ]
+    },
+    {
+      "heading": "Where does a small business already use a chatbot?",
+      "paragraphs": [
+        "Most small businesses already have some version of a chatbot: a website widget that answers hours and pricing questions, a support bot that pulls answers from a help center, or a simple appointment scheduler with fixed options. These tools are useful and low risk, because a person still has to act on whatever the chatbot tells them.",
+        "That low risk is also the limit. A chatbot that hands a customer a scheduling link still leaves the actual scheduling, and every follow up step after it, to a person on both ends of the conversation. The convenience stops exactly where the real work begins."
+      ]
+    },
+    {
+      "heading": "What can an agent do that a chatbot cannot?",
+      "paragraphs": [
+        "An agent can take that same customer question and act on it. Instead of telling a customer where to find the booking page, it can check real availability and put the appointment on the calendar. Instead of telling an employee what a policy says, it can pull the exact record, draft the update, and queue it for approval. The output is not information, it is a finished or near finished task.",
+        "This matters most in the places where a business currently pays a person to do repetitive coordination work: scheduling, data entry, first draft replies, and status updates between systems that do not talk to each other.",
+        "None of that coordination work is glamorous, which is exactly why it is a good fit. It follows clear rules most of the time, it happens often enough to be worth automating, and the cost of a small mistake is usually a quick correction rather than a serious problem."
+      ]
+    },
+    {
+      "heading": "What is the catch?",
+      "paragraphs": [
+        "The catch is exactly the source of the benefit: an agent that can act can also act on a mistake. A chatbot that gives a wrong answer causes a person to make a wrong decision. An agent that takes a wrong action can send the wrong email, book the wrong slot, or touch a customer record incorrectly, faster than a person would notice. That speed is what makes the guardrails matter, not optional polish added later.",
+        "That risk is manageable, but it has to be designed for on purpose. Every credible agent setup keeps a clear line between actions that are safe to automate fully and actions, such as anything involving money, a public message, or an irreversible change, that still need a person to approve before they go out."
+      ]
+    },
+    {
+      "heading": "Where should a small business start?",
+      "paragraphs": [
+        "Start with one workflow that already has a chatbot or a manual process attached to it, and that is low risk if something goes slightly wrong. Internal scheduling is a common first choice. Let the agent draft the action and get final sign off from a person for the first few weeks, then loosen that gate only once the pattern proves itself.",
+        "Measure the same things you would measure for a new employee doing that task: how often the work was done correctly without a correction, and how much time it freed up. Those two numbers make the case for expanding an agent's scope far better than any general claim about the technology."
+      ]
+    },
+    {
+      "heading": "Who should stay in the loop?",
+      "paragraphs": [
+        "Anything that reaches a customer directly, spends money, or cannot be undone should keep a person in the loop, at least for now. That is not a limitation of the technology so much as good judgment: the value of an agent is speed and consistency on the routine work, which frees a person's attention for the decisions that actually need it.",
+        "This division of labor is not permanent. As a specific workflow proves itself over weeks or months, the gate can move further out, and the person's role shifts from approving every action to spot checking a sample of them. The pace of that shift should be set by evidence, not by how impressive the technology seems on day one."
+      ]
+    }
+  ],
+  "faq": [
+    {
+      "question": "Is an AI agent just a smarter chatbot?",
+      "answer": "Not quite. The difference is not intelligence, it is authority to act. An agent can carry out a task using real tools; a chatbot can only describe what to do."
+    },
+    {
+      "question": "Do agents replace customer service staff?",
+      "answer": "Usually not entirely. Agents tend to absorb the repetitive parts of a role, coordination and data entry, which leaves staff more time for judgment calls and relationship work."
+    },
+    {
+      "question": "Is this safe for a small business to try?",
+      "answer": "Yes, if it starts with a low risk workflow and keeps a person approving anything that touches money, a public message, or an irreversible change."
+    },
+    {
+      "question": "What is a good first agent project?",
+      "answer": "Internal scheduling or first draft replies to routine inquiries. Both are common, low risk, and easy to measure."
+    }
+  ]
+}

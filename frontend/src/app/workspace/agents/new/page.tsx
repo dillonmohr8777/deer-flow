@@ -2,7 +2,6 @@
 
 import {
   ArrowLeftIcon,
-  BotIcon,
   CheckCircleIcon,
   InfoIcon,
   MoreHorizontalIcon,
@@ -27,9 +26,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 import { ArtifactsProvider } from "@/components/workspace/artifacts";
 import { MessageList } from "@/components/workspace/messages";
 import { ThreadContext } from "@/components/workspace/messages/context";
+import { pageStyles } from "@/components/workspace/page-body";
 import type { Agent } from "@/core/agents";
 import {
   AgentNameCheckError,
@@ -291,9 +292,12 @@ export default function NewAgentPage() {
   const header = (
     <header className="flex shrink-0 items-center justify-between gap-3 border-b px-4 py-3">
       <div className="flex items-center gap-3">
+        <SidebarTrigger className="md:hidden" />
         <Button
           variant="ghost"
           size="icon-sm"
+          aria-label={t.agents.backToGallery}
+          title={t.agents.backToGallery}
           onClick={() => router.push("/workspace/agents")}
         >
           <ArrowLeftIcon className="h-4 w-4" />
@@ -330,19 +334,28 @@ export default function NewAgentPage() {
 
   if (step === "name") {
     return (
-      <div className="flex size-full flex-col">
+      <div className={cn("flex size-full flex-col", pageStyles.page)}>
         {header}
         <main className="flex flex-1 flex-col items-center justify-center px-4">
           <div className="w-full max-w-sm space-y-8">
             <div className="space-y-3 text-center">
-              <div className="bg-primary/10 mx-auto flex h-14 w-14 items-center justify-center rounded-full">
-                <BotIcon className="text-primary h-7 w-7" />
-              </div>
+              {/* A new teammate: the builder Momo, decorative beside the title. */}
+              <img
+                src="/momentum/momos/builder.svg"
+                alt=""
+                aria-hidden="true"
+                width={56}
+                height={56}
+                className="mx-auto size-14"
+              />
               <div className="space-y-1">
                 <h2 className="text-xl font-semibold">
                   {t.agents.nameStepTitle}
                 </h2>
-                <p className="text-muted-foreground text-sm">
+                <p
+                  id="agent-name-hint"
+                  className="text-muted-foreground text-sm"
+                >
                   {t.agents.nameStepHint}
                 </p>
               </div>
@@ -351,6 +364,9 @@ export default function NewAgentPage() {
             <div className="space-y-3">
               <Input
                 autoFocus
+                aria-label={t.agents.nameStepTitle}
+                aria-describedby="agent-name-hint"
+                aria-invalid={Boolean(nameError)}
                 placeholder={t.agents.nameStepPlaceholder}
                 value={nameInput}
                 onChange={(e) => {
@@ -361,7 +377,9 @@ export default function NewAgentPage() {
                 className={cn(nameError && "border-destructive")}
               />
               {nameError ? (
-                <p className="text-destructive text-sm">{nameError}</p>
+                <p role="alert" className="text-destructive text-sm">
+                  {nameError}
+                </p>
               ) : null}
               <Button
                 className="w-full"

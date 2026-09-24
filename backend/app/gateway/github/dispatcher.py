@@ -11,6 +11,8 @@ first-class :class:`Channel` (see ``app/channels/github.py``):
             • filter bots
             • drop redundant review-comment webhook noise, per binding
             • apply per-binding trigger filter
+            • require an active organization delegation for the bound
+              agent's owner (fail-closed; see ``_dispatch_is_delegated``)
             • publish one :class:`InboundMessage` per surviving agent
         → ChannelManager picks it up off the bus
             • resolves run params (agent_name comes from message metadata)
@@ -34,8 +36,57 @@ from app.gateway.github.prompts import build_prompt
 from app.gateway.github.registry import build_github_agent_registry, lookup_agents
 from app.gateway.github.triggers import event_should_fire
 from deerflow.config.agents_config import GitHubAgentConfig, GitHubTriggerConfig
+from deerflow.persistence.organizations.delegation import OrganizationDelegationRepository
+from deerflow.persistence.organizations.identity import private_organization_id
 
 logger = logging.getLogger(__name__)
+
+# M3 contract section 4: an internal caller (this webhook) never gets to act
+# as ``match.user_id`` on the strength of the HMAC secret alone. Every
+# dispatch must resolve a durable, owner-granted delegation scoped to the
+# bound agent's organization. Subject identity is per (owner, agent) binding
+# -- not the whole owner -- so a future grant flow can authorize one bound
+# agent without opening every other agent the same owner owns.
+GITHUB_DELEGATION_SUBJECT_TYPE = "github_agent_binding"
+GITHUB_DELEGATION_SCOPE = "runs:create"
+
+
+def _github_delegation_subject_id(owner_user_id: str, agent_name: str) -> str:
+    return f"{owner_user_id}:{agent_name}"
+
+
+async def _dispatch_is_delegated(owner_user_id: str, agent_name: str) -> bool:
+    """Fail-closed organization-delegation gate for one matched binding.
+
+    No grant flow exists yet for GitHub bindings (tracked as a lane-0-phase-2
+    / dedicated GitHub delegation UI follow-up), so this denies every
+    dispatch once organizations are configured -- there is currently no way
+    to satisfy it in a live deployment, which is the intended fail-closed
+    posture until a grant flow ships. A process with no database engine
+    initialized (``database.backend: memory``, or a bare/test process that
+    never called ``init_engine``) has no organization boundary to protect
+    yet and keeps the pre-M3 behavior, mirroring ``resolve_organization_id()``'s
+    "None means no boundary was established" rule elsewhere in M3.
+
+    The session-factory lookup is a deferred import so a test's
+    ``monkeypatch.setattr("deerflow.persistence.engine.get_session_factory", ...)``
+    (the pattern ``org_isolation_fixtures.org_world`` uses) is observed on
+    every call rather than a stale reference captured at module import time.
+    """
+    from deerflow.persistence.engine import get_session_factory
+
+    session_factory = get_session_factory()
+    if session_factory is None:
+        return True
+    organization_id = private_organization_id(owner_user_id)
+    repository = OrganizationDelegationRepository(session_factory)
+    delegation = await repository.resolve_active_delegation(
+        subject_type=GITHUB_DELEGATION_SUBJECT_TYPE,
+        subject_id=_github_delegation_subject_id(owner_user_id, agent_name),
+        organization_id=organization_id,
+        scope=GITHUB_DELEGATION_SCOPE,
+    )
+    return delegation is not None
 
 
 def _is_self_event(
@@ -382,6 +433,22 @@ async def fanout_event(
                 reason,
             )
             skipped.append({"agent": agent.name, "reason": reason})
+            continue
+
+        # 7.5 Organization delegation gate -- see ``_dispatch_is_delegated``.
+        # Checked only once the binding would otherwise fire, so the
+        # self-event/trigger/redundant-comment skip reasons above still take
+        # precedence and stay the useful signal for operator debugging.
+        if not await _dispatch_is_delegated(match.user_id, agent.name):
+            logger.warning(
+                "github_fanout: agent=%s skipped (reason=no_active_delegation, owner=%s, repo=%s#%s, delivery=%s)",
+                agent.name,
+                match.user_id,
+                repo,
+                number,
+                delivery_id,
+            )
+            skipped.append({"agent": agent.name, "reason": "no_active_delegation"})
             continue
 
         # 8. Build prompt + publish inbound message onto the bus.

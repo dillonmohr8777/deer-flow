@@ -1179,6 +1179,47 @@ POST /api/trash/purge
 
 **Response:** `{"purged": <int>}` — permanently deletes every trashed document of the caller, regardless of age: the confirmation covers the whole listing, so the retention cutoff never gates this route. Each row goes through the same guarded row-locked transaction as the single-document purge — bytes first, then the row. A file-cleanup failure other than already-absent content answers `500` with a retryable message, leaving that row and every row not yet visited trashed. Retention expiry is enforced only by the sweep (lazily before `GET /api/trash/documents` and once at gateway startup).
 
+### Clients
+
+Client roster (Momentum Phase 2). `clients` is organization-owned, not user-owned: every route is scoped to the caller's active organization (`clients:read`/`clients:write`), and a missing or foreign client id is `404` (never `403`). `ClientResponse` fields: `id`, `display_name`, `aliases`, `status` (`active`/`inactive`/`prospect`), `email_domains`, `slack_channel_ids`, `registry_id`, `notes`, `created_at`, `updated_at`, plus `assignments` (`[{user_id, role, created_at, updated_at}]`) and `project_count` (projects with a matching `client_id`).
+
+#### List / Get / Create / Update / Archive
+
+```http
+GET /api/clients                 # optional ?status=active|inactive|prospect
+GET /api/clients/mine             # clients the caller has an assignment on
+GET /api/clients/{client_id}
+POST /api/clients                 # {"display_name", "aliases"?, "status"?, "email_domains"?, "slack_channel_ids"?, "registry_id"?, "notes"?}
+PATCH /api/clients/{client_id}    # any subset of the create fields except registry_id
+POST /api/clients/{client_id}/archive   # sets status="inactive"
+```
+
+**Response:** `ClientResponse` (list routes: `{"clients": [...]}`, in `display_name ASC` order).
+
+#### Assignments
+
+```http
+POST /api/clients/{client_id}/assignments
+Content-Type: application/json
+
+{"user_id": "…", "role": "account_manager" | "contributor" | "client_contact"}
+```
+
+Upserts by `(client_id, user_id)`: assigning an already-assigned person updates their role rather than adding a second row. `DELETE /api/clients/{client_id}/assignments/{user_id}` removes one assignment (`204`).
+
+#### Registry Import
+
+```http
+POST /api/clients/import
+Content-Type: application/json
+
+{"clients": [{"id", "displayName", "aliases"?, "status"?, "emailDomains"?, "slackChannels"?, ...}]}
+```
+
+Admin-only (`403` otherwise). The body is the canonical roster shape from `client-operations/registry/clients.json`; unrecognized fields (`contacts`, `evidence`, `folder`, `accessRefs`, `lastEvidenceAt`) are ignored. Upserts by `id` → `registry_id` within the caller's active organization; an entry missing `id` or `displayName` is skipped, never deleted. Owners are not structured in the registry yet, so this never writes `client_assignments`. `backend/scripts/import_client_registry.py` is the operator CLI: it logs in, then posts a local registry file to this endpoint.
+
+**Response:** `{"created": <int>, "updated": <int>, "skipped": <int>, "skipped_ids": [...]}`.
+
 ### Artifacts
 
 #### Get Artifact
@@ -1197,6 +1238,91 @@ GET /api/threads/{thread_id}/artifacts/{path}
 - `download` (boolean): If `true`, force download with Content-Disposition header
 
 **Response:** File content with appropriate Content-Type. HTML and XML documents (`.html`, `.xml`, `.xhtml`, `.svg`, and other `+xml` types) are always returned as attachments, regardless of `download`, so generated markup never renders in the application origin.
+
+---
+
+### Admin Controls
+
+Base URL: `/api/admin`
+
+Every endpoint here requires the caller's `system_role` to be `admin`
+(`require_admin_user`, the same predicate the Models and MCP Configuration
+routes use), and each is itself written to the audit log. See AUTH_DESIGN.md
+"Audit log and admin controls" for the underlying model.
+
+#### Disable a user
+
+```http
+POST /api/admin/users/{user_id}/disable
+```
+
+The target user can no longer log in, and any of its live sessions stop
+validating on their next request.
+
+#### Enable a user
+
+```http
+POST /api/admin/users/{user_id}/enable
+```
+
+Clears a previous disable.
+
+#### Force logout
+
+```http
+POST /api/admin/users/{user_id}/force-logout
+```
+
+Bumps the target user's `token_version`, invalidating every JWT already
+issued to that account without touching its password or disabled state.
+
+**Response (all three, `200`):**
+```json
+{
+  "id": "0f0c6e6a-...",
+  "email": "person@example.com",
+  "disabled_at": null,
+  "token_version": 4
+}
+```
+
+#### List audit events
+
+```http
+GET /api/admin/audit-events?action_prefix=auth.login.&actor={user_id}&since=2026-09-01T00:00:00Z&until=2026-09-30T00:00:00Z&limit=50&cursor={opaque_cursor}
+```
+
+Every filter is optional. Results are cross-organization (a system admin's
+view of the whole deployment, not one tenant) and ordered newest first.
+`limit` is clamped to `1..200`; `cursor` is the opaque `next_cursor` from a
+previous page, and its absence means there is nothing more to page through.
+
+**Response:**
+```json
+{
+  "events": [
+    {
+      "id": "b6b0...",
+      "occurred_at": "2026-09-23T18:06:37.123456+00:00",
+      "actor_user_id": "0f0c6e6a-...",
+      "organization_id": "org-abc",
+      "action": "auth.login.succeeded",
+      "target_type": null,
+      "target_id": null,
+      "outcome": "success",
+      "ip": "203.0.113.4",
+      "user_agent": "Mozilla/5.0 ...",
+      "details": null
+    }
+  ],
+  "next_cursor": null
+}
+```
+
+`details` is redacted server-side before it is ever written: a key whose
+name looks like a credential (password, token, secret, cookie, api_key,
+authorization, credential, private_key, access_key, client_secret) always
+comes back as `"[redacted]"`.
 
 ---
 
@@ -1227,9 +1353,9 @@ DeerFlow supports four HTTP identity sources. They share the same thread/run iso
 | Browser session | `access_token` cookie after login/register | Yes | `users.id` |
 | OIDC / SSO | OAuth callback → cookie | Yes | `users.id` (see [SSO.md](SSO.md)) |
 | IM channel binding | Connect code + `channel_connections` | Bound to registered user | `channel_connections.owner_user_id` |
-| **Internal Auth** | `X-DeerFlow-Internal-Token` + `X-DeerFlow-Owner-User-Id` | **No** | Owner string on `threads_meta.user_id` |
+| **Internal Auth** | `X-DeerFlow-Internal-Token` + `X-DeerFlow-Delegation-Id` | **No** (acts as the delegation owner) | The delegation organization's storage principal and `organization_id` |
 
-**IM channel binding** and **Internal Auth** are both *platform-trust* integrations: DeerFlow trusts the channel/platform to authenticate end users. IM bindings persist the mapping in `channel_connections` / `channel_conversations` and require a DeerFlow `users` row. Internal Auth lets a platform call the Gateway API directly with a deployment-shared token and a per-request owner header—no `users` row, but thread/run/checkpoint isolation works the same way.
+**IM channel binding** and **Internal Auth** are both *platform-trust* integrations. IM bindings persist the mapping in `channel_connections` / `channel_conversations` and require a DeerFlow `users` row. Every internal call, IM workers included, acts only through an active `organization_delegations` row that ties the caller to a real, active member of an active organization; a token plus an owner header alone is refused.
 
 ### Browser session (default)
 
@@ -1267,9 +1393,10 @@ export DEER_FLOW_INTERNAL_AUTH_TOKEN="<long-random-secret>"
 | Header | Required | Description |
 |---|---|---|
 | `X-DeerFlow-Internal-Token` | Yes | Must match `DEER_FLOW_INTERNAL_AUTH_TOKEN`; missing/invalid → `401` |
-| `X-DeerFlow-Owner-User-Id` | Yes for per-user isolation | Platform user id (e.g. `feishu_ou_alice`, `wecom_user_bob`); omit → `default` bucket |
+| `X-DeerFlow-Delegation-Id` | Yes | An active organization delegation granted to this caller |
+| `X-DeerFlow-Owner-User-Id` | No | If sent, must equal the delegation's owner |
 
-Does **not** use browser cookies or CSRF tokens. Does **not** insert into `users`; sets `threads_meta.user_id` / `runs.user_id` from the owner header. DeerFlow validates only the platform token—not whether the owner id represents a real end user; user validity is entirely the platform's responsibility. See [AUTH_DESIGN.md — Internal Auth](AUTH_DESIGN.md#internal-auth-direct-http) for trust boundaries, persistence, and security notes.
+Does **not** use browser cookies or CSRF tokens and does **not** insert into `users`. Every request re-validates the delegation: active, unexpired, owned by an active member of an active organization, and matching the owner header. A missing or failing delegation (including token plus owner header alone) is `403 Internal calls require an active organization delegation`. An admitted call acts as the delegation owner in its organization, on that organization's storage principal, with route permissions narrowed to the delegation scopes. See [AUTH_DESIGN.md](AUTH_DESIGN.md) for where delegations come from and how revocation works.
 
 Use the standard Gateway thread/run endpoints (`POST /api/threads`, `POST /api/threads/{thread_id}/runs/stream`, etc.) with the headers above on every request.
 

@@ -36,6 +36,10 @@ class ProjectRow(Base):
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     user_id: Mapped[str] = mapped_column(String(64), index=True)
     organization_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    # Momentum Phase 2 item 2: optional link to the owning client (clients.id).
+    # Nullable -- most projects have no client yet -- and unenforced by a FK,
+    # matching threads_meta.project_id's precedent (0020).
+    client_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     name: Mapped[str] = mapped_column(String(128))
     instructions: Mapped[str] = mapped_column(Text, default="")
     presentation: Mapped[dict] = mapped_column(JSON, default=dict)

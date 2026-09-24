@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import logging
 import math
 import os
@@ -474,7 +475,11 @@ class ChannelService:
                 config["connection_repo"] = self._connection_repo
             channel = channel_cls(bus=self.bus, config=config)
             self._channels[name] = channel
-            await channel.start()
+            # A restart can run inside an HTTP request; the channel's
+            # background tasks must not inherit that request's identity
+            # ContextVars. Start in an empty context, so every task acts only
+            # through the explicit owner and delegation of each message.
+            await asyncio.create_task(channel.start(), context=contextvars.Context())
             if not channel.is_running:
                 logger.error("Channel did not enter a running state after start()")
                 await self._stop_and_discard_channel(name, channel)

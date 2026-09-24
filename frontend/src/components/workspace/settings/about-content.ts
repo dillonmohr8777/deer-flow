@@ -8,7 +8,7 @@ export const aboutMarkdown = `# 🦌 [About DeerFlow ${APP_VERSION}](https://git
 
 > **From Open Source, Back to Open Source**
 
-DeerFlow (**D**eep **E**xploration and **E**fficient **R**esearch **Flow**) is an open-source **super agent harness** that orchestrates **sub-agents**, **memory**, and **sandboxes** to do almost anything — powered by **extensible skills**.
+DeerFlow (**D**eep **E**xploration and **E**fficient **R**esearch **Flow**) is an open-source **super agent harness** that orchestrates **sub-agents**, **memory**, and **sandboxes** to do almost anything. It's powered by **extensible skills**.
 
 ---
 
@@ -65,5 +65,5 @@ Finally, we want to express our heartfelt gratitude to the core authors of DeerF
 - **[Daniel Walnut](https://github.com/hetaoBackend/)**
 - **[Henry Li](https://github.com/magiccube/)**
 
-Without their vision, passion and dedication, \`DeerFlow\` would not be what it is today.
+Without their vision, passion and dedication, \`DeerFlow\` wouldn't be what it is today.
 `;

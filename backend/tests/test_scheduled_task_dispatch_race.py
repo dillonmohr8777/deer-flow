@@ -21,6 +21,7 @@ import asyncio
 from datetime import UTC, datetime
 
 import pytest
+from org_isolation_fixtures import delegate_every_scheduled_task
 
 from app.scheduler.service import ScheduledTaskService
 from deerflow.config.database_config import DatabaseConfig
@@ -217,3 +218,9 @@ async def test_partial_unique_index_enforces_one_active_run_per_task(tmp_path):
         assert await run_repo.has_active_runs("t1") is True
     finally:
         await close_engine()
+
+
+@pytest.fixture(autouse=True)
+def _tasks_are_delegated(monkeypatch):
+    """Queue mechanics only: every org-less test task resolves a launch delegation."""
+    delegate_every_scheduled_task(monkeypatch)

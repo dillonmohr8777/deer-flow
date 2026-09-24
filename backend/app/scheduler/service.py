@@ -23,6 +23,7 @@ _ACTIVE_RUN_CONFLICT_ERROR = "task already has an active run"
 _RESTART_RECOVERY_ERROR = "interrupted: gateway restarted before the run reached a terminal state"
 _LEASE_RECOVERY_ERROR = "interrupted: the owning gateway stopped renewing its run lease"
 _QUEUE_TIMEOUT_ERROR = "scheduled task queue wait timeout exceeded"
+_NO_DELEGATION_ERROR = "scheduled task has no active delegation in its organization"
 
 
 class ScheduledTaskService:
@@ -263,11 +264,19 @@ class ScheduledTaskService:
         launched_thread_id: str | None = None
         launch_succeeded = False
         try:
+            # Contract section 4: a task starts runs only through its owner's
+            # delegation, re-read here so a revoked owner fails the occurrence
+            # closed. A NULL-organization (quarantined) task has none and fails
+            # closed too; the launcher acts through the delegation, never a raw
+            # owner header.
+            delegation = await self._task_repo.resolve_launch_delegation(task)
+            if delegation is None:
+                raise PermissionError(_NO_DELEGATION_ERROR)
             result = await self._launch_run(
                 thread_id=execution_thread_id,
                 assistant_id=task.get("assistant_id"),
                 prompt=task["prompt"],
-                owner_user_id=task.get("user_id"),
+                delegation=delegation,
                 metadata={
                     "scheduled_task_id": task["id"],
                     "scheduled_task_run_id": task_run_id,

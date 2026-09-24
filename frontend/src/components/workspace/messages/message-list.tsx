@@ -70,6 +70,7 @@ import {
   type StreamMetadataSnapshot,
 } from "@/core/messages/utils";
 import { getWorkspaceChangeAnchorGroupIndices } from "@/core/messages/workspace-change-anchor";
+import { useLocalSettings } from "@/core/settings";
 import {
   buildMessageSidecarContext,
   type SidecarContext,
@@ -106,6 +107,11 @@ import {
 import { RunActivity, RunDuration } from "./run-duration";
 import { MessageListSkeleton } from "./skeleton";
 import { SubtaskCard } from "./subtask-card";
+import {
+  DeepReasoningContext,
+  DeepReasoningStatus,
+  useDeepReasoningTracker,
+} from "./ultra-thinking";
 import {
   VirtualMessageList,
   type VirtualMessageListHandle,
@@ -304,6 +310,7 @@ export function MessageList({
   sidecarSurface = false,
   initialScroll = "smooth",
   resizeScroll = "smooth",
+  deepReasoning = false,
 }: {
   archiveDownloadsEnabled?: boolean;
   className?: string;
@@ -339,12 +346,24 @@ export function MessageList({
   sidecarSurface?: boolean;
   initialScroll?: ConversationProps["initial"];
   resizeScroll?: ConversationProps["resize"];
+  /**
+   * The thread's run setting asks for deep reasoning (isDeepReasoningRun).
+   * Read when each run starts, so changing the composer mid-run never
+   * restyles a run that is already streaming.
+   */
+  deepReasoning?: boolean;
 }) {
   const { t } = useI18n();
   const sidecar = useMaybeSidecar();
+  const [{ context: activeContext }] = useLocalSettings();
   const [selectionToolbar, setSelectionToolbar] =
     useState<SelectionToolbarState | null>(null);
   const messages = thread.messages;
+  const deepReasoningState = useDeepReasoningTracker(
+    messages,
+    thread.isLoading,
+    deepReasoning,
+  );
   const groupedMessages = useStableMessageGroups(messages, thread.isLoading);
   const chapters = useMemo(
     () =>
@@ -890,7 +909,8 @@ export function MessageList({
       }
 
       return (
-        <div className="mt-2 flex justify-start gap-1 opacity-0 transition-opacity delay-200 duration-300 group-hover/assistant-turn:opacity-100">
+        // Revealed on hover, on keyboard focus, and always on touch screens.
+        <div className="mt-2 flex justify-start gap-1 opacity-0 transition-opacity delay-200 duration-300 group-focus-within/assistant-turn:opacity-100 group-hover/assistant-turn:opacity-100 [@media(hover:none)]:opacity-100">
           {clipboardData && <CopyButton clipboardData={clipboardData} />}
           {enableBranchForTurn &&
             !isStreaming &&
@@ -1000,6 +1020,9 @@ export function MessageList({
             enabled={true}
             isLoading={thread.isLoading}
             messages={turnUsageMessages ?? []}
+            showModelDetail={activeContext.experience_mode === "hard"}
+            modelName={activeContext.model_name}
+            reasoningEffort={activeContext.reasoning_effort}
           />
         );
       }
@@ -1026,6 +1049,9 @@ export function MessageList({
       return null;
     },
     [
+      activeContext.experience_mode,
+      activeContext.model_name,
+      activeContext.reasoning_effort,
       showTokenDebugSummaries,
       thread.isLoading,
       tokenDebugSteps,
@@ -1082,7 +1108,7 @@ export function MessageList({
       </div>
     );
   };
-  return (
+  const conversation = (
     <KnowledgeSourcesProvider messages={thread.messages}>
       <Conversation
         className={cn("flex size-full flex-col justify-center", className)}
@@ -1473,6 +1499,7 @@ export function MessageList({
           <div style={{ height: `${paddingBottom}px` }} />
         </ConversationContent>
       </Conversation>
+      <DeepReasoningStatus state={deepReasoningState} />
       {conversationOutlineEnabled && (
         <ConversationOutline
           chapters={chapters}
@@ -1529,5 +1556,10 @@ export function MessageList({
         </div>
       )}
     </KnowledgeSourcesProvider>
+  );
+  return (
+    <DeepReasoningContext.Provider value={deepReasoningState}>
+      {conversation}
+    </DeepReasoningContext.Provider>
   );
 }

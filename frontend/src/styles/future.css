@@ -1,0 +1,221 @@
+/*
+ * Future treatment — token layer.
+ *
+ * Original "chrome future" look, retro-futurist minimalism: stark white and
+ * silver surfaces, brushed-chrome gradients on large surfaces only (never
+ * behind body text), graphite text, geometric sans headings. A subtle
+ * one-time echo plays on the page H1 when the treatment loads.
+ *
+ * Scope: everything here lives under [data-treatment="future"], set the same
+ * way paper.css's scope is (WorkspaceAppearanceProvider, on the workspace
+ * wrapper and on <html>). Nothing here changes another treatment.
+ *
+ * Ratios below are proven by tests/unit/future-tokens.test.ts, which parses
+ * this file's own token values and computes WCAG contrast.
+ *
+ *   --future-white         #FFFFFF  (canvas)
+ *   --future-silver        #E4E6EA  (panel)
+ *   --future-graphite      #22262E  vs white          15.17
+ *   --future-graphite-lo   #4B515C  vs white           7.98
+ *   --future-accent        #0B5FA5  vs white           6.57
+ *   --future-focus         #0B5FA5  vs white           6.57
+ *   --future-danger        #B3261E  vs white           6.54
+ *   --future-ok            #0F7A48  vs white           5.39
+ *   --future-chrome-deep   #7A828E  (object-only, brushed gradient stop)
+ */
+
+[data-treatment="future"] {
+  --future-white: #ffffff;
+  --future-silver: #e4e6ea;
+  --future-graphite: #22262e;
+  --future-graphite-lo: #4b515c;
+  --future-accent: #0b5fa5;
+  --future-focus: #0b5fa5;
+  --future-danger: #b3261e;
+  --future-ok: #0f7a48;
+  --future-chrome-deep: #7a828e;
+  --future-line: #c3c7ce;
+
+  /* Brushed-chrome gradient — large surfaces only (sidebar, topbar, dialog
+     chrome), never behind body text: a repeating soft-metal band. */
+  --future-chrome: repeating-linear-gradient(
+    100deg,
+    var(--future-white) 0%,
+    var(--future-silver) 6%,
+    var(--future-white) 12%,
+    var(--future-chrome-deep) 18%,
+    var(--future-silver) 24%,
+    var(--future-white) 32%
+  );
+}
+
+/* ---------- Self-hosted face ---------- */
+/* Orbitron 700, OFL 1.1. Headings only. Source: SOURCES.md. */
+@font-face {
+  font-family: "Orbitron";
+  src: url("/momentum/orbitron-bold.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+    U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF,
+    U+FFFD;
+}
+
+[data-treatment="future"] {
+  --future-font: "Orbitron", system-ui, sans-serif;
+}
+
+/*
+ * Shell remap: sidebar, headers, page canvas, dialogs, menus. Matches the
+ * appearance provider's wrapper ([data-workspace-shell]) and <html>.
+ */
+:root:not(.dark)[data-treatment="future"],
+:root:not(.dark) [data-workspace-shell][data-treatment="future"] {
+  --background: var(--future-white);
+  --foreground: var(--future-graphite);
+  --card: var(--future-white);
+  --card-foreground: var(--future-graphite);
+  --popover: var(--future-white);
+  --popover-foreground: var(--future-graphite);
+  --primary: var(--future-accent);
+  --primary-foreground: var(--future-white);
+  --secondary: var(--future-silver);
+  --secondary-foreground: var(--future-graphite);
+  --muted-surface: var(--future-silver);
+  --muted-foreground: var(--future-graphite-lo);
+  --accent: var(--future-silver);
+  --accent-foreground: var(--future-graphite);
+  --destructive: var(--future-danger);
+  --border: var(--future-line);
+  --input: var(--future-line);
+  --ring: var(--future-focus);
+  --sidebar: var(--future-white);
+  --sidebar-foreground: var(--future-graphite);
+  --sidebar-primary: var(--future-accent);
+  --sidebar-primary-foreground: var(--future-white);
+  --sidebar-accent: var(--future-silver);
+  --sidebar-accent-foreground: var(--future-graphite);
+  --sidebar-border: var(--future-line);
+  --sidebar-ring: var(--future-focus);
+  font-family: var(--m-font-text);
+}
+
+/* Geometric sans headings only — body text stays on the readable UI face. */
+:is(
+    :root:not(.dark)[data-treatment="future"],
+    :root:not(.dark) [data-workspace-shell][data-treatment="future"]
+  )
+  :is(h1, h2, h3, h4, [data-slot="dialog-title"]) {
+  font-family: var(--future-font);
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+}
+
+/* Chrome gradient on large chrome surfaces only — sidebar and dialog chrome
+   — never on a card that carries body text. */
+:is(
+    :root:not(.dark)[data-treatment="future"],
+    :root:not(.dark) [data-workspace-shell][data-treatment="future"]
+  )
+  :is([data-slot="sidebar-inner"], [data-slot="sidebar"][data-mobile="true"]) {
+  background-image: var(--future-chrome);
+  background-color: var(--future-white);
+  color: var(--future-graphite);
+}
+
+:is(
+    :root:not(.dark)[data-treatment="future"],
+    :root:not(.dark) [data-workspace-shell][data-treatment="future"]
+  )
+  :is([data-slot="sidebar-inset"], .momentum-conversation-surface) {
+  background-color: var(--future-white);
+  /* The base rule (globals.css) sets a shorthand `background` with its own
+     gradient image; a longhand background-color alone leaves that image
+     layered on top, so it must be cleared explicitly here too. */
+  background-image: none;
+  color: var(--future-graphite);
+}
+
+/* Cards: white/silver surfaces, graphite text, a crisp hairline — no chrome
+   gradient behind card content. */
+:is(
+    :root:not(.dark)[data-treatment="future"],
+    :root:not(.dark) [data-workspace-shell][data-treatment="future"]
+  )
+  [data-slot="card"] {
+  background-color: var(--future-white);
+  border-color: var(--future-line);
+  box-shadow: none;
+}
+
+:is(
+    :root:not(.dark)[data-treatment="future"],
+    :root:not(.dark) [data-workspace-shell][data-treatment="future"]
+  )
+  [data-slot="dialog-content"] {
+  background-image: var(--future-chrome);
+  background-color: var(--future-white);
+  border-color: var(--future-line);
+}
+
+/*
+ * H1 echo — a one-time, stepped fading duplicate offset when a page's H1
+ * first paints in this treatment (each route mounts a new H1, so this plays
+ * again on navigation with no JS retrigger needed). steps() gives the
+ * discrete "ghost frame" read instead of a smooth glide. No audio, no
+ * characters. Gated on data-motion="on" (appearance-provider.tsx, mirrors
+ * brandMotionAllowed) AND prefers-reduced-motion, same contract as paper's
+ * motion layer.
+ */
+@media (prefers-reduced-motion: no-preference) {
+  :is(
+      :root:not(.dark)[data-treatment="future"][data-motion="on"],
+      :root:not(.dark)
+        [data-workspace-shell][data-treatment="future"][data-motion="on"]
+    )
+    h1 {
+    animation: future-h1-echo 900ms steps(6, end) both;
+  }
+}
+@keyframes future-h1-echo {
+  0% {
+    text-shadow:
+      3px 3px 0 color-mix(in srgb, var(--future-chrome-deep) 55%, transparent),
+      6px 6px 0 color-mix(in srgb, var(--future-chrome-deep) 30%, transparent),
+      9px 9px 0 color-mix(in srgb, var(--future-chrome-deep) 15%, transparent);
+  }
+  60% {
+    text-shadow:
+      2px 2px 0 color-mix(in srgb, var(--future-chrome-deep) 22%, transparent),
+      4px 4px 0 color-mix(in srgb, var(--future-chrome-deep) 10%, transparent),
+      6px 6px 0 transparent;
+  }
+  100% {
+    text-shadow: none;
+  }
+}
+
+/* The composer's input group is styled with its own light default
+   independent of the shell token remap above; here it already matches
+   (white), so only the border needs to line up with the rest of the
+   treatment. */
+:is(
+    :root:not(.dark)[data-treatment="future"],
+    :root:not(.dark) [data-workspace-shell][data-treatment="future"]
+  )
+  [data-chat-composer]
+  [data-slot="input-group"] {
+  background-color: var(--future-white);
+  border-color: var(--future-line);
+  color: var(--future-graphite);
+}
+
+@media (forced-colors: active) {
+  [data-treatment="future"] * {
+    background-image: none !important;
+    animation: none !important;
+    text-shadow: none !important;
+  }
+}

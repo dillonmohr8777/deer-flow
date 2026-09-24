@@ -21,11 +21,20 @@ from deerflow.persistence.channel_connections.model import (
     ChannelCredentialRow,
     ChannelOAuthStateRow,
 )
+from deerflow.persistence.organizations.delegation import OrganizationDelegationRepository
 from deerflow.persistence.organizations.identity import private_organization_id
-from deerflow.persistence.organizations.resolution import private_organization_for_user
+from deerflow.persistence.organizations.resolution import OrganizationMismatchError, organization_for_write, private_organization_for_user
+from deerflow.persistence.thread_meta.model import ThreadMetaRow
 from deerflow.utils.time import coerce_iso
 
 logger = logging.getLogger(__name__)
+
+# Organization delegation subject type for a channel connection; the subject id is the connection id.
+CHANNEL_CONNECTION_SUBJECT_TYPE = "channel_connection"
+# Route permissions a channel worker needs to act for the connection owner:
+# find or create the conversation's thread, read and set its goal, start runs
+# and read their results. Nothing destructive and no cancellation.
+CHANNEL_WORKER_SCOPES = ("threads:read", "threads:write", "runs:create", "runs:read")
 
 # Bounded retries for upsert_connection when a concurrent writer commits a
 # conflicting row first (same owner identity, or the same active external
@@ -58,7 +67,13 @@ class ChannelCredentialCipher:
 
 
 class ChannelConnectionRepository:
-    """Persistence facade for channel connections, credentials, and conversations."""
+    """Persistence facade for channel connections, credentials, and conversations.
+
+    Channels are personal during M3: every connection, pending connect code and
+    conversation belongs to its owner's private organization. Browser callers pass
+    the active organization (``resolve_organization_id()``) and get only rows in
+    it; channel workers pass none and keep the owner filter alone.
+    """
 
     def __init__(
         self,
@@ -136,9 +151,9 @@ class ChannelConnectionRepository:
             row.capabilities_json = dict(capabilities or {})
             row.metadata_json = dict(metadata or {})
 
-        async def _revoke_other_active_owners(session: AsyncSession) -> None:
+        async def _revoke_other_active_owners(session: AsyncSession) -> list[str]:
             if status != "connected":
-                return
+                return []
             with session.no_autoflush:
                 result = await session.execute(
                     select(ChannelConnectionRow.id).where(
@@ -151,9 +166,10 @@ class ChannelConnectionRepository:
                 )
             transferred_ids = [row_id for row_id in result.scalars()]
             if not transferred_ids:
-                return
+                return []
             await session.execute(update(ChannelConnectionRow).where(ChannelConnectionRow.id.in_(transferred_ids)).values(status="revoked"))
             await session.execute(delete(ChannelCredentialRow).where(ChannelCredentialRow.connection_id.in_(transferred_ids)))
+            return transferred_ids
 
         stmt = select(ChannelConnectionRow).where(
             ChannelConnectionRow.owner_user_id == owner_user_id,
@@ -171,7 +187,7 @@ class ChannelConnectionRepository:
                     # Revoke any other owner's active row for this external identity
                     # *before* our connected row is flushed, so the partial unique
                     # index on active identities is satisfied at commit time.
-                    await _revoke_other_active_owners(session)
+                    transferred_ids = await _revoke_other_active_owners(session)
                     if row is None:
                         row = ChannelConnectionRow(
                             id=self._new_id(),
@@ -187,7 +203,8 @@ class ChannelConnectionRepository:
                     _apply(row)
                     await session.commit()
                     await session.refresh(row)
-                    return self._connection_to_dict(row)
+                    connection = self._connection_to_dict(row)
+                    break
                 except IntegrityError as exc:
                     # A concurrent writer committed a conflicting row first (this
                     # owner's identity, or the same active external identity). Roll
@@ -195,17 +212,45 @@ class ChannelConnectionRepository:
                     # revokes the newly-committed owner, and writes our row.
                     last_error = exc
                     await session.rollback()
-            raise last_error  # type: ignore[misc]  # loop runs at least once
+            else:
+                raise last_error  # type: ignore[misc]  # loop runs at least once
+        # A transferred connection takes its previous owner's delegation with it.
+        await self._revoke_delegations(transferred_ids)
+        if status == "connected" and connection.get("organization_id"):
+            # Connecting grants the worker its delegation (a reconnect replaces
+            # it); without one the Gateway refuses every call the worker makes.
+            await OrganizationDelegationRepository(self.session_factory).grant(
+                organization_id=connection["organization_id"],
+                subject_type=CHANNEL_CONNECTION_SUBJECT_TYPE,
+                subject_id=connection["id"],
+                owner_user_id=owner_user_id,
+                scopes=list(CHANNEL_WORKER_SCOPES),
+            )
+        return connection
 
-    async def list_connections(self, owner_user_id: str) -> list[dict[str, Any]]:
+    async def _revoke_delegations(self, connection_ids: list[str]) -> None:
+        """Revoke the organization delegation of each already-revoked connection.
+
+        Runs after the connection commit, in the delegation repository's own
+        transaction. If it fails, the caller sees the error and the leftover
+        delegation names a revoked connection, which no worker resolves.
+        """
+        delegations = OrganizationDelegationRepository(self.session_factory)
+        for connection_id in connection_ids:
+            await delegations.revoke(subject_type=CHANNEL_CONNECTION_SUBJECT_TYPE, subject_id=connection_id)
+
+    async def list_connections(self, owner_user_id: str, *, organization_id: str | None = None) -> list[dict[str, Any]]:
+        conditions = [ChannelConnectionRow.owner_user_id == owner_user_id]
+        if organization_id is not None:
+            conditions.append(ChannelConnectionRow.organization_id == organization_id)
         async with self.session_factory() as session:
-            result = await session.execute(select(ChannelConnectionRow).where(ChannelConnectionRow.owner_user_id == owner_user_id).order_by(ChannelConnectionRow.updated_at.desc(), ChannelConnectionRow.id.desc()))
+            result = await session.execute(select(ChannelConnectionRow).where(*conditions).order_by(ChannelConnectionRow.updated_at.desc(), ChannelConnectionRow.id.desc()))
             return [self._connection_to_dict(row) for row in result.scalars()]
 
-    async def disconnect_connection(self, *, connection_id: str, owner_user_id: str) -> bool:
+    async def disconnect_connection(self, *, connection_id: str, owner_user_id: str, organization_id: str | None = None) -> bool:
         async with self.session_factory() as session:
             row = await session.get(ChannelConnectionRow, connection_id)
-            if row is None or row.owner_user_id != owner_user_id:
+            if row is None or row.owner_user_id != owner_user_id or (organization_id is not None and row.organization_id != organization_id):
                 return False
 
             row.status = "revoked"
@@ -213,7 +258,8 @@ class ChannelConnectionRepository:
             if credential is not None:
                 await session.delete(credential)
             await session.commit()
-            return True
+        await self._revoke_delegations([connection_id])
+        return True
 
     async def disconnect_provider_connections(self, *, provider: str) -> int:
         """Revoke all active user connections for an instance-wide provider removal."""
@@ -231,7 +277,8 @@ class ChannelConnectionRepository:
             await session.execute(update(ChannelConnectionRow).where(ChannelConnectionRow.id.in_(connection_ids)).values(status="revoked"))
             await session.execute(delete(ChannelCredentialRow).where(ChannelCredentialRow.connection_id.in_(connection_ids)))
             await session.commit()
-            return len(connection_ids)
+        await self._revoke_delegations(connection_ids)
+        return len(connection_ids)
 
     async def store_credentials(
         self,
@@ -334,6 +381,7 @@ class ChannelConnectionRepository:
         expires_at: datetime,
         max_pending: int,
         now: datetime | None = None,
+        organization_id: str | None = None,
         code_verifier: str | None = None,
         nonce_hash: str | None = None,
         redirect_after: str | None = None,
@@ -348,9 +396,14 @@ class ChannelConnectionRepository:
         the cap). PostgreSQL takes a transaction-scoped advisory lock; SQLite
         serializes writers through the write lock the leading DELETE acquires.
 
+        ``organization_id`` is the caller's active organization. A connect code
+        is personal, so any organization other than the owner's private one
+        raises :class:`OrganizationMismatchError` before anything is written.
+
         Returns ``True`` when the row was inserted, ``False`` when the cap is
         already reached.
         """
+        organization_id = organization_for_write(organization_id, None, owner_user_id)
         current_time = now or datetime.now(UTC)
         async with self.session_factory() as session:
             await self._serialize_oauth_owner_scope(session, owner_user_id, provider)
@@ -384,7 +437,7 @@ class ChannelConnectionRepository:
                 ChannelOAuthStateRow(
                     state_hash=self.hash_state(state),
                     owner_user_id=owner_user_id,
-                    organization_id=await private_organization_for_user(session, owner_user_id),
+                    organization_id=organization_id or await private_organization_for_user(session, owner_user_id),
                     provider=provider,
                     code_verifier_encrypted=self._encrypt_optional_secret(code_verifier),
                     nonce_hash=nonce_hash,
@@ -469,6 +522,15 @@ class ChannelConnectionRepository:
             if expires_at is not None and expires_at < current_time:
                 await session.commit()
                 return None
+            try:
+                # Every caller completes the code with upsert_connection(owner), which
+                # lands in the owner's private organization. Refuse a code recorded in
+                # any other organization so it never completes across organizations.
+                organization_id = organization_for_write(None, row.organization_id, row.owner_user_id)
+            except OrganizationMismatchError:
+                logger.warning("Refusing a channel connect code recorded outside its owner's organization")
+                await session.commit()
+                return None
 
             # Conditional UPDATE so two concurrent workers cannot both consume
             # the same binding code: only the writer that flips consumed_at
@@ -486,6 +548,7 @@ class ChannelConnectionRepository:
                 return None
             return {
                 "owner_user_id": row.owner_user_id,
+                "organization_id": organization_id,
                 "provider": row.provider,
                 "requested_scopes": row.requested_scopes_json or [],
                 "metadata": row.metadata_json or {},
@@ -512,7 +575,19 @@ class ChannelConnectionRepository:
                 .limit(1)
             )
             row = result.scalar_one_or_none()
-            return self._connection_to_dict(row) if row is not None else None
+        if row is None:
+            return None
+        connection = self._connection_to_dict(row)
+        # The worker presents this id (X-DeerFlow-Delegation-Id); the Gateway
+        # re-validates it on every call, so it is a pointer, not authority.
+        delegation = await OrganizationDelegationRepository(self.session_factory).resolve_active_delegation(
+            subject_type=CHANNEL_CONNECTION_SUBJECT_TYPE,
+            subject_id=connection["id"],
+            organization_id=connection.get("organization_id"),
+            scope="runs:create",
+        )
+        connection["delegation_id"] = delegation.id if delegation is not None else None
+        return connection
 
     async def set_thread_id(
         self,
@@ -525,14 +600,20 @@ class ChannelConnectionRepository:
         external_topic_id: str | None = None,
     ) -> None:
         topic_id = external_topic_id or ""
+        expected_organization_id = private_organization_id(owner_user_id)
         async with self.session_factory() as session:
             connection = await session.get(ChannelConnectionRow, connection_id, with_for_update=True)
             if connection is not None:
                 if connection.owner_user_id != owner_user_id:
                     raise ValueError("channel connection belongs to a different user")
-                expected_organization_id = private_organization_id(owner_user_id)
                 if connection.organization_id is not None and connection.organization_id != expected_organization_id:
                     raise ValueError("channel connection has conflicting organization ownership")
+            # The conversation may point only at the owner's own thread in the owner's
+            # organization. A thread with no row yet is unclaimed; Gateway run admission
+            # records its owner on first use.
+            thread = await session.get(ThreadMetaRow, thread_id)
+            if thread is not None and (thread.user_id != owner_user_id or thread.organization_id not in (None, expected_organization_id)):
+                raise ValueError("channel conversation cannot point at another owner's or organization's thread")
             stmt = select(ChannelConversationRow).where(
                 ChannelConversationRow.connection_id == connection_id,
                 ChannelConversationRow.external_conversation_id == external_conversation_id,

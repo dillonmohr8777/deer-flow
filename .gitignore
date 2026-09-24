@@ -64,6 +64,8 @@ config.yaml.bak
 .playwright-mcp
 /frontend/test-results/
 /frontend/playwright-report/
+# The Momo Daily staff portraits are private; the repo is public.
+/frontend/public/momentum/daily/people/
 .gstack/
 .worktrees
 

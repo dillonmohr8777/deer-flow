@@ -5,12 +5,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
-from sqlalchemy import select
+from sqlalchemy import exists, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
 from deerflow.persistence.organizations.identity import private_organization_id
 from deerflow.persistence.organizations.model import OrganizationMemberRow, OrganizationRow
+from deerflow.persistence.user.model import UserRow
 
 
 class _OwnedRow(Protocol):
@@ -55,6 +56,9 @@ async def active_organization_for_user(
                 OrganizationRow.id == target_id,
                 OrganizationRow.status == "active",
                 OrganizationMemberRow.status == "active",
+                # A disabled account keeps no organization, which closes its
+                # sessions, PATs and internal delegations in this one place.
+                ~exists().where(UserRow.id == user_id, UserRow.disabled_at.is_not(None)),
             )
         )
     ).first()
@@ -112,3 +116,29 @@ def organization_from_owned_parent(parent: _OwnedRow | None, expected_user_id: s
     if parent.organization_id is not None and parent.organization_id != expected_organization_id:
         raise ValueError(f"{parent_name} has conflicting organization ownership")
     return parent.organization_id
+
+
+class OrganizationMismatchError(LookupError):
+    """A write cannot be proven to belong to its organization; answer 404."""
+
+
+def organization_for_write(active_organization_id: str | None, parent_organization_id: str | None, storage_user_id: str | None) -> str | None:
+    """Return the organization to stamp on a new or re-parented row.
+
+    Takes server-owned inputs only: the middleware-verified active organization
+    (``resolve_organization_id()``), the organization of a parent row already
+    loaded under the caller's user filter, and the storage principal of the
+    workspace being written (``resolve_user_id(AUTO)``), which is not the row's
+    ``user_id`` when the row is audited to a person, such as feedback in a shared
+    workspace. Every organization is
+    ``private_organization_id(storage principal)``, so any other value is a
+    cross-organization attach or an actor/storage mix-up and raises
+    :class:`OrganizationMismatchError`. With no active organization and no
+    parent organization the result is ``None``, the quarantine marker, never a
+    guess.
+    """
+    expected = private_organization_id(storage_user_id) if storage_user_id else None
+    for organization_id in (active_organization_id, parent_organization_id):
+        if organization_id is not None and organization_id != expected:
+            raise OrganizationMismatchError("organization does not match the storage principal")
+    return active_organization_id or parent_organization_id

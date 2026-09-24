@@ -11,6 +11,7 @@ import hashlib
 import logging
 import secrets
 from datetime import UTC, datetime, timedelta
+from typing import Literal
 from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
@@ -23,7 +24,7 @@ from app.gateway.auth.password import hash_password_async, verify_password_async
 from app.gateway.auth.session_cookie import ACCESS_TOKEN_COOKIE_NAME, set_session_cookie
 from app.gateway.auth_disabled import AUTH_SOURCE_AUTH_DISABLED, AUTH_SOURCE_INTERNAL, AUTH_SOURCE_PAT, AUTH_SOURCE_SESSION
 from app.gateway.csrf_middleware import is_secure_request
-from app.gateway.deps import get_current_user_from_request
+from app.gateway.deps import get_current_user_from_request, record_audit_event
 from deerflow.persistence.engine import get_session_factory
 from deerflow.persistence.organizations.identity import private_organization_id, private_organization_slug
 from deerflow.persistence.organizations.invitation import InvitationRow
@@ -39,10 +40,17 @@ _SHARED_MEMBER_ROLES = ("owner", "admin")
 
 
 class CreateInvitationRequest(BaseModel):
+    """``role`` is the membership the invitation grants. "member" is least
+    privilege (no member management, no org settings -- see the
+    _SHARED_MEMBER_ROLES / _EDIT_ROLES allowlists elsewhere) and is the
+    default; "admin" stays available when the inviter explicitly chooses it.
+    """
+
     model_config = ConfigDict(extra="forbid")
 
     organization_id: str = Field(min_length=1, max_length=64)
     email: EmailStr
+    role: Literal["member", "admin"] = "member"
 
     @field_validator("email")
     @classmethod
@@ -179,6 +187,17 @@ def _set_workspace_session(response: Response, request: Request, user_id: str, t
     )
 
 
+_INVITATIONS_FROZEN_DETAIL = "Workspace invitations are paused while workspace isolation is upgraded. Existing members keep their access."
+
+
+def _refuse_if_frozen() -> None:
+    """Decision 1: no new invitations and no acceptance of existing tokens."""
+    from app.gateway.authz import _get_route_authorization_config
+
+    if _get_route_authorization_config().invitations_frozen:
+        raise HTTPException(status_code=403, detail=_INVITATIONS_FROZEN_DETAIL)
+
+
 def _no_store(response: Response) -> None:
     response.headers["Cache-Control"] = "no-store"
     response.headers["Pragma"] = "no-cache"
@@ -187,6 +206,7 @@ def _no_store(response: Response) -> None:
 @router.post("", response_model=CreateInvitationResponse, status_code=status.HTTP_201_CREATED)
 async def create_invitation(body: CreateInvitationRequest, request: Request, response: Response) -> CreateInvitationResponse:
     _no_store(response)
+    _refuse_if_frozen()
     actor = await get_current_user_from_request(request)
     actor_id = str(actor.id)
     token = secrets.token_urlsafe(32)
@@ -205,7 +225,7 @@ async def create_invitation(body: CreateInvitationRequest, request: Request, res
                     token_hash=_token_hash(token),
                     organization_id=organization.id,
                     email=str(body.email).lower(),
-                    role="admin",
+                    role=body.role,
                     created_by=actor_id,
                     expires_at=expires_at,
                     created_at=now,
@@ -213,6 +233,9 @@ async def create_invitation(body: CreateInvitationRequest, request: Request, res
                 )
             )
 
+    await record_audit_event(
+        request, action="invitation.created", outcome="success", actor_user_id=actor_id, organization_id=organization.id, target_type="invitation", target_id=invitation_id, details={"email": str(body.email).lower(), "role": body.role}
+    )
     return CreateInvitationResponse(
         id=invitation_id,
         token=token,
@@ -225,6 +248,7 @@ async def create_invitation(body: CreateInvitationRequest, request: Request, res
 @router.post("/inspect", response_model=InspectInvitationResponse)
 async def inspect_invitation(body: InvitationTokenRequest, response: Response) -> InspectInvitationResponse:
     _no_store(response)
+    _refuse_if_frozen()
     now = _now()
     async with _session_factory()() as session:
         invitation = await session.scalar(select(InvitationRow).where(InvitationRow.token_hash == _token_hash(body.token)))
@@ -252,6 +276,7 @@ async def inspect_invitation(body: InvitationTokenRequest, response: Response) -
 @router.post("/accept", response_model=AcceptInvitationResponse)
 async def accept_invitation(body: AcceptInvitationRequest, request: Request, response: Response) -> AcceptInvitationResponse:
     _no_store(response)
+    _refuse_if_frozen()
     from app.gateway.routers.auth import _check_rate_limit, _get_client_ip, _record_login_failure, _record_login_success
 
     client_ip = _get_client_ip(request)
@@ -262,6 +287,8 @@ async def accept_invitation(body: AcceptInvitationRequest, request: Request, res
     user_id: str | None = None
     token_version = 0
     organization_id: str | None = None
+    invitation_id: str | None = None
+    granted_role: str | None = None
 
     try:
         async with session_factory() as session:
@@ -299,6 +326,7 @@ async def accept_invitation(body: AcceptInvitationRequest, request: Request, res
                 if organization is None or not await _invitation_issuer_is_active(session, invitation):
                     raise _forbidden()
                 organization_id = organization.id
+                invitation_id = invitation.id
 
                 existing = await _find_user_by_email(session, invitation.email)
                 if existing is not None:
@@ -358,20 +386,24 @@ async def accept_invitation(body: AcceptInvitationRequest, request: Request, res
                     {"organization_id": organization_id, "user_id": user_id},
                 )
                 if workspace_member is None:
+                    granted_role = invitation.role or "member"
                     session.add(
                         OrganizationMemberRow(
                             organization_id=organization_id,
                             user_id=user_id,
-                            role=invitation.role or "admin",
+                            role=granted_role,
                             status="active",
                             created_at=now,
                             updated_at=now,
                         )
                     )
                 elif workspace_member.role != "owner":
-                    workspace_member.role = invitation.role or "admin"
+                    granted_role = invitation.role or "member"
+                    workspace_member.role = granted_role
                     workspace_member.status = "active"
                     workspace_member.updated_at = now
+                else:
+                    granted_role = "owner"
     except IntegrityError:
         logger.info("Workspace invitation acceptance conflicted with an existing account or membership")
         raise HTTPException(status_code=409, detail="This invitation could not be accepted; retry from the invitation page") from None
@@ -379,6 +411,7 @@ async def accept_invitation(body: AcceptInvitationRequest, request: Request, res
     assert user_id is not None and organization_id is not None
     _record_login_success(client_ip)
     _set_workspace_session(response, request, user_id, token_version, organization_id)
+    await record_audit_event(request, action="invitation.accepted", outcome="success", actor_user_id=user_id, organization_id=organization_id, target_type="invitation", target_id=invitation_id, details={"role": granted_role})
     return AcceptInvitationResponse(workspace_id=organization_id)
 
 
@@ -387,6 +420,7 @@ async def revoke_invitation(invitation_id: str, request: Request) -> Response:
     actor = await get_current_user_from_request(request)
     actor_id = str(actor.id)
     now = _now()
+    revoked_organization_id: str | None = None
     async with _session_factory()() as session:
         async with session.begin():
             invitation = await session.get(InvitationRow, invitation_id)
@@ -397,6 +431,8 @@ async def revoke_invitation(invitation_id: str, request: Request) -> Response:
                 raise HTTPException(status_code=403, detail="Only an active workspace owner or admin can revoke invitations")
             invitation.consumed_at = now
             invitation.updated_at = now
+            revoked_organization_id = organization.id
+    await record_audit_event(request, action="invitation.revoked", outcome="success", actor_user_id=actor_id, organization_id=revoked_organization_id, target_type="invitation", target_id=invitation_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
