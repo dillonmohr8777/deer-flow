@@ -1,225 +1,240 @@
 ---
-name: Momentum Command Center
-description: A living blue-white operating current for inspectable agent work.
+name: MomoBot Paper
+description: Cut paper on a cream desk. Royal blue marks what is selected, ink carries the words, and a hint of brass marks work in progress.
 colors:
-  canvas: "#f7fbff"
-  surface: "#ffffff"
-  surface-blue: "#edf7ff"
-  surface-violet: "#f2f0ff"
-  ink: "#07172f"
-  muted: "#50657b"
-  line: "#d2e3f2"
-  strong: "#91b7d6"
-  blue: "#075bd8"
-  blue-deep: "#06439d"
-  cyan: "#008fc9"
-  cyan-text: "#00668e"
-  violet: "#5b3bd8"
-  rose: "#c73570"
-  green: "#087d62"
-  danger: "#b4233e"
+  cream: "#f2ede3"
+  cream-hi: "#fbf8f1"
+  cream-lo: "#e9decc"
+  kraft: "#d8c3a0"
+  ink: "#101e3f"
+  ink-muted: "#3a4a6b"
+  royal: "#1b4b9e"
+  royal-deep: "#14346e"
   focus: "#003da5"
+  line: "#8c7a5c"
+  brass: "#c8a04a"
+  brass-text: "#7a5e18"
+  cyan: "#17a9e8"
+  cyan-text: "#0a6183"
+  ok: "#0a6b4f"
+  danger: "#9a2b3c"
 typography:
   display:
-    fontFamily: "Momentum Display, Archivo Black, sans-serif"
-    fontSize: "clamp(34px, 4vw, 58px)"
-    fontWeight: 400
-    lineHeight: 1.02
-    letterSpacing: "-0.03em"
+    fontFamily: "Fraunces, Georgia, serif"
+    fontSize: "clamp(2.25rem, 4vw, 3.25rem)"
+    fontWeight: 700
+    letterSpacing: "-0.01em"
   headline:
-    fontFamily: "Momentum UI, Nunito Sans, system-ui, sans-serif"
-    fontSize: "21px"
-    fontWeight: 900
-    lineHeight: 1.25
+    fontFamily: "Fraunces, Georgia, serif"
+    fontSize: "clamp(1.75rem, 1.25rem + 1.2vw, 2.25rem)"
+    fontWeight: 700
+    lineHeight: 1.15
+    letterSpacing: "-0.01em"
   body:
-    fontFamily: "Momentum UI, Nunito Sans, system-ui, sans-serif"
-    fontSize: "15px"
+    fontFamily: "Nunito Sans, system-ui, sans-serif"
+    fontSize: "0.875rem"
     fontWeight: 400
     lineHeight: 1.5
   label:
-    fontFamily: "Momentum UI, Nunito Sans, system-ui, sans-serif"
-    fontSize: "13px"
-    fontWeight: 800
-    lineHeight: 1.2
+    fontFamily: "Nunito Sans, system-ui, sans-serif"
+    fontSize: "11px"
+    fontWeight: 700
+    letterSpacing: "0.18em"
 rounded:
-  sm: "8px"
-  md: "11px"
-  lg: "14px"
-  card: "16px"
-  pill: "999px"
+  mark: "1px"
+  chip: "2px"
+  card: "4px"
+  button: "6px"
+  sheet: "2px 5px 3px 6px"
 spacing:
-  xs: "4px"
-  sm: "8px"
-  md: "12px"
-  lg: "16px"
-  xl: "24px"
-  section: "34px"
+  gutter-phone: "16px"
+  gutter-desktop: "32px"
+  container-sm: "576px"
+  container-md: "816px"
+  container-lg: "1024px"
+  touch-min: "44px"
 components:
   button-primary:
-    backgroundColor: "{colors.blue}"
-    textColor: "{colors.surface}"
-    typography: "{typography.label}"
-    rounded: "{rounded.md}"
-    padding: "12px 18px"
-  card-agent:
-    backgroundColor: "{colors.surface}"
+    backgroundColor: "{colors.royal}"
+    textColor: "{colors.cream-hi}"
+    rounded: "{rounded.button}"
+  sheet:
+    backgroundColor: "{colors.cream-hi}"
     textColor: "{colors.ink}"
-    rounded: "{rounded.lg}"
-    padding: "14px 12px"
-  input-search:
-    backgroundColor: "{colors.surface}"
-    textColor: "{colors.ink}"
-    rounded: "{rounded.sm}"
-    padding: "9px 11px"
+    rounded: "{rounded.sheet}"
+  dialog:
+    backgroundColor: "{colors.cream-hi}"
+    shadow: "8px 10px 0 {colors.kraft}"
 ---
 
-# Design System: Momentum Command Center
+# Design System: MomoBot Paper
 
-## Overview
+MomoBot is Momentum's operating console. The shipped look is the **paper cutout treatment**: cream paper, ink type, royal blue for state and action, and a hint of brass. It is the default for the signed-in workspace (`DEFAULT_APPEARANCE.treatment` in `appearance-preferences.ts`) and for the front door: `/`, `/login` and `/invite` (`FUNNEL_TREATMENT` in `components/momentum/treatment.ts`).
 
-**Creative North Star: "Momentum Current"**
+The source of truth is code, not this file:
 
-Momentum is a living blue-white operating surface where language becomes work and work resolves into evidence. White and ice-blue fields carry a controlled current of cobalt, cyan, indigo, and violet; color clarifies source, model activity, state, and selection without inventing progress.
+- `frontend/src/styles/paper.css` holds the tokens, the shell skin, the decoration and the motion layer.
+- `tests/unit/paper-tokens.test.ts` recomputes every contrast ratio listed below from that file.
+- `frontend/src/styles/fonts.css` holds the type voices.
+- `components/workspace/page-body.tsx` holds the shared page states.
 
-The interface is friendly enough for daily client work and rigorous enough for an operator. Real runs, agents, artifacts, costs, and errors stay legible. Every agent and conversation receives a deterministic authored vector identity, so long histories remain scannable without emoji or platform-dependent pictograms.
+The canon is "blue, white, grey, with a hint of gold". Restraint is the craft.
 
-**Key Characteristics:**
+Paper is light only. A dark theme choice keeps the shadcn dark tokens. Other Appearance options (`classic`, `current`, `space`, `future`, `retro`) still exist, but they are opt-in and this file does not describe them.
 
-- White and ice-blue grounds with Momentum cobalt structure and restrained spectral accents.
-- A luminous lead-agent source connected to specialist work and execution receipts.
-- Deterministic Momentum vector glyphs for agents, conversations, and background work.
-- Glow and motion only when a state is live, selected, or actively changing.
-- Generated copy uses semantic color to speed reading while preserving long-form legibility.
+## Colour
 
-## Colors
+Every token lives under `[data-treatment="paper"]`. Ratios are WCAG contrast, as proven by the unit test.
 
-The palette is cool, luminous, and operational: deep navy establishes trust, cobalt carries action, cyan signals motion, violet identifies model intelligence, green verifies completion, and red is reserved for real exceptions.
+| Token                | Hex     | Use                                                                    | Ratio             |
+| -------------------- | ------- | ---------------------------------------------------------------------- | ----------------- |
+| `--paper-cream`      | #f2ede3 | Page canvas, sidebar (with a 5% grain tile)                            | ink 14.07         |
+| `--paper-cream-hi`   | #fbf8f1 | Sheets, cards, dialogs, popovers, the selected sidebar row             | ink 15.47         |
+| `--paper-cream-lo`   | #e9decc | Hover and quiet fills, secondary buttons, notices                      | ink 12.34         |
+| `--paper-kraft`      | #d8c3a0 | Dialog offset shadow, hero scraps, the pressed filter fill             | ink 9.56          |
+| `--paper-ink`        | #101e3f | Text                                                                   |                   |
+| `--paper-ink-muted`  | #3a4a6b | Supporting copy, labels, inactive tabs                                 | 7.59 on cream     |
+| `--paper-royal`      | #1b4b9e | Primary actions, selected state, active status                         | 7.07 on cream     |
+| `--paper-royal-deep` | #14346e | Hover on primary, the /invite and /login field                         | cream on it 10.49 |
+| `--paper-focus`      | #003da5 | Keyboard focus rings only                                              | 8.14              |
+| `--paper-line`       | #8c7a5c | Borders, inputs, rules (UI only, never text)                           | 3.56              |
+| `--paper-brass-text` | #7a5e18 | A brass word, the attention status                                     | 5.23              |
+| `--paper-cyan-text`  | #0a6183 | A cyan word                                                            | 5.90              |
+| `--paper-ok`         | #0a6b4f | Verified completion                                                    | 5.57              |
+| `--paper-danger`     | #9a2b3c | Real failures and errors only                                          | 6.46              |
+| `--paper-brass`      | #c8a04a | **Object only** (2.75): pins, status dots, the Light theme preview dot |                   |
+| `--paper-cyan`       | #17a9e8 | **Object only** (2.28)                                                 |                   |
 
-### Primary
+Rules:
 
-- **Momentum Cobalt** ({colors.blue}): Primary actions, active navigation, selected paths, links, and the dominant authored stroke.
-- **Deep Cobalt** ({colors.blue-deep}): High-emphasis labels and darker gradient anchors.
+- **Colour carries state.** Royal marks the selected or acting thing. Green means verified done. Danger means a real failure. Nothing is coloured for decoration.
+- **Brass is a hint.** A brass pin means something is working right now, so it is never a resting ornament. Brass and cyan as _words_ use their `-text` variants.
+- **The shell remaps shadcn.** Under paper, paper.css maps `--background`, `--card`, `--primary`, `--border`, `--input`, `--ring`, `--muted-surface`, `--accent` and the sidebar tokens to paper tokens. Components use the semantic tokens (`bg-card`, `border-border`, `text-muted-foreground`), never hard-coded hex.
+- **Command Center locals follow paper too.** `command-center.module.css` maps its own palette (`--canvas`, `--surface`, `--surface-blue`, `--ink`, `--line`, `--blue`) to paper tokens under `.root[data-treatment="paper"]`. `--surface-blue` is cream-lo.
+- **Focus is always visible.** Focus uses a 2 to 3px `--paper-focus` outline or `--ring` (the global rule in globals.css is 3px with a 2px offset). Never remove an outline without a replacement.
 
-### Secondary
+## Type
 
-- **Current Cyan** ({colors.cyan}): Live graphical motion and the bright edge of the current.
-- **Readable Cyan** ({colors.cyan-text}): Small model metadata and link text on white; Current Cyan remains the graphical accent.
-- **Intelligence Violet** ({colors.violet}): Token data and generated-copy hierarchy as text only. Never an action surface or gradient stop.
-- **Conversation Rose** ({colors.rose}): Rare identity variation inside the deterministic glyph system, not a generic alert color.
+| Voice   | Token              | Face                           | Where                                                                                             |
+| ------- | ------------------ | ------------------------------ | ------------------------------------------------------------------------------------------------- |
+| Heading | `--m-font-serif`   | Fraunces 700, tracking -0.01em | Page h1 and section h2 on paper pages, dialog titles, Command Center headings and metric numerals |
+| Text    | `--m-font-text`    | Nunito Sans                    | Everything else: body, controls, labels, data                                                     |
+| Display | `--m-font-display` | Archivo Black                  | The landing's MomoBot wordmark only                                                               |
+| Code    | `--m-font-mono`    | System mono stack              | Code, ids, file names                                                                             |
 
-### Tertiary
+Sizes:
 
-- **Verified Green** ({colors.green}): Confirmed completion and enabled state.
-- **Exception Red** ({colors.danger}): Failed runs, timeouts, and errors only.
-- **Focus Cobalt** ({colors.focus}): Keyboard focus outline only; it is an accessibility signal, not a decorative accent.
+- **Command Center h1:** `clamp(2.25rem, 4vw, 3.25rem)`.
+- **Page h1** (Agents, Scheduled tasks, Projects and others through `page-body.module.css`): `clamp(1.75rem, 1.25rem + 1.2vw, 2.25rem)`, line-height 1.15.
+- **Section titles inside Settings:** 1.125rem semibold `h3`.
+- **Body UI text:** 0.875rem with a 1.5rem line-height. Ledes wrap at 62ch.
+- **Labels** (sidebar groups, metric names, filter group names): 11px, 700, 0.14 to 0.18em tracking, uppercase, ink-muted.
+- **Metric numerals** scale with their cell: `clamp(1.25rem, 20cqi, 3.5rem)`.
 
-### Neutral
+Row titles stay Nunito Sans. Fraunces is for headings, never labels, buttons or table data; the Command Center's four big metric numerals are the one exception.
 
-- **Current Canvas** ({colors.canvas}): Main application field.
-- **Clear Surface** ({colors.surface}): Cards, controls, and readable content planes.
-- **Ice Surface** ({colors.surface-blue}): Hover, subtle state, and cool tonal layering.
-- **Violet Surface** ({colors.surface-violet}): Quiet model-intelligence emphasis.
-- **Current Ink** ({colors.ink}): Default text and high-value numbers.
-- **Muted Current** ({colors.muted}): Supporting copy and metadata.
-- **Current Line** ({colors.line}): Dividers and low-emphasis borders.
-- **Strong Current Line** ({colors.strong}): Inputs, connectors, and stronger boundaries.
+## Shape and depth
 
-### Named Rules
+- **Radius**
+  - Sheets use an uneven `2px 5px 3px 6px`, so they read as cut, not machined.
+  - Command Center panels and cards use 4px.
+  - Specialist cards, chips and filters use 2px.
+  - Primary buttons use 6px.
+  - Status marks are 1px squares or circles.
+  - Shadcn primitives (inputs, selects, menus) keep the `--radius` scale, base 0.625rem.
+- **Depth is print, not glow.**
+  - Sheets have a hairline `--paper-line` edge and a 1px ink shadow at 10%.
+  - Dialogs are cream-hi sheets with a hard `8px 10px 0` kraft offset.
+  - The dialog overlay is ink at 45%.
+  - No zero-offset coloured halos.
+- **Decoration** (paper.css; every piece is aria-hidden and dropped under `forced-colors`):
+  - `.paper-torn` and `.paper-torn-alt` give a 24px torn top edge; alternate them across a run of sheets.
+  - `.sheet::after` adds a 5% grain.
+  - `.pinned::before` adds a 14px brass pin, which means working.
+- **Scraps** (`components/momentum/scraps.tsx`) appear only in the sidebar footer, in `EmptyState`, and in the Momo Daily margins at desktop widths. Never in chat threads, forms, dialogs or dense tables.
+- **The blueprint grid** on royal-deep is the /invite and /login field, a landing scrap and the Command Center hero scrap. It is intentional there and nowhere else.
 
-**The Truth Before Glow Rule.** Color, glow, and motion may amplify recorded state; they never manufacture activity, success, cost, or urgency.
+## Motion
 
-**The Spectral Semantics Rule.** Blue means structure, cyan means motion, violet means model intelligence, green means verified completion, and red means a real exception.
+Paper motion is a closed list of five items (`@layer paper-motion`):
 
-## Typography
+1. Front-door letters settle in 380ms, with a 40ms stagger.
+2. Invite release: the pin lifts and the sheet slides away in 420ms.
+3. Working squares tick in `steps(3)` over 1.2s while the work is active.
+4. Cards lift 2px on hover over 140ms.
+5. The brand signature drifts.
 
-**Display Font:** Momentum Display / Archivo Black (with sans-serif fallback)
-**Body Font:** Momentum UI / Nunito Sans (with system sans fallback)
-
-**Character:** A heavy, compact display voice makes the command surface decisive; rounded Momentum UI text keeps dense operational copy warm and readable. Tabular numerals stabilize changing counts.
-
-### Hierarchy
-
-- **Display** (400, `clamp(34px, 4vw, 58px)`, 1.02): Mission Control and other singular page titles.
-- **Headline** (900, 21px, 1.25): Primary sections and major result headings.
-- **Title** (900, 17–19px, 1.3): Agent names, run names, and drawer headings.
-- **Body** (400, 15px, 1.5): Interface copy and generated responses, normally constrained to a readable measure.
-- **Label** (800, 11–14px, 1.2): Tabs, statuses, metadata, controls, and metric labels.
-
-### Named Rules
-
-**The Friendly Density Rule.** Use weight, spacing, and semantic color to make dense information scan quickly; never solve density by shrinking body copy below a comfortable reading size.
+Items 1, 2 and 5 need both `prefers-reduced-motion: no-preference` and the user's brand-motion setting, which is **off by default**. Reduced motion turns every item off, not down. Nothing moves to fake activity.
 
 ## Layout
 
-The Command Center uses a 1560px maximum content frame with 32px desktop gutters and a 34px section rhythm. The first viewport moves from title and mission action to horizontally scrollable navigation, a compact four-fact strip, then a two-column agent/work stream. Below 1100px, the overview becomes one column. At 640px, gutters reduce to 16px, the heading stacks, jobs move before the specialist roster, metrics become a single swipeable rail, specialists become a vertical connected current, and tabs scroll horizontally rather than wrap.
+- **Page frame.** Operate pages sit in `WorkspaceContainer`, with a max width of `--container-width-md` (816px) or `-lg` (1024px). Command Center has its own 1560px frame, with 32px gutters on desktop and 16px on phones.
+- **Page header.** The h1 and a one-sentence lede sit on the left. One primary action sits on the right and wraps under the lede on phones. The work leads: when a page has records, show them before any create form (Scheduled tasks puts its list first and a "New scheduled task" button jumps to the form).
+- **Command Center order.**
+  1. Top bar: sidebar trigger, "Command Center", and the workspace scope as a plain label.
+  2. Heading: the view name as h1, then the view's own lede (the brand line "Give your ambition a team" belongs to Mission Control only), then the hero crew.
+  3. Actions: Start a mission (primary) and Appearance (quiet link).
+  4. Tabs: Mission Control, Agent Studio, Jobs, Workflows, Client Spaces, Business Intelligence, Artifact Library. A tab the backend only partly supports carries a Preview tag and a one-line note.
+  5. A four-fact strip: Active runs, Recorded runs, Errors & timeouts, Recorded tokens.
+  6. The view. Mission Control shows the agent team (lead plus specialists) beside Latest assignments, then Also in your workspace links, then the footer ("No model calls from this dashboard").
+- **Selection.** Selecting a run opens its receipt drawer on the right.
 
-Conversation pages keep generated copy in a readable central measure and anchor the composer at the bottom. On persisted mobile conversations, the background-work control sits above the composer so it never obscures the submit control.
+## States
 
-## Elevation & Depth
+Use the shared components in `components/workspace/page-body.tsx`. Do not write one-off state markup.
 
-Depth is cool and diffuse. White surfaces use faint blue ambient shadows; selected cards and the lead-agent source receive stronger cobalt depth. Background auroras and the faceted current provide atmosphere, but zero-offset glow is reserved for live rings and selected paths. Reduced-motion users receive the same hierarchy with all nonessential animation removed.
+- **Loading:** `WorkingState`. Three ticking squares plus the word, `role="status"`. No spinner in the middle of content.
+- **Empty:** `EmptyState`. A small Momo holding a tool, two scraps, a bold title, **one sentence that says what will appear here**, and **one action** (for example Chats: "No recent chats", then "Conversations you start with the team show up here, newest first", then New chat). Never a bare "nothing here".
+- **Error:** `ErrorState`. A red-thread tag, the plain reason, the server detail when there is one, and one next step (Retry or Try again), `role="alert"`.
+- **Status:** `StatusTag` puts a word beside a shape, so colour is never the only signal:
+  - ok: filled green circle
+  - active: filled royal circle
+  - idle: hollow circle
+  - attention: brass square
+  - danger: rotated square
+  - unknown: dashed circle
+- **Truth before tidiness.**
+  - Missing data is unavailable, not zero. Show "Not recorded", "Not priced" or "Unavailable".
+  - A failed or pending read never produces an "empty" message. For example, Client Spaces says "no clients" only after a successful empty read.
+  - Configured agents are definitions, not running workers.
+  - Missing ids in a receipt read as a muted word, not a monospace placeholder.
 
-Motion is state-bound: controls transition in 160ms, the desktop live ring resolves over 1.9s, the desktop status pulse runs at 1.8s, the ambient current drifts over 7s, and active fetch spinners use 1s. Mobile keeps at most one continuous state loop in the Command Center. Reduced-motion removes every loop and transition.
+## Phones
 
-### Named Rules
+- Below 768px the sidebar becomes a sheet and pages take the mobile shell. The server renders the phone layout from a User-Agent hint, so it does not flash the desktop first.
+- Gutters are 16px on every page. No horizontal page scroll (pinned by `ui-polish-mobile.spec.ts`).
+- Icon buttons have a 44px minimum below 640px (`workspace-mobile.css`). Command Center controls are 44 to 48px.
+- Tabs, metric strips and the Settings section list become sideways rails. The active item is scrolled into view, and grid items get `min-width: 0` so a rail scrolls instead of widening its parent.
+- Command Center puts Latest assignments before the agent team on phones. It swaps DOM order, not CSS `order`, so focus order matches reading order.
+- The chat composer keeps its disclaimer clear of the bottom edge with safe-area padding. The background-work control never covers the submit button.
+- Dialog headers are left-aligned at every width.
 
-**The State Earns Light Rule.** Resting content stays clear and quiet; stronger glow belongs only to live, selected, focused, or actively changing state.
+## Copy
 
-## Shapes
+- The product is **MomoBot**; the company is **Momentum**.
+- **No em or en dashes** in user-visible copy. Use a colon, a comma or a new sentence.
+- Actions are sentence case and name what they do: "New agent", "Sign in", "Start a mission", "New scheduled task".
+- No internal identifiers in labels (`lead_agent`, raw status enums). Show "Default agent", "Active", "Prospect".
+- Errors name the problem and the recovery.
+- Scheduled-task presets are agency routines that draft and cite; none sends, posts or spends on its own.
+- Locale strings live in `core/i18n/locales/{en-US,zh-CN,types}.ts` and change together.
 
-Cards use gently rounded 14–16px corners; controls use 8–11px corners. Pills are limited to compact status and account controls. Connector geometry is crisp and deterministic. Authored Momentum glyphs use circles, paths, gradients, and nodes as true vector identity marks—not as illustration substitutes.
+## Don't
 
-## Components
+- **No AI purple or violet** in product UI. No violet gradient stops.
+- **No neon glow**, no glassmorphism or decorative blur, and no floating gradient orbs.
+- **No three equal cards in a feature row.** No generic same-size card grids for the agent team.
+- **No emoji or platform pictograms as identity.** Agents use canon Momo art or the deterministic `MomentumGlyph`.
+- **No gradient text**, and no coloured left-border stripes on cards or alerts.
+- **No decorative motion or fake progress.** No glow on resting content.
+- **No new hex values.** If a colour is missing, it belongs in paper.css with a measured ratio and a test.
 
-### Buttons
+## Known drift
 
-- **Shape:** Compact rounded action controls (11px).
-- **Primary:** Solid Momentum Cobalt, white text (6.0:1), 12px × 18px padding, hairline shadow. No gradient: brand tokens only, no AI purple (owner decision, 2026-09-22).
-- **Hover / Focus:** Deepens to Deep Cobalt on hover; keyboard focus receives a 3px Focus Cobalt outline with 3px offset. Controls on deep blue receive a white inner outline.
-- **Secondary / Ghost:** Clear or ice-blue surfaces with cobalt text and a Current Line border.
+This is where code still departs from the rules above, recorded so no one copies it:
 
-### Cards / Containers
-
-- **Operational panels:** Clear Surface at roughly 93% opacity, 16px radius, Current Line border, and a soft blue ambient shadow.
-- **Lead agent:** Solid Deep Cobalt with white text (9.1:1) and the custom glyph. No violet, no glow (owner decision, 2026-09-22).
-- **Specialist cards:** Clear Surface with compact metadata; selection shifts to an ice/violet wash and strengthens the connected path.
-
-### Inputs / Fields
-
-- **Search/select:** Clear Surface, Strong Current Line, 8–9px radius, and compact 9–11px padding.
-- **Focus:** Focus Cobalt outline; placeholders remain Muted Current and meet the surrounding tonal system.
-
-### Navigation
-
-- **Top bar:** Authentic Momentum mark, current surface name, and account scope on a translucent ice-white rail.
-- **Tabs:** Cobalt active state with a solid cobalt underline; compact horizontal overflow on narrow screens.
-
-### Momentum Glyph
-
-Each seed deterministically chooses one of eight authored paths, six accent colors, twelve rotations, and twenty-five node positions. This yields thousands of stable identities while keeping a shared visual grammar and accessible labels where the glyph carries meaning.
-
-### Generated Copy
-
-Long-form responses keep navy body text. Headings run through a cobalt-indigo gradient; strong text is deep blue, links and emphasis use cyan, list markers and code use violet, and blockquotes receive an ice-blue wash. Dark conversations use a separate high-contrast blue-violet ramp, and forced-colors mode returns gradient headings to solid system text. The color hierarchy is semantic and restrained enough for sustained reading.
-
-### Execution Receipt
-
-Selecting a run opens a right-side evidence drawer with recorded status, model, usage, cost when available, errors, artifacts, and only the controls the runtime truly supports.
-
-## Do's and Don'ts
-
-### Do:
-
-- **Do** drive activity, counts, model names, costs, and status from recorded runtime evidence.
-- **Do** use the authentic Momentum mark, self-hosted Momentum type, and deterministic vector glyph system together.
-- **Do** preserve loading, error, empty, disabled, hover, keyboard focus, and reduced-motion states.
-- **Do** keep generated copy colorful by meaning and readable over long sessions.
-- **Do** keep mobile controls clear of the composer and other primary actions.
-
-### Don't:
-
-- **Don't** use emoji, Unicode stand-ins, or platform-dependent pictograms as agent or conversation identity.
-- **Don't** add perpetual motion, decorative fake progress, or glow to resting content.
-- **Don't** turn unavailable data into zero or configured agents into claims of running workers.
-- **Don't** flatten the lead-agent current into a generic same-size card grid.
-- **Don't** let spectral styling reduce contrast or become rainbow confetti.
+- The landing hero heading uses gradient text ending in violet (`momentum-landing.module.css`, `globals.css` violet stops).
+- `workspace-appearance.module.css` carries raw hex for its treatment previews.
+- `command-center.module.css` keeps a pre-paper local palette on `.root`, which paper overrides.
+- `.impeccable/design.json` still describes the retired "Momentum Current" palette.
+- Operate pages still use several header patterns and several selected-state styles, including a kraft fill for pressed filters where the rule says royal. One shared header and one selected rule are open follow-ups.
