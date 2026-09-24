@@ -1205,7 +1205,7 @@ Content-Type: application/json
 {"user_id": "…", "role": "account_manager" | "contributor" | "client_contact"}
 ```
 
-Upserts by `(client_id, user_id)` — assigning an already-assigned person updates their role rather than adding a second row. `DELETE /api/clients/{client_id}/assignments/{user_id}` removes one assignment (`204`).
+Upserts by `(client_id, user_id)`: assigning an already-assigned person updates their role rather than adding a second row. `DELETE /api/clients/{client_id}/assignments/{user_id}` removes one assignment (`204`).
 
 #### Registry Import
 
@@ -1216,7 +1216,7 @@ Content-Type: application/json
 {"clients": [{"id", "displayName", "aliases"?, "status"?, "emailDomains"?, "slackChannels"?, ...}]}
 ```
 
-Admin-only (`403` otherwise) — the canonical roster shape from `client-operations/registry/clients.json`; unrecognized fields (`contacts`, `evidence`, `folder`, `accessRefs`, `lastEvidenceAt`) are ignored. Upserts by `id` → `registry_id` within the caller's active organization; an entry missing `id` or `displayName` is skipped, never deleted. Owners are not structured in the registry yet, so this never writes `client_assignments`. `backend/scripts/import_client_registry.py` is the operator CLI: it logs in, then posts a local registry file to this endpoint.
+Admin-only (`403` otherwise). The body is the canonical roster shape from `client-operations/registry/clients.json`; unrecognized fields (`contacts`, `evidence`, `folder`, `accessRefs`, `lastEvidenceAt`) are ignored. Upserts by `id` → `registry_id` within the caller's active organization; an entry missing `id` or `displayName` is skipped, never deleted. Owners are not structured in the registry yet, so this never writes `client_assignments`. `backend/scripts/import_client_registry.py` is the operator CLI: it logs in, then posts a local registry file to this endpoint.
 
 **Response:** `{"created": <int>, "updated": <int>, "skipped": <int>, "skipped_ids": [...]}`.
 

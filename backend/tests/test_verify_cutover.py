@@ -55,7 +55,7 @@ def _seed(path: Path, *, email: str, doc_sha: str) -> None:
 def test_local_head_is_current_pinned_revision():
     # Pinned per plans/momentum-backend-goal.md M7; bump this alongside a
     # new head revision so the drift is deliberate, not silent.
-    assert local_head() == "0032_org_delegation_backfill"
+    assert local_head() == "0034_clients"
 
 
 def test_db_alembic_version_none_when_table_missing(tmp_path):
