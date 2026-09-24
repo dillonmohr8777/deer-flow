@@ -643,6 +643,7 @@ export interface Translations {
     cronHelp: string;
     create: {
       title: string;
+      newTask: string;
       taskTitle: string;
       prompt: string;
       agent: string;
@@ -746,10 +747,11 @@ export interface Translations {
     };
     recipes: {
       label: string;
-      trending: { title: string; desc: string };
-      news: { title: string; desc: string };
-      issues: { title: string; desc: string };
-      weekly: { title: string; desc: string };
+      morningBrief: { title: string; desc: string };
+      clientReport: { title: string; desc: string };
+      siteWatch: { title: string; desc: string };
+      visibility: { title: string; desc: string };
+      pipeline: { title: string; desc: string };
     };
   };
 
@@ -856,6 +858,7 @@ export interface Translations {
     deleteConfirm: (title: string) => string;
     deleteFailed: string;
     noActiveChats: string;
+    noActiveChatsHint: string;
     activeChats: string;
     archivedChats: string;
     archiveChat: string;

@@ -693,10 +693,11 @@ export const zhCN: Translations = {
     cronHelp: "打开 crontab.guru",
     create: {
       title: "创建定时任务",
+      newTask: "新建定时任务",
       taskTitle: "任务标题",
       prompt: "提示词",
       agent: "Agent",
-      leadAgent: "默认 Agent（lead_agent）",
+      leadAgent: "默认 Agent",
       submit: "创建",
       fillRequired: "请填写所有必填项",
     },
@@ -801,21 +802,25 @@ export const zhCN: Translations = {
     },
     recipes: {
       label: "快速创建",
-      trending: {
-        title: "GitHub Trending 日榜",
-        desc: "总结今日 Trending 前十仓库",
+      morningBrief: {
+        title: "每日客户晨报",
+        desc: "工作日早上：按客户列出待回复、待审批和停滞的工作",
       },
-      news: {
-        title: "每日科技新闻摘要",
-        desc: "收集并总结当日科技要闻",
+      clientReport: {
+        title: "每周客户报告草稿",
+        desc: "每周五下午：为一位客户起草附带来源的报告，供审阅",
       },
-      issues: {
-        title: "GitHub Issue 分诊",
-        desc: "分诊某仓库的 open issues（填入 {{repo}}）",
+      siteWatch: {
+        title: "每日网站巡检",
+        desc: "每天早上：哪些客户网站无法访问或有变化",
       },
-      weekly: {
-        title: "每周周报",
-        desc: "每周一汇总一周工作",
+      visibility: {
+        title: "每周 SEO 与 AI 答案检查",
+        desc: "每周三：搜索排名与 AI 答案提及情况，并给出改进建议",
+      },
+      pipeline: {
+        title: "周一销售管道与跟进",
+        desc: "每周一：在谈项目、逾期线索和跟进草稿",
       },
     },
   },
@@ -934,6 +939,7 @@ export const zhCN: Translations = {
       `确定删除“${title}”吗？这将删除对话及其文件，此操作不可撤销。`,
     deleteFailed: "删除对话失败，请重试。",
     noActiveChats: "暂无近期会话",
+    noActiveChatsHint: "你与团队开启的会话会显示在这里，最新的在最前。",
     activeChats: "近期会话",
     archivedChats: "已归档",
     archiveChat: "归档",

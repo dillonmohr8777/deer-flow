@@ -132,6 +132,26 @@ export function SettingsDialog(props: SettingsDialogProps) {
     useState<SettingsSection>(defaultSection);
   const navRef = useRef<HTMLElement>(null);
 
+  const { open } = dialogProps;
+  useEffect(() => {
+    // On phones the sections are a sideways rail: centre the selected one,
+    // or a deep link lands on a tab scrolled off the right edge. Measured a
+    // frame after open, once the rail has its real width.
+    if (!open) return;
+    const frame = requestAnimationFrame(() => {
+      const nav = navRef.current;
+      const tab = nav?.querySelector<HTMLElement>(
+        `[data-section="${activeSection}"]`,
+      );
+      if (!nav || !tab || nav.scrollWidth <= nav.clientWidth) return;
+      const navBox = nav.getBoundingClientRect();
+      const tabBox = tab.getBoundingClientRect();
+      nav.scrollLeft +=
+        tabBox.left - navBox.left - (navBox.width - tabBox.width) / 2;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [activeSection, open]);
+
   useEffect(() => {
     // When opening the dialog, ensure the active section follows the caller's intent.
     // This allows triggers like "About" to open the dialog directly on that page.
@@ -227,12 +247,17 @@ export function SettingsDialog(props: SettingsDialogProps) {
             {t.settings.description}
           </p>
         </DialogHeader>
-        <div className="grid min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)] gap-3 md:grid-cols-[220px_minmax(0,1fr)] md:grid-rows-1 md:gap-4">
+        {/* minmax(0,1fr), not the implicit auto column, plus min-w-0 on
+            both items: on phones they otherwise grow to their widest child
+            and run past the dialog. */}
+        <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)] gap-3 md:grid-cols-[220px_minmax(0,1fr)] md:grid-rows-1 md:gap-4">
           <nav
             ref={navRef}
             aria-label={t.settings.title}
             className={cn(
-              "bg-sidebar min-h-0 overflow-x-auto rounded-lg border p-1.5 md:overflow-y-auto md:p-2",
+              // min-w-0: a grid item defaults to its min-content width, so
+              // without it the rail never scrolls and runs off the dialog.
+              "bg-sidebar min-h-0 min-w-0 overflow-x-auto rounded-lg border p-1.5 md:overflow-y-auto md:p-2",
               styles.tabFade,
             )}
           >
@@ -261,7 +286,12 @@ export function SettingsDialog(props: SettingsDialogProps) {
               })}
             </ul>
           </nav>
-          <ScrollArea className="h-full min-h-0 rounded-lg border">
+          <ScrollArea
+            className={cn(
+              "h-full min-h-0 min-w-0 rounded-lg border",
+              styles.panel,
+            )}
+          >
             <div className="space-y-8 p-4 sm:p-6">
               {activeSection === "models" && <ModelSettingsPage />}
               {activeSection === "account" && <AccountSettingsPage />}

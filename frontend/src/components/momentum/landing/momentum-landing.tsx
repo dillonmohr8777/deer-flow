@@ -23,8 +23,13 @@ import { useEffect, useState } from "react";
 
 import { CutPaper } from "@/components/momentum/cut-paper";
 import { MomoFilm } from "@/components/momentum/momo-film";
+import { BouncingMomo } from "@/components/momentum/momobot/bouncing-momo";
 import { useIntroMotion } from "@/components/momentum/momobot/intro-motion";
-import { MomoBotLockup } from "@/components/momentum/momobot/lockup";
+import {
+  MomentumMark,
+  MomoBotLockup,
+  MomoBotWordmark,
+} from "@/components/momentum/momobot/lockup";
 import { ScrapbookBackdrop } from "@/components/momentum/momobot/scrapbook-backdrop";
 import {
   FUNNEL_TREATMENT,
@@ -200,18 +205,35 @@ function PaperLanding() {
 
       <div className={styles.paperShell}>
         <header className={styles.paperHeader}>
+          {/* The product leads on the left; the maker signs off at the far
+              right, apart from it, after the one action. */}
           <Link className={styles.paperWordmark} href="/">
-            <MomoBotLockup />
+            <MomoBotWordmark />
           </Link>
-          <Link className={styles.paperSignIn} href="/workspace">
-            Sign in
-          </Link>
+          <div className={styles.paperHeaderEnd}>
+            <Link className={styles.paperSignIn} href="/workspace">
+              Sign in
+            </Link>
+            <MomentumMark className={styles.paperMaker} />
+          </div>
         </header>
 
         <main className={styles.paperHero}>
           <p className={`${styles.paperScrap} m-voice-annotation`}>
             still invite only, for now
           </p>
+
+          {/* Before the headline in the DOM so phones meet Momo first; wide
+              screens lift him beside the headline (position: absolute). */}
+          <BouncingMomo live={motion.live} className={styles.paperMomos}>
+            <MomoFilm
+              key={introDone ? "hello" : "intro"}
+              name={introDone ? "momo-hello" : "momo-intro"}
+              live={motion.live}
+              loop={introDone}
+              onEnded={() => setIntroDone(true)}
+            />
+          </BouncingMomo>
 
           <h1 className={styles.paperTitle}>
             <span className="m-voice-serif">Say hello to</span>
@@ -264,16 +286,6 @@ function PaperLanding() {
               </li>
             ))}
           </ul>
-
-          <div className={styles.paperMomos} aria-hidden="true">
-            <MomoFilm
-              key={introDone ? "hello" : "intro"}
-              name={introDone ? "momo-hello" : "momo-intro"}
-              live={motion.live}
-              loop={introDone}
-              onEnded={() => setIntroDone(true)}
-            />
-          </div>
         </main>
 
         <footer className={styles.paperFooter}>

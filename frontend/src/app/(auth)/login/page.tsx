@@ -8,8 +8,13 @@ import { useEffect, useState } from "react";
 import inviteStyles from "@/app/invite/invite.module.css";
 import { RememberSessionOption } from "@/components/auth/remember-session-option";
 import { MomoFilm } from "@/components/momentum/momo-film";
+import { BouncingMomo } from "@/components/momentum/momobot/bouncing-momo";
 import { useIntroMotion } from "@/components/momentum/momobot/intro-motion";
-import { MomoBotLockup } from "@/components/momentum/momobot/lockup";
+import {
+  MomentumMark,
+  MomoBotLockup,
+  MomoBotWordmark,
+} from "@/components/momentum/momobot/lockup";
 import momoStyles from "@/components/momentum/momobot/momobot.module.css";
 import { ScrapbookBackdrop } from "@/components/momentum/momobot/scrapbook-backdrop";
 import { resolveFunnelTreatment } from "@/components/momentum/treatment";
@@ -269,6 +274,9 @@ export default function LoginPage() {
   const mutedStyle = paper ? { color: "var(--paper-ink-muted)" } : undefined;
   const linkClass = paper ? undefined : "text-blue-500";
   const linkStyle = paper ? { color: "var(--paper-focus)" } : undefined;
+  // red-500 measured 3.55:1 on cream and fails AA for small error text.
+  const errorClass = paper ? "text-sm" : "text-sm text-red-500";
+  const errorStyle = paper ? { color: "var(--paper-danger)" } : undefined;
 
   // Paper: the sign-in is the same physical object as the invite — one
   // deckled cream sheet pinned on the blueprint field (invite.module.css
@@ -284,10 +292,16 @@ export default function LoginPage() {
       )}
     >
       <div className="text-center">
-        <MomoBotLockup
-          className="mx-auto"
-          wordmarkClassName={cn(!paper && "dark:brightness-0 dark:invert")}
-        />
+        {paper ? (
+          // Paper splits the lockup: the product name leads the sheet and
+          // the Momentum mark signs the page's top-right corner.
+          <MomoBotWordmark className="block" />
+        ) : (
+          <MomoBotLockup
+            className="mx-auto"
+            wordmarkClassName="dark:brightness-0 dark:invert"
+          />
+        )}
         <h1
           className={cn("mt-2", mutedClass, paper && "m-voice-serif text-lg")}
           style={mutedStyle}
@@ -318,7 +332,11 @@ export default function LoginPage() {
             required
             autoFocus
           />
-          {error && <p className="text-sm text-red-500">{error}</p>}
+          {error && (
+            <p className={errorClass} style={errorStyle}>
+              {error}
+            </p>
+          )}
           <Button type="submit" className="w-full" disabled={loading}>
             {loading ? t.login.pleaseWait : t.login.mfaVerifyButton}
           </Button>
@@ -358,7 +376,12 @@ export default function LoginPage() {
         <div
           role="status"
           aria-live="polite"
-          className="border-l-2 border-amber-500 ps-3 text-sm"
+          className={cn(
+            "border-l-2 ps-3 text-sm",
+            !paper && "border-amber-500",
+          )}
+          // Paper keeps gold to a hint: the text-safe brass, not amber-500.
+          style={paper ? { borderColor: "var(--paper-brass-text)" } : undefined}
         >
           <p className="font-medium">{t.login.serviceUnavailableTitle}</p>
           <p className={cn("mt-1", mutedClass)} style={mutedStyle}>
@@ -437,7 +460,11 @@ export default function LoginPage() {
               onCheckedChange={setRememberMe}
             />
 
-            {error && <p className="text-sm text-red-500">{error}</p>}
+            {error && (
+              <p className={errorClass} style={errorStyle}>
+                {error}
+              </p>
+            )}
 
             <Button
               type="submit"
@@ -557,17 +584,15 @@ export default function LoginPage() {
       {paper ? (
         <>
           <ScrapbookBackdrop motion={introMotion} tone="royal" />
-          <div
-            className={cn(
-              inviteStyles.frame,
-              "pinned",
-              momoStyles.frameWithMomo,
-            )}
-          >
-            <div className={momoStyles.momoPhoto}>
+          <MomentumMark className={momoStyles.cornerMark} />
+          <div className={momoStyles.signInStage}>
+            <BouncingMomo
+              live={introMotion.live}
+              className={momoStyles.signInMomo}
+            >
               <MomoFilm name="momo-hello" live={introMotion.live} />
-            </div>
-            {card}
+            </BouncingMomo>
+            <div className={cn(inviteStyles.frame, "pinned")}>{card}</div>
           </div>
         </>
       ) : (

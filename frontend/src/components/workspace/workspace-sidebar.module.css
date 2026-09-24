@@ -20,3 +20,15 @@
     display: none;
   }
 }
+
+/* The Momentum signature closes the footer, right-aligned and small, so the
+   MomoBot name at the top of the sidebar stands alone. */
+.signature {
+  display: flex;
+  justify-content: flex-end;
+  padding: 2px 8px 2px 0;
+}
+
+.signature [data-size="compact"] {
+  width: 104px;
+}

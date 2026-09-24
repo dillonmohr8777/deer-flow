@@ -179,50 +179,175 @@
   outline-offset: 2px;
 }
 
-/* ---- Momo on the sign-in sheet ---------------------------------------- */
+/* ---- Split lockup: product name and maker ------------------------------ */
+
+/* The product name alone, large enough to lead the page. */
+.productName {
+  font-size: clamp(1.75rem, 1.35rem + 1.3vw, 2.375rem);
+  line-height: 1;
+  letter-spacing: -0.015em;
+  color: var(--paper-royal, currentColor);
+  white-space: nowrap;
+}
+
+/* "by Momentum", set apart from the product: the maker signs the corner. */
+.maker {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  white-space: nowrap;
+}
+
+.makerBy {
+  font-size: 0.8125rem;
+  color: var(--paper-ink-muted, currentColor);
+}
+
+.makerWordmark {
+  height: 1.375rem;
+  width: auto;
+}
+
+/* ---- Bouncing Momo ----------------------------------------------------- */
 
 /*
- * Sign in: the Hello film as a photo pinned over the sheet's top right
- * corner, cream border and a brass pin, tilted like it was stuck on by hand.
+ * A Momo film on a cream photo, floating in 3D over a ground shadow that
+ * shrinks and fades as the photo rises. Transform and opacity only. The rise
+ * decelerates and the fall accelerates, so the float reads as a bounce.
+ * No pin: a pinned photo cannot float, and a pin means work in progress.
  */
-.momoPhoto {
-  position: absolute;
-  top: 0;
-  right: -0.75rem;
-  z-index: 2;
-  width: clamp(7.5rem, 28vw, 10.5rem);
-  aspect-ratio: 1;
-  padding: 0.4rem 0.4rem 1.1rem;
+.momoStage {
+  position: relative;
+  padding-bottom: 2.5rem;
+  perspective: 900px;
+  perspective-origin: 50% 30%;
+}
+
+.momoFloat {
+  transform: rotateX(6deg) rotateY(-12deg) rotateZ(2deg);
+  transform-style: preserve-3d;
+}
+
+.momoCard {
+  padding: 0.55rem 0.55rem 1.6rem;
   background: var(--paper-cream-hi, #fbf8f1);
   box-shadow:
-    0 1px 2px rgb(16 30 63 / 0.18),
-    0 10px 24px -8px rgb(16 30 63 / 0.45);
-  transform: translateY(-72%) rotate(4deg);
-  pointer-events: none;
+    0 1px 2px rgb(16 30 63 / 0.16),
+    0 24px 44px -18px rgb(16 30 63 / 0.5);
 }
 
-.momoPhoto video {
+.momoCard video {
   display: block;
   width: 100%;
-  height: 100%;
+  aspect-ratio: 1;
   object-fit: cover;
+  object-position: 62% 50%;
 }
 
-.momoPhoto::after {
-  content: "";
+.momoGround {
   position: absolute;
-  top: -0.3rem;
-  left: 50%;
-  width: 0.7rem;
-  height: 0.7rem;
+  right: 14%;
+  bottom: 0.5rem;
+  left: 14%;
+  height: 1.25rem;
   border-radius: 50%;
-  background: radial-gradient(circle at 35% 35%, #f3dc8b, #b8913a 60%, #7a5d1f);
-  box-shadow: 0 2px 3px rgb(0 0 0 / 0.35);
-  transform: translateX(-50%);
+  background: radial-gradient(
+    closest-side,
+    rgb(16 30 63 / 0.34),
+    rgb(16 30 63 / 0)
+  );
 }
 
-/* Room above the pinned sheet for Momo's head and antenna. */
-.frameWithMomo {
+@media (prefers-reduced-motion: no-preference) {
+  .momoFloat {
+    animation: momo-bounce 2.6s infinite;
+    will-change: transform;
+  }
+
+  .momoGround {
+    animation: momo-ground 2.6s infinite;
+  }
+
+  .momoStage[data-live="false"] .momoFloat,
+  .momoStage[data-live="false"] .momoGround {
+    animation-play-state: paused;
+  }
+}
+
+@keyframes momo-bounce {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) rotateX(6deg) rotateY(-12deg) rotateZ(2deg);
+    animation-timing-function: cubic-bezier(0.22, 0.61, 0.36, 1);
+  }
+  50% {
+    transform: translate3d(0, -26px, 0) rotateX(-5deg) rotateY(10deg)
+      rotateZ(-1deg);
+    animation-timing-function: cubic-bezier(0.55, 0, 0.78, 0.4);
+  }
+}
+
+@keyframes momo-ground {
+  0%,
+  100% {
+    transform: scaleX(1);
+    opacity: 1;
+    animation-timing-function: cubic-bezier(0.22, 0.61, 0.36, 1);
+  }
+  50% {
+    transform: scaleX(0.7);
+    opacity: 0.5;
+    animation-timing-function: cubic-bezier(0.55, 0, 0.78, 0.4);
+  }
+}
+
+@media (forced-colors: active) {
+  .momoGround {
+    display: none;
+  }
+}
+
+/* ---- Sign in: Momo beside the sheet, maker in the corner --------------- */
+
+/* Phones stack Momo over the sheet; wide screens set them side by side. */
+.signInStage {
+  position: relative;
   z-index: 1;
-  margin-top: clamp(4.5rem, 12vw, 6.5rem);
+  display: grid;
+  justify-items: center;
+  gap: clamp(0.5rem, 3vw, 1.5rem);
+  width: min(28rem, 100%);
+  height: fit-content;
+  /* Clear of the corner mark even at the top of Momo's bounce. */
+  margin-top: 2rem;
+}
+
+.signInMomo {
+  width: clamp(11rem, 52vw, 14rem);
+}
+
+@media (min-width: 64rem) {
+  .signInStage {
+    grid-template-columns: minmax(0, 1fr) 28rem;
+    align-items: center;
+    column-gap: clamp(3rem, 6vw, 6rem);
+    width: min(62rem, 100%);
+    margin-top: 0;
+  }
+
+  .signInMomo {
+    width: clamp(16rem, 24vw, 21rem);
+  }
+}
+
+/* The maker's tab, top right of the field, well clear of Momo. */
+.cornerMark {
+  position: absolute;
+  top: 1rem;
+  right: clamp(1rem, 3vw, 2rem);
+  z-index: 2;
+  padding: 0.45rem 0.8rem;
+  border: 1px solid var(--paper-line);
+  background: var(--paper-cream-hi);
+  box-shadow: 0 8px 16px -10px rgb(16 30 63 / 0.6);
 }

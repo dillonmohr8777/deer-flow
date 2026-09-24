@@ -1,6 +1,6 @@
 "use client";
 
-import { ArchiveRestore } from "lucide-react";
+import { ArchiveRestore, MessageSquarePlus } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { EmptyState } from "@/components/workspace/page-body";
 import {
   ThreadChannelBadge,
   ThreadChannelIcon,
@@ -95,7 +96,7 @@ export default function ChatsPage() {
           onValueChange={setView}
           className="flex size-full flex-col"
         >
-          <header className="mx-auto flex w-full max-w-(--container-width-md) shrink-0 flex-col gap-3 pt-8">
+          <header className="mx-auto flex w-full max-w-(--container-width-md) shrink-0 flex-col gap-3 px-4 pt-8">
             {!staticWebsite && (
               <TabsList aria-label={t.pages.chats}>
                 <TabsTrigger value="active">{t.chats.activeChats}</TabsTrigger>
@@ -116,7 +117,7 @@ export default function ChatsPage() {
           <TabsContent value={view} className="min-h-0 flex-1">
             <main className="h-full">
               <ScrollArea className="size-full py-4">
-                <div className="mx-auto flex size-full max-w-(--container-width-md) flex-col">
+                <div className="mx-auto flex size-full max-w-(--container-width-md) flex-col px-4">
                   {isError && (
                     <div role="alert" className="p-4 text-center">
                       <p>{t.chats.loadChatsFailed}</p>
@@ -125,18 +126,36 @@ export default function ChatsPage() {
                       </Button>
                     </div>
                   )}
-                  {!isLoading && !isError && filteredThreads.length === 0 && (
-                    <p
-                      role="status"
-                      className="text-muted-foreground p-8 text-center"
-                    >
-                      {isSearching
-                        ? t.chats.noMatchingChats
-                        : archived
-                          ? t.chats.noArchivedChats
-                          : t.chats.noActiveChats}
-                    </p>
-                  )}
+                  {!isLoading &&
+                    !isError &&
+                    filteredThreads.length === 0 &&
+                    (isSearching || archived ? (
+                      <p
+                        role="status"
+                        className="text-muted-foreground p-8 text-center"
+                      >
+                        {isSearching
+                          ? t.chats.noMatchingChats
+                          : t.chats.noArchivedChats}
+                      </p>
+                    ) : (
+                      <div role="status" className="px-2 py-6">
+                        <EmptyState
+                          momo="lead"
+                          title={t.chats.noActiveChats}
+                          action={
+                            <Button asChild size="sm">
+                              <Link href="/workspace/chats/new">
+                                <MessageSquarePlus />
+                                {t.sidebar.newChat}
+                              </Link>
+                            </Button>
+                          }
+                        >
+                          {t.chats.noActiveChatsHint}
+                        </EmptyState>
+                      </div>
+                    ))}
                   <VirtualThreadList
                     estimateSize={76}
                     items={filteredThreads}

@@ -747,10 +747,11 @@ export const enUS: Translations = {
     cronHelp: "Open crontab.guru",
     create: {
       title: "Create scheduled task",
+      newTask: "New scheduled task",
       taskTitle: "Task title",
       prompt: "Prompt",
       agent: "Agent",
-      leadAgent: "Default agent (lead_agent)",
+      leadAgent: "Default agent",
       submit: "Create",
       fillRequired: "Fill all required fields",
     },
@@ -857,21 +858,25 @@ export const enUS: Translations = {
     },
     recipes: {
       label: "Quick create",
-      trending: {
-        title: "GitHub Trending daily",
-        desc: "Summarize today's top 10 trending repos",
+      morningBrief: {
+        title: "Morning client brief",
+        desc: "Weekday mornings: replies, approvals and stalled work, by client",
       },
-      news: {
-        title: "Daily tech news digest",
-        desc: "Collect and summarize the day's top tech news",
+      clientReport: {
+        title: "Weekly client report draft",
+        desc: "Friday afternoons: a cited report draft for one client, for review",
       },
-      issues: {
-        title: "GitHub Issue triage",
-        desc: "Triage a repo's open issues (fill in {{repo}})",
+      siteWatch: {
+        title: "Daily website watch",
+        desc: "Every morning: which client sites are down or changed",
       },
-      weekly: {
-        title: "Weekly report",
-        desc: "Compile a weekly summary, every Monday",
+      visibility: {
+        title: "Weekly SEO and AI-answer check",
+        desc: "Wednesdays: search rank and AI-answer mentions, with fixes",
+      },
+      pipeline: {
+        title: "Monday pipeline and follow-ups",
+        desc: "Mondays: open deals, overdue leads and follow-up drafts",
       },
     },
   },
@@ -881,7 +886,7 @@ export const enUS: Translations = {
     title: "Agents",
     description:
       "Create and manage custom agents with specialized prompts and capabilities.",
-    newAgent: "New Agent",
+    newAgent: "New agent",
     emptyTitle: "No custom agents yet",
     emptyDescription:
       "Create your first custom agent with a specialized system prompt.",
@@ -1001,6 +1006,8 @@ export const enUS: Translations = {
       `Delete “${title}”? This will delete the conversation and its files. This action can't be undone.`,
     deleteFailed: "Failed to delete chat. Please try again.",
     noActiveChats: "No recent chats",
+    noActiveChatsHint:
+      "Conversations you start with the team show up here, newest first.",
     activeChats: "Recent chats",
     archivedChats: "Archived",
     archiveChat: "Archive chat",
@@ -1945,7 +1952,7 @@ export const enUS: Translations = {
     rememberMeDescription:
       "Keep this browser session when possible. We store only your email, never your password.",
     pleaseWait: "Please wait...",
-    signIn: "Sign In",
+    signIn: "Sign in",
     createAccount: "Create Account",
     createAdminAccount: "Create admin account",
     adminSetupRequiredTitle: "Administrator setup is required",

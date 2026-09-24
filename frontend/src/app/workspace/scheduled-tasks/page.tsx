@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { CopyIcon, TriangleAlertIcon } from "lucide-react";
+import { CopyIcon, Plus, TriangleAlertIcon } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -247,6 +247,13 @@ export default function ScheduledTasksPage() {
     setContextMode("fresh_thread_per_run");
     setCreateNonce((n) => n + 1);
   };
+  const focusCreateForm = () => {
+    createFormRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+    createTitleRef.current?.focus({ preventScroll: true });
+  };
   const duplicateTask = (task: ScheduledTask) => {
     setTitle(`${task.title}${st.actions.duplicateTitleSuffix}`);
     setPrompt(task.prompt);
@@ -260,11 +267,7 @@ export default function ScheduledTasksPage() {
     });
     setFormError(null);
     setCreateNonce((nonce) => nonce + 1);
-    createFormRef.current?.scrollIntoView({
-      behavior: "smooth",
-      block: "start",
-    });
-    createTitleRef.current?.focus();
+    focusCreateForm();
   };
 
   useEffect(() => {
@@ -314,166 +317,172 @@ export default function ScheduledTasksPage() {
     }
   }
 
+  // With nothing scheduled, the form is the page. Once tasks exist they lead:
+  // their state is what a visit is for, and the form waits below the list.
+  // Loading and failed reads keep the list first so the page does not jump.
+  const formFirst = !!data && data.length === 0;
+  const createForm = (
+    <section
+      ref={createFormRef}
+      className={cn(
+        "grid gap-3 rounded-lg border p-4 sm:p-5",
+        pageStyles.sheet,
+      )}
+      data-testid="scheduled-task-create-form"
+      aria-labelledby="scheduled-task-create-title"
+    >
+      <h2 id="scheduled-task-create-title" className="text-lg font-semibold">
+        {st.create.title}
+      </h2>
+      <div
+        className="flex flex-wrap items-center gap-1.5"
+        data-testid="schedule-recipes"
+      >
+        <span className={cn(pageStyles.eyebrow, "mr-1")}>
+          {st.recipes.label}
+        </span>
+        {RECIPES.map((recipe) => (
+          <Button
+            key={recipe.id}
+            variant="outline"
+            size="sm"
+            onClick={() => applyRecipe(recipe)}
+            title={st.recipes[recipe.titleKey].desc}
+          >
+            {st.recipes[recipe.titleKey].title}
+          </Button>
+        ))}
+      </div>
+      <FilterGroup
+        label={st.detail.contextMode}
+        showLabel
+        value={contextMode}
+        onChange={setContextMode}
+        options={[
+          { value: "fresh_thread_per_run", label: st.context.fresh },
+          { value: "reuse_thread", label: st.context.reuse },
+        ]}
+      />
+      {contextMode === "reuse_thread" && (
+        <>
+          <Input
+            value={targetThreadId}
+            onChange={(event) => setTargetThreadId(event.target.value)}
+            placeholder={st.context.threadIdPlaceholder}
+          />
+          <ReuseThreadNotice
+            title={st.context.reuseNoticeTitle}
+            description={st.context.reuseNoticeDescription}
+          />
+        </>
+      )}
+      <Select value={createAssistantId} onValueChange={setCreateAssistantId}>
+        <SelectTrigger
+          className="w-full"
+          data-testid="scheduled-task-create-agent"
+          aria-label={st.create.agent}
+        >
+          <SelectValue placeholder={st.create.agent} />
+        </SelectTrigger>
+        <SelectContent>
+          {agentOptions.map((option) => (
+            <SelectItem key={option.value} value={option.value}>
+              {option.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Input
+        ref={createTitleRef}
+        value={title}
+        onChange={(event) => setTitle(event.target.value)}
+        placeholder={st.create.taskTitle}
+      />
+      <Textarea
+        rows={4}
+        value={prompt}
+        onChange={(event) => setPrompt(event.target.value)}
+        placeholder={st.create.prompt}
+      />
+      <ScheduledTaskScheduleInput
+        key={createNonce}
+        initial={createSchedule}
+        onChange={setCreateSchedule}
+      />
+      {formError && <div className="text-destructive text-sm">{formError}</div>}
+      <Button
+        onClick={() => {
+          const hasSchedule = hasScheduleSpec(createSchedule.schedule_spec);
+          if (
+            !title ||
+            !prompt ||
+            !hasSchedule ||
+            (contextMode === "reuse_thread" && !targetThreadId)
+          ) {
+            setFormError(st.create.fillRequired);
+            return;
+          }
+          setFormError(null);
+          createTask.mutate(
+            {
+              context_mode: contextMode,
+              thread_id: contextMode === "reuse_thread" ? targetThreadId : null,
+              assistant_id: createAssistantId,
+              title,
+              prompt,
+              schedule_type: createSchedule.schedule_type,
+              schedule_spec: createSchedule.schedule_spec,
+              timezone: createSchedule.timezone || "UTC",
+            },
+            {
+              onSuccess: () => {
+                // Clear the form so a follow-up task starts fresh.
+                setTitle("");
+                setPrompt("");
+                setTargetThreadId("");
+                setCreateAssistantId(DEFAULT_ASSISTANT_ID);
+                setContextMode("fresh_thread_per_run");
+                setCreateSchedule({
+                  schedule_type: "cron",
+                  schedule_spec: { cron: "0 9 * * *" },
+                  timezone: "",
+                });
+                setCreateNonce((n) => n + 1);
+              },
+            },
+          );
+        }}
+        disabled={
+          !title ||
+          !prompt ||
+          !hasScheduleSpec(createSchedule.schedule_spec) ||
+          (contextMode === "reuse_thread" && !targetThreadId) ||
+          createTask.isPending
+        }
+      >
+        {st.create.submit}
+      </Button>
+    </section>
+  );
+
   return (
     <WorkspaceContainer>
       <WorkspaceHeader />
       <WorkspaceBody className={pageStyles.page}>
         <div className="momentum-page mx-auto flex w-full max-w-(--container-width-lg) flex-col gap-6 p-4 pb-28 sm:p-6 sm:pb-28">
-          <header className="pt-2">
-            <h1 className="text-2xl">{t.sidebar.scheduledTasks}</h1>
-            <p className={cn(pageStyles.lede, "mt-1")}>{st.lede}</p>
-          </header>
-          <section
-            ref={createFormRef}
-            className={cn(
-              "grid gap-3 rounded-lg border p-4 sm:p-5",
-              pageStyles.sheet,
-            )}
-            data-testid="scheduled-task-create-form"
-            aria-labelledby="scheduled-task-create-title"
-          >
-            <h2
-              id="scheduled-task-create-title"
-              className="text-lg font-semibold"
-            >
-              {st.create.title}
-            </h2>
-            <div
-              className="flex flex-wrap items-center gap-1.5"
-              data-testid="schedule-recipes"
-            >
-              <span className={cn(pageStyles.eyebrow, "mr-1")}>
-                {st.recipes.label}
-              </span>
-              {RECIPES.map((recipe) => (
-                <Button
-                  key={recipe.id}
-                  variant="outline"
-                  size="sm"
-                  onClick={() => applyRecipe(recipe)}
-                >
-                  {st.recipes[recipe.titleKey].title}
-                </Button>
-              ))}
+          <header className="flex flex-wrap items-end justify-between gap-3 pt-2">
+            <div>
+              <h1 className="text-2xl">{t.sidebar.scheduledTasks}</h1>
+              <p className={cn(pageStyles.lede, "mt-1")}>{st.lede}</p>
             </div>
-            <FilterGroup
-              label={st.detail.contextMode}
-              showLabel
-              value={contextMode}
-              onChange={setContextMode}
-              options={[
-                { value: "fresh_thread_per_run", label: st.context.fresh },
-                { value: "reuse_thread", label: st.context.reuse },
-              ]}
-            />
-            {contextMode === "reuse_thread" && (
-              <>
-                <Input
-                  value={targetThreadId}
-                  onChange={(event) => setTargetThreadId(event.target.value)}
-                  placeholder={st.context.threadIdPlaceholder}
-                />
-                <ReuseThreadNotice
-                  title={st.context.reuseNoticeTitle}
-                  description={st.context.reuseNoticeDescription}
-                />
-              </>
+            {!formFirst && data && (
+              <Button onClick={focusCreateForm}>
+                <Plus />
+                {st.create.newTask}
+              </Button>
             )}
-            <Select
-              value={createAssistantId}
-              onValueChange={setCreateAssistantId}
-            >
-              <SelectTrigger
-                className="w-full"
-                data-testid="scheduled-task-create-agent"
-                aria-label={st.create.agent}
-              >
-                <SelectValue placeholder={st.create.agent} />
-              </SelectTrigger>
-              <SelectContent>
-                {agentOptions.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Input
-              ref={createTitleRef}
-              value={title}
-              onChange={(event) => setTitle(event.target.value)}
-              placeholder={st.create.taskTitle}
-            />
-            <Textarea
-              rows={4}
-              value={prompt}
-              onChange={(event) => setPrompt(event.target.value)}
-              placeholder={st.create.prompt}
-            />
-            <ScheduledTaskScheduleInput
-              key={createNonce}
-              initial={createSchedule}
-              onChange={setCreateSchedule}
-            />
-            {formError && (
-              <div className="text-destructive text-sm">{formError}</div>
-            )}
-            <Button
-              onClick={() => {
-                const hasSchedule = hasScheduleSpec(
-                  createSchedule.schedule_spec,
-                );
-                if (
-                  !title ||
-                  !prompt ||
-                  !hasSchedule ||
-                  (contextMode === "reuse_thread" && !targetThreadId)
-                ) {
-                  setFormError(st.create.fillRequired);
-                  return;
-                }
-                setFormError(null);
-                createTask.mutate(
-                  {
-                    context_mode: contextMode,
-                    thread_id:
-                      contextMode === "reuse_thread" ? targetThreadId : null,
-                    assistant_id: createAssistantId,
-                    title,
-                    prompt,
-                    schedule_type: createSchedule.schedule_type,
-                    schedule_spec: createSchedule.schedule_spec,
-                    timezone: createSchedule.timezone || "UTC",
-                  },
-                  {
-                    onSuccess: () => {
-                      // Clear the form so a follow-up task starts fresh.
-                      setTitle("");
-                      setPrompt("");
-                      setTargetThreadId("");
-                      setCreateAssistantId(DEFAULT_ASSISTANT_ID);
-                      setContextMode("fresh_thread_per_run");
-                      setCreateSchedule({
-                        schedule_type: "cron",
-                        schedule_spec: { cron: "0 9 * * *" },
-                        timezone: "",
-                      });
-                      setCreateNonce((n) => n + 1);
-                    },
-                  },
-                );
-              }}
-              disabled={
-                !title ||
-                !prompt ||
-                !hasScheduleSpec(createSchedule.schedule_spec) ||
-                (contextMode === "reuse_thread" && !targetThreadId) ||
-                createTask.isPending
-              }
-            >
-              {st.create.submit}
-            </Button>
-          </section>
+          </header>
+          {formFirst && createForm}
           {threadId && (
             <div className="text-muted-foreground text-sm">
               {st.detail.filteredByThread.replace("{id}", threadId)}
@@ -672,16 +681,24 @@ export default function ScheduledTasksPage() {
                         ? st.detail.thread
                         : st.detail.lastThread}
                     </dt>
-                    <dd className="font-mono text-xs leading-5 break-all">
-                      {(selectedTask.context_mode === "reuse_thread"
-                        ? selectedTask.thread_id
-                        : selectedTask.last_thread_id) ?? st.detail.none}
+                    <dd>
+                      <ReceiptId
+                        value={
+                          selectedTask.context_mode === "reuse_thread"
+                            ? selectedTask.thread_id
+                            : selectedTask.last_thread_id
+                        }
+                        missing={st.detail.none}
+                      />
                     </dd>
                     <dt className="text-muted-foreground">
                       {st.detail.lastRunId}
                     </dt>
-                    <dd className="font-mono text-xs leading-5 break-all">
-                      {selectedTask.last_run_id ?? st.detail.none}
+                    <dd>
+                      <ReceiptId
+                        value={selectedTask.last_run_id}
+                        missing={st.detail.none}
+                      />
                     </dd>
                     <dt className="text-muted-foreground">
                       {st.detail.lastError}
@@ -689,7 +706,9 @@ export default function ScheduledTasksPage() {
                     <dd
                       className={cn(
                         "[overflow-wrap:anywhere]",
-                        selectedTask.last_error && "text-destructive",
+                        selectedTask.last_error
+                          ? "text-destructive"
+                          : "text-muted-foreground",
                       )}
                     >
                       {selectedTask.last_error ?? st.detail.none}
@@ -920,6 +939,7 @@ export default function ScheduledTasksPage() {
               </section>
             ) : null}
           </div>
+          {!formFirst && createForm}
         </div>
       </WorkspaceBody>
 
@@ -955,5 +975,20 @@ export default function ScheduledTasksPage() {
         </DialogContent>
       </Dialog>
     </WorkspaceContainer>
+  );
+}
+
+/** An id in a receipt: monospace when recorded, a plain muted word when not. */
+function ReceiptId({
+  value,
+  missing,
+}: {
+  value: string | null | undefined;
+  missing: string;
+}) {
+  return value ? (
+    <span className="font-mono text-xs leading-5 break-all">{value}</span>
+  ) : (
+    <span className="text-muted-foreground">{missing}</span>
   );
 }

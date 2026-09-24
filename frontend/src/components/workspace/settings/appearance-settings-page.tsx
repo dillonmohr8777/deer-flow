@@ -161,20 +161,24 @@ function ThemePreviewCard({
           "relative overflow-hidden rounded-md border text-xs transition-colors",
           previewMode === "dark"
             ? "border-neutral-800 bg-neutral-900 text-neutral-200"
-            : "border-slate-200 bg-white text-slate-900",
+            : // Paper sheet when the paper tokens are in scope; the fallbacks
+              // are the previous slate/white preview for other treatments.
+              "border-[color:var(--paper-line,#e2e8f0)] bg-[var(--paper-cream-hi,#fff)] text-[var(--paper-ink,#0f172a)]",
         )}
       >
         <div className="border-border/50 flex items-center gap-2 border-b px-3 py-2">
           <div
             className={cn(
               "h-2 w-2 rounded-full",
-              previewMode === "dark" ? "bg-emerald-400" : "bg-emerald-500",
+              previewMode === "dark"
+                ? "bg-emerald-400"
+                : "bg-[var(--paper-brass,#10b981)]",
             )}
           />
           <div className="h-2 w-10 rounded-full bg-current/20" />
           <div className="h-2 w-6 rounded-full bg-current/15" />
         </div>
-        <div className="grid grid-cols-[1fr_240px] gap-3 px-3 py-3">
+        <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,240px)] gap-3 px-3 py-3">
           <div className="space-y-2">
             <div className="h-3 w-3/4 rounded-full bg-current/15" />
             <div className="h-3 w-1/2 rounded-full bg-current/10" />

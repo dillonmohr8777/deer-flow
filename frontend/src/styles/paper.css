@@ -83,11 +83,9 @@
    */
   --canvas: var(--paper-cream);
   --surface: var(--paper-cream-hi);
-  --surface-blue: color-mix(
-    in srgb,
-    var(--paper-royal) 8%,
-    var(--paper-cream-hi)
-  );
+  /* Royal at 8% over cream-hi measured #e9eaea, a dead grey. Quiet fills
+     are cream-lo everywhere else in paper. */
+  --surface-blue: var(--paper-cream-lo);
   --surface-violet: color-mix(
     in srgb,
     var(--paper-ink-muted) 8%,
@@ -233,6 +231,15 @@
   font-family: var(--m-font-serif);
   font-weight: 700;
 }
+/* Upstream centres dialog headers below 640px while every field below them
+   stays left-aligned; a sheet reads from its top-left corner at every width. */
+:is(
+    :root:not(.dark)[data-treatment="paper"],
+    :root:not(.dark) [data-workspace-shell][data-treatment="paper"]
+  )
+  [data-slot="dialog-header"] {
+  text-align: left;
+}
 
 /*
  * Torn deckle edge — an aria-hidden decoration for a "sheet" element.
@@ -341,6 +348,8 @@
 
 /*
  * Paper motion layer — the five-item product motion list, and no more.
+ * (A sixth item, the front-door Momo bounce, lives with its component in
+ * components/momentum/momobot/momobot.module.css; see DESIGN.md, Motion.)
  * Source: C:\Users\dillo\Documents\Qwen\block-shots\W0-motion-vocabulary.md
  * (ad analysis). Vocabulary borrowed: fast-start, ease-to-rest slide/settle.
  * Vocabulary dropped on purpose: the ad's repeated spring overshoot-bounce,

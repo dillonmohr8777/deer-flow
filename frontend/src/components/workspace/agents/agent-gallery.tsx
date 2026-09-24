@@ -35,32 +35,29 @@ export function AgentGallery() {
     >
       {/* Page header. Agents has no WorkspaceHeader, so it carries the same
           phone-only sidebar trigger the other workspace pages do. */}
-      <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3 border-b px-4 py-5 sm:px-8">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <SidebarTrigger className="-ml-2 md:hidden" />
-            <h1 className="text-2xl">{t.agents.title}</h1>
+      <div className="border-b px-4 py-5 sm:px-8">
+        {/* Same frame as the roster below, so the title and the rows share
+            one left edge. */}
+        <div className="mx-auto flex w-full max-w-5xl flex-wrap items-end justify-between gap-x-6 gap-y-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <SidebarTrigger className="-ml-2 md:hidden" />
+              <h1 className="text-2xl">{t.agents.title}</h1>
+            </div>
+            <p className={cn(pageStyles.lede, "mt-1")}>
+              {t.agents.description}
+            </p>
           </div>
-          <p className={cn(pageStyles.lede, "mt-1")}>{t.agents.description}</p>
+          <Button onClick={handleNewAgent}>
+            <PlusIcon className="mr-1.5 h-4 w-4" />
+            {t.agents.newAgent}
+          </Button>
         </div>
-        <Button onClick={handleNewAgent}>
-          <PlusIcon className="mr-1.5 h-4 w-4" />
-          {t.agents.newAgent}
-        </Button>
       </div>
 
       {/* Roster */}
       <div className="flex-1 overflow-y-auto px-4 pb-28 sm:px-8">
         <div className="mx-auto w-full max-w-5xl">
-          {/* The crew film, pinned at the top of the roster: plays once. */}
-          <div className="mt-6 mb-2 w-full max-w-xl rotate-[-0.8deg] border-[6px] border-b-[18px] border-[#fbf8f1] shadow-[0_14px_30px_-14px_rgb(16_30_63/0.5)]">
-            <MomoFilm
-              name="momo-crew"
-              live={motionOn}
-              loop={false}
-              className="aspect-video w-full object-cover"
-            />
-          </div>
           {isLoading ? (
             <WorkingState label={t.common.loading} />
           ) : error ? (
@@ -78,20 +75,32 @@ export function AgentGallery() {
               }
             />
           ) : agents.length === 0 ? (
-            <EmptyState
-              momo="builder"
-              title={t.agents.emptyTitle}
-              action={
-                <Button variant="outline" size="sm" onClick={handleNewAgent}>
-                  <PlusIcon className="h-4 w-4" />
-                  {t.agents.newAgent}
-                </Button>
-              }
-            >
-              {t.agents.emptyDescription}
-            </EmptyState>
+            <>
+              {/* The crew film introduces an empty roster: plays once. With
+                agents on the page it pushed the roster below the fold. */}
+              <div className="border-card mt-6 mb-2 w-full max-w-xl rotate-[-0.8deg] border-[6px] border-b-[18px] shadow-[0_14px_30px_-14px_rgb(16_30_63/0.5)]">
+                <MomoFilm
+                  name="momo-crew"
+                  live={motionOn}
+                  loop={false}
+                  className="aspect-video w-full object-cover"
+                />
+              </div>
+              <EmptyState
+                momo="builder"
+                title={t.agents.emptyTitle}
+                action={
+                  <Button variant="outline" size="sm" onClick={handleNewAgent}>
+                    <PlusIcon className="h-4 w-4" />
+                    {t.agents.newAgent}
+                  </Button>
+                }
+              >
+                {t.agents.emptyDescription}
+              </EmptyState>
+            </>
           ) : (
-            <ul className={cn("divide-y", pageStyles.rows)}>
+            <ul className={cn("mt-2 divide-y", pageStyles.rows)}>
               {agents.map((agent) => (
                 <AgentCard key={agent.name} agent={agent} />
               ))}

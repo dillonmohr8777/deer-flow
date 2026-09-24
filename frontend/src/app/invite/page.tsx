@@ -222,7 +222,10 @@ export default function InvitePage() {
             <section aria-label="Invite details" className={styles.details}>
               <p className={`${styles.email} m-voice-body`}>
                 Invited: {info.email} · Expires:{" "}
-                {new Date(info.expires_at).toLocaleString()}
+                {new Date(info.expires_at).toLocaleString(undefined, {
+                  dateStyle: "medium",
+                  timeStyle: "short",
+                })}
               </p>
               <p className={`${styles.hint} m-voice-body`}>
                 {isNew
