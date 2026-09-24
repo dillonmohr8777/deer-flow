@@ -11,9 +11,14 @@ test.describe("UI polish mobile regressions", () => {
 
     await page.goto("/workspace/chats/new");
 
-    await page.getByRole("button", { name: /toggle sidebar/i }).click();
-
-    await expect(page.getByRole("link", { name: /new chat/i })).toBeVisible();
+    // A click that lands before hydration does nothing (the button is server
+    // rendered), and this raced on the trunk too: retry until the sheet opens.
+    await expect(async () => {
+      await page.getByRole("button", { name: /toggle sidebar/i }).click();
+      await expect(page.getByRole("link", { name: /new chat/i })).toBeVisible({
+        timeout: 1_000,
+      });
+    }).toPass();
     await expect(page.getByRole("link", { name: /agents/i })).toBeVisible();
     await expect
       .poll(() => page.evaluate(() => document.documentElement.scrollWidth))
