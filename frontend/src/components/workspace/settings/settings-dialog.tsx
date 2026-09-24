@@ -24,6 +24,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
 
+import styles from "./settings-dialog.module.css";
+
 function SettingsPageLoading() {
   return (
     <p role="status" className="text-muted-foreground py-8 text-center text-sm">
@@ -201,7 +203,10 @@ export function SettingsDialog(props: SettingsDialogProps) {
           <nav
             ref={navRef}
             aria-label={t.settings.title}
-            className="bg-sidebar min-h-0 overflow-x-auto rounded-lg border p-1.5 md:overflow-y-auto md:p-2"
+            className={cn(
+              "bg-sidebar min-h-0 overflow-x-auto rounded-lg border p-1.5 md:overflow-y-auto md:p-2",
+              styles.tabFade,
+            )}
           >
             <ul className="flex gap-1 md:block md:space-y-1 md:pr-1">
               {sections.map(({ id, label, icon: Icon }) => {

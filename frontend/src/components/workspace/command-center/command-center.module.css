@@ -76,6 +76,9 @@
   text-underline-offset: 4px;
 }
 
+/* --surface/--line are already remapped per treatment above, so this one
+   rule (not a hardcoded near-white) is enough to theme every treatment;
+   paper alone keeps a bespoke grain background below. */
 .topbar {
   position: relative;
   z-index: 2;
@@ -85,8 +88,8 @@
   gap: 20px;
   min-height: 70px;
   padding: 16px 32px;
-  border-bottom: 1px solid rgba(145, 183, 214, 0.62);
-  background: rgba(250, 253, 255, 0.94);
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
 }
 .brand {
   display: flex;

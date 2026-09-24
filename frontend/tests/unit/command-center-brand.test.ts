@@ -34,6 +34,27 @@ describe("command center reading order", () => {
   });
 });
 
+describe("command center topbar theming", () => {
+  // The topbar once had a hardcoded near-white background overridden only
+  // for paper, so Space/Future/Retro kept a near-white header on a dark
+  // canvas. The base rule now reads the already-remapped --surface/--line
+  // tokens directly, so no per-treatment override is required for those
+  // three; paper alone keeps its own bespoke grain background.
+  it("uses the themed --surface/--line tokens, not a hardcoded color", () => {
+    const body = rule(".topbar");
+    expect(body).toMatch(/background:\s*var\(--surface\)/);
+    expect(body).toMatch(/border-bottom:\s*1px solid var\(--line\)/);
+    expect(body).not.toMatch(/rgba\(/);
+  });
+
+  for (const treatment of ["space", "future", "retro"]) {
+    it(`${treatment} does not force back the hardcoded near-white topbar`, () => {
+      const start = css.indexOf(`.root[data-treatment="${treatment}"] .topbar`);
+      expect(start).toBe(-1);
+    });
+  }
+});
+
 describe("command center brand surfaces", () => {
   // .topologyLead::after (the old connector line) is gone; the specialist
   // card took its place as the fourth brand surface checked here.

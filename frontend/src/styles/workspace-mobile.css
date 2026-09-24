@@ -1,0 +1,30 @@
+/* Mobile-only overrides for the /workspace shell. Loaded once from
+   workspace/layout.tsx (not globals.css), so login/landing/docs are
+   untouched. Plain (unlayered) rules outrank Tailwind's `@layer utilities`
+   regardless of source order, so these need no `!important`. */
+
+/* Shadcn's Button (ui/button.tsx) always stamps data-slot="button" and
+   data-size="icon" | "icon-sm" | "icon-lg" from its own variant/size props,
+   so this reaches every icon-only button (32-36px) without editing the
+   generated component. Only min-width/min-height are added -- CSS resolves
+   min-* as a floor over a smaller width/height regardless of cascade -- and
+   only under 640px, so desktop keeps its existing sizes. */
+@media (max-width: 639px) {
+  [data-slot="button"][data-size^="icon"] {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
+/* The mobile sidebar Sheet (ui/sidebar.tsx, generated shadcn) always stamps
+   data-slot="sidebar" data-mobile="true" on its SheetContent regardless of
+   props, so this reaches it from here instead of editing the generated
+   file. That node only exists in the DOM while the mobile branch renders,
+   so no extra breakpoint guard is needed. The sheet slides in from the left
+   (workspace-sidebar.tsx never overrides `side`), so the left inset is the
+   one that matters for a landscape notch. */
+[data-slot="sidebar"][data-mobile="true"] {
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+}

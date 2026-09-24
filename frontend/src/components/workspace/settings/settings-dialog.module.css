@@ -1,0 +1,19 @@
+/* Below md, the section nav becomes a horizontal scroller with no
+   indication there's more off-screen. Pure-CSS scroll shadows: two
+   `background-attachment: local` layers scroll with the content and cancel
+   out at each real edge, so the fade is accurate at rest, mid-scroll and at
+   the end without any JS scroll listener. Desktop's vertical `md:block`
+   list has no horizontal overflow, so the media query keeps it a no-op
+   there instead of leaving two static bands on the list. */
+@media (max-width: 767px) {
+  .tabFade {
+    background-image:
+      linear-gradient(to right, var(--color-sidebar) 30%, transparent),
+      linear-gradient(to left, var(--color-sidebar) 30%, transparent) 100% 0;
+    background-repeat: no-repeat;
+    background-size:
+      24px 100%,
+      24px 100%;
+    background-attachment: local, local;
+  }
+}
