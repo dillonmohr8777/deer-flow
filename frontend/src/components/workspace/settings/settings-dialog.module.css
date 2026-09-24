@@ -1,19 +1,27 @@
-/* Below md, the section nav becomes a horizontal scroller with no
-   indication there's more off-screen. Pure-CSS scroll shadows: two
-   `background-attachment: local` layers scroll with the content and cancel
-   out at each real edge, so the fade is accurate at rest, mid-scroll and at
-   the end without any JS scroll listener. Desktop's vertical `md:block`
-   list has no horizontal overflow, so the media query keeps it a no-op
-   there instead of leaving two static bands on the list. */
+/* Phone-width scroll shadows on the tab strip. The `local` covers scroll with
+   the tabs and hide the fixed `scroll` shadows at each real edge, so a shadow
+   only shows where more tabs sit off-screen. */
 @media (max-width: 767px) {
   .tabFade {
-    background-image:
-      linear-gradient(to right, var(--color-sidebar) 30%, transparent),
-      linear-gradient(to left, var(--color-sidebar) 30%, transparent) 100% 0;
+    background:
+      linear-gradient(to right, var(--color-sidebar) 30%, transparent) left /
+        24px 100%,
+      linear-gradient(to left, var(--color-sidebar) 30%, transparent) right /
+        24px 100%,
+      linear-gradient(
+          to right,
+          color-mix(in oklab, var(--color-foreground) 16%, transparent),
+          transparent
+        )
+        left / 12px 100%,
+      linear-gradient(
+          to left,
+          color-mix(in oklab, var(--color-foreground) 16%, transparent),
+          transparent
+        )
+        right / 12px 100%;
+    background-color: var(--color-sidebar);
     background-repeat: no-repeat;
-    background-size:
-      24px 100%,
-      24px 100%;
-    background-attachment: local, local;
+    background-attachment: local, local, scroll, scroll;
   }
 }
