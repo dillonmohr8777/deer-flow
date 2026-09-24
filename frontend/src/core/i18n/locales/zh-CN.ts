@@ -1816,4 +1816,15 @@ export const zhCN: Translations = {
       sso_not_allowed: "你的账号不允许使用 SSO 登录。请联系管理员。",
     },
   },
+  commandCenter: {
+    clientAgents: {
+      title: "智能体",
+      loading: "正在加载智能体…",
+      empty: "还没有智能体。",
+      selectPlaceholder: "从模板添加…",
+      add: "添加",
+      adding: "添加中…",
+      addError: "添加失败，请重试。",
+    },
+  },
 };
