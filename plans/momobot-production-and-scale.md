@@ -64,6 +64,27 @@ Written 2026-09-23 on top of the approved plan (Phases 1 to 3: cloud and SOC 2 b
    - External sends, spend and publishing stay approval-gated.
 8. **Rollout.** 3 pilot clients with 4 templates (weekly report, visibility monitor, content drafts, reviews). Then 10 clients with all 10 templates. Then every active client in the registry, all measured.
 
+## Hosting options (waiting on Dillon's pick, 2026-09-23)
+
+MomoBot needs:
+- a server that can run Docker, because the agent sandbox runs there;
+- Postgres;
+- file storage;
+- Cloudflare in front.
+
+It doesn't need GPUs, an Oracle database or Azure. The prices below are rough list prices from memory; confirm them on each provider's calculator before buying.
+
+| Route | Setup | ~$/mo |
+|---|---|---|
+| Lean, recommended under $150 | Hetzner Cloud in Ashburn: an 8 dedicated vCPU, 32 GB app server with Postgres in Docker (`compose.postgres.yaml`), a small test server, nightly encrypted backups to Cloudflare R2, and Cloudflare Free | 65 to 90 |
+| Managed database | DigitalOcean in NYC: a 4 to 8 vCPU droplet, managed Postgres with point-in-time restore, and a small test droplet | 90 to 140 |
+| Enterprise | Google Cloud, already in the access registry: Compute Engine, Cloud SQL, Cloud Storage, Secret Manager, Cloudflare Pro, and paid Sentry and Langfuse | 350 to 420 |
+
+- **Monitoring:** the free tiers of Sentry, Better Stack, Langfuse and Cloudflare cover us at this size.
+- **Oracle's free ARM tier** is a test box only.
+- **Upgrade path:** start lean. Move Postgres to a managed service when paying clients need automatic failover. Move to the enterprise route when a client's security review requires it.
+- **The cost that grows with the agent fleet is model usage, not hosting.**
+
 ## Suggested order after the current lanes land
 
 1. Deploy the batch now in flight, rehearsed.
