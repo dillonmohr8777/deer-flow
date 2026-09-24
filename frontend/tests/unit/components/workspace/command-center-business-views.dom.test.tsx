@@ -74,7 +74,7 @@ describe("ClientSpacesView", () => {
   it("shows a retry notice on error", () => {
     clientsMock.isError = true;
     render(<ClientSpacesView />);
-    expect(screen.getByText("Clients could not be loaded.")).toBeTruthy();
+    expect(screen.getByText("Clients couldn't be loaded.")).toBeTruthy();
     expect(screen.getByRole("button", { name: /Retry/ })).toBeTruthy();
   });
 
