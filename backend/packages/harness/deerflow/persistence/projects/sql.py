@@ -66,6 +66,7 @@ class ProjectRepository:
         name: str,
         instructions: str = "",
         presentation: dict | None = None,
+        client_id: str | None = None,
         user_id: str | None | _AutoSentinel = AUTO,
     ) -> dict:
         resolved_user_id = resolve_user_id(user_id, method_name="ProjectRepository.create")
@@ -73,6 +74,7 @@ class ProjectRepository:
         row = ProjectRow(
             id=uuid.uuid4().hex,
             user_id=resolved_user_id,
+            client_id=client_id,
             name=name,
             instructions=instructions,
             presentation=presentation or {},
@@ -119,6 +121,25 @@ class ProjectRepository:
             result = await session.execute(stmt)
             return [self._row_to_dict(r) for r in result.scalars()]
 
+    async def find_by_client_id(self, client_id: str, *, user_id: str | None | _AutoSentinel = AUTO) -> dict | None:
+        """Earliest project linked to *client_id*, or ``None``.
+
+        Backs the client-onboarding tool's create-or-update lookup (Momentum
+        welcome skill): a client is expected to own at most one project through
+        this flow, so the oldest match wins deterministically if more than one
+        ever exists.
+        """
+        resolved_user_id = resolve_user_id(user_id, method_name="ProjectRepository.find_by_client_id")
+        resolved_organization_id = resolve_organization_id()
+        stmt = select(ProjectRow).where(ProjectRow.client_id == client_id).order_by(ProjectRow.created_at.asc(), ProjectRow.id.asc())
+        if resolved_user_id is not None:
+            stmt = stmt.where(ProjectRow.user_id == resolved_user_id)
+        if resolved_organization_id is not None:
+            stmt = stmt.where(ProjectRow.organization_id == resolved_organization_id)
+        async with self._sf() as session:
+            row = (await session.execute(stmt)).scalars().first()
+            return self._row_to_dict(row) if row is not None else None
+
     async def patch(
         self,
         project_id: str,
@@ -126,6 +147,7 @@ class ProjectRepository:
         name: str | None = None,
         instructions: str | None = None,
         presentation: dict | None = None,
+        client_id: str | None = None,
         user_id: str | None | _AutoSentinel = AUTO,
     ) -> dict | None:
         resolved_user_id = resolve_user_id(user_id, method_name="ProjectRepository.patch")
@@ -140,6 +162,8 @@ class ProjectRepository:
                 row.instructions = instructions
             if presentation is not None:
                 row.presentation = presentation
+            if client_id is not None:
+                row.client_id = client_id
             await session.commit()
             await session.refresh(row)
             return self._row_to_dict(row)

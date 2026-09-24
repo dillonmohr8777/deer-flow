@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field, field_validator
 
 from app.gateway.authz import require_permission
-from app.gateway.deps import get_config, get_project_repo, get_thread_store
+from app.gateway.deps import get_client_repo, get_config, get_project_repo, get_thread_store
 from deerflow.config.app_config import AppConfig, get_app_config
 from deerflow.config.projects_config import ProjectsConfig
 from deerflow.runtime.secret_context import redact_metadata_secrets
@@ -25,6 +25,7 @@ class ProjectResponse(BaseModel):
     instructions: str
     presentation: dict
     status: str
+    client_id: str | None = None
     created_at: str
     updated_at: str
 
@@ -33,12 +34,14 @@ class ProjectCreateRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=128)
     instructions: str = ""
     presentation: dict = Field(default_factory=dict)
+    client_id: str | None = None
 
 
 class ProjectPatchRequest(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=128)
     instructions: str | None = None
     presentation: dict | None = None
+    client_id: str | None = None
 
 
 class ProjectListResponse(BaseModel):
@@ -82,6 +85,7 @@ def _to_response(row: dict) -> ProjectResponse:
         instructions=row.get("instructions", ""),
         presentation=row.get("presentation") or {},
         status=row["status"],
+        client_id=row.get("client_id"),
         created_at=row.get("created_at", ""),
         updated_at=row.get("updated_at", ""),
     )
@@ -113,12 +117,25 @@ def _validate_instructions_length(instructions: str | None) -> None:
         raise HTTPException(status_code=422, detail=f"instructions exceeds the configured {max_bytes}-byte UTF-8 limit")
 
 
+async def _validate_client_id(client_id: str | None, request: Request) -> None:
+    """Reject a ``client_id`` outside the caller's active organization (422).
+
+    ``ClientRepository.get`` already scopes by ``resolve_organization_id()``,
+    so a foreign-organization client is indistinguishable from an unknown one.
+    """
+    if client_id is None:
+        return
+    if await get_client_repo(request).get(client_id) is None:
+        raise HTTPException(status_code=422, detail=f"Unknown client_id {client_id!r}")
+
+
 @router.post("", response_model=ProjectResponse, status_code=201)
 @require_permission("projects", "write")
 async def create_project(body: ProjectCreateRequest, request: Request) -> ProjectResponse:
     _validate_instructions_length(body.instructions)
+    await _validate_client_id(body.client_id, request)
     repo = get_project_repo(request)
-    return _to_response(await repo.create(name=body.name, instructions=body.instructions, presentation=body.presentation))
+    return _to_response(await repo.create(name=body.name, instructions=body.instructions, presentation=body.presentation, client_id=body.client_id))
 
 
 @router.get("", response_model=ProjectListResponse)
@@ -156,7 +173,8 @@ async def get_project(project_id: str, request: Request) -> ProjectResponse:
 @require_permission("projects", "write")
 async def patch_project(project_id: str, body: ProjectPatchRequest, request: Request) -> ProjectResponse:
     _validate_instructions_length(body.instructions)
-    row = await get_project_repo(request).patch(project_id, name=body.name, instructions=body.instructions, presentation=body.presentation)
+    await _validate_client_id(body.client_id, request)
+    row = await get_project_repo(request).patch(project_id, name=body.name, instructions=body.instructions, presentation=body.presentation, client_id=body.client_id)
     if row is None:
         raise _not_found()
     return _to_response(row)
