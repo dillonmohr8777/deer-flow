@@ -747,10 +747,11 @@ export interface Translations {
     };
     recipes: {
       label: string;
-      trending: { title: string; desc: string };
-      news: { title: string; desc: string };
-      issues: { title: string; desc: string };
-      weekly: { title: string; desc: string };
+      morningBrief: { title: string; desc: string };
+      clientReport: { title: string; desc: string };
+      siteWatch: { title: string; desc: string };
+      visibility: { title: string; desc: string };
+      pipeline: { title: string; desc: string };
     };
   };
 

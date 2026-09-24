@@ -802,21 +802,25 @@ export const zhCN: Translations = {
     },
     recipes: {
       label: "快速创建",
-      trending: {
-        title: "GitHub Trending 日榜",
-        desc: "总结今日 Trending 前十仓库",
+      morningBrief: {
+        title: "每日客户晨报",
+        desc: "工作日早上：按客户列出待回复、待审批和停滞的工作",
       },
-      news: {
-        title: "每日科技新闻摘要",
-        desc: "收集并总结当日科技要闻",
+      clientReport: {
+        title: "每周客户报告草稿",
+        desc: "每周五下午：为一位客户起草附带来源的报告，供审阅",
       },
-      issues: {
-        title: "GitHub Issue 分诊",
-        desc: "分诊某仓库的 open issues（填入 {{repo}}）",
+      siteWatch: {
+        title: "每日网站巡检",
+        desc: "每天早上：哪些客户网站无法访问或有变化",
       },
-      weekly: {
-        title: "每周周报",
-        desc: "每周一汇总一周工作",
+      visibility: {
+        title: "每周 SEO 与 AI 答案检查",
+        desc: "每周三：搜索排名与 AI 答案提及情况，并给出改进建议",
+      },
+      pipeline: {
+        title: "周一销售管道与跟进",
+        desc: "每周一：在谈项目、逾期线索和跟进草稿",
       },
     },
   },

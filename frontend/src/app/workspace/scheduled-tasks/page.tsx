@@ -347,6 +347,7 @@ export default function ScheduledTasksPage() {
             variant="outline"
             size="sm"
             onClick={() => applyRecipe(recipe)}
+            title={st.recipes[recipe.titleKey].desc}
           >
             {st.recipes[recipe.titleKey].title}
           </Button>

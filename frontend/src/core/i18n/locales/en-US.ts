@@ -858,21 +858,25 @@ export const enUS: Translations = {
     },
     recipes: {
       label: "Quick create",
-      trending: {
-        title: "GitHub Trending daily",
-        desc: "Summarize today's top 10 trending repos",
+      morningBrief: {
+        title: "Morning client brief",
+        desc: "Weekday mornings: replies, approvals and stalled work, by client",
       },
-      news: {
-        title: "Daily tech news digest",
-        desc: "Collect and summarize the day's top tech news",
+      clientReport: {
+        title: "Weekly client report draft",
+        desc: "Friday afternoons: a cited report draft for one client, for review",
       },
-      issues: {
-        title: "GitHub Issue triage",
-        desc: "Triage a repo's open issues (fill in {{repo}})",
+      siteWatch: {
+        title: "Daily website watch",
+        desc: "Every morning: which client sites are down or changed",
       },
-      weekly: {
-        title: "Weekly report",
-        desc: "Compile a weekly summary, every Monday",
+      visibility: {
+        title: "Weekly SEO and AI-answer check",
+        desc: "Wednesdays: search rank and AI-answer mentions, with fixes",
+      },
+      pipeline: {
+        title: "Monday pipeline and follow-ups",
+        desc: "Mondays: open deals, overdue leads and follow-up drafts",
       },
     },
   },
