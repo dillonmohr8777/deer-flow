@@ -121,18 +121,30 @@ _PAT_ROUTE_RULES: tuple[tuple[frozenset[str], re.Pattern[str]], ...] = (
     # endpoint is read-only, requires runs:read, and filters rows to the PAT
     # owner's runs; the rest of /api/console remains default-denied.
     (frozenset({"GET"}), re.compile(r"^/api/console/usage-ledger$")),
-    # Fleet template catalog, custom-agent create/list, and scheduled-task
-    # create/list/pause/resume (Dillon workspace seed script, 2026-09-24): a
-    # PAT-driven seeding script stamps fleet templates into real agents and
-    # schedules with no browser session available. Enumerated per
-    # implemented route, same no-dead-methods discipline as the rest of this
-    # policy: ``GET /api/agents/check`` stays denied (name-availability probe,
-    # not needed by the script), and agent delete/update plus scheduled-task
-    # delete/trigger/runs stay PAT-denied until a script actually needs them.
-    # Every admitted route here is already gated by ``threads``/``runs``
-    # permissions already in ``PAT_ALLOWED_SCOPES`` (scheduled-tasks) or by no
-    # ``@require_permission`` at all (agents), so no scope-enum change is
-    # needed alongside this route widening.
+)
+
+# Fleet template catalog, custom-agent create/list, and scheduled-task
+# create/list/pause/resume (Dillon workspace seed script, 2026-09-24): a
+# PAT-driven seeding script stamps fleet templates into real agents and
+# schedules with no browser session available. Enumerated per implemented
+# route, same no-dead-methods discipline as the rest of this policy: ``GET
+# /api/agents/check`` stays denied (name-availability probe, not needed by
+# the script), and agent delete/update plus scheduled-task delete/trigger/
+# runs stay PAT-denied until a script actually needs them. Every admitted
+# route here is already gated by ``threads``/``runs`` permissions already in
+# ``PAT_ALLOWED_SCOPES`` (scheduled-tasks) or by no ``@require_permission``
+# at all (agents), so no scope-enum change is needed alongside this route
+# widening.
+#
+# Kept in a SEPARATE tuple, gated behind ``config.private_workspace.enabled``
+# (default false -- see ``deerflow.config.app_config.PrivateWorkspaceConfig``),
+# not merged into ``_PAT_ROUTE_RULES`` above. ``POST /api/agents`` carries no
+# ``@require_permission`` at all, so on a client-facing MomoBot a leaked
+# client PAT holding nothing but ``threads:read`` could otherwise create
+# persistent custom agents and schedule them to run unattended -- catastrophic
+# on the app every real client logs into, harmless on the owner-only private
+# workspace these routes exist for. Master review, 2026-09-24 (PR #14).
+_PRIVATE_WORKSPACE_PAT_ROUTE_RULES: tuple[tuple[frozenset[str], re.Pattern[str]], ...] = (
     (frozenset({"GET"}), re.compile(r"^/api/fleet/templates$")),
     (frozenset({"GET", "POST"}), re.compile(r"^/api/agents$")),
     (frozenset({"GET"}), re.compile(r"^/api/agents/(?!check$)[^/]+$")),
@@ -144,14 +156,25 @@ _PAT_ROUTE_RULES: tuple[tuple[frozenset[str], re.Pattern[str]], ...] = (
 _BASE62_ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 
 
-def is_pat_allowed_route(method: str, path: str) -> bool:
+def is_pat_allowed_route(method: str, path: str, *, private_workspace_enabled: bool = False) -> bool:
     """Return whether the PAT route policy admits *method* + *path*.
 
     Trailing slashes are normalized away so the mounted route and its
     redirect-style twin resolve identically.
+
+    ``private_workspace_enabled`` gates ``_PRIVATE_WORKSPACE_PAT_ROUTE_RULES``
+    (fleet/agents/scheduled-task creation) on top of the always-on
+    ``_PAT_ROUTE_RULES`` base policy. Defaults to false -- the safe,
+    client-facing-MomoBot behavior -- so every pre-existing call site (and
+    every test written before this flag existed) keeps its exact prior
+    behavior unless it explicitly opts in. The one real call site
+    (``auth_middleware.py``) passes ``get_app_config().private_workspace.enabled``;
+    this function stays a pure, config-free predicate so it never has to load
+    a config file itself, including inside a bare unit test.
     """
     normalized = path.rstrip("/") or "/"
-    return any(method in methods and pattern.match(normalized) for methods, pattern in _PAT_ROUTE_RULES)
+    rules = _PAT_ROUTE_RULES + _PRIVATE_WORKSPACE_PAT_ROUTE_RULES if private_workspace_enabled else _PAT_ROUTE_RULES
+    return any(method in methods and pattern.match(normalized) for methods, pattern in rules)
 
 
 @functools.cache

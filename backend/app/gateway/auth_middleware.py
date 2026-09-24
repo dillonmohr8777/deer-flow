@@ -258,6 +258,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             # so it stays ahead of the Bearer check (a stray Authorization
             # header from a proxy must not 401 an E2E sandbox).
             from app.gateway.auth.pat import authenticate_pat, is_pat_allowed_route
+            from deerflow.config.app_config import get_app_config
 
             try:
                 user, pat_scopes, pat_organization_id = await authenticate_pat(request.app, authorization)
@@ -267,7 +268,19 @@ class AuthMiddleware(BaseHTTPMiddleware):
             # constrain @require_permission routes, so any route outside the
             # explicit PAT policy is closed to PAT callers outright — an
             # all-scopes token must not reach undecorated mutation routes.
-            if not is_pat_allowed_route(request.method, get_request_route_path(request)):
+            # private_workspace.enabled additionally gates the fleet/agents/
+            # scheduled-task routes (PR #14 review): false on every
+            # client-facing MomoBot, so a leaked client PAT cannot create a
+            # persistent custom agent or schedule it to run unattended. Fails
+            # closed (disabled) on any config-resolution error -- a missing
+            # or malformed config.yaml must never crash authenticated
+            # requests, and "closed" here means the strictest, safest policy
+            # anyway.
+            try:
+                private_workspace_enabled = get_app_config().private_workspace.enabled
+            except Exception:
+                private_workspace_enabled = False
+            if not is_pat_allowed_route(request.method, get_request_route_path(request), private_workspace_enabled=private_workspace_enabled):
                 return JSONResponse(
                     status_code=403,
                     content={"detail": "PAT credentials are not permitted on this route"},

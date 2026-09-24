@@ -697,42 +697,81 @@ def test_pat_projects_policy_admits_exactly_the_mounted_routes():
     assert is_pat_allowed_route("GET", move_path) is False
 
 
-def test_pat_fleet_agents_scheduled_tasks_policy():
-    """Dillon workspace seed script (2026-09-24): a PAT-driven seeding script
-    reads the fleet template catalog, creates custom agents, and creates plus
-    pauses/resumes scheduled tasks with no browser session available. Every
-    route the script calls is admitted; deliberately unimplemented-for-PAT
-    neighbors (agent delete/update, the agent name-availability probe,
-    scheduled-task delete/trigger/runs, and client-scoped fleet stamping)
-    stay default-denied, pinning today's narrow, enumerated surface."""
+_FLEET_AGENTS_SCHEDULED_TASKS_ROUTES = [
+    ("GET", "/api/fleet/templates"),
+    ("GET", "/api/agents"),
+    ("POST", "/api/agents"),
+    ("GET", "/api/agents/chief-of-staff"),
+    ("GET", "/api/scheduled-tasks"),
+    ("POST", "/api/scheduled-tasks"),
+    ("GET", "/api/scheduled-tasks/task-1"),
+    ("POST", "/api/scheduled-tasks/task-1/pause"),
+    ("POST", "/api/scheduled-tasks/task-1/resume"),
+]
+
+_FLEET_AGENTS_SCHEDULED_TASKS_NEIGHBORS = [
+    ("GET", "/api/agents/check"),
+    ("PATCH", "/api/agents/chief-of-staff"),
+    ("DELETE", "/api/agents/chief-of-staff"),
+    ("PATCH", "/api/scheduled-tasks/task-1"),
+    ("DELETE", "/api/scheduled-tasks/task-1"),
+    ("POST", "/api/scheduled-tasks/task-1/trigger"),
+    ("GET", "/api/scheduled-tasks/task-1/runs"),
+    ("POST", "/api/fleet/templates"),
+    ("GET", "/api/clients/client-1/agents"),
+    ("POST", "/api/clients/client-1/agents"),
+]
+
+
+def test_pat_fleet_agents_scheduled_tasks_policy_denied_by_default():
+    """Master review of PR #14 (2026-09-24): ``POST /api/agents`` carries no
+    ``@require_permission`` at all, so before this flag existed, any PAT --
+    including one leaked from a client-facing MomoBot holding nothing but
+    ``threads:read`` -- could create a persistent custom agent and schedule it
+    to run unattended. The private-workspace route widening must default to
+    off so a client-facing MomoBot (which never sets
+    ``private_workspace.enabled``) is unaffected: every route the Dillon
+    workspace seed script needs stays PAT-denied unless the caller explicitly
+    opts in."""
     from app.gateway.auth.pat import is_pat_allowed_route
 
-    for method, path in [
-        ("GET", "/api/fleet/templates"),
-        ("GET", "/api/agents"),
-        ("POST", "/api/agents"),
-        ("GET", "/api/agents/chief-of-staff"),
-        ("GET", "/api/scheduled-tasks"),
-        ("POST", "/api/scheduled-tasks"),
-        ("GET", "/api/scheduled-tasks/task-1"),
-        ("POST", "/api/scheduled-tasks/task-1/pause"),
-        ("POST", "/api/scheduled-tasks/task-1/resume"),
-    ]:
-        assert is_pat_allowed_route(method, path), f"{method} {path} is implemented but PAT-denied"
+    for method, path in _FLEET_AGENTS_SCHEDULED_TASKS_ROUTES:
+        assert not is_pat_allowed_route(method, path), f"{method} {path} must stay PAT-denied with the flag unset (default)"
+        assert not is_pat_allowed_route(method, path, private_workspace_enabled=False), f"{method} {path} must stay PAT-denied with private_workspace_enabled=False"
 
-    for method, path in [
-        ("GET", "/api/agents/check"),
-        ("PATCH", "/api/agents/chief-of-staff"),
-        ("DELETE", "/api/agents/chief-of-staff"),
-        ("PATCH", "/api/scheduled-tasks/task-1"),
-        ("DELETE", "/api/scheduled-tasks/task-1"),
-        ("POST", "/api/scheduled-tasks/task-1/trigger"),
-        ("GET", "/api/scheduled-tasks/task-1/runs"),
-        ("POST", "/api/fleet/templates"),
-        ("GET", "/api/clients/client-1/agents"),
-        ("POST", "/api/clients/client-1/agents"),
-    ]:
-        assert not is_pat_allowed_route(method, path), f"{method} {path} must stay PAT-denied"
+
+def test_pat_fleet_agents_scheduled_tasks_policy_admitted_when_private_workspace_enabled():
+    """Dillon workspace seed script (2026-09-24): with
+    ``private_workspace_enabled=True`` (set only from
+    ``config.private_workspace.enabled``, itself true only in
+    ``dillon.workspace.config.yaml`` -- see ``deploy/make_config.py`` in the
+    ops-pack repo, never in a client-facing MomoBot config), a PAT-driven
+    seeding script can read the fleet template catalog, create custom agents,
+    and create plus pause/resume scheduled tasks with no browser session
+    available. Every route the script calls is admitted; deliberately
+    unimplemented-for-PAT neighbors (agent delete/update, the agent
+    name-availability probe, scheduled-task delete/trigger/runs, and
+    client-scoped fleet stamping) stay default-denied even with the flag on,
+    pinning today's narrow, enumerated surface."""
+    from app.gateway.auth.pat import is_pat_allowed_route
+
+    for method, path in _FLEET_AGENTS_SCHEDULED_TASKS_ROUTES:
+        assert is_pat_allowed_route(method, path, private_workspace_enabled=True), f"{method} {path} is implemented but PAT-denied with the flag on"
+
+    for method, path in _FLEET_AGENTS_SCHEDULED_TASKS_NEIGHBORS:
+        assert not is_pat_allowed_route(method, path, private_workspace_enabled=True), f"{method} {path} must stay PAT-denied even with the flag on"
+
+
+def test_pat_base_policy_unaffected_by_private_workspace_flag():
+    """The flag only ever widens the policy for the six new routes; every
+    pre-existing base-policy route keeps its exact behavior regardless of
+    ``private_workspace_enabled``, both directions."""
+    from app.gateway.auth.pat import is_pat_allowed_route
+
+    for method, path in [("POST", "/api/threads"), ("GET", "/api/console/usage-ledger")]:
+        assert is_pat_allowed_route(method, path) == is_pat_allowed_route(method, path, private_workspace_enabled=True)
+    assert is_pat_allowed_route("GET", "/api/threads") is False
+    assert is_pat_allowed_route("GET", "/api/threads", private_workspace_enabled=True) is False
 
 
 def test_pat_scopes_enforced_on_stateless_run_entry(client):

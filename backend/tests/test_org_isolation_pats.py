@@ -84,7 +84,7 @@ async def pat_world(org_world, monkeypatch):  # noqa: F811
     # clients router, neither of which is on the production PAT route
     # allowlist (a separate, already-covered concern) -- allow every route so
     # only organization scoping is under test here.
-    monkeypatch.setattr("app.gateway.auth.pat.is_pat_allowed_route", lambda method, path: True)
+    monkeypatch.setattr("app.gateway.auth.pat.is_pat_allowed_route", lambda method, path, **kwargs: True)
     return session_factory
 
 
