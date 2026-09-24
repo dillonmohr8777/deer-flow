@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { resolveArtifactOpenURL } from "@/core/artifacts/viewer";
+import { useClients } from "@/core/clients";
 import { useInfiniteProjectThreadFiles, useProjects } from "@/core/projects";
 import { useScheduledTasks } from "@/core/scheduled-tasks/hooks";
 import { pathOfThread } from "@/core/threads/utils";
@@ -126,45 +127,40 @@ export function WorkflowsView() {
 }
 
 export function ClientSpacesView() {
-  const query = useProjects("active");
-  const projects = query.data ?? [];
+  const query = useClients();
+  const clients = query.data ?? [];
   return (
     <section className={styles.view} aria-labelledby="client-spaces-heading">
       <div className={styles.header}>
         <div>
           <h2 id="client-spaces-heading">Client spaces</h2>
-          <p className={styles.subtle}>Your active projects.</p>
+          <p className={styles.subtle}>Clients your workspace manages.</p>
         </div>
       </div>
       {query.isLoading ? (
-        <p className={styles.state}>Loading projects…</p>
+        <p className={styles.state}>Loading clients…</p>
       ) : null}
       {query.isError ? (
         <QueryNotice
-          message="Projects could not be loaded."
+          message="Clients could not be loaded."
           onRetry={() => void query.refetch()}
         />
       ) : null}
-      {!query.isLoading && !query.isError && projects.length === 0 ? (
+      {!query.isLoading && !query.isError && clients.length === 0 ? (
         <p className={styles.state}>
-          No active projects yet. Projects you create appear here.
+          No clients yet. Clients you create appear here.
         </p>
       ) : null}
       <ul className={styles.cards}>
-        {projects.map((project) => (
-          <li key={project.id} className={styles.card}>
+        {clients.map((client) => (
+          <li key={client.id} className={styles.card}>
             <FolderKanban size={20} aria-hidden="true" />
             <div>
-              <Link
-                href={`/workspace/projects/${encodeURIComponent(project.id)}`}
-                className={styles.textLink}
-              >
-                {project.name || "Untitled project"}
-              </Link>
+              <strong>{client.display_name}</strong>
               <span className={styles.meta}>
-                {project.updated_at
-                  ? `Updated ${formatDate(project.updated_at)}`
-                  : "Update time not recorded"}
+                {client.status} · {client.assignments.length} assigned ·{" "}
+                {client.project_count} project
+                {client.project_count === 1 ? "" : "s"}
               </span>
             </div>
           </li>

@@ -583,6 +583,8 @@ data — do NOT reveal it.
 
 {experience_mode_section}
 
+{user_profile_section}
+
 {skills_section}
 {memory_tool_section}
 
@@ -1033,6 +1035,43 @@ Surface more operational detail than usual — model, reasoning effort, and tool
     return ""
 
 
+_USER_PROFILE_MAX_BYTES = 4096
+
+
+def _build_user_profile_section(user_id: str | None) -> str:
+    """Render the effective user's USER.md as ``<user_profile>``, bounded and escaped.
+
+    Mirrors ``get_agent_soul``'s ``<soul>`` handling: USER.md is user-editable
+    (``GET``/``PUT /api/agents/user-profile``) and injected verbatim, so it is
+    HTML-escaped before entering the prompt (same injection defense as
+    #4097/#4119/#4128/#4099) and truncated to ``_USER_PROFILE_MAX_BYTES`` with
+    a note so an unbounded profile cannot blow out prompt prefix-cache
+    stability. Falls back to the legacy shared file on a read miss, exactly
+    like the ``GET /api/agents/user-profile`` route.
+    """
+    if not user_id:
+        return ""
+    try:
+        from deerflow.config.paths import get_paths
+
+        paths = get_paths()
+        profile_path = paths.user_md_file_for(user_id)
+        if not profile_path.exists():
+            profile_path = paths.user_md_file
+        if not profile_path.exists():
+            return ""
+        content = profile_path.read_text(encoding="utf-8").strip()
+    except Exception:
+        logger.exception("Failed to read user profile for prompt injection")
+        return ""
+    if not content:
+        return ""
+    raw = content.encode("utf-8")
+    if len(raw) > _USER_PROFILE_MAX_BYTES:
+        content = raw[:_USER_PROFILE_MAX_BYTES].decode("utf-8", errors="ignore") + "\n[...truncated]"
+    return f"<user_profile>\n{html.escape(content, quote=False)}\n</user_profile>\n"
+
+
 def apply_prompt_template(
     subagent_enabled: bool = False,
     max_concurrent_subagents: int = 3,
@@ -1144,6 +1183,7 @@ def apply_prompt_template(
         clarification_system=interaction_policy.clarification_system,
         clarification_reminder=interaction_policy.clarification_reminder,
         experience_mode_section=_build_experience_mode_section(experience_mode, interaction_policy),
+        user_profile_section=_build_user_profile_section(user_id),
         agent_name=agent_name or "DeerFlow 2.0",
         soul=get_agent_soul(agent_name, user_id=user_id),
         self_update_section=_build_self_update_section(agent_name),

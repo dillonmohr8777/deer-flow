@@ -28,6 +28,7 @@ import { ThreadSubagentBatches } from "@/components/workspace/thread-subagent-ba
 import { useAgents } from "@/core/agents";
 import { useAuth } from "@/core/auth/AuthProvider";
 import { hasPermission, PERMISSIONS } from "@/core/auth/permissions";
+import { useClients } from "@/core/clients";
 import {
   useCancelConsoleRun,
   useConsoleRuns,
@@ -86,7 +87,7 @@ type View = (typeof tabs)[number];
  */
 const PREVIEW_NOTES: Partial<Record<View, string>> = {
   "Client Spaces":
-    "Client spaces are not connected yet. Until they are, this lists your active projects, and a project is not a verified client.",
+    "No clients have been added to this workspace yet. Once they are, they list here with their assigned people and linked projects.",
   "Business Intelligence":
     "Token usage and provider attempts are recorded here. Revenue, margins and billing are not connected yet.",
   "Artifact Library":
@@ -139,6 +140,13 @@ export function CommandCenter() {
   const [appearanceOpen, setAppearanceOpen] = useState(false);
   const appearanceTrigger = useRef<HTMLButtonElement>(null);
   const canReadRuns = Boolean(user) && hasPermission(user, "runs:read");
+  const clientsQuery = useClients();
+  const hasClients = (clientsQuery.data?.length ?? 0) > 0;
+  // Client Spaces stops being a preview once real clients exist (Momentum
+  // Phase 2 item 2) -- every other tab's disclaimer is unaffected.
+  const previewNotes: Partial<Record<View, string>> = hasClients
+    ? { ...PREVIEW_NOTES, "Client Spaces": undefined }
+    : PREVIEW_NOTES;
   const [view, setView] = useState<View>("Mission Control");
   const [filter, setFilter] = useState("");
   const [offset, setOffset] = useState(0);
@@ -560,7 +568,7 @@ export function CommandCenter() {
               }}
             >
               {tab}
-              {PREVIEW_NOTES[tab] && (
+              {previewNotes[tab] && (
                 <>
                   {" "}
                   <span className={styles.previewTag}>Preview</span>
@@ -612,10 +620,10 @@ export function CommandCenter() {
             ))}
           </div>
         )}
-        {PREVIEW_NOTES[view] && (
+        {previewNotes[view] && (
           <p className={styles.previewNote}>
             <span className={styles.previewTag}>Preview</span>{" "}
-            {PREVIEW_NOTES[view]}
+            {previewNotes[view]}
           </p>
         )}
         {view === "Mission Control" ? (

@@ -36,6 +36,9 @@ PAT_ALLOWED_SCOPES: frozenset[str] = frozenset(
         "projects:read",
         "projects:write",
         "projects:delete",
+        "clients:read",
+        "clients:write",
+        "clients:delete",
     }
 )
 

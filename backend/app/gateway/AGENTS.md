@@ -62,6 +62,8 @@ read-only into the run context. The server-reserved `deerflow_project_id`
 metadata key is a read-only exposure of the `threads_meta.project_id` column and
 is stripped from client writes.
 
+The client roster (`routers/clients.py`, `/api/clients`, migration `0034_clients`) is organization-owned, not user-owned: `clients` and `client_assignments` carry no `user_id`, so every route scopes on `resolve_organization_id()` alone (mirroring `organizations`/`organization_members` rather than `projects`). `client_assignments` is a composite-primary-key `(client_id, user_id)` row, same shape as `organization_members`; `POST .../assignments` upserts the role rather than erroring on a repeat assignment. `projects.client_id` (nullable, unenforced, migration `0034`) is the only link back to Projects today — no route sets it yet. `POST /api/clients/import` is admin-only (`require_admin_user`, no `@require_permission`, mirroring `capabilities.py::install`) and upserts the `client-operations/registry/clients.json` roster by `registry_id` within the caller's active organization; it never deletes, and owners are not inferred from the registry (`client_assignments` untouched).
+
 Localhost persistence deliberately reads the direct request `Host` and ignores `Forwarded` / `X-Forwarded-Host`. Scheme and auth-origin reconstruction still consume forwarding headers. The bundled nginx sets `X-Forwarded-Proto`, but preserves an upstream HTTPS value and does not overwrite every forwarded header, so the outer trusted proxy must replace or strip client-supplied forwarding headers before traffic reaches DeerFlow.
 
 Standalone local LangGraph Studio is recognized only through the upstream
