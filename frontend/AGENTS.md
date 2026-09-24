@@ -232,6 +232,17 @@ dense tables, where a moving decoration would distract rather than help. `data-l
 (the same `motionOn`/`useDailyMotion()` switch as Momo films) pauses their sway, and
 they are hidden entirely under the future and retro treatments.
 
+The Daily's "Your morning" section (`components/momentum/daily/your-morning.tsx`)
+is personal and the Daily itself is public, so it never uses `AuthProvider` or
+TanStack Query: `app/daily/page.tsx` resolves sign-in state and the dictionary
+slice server-side (`core/momo-daily/load.ts`'s `getDailyViewer()`, `core/i18n/server.ts`'s
+`getI18n()`) and passes plain-string props down; `use-today-brief.ts` is a
+fetch-on-mount hook gated on `signedIn` so an anonymous reader never calls the
+authenticated `/api/briefs/today` endpoint (whose `fetchWithAuth` wrapper redirects
+to `/login` on 401). "Have Momo write it up" reuses `core/threads/composer-draft.ts`'s
+sessionStorage draft key (scope `"new"`) instead of new thread-creation plumbing.
+The section adds no motion of its own, so it satisfies reduced-motion by construction.
+
 `backend/packages/harness/deerflow/capabilities/builtin.json` owns localized
 catalog manifests. Refresh the generated demo snapshot with `pnpm catalog:sync`
 after changing the catalog; unit tests enforce equality with the source. Demo

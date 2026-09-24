@@ -20,6 +20,7 @@ from app.gateway.routers import (
     artifacts,
     assistants_compat,
     auth,
+    briefs,
     browser,
     capabilities,
     channel_connections,
@@ -922,6 +923,9 @@ This gateway provides runtime endpoints for agent runs plus custom endpoints for
 
     # Console API (cross-thread observability) is mounted at /api/console
     app.include_router(console.router)
+
+    # Briefs API (personal morning brief) is mounted at /api/briefs
+    app.include_router(briefs.router)
 
     # MCP API is mounted at /api/mcp
     app.include_router(capabilities.router)

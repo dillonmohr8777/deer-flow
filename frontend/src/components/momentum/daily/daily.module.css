@@ -846,3 +846,120 @@
   top: 60%;
   right: -86px;
 }
+
+/* ---------- Your morning (personal brief, signed-in only) -------------- */
+
+.brief {
+  margin: 0 0 24px;
+  padding: 16px;
+  background: var(--paper-cream);
+  border: 1px solid var(--paper-line);
+}
+
+.briefHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.briefHeader .sectionHeading {
+  margin: 0;
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.briefWriteUp {
+  padding: 8px 16px;
+  border: 1px solid var(--paper-royal-deep);
+  border-radius: 999px;
+  background: var(--paper-royal);
+  color: var(--paper-cream-hi);
+  font: 700 13px/1 var(--m-font-text);
+  letter-spacing: 0.03em;
+  cursor: pointer;
+}
+
+.briefWriteUp:hover {
+  background: var(--paper-royal-deep);
+}
+
+.briefClients {
+  margin: 8px 0 16px;
+  font-size: 13px;
+  color: var(--paper-ink-muted);
+}
+
+.briefClientsLabel {
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--paper-brass-text);
+}
+
+.briefColumns {
+  display: grid;
+  gap: 20px;
+}
+
+@media (min-width: 900px) {
+  .briefColumns {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.briefSubheading {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--paper-ink-muted);
+}
+
+.briefList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.briefRow {
+  padding: 8px 10px;
+  background: var(--paper-cream-hi);
+  border: 1px solid color-mix(in srgb, var(--paper-line) 60%, transparent);
+  border-left: 3px solid var(--paper-line);
+}
+
+.briefRow[data-brief-alert="true"] {
+  border-left-color: var(--paper-danger);
+}
+
+.briefKind {
+  margin: 0 0 2px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--paper-ink-muted);
+}
+
+.briefRow[data-brief-alert="true"] .briefKind {
+  color: var(--paper-danger);
+}
+
+.briefTitle {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.briefDetail,
+.briefMeta {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--paper-ink-muted);
+}

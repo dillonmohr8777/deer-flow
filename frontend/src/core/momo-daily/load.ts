@@ -29,10 +29,24 @@ export const loadAllArticles = cache(async (): Promise<DailyArticle[]> => {
   );
 });
 
+// De-dupes the gateway round trip: isSignedIn() and getDailyViewer() (Your
+// morning) both need it, sometimes in the same request (page + metadata).
+const cachedServerSideUser = cache(getServerSideUser);
+
 /**
  * Drafts are for signed-in workspace users only. Cached per request so the
  * page and its metadata share one gateway round trip.
  */
 export const isSignedIn = cache(
-  async () => (await getServerSideUser()).tag === "authenticated",
+  async () => (await cachedServerSideUser()).tag === "authenticated",
+);
+
+/** Signed-in identity for the "Your morning" section (a public page feature). */
+export const getDailyViewer = cache(
+  async (): Promise<{ signedIn: boolean; userId: string | null }> => {
+    const result = await cachedServerSideUser();
+    return result.tag === "authenticated"
+      ? { signedIn: true, userId: result.user.id }
+      : { signedIn: false, userId: null };
+  },
 );

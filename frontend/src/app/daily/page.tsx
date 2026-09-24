@@ -1,6 +1,7 @@
 import { type Metadata } from "next";
 
 import { DailyFrontPage } from "@/components/momentum/daily/front-page";
+import { getI18n } from "@/core/i18n/server";
 import {
   absoluteUrl,
   articlePath,
@@ -9,7 +10,7 @@ import {
   serializeJsonLd,
   visibleArticles,
 } from "@/core/momo-daily";
-import { isSignedIn, loadAllArticles } from "@/core/momo-daily/load";
+import { getDailyViewer, loadAllArticles } from "@/core/momo-daily/load";
 
 const DESCRIPTION =
   "Momentum's newspaper for clients and the team: the latest in AI, explained plainly and answered first.";
@@ -34,8 +35,9 @@ export const metadata: Metadata = {
 };
 
 export default async function DailyPage() {
+  const [viewer, { t }] = await Promise.all([getDailyViewer(), getI18n()]);
   const articles = visibleArticles(await loadAllArticles(), {
-    signedIn: await isSignedIn(),
+    signedIn: viewer.signedIn,
   });
   const editionDate = new Date().toLocaleDateString("en-US", {
     weekday: "long",
@@ -69,7 +71,13 @@ export default async function DailyPage() {
           }),
         }}
       />
-      <DailyFrontPage articles={articles} editionDate={editionDate} />
+      <DailyFrontPage
+        articles={articles}
+        editionDate={editionDate}
+        signedIn={viewer.signedIn}
+        userId={viewer.userId}
+        dailyBriefCopy={t.dailyBrief}
+      />
     </>
   );
 }

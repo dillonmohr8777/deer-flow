@@ -13,6 +13,7 @@ import {
 
 import { MomoFilm } from "@/components/momentum/momo-film";
 import { Scraps } from "@/components/momentum/scraps";
+import type { Translations } from "@/core/i18n/locales";
 import {
   articlePath,
   type DailyArticle,
@@ -25,6 +26,7 @@ import {
 import { Reporter } from "./reporter";
 import { StaffBox } from "./staff-box";
 import { useDailyMotion } from "./use-daily-motion";
+import { YourMorning } from "./your-morning";
 
 import styles from "./daily.module.css";
 
@@ -83,9 +85,15 @@ function Masthead({
 export function DailyFrontPage({
   articles,
   editionDate,
+  signedIn = false,
+  userId = null,
+  dailyBriefCopy,
 }: {
   articles: readonly DailyArticle[];
   editionDate: string;
+  signedIn?: boolean;
+  userId?: string | null;
+  dailyBriefCopy?: Translations["dailyBrief"];
 }) {
   const motion = useDailyMotion();
   const router = useRouter();
@@ -171,6 +179,14 @@ export function DailyFrontPage({
       <div className={styles.sheet} data-turning={turning ? "true" : undefined}>
         <div className={styles.aboveFold}>
           <Masthead editionDate={editionDate} motion={motion} />
+
+          {signedIn && dailyBriefCopy ? (
+            <YourMorning
+              signedIn={signedIn}
+              userId={userId}
+              copy={dailyBriefCopy}
+            />
+          ) : null}
 
           {lead ? (
             <article

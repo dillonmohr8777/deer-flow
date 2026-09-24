@@ -1587,4 +1587,33 @@ export interface Translations {
       sso_not_allowed: string;
     };
   };
+
+  // Momo Daily > Your morning (personal brief section, briefs.py)
+  dailyBrief: {
+    title: string;
+    clientsLabel: string;
+    loading: string;
+    error: string;
+    emptyTitle: string;
+    emptyBody: string;
+    activityHeading: string;
+    dueHeading: string;
+    waitingHeading: string;
+    untitledChat: string;
+    kindThread: string;
+    kindRunSuccess: string;
+    kindRunFailed: string;
+    kindDocument: string;
+    kindScheduledSuccess: string;
+    kindScheduledFailed: string;
+    waitingInterrupted: string;
+    waitingClarification: string;
+    writeItUp: string;
+    writeItUpIntro: string;
+    writeItUpClients: string;
+    writeItUpActivity: string;
+    writeItUpDue: string;
+    writeItUpWaiting: string;
+    writeItUpNothing: string;
+  };
 }
