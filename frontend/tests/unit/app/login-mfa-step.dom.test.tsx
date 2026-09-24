@@ -41,10 +41,10 @@ function routeFetch(
     if (url.includes("/api/v1/auth/setup-status")) {
       return jsonResponse({ needs_setup: false, registration_enabled: true });
     }
-    const override = Object.entries(overrides).find(([key]) =>
+    const handler = Object.entries(overrides).find(([key]) =>
       url.includes(key),
-    );
-    if (override) return override[1]();
+    )?.[1];
+    if (handler) return handler();
     throw new Error(`Unexpected fetch: ${url}`);
   };
 }
@@ -119,7 +119,7 @@ describe("login MFA step", () => {
     expect(loginMfa).toHaveBeenCalled();
     const [, init] = (
       globalThis.fetch as ReturnType<typeof rs.fn>
-    ).mock.calls.find(([u]: [string]) => u.includes("/login/mfa"))!;
+    ).mock.calls.find(([u]) => String(u).includes("/login/mfa"))!;
     expect(JSON.parse(init.body as string)).toEqual({
       challenge: "challenge-123",
       remember_me: true,
@@ -182,7 +182,7 @@ describe("login MFA step", () => {
     await waitFor(() => expect(mocks.push).toHaveBeenCalled());
     const [, init] = (
       globalThis.fetch as ReturnType<typeof rs.fn>
-    ).mock.calls.find(([u]: [string]) => u.includes("/login/mfa"))!;
+    ).mock.calls.find(([u]) => String(u).includes("/login/mfa"))!;
     expect(JSON.parse(init.body as string)).toEqual({
       challenge: "challenge-123",
       remember_me: true,
