@@ -143,7 +143,7 @@ export function CommandCenter() {
   const clientsQuery = useClients();
   const hasClients = (clientsQuery.data?.length ?? 0) > 0;
   // Client Spaces stops being a preview once real clients exist (Momentum
-  // Phase 2 item 2) -- every other tab's disclaimer is unaffected.
+  // Phase 2 item 2). Every other tab's disclaimer is unaffected.
   const previewNotes: Partial<Record<View, string>> = hasClients
     ? { ...PREVIEW_NOTES, "Client Spaces": undefined }
     : PREVIEW_NOTES;

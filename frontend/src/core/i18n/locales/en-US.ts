@@ -1357,7 +1357,7 @@ export const enUS: Translations = {
         "Security and admin actions across the deployment. Read only.",
       adminOnly: "Only administrators can view the audit log.",
       loading: "Loading audit events…",
-      failed: "Could not load audit events.",
+      failed: "Couldn't load audit events.",
       empty: "No audit events yet.",
       loadMore: "Load more",
       filterActionPrefix: "Action prefix",
