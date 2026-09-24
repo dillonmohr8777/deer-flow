@@ -83,11 +83,9 @@
    */
   --canvas: var(--paper-cream);
   --surface: var(--paper-cream-hi);
-  --surface-blue: color-mix(
-    in srgb,
-    var(--paper-royal) 8%,
-    var(--paper-cream-hi)
-  );
+  /* Royal at 8% over cream-hi measured #e9eaea, a dead grey. Quiet fills
+     are cream-lo everywhere else in paper. */
+  --surface-blue: var(--paper-cream-lo);
   --surface-violet: color-mix(
     in srgb,
     var(--paper-ink-muted) 8%,

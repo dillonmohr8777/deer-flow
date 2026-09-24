@@ -214,6 +214,12 @@ function ClientAgentsSection({ client }: { client: Client }) {
   );
 }
 
+const CLIENT_STATUS_LABEL: Record<string, string> = {
+  active: "Active",
+  inactive: "Inactive",
+  prospect: "Prospect",
+};
+
 export function ClientSpacesView() {
   const query = useClients();
   const clients = query.data ?? [];
@@ -246,8 +252,9 @@ export function ClientSpacesView() {
             <div>
               <strong>{client.display_name}</strong>
               <span className={styles.meta}>
-                {client.status} · {client.assignments.length} assigned ·{" "}
-                {client.project_count} project
+                {CLIENT_STATUS_LABEL[client.status] ?? client.status} ·{" "}
+                {client.assignments.length} assigned · {client.project_count}{" "}
+                project
                 {client.project_count === 1 ? "" : "s"}
               </span>
               <ClientAgentsSection client={client} />

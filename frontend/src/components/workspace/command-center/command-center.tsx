@@ -40,6 +40,7 @@ import {
 import { useModels } from "@/core/models/hooks";
 import { useSubagents } from "@/core/subagents";
 import { pathOfThread } from "@/core/threads/utils";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 import { AgentTopology } from "./agent-topology";
 import { useWorkspaceAppearance } from "./appearance-provider";
@@ -94,6 +95,17 @@ const PREVIEW_NOTES: Partial<Record<View, string>> = {
     "There's no workspace-wide artifact index yet. Choose a project to browse the files its conversations produced.",
 };
 
+/** Each view says what it holds; the brand line belongs to Mission Control. */
+const VIEW_LEDES: Record<Exclude<View, "Mission Control">, string> = {
+  "Agent Studio": "Your lead agent and the specialists it can hand work to.",
+  Jobs: "Every recorded run, newest first, with its receipt.",
+  Workflows: "Scheduled work and where each definition stands.",
+  "Client Spaces": "Clients, the people assigned to them and their projects.",
+  "Business Intelligence": "Recorded token usage and provider attempts.",
+  "Artifact Library":
+    "Files your conversations produced, one project at a time.",
+};
+
 function duration(seconds: number | null) {
   if (seconds === null) return "Not recorded";
   return seconds < 60
@@ -137,16 +149,19 @@ function Status({ status }: { status: string }) {
 export function CommandCenter() {
   const { user } = useAuth();
   const { preferences } = useWorkspaceAppearance();
+  const isMobile = useIsMobile();
   const [appearanceOpen, setAppearanceOpen] = useState(false);
   const appearanceTrigger = useRef<HTMLButtonElement>(null);
   const canReadRuns = Boolean(user) && hasPermission(user, "runs:read");
   const clientsQuery = useClients();
-  const hasClients = (clientsQuery.data?.length ?? 0) > 0;
   // Client Spaces stops being a preview once real clients exist (Momentum
-  // Phase 2 item 2). Every other tab's disclaimer is unaffected.
-  const previewNotes: Partial<Record<View, string>> = hasClients
-    ? { ...PREVIEW_NOTES, "Client Spaces": undefined }
-    : PREVIEW_NOTES;
+  // Phase 2 item 2). Only a successful empty read may say "no clients": a
+  // failed or pending read is unknown, not zero. Every other tab's
+  // disclaimer is unaffected.
+  const noClients = clientsQuery.isSuccess && clientsQuery.data.length === 0;
+  const previewNotes: Partial<Record<View, string>> = noClients
+    ? PREVIEW_NOTES
+    : { ...PREVIEW_NOTES, "Client Spaces": undefined };
   const [view, setView] = useState<View>("Mission Control");
   const [filter, setFilter] = useState("");
   const [offset, setOffset] = useState(0);
@@ -497,7 +512,13 @@ export function CommandCenter() {
           <div className={styles.headingText}>
             <h1>{view}</h1>
             <p className={styles.headingCopy}>
-              <span>Give your ambition a team.</span> Keep the work in view.
+              {view === "Mission Control" ? (
+                <>
+                  <span>Give your ambition a team.</span> Keep the work in view.
+                </>
+              ) : (
+                VIEW_LEDES[view]
+              )}
             </p>
           </div>
           {/* The page's one loud moment: the crew on a kraft scrap, as on the
@@ -628,9 +649,12 @@ export function CommandCenter() {
         )}
         {view === "Mission Control" ? (
           <>
+            {/* Phones lead with the work (DESIGN.md, Layout). The DOM order
+                changes with it, not CSS `order`, so the keyboard still walks
+                the page in the order it reads. */}
             <div className={styles.overview}>
-              {team}
-              {jobList}
+              {isMobile ? jobList : team}
+              {isMobile ? team : jobList}
             </div>
             <nav className={styles.destinations} aria-label="Workspace tools">
               <span>Also in your workspace</span>

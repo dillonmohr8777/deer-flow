@@ -247,11 +247,9 @@
 .root[data-treatment="paper"] {
   --canvas: var(--paper-cream);
   --surface: var(--paper-cream-hi);
-  --surface-blue: color-mix(
-    in srgb,
-    var(--paper-royal) 8%,
-    var(--paper-cream-hi)
-  );
+  /* Quiet fills are cream-lo in paper (paper.css). Royal at 8% over
+     cream-hi measured #e9eaea: a dead grey, not a paper tone. */
+  --surface-blue: var(--paper-cream-lo);
   --ink: var(--paper-ink);
   --muted: var(--paper-ink-muted);
   /* Hairlines stay soft; controls take the full 3.56:1 line as --strong. */
@@ -1461,8 +1459,8 @@
   .metrics strong {
     font-size: 23px;
   }
-  /* No `order` here: the team and the assignments keep the source order at
-     every width, so the keyboard walks the page in the order it reads. */
+  /* No `order` here: command-center.tsx swaps the DOM order on phones, so
+     the keyboard walks the page in the order it reads. */
   .team,
   .jobs,
   .usage {
