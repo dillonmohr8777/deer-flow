@@ -443,12 +443,18 @@
   background: #e9f3ff;
   border-color: #91b7d6;
 }
+/* Icon-only in the sidebar header: a 40px target, the icon stays 16px. */
 .motionToggle[data-compact="true"] {
-  width: 28px;
-  min-height: 30px;
+  width: 40px;
+  min-height: 40px;
   flex: 0 0 auto;
   border-color: transparent;
+  /* Ghost at rest, like the sidebar trigger beside it; hover still fills. */
+  background: transparent;
   padding: 5px;
+}
+.motionToggle[data-compact="true"]:hover {
+  background: var(--accent);
 }
 @media (max-width: 900px) {
   .panelBody {

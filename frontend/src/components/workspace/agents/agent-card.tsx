@@ -76,7 +76,7 @@ export function AgentCard({ agent }: AgentCardProps) {
             {displayName}
           </h2>
           {agent.model && (
-            <span className="text-muted-foreground text-xs font-bold">
+            <span className="text-muted-foreground text-sm font-bold">
               {formatModelLabel(agent.model)}
             </span>
           )}
@@ -106,7 +106,7 @@ export function AgentCard({ agent }: AgentCardProps) {
           <span className="sr-only">{displayName}</span>
         </Button>
         <Button
-          size="icon-sm"
+          size="icon-lg"
           variant="ghost"
           onClick={() => setSettingsOpen(true)}
           title={t.agents.settings}
