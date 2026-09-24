@@ -348,6 +348,8 @@
 
 /*
  * Paper motion layer — the five-item product motion list, and no more.
+ * (A sixth item, the front-door Momo bounce, lives with its component in
+ * components/momentum/momobot/momobot.module.css; see DESIGN.md, Motion.)
  * Source: C:\Users\dillo\Documents\Qwen\block-shots\W0-motion-vocabulary.md
  * (ad analysis). Vocabulary borrowed: fast-start, ease-to-rest slide/settle.
  * Vocabulary dropped on purpose: the ad's repeated spring overshoot-bounce,

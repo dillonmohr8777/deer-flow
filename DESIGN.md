@@ -115,12 +115,13 @@ Rules:
 
 ## Type
 
-| Voice   | Token              | Face                           | Where                                                                                             |
-| ------- | ------------------ | ------------------------------ | ------------------------------------------------------------------------------------------------- |
-| Heading | `--m-font-serif`   | Fraunces 700, tracking -0.01em | Page h1 and section h2 on paper pages, dialog titles, Command Center headings and metric numerals |
-| Text    | `--m-font-text`    | Nunito Sans                    | Everything else: body, controls, labels, data                                                     |
-| Display | `--m-font-display` | Archivo Black                  | The landing's MomoBot wordmark only                                                               |
-| Code    | `--m-font-mono`    | System mono stack              | Code, ids, file names                                                                             |
+| Voice      | Token              | Face                           | Where                                                                                             |
+| ---------- | ------------------ | ------------------------------ | ------------------------------------------------------------------------------------------------- |
+| Heading    | `--m-font-serif`   | Fraunces 700, tracking -0.01em | Page h1 and section h2 on paper pages, dialog titles, Command Center headings and metric numerals |
+| Text       | `--m-font-text`    | Nunito Sans                    | Everything else: body, controls, labels, data                                                     |
+| Display    | `--m-font-display` | Archivo Black                  | The landing's MomoBot wordmark only                                                               |
+| Code       | `--m-font-mono`    | System mono stack              | Code, ids, file names                                                                             |
+| Annotation | `--m-font-script`  | Caveat                         | The landing's handwritten aside only                                                              |
 
 Sizes:
 
@@ -156,18 +157,20 @@ Row titles stay Nunito Sans. Fraunces is for headings, never labels, buttons or 
 
 ## Motion
 
-Paper motion is a closed list of five items (`@layer paper-motion`):
+Paper motion is a closed list of six items (items 1 to 5 in `@layer paper-motion`, item 6 in `momobot.module.css`):
 
 1. Front-door letters settle in 380ms, with a 40ms stagger.
 2. Invite release: the pin lifts and the sheet slides away in 420ms.
 3. Working squares tick in `steps(3)` over 1.2s while the work is active.
 4. Cards lift 2px on hover over 140ms.
 5. The brand signature drifts.
+6. Front-door Momo bounces: on `/` and `/login` a Momo film on a cream photo floats 26px and tilts in 3D (rotateX and rotateY) over 2.6s above a ground shadow that shrinks as it rises (`bouncing-momo.tsx`). Transform and opacity only. Approved by Dillon, 2026-09-24.
 
-Items 1, 2 and 5 need both `prefers-reduced-motion: no-preference` and the user's brand-motion setting, which is **off by default**. Reduced motion turns every item off, not down. Nothing moves to fake activity.
+Items 1, 2 and 5 need both `prefers-reduced-motion: no-preference` and the user's brand-motion setting, which is **off by default**. Item 6 follows the front door's own switch (`useIntroMotion().live`: reduced motion, tab visibility and the Pause motion control). Reduced motion turns every item off, not down; Momo then stands still, slightly tilted, on the film's poster. Nothing moves to fake activity.
 
 ## Layout
 
+- **Front door names.** The product leads and the maker signs off apart from it. On `/` the MomoBot name sits top left and "by Momentum" (the unchanged wordmark artwork) sits on a cream tab at the far top right, after Sign in; phones drop the header Sign in because the hero's Enter the workspace goes to the same place. On `/login` the name heads the sheet and the Momentum tab sits in the page's top right corner. In the workspace sidebar the MomoBot name leads the header and the Momentum signature closes the footer, right-aligned. Momo is the focal point: beside the headline or the sheet on wide screens, above them on phones.
 - **Page frame.** Operate pages sit in `WorkspaceContainer`, with a max width of `--container-width-md` (816px) or `-lg` (1024px). Command Center has its own 1560px frame, with 32px gutters on desktop and 16px on phones.
 - **Page header.** The h1 and a one-sentence lede sit on the left. One primary action sits on the right and wraps under the lede on phones. The work leads: when a page has records, show them before any create form (Scheduled tasks puts its list first and a "New scheduled task" button jumps to the form).
 - **Command Center order.**
