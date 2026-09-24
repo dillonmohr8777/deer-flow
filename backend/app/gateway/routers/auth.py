@@ -774,7 +774,13 @@ async def get_me(request: Request):
         from app.gateway.authz import resolve_route_permissions_for_request
 
         permissions = await resolve_route_permissions_for_request(request, user)
-    mfa_repo = getattr(request.app.state, "mfa_repo", None)
+    # try/except, not a direct .app.state access: several existing tests call
+    # this handler directly against a lightweight fake Request (a
+    # SimpleNamespace with .state but no .app at all).
+    try:
+        mfa_repo = request.app.state.mfa_repo
+    except Exception:
+        mfa_repo = None
     mfa_row = await mfa_repo.get(str(user.id)) if mfa_repo is not None else None
     return UserResponse(
         id=str(user.id),
