@@ -10,6 +10,7 @@ loader runs were both removed.
 | `workspace.config.yaml` | Live gateway config, byte-identical to the mounted one on 2026-09-22. Real keys are `$OPENROUTER_API_KEY` / `$AI_GATEWAY_API_KEY` from `.env`; the Ollama `api_key: ollama` values are placeholders. |
 | `compose.momentum.yaml` | Overlay on `docker/docker-compose.yaml` + `docker-compose.dood.yaml`: pinned image tags, tailnet listener. |
 | `restart.ps1` | Start or restart the stack. `-WhatIfOnly` renders config and changes nothing. |
+| `health.ps1` | Daily and at-logon check: Docker, UI and `/health/ready` on 2026, backup receipt under 26 h. Re-publishes nginx once if Docker beat Tailscale to the 100.x address after an unclean shutdown. Receipts append to `%LOCALAPPDATA%MomoBothealth.jsonl`; exit 1 means look. |
 | `load-secrets.ps1` | Loads service credentials stored in the gateway volume. Never prints them. |
 | `backup_volume.py` | Consistent snapshot of the gateway volume into an empty volume, safe while live. |
 | `compose.rehearsal.yaml` | Container names for a side-by-side restore rehearsal. |
