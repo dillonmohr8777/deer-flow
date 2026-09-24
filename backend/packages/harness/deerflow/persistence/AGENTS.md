@@ -18,6 +18,8 @@ Tests build on `tests/org_isolation_fixtures.py` (private orgs A, B, C; shared w
 
 `clients`/`client_assignments` (`persistence/clients/`) are organization-owned with no `user_id` column at all: a variation on the pattern above for resources that belong to the workspace rather than to one member. Reads/writes scope on `organization_id == resolve_organization_id()` alone (no user filter to combine it with); `create` still stamps via `organization_for_write(resolve_organization_id(), None, resolve_user_id(AUTO))` for the same consistency check. `client_assignments` uses a composite `(client_id, user_id)` primary key, mirroring `organization_members`, so "one row per person per client" is a schema invariant.
 
+`projects.client_id` (nullable, no FK, migration `0034_clients`) optionally links a project to a client; `ProjectRepository.find_by_client_id()` is the create-or-update lookup the welcome-skill onboarding tool uses. `private_organization_id(user_id)` is a pure hash, but `private_organization_for_user`/`organization_for_write` require a live, `status='active'` `organizations` row at that id -- not just the derived string. Code that reconstructs `WorkspaceStorageContext` outside a request (a tool with no ambient `_storage_context`, e.g. `tools/builtins/client_onboarding_tool.py`) must look the row up rather than assume it, or writes scoped through `resolve_organization_id()` silently stop matching rows a sibling call stamped through `private_organization_for_user`.
+
 A disabled account (`users.disabled_at`, migration `0033_audit_events`) resolves no organization in `active_organization_for_user`, so its sessions, PATs and internal delegations all stop at that one check.
 
 # Audit log
