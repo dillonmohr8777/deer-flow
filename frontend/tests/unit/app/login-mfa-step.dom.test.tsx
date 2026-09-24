@@ -59,7 +59,7 @@ async function submitPassword(
   fireEvent.change(screen.getByLabelText("Password"), {
     target: { value: password },
   });
-  fireEvent.click(screen.getByRole("button", { name: "Sign In" }));
+  fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
   await screen.findByText(
     "Enter the 6-digit code from your authenticator app.",
   );

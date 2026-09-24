@@ -882,7 +882,7 @@ export const enUS: Translations = {
     title: "Agents",
     description:
       "Create and manage custom agents with specialized prompts and capabilities.",
-    newAgent: "New Agent",
+    newAgent: "New agent",
     emptyTitle: "No custom agents yet",
     emptyDescription:
       "Create your first custom agent with a specialized system prompt.",
@@ -1948,7 +1948,7 @@ export const enUS: Translations = {
     rememberMeDescription:
       "Keep this browser session when possible. We store only your email, never your password.",
     pleaseWait: "Please wait...",
-    signIn: "Sign In",
+    signIn: "Sign in",
     createAccount: "Create Account",
     createAdminAccount: "Create admin account",
     adminSetupRequiredTitle: "Administrator setup is required",
