@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 
 import pytest
 import pytest_asyncio
@@ -19,6 +21,7 @@ from app.gateway.auth.pat import (
 from deerflow.config.database_config import DatabaseConfig
 from deerflow.persistence.engine import close_engine, get_session_factory, init_engine_from_config
 from deerflow.persistence.personal_access_tokens import PersonalAccessTokenRepository
+from deerflow.runtime.user_context import reset_current_user, set_current_user
 
 
 @pytest_asyncio.fixture(autouse=True)
@@ -32,6 +35,21 @@ async def _make_repo(tmp_path) -> PersonalAccessTokenRepository:
     session_factory = get_session_factory()
     assert session_factory is not None
     return PersonalAccessTokenRepository(session_factory)
+
+
+@contextmanager
+def _as_user(user_id: str):
+    """Minimal request-scoped identity so ``create()``'s ``organization_for_write``
+    can resolve ``resolve_user_id(AUTO)`` without raising. No storage/organization
+    context is set, so ``resolve_organization_id()`` stays ``None`` and the created
+    row's ``organization_id`` stays ``None`` -- these tests predate M3 organizations
+    and are not exercising org scoping (see test_org_isolation_pats.py for that).
+    """
+    token = set_current_user(SimpleNamespace(id=user_id))
+    try:
+        yield
+    finally:
+        reset_current_user(token)
 
 
 # ── Token utilities ───────────────────────────────────────────────────────
@@ -102,12 +120,13 @@ def test_pat_scopes_stay_aligned_with_route_permissions():
 async def test_create_and_resolve_by_digest_roundtrip(tmp_path):
     repo = await _make_repo(tmp_path)
     token = generate_pat_token()
-    record = await repo.create(
-        user_id="user-1",
-        name="ci-runner",
-        scopes=["runs:read"],
-        token_digest=pat_token_digest(token),
-    )
+    with _as_user("user-1"):
+        record = await repo.create(
+            user_id="user-1",
+            name="ci-runner",
+            scopes=["runs:read"],
+            token_digest=pat_token_digest(token),
+        )
     assert record["user_id"] == "user-1"
     assert record["scopes"] == ["runs:read"]
     assert record["revoked_at"] is None
@@ -124,7 +143,8 @@ async def test_create_and_resolve_by_digest_roundtrip(tmp_path):
 async def test_revoked_token_no_longer_resolves(tmp_path):
     repo = await _make_repo(tmp_path)
     token = generate_pat_token()
-    record = await repo.create(user_id="user-1", name="temp", scopes=["runs:read"], token_digest=pat_token_digest(token))
+    with _as_user("user-1"):
+        record = await repo.create(user_id="user-1", name="temp", scopes=["runs:read"], token_digest=pat_token_digest(token))
 
     assert await repo.revoke(record["id"], "user-1") is True
     # Revoking twice is a no-op.
@@ -136,7 +156,8 @@ async def test_revoked_token_no_longer_resolves(tmp_path):
 async def test_revoke_is_scoped_to_the_owning_user(tmp_path):
     repo = await _make_repo(tmp_path)
     token = generate_pat_token()
-    record = await repo.create(user_id="user-1", name="mine", scopes=["runs:read"], token_digest=pat_token_digest(token))
+    with _as_user("user-1"):
+        record = await repo.create(user_id="user-1", name="mine", scopes=["runs:read"], token_digest=pat_token_digest(token))
 
     assert await repo.revoke(record["id"], "user-2") is False  # not the owner
     assert await repo.get_active_by_digest(pat_token_digest(token)) is not None
@@ -146,13 +167,14 @@ async def test_revoke_is_scoped_to_the_owning_user(tmp_path):
 async def test_expired_token_no_longer_resolves(tmp_path):
     repo = await _make_repo(tmp_path)
     token = generate_pat_token()
-    await repo.create(
-        user_id="user-1",
-        name="short-lived",
-        scopes=["runs:read"],
-        token_digest=pat_token_digest(token),
-        expires_at=datetime.now(UTC) - timedelta(seconds=1),
-    )
+    with _as_user("user-1"):
+        await repo.create(
+            user_id="user-1",
+            name="short-lived",
+            scopes=["runs:read"],
+            token_digest=pat_token_digest(token),
+            expires_at=datetime.now(UTC) - timedelta(seconds=1),
+        )
     assert await repo.get_active_by_digest(pat_token_digest(token)) is None
 
 
@@ -160,8 +182,10 @@ async def test_expired_token_no_longer_resolves(tmp_path):
 async def test_list_for_user_is_isolated_and_never_returns_raw_tokens(tmp_path):
     repo = await _make_repo(tmp_path)
     token = generate_pat_token()
-    created = await repo.create(user_id="user-1", name="a", scopes=["runs:read"], token_digest=pat_token_digest(token))
-    await repo.create(user_id="user-2", name="b", scopes=["threads:read"], token_digest=pat_token_digest(generate_pat_token()))
+    with _as_user("user-1"):
+        created = await repo.create(user_id="user-1", name="a", scopes=["runs:read"], token_digest=pat_token_digest(token))
+    with _as_user("user-2"):
+        await repo.create(user_id="user-2", name="b", scopes=["threads:read"], token_digest=pat_token_digest(generate_pat_token()))
 
     listed = await repo.list_for_user("user-1")
     assert [item["id"] for item in listed] == [created["id"]]
@@ -172,11 +196,12 @@ async def test_list_for_user_is_isolated_and_never_returns_raw_tokens(tmp_path):
 async def test_token_digest_unique_constraint(tmp_path):
     repo = await _make_repo(tmp_path)
     digest = pat_token_digest(generate_pat_token())
-    await repo.create(user_id="user-1", name="a", scopes=["runs:read"], token_digest=digest)
-    from sqlalchemy.exc import IntegrityError
+    with _as_user("user-1"):
+        await repo.create(user_id="user-1", name="a", scopes=["runs:read"], token_digest=digest)
+        from sqlalchemy.exc import IntegrityError
 
-    with pytest.raises(IntegrityError):
-        await repo.create(user_id="user-1", name="dup", scopes=["runs:read"], token_digest=digest)
+        with pytest.raises(IntegrityError):
+            await repo.create(user_id="user-1", name="dup", scopes=["runs:read"], token_digest=digest)
 
 
 @pytest.mark.asyncio
@@ -184,7 +209,8 @@ async def test_touch_last_used_is_throttled(tmp_path):
     await init_engine_from_config(DatabaseConfig(backend="sqlite", sqlite_dir=str(tmp_path)))
     session_factory = get_session_factory()
     repo = PersonalAccessTokenRepository(session_factory, last_used_write_interval_seconds=300.0)
-    record = await repo.create(user_id="user-1", name="t", scopes=["runs:read"], token_digest=pat_token_digest(generate_pat_token()))
+    with _as_user("user-1"):
+        record = await repo.create(user_id="user-1", name="t", scopes=["runs:read"], token_digest=pat_token_digest(generate_pat_token()))
 
     await repo.touch_last_used(record["id"])
     first = (await repo.list_for_user("user-1"))[0]["last_used_at"]

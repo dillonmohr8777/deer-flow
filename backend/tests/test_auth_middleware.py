@@ -407,7 +407,9 @@ def test_pat_stamps_active_private_organization(monkeypatch):
     from types import SimpleNamespace
 
     async def fake_authenticate_pat(app, authorization):
-        return SimpleNamespace(id="pat-user", email="pat@test.local", system_role="user"), frozenset({"threads:read"})
+        # organization_id=None: a pre-migration/quarantined PAT falls back to
+        # the owner's private organization, same as before 0037_pat_organization.
+        return SimpleNamespace(id="pat-user", email="pat@test.local", system_role="user"), frozenset({"threads:read"}), None
 
     monkeypatch.setenv("DEER_FLOW_AUTH_DISABLED", "")
     monkeypatch.setattr("app.gateway.auth.pat.authenticate_pat", fake_authenticate_pat)

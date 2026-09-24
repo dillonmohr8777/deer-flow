@@ -58,6 +58,21 @@ _WORKSPACE_AUTH_EXEMPT_PREFIXES: tuple[str, ...] = (
 # Kept for callers/tests that imported the original single-prefix seam.
 _WORKSPACE_AUTH_EXEMPT_PREFIX = "/api/v1/auth/"
 
+# Personal access tokens are themselves an organization-scoped resource (M3,
+# migration 0037_pat_organization): unlike genuine credential-management
+# routes (login, password change, MFA, invitations -- which must stay pinned
+# to the actor's identity regardless of any cookie), PAT create/list/revoke
+# is carved out of the blanket ``/api/v1/auth/`` exemption above so the
+# session's active organization (the workspace-selection cookie) selects
+# which organization a PAT is minted for, listed from, or revoked in -- the
+# same ``organization_for_write`` treatment every other M3 resource gets.
+# This is safe precisely because organization selection is fail-closed
+# (``active_organization_for_user`` re-verifies active membership before any
+# row is stamped or returned): a stale/forged cookie naming an organization
+# the caller cannot prove membership in 403s the whole request rather than
+# widening it.
+_PAT_MANAGEMENT_PREFIX = "/api/v1/auth/pats"
+
 # Paths that never require authentication.
 _PUBLIC_PATH_PREFIXES: tuple[str, ...] = (
     "/health",
@@ -150,13 +165,17 @@ async def _resolve_internal_delegation(delegation_id: str | None) -> ActiveDeleg
 def _workspace_selection_for_request(request: Request, auth_source: str) -> str | None:
     """Return a cookie-selected organization only for browser session calls.
 
-    Credential-management routes and PAT requests always stay on the actor's
-    private organization. This prevents an ambient browser cookie from
-    widening a bearer-token request or changing account/PAT semantics.
+    Credential-management routes always stay on the actor's private
+    organization, preventing an ambient browser cookie from widening a
+    bearer-token request or changing account semantics. PAT management
+    (``/api/v1/auth/pats``) is carved out of that exemption: a PAT is itself
+    an organization-scoped resource, so its active organization is selected
+    the same way every other M3 resource's is (see ``_PAT_MANAGEMENT_PREFIX``).
     """
     if auth_source != AUTH_SOURCE_SESSION:
         return None
-    if any(get_request_route_path(request).startswith(prefix) for prefix in _WORKSPACE_AUTH_EXEMPT_PREFIXES):
+    path = get_request_route_path(request)
+    if not path.startswith(_PAT_MANAGEMENT_PREFIX) and any(path.startswith(prefix) for prefix in _WORKSPACE_AUTH_EXEMPT_PREFIXES):
         return None
     selected = request.cookies.get(WORKSPACE_COOKIE_NAME)
     return selected.strip() if selected and selected.strip() else None
@@ -222,6 +241,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         access_token = request.cookies.get("access_token")
         authorization = request.headers.get("authorization")
         pat_scopes: frozenset[str] = frozenset()
+        pat_organization_id: str | None = None
 
         # Non-public path: require session cookie
         if internal_user is not None:
@@ -240,7 +260,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             from app.gateway.auth.pat import authenticate_pat, is_pat_allowed_route
 
             try:
-                user, pat_scopes = await authenticate_pat(request.app, authorization)
+                user, pat_scopes, pat_organization_id = await authenticate_pat(request.app, authorization)
             except HTTPException as exc:
                 return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
             # Default-deny route boundary (#5041 review P1-1): scopes only
@@ -296,10 +316,19 @@ class AuthMiddleware(BaseHTTPMiddleware):
         request.state.auth_source = auth_source
         organization: ActiveOrganization | None = delegation.organization if delegation is not None else None
         if auth_source in {AUTH_SOURCE_SESSION, AUTH_SOURCE_PAT}:
+            # A PAT is pinned to the organization active when it was minted
+            # (its own stamped ``organization_id``, migration
+            # 0037_pat_organization) — never to a workspace-selection cookie,
+            # which only ever applies to interactive sessions. This is what
+            # stops a PAT minted in one organization from acting in another
+            # even if the bearer request carries a stale/forged workspace
+            # cookie, and what makes a since-revoked membership in that
+            # organization fail closed below (organization is None -> 403).
+            selected_organization_id = pat_organization_id if auth_source == AUTH_SOURCE_PAT else _workspace_selection_for_request(request, auth_source)
             try:
                 organization = await _resolve_active_workspace(
                     str(user.id),
-                    _workspace_selection_for_request(request, auth_source),
+                    selected_organization_id,
                 )
             except Exception:
                 logger.exception("Could not resolve organization authorization for authenticated request")
