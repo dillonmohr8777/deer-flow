@@ -8,6 +8,7 @@ import secrets
 import time
 import urllib.parse
 from ipaddress import ip_address, ip_network
+from typing import Literal
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
@@ -19,7 +20,10 @@ from app.gateway.auth import (
     create_access_token,
 )
 from app.gateway.auth.config import get_auth_config
-from app.gateway.auth.errors import AuthErrorCode, AuthErrorResponse
+from app.gateway.auth.errors import AuthErrorCode, AuthErrorResponse, TokenError
+from app.gateway.auth.jwt import MFA_CHALLENGE_TTL, create_mfa_challenge_token, decode_mfa_challenge_token
+from app.gateway.auth.mfa_crypto import InvalidToken as MfaInvalidToken
+from app.gateway.auth.mfa_crypto import decrypt_totp_secret, encrypt_totp_secret
 from app.gateway.auth.oidc import OIDCError, OIDCService
 from app.gateway.auth.oidc_state import (
     OIDCStatePayload,
@@ -32,11 +36,13 @@ from app.gateway.auth.oidc_state import (
     set_state_cookie,
 )
 from app.gateway.auth.pat import PAT_MAX_NAME_LENGTH
+from app.gateway.auth.recovery_codes import generate_recovery_codes, hash_recovery_code, recovery_code_matches
 from app.gateway.auth.session_cookie import ACCESS_TOKEN_COOKIE_NAME, SESSION_PERSISTENCE_COOKIE_NAME, set_session_cookie
 from app.gateway.auth.session_cookie_state import SKIP_AUTH_CSRF_COOKIE_STATE_ATTR
+from app.gateway.auth.totp import build_otpauth_uri, generate_totp_secret, verify_totp_code
 from app.gateway.auth.user_provisioning import get_or_provision_oidc_user
 from app.gateway.csrf_middleware import CSRF_COOKIE_NAME, _request_origin, auth_csrf_cookie_settings, generate_csrf_token, is_secure_request
-from app.gateway.deps import get_current_user_from_request, get_local_provider, record_audit_event
+from app.gateway.deps import get_current_user_from_request, get_local_provider, get_mfa_repo, record_audit_event
 from deerflow.config.auth_config import OIDCProviderConfig
 
 logger = logging.getLogger(__name__)
@@ -52,6 +58,19 @@ class LoginResponse(BaseModel):
 
     expires_in: int  # seconds
     needs_setup: bool = False
+    mfa_required: Literal[False] = False
+
+
+class MfaChallengeResponse(BaseModel):
+    """Returned by a password login instead of a session when MFA is enabled.
+
+    ``challenge`` is a short-lived, single-use signed token; exchange it
+    (plus a TOTP code or recovery code) at ``POST /login/mfa`` for the
+    actual session.
+    """
+
+    mfa_required: Literal[True] = True
+    challenge: str
 
 
 # Top common-password blocklist. Drawn from the public SecLists "10k worst
@@ -396,17 +415,89 @@ def _record_login_success(ip: str) -> None:
     _login_attempts.pop(ip, None)
 
 
+def _mfa_bucket(user_id: str) -> str:
+    """The shared per-user throttle bucket key for MFA code attempts.
+
+    Reuses ``_check_rate_limit`` / `_record_login_failure` / `_record_login_success`
+    (the same functions the IP lockout above uses -- they only ever treat
+    their argument as an opaque bucket key) across enroll-confirm, disable,
+    and login/mfa, so brute-forcing a user's own code cannot get a fresh
+    budget just by switching which of those three endpoints it calls.
+    """
+    return f"mfa:{user_id}"
+
+
+# ── MFA challenge tracking ──────────────────────────────────────────────
+# jti -> (attempts, issued_at). Seeded when a challenge is minted at
+# /login/local, consulted + attempt-counted on every /login/mfa call, and
+# deleted on success (single use) or once its attempt budget / TTL is
+# exhausted (whichever first forces a fresh /login/local). Same in-process,
+# per-worker caveat as _login_attempts above.
+_mfa_challenges: dict[str, tuple[int, float]] = {}
+_MFA_CHALLENGE_MAX_ATTEMPTS = 5
+_MFA_CHALLENGE_TTL_SECONDS = MFA_CHALLENGE_TTL.total_seconds()
+_MAX_TRACKED_MFA_CHALLENGES = 10000
+
+
+def _issue_mfa_challenge(user_id: str) -> str:
+    """Mint a signed challenge for *user_id* and seed its attempt counter."""
+    now = time.time()
+    if len(_mfa_challenges) >= _MAX_TRACKED_MFA_CHALLENGES:
+        cutoff = now - _MFA_CHALLENGE_TTL_SECONDS
+        stale = [k for k, (_, issued_at) in _mfa_challenges.items() if issued_at < cutoff]
+        for k in stale:
+            del _mfa_challenges[k]
+        if len(_mfa_challenges) >= _MAX_TRACKED_MFA_CHALLENGES:
+            by_age = sorted(_mfa_challenges.items(), key=lambda kv: kv[1][1])
+            for k, _ in by_age[: len(by_age) // 2]:
+                del _mfa_challenges[k]
+    jti = secrets.token_urlsafe(24)
+    _mfa_challenges[jti] = (0, now)
+    return create_mfa_challenge_token(user_id, jti)
+
+
+def _consume_mfa_challenge_attempt(jti: str) -> bool:
+    """Count one verification attempt against *jti*; False means reject.
+
+    False covers an unknown jti (never issued, already used, or already
+    evicted), an expired one, or one that has already exhausted its
+    attempt budget -- in the last two cases the record is also deleted so
+    the caller must restart from /login/local.
+    """
+    record = _mfa_challenges.get(jti)
+    if record is None:
+        return False
+    attempts, issued_at = record
+    if time.time() - issued_at > _MFA_CHALLENGE_TTL_SECONDS:
+        del _mfa_challenges[jti]
+        return False
+    if attempts >= _MFA_CHALLENGE_MAX_ATTEMPTS:
+        del _mfa_challenges[jti]
+        return False
+    _mfa_challenges[jti] = (attempts + 1, issued_at)
+    return True
+
+
+def _invalidate_mfa_challenge(jti: str) -> None:
+    """Consume *jti* on success so the same challenge cannot be replayed."""
+    _mfa_challenges.pop(jti, None)
+
+
 # ── Endpoints ─────────────────────────────────────────────────────────────
 
 
-@router.post("/login/local", response_model=LoginResponse)
+@router.post("/login/local", response_model=LoginResponse | MfaChallengeResponse)
 async def login_local(
     request: Request,
     response: Response,
     form_data: OAuth2PasswordRequestForm = Depends(),
     remember_me: bool = Form(default=True),
 ):
-    """Local email/password login."""
+    """Local email/password login.
+
+    When the account has TOTP MFA enabled, this issues a single-use
+    challenge instead of a session -- exchange it at ``POST /login/mfa``.
+    """
     client_ip = _get_client_ip(request)
     await _check_rate_limit(client_ip)
 
@@ -421,9 +512,113 @@ async def login_local(
         )
 
     _record_login_success(client_ip)
+
+    mfa_repo = getattr(request.app.state, "mfa_repo", None)
+    mfa_row = await mfa_repo.get(str(user.id)) if mfa_repo is not None else None
+    if mfa_row is not None and mfa_row["enabled_at"] is not None:
+        challenge = _issue_mfa_challenge(str(user.id))
+        return MfaChallengeResponse(challenge=challenge)
+
     token = create_access_token(str(user.id), token_version=user.token_version)
     _set_session_cookie(response, token, request, remember_me=remember_me)
     await record_audit_event(request, action="auth.login.succeeded", outcome="success", actor_user_id=str(user.id), ip=client_ip, user_agent=request.headers.get("user-agent"))
+
+    return LoginResponse(
+        expires_in=get_auth_config().token_expiry_days * 24 * 3600,
+        needs_setup=user.needs_setup,
+    )
+
+
+class MfaLoginRequest(BaseModel):
+    """Exchange an MFA challenge plus a code or recovery code for a session."""
+
+    challenge: str
+    code: str | None = Field(default=None, min_length=6, max_length=6)
+    recovery_code: str | None = None
+    remember_me: bool = True
+
+    @field_validator("recovery_code")
+    @classmethod
+    def _strip_recovery_code(cls, value: str | None) -> str | None:
+        return value.strip() if value else value
+
+
+@router.post("/login/mfa", response_model=LoginResponse)
+async def login_mfa(request: Request, response: Response, body: MfaLoginRequest):
+    """Complete a password login that returned ``mfa_required``."""
+    client_ip = _get_client_ip(request)
+    await _check_rate_limit(client_ip)
+
+    generic_error = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail=AuthErrorResponse(code=AuthErrorCode.INVALID_CREDENTIALS, message="Invalid or expired verification challenge").model_dump(),
+    )
+
+    if not body.code and not body.recovery_code:
+        raise generic_error
+
+    payload = decode_mfa_challenge_token(body.challenge)
+    if isinstance(payload, TokenError):
+        await _record_login_failure(client_ip)
+        raise generic_error
+
+    user_id = payload.sub
+
+    if not _consume_mfa_challenge_attempt(payload.jti):
+        await _record_login_failure(client_ip)
+        await record_audit_event(request, action="mfa.challenge.failed", outcome="denied", actor_user_id=user_id, ip=client_ip, user_agent=request.headers.get("user-agent"), details={"reason": "challenge_expired_or_exhausted"})
+        raise generic_error
+
+    await _check_rate_limit(_mfa_bucket(user_id))
+
+    user = await get_local_provider().get_user(user_id)
+    if user is None or user.disabled_at is not None:
+        # Fail exactly like an invalid code -- a disabled/deleted account
+        # must not be distinguishable from a wrong one here (#4849-style
+        # generic-failure posture), and disabled_at is re-checked at every
+        # auth boundary, this one included.
+        await _record_login_failure(client_ip)
+        await _record_login_failure(_mfa_bucket(user_id))
+        raise generic_error
+
+    mfa_repo = get_mfa_repo(request)
+    mfa_row = await mfa_repo.get(user_id)
+    if mfa_row is None or mfa_row["enabled_at"] is None:
+        await _record_login_failure(client_ip)
+        raise generic_error
+
+    verified = False
+    used_recovery_hash: str | None = None
+    if body.code:
+        try:
+            secret = decrypt_totp_secret(mfa_row["secret_encrypted"])
+        except MfaInvalidToken:
+            secret = None
+        verified = secret is not None and verify_totp_code(secret, body.code)
+    elif body.recovery_code:
+        for entry in mfa_row["recovery_codes"]:
+            if entry.get("used_at") is None and recovery_code_matches(entry["hash"], body.recovery_code):
+                verified = True
+                used_recovery_hash = entry["hash"]
+                break
+
+    if not verified:
+        await _record_login_failure(client_ip)
+        await _record_login_failure(_mfa_bucket(user_id))
+        await record_audit_event(request, action="mfa.challenge.failed", outcome="denied", actor_user_id=user_id, ip=client_ip, user_agent=request.headers.get("user-agent"))
+        raise generic_error
+
+    if used_recovery_hash is not None:
+        await mfa_repo.mark_recovery_code_used(user_id, used_recovery_hash)
+        await record_audit_event(request, action="mfa.recovery_code.used", outcome="success", actor_user_id=user_id, ip=client_ip, user_agent=request.headers.get("user-agent"))
+
+    _invalidate_mfa_challenge(payload.jti)
+    _record_login_success(client_ip)
+    _record_login_success(_mfa_bucket(user_id))
+
+    token = create_access_token(str(user.id), token_version=user.token_version)
+    _set_session_cookie(response, token, request, remember_me=body.remember_me)
+    await record_audit_event(request, action="auth.login.succeeded", outcome="success", actor_user_id=str(user.id), ip=client_ip, user_agent=request.headers.get("user-agent"), details={"mfa": True})
 
     return LoginResponse(
         expires_in=get_auth_config().token_expiry_days * 24 * 3600,
@@ -579,6 +774,14 @@ async def get_me(request: Request):
         from app.gateway.authz import resolve_route_permissions_for_request
 
         permissions = await resolve_route_permissions_for_request(request, user)
+    # try/except, not a direct .app.state access: several existing tests call
+    # this handler directly against a lightweight fake Request (a
+    # SimpleNamespace with .state but no .app at all).
+    try:
+        mfa_repo = request.app.state.mfa_repo
+    except Exception:
+        mfa_repo = None
+    mfa_row = await mfa_repo.get(str(user.id)) if mfa_repo is not None else None
     return UserResponse(
         id=str(user.id),
         email=user.email,
@@ -586,6 +789,7 @@ async def get_me(request: Request):
         needs_setup=user.needs_setup,
         oauth_provider=user.oauth_provider,
         permissions=permissions,
+        mfa_enabled=mfa_row is not None and mfa_row["enabled_at"] is not None,
     )
 
 
@@ -713,6 +917,153 @@ async def revoke_pat(request: Request, pat_id: str):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Token not found")
     await record_audit_event(request, action="auth.pat.revoked", outcome="success", actor_user_id=str(user.id), target_type="personal_access_token", target_id=pat_id)
     return MessageResponse(message="Token revoked")
+
+
+# ── Two-factor authentication (TOTP) ─────────────────────────────────────
+# All three routes require interactive session auth (require_session_source,
+# same #4849 rule as PAT management and change-password): a leaked PAT must
+# not be able to enroll, confirm, or disable MFA on its owner's behalf.
+
+
+class MfaEnrollStartResponse(BaseModel):
+    """The secret is shown once here for manual entry; it is also encoded
+    in ``otpauth_uri`` for QR-code scanning. Neither is retrievable again --
+    a lost/abandoned enrollment must be restarted from this endpoint."""
+
+    secret: str
+    otpauth_uri: str
+
+
+class MfaEnrollConfirmRequest(BaseModel):
+    code: str = Field(min_length=6, max_length=6)
+
+
+class MfaEnrollConfirmResponse(BaseModel):
+    """The ten recovery codes, shown exactly once. Only their hashes persist."""
+
+    recovery_codes: list[str]
+
+
+class MfaDisableRequest(BaseModel):
+    password: str
+    code: str | None = None
+    recovery_code: str | None = None
+
+    @field_validator("recovery_code")
+    @classmethod
+    def _strip_recovery_code(cls, value: str | None) -> str | None:
+        return value.strip() if value else value
+
+
+@router.post("/mfa/enroll/start", response_model=MfaEnrollStartResponse, dependencies=[Depends(require_session_source)])
+async def mfa_enroll_start(request: Request):
+    """Start (or restart) TOTP enrollment: generate and persist a new secret.
+
+    Restarting before confirming discards any previous unconfirmed secret.
+    Already-enabled MFA must be disabled first (409).
+    """
+    user = await get_current_user_from_request(request)
+    mfa_repo = get_mfa_repo(request)
+
+    existing = await mfa_repo.get(str(user.id))
+    if existing is not None and existing["enabled_at"] is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Two-factor authentication is already enabled")
+
+    secret = generate_totp_secret()
+    await mfa_repo.start_enrollment(str(user.id), encrypt_totp_secret(secret))
+    return MfaEnrollStartResponse(secret=secret, otpauth_uri=build_otpauth_uri(secret, user.email))
+
+
+@router.post("/mfa/enroll/confirm", response_model=MfaEnrollConfirmResponse, dependencies=[Depends(require_session_source)])
+async def mfa_enroll_confirm(request: Request, body: MfaEnrollConfirmRequest):
+    """Confirm enrollment with a valid code, enabling MFA and returning
+    ten one-time recovery codes exactly once."""
+    user = await get_current_user_from_request(request)
+    await _check_rate_limit(_mfa_bucket(str(user.id)))
+    mfa_repo = get_mfa_repo(request)
+
+    pending = await mfa_repo.get(str(user.id))
+    if pending is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Start two-factor enrollment first")
+    if pending["enabled_at"] is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Two-factor authentication is already enabled")
+
+    try:
+        secret = decrypt_totp_secret(pending["secret_encrypted"])
+    except MfaInvalidToken:
+        secret = None
+    if secret is None or not verify_totp_code(secret, body.code):
+        await _record_login_failure(_mfa_bucket(str(user.id)))
+        await record_audit_event(request, action="mfa.challenge.failed", outcome="denied", actor_user_id=str(user.id))
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=AuthErrorResponse(code=AuthErrorCode.INVALID_CREDENTIALS, message="Invalid verification code").model_dump(),
+        )
+
+    _record_login_success(_mfa_bucket(str(user.id)))
+    recovery_codes = generate_recovery_codes()
+    await mfa_repo.confirm_enrollment(str(user.id), [hash_recovery_code(c) for c in recovery_codes])
+    await record_audit_event(request, action="mfa.enabled", outcome="success", actor_user_id=str(user.id))
+    return MfaEnrollConfirmResponse(recovery_codes=recovery_codes)
+
+
+@router.post("/mfa/disable", response_model=MessageResponse, dependencies=[Depends(require_session_source)])
+async def mfa_disable(request: Request, body: MfaDisableRequest):
+    """Disable MFA: requires the account password plus a valid code or recovery code."""
+    from app.gateway.auth.password import verify_password_async
+
+    user = await get_current_user_from_request(request)
+    if user.password_hash is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=AuthErrorResponse(code=AuthErrorCode.INVALID_CREDENTIALS, message="OAuth users cannot manage password-based two-factor authentication").model_dump())
+
+    generic_error = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail=AuthErrorResponse(code=AuthErrorCode.INVALID_CREDENTIALS, message="Incorrect password or verification code").model_dump(),
+    )
+    if not body.code and not body.recovery_code:
+        raise generic_error
+
+    await _check_rate_limit(_mfa_bucket(str(user.id)))
+    mfa_repo = get_mfa_repo(request)
+    row = await mfa_repo.get(str(user.id))
+    if row is None or row["enabled_at"] is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Two-factor authentication is not enabled")
+
+    if not await verify_password_async(body.password, user.password_hash):
+        await _record_login_failure(_mfa_bucket(str(user.id)))
+        await record_audit_event(request, action="mfa.challenge.failed", outcome="denied", actor_user_id=str(user.id))
+        raise generic_error
+
+    verified = False
+    used_recovery_hash: str | None = None
+    if body.code:
+        try:
+            secret = decrypt_totp_secret(row["secret_encrypted"])
+        except MfaInvalidToken:
+            secret = None
+        verified = secret is not None and verify_totp_code(secret, body.code)
+    elif body.recovery_code:
+        for entry in row["recovery_codes"]:
+            if entry.get("used_at") is None and recovery_code_matches(entry["hash"], body.recovery_code):
+                verified = True
+                used_recovery_hash = entry["hash"]
+                break
+
+    if not verified:
+        await _record_login_failure(_mfa_bucket(str(user.id)))
+        await record_audit_event(request, action="mfa.challenge.failed", outcome="denied", actor_user_id=str(user.id))
+        raise generic_error
+
+    if used_recovery_hash is not None:
+        # Record the recovery-code use even though the row is about to be
+        # deleted wholesale -- the audit trail should show which path
+        # disabled MFA, not just that it happened.
+        await record_audit_event(request, action="mfa.recovery_code.used", outcome="success", actor_user_id=str(user.id))
+
+    _record_login_success(_mfa_bucket(str(user.id)))
+    await mfa_repo.disable(str(user.id))
+    await record_audit_event(request, action="mfa.disabled", outcome="success", actor_user_id=str(user.id))
+    return MessageResponse(message="Two-factor authentication disabled")
 
 
 # Per-IP cache: ip → (timestamp, result_dict).

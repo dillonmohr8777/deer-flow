@@ -76,6 +76,10 @@ _PUBLIC_PATH_PREFIXES: tuple[str, ...] = (
 _PUBLIC_EXACT_PATHS: frozenset[str] = frozenset(
     {
         "/api/v1/auth/login/local",
+        # The caller holds only the single-use challenge from login/local's
+        # mfa_required response, not a session yet -- the challenge itself
+        # (signed, short-lived, attempt-limited) is the auth boundary here.
+        "/api/v1/auth/login/mfa",
         "/api/v1/auth/register",
         "/api/v1/auth/logout",
         "/api/v1/auth/setup-status",

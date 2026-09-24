@@ -1342,6 +1342,7 @@ export const enUS: Translations = {
     sections: {
       models: "Models",
       account: "Account",
+      security: "Security",
       appearance: "Appearance",
       channels: "Channels",
       memory: "Memory",
@@ -1893,6 +1894,41 @@ export const enUS: Translations = {
       updatePassword: "Update Password",
       signOut: "Sign Out",
     },
+    security: {
+      title: "Two-factor authentication",
+      description:
+        "Add a second step when you sign in with a password, using an authenticator app.",
+      statusEnabled: "Two-factor authentication is on.",
+      statusDisabledDescription:
+        "It's off. Turn it on for an extra layer of protection.",
+      enableButton: "Turn on two-factor authentication",
+      disableButton: "Turn off two-factor authentication",
+      enrollScanTitle: "Scan this code",
+      enrollScanInstructions:
+        "Scan the QR code with your authenticator app, or enter the key manually.",
+      enrollManualEntryLabel: "Can't scan it? Enter this key manually:",
+      enrollCodeLabel: "Enter the 6-digit code from your app",
+      enrollCodePlaceholder: "123456",
+      enrollConfirmButton: "Confirm and turn on",
+      enrollCancelButton: "Cancel",
+      enrollInvalidCode: "That code isn't valid. Check your app and try again.",
+      recoveryCodesTitle: "Save your recovery codes",
+      recoveryCodesDescription:
+        "Each code works once, if you lose access to your authenticator app. Store them somewhere safe; you won't see them again.",
+      recoveryCodesCopyButton: "Copy codes",
+      recoveryCodesCopied: "Copied",
+      recoveryCodesDoneButton: "I've saved these",
+      disableTitle: "Turn off two-factor authentication",
+      disablePasswordLabel: "Password",
+      disableCodeLabel: "6-digit code",
+      disableRecoveryCodeLabel: "Recovery code",
+      disableUseRecoveryCodeLink: "Use a recovery code instead",
+      disableUseCodeLink: "Use your authenticator app instead",
+      disableSubmitButton: "Turn off",
+      disableCancelButton: "Cancel",
+      disableIncorrect: "That password or code isn't right.",
+      networkError: "Network error. Please try again.",
+    },
     acknowledge: {
       emptyTitle: "Acknowledgements",
       emptyDescription: "Credits and acknowledgements will show here.",
@@ -1936,6 +1972,15 @@ export const enUS: Translations = {
       sso_not_allowed:
         "SSO login isn't allowed for your account. Contact your administrator.",
     },
+    mfaTitle: "Two-factor verification",
+    mfaDescription: "Enter the 6-digit code from your authenticator app.",
+    mfaCodePlaceholder: "123456",
+    mfaRecoveryCodePlaceholder: "xxxxx-xxxxx",
+    mfaUseRecoveryCode: "Use a recovery code instead",
+    mfaUseCode: "Use your authenticator app instead",
+    mfaVerifyButton: "Verify",
+    mfaBackToLogin: "Back to sign in",
+    mfaInvalidCode: "That code isn't valid. Please try again.",
   },
   commandCenter: {
     clientAgents: {

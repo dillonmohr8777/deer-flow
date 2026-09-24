@@ -74,6 +74,67 @@ async def test_oidc_existing_local_account_blocks_sso_login_even_when_verified()
 
 
 @pytest.mark.asyncio
+async def test_oidc_auto_create_rejects_email_outside_allowed_domains():
+    """Google Workspace / any provider: allowed_email_domains restricts
+    auto-created accounts to the configured domain list (#AUTH_DESIGN)."""
+    local_provider = AsyncMock()
+    local_provider.get_user_by_oauth.return_value = None
+    local_provider.get_user_by_email.return_value = None
+
+    with pytest.raises(HTTPException) as exc_info:
+        await get_or_provision_oidc_user(
+            provider_id="google",
+            provider_config=_provider_config(allowed_email_domains=["allowed.example.com"]),
+            identity=_identity(email="user@not-allowed.example.com"),
+            local_provider=local_provider,
+        )
+
+    assert exc_info.value.status_code == 403
+    local_provider.create_oauth_user.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_oidc_auto_create_allows_email_inside_allowed_domains_case_insensitively():
+    local_provider = AsyncMock()
+    local_provider.get_user_by_oauth.return_value = None
+    local_provider.get_user_by_email.return_value = None
+    created_user = User(email="user@allowed.example.com", password_hash=None, system_role="user", oauth_provider="google", oauth_id="subject-1")
+    local_provider.create_oauth_user.return_value = created_user
+
+    result = await get_or_provision_oidc_user(
+        provider_id="google",
+        # Mixed-case configured domain and an "@"-prefixed entry must both
+        # still match a lowercase incoming email domain.
+        provider_config=_provider_config(allowed_email_domains=["Allowed.Example.COM"]),
+        identity=_identity(subject="subject-1", email="USER@allowed.example.com"),
+        local_provider=local_provider,
+    )
+
+    assert result == {"user": created_user, "created": True}
+    local_provider.create_oauth_user.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_oidc_empty_allowed_domains_list_permits_any_domain():
+    """The default (empty list) means "no restriction" -- existing behavior
+    for deployments that never set allowed_email_domains."""
+    local_provider = AsyncMock()
+    local_provider.get_user_by_oauth.return_value = None
+    local_provider.get_user_by_email.return_value = None
+    created_user = User(email="user@anywhere.example.com", password_hash=None, system_role="user")
+    local_provider.create_oauth_user.return_value = created_user
+
+    result = await get_or_provision_oidc_user(
+        provider_id="google",
+        provider_config=_provider_config(),
+        identity=_identity(email="user@anywhere.example.com"),
+        local_provider=local_provider,
+    )
+
+    assert result == {"user": created_user, "created": True}
+
+
+@pytest.mark.asyncio
 async def test_oidc_auto_create_assigns_admin_role_from_configured_email():
     local_provider = AsyncMock()
     local_provider.get_user_by_oauth.return_value = None

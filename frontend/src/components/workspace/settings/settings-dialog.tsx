@@ -7,6 +7,7 @@ import {
   InfoIcon,
   BrainIcon,
   GraduationCapIcon,
+  KeyRoundIcon,
   PaletteIcon,
   ShieldCheckIcon,
   UsersRoundIcon,
@@ -39,6 +40,13 @@ const AccountSettingsPage = dynamic(
   () =>
     import("./account-settings-page").then(
       (module) => module.AccountSettingsPage,
+    ),
+  { loading: SettingsPageLoading },
+);
+const SecuritySettingsPage = dynamic(
+  () =>
+    import("./security-settings-page").then(
+      (module) => module.SecuritySettingsPage,
     ),
   { loading: SettingsPageLoading },
 );
@@ -103,6 +111,7 @@ const AuditSettingsPage = dynamic(
 export type SettingsSection =
   | "models"
   | "account"
+  | "security"
   | "appearance"
   | "channels"
   | "memory"
@@ -138,6 +147,11 @@ export function SettingsDialog(props: SettingsDialogProps) {
         id: "account",
         label: t.settings.sections.account,
         icon: UserIcon,
+      },
+      {
+        id: "security",
+        label: t.settings.sections.security,
+        icon: KeyRoundIcon,
       },
       {
         id: "appearance",
@@ -179,6 +193,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
     [
       t.settings.sections.models,
       t.settings.sections.account,
+      t.settings.sections.security,
       t.settings.sections.appearance,
       t.settings.sections.channels,
       t.settings.sections.memory,
@@ -250,6 +265,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
             <div className="space-y-8 p-4 sm:p-6">
               {activeSection === "models" && <ModelSettingsPage />}
               {activeSection === "account" && <AccountSettingsPage />}
+              {activeSection === "security" && <SecuritySettingsPage />}
               {activeSection === "appearance" && <AppearanceSettingsPage />}
               {activeSection === "memory" && <MemorySettingsPage />}
               {activeSection === "subagents" && <SubagentSettingsPage />}
