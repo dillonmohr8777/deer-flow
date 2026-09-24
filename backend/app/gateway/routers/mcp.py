@@ -1,3 +1,23 @@
+"""MCP server configuration API (``extensions_config.json``'s ``mcpServers``).
+
+Organization isolation (M3): MCP server configuration is deployment-global,
+not per-organization, by design -- there is exactly one ``extensions_config.json``
+per Gateway process (see backend/AGENTS.md's note on it being written
+read-write at runtime), and every route below reads or writes that single
+file regardless of which organization is active. This mirrors
+``managed_subagents`` (deployment-global catalog, admin-only mutation) and
+``skills.py``'s PUBLIC-skill state, which explicitly "matches the MCP
+router" for the same reason: MCP servers are Gateway-wide infrastructure an
+operator configures once (npx/uvx launchers, OAuth client registrations,
+routing/toolset policy), not per-tenant data. Every read (``GET
+/api/mcp/config``) and every write (``PUT``/``POST``/``PATCH``/``DELETE``)
+is gated by ``require_admin_user`` -- a system-role check, not an
+organization-role check -- so an admin acting under any organization can
+administer it, and a non-admin under any organization cannot, regardless of
+which organization is active. See ``persistence/AGENTS.md``'s "deployment-global,
+not shareable" list and ``tests/test_org_isolation_mcp_config.py``.
+"""
+
 import asyncio
 import logging
 import os

@@ -17,6 +17,7 @@ from org_isolation_fixtures import ORG_S, USER_A, USER_B, USER_C, auth_headers, 
 from app.gateway.auth_middleware import AuthMiddleware
 from app.gateway.routers import clients
 from deerflow.persistence.clients import ClientRepository
+from deerflow.persistence.fleet import FleetBindingRepository
 
 pytestmark = pytest.mark.asyncio
 
@@ -25,6 +26,7 @@ def _build_app(session_factory) -> FastAPI:
     app = FastAPI()
     app.add_middleware(AuthMiddleware)
     app.state.client_repo = ClientRepository(session_factory)
+    app.state.fleet_binding_repo = FleetBindingRepository(session_factory)
     app.include_router(clients.router)
     return app
 
@@ -64,10 +66,20 @@ async def test_client_routes_404_across_organizations(org_world):  # noqa: F811
         assert (await client.post(f"/api/clients/{cid}/assignments", json={"user_id": USER_B, "role": "contributor"}, headers=headers_b)).status_code == 404
         assert (await client.delete(f"/api/clients/{cid}/assignments/{USER_A}", headers=headers_b)).status_code == 404
 
+        # Fleet template stamping's client-scoped agent index: reading another
+        # organization's stamped agents is indistinguishable from a missing
+        # client, same as every other route above.
+        assert (await client.get(f"/api/clients/{cid}/agents", headers=headers_b)).status_code == 404
+
         # A's own view is untouched by B's attempts.
         still_there = await client.get(f"/api/clients/{cid}", headers=headers_a)
         assert still_there.status_code == 200
         assert still_there.json()["assignments"][0]["user_id"] == USER_A
+
+        # A can read its own (empty) stamped-agent index.
+        own_agents = await client.get(f"/api/clients/{cid}/agents", headers=headers_a)
+        assert own_agents.status_code == 200
+        assert own_agents.json()["agents"] == []
 
 
 async def test_shared_workspace_co_member_sees_clients(org_world):  # noqa: F811
