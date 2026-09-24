@@ -2274,7 +2274,9 @@ agents_api:
 # Private Workspace
 # ============================================================================
 # true only on the owner's private instance: it turns on the Desk home
-# (/workspace/desk). Every client-facing MomoBot leaves this false.
+# (/workspace/desk) and the PAT-callable fleet/agents/scheduled-task creation
+# routes (backend/app/gateway/auth/pat.py). Every client-facing MomoBot
+# leaves this false.
 private_workspace:
   enabled: false
 

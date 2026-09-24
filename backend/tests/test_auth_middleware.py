@@ -413,7 +413,7 @@ def test_pat_stamps_active_private_organization(monkeypatch):
 
     monkeypatch.setenv("DEER_FLOW_AUTH_DISABLED", "")
     monkeypatch.setattr("app.gateway.auth.pat.authenticate_pat", fake_authenticate_pat)
-    monkeypatch.setattr("app.gateway.auth.pat.is_pat_allowed_route", lambda method, path: True)
+    monkeypatch.setattr("app.gateway.auth.pat.is_pat_allowed_route", lambda method, path, **kwargs: True)
 
     response = TestClient(_make_app()).get("/api/tenant-context", headers={"Authorization": "Bearer dfp_test"})
 
