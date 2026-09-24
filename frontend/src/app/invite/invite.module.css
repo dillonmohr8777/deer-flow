@@ -163,13 +163,16 @@
   padding: 0.5rem 0.125rem;
   background: transparent;
   border: none;
-  border-bottom: 2px solid var(--paper-kraft);
+  /* --paper-line, not kraft: kraft measured 1.62:1 on cream-hi, so the
+     field this page exists for all but disappeared. Line is 3.56:1. */
+  border-bottom: 2px solid var(--paper-line);
   color: var(--paper-ink);
   font-size: 1rem;
 }
 
 .input:focus-visible {
-  outline: none;
+  outline: 2px solid var(--paper-focus);
+  outline-offset: 3px;
   border-bottom-color: var(--paper-focus);
 }
 
