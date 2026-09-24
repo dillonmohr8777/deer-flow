@@ -55,8 +55,16 @@ def _delegations(db_path) -> list[tuple]:
 
 
 def test_0032_chains_into_the_single_head():
+    """0032 has no fork: exactly one head, and it descends from 0032.
+
+    Not "0032 IS the head" -- a later lane (0034_clients and beyond) chains
+    past it legitimately, matching 0031's own single-head test's
+    ``len(...) == 1`` style rather than pinning the exact head id.
+    """
     script = ScriptDirectory(str(_MIGRATIONS_DIR))
-    assert script.get_heads() == [REVISION]
+    heads = script.get_heads()
+    assert len(heads) == 1
+    assert REVISION in {rev.revision for rev in script.walk_revisions(base=PREVIOUS, head=heads[0])}
     assert script.get_revision(REVISION).down_revision == PREVIOUS
 
 

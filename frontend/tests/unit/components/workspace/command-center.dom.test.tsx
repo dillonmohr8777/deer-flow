@@ -21,6 +21,7 @@ const mocks = rs.hoisted(() => ({
   stats: undefined as unknown,
   statsLoading: false,
   runs: [] as unknown[],
+  clients: [] as unknown[],
 }));
 const contributorRun = {
   run_id: "run-7",
@@ -105,6 +106,15 @@ rs.mock("@/core/auth/permissions", () => ({
 
 rs.mock("@/core/agents", () => ({
   useAgents: () => ({ agents: [{ name: "lead", display_name: "Lead" }] }),
+}));
+
+rs.mock("@/core/clients", () => ({
+  useClients: () => ({
+    data: mocks.clients,
+    isLoading: false,
+    isError: false,
+    refetch: rs.fn(),
+  }),
 }));
 
 rs.mock("@/core/subagents", () => ({
@@ -208,6 +218,7 @@ beforeEach(() => {
   mocks.stats = { ...baseStats };
   mocks.statsLoading = false;
   mocks.runs = [];
+  mocks.clients = [];
 });
 
 afterEach(() => {
@@ -317,9 +328,29 @@ describe("CommandCenter", () => {
       screen.getByRole("button", { name: "Client Spaces Preview" }),
     );
     expect(
-      screen.getByText(/Client spaces aren't connected yet/),
+      screen.getByText(/No clients have been added to this workspace yet/),
     ).toBeDefined();
     expect(screen.getByTestId("client-spaces")).toBeDefined();
+  });
+
+  it("drops the Client Spaces preview label once real clients exist", () => {
+    mocks.clients = [{ id: "c1", display_name: "Acme" }];
+    render(<CommandCenter />);
+
+    expect(
+      screen.queryByRole("button", { name: "Client Spaces Preview" }),
+    ).toBeNull();
+    expect(screen.getByRole("button", { name: "Client Spaces" })).toBeDefined();
+    // Every other Preview-labelled tab is unaffected.
+    for (const name of ["Business Intelligence", "Artifact Library"])
+      expect(
+        screen.getByRole("button", { name: `${name} Preview` }),
+      ).toBeDefined();
+
+    fireEvent.click(screen.getByRole("button", { name: "Client Spaces" }));
+    expect(
+      screen.queryByText(/No clients have been added to this workspace yet/),
+    ).toBeNull();
   });
 
   it("merges usage rows that share a display name", () => {

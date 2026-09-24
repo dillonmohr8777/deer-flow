@@ -33,6 +33,9 @@ _ALL_PERMISSIONS = [
     Permissions.PROJECTS_READ,
     Permissions.PROJECTS_WRITE,
     Permissions.PROJECTS_DELETE,
+    Permissions.CLIENTS_READ,
+    Permissions.CLIENTS_WRITE,
+    Permissions.CLIENTS_DELETE,
 ]
 
 

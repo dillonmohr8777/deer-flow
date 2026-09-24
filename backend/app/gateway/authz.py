@@ -72,6 +72,10 @@ class Permissions:
     PROJECTS_READ = "projects:read"
     PROJECTS_WRITE = "projects:write"
     PROJECTS_DELETE = "projects:delete"
+    # Clients
+    CLIENTS_READ = "clients:read"
+    CLIENTS_WRITE = "clients:write"
+    CLIENTS_DELETE = "clients:delete"
 
 
 class AuthContext:
@@ -172,6 +176,9 @@ _ALL_PERMISSIONS: list[str] = [
     Permissions.PROJECTS_READ,
     Permissions.PROJECTS_WRITE,
     Permissions.PROJECTS_DELETE,
+    Permissions.CLIENTS_READ,
+    Permissions.CLIENTS_WRITE,
+    Permissions.CLIENTS_DELETE,
 ]
 
 

@@ -24,6 +24,7 @@ from app.gateway.routers import (
     capabilities,
     channel_connections,
     channels,
+    clients,
     console,
     features,
     feedback,
@@ -967,6 +968,8 @@ This gateway provides runtime endpoints for agent runs plus custom endpoints for
     app.include_router(project_thread_files.router)
     # Trash API is mounted at /api/trash
     app.include_router(trash.router)
+    # Client roster API (+ admin registry import) is mounted at /api/clients
+    app.include_router(clients.router)
 
     # Deployment-level subagent catalog and admin management.
     app.include_router(subagents.router)

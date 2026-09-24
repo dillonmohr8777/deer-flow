@@ -1179,6 +1179,47 @@ POST /api/trash/purge
 
 **Response:** `{"purged": <int>}` — permanently deletes every trashed document of the caller, regardless of age: the confirmation covers the whole listing, so the retention cutoff never gates this route. Each row goes through the same guarded row-locked transaction as the single-document purge — bytes first, then the row. A file-cleanup failure other than already-absent content answers `500` with a retryable message, leaving that row and every row not yet visited trashed. Retention expiry is enforced only by the sweep (lazily before `GET /api/trash/documents` and once at gateway startup).
 
+### Clients
+
+Client roster (Momentum Phase 2). `clients` is organization-owned, not user-owned: every route is scoped to the caller's active organization (`clients:read`/`clients:write`), and a missing or foreign client id is `404` (never `403`). `ClientResponse` fields: `id`, `display_name`, `aliases`, `status` (`active`/`inactive`/`prospect`), `email_domains`, `slack_channel_ids`, `registry_id`, `notes`, `created_at`, `updated_at`, plus `assignments` (`[{user_id, role, created_at, updated_at}]`) and `project_count` (projects with a matching `client_id`).
+
+#### List / Get / Create / Update / Archive
+
+```http
+GET /api/clients                 # optional ?status=active|inactive|prospect
+GET /api/clients/mine             # clients the caller has an assignment on
+GET /api/clients/{client_id}
+POST /api/clients                 # {"display_name", "aliases"?, "status"?, "email_domains"?, "slack_channel_ids"?, "registry_id"?, "notes"?}
+PATCH /api/clients/{client_id}    # any subset of the create fields except registry_id
+POST /api/clients/{client_id}/archive   # sets status="inactive"
+```
+
+**Response:** `ClientResponse` (list routes: `{"clients": [...]}`, in `display_name ASC` order).
+
+#### Assignments
+
+```http
+POST /api/clients/{client_id}/assignments
+Content-Type: application/json
+
+{"user_id": "…", "role": "account_manager" | "contributor" | "client_contact"}
+```
+
+Upserts by `(client_id, user_id)` — assigning an already-assigned person updates their role rather than adding a second row. `DELETE /api/clients/{client_id}/assignments/{user_id}` removes one assignment (`204`).
+
+#### Registry Import
+
+```http
+POST /api/clients/import
+Content-Type: application/json
+
+{"clients": [{"id", "displayName", "aliases"?, "status"?, "emailDomains"?, "slackChannels"?, ...}]}
+```
+
+Admin-only (`403` otherwise) — the canonical roster shape from `client-operations/registry/clients.json`; unrecognized fields (`contacts`, `evidence`, `folder`, `accessRefs`, `lastEvidenceAt`) are ignored. Upserts by `id` → `registry_id` within the caller's active organization; an entry missing `id` or `displayName` is skipped, never deleted. Owners are not structured in the registry yet, so this never writes `client_assignments`. `backend/scripts/import_client_registry.py` is the operator CLI: it logs in, then posts a local registry file to this endpoint.
+
+**Response:** `{"created": <int>, "updated": <int>, "skipped": <int>, "skipped_ids": [...]}`.
+
 ### Artifacts
 
 #### Get Artifact

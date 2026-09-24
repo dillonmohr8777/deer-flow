@@ -10,6 +10,7 @@ from contextlib import closing
 import pytest
 from alembic import command
 from alembic.script import ScriptDirectory
+from sqlalchemy import insert
 
 import deerflow.persistence.models  # noqa: F401 -- registers ORM models
 from deerflow.persistence.agents.model import AgentRow
@@ -77,11 +78,15 @@ async def _seed(session_factory) -> None:
         session.add(OrganizationRow(id=ORG[S], slug=private_organization_slug(S), name="Shared S", status="active", storage_user_id=S))
         session.add(OrganizationMemberRow(organization_id=ORG[S], user_id=A, role="owner", status="active"))
         session.add(OrganizationMemberRow(organization_id=ORG[S], user_id=C, role="admin", status="revoked"))
+        # Core insert(), not the ProjectRow ORM object: this seed runs against
+        # the schema pinned at PREVIOUS (0030), and an ORM insert lists every
+        # column the *current* model maps -- including any later migration's
+        # addition (e.g. 0034's client_id) -- which 0030's table doesn't have
+        # yet. Naming only the columns 0030 actually owns keeps this test
+        # immune to future ProjectRow columns.
+        await session.execute(insert(ProjectRow.__table__), [{"id": "p-a", "user_id": A, "name": "a"}, {"id": "p-b", "user_id": B, "name": "b"}, {"id": "p-d", "user_id": D, "name": "d"}])
         session.add_all(
             [
-                ProjectRow(id="p-a", user_id=A, name="a"),
-                ProjectRow(id="p-b", user_id=B, name="b"),
-                ProjectRow(id="p-d", user_id=D, name="d"),
                 AgentRow(id="agent-s", user_id=S, name="agent-s", config={}, soul=""),
                 AgentRow(id="agent-e", user_id=E, name="agent-e", config={}, soul=""),
                 ThreadMetaRow(thread_id="t-a", user_id=A, **thread),
