@@ -1587,4 +1587,17 @@ export interface Translations {
       sso_not_allowed: string;
     };
   };
+
+  // Command Center — Client Spaces stamped agents (fleet templates)
+  commandCenter: {
+    clientAgents: {
+      title: string;
+      loading: string;
+      empty: string;
+      selectPlaceholder: string;
+      add: string;
+      adding: string;
+      addError: string;
+    };
+  };
 }

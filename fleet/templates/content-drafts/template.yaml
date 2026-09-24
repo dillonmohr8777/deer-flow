@@ -1,0 +1,22 @@
+id: content-drafts
+version: "1"
+name: Content Drafts
+description: >-
+  Writes blog and social post drafts for one client, grounded in a little
+  research, and ready for a human to review before anything goes out.
+model: openrouter-sonnet-5
+skills:
+  - deep-research
+tool_groups:
+  - web
+  - file:read
+  - file:write
+mcp_plugins: []
+schedule:
+  cron: "0 9 * * 4"
+  timezone: America/New_York
+acceptance_criteria:
+  - Each draft names its topic, target platform, and the one point it's making.
+  - Facts and claims are checked before they're written down.
+  - Every draft is clearly labeled DRAFT and waits for a human to approve it.
+  - Nothing is posted or published by the agent itself.

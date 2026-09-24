@@ -1,11 +1,24 @@
 "use client";
 
-import { AlertCircle, FileText, FolderKanban, RefreshCw } from "lucide-react";
+import {
+  AlertCircle,
+  Bot,
+  FileText,
+  FolderKanban,
+  RefreshCw,
+} from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
 import { resolveArtifactOpenURL } from "@/core/artifacts/viewer";
+import type { Client } from "@/core/clients";
 import { useClients } from "@/core/clients";
+import {
+  useClientAgents,
+  useFleetTemplates,
+  useStampClientAgent,
+} from "@/core/fleet";
+import { useI18n } from "@/core/i18n/hooks";
 import { useInfiniteProjectThreadFiles, useProjects } from "@/core/projects";
 import { useScheduledTasks } from "@/core/scheduled-tasks/hooks";
 import { pathOfThread } from "@/core/threads/utils";
@@ -126,6 +139,81 @@ export function WorkflowsView() {
   );
 }
 
+function ClientAgentsSection({ client }: { client: Client }) {
+  const { t } = useI18n();
+  const copy = t.commandCenter.clientAgents;
+  const agentsQuery = useClientAgents(client.id);
+  const templatesQuery = useFleetTemplates();
+  const stamp = useStampClientAgent(client.id);
+  const [templateId, setTemplateId] = useState("");
+
+  const agents = agentsQuery.data ?? [];
+  const stampedTemplateIds = new Set(agents.map((agent) => agent.template_id));
+  const availableTemplates = (templatesQuery.data ?? []).filter(
+    (template) => !stampedTemplateIds.has(template.id),
+  );
+
+  return (
+    <div className={styles.agentsSection}>
+      <span className={styles.agentsLabel}>{copy.title}</span>
+      {agentsQuery.isLoading ? (
+        <p className={styles.state}>{copy.loading}</p>
+      ) : null}
+      {!agentsQuery.isLoading && agents.length === 0 ? (
+        <p className={styles.state}>{copy.empty}</p>
+      ) : null}
+      {agents.length > 0 ? (
+        <ul className={styles.agentsList}>
+          {agents.map((agent) => (
+            <li key={agent.agent_name}>
+              <Bot size={14} aria-hidden="true" />
+              <span>{agent.display_name ?? agent.agent_name}</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {availableTemplates.length > 0 ? (
+        <form
+          className={styles.addAgentForm}
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (!templateId) return;
+            stamp.mutate(templateId, {
+              onSuccess: () => setTemplateId(""),
+            });
+          }}
+        >
+          <select
+            aria-label={`${copy.title}: ${client.display_name}`}
+            value={templateId}
+            onChange={(event) => setTemplateId(event.target.value)}
+            disabled={stamp.isPending}
+          >
+            <option value="">{copy.selectPlaceholder}</option>
+            {availableTemplates.map((template) => (
+              <option value={template.id} key={template.id}>
+                {template.name}
+              </option>
+            ))}
+          </select>
+          <button
+            type="submit"
+            className={styles.linkButton}
+            disabled={!templateId || stamp.isPending}
+          >
+            {stamp.isPending ? copy.adding : copy.add}
+          </button>
+        </form>
+      ) : null}
+      {stamp.isError ? (
+        <p className={styles.state} role="alert">
+          {stamp.error instanceof Error ? stamp.error.message : copy.addError}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 export function ClientSpacesView() {
   const query = useClients();
   const clients = query.data ?? [];
@@ -162,6 +250,7 @@ export function ClientSpacesView() {
                 {client.project_count} project
                 {client.project_count === 1 ? "" : "s"}
               </span>
+              <ClientAgentsSection client={client} />
             </div>
           </li>
         ))}

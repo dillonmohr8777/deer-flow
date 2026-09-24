@@ -245,6 +245,15 @@ class AgentConfig(BaseModel):
     # webhook events from the gateway dispatcher. None means "no GitHub
     # integration", which is the case for every existing agent.
     github: GitHubAgentConfig | None = None
+    # Fleet template binding (Momentum fleet feature, POST
+    # /api/clients/{client_id}/agents). Stamped once at creation time by that
+    # route and never edited afterward, so — like ``github`` — these stay
+    # outside MANAGED_AGENT_CONFIG_FIELDS: preserve_non_managed_fields()
+    # carries them forward untouched on every later PATCH /api/agents/{name}.
+    # None on every hand-authored or pre-fleet agent.
+    client_id: str | None = None
+    template_id: str | None = None
+    template_version: str | None = None
 
 
 # Fields explicitly managed by agent-update surfaces. Anything else declared

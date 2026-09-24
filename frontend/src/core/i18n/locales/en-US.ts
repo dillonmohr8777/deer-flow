@@ -1937,4 +1937,15 @@ export const enUS: Translations = {
         "SSO login isn't allowed for your account. Contact your administrator.",
     },
   },
+  commandCenter: {
+    clientAgents: {
+      title: "Agents",
+      loading: "Loading agents…",
+      empty: "No agents yet.",
+      selectPlaceholder: "Add from template…",
+      add: "Add",
+      adding: "Adding…",
+      addError: "Couldn't add that agent.",
+    },
+  },
 };

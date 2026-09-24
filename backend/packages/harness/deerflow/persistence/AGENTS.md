@@ -18,6 +18,8 @@ Tests build on `tests/org_isolation_fixtures.py` (private orgs A, B, C; shared w
 
 `clients`/`client_assignments` (`persistence/clients/`) are organization-owned with no `user_id` column at all: a variation on the pattern above for resources that belong to the workspace rather than to one member. Reads/writes scope on `organization_id == resolve_organization_id()` alone (no user filter to combine it with); `create` still stamps via `organization_for_write(resolve_organization_id(), None, resolve_user_id(AUTO))` for the same consistency check. `client_assignments` uses a composite `(client_id, user_id)` primary key, mirroring `organization_members`, so "one row per person per client" is a schema invariant.
 
+`fleet_agent_bindings` (`persistence/fleet/`, migration `0035_fleet_agent_bindings`) is the same organization-owned shape, scoped the same way, for one more reason than the two above: it exists so `POST /api/clients/{client_id}/agents` (fleet template stamping) can answer "does this client already have an agent from this template" and "list this client's stamped agents" without ever calling `AgentStore.list_all()` -- the cross-owner scan reserved for the GitHub registry and forbidden from org-scoped routes (see the Organization isolation lane D note above). The actual agent definition stays in the personal `agents` table, owned by whichever user stamped it; this table is only the org-shared index pointing at it, unique on `(client_id, template_id)` for idempotent stamping.
+
 A disabled account (`users.disabled_at`, migration `0033_audit_events`) resolves no organization in `active_organization_for_user`, so its sessions, PATs and internal delegations all stop at that one check.
 
 # Audit log

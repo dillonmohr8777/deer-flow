@@ -28,6 +28,7 @@ from app.gateway.routers import (
     console,
     features,
     feedback,
+    fleet,
     github_webhooks,
     input_polish,
     integrations,
@@ -970,6 +971,8 @@ This gateway provides runtime endpoints for agent runs plus custom endpoints for
     app.include_router(trash.router)
     # Client roster API (+ admin registry import) is mounted at /api/clients
     app.include_router(clients.router)
+    # Fleet template catalog (read-only) is mounted at /api/fleet
+    app.include_router(fleet.router)
 
     # Deployment-level subagent catalog and admin management.
     app.include_router(subagents.router)
