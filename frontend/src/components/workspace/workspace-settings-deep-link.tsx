@@ -12,12 +12,14 @@ import {
 const SETTINGS_SECTIONS = new Set<SettingsSection>([
   "models",
   "account",
+  "security",
   "appearance",
   "channels",
   "memory",
   "subagents",
   "notification",
   "experience",
+  "audit",
   "about",
 ]);
 
