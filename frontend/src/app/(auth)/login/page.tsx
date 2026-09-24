@@ -8,8 +8,13 @@ import { useEffect, useState } from "react";
 import inviteStyles from "@/app/invite/invite.module.css";
 import { RememberSessionOption } from "@/components/auth/remember-session-option";
 import { MomoFilm } from "@/components/momentum/momo-film";
+import { BouncingMomo } from "@/components/momentum/momobot/bouncing-momo";
 import { useIntroMotion } from "@/components/momentum/momobot/intro-motion";
-import { MomoBotLockup } from "@/components/momentum/momobot/lockup";
+import {
+  MomentumMark,
+  MomoBotLockup,
+  MomoBotWordmark,
+} from "@/components/momentum/momobot/lockup";
 import momoStyles from "@/components/momentum/momobot/momobot.module.css";
 import { ScrapbookBackdrop } from "@/components/momentum/momobot/scrapbook-backdrop";
 import { resolveFunnelTreatment } from "@/components/momentum/treatment";
@@ -287,10 +292,16 @@ export default function LoginPage() {
       )}
     >
       <div className="text-center">
-        <MomoBotLockup
-          className="mx-auto"
-          wordmarkClassName={cn(!paper && "dark:brightness-0 dark:invert")}
-        />
+        {paper ? (
+          // Paper splits the lockup: the product name leads the sheet and
+          // the Momentum mark signs the page's top-right corner.
+          <MomoBotWordmark className="block" />
+        ) : (
+          <MomoBotLockup
+            className="mx-auto"
+            wordmarkClassName="dark:brightness-0 dark:invert"
+          />
+        )}
         <h1
           className={cn("mt-2", mutedClass, paper && "m-voice-serif text-lg")}
           style={mutedStyle}
@@ -573,17 +584,15 @@ export default function LoginPage() {
       {paper ? (
         <>
           <ScrapbookBackdrop motion={introMotion} tone="royal" />
-          <div
-            className={cn(
-              inviteStyles.frame,
-              "pinned",
-              momoStyles.frameWithMomo,
-            )}
-          >
-            <div className={momoStyles.momoPhoto}>
+          <MomentumMark className={momoStyles.cornerMark} />
+          <div className={momoStyles.signInStage}>
+            <BouncingMomo
+              live={introMotion.live}
+              className={momoStyles.signInMomo}
+            >
               <MomoFilm name="momo-hello" live={introMotion.live} />
-            </div>
-            {card}
+            </BouncingMomo>
+            <div className={cn(inviteStyles.frame, "pinned")}>{card}</div>
           </div>
         </>
       ) : (

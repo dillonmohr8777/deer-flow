@@ -461,13 +461,15 @@
 .paperShell {
   position: relative;
   z-index: 1;
-  width: min(72rem, 100% - 3rem);
+  /* 80rem, not 72: room for the headline column and a large Momo beside it
+     without Momo running past the header's right edge. */
+  width: min(80rem, 100% - 3rem);
   margin-inline: auto;
 }
 
 @media (max-width: 40rem) {
   .paperShell {
-    width: min(72rem, 100% - 2rem);
+    width: min(80rem, 100% - 2rem);
   }
 }
 
@@ -482,6 +484,45 @@
 .paperWordmark {
   display: inline-flex;
   align-items: center;
+}
+
+/*
+ * The right end of the header is a cream tab: the collage behind it has no
+ * scrim that far right, so the sign-in link and the Momentum mark carry
+ * their own paper, and their contrast no longer depends on the film frame.
+ */
+.paperHeaderEnd {
+  display: flex;
+  align-items: center;
+  gap: clamp(0.875rem, 2.5vw, 1.25rem);
+  padding: 0.45rem 0.85rem;
+  border: 1px solid var(--paper-line);
+  background: var(--paper-cream-hi);
+  box-shadow: 0 8px 16px -10px rgb(16 30 63 / 0.55);
+}
+
+/* A hairline between the one action and the maker's mark. */
+.paperMaker {
+  padding-left: clamp(0.875rem, 2.5vw, 1.25rem);
+  border-left: 1px solid var(--paper-line);
+}
+
+/* Phones: the hero's Enter the workspace button is the sign-in path, so the
+   header keeps only the two names, as far apart as the row allows. */
+@media (max-width: 40rem) {
+  .paperHeaderEnd .paperSignIn {
+    display: none;
+  }
+
+  .paperMaker {
+    padding-left: 0;
+    border-left: 0;
+  }
+}
+
+.paperWordmark:focus-visible {
+  outline: 2px solid var(--paper-focus);
+  outline-offset: 4px;
 }
 
 .paperSignIn {
@@ -517,13 +558,13 @@
 
 .paperTitle > :global(.m-voice-serif) {
   display: block;
-  font-size: clamp(1.5rem, 3.4vw, 2.25rem);
+  font-size: clamp(1.75rem, 3.6vw, 2.75rem);
   color: var(--paper-ink-muted);
 }
 
 .paperCutWord {
   display: block;
-  font-size: clamp(3rem, 10vw, 6.5rem);
+  font-size: clamp(3.25rem, 11vw, 7.5rem);
   line-height: 1;
   letter-spacing: -0.01em;
 }
@@ -693,46 +734,30 @@
  * Hello loop stays. On wide screens he sits in the open space right of the
  * hero copy, where the scrim thins; on narrow screens he follows the cards.
  */
-.paperMomos {
-  position: relative;
-  width: min(100%, 24rem);
-  margin-top: clamp(2.5rem, 6vw, 4rem);
-  padding: 0.55rem 0.55rem 1.6rem;
-  background: var(--paper-cream-hi);
-  box-shadow:
-    0 1px 2px rgb(16 30 63 / 0.16),
-    0 18px 36px -14px rgb(16 30 63 / 0.4);
-  transform: rotate(2deg);
+/*
+ * Momo, the page's focal point (bouncing-momo.tsx owns the photo, the 3D
+ * bounce and the ground shadow). Phones and tablets meet him first, centred
+ * above the headline; from 72rem he stands beside it, as large as the
+ * shell's spare width allows.
+ */
+.paperHero .paperMomos {
+  width: min(100%, 15rem);
+  margin: 0 auto clamp(0.5rem, 3vw, 1.5rem);
 }
 
-.paperMomos::after {
-  content: "";
-  position: absolute;
-  top: -0.35rem;
-  left: 50%;
-  width: 0.8rem;
-  height: 0.8rem;
-  border-radius: 50%;
-  background: radial-gradient(circle at 35% 35%, #f3dc8b, #b8913a 60%, #7a5d1f);
-  box-shadow: 0 2px 3px rgb(0 0 0 / 0.35);
-  transform: translateX(-50%);
+@media (min-width: 40rem) {
+  .paperHero .paperMomos {
+    width: 20rem;
+  }
 }
 
-.paperMomos video {
-  display: block;
-  width: 100%;
-  aspect-ratio: 1;
-  object-fit: cover;
-  object-position: 62% 50%;
-}
-
-@media (min-width: 64rem) {
-  .paperMomos {
+@media (min-width: 72rem) {
+  .paperHero .paperMomos {
     position: absolute;
-    top: clamp(4rem, 9vw, 7rem);
+    top: clamp(1rem, 3vw, 2.5rem);
     left: calc(100% + clamp(2rem, 4vw, 4rem));
-    width: min(24rem, 100vw - 44rem - 8rem);
-    margin-top: 0;
+    width: clamp(18rem, 100vw - 56rem, 30rem);
+    margin: 0;
   }
 }
 
