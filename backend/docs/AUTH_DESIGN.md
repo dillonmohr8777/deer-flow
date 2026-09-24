@@ -113,6 +113,27 @@ enum UserScope:
 
 登录失败会按客户端 IP 计数。IP 解析只在 TCP peer 属于 `AUTH_TRUSTED_PROXIES` 时信任 `X-Real-IP`，不使用 `X-Forwarded-For`。阈值与锁定时长可通过 `auth.local.max_login_attempts`（默认 5）和 `auth.local.lockout_seconds`（默认 300 秒）配置，按次实时读取，改配置后下一次登录即生效，无需重启 Gateway（`max_login_attempts` 最小为 2：单次失败不得锁定 IP。时长热改按方向生效：下调可提前释放进行中的锁定、收紧阈值会保留已计数的失败；上调只延长仍在锁定期内的锁定，不会复活已服满原时长的锁定）。
 
+### 双因素认证（TOTP MFA）
+
+密码账号可以额外启用基于时间的一次性密码（TOTP，RFC 6238），标准 30 秒步长、6 位数字，校验时允许当前步前后各一步的时钟漂移。实现只用标准库（`hmac`、`hashlib`、`base64`），未引入第三方 TOTP 依赖，见 `app/gateway/auth/totp.py`，并用 RFC 6238 附录 B 的官方测试向量校验（`tests/test_totp.py`）。
+
+新表 `user_mfa`（迁移 `0035_user_mfa`，`down_revision` 为 `0034_clients`）：每个用户一行，`user_id` 外键指向 `users.id`（级联删除）；`secret_encrypted` 是加密后的 TOTP 密钥；`enabled_at` 为空表示已开始但尚未确认的注册流程；`recovery_codes` 是一个 JSON 列表，保存十个一次性恢复码的哈希（含各自的 `used_at`），原始恢复码只在确认注册时展示一次，不落库。
+
+密钥加密：`app/gateway/auth/mfa_crypto.py` 用部署已有的 JWT 密钥（`AUTH_JWT_SECRET`，或回退到持久化的 `.jwt_secret` 文件）通过 HMAC-SHA256 派生一把独立的 Fernet 密钥，不需要再单独配置和备份一份 MFA 专用密钥；派生方式和 `ChannelCredentialCipher.from_key` 已有的 sha256 摘要派生 Fernet key 的做法一致。
+
+流程：
+
+1. `POST /api/v1/auth/mfa/enroll/start`（需要交互式 session，PAT 不可用）：生成新密钥并以未确认状态持久化，返回 `otpauth://` URI 和明文密钥供手动输入。重复调用会覆盖上一次未确认的密钥。
+2. `POST /api/v1/auth/mfa/enroll/confirm`：提交一次有效验证码后，标记 `enabled_at`，生成十个恢复码并一次性返回（`app/gateway/auth/recovery_codes.py`：`secrets` 生成、哈希持久化、`hmac.compare_digest` 常量时间比对）。
+3. `POST /api/v1/auth/mfa/disable`：需要账号密码加一个验证码或恢复码，成功后整行删除（重新启用需要重新走一遍注册流程）。
+4. 登录：`POST /api/v1/auth/login/local` 密码验证通过后，如果该账号已启用 MFA，不签发 session，而是返回 `{"mfa_required": true, "challenge": "..."}`；`challenge` 是一个短期（5 分钟）、签名、单次有效的 JWT（`typ=mfa_challenge`，与普通 access token 用同一密钥签名但 `typ` 声明不同，二者不能互相冒用）。`POST /api/v1/auth/login/mfa` 用 `challenge` 加验证码或恢复码换取真正的 session。
+
+限速：`challenge` 本身在进程内按 `jti` 记录尝试次数，超过 5 次或过期即失效，必须重新登录密码；同时复用登录页已有的按 IP 限速桶，以及一个跨 `login/mfa`、`enroll/confirm`、`disable` 共享的按用户限速桶（`mfa:{user_id}`），避免绕过某一个端点的限速重新获得尝试预算。和登录限速一样，这些计数器是进程内字典，多 worker 部署下只是近似限速。
+
+审计：`mfa.enabled`、`mfa.disabled`、`mfa.challenge.failed`、`mfa.recovery_code.used` 均走 `record_audit_event`。`disabled_at` 非空的账号在 `login/mfa` 换取 session 时会被显式拒绝（`get_local_provider().get_user()` 之后重新检查一次），管理端点（enroll/disable）则复用 `get_current_user_from_request` 已有的 disabled 检查。
+
+前端：Settings 的 Security 标签页提供注册（含二维码，用已安装的 `qrcode.react`，同时展示 `otpauth://` 链接和密钥供手动输入）、确认、恢复码复制、关闭四个环节；登录页在收到 `mfa_required` 后展示第二步，接受 6 位验证码或恢复码。
+
 ### 注册
 
 `POST /api/v1/auth/register` 创建普通 `user`，并自动登录。
@@ -294,6 +315,40 @@ graph TB
 
 OIDC 细节见 [SSO.md](SSO.md)。IM 绑定细节见 [IM_CHANNEL_CONNECTIONS.md](IM_CHANNEL_CONNECTIONS.md)。
 
+## Google 单点登录配置
+
+Google 走的是完全通用的 OIDC 流程（`app/gateway/auth/oidc.py`），代码层面不需要为 Google 单独写任何分支；`allowed_email_domains`、`auto_create_users`、`require_verified_email`、`admin_emails` 这些用户准入策略对所有 provider 都一样生效，包括限定到某个 Google Workspace 域名。登录页会在 `GET /api/v1/auth/providers` 返回启用的 provider 后自动展示对应按钮（`t.login.continueWith(display_name)`），前端不需要为 Google 单独改代码。
+
+在 Google Cloud Console 完成以下步骤，拿到 `client_id` 和 `client_secret`：
+
+1. 打开 [Google Cloud Console](https://console.cloud.google.com/)，新建或选择一个项目。
+2. 进入“API 和服务”下的“OAuth 同意屏幕”，选择用户类型（选“内部”仅允许本组织的 Google Workspace 账号登录；选“外部”允许任意 Google 账号，可以再用 `allowed_email_domains` 收紧到指定域名），填写应用名称和支持邮箱等必填信息。
+3. 进入“API 和服务”下的“凭据”，点击“创建凭据”，选择“OAuth 客户端 ID”，应用类型选“Web 应用”。
+4. 在“已获授权的重定向 URI”中加入：
+
+   ```text
+   https://<你的部署域名>/api/v1/auth/callback/google
+   ```
+
+   本地开发再加一条：
+
+   ```text
+   http://localhost:2026/api/v1/auth/callback/google
+   ```
+
+5. 创建后会拿到一个客户端 ID 和一个客户端密钥。密钥只显示一次，立即保存。
+6. 把客户端密钥放进环境变量，不要写进 `config.yaml` 明文：
+
+   ```bash
+   export GOOGLE_OAUTH_CLIENT_ID="<客户端 ID>"
+   export GOOGLE_OAUTH_CLIENT_SECRET="<客户端密钥>"
+   ```
+
+7. 在 `config.yaml` 里把 `auth.oidc.enabled` 设为 `true`，按 `config.example.yaml` 里注释掉的 `google:` 示例块打开一份，`client_id` 填 `$GOOGLE_OAUTH_CLIENT_ID`，`client_secret` 填 `$GOOGLE_OAUTH_CLIENT_SECRET`；只允许某个 Workspace 域名登录时设置 `allowed_email_domains`。`issuer` 填 `https://accounts.google.com` 即可，Google 的 discovery 端点是标准的 `https://accounts.google.com/.well-known/openid-configuration`，不需要再单独配置 `authorization_endpoint`、`token_endpoint`、`jwks_uri`。
+8. 重启 Gateway 使配置生效。
+
+本仓库不会创建也不会持有任何真实的 Google OAuth 客户端凭据；以上步骤由部署者在自己的 Google Cloud 项目中完成。
+
 ## 平台信任接入
 
 **IM Channel 绑定** 与 **Internal Auth** 可归为同一大类：**平台信任模型**——DeerFlow 把渠道/合作平台视为已认证边界，由平台把“自己的用户”映射到 DeerFlow 的运行时身份，而不是让每个终端用户再走 DeerFlow 注册登录。
@@ -414,7 +469,9 @@ PYTHONPATH=. python scripts/migrate_user_isolation.py --user-id <target-user-id>
 - 只有迁移脚本和 admin CLI 可以显式传 `user_id=None` 绕过隔离。
 - 本地文件路径必须通过 `Paths` 和 sandbox path validation 解析，不能拼接未校验的用户输入。
 - 捕获认证、迁移、后台任务异常必须记录日志；不能空 catch。
-- `disabled_at` 非空的账号必须同时在登录（`LocalAuthProvider.authenticate`）和已有 session 校验（`get_current_user_from_request`）两处被拒绝。
+- `disabled_at` 非空的账号必须同时在登录（`LocalAuthProvider.authenticate`）和已有 session 校验（`get_current_user_from_request`）两处被拒绝；`disabled_at` 非空的账号在 `login/mfa` 换取 session 时也要被拒绝。
+- MFA 验证码和恢复码必须常量时间比较（`verify_totp_code`、`recovery_code_matches`），且一次成功验证之后不能复用同一个恢复码或同一个 `challenge`。
+- MFA 密钥必须加密存储，恢复码只能以哈希形式持久化；任何失败响应都不能透露具体是密码、验证码还是 `challenge` 本身出了问题。
 
 ## 审计日志与管理员操作
 
@@ -422,7 +479,7 @@ SOC 2 风格的最小控制集，为向外部客户开放做准备。
 
 - **`audit_events` 表**（append only，迁移 `0033_audit_events`）记录 `occurred_at` / `actor_user_id` / `organization_id` / `action`（形如 `auth.login.succeeded` 的点分字符串）/ `target_type` / `target_id` / `outcome`（`success` / `denied` / `failed`）/ `ip` / `user_agent` / `details`（JSON）。`AuditEventRepository.record()` 永远不向请求路径抛异常：写入失败只记日志，不能让被审计的动作本身失败。
 - `details` 在写入前统一走 `deerflow.persistence.audit_events.redact_audit_details`：键名包含 password / token / secret / cookie / api_key / authorization / credential / private_key / access_key / client_secret 等字样的值一律替换为 `"[redacted]"`。
-- 已接入 `record`（一行调用，见 `app.gateway.deps.record_audit_event`）的动作：本地登录成功 / 失败、登出、改密码、PAT 创建 / 撤销、邀请创建 / 接受 / 撤销（含成员角色变更）、MCP 配置写入、managed model 保存、managed subagent 增改删、run 取消，以及下面三个管理员动作本身。
+- 已接入 `record`（一行调用，见 `app.gateway.deps.record_audit_event`）的动作：本地登录成功 / 失败、登出、改密码、PAT 创建 / 撤销、邀请创建 / 接受 / 撤销（含成员角色变更）、MCP 配置写入、managed model 保存、managed subagent 增改删、run 取消、MFA 启用 / 关闭 / 验证失败 / 恢复码使用（`mfa.enabled` / `mfa.disabled` / `mfa.challenge.failed` / `mfa.recovery_code.used`），以及下面三个管理员动作本身。
 - **管理员操作**（`app/gateway/routers/admin.py`，`/api/admin/*`，`require_admin_user` 门禁，与 Models / MCP 配置同一断言）：`POST /users/{id}/disable`、`POST /users/{id}/enable`、`POST /users/{id}/force-logout`（复用已有的 `token_version` 机制），以及只读的 `GET /audit-events`（按 action 前缀 / actor / since / until 过滤，游标分页，跨组织，供系统管理员纵览整个部署）。
 - 共享工作区邀请默认角色已改为 `member`（最小权限：不能管理成员、不能改组织设置），邀请人可显式选择 `admin`；见 `app/gateway/routers/invitations.py` 的 `CreateInvitationRequest.role`。
 
@@ -431,8 +488,9 @@ SOC 2 风格的最小控制集，为向外部客户开放做准备。
 | 边界 | 当前行为 | 后续方向 |
 |---|---|---|
 | 无 admin 时注册普通用户 | 允许注册普通 `user` | 如产品要求先初始化 admin，给 `/register` 加 gate |
-| 登录限速 | 进程内 dict，单 worker 精确，多 worker 近似 | Redis / DB-backed rate limiter |
-| OAuth / OIDC | 已实现通用 OIDC SSO（Keycloak, Google, Azure AD, Okta 等），支持 PKCE + nonce、auto-provisioning、email domain 限制（详见 [SSO.md](SSO.md)） | 支持 RP-initiated logout、自定义 scope 映射 |
+| 登录限速 | 进程内 dict，单 worker 精确，多 worker 近似；MFA 的 challenge 尝试次数、按用户限速桶用同一进程内机制 | Redis / DB-backed rate limiter |
+| OAuth / OIDC | 已实现通用 OIDC SSO（Keycloak, Google, Azure AD, Okta 等），支持 PKCE + nonce、auto-provisioning、email domain 限制（详见 [SSO.md](SSO.md)，Google Cloud Console 配置步骤见本文上方） | 支持 RP-initiated logout、自定义 scope 映射 |
+| MFA | 仅支持密码账号的 TOTP；恢复码固定十个，用完需关闭重开 MFA 才能重新生成 | Sign in with Apple（App Store 阶段再做）、passkeys、WebAuthn |
 | IM 用户隔离 | `channel_connections` 绑定到 `users.id`；未绑定消息在 `require_bound_identity: true` 时被拒绝 | 更多渠道与审计能力 |
 | Internal Auth 泄露 token | token 加 owner header 不再足够；仍需一条 active 委托，且 owner header 必须与之一致 | 部署时轮换 token；委托 id 视为敏感标识，按需撤销 |
 | 共享工作区邀请 | `authorization.invitations_frozen`（默认 true）下创建、查看、接受邀请均为 403；已有成员不受影响 | M3 隔离门禁完成、角色矩阵获批后再开放 |
@@ -446,7 +504,12 @@ SOC 2 风格的最小控制集，为向外部客户开放做准备。
 | `app/gateway/auth_middleware.py` | 全局认证门、JWT 严格验证、写入 user context |
 | `app/gateway/csrf_middleware.py` | CSRF double-submit 和 auth Origin 校验 |
 | `app/gateway/routers/auth.py` | initialize/login/register/logout/me/change-password + SSO OIDC 端点（providers/oauth/callback） |
-| `app/gateway/auth/jwt.py` | JWT 创建与解析 |
+| `app/gateway/auth/jwt.py` | JWT 创建与解析；同时定义 MFA challenge token（`typ=mfa_challenge`） |
+| `app/gateway/auth/totp.py` | 标准库 TOTP（RFC 6238）：生成密钥、算码、常量时间校验、`otpauth://` URI |
+| `app/gateway/auth/mfa_crypto.py` | 从已有 JWT 密钥派生的 MFA 密钥 Fernet 加解密 |
+| `app/gateway/auth/recovery_codes.py` | 恢复码生成、哈希、常量时间比对 |
+| `deerflow/persistence/user_mfa/` | `UserMfaRow` / `UserMfaRepository`（enroll/confirm/disable、恢复码单次使用） |
+| `packages/harness/deerflow/persistence/migrations/versions/0035_user_mfa.py` | `user_mfa` 建表 |
 | `app/gateway/auth/oidc.py` | OIDC 核心服务：discovery、token exchange、ID token 验证、userinfo |
 | `app/gateway/auth/oidc_state.py` | OIDC state 管理：signed cookie 存储 state/nonce/code_verifier |
 | `app/gateway/auth/user_provisioning.py` | OIDC 用户自动创建、email linking、domain 限制 |
