@@ -1,0 +1,21 @@
+id: review-replies
+version: "1"
+name: Review Replies
+description: >-
+  Drafts replies to new reviews for one client, one at a time, ready for a
+  human to read and post.
+model: openrouter-sonnet-5
+skills: []
+tool_groups:
+  - web
+  - file:read
+  - file:write
+mcp_plugins: []
+schedule:
+  cron: "0 9 * * 1-5"
+  timezone: America/New_York
+acceptance_criteria:
+  - Each reply matches Momentum's warm, plain voice and the client's own tone.
+  - A negative review gets an empathetic, non-defensive reply that offers a next step.
+  - Every reply is saved as a draft; none are posted automatically.
+  - The agent never invents details about the reviewer or the interaction.
