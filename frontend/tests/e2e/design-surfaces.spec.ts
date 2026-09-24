@@ -290,9 +290,12 @@ async function mockDesignAPI(page: Page, { empty = false } = {}) {
   // Anything the fixtures below do not answer resolves to an empty 404 rather
   // than hanging on a gateway that is not running. Registered first so every
   // specific route below takes precedence.
-  await page.route("**/api/**", (route) =>
-    route.fulfill({ status: 404, json: { detail: "Not mocked" } }),
-  );
+  await page.route("**/api/**", (route) => {
+    if (process.env.DESIGN_SHOTS_DEBUG === "1") {
+      console.warn("[design-shots] unmocked", route.request().url());
+    }
+    return route.fulfill({ status: 404, json: { detail: "Not mocked" } });
+  });
   mockLangGraphAPI(page, {
     threads: empty ? [] : THREADS,
     agents: AGENTS,
@@ -401,67 +404,71 @@ async function mockDesignAPI(page: Page, { empty = false } = {}) {
   );
   await page.route(/\/api\/clients(\?|$)/, (route) =>
     route.fulfill({
-      json: empty
-        ? []
-        : [
-            {
-              id: "client-omega",
-              display_name: "Omega Landscaping",
-              aliases: ["Omega"],
-              status: "active",
-              email_domains: ["omegalandscaping.com"],
-              slack_channel_ids: [],
-              registry_id: "omega",
-              notes: "Priority conversion lane.",
-              created_at: "2026-03-01T12:00:00Z",
-              updated_at: "2026-09-20T12:00:00Z",
-              assignments: [
-                {
-                  user_id: "default",
-                  role: "account_manager",
-                  created_at: "2026-03-01T12:00:00Z",
-                  updated_at: "2026-03-01T12:00:00Z",
-                },
-              ],
-              project_count: 2,
-            },
-            {
-              id: "client-bridge",
-              display_name: "Bridge Software Development",
-              aliases: [],
-              status: "prospect",
-              email_domains: [],
-              slack_channel_ids: [],
-              registry_id: null,
-              notes: "",
-              created_at: "2026-08-12T12:00:00Z",
-              updated_at: "2026-09-18T12:00:00Z",
-              assignments: [],
-              project_count: 1,
-            },
-          ],
+      json: {
+        clients: empty
+          ? []
+          : [
+              {
+                id: "client-omega",
+                display_name: "Omega Landscaping",
+                aliases: ["Omega"],
+                status: "active",
+                email_domains: ["omegalandscaping.com"],
+                slack_channel_ids: [],
+                registry_id: "omega",
+                notes: "Priority conversion lane.",
+                created_at: "2026-03-01T12:00:00Z",
+                updated_at: "2026-09-20T12:00:00Z",
+                assignments: [
+                  {
+                    user_id: "default",
+                    role: "account_manager",
+                    created_at: "2026-03-01T12:00:00Z",
+                    updated_at: "2026-03-01T12:00:00Z",
+                  },
+                ],
+                project_count: 2,
+              },
+              {
+                id: "client-bridge",
+                display_name: "Bridge Software Development",
+                aliases: [],
+                status: "prospect",
+                email_domains: [],
+                slack_channel_ids: [],
+                registry_id: null,
+                notes: "",
+                created_at: "2026-08-12T12:00:00Z",
+                updated_at: "2026-09-18T12:00:00Z",
+                assignments: [],
+                project_count: 1,
+              },
+            ],
+      },
     }),
   );
   await page.route("**/api/fleet/templates", (route) =>
     route.fulfill({
-      json: [
-        {
-          id: "weekly-report",
-          version: "1.2.0",
-          name: "Weekly client report",
-          description: "Monday summary of leads, spend and booked work.",
-          model: "claude-sonnet",
-          skills: ["data-analysis"],
-          tool_groups: ["web"],
-          mcp_plugins: [],
-          schedule: { cron: "0 8 * * 1", timezone: "America/New_York" },
-          acceptance_criteria: ["Every number cites its source export."],
-        },
-      ],
+      json: {
+        templates: [
+          {
+            id: "weekly-report",
+            version: "1.2.0",
+            name: "Weekly client report",
+            description: "Monday summary of leads, spend and booked work.",
+            model: "claude-sonnet",
+            skills: ["data-analysis"],
+            tool_groups: ["web"],
+            mcp_plugins: [],
+            schedule: { cron: "0 8 * * 1", timezone: "America/New_York" },
+            acceptance_criteria: ["Every number cites its source export."],
+          },
+        ],
+      },
     }),
   );
   await page.route(/\/api\/clients\/[^/]+\/agents$/, (route) =>
-    route.fulfill({ json: [] }),
+    route.fulfill({ json: { agents: [] } }),
   );
   await page.route(/\/api\/projects\/[^/]+\/documents(\?|$)/, (route) =>
     route.fulfill({ json: { documents: [], has_more: false } }),
@@ -472,7 +479,8 @@ type Surface = {
   name: string;
   path: string;
   empty?: boolean;
-  full?: boolean;
+  /** Extra captures after scrolling the main scroller by ~a screen. */
+  scrolls?: number;
   prepare?: (page: Page) => Promise<void>;
 };
 
@@ -481,11 +489,12 @@ const SIGNED_IN: Surface[] = [
   { name: "chats-empty", path: "/workspace/chats", empty: true },
   { name: "chats-list", path: "/workspace/chats" },
   { name: "chat-thread", path: `/workspace/chats/${MOCK_THREAD_ID}` },
-  { name: "command-center", path: "/workspace/command-center", full: true },
+  { name: "command-center", path: "/workspace/command-center", scrolls: 2 },
   {
     name: "command-center-empty",
     path: "/workspace/command-center",
     empty: true,
+    scrolls: 1,
   },
   { name: "agents", path: "/workspace/agents" },
   {
@@ -497,13 +506,14 @@ const SIGNED_IN: Surface[] = [
     },
   },
   { name: "project", path: `/workspace/projects/${PROJECT_ID}` },
-  { name: "scheduled-tasks", path: "/workspace/scheduled-tasks" },
+  { name: "scheduled-tasks", path: "/workspace/scheduled-tasks", scrolls: 1 },
   {
     name: "scheduled-tasks-empty",
     path: "/workspace/scheduled-tasks",
     empty: true,
+    scrolls: 1,
   },
-  { name: "capabilities", path: "/workspace/capabilities" },
+  { name: "capabilities", path: "/workspace/capabilities", scrolls: 1 },
   {
     name: "settings",
     path: "/workspace/chats/new?settings=appearance",
@@ -522,15 +532,16 @@ const SIGNED_IN: Surface[] = [
   {
     name: "client-spaces",
     path: "/workspace/command-center",
+    scrolls: 1,
     prepare: async (page) => {
       await page.getByRole("button", { name: "Client Spaces" }).click();
     },
   },
-  { name: "daily", path: "/daily", full: true },
+  { name: "daily", path: "/daily", scrolls: 2 },
 ];
 
 const SIGNED_OUT: Surface[] = [
-  { name: "landing", path: "/", full: true },
+  { name: "landing", path: "/", scrolls: 3 },
   {
     name: "invite",
     path: "/invite#token=design-review",
@@ -562,10 +573,36 @@ async function capture(
   mkdirSync(outDir, { recursive: true });
   const file = path.join(outDir, `${surface.name}-${viewport.name}.png`);
   await page.screenshot({ path: file });
-  if (surface.full) {
+  // App pages scroll inside a container, so a fullPage capture would only
+  // repeat the viewport: scroll the largest scroller instead.
+  for (let index = 1; index <= (surface.scrolls ?? 0); index++) {
+    const moved = await page.evaluate(() => {
+      const candidates = [
+        document.scrollingElement,
+        ...document.querySelectorAll<HTMLElement>("*"),
+      ].filter(
+        (element): element is Element =>
+          element !== null &&
+          element.scrollHeight > element.clientHeight + 40 &&
+          (element === document.scrollingElement ||
+            /auto|scroll/.test(getComputedStyle(element).overflowY)),
+      );
+      const scroller = candidates.sort(
+        (a, b) =>
+          b.clientHeight * b.clientWidth - a.clientHeight * a.clientWidth,
+      )[0];
+      if (!scroller) return false;
+      const before = scroller.scrollTop;
+      scroller.scrollTop += scroller.clientHeight * 0.85;
+      return scroller.scrollTop > before;
+    });
+    if (!moved) break;
+    await page.waitForTimeout(300);
     await page.screenshot({
-      path: path.join(outDir, `${surface.name}-${viewport.name}-full.png`),
-      fullPage: true,
+      path: path.join(
+        outDir,
+        `${surface.name}-${viewport.name}-${index + 1}.png`,
+      ),
     });
   }
 }
