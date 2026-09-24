@@ -142,12 +142,12 @@ describe("ClientSpacesView", () => {
     renderWithI18n(<ClientSpacesView />);
 
     const acmeRow = screen.getByText("Acme").closest("li");
-    expect(acmeRow?.textContent).toContain("active");
+    expect(acmeRow?.textContent).toContain("Active");
     expect(acmeRow?.textContent).toContain("2 assigned");
     expect(acmeRow?.textContent).toContain("3 projects");
 
     const globexRow = screen.getByText("Globex").closest("li");
-    expect(globexRow?.textContent).toContain("prospect");
+    expect(globexRow?.textContent).toContain("Prospect");
     expect(globexRow?.textContent).toContain("0 assigned");
     expect(globexRow?.textContent).toContain("0 projects");
   });

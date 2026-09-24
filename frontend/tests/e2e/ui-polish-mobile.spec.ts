@@ -75,4 +75,33 @@ test.describe("UI polish mobile regressions", () => {
     // would pass trivially if <html> were stuck in one mode.
     expect(darkRing).not.toBe(lightRing);
   });
+
+  test("chats search and tabs keep the page gutter on phones", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    mockLangGraphAPI(page);
+
+    await page.goto("/workspace/chats");
+
+    const search = page.getByPlaceholder("Search chats");
+    await expect(search).toBeVisible();
+    const bounds = await search.boundingBox();
+    expect(bounds!.x).toBeGreaterThanOrEqual(12);
+    expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(390 - 12);
+  });
+
+  test("?settings=security opens the Security section", async ({ page }) => {
+    mockLangGraphAPI(page);
+
+    await page.goto("/workspace/chats/new?settings=security");
+
+    const dialog = page.getByRole("dialog", { name: "Settings" });
+    await expect(
+      dialog.getByRole("button", { name: "Security", exact: true }),
+    ).toHaveAttribute("aria-current", "page");
+    await expect(
+      dialog.getByRole("heading", { name: "Two-factor authentication" }),
+    ).toBeVisible();
+  });
 });

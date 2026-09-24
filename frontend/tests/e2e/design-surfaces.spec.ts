@@ -521,13 +521,8 @@ const SIGNED_IN: Surface[] = [
   },
   {
     name: "settings-security",
-    path: "/workspace/chats/new?settings=appearance",
-    prepare: async (page) => {
-      const dialog = page.getByRole("dialog");
-      await dialog
-        .getByRole("button", { name: "Security", exact: true })
-        .click();
-    },
+    path: "/workspace/chats/new?settings=security",
+    prepare: (page) => expect(page.getByRole("dialog")).toBeVisible(),
   },
   {
     name: "client-spaces",

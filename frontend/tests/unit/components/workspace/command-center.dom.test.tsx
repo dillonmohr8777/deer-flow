@@ -22,6 +22,7 @@ const mocks = rs.hoisted(() => ({
   statsLoading: false,
   runs: [] as unknown[],
   clients: [] as unknown[],
+  clientsError: false,
 }));
 const contributorRun = {
   run_id: "run-7",
@@ -112,7 +113,8 @@ rs.mock("@/core/clients", () => ({
   useClients: () => ({
     data: mocks.clients,
     isLoading: false,
-    isError: false,
+    isError: mocks.clientsError,
+    isSuccess: !mocks.clientsError,
     refetch: rs.fn(),
   }),
 }));
@@ -219,6 +221,7 @@ beforeEach(() => {
   mocks.statsLoading = false;
   mocks.runs = [];
   mocks.clients = [];
+  mocks.clientsError = false;
 });
 
 afterEach(() => {
@@ -347,6 +350,20 @@ describe("CommandCenter", () => {
         screen.getByRole("button", { name: `${name} Preview` }),
       ).toBeDefined();
 
+    fireEvent.click(screen.getByRole("button", { name: "Client Spaces" }));
+    expect(
+      screen.queryByText(/No clients have been added to this workspace yet/),
+    ).toBeNull();
+  });
+
+  it("never says there are no clients when the client read failed", () => {
+    mocks.clientsError = true;
+    render(<CommandCenter />);
+
+    // Unknown is not zero: no Preview tag and no "no clients" note.
+    expect(
+      screen.queryByRole("button", { name: "Client Spaces Preview" }),
+    ).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Client Spaces" }));
     expect(
       screen.queryByText(/No clients have been added to this workspace yet/),
