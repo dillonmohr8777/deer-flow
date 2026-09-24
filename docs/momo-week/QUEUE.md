@@ -17,8 +17,8 @@ Receipts: `docs/momo-week/PROGRESS.md`. Owner: Claude chief for Dillon Mohr.
 ## Tasks
 
 ### A. M3 isolation gate (prerequisite for anything multi-client)
-- [ ] **a1 m3-audit**: Read `plans/momentum-m3-isolation-plan.md` §3–4. Run the backend suite; list which gate-7.2 items are already enforced (with test names) and which are missing. Write `docs/momo-week/m3-status.md`. Accept: file exists, suite result recorded.
-- [ ] **a2 m3-gaps**: Implement the missing items from a1 one lane at a time, each with a cross-org probe test that returns 404. Accept: new tests pass, full backend suite no worse than a1's baseline.
+- [x] **a1 m3-audit**: https://github.com/dillonmohr8777/deer-flow/pull/17 — all 7 gate-7.2 gaps from the plan are already closed on this branch (see `docs/momo-week/m3-status.md`); one unrelated pre-existing suite failure noted (`test_client_langfuse_metadata.py`), not caused by this change.
+- [ ] **a2 m3-gaps**: Implement the missing items from a1 one lane at a time, each with a cross-org probe test that returns 404. Accept: new tests pass, full backend suite no worse than a1's baseline. Note from a1's audit: no gaps remain against the plan as scoped — `docs/momo-week/m3-status.md` recommends dropping this task rather than carrying it forward; Dillon's call.
 
 ### B. Momo Board (Workspace Phase 4): client posts, tickets, concerns, DMs, Momo drafts, owner approves
 Reuse: `backend/app/gateway/routers/clients.py`, the org/membership model, the Desk page (`frontend/src/app/workspace/desk/`), run receipts, and the momo-concierge prompt text (triage, draft only, label claims observed/inferred/unknown). Gate everything behind `config.private_workspace.enabled`, the same way the Desk does.
