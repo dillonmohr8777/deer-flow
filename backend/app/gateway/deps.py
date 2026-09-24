@@ -833,7 +833,8 @@ def audit_actor_id(request: Request) -> str | None:
     ``.cookies`` at all. Returns ``None`` on that same fallback path, which
     only means the audit row's ``actor_user_id`` is left blank.
     """
-    user = getattr(request.state, "user", None)
+    # Handlers called directly (blocking-I/O tests) may pass request=None.
+    user = getattr(getattr(request, "state", None), "user", None)
     user_id = getattr(user, "id", None)
     return str(user_id) if user_id is not None else None
 
