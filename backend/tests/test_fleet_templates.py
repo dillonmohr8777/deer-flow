@@ -62,7 +62,20 @@ def test_load_valid_template_round_trips_every_field(project_root) -> None:
     assert template.schedule.timezone == "America/New_York"
     assert template.acceptance_criteria == ["Covers the prior 7 days only."]
     assert template.soul == "Hello {client_name}.\n"
-    assert template.render_soul(client_name="Acme") == "Hello Acme.\n"
+    rendered = template.render_soul(client_name="Acme")
+    assert rendered.startswith("Hello Acme.\n")
+    assert "Covers the prior 7 days only." in rendered
+    assert "UNVERIFIED" in rendered
+
+
+def test_render_soul_preserves_braces_and_fills_client_in_criteria(project_root) -> None:
+    manifest = {**VALID_MANIFEST, "acceptance_criteria": ['Reconcile {client_name} totals with {"amount": 12}.']}
+    _write_template(project_root, "weekly-client-report", manifest, soul='Keep {"a": 1} for {client_name}.')
+    template = load_fleet_template("weekly-client-report")
+    rendered = template.render_soul(client_name="Acme")
+    assert 'Keep {"a": 1} for Acme.' in rendered
+    assert 'Reconcile Acme totals with {"amount": 12}.' in rendered
+    assert template.acceptance_criteria == manifest["acceptance_criteria"]
 
 
 def test_load_fleet_templates_lists_sorted_by_id(project_root) -> None:

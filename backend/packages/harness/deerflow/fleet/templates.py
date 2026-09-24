@@ -90,13 +90,27 @@ class FleetTemplate(BaseModel):
         return value
 
     def render_soul(self, *, client_name: str) -> str:
-        """Fill the ``{client_name}`` placeholder in the SOUL.md body.
+        """Render the SOUL.md body and append its run acceptance contract.
 
         A literal substring replace, not ``str.format``; SOUL.md is free-form
         prose that may contain unrelated curly braces (a markdown code sample,
         an aside), and those must not be mistaken for format fields.
         """
-        return self.soul.replace("{client_name}", client_name)
+        rendered_soul = self.soul.replace("{client_name}", client_name)
+        rendered_criteria = [criterion.replace("{client_name}", client_name) for criterion in self.acceptance_criteria]
+        criteria_lines = "\n".join(f"- {criterion}" for criterion in rendered_criteria)
+        acceptance_contract = (
+            "## Acceptance criteria\n"
+            "Before declaring a run complete, check every criterion below against concrete evidence. "
+            "Record the evidence in the saved output, retain any unmet criterion as `UNVERIFIED`, "
+            "and repair it within the authorized scope and budget when possible. "
+            "Run completion is not acceptance of the deliverable.\n\n"
+            f"{criteria_lines}"
+        )
+        if rendered_soul:
+            separator = "" if rendered_soul.endswith("\n") else "\n"
+            return f"{rendered_soul}{separator}\n{acceptance_contract}\n"
+        return f"{acceptance_contract}\n"
 
 
 def templates_root() -> Path:

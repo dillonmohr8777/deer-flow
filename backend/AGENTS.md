@@ -238,6 +238,15 @@ while `strip_internal_context_keys` scrubs both destinations. Treat
 `_normalize_input_messages` rejects canonical external system/developer roles;
 only `AUTH_SOURCE_INTERNAL` run input may retain them.
 
+### Fleet template acceptance prompts
+
+`deerflow.fleet.FleetTemplate.render_soul()` performs literal `{client_name}`
+substitution in the SOUL body and in each manifest `acceptance_criteria` entry,
+then appends a short evidence checklist. The prompt preserves unmet criteria as
+`UNVERIFIED` and permits repair only within the authorized scope and budget.
+This is propagation into the stamped agent instructions; it does not change
+scheduled-task or subagent completion statuses or create an acceptance gate.
+
 ## Development Workflow
 
 ### Test-Driven Development (TDD) — MANDATORY

@@ -145,7 +145,14 @@ async def test_stamp_creates_agent_and_paused_task_for_org_admin(fleet_stamping_
     assert agent_cfg.template_id == "weekly-client-report"
     assert agent_cfg.template_version == "1"
     assert agent_cfg.model == "openrouter-sonnet-5"
-    assert "Acme Corp" in (store.get_soul("acme-corp-weekly-client-report", user_id=STORAGE_S) or "")
+    stamped_soul = store.get_soul("acme-corp-weekly-client-report", user_id=STORAGE_S) or ""
+    assert "Acme Corp" in stamped_soul
+    from deerflow.fleet import load_fleet_template
+
+    template = load_fleet_template("weekly-client-report")
+    for criterion in template.acceptance_criteria:
+        assert criterion.replace("{client_name}", "Acme Corp") in stamped_soul
+    assert "UNVERIFIED" in stamped_soul
 
     task_repo = ScheduledTaskRepository(session_factory)
     tasks = await task_repo.list_by_user(STORAGE_S)
