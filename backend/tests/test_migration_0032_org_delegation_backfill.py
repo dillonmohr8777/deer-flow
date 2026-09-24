@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 import pytest
 from alembic import command
 from alembic.script import ScriptDirectory
+from sqlalchemy import insert
 
 import deerflow.persistence.models  # noqa: F401 -- registers ORM models
 from deerflow.persistence.bootstrap import _MIGRATIONS_DIR, _get_alembic_config
@@ -18,12 +19,13 @@ from deerflow.persistence.engine import close_engine, get_engine, get_session_fa
 from deerflow.persistence.mcp_tasks.model import McpTaskRow
 from deerflow.persistence.organizations.delegation import OrganizationDelegationRepository
 from deerflow.persistence.organizations.identity import private_organization_id, private_organization_slug
-from deerflow.persistence.organizations.model import OrganizationMemberRow, OrganizationRow
+from deerflow.persistence.organizations.model import OrganizationDelegationRow, OrganizationMemberRow, OrganizationRow
 from deerflow.persistence.scheduled_tasks.model import ScheduledTaskRow
 from deerflow.persistence.user.model import UserRow
 
 REVISION = "0032_org_delegation_backfill"
 PREVIOUS = "0031_org_rebackfill"
+EXISTING = "dlg-existing-a"
 
 # a and c are real users; s is shared workspace S's storage principal (a owns S,
 # c is an admin there); b's private organization has lost b's membership.
@@ -34,8 +36,15 @@ ORG = {user: private_organization_id(user) for user in (A, B, C, S)}
 async def _seed(session_factory) -> None:
     now = datetime.now(UTC)
     async with session_factory() as session, session.begin():
-        for user in (A, B, C, S):
-            session.add(UserRow(id=user, email=f"{user}@example.com", system_role="user", needs_setup=False, token_version=0))
+        # Core inserts naming only columns that exist at 0031: the ORM rows now
+        # also carry later columns such as 0033's users.disabled_at.
+        await session.execute(insert(UserRow.__table__), [{"id": user, "email": f"{user}@example.com", "system_role": "user", "needs_setup": False, "token_version": 0, "created_at": now} for user in (A, B, C, S)])
+        # A delegation that already exists before 0032 is kept, not duplicated.
+        await session.execute(
+            insert(OrganizationDelegationRow.__table__).values(
+                id=EXISTING, organization_id=ORG[A], subject_type="scheduled_task", subject_id="task-a", owner_user_id=A, scopes=["runs:create"], status="active", created_at=now, updated_at=now
+            )
+        )
         for user in (A, B, C):
             session.add(OrganizationRow(id=ORG[user], slug=private_organization_slug(user), name="Private organization", status="active"))
             session.add(OrganizationMemberRow(organization_id=ORG[user], user_id=user, role="owner", status="revoked" if user == B else "active"))
@@ -76,8 +85,6 @@ async def test_0032_grants_resolvable_delegations_and_round_trips(tmp_path):
         cfg = _get_alembic_config(get_engine())
         await asyncio.to_thread(command.downgrade, cfg, PREVIOUS)
         await _seed(get_session_factory())
-        # A delegation that already exists is kept, not duplicated.
-        existing = await OrganizationDelegationRepository(get_session_factory()).grant(organization_id=ORG[A], subject_type="scheduled_task", subject_id="task-a", owner_user_id=A, scopes=["runs:create"])
 
         await asyncio.to_thread(command.upgrade, cfg, REVISION)
         expected = [
@@ -88,6 +95,9 @@ async def test_0032_grants_resolvable_delegations_and_round_trips(tmp_path):
         ]
         # task-b (owner lost membership), task-quarantined (no organization) and the revoked connection get none.
         assert _delegations(db_path) == expected
+        # The repository reads columns added after 0032 (users.disabled_at), so resolve at head.
+        await asyncio.to_thread(command.upgrade, cfg, "head")
+        existing = EXISTING
         delegations = OrganizationDelegationRepository(get_session_factory())
         for subject_type, subject_id, organization_id, owner, _status in expected:
             resolved = await delegations.resolve_active_delegation(subject_type=subject_type, subject_id=subject_id, organization_id=organization_id, scope="runs:create")

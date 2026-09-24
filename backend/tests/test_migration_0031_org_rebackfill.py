@@ -67,8 +67,8 @@ async def _seed(session_factory) -> None:
     thread = {"status": "idle", "metadata_json": {}}
     run = {"status": "success", "metadata_json": {}, "kwargs_json": {}}
     async with session_factory() as session, session.begin():
-        for user in (A, B, C, S, D, E):
-            session.add(UserRow(id=user, email=f"{user}@example.com", system_role="user", needs_setup=False, token_version=0))
+        # Core insert: the UserRow ORM object now also carries 0033's disabled_at.
+        await session.execute(insert(UserRow.__table__), [{"id": user, "email": f"{user}@example.com", "system_role": "user", "needs_setup": False, "token_version": 0} for user in (A, B, C, S, D, E)])
         # Private organizations keep a NULL storage principal. A NOT IN exclusion
         # over that nullable column would match nothing and stamp no real user.
         for user in (A, B, C, E):
