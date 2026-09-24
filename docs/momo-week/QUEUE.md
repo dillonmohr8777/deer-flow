@@ -44,7 +44,7 @@ Source of truth: `DESIGN.md` ("MomoBot Paper": its tokens, type and rules win ov
 - Critique the "after" shots against DESIGN.md and the backlog item, as a strict reviewer. Fix what fails, then put a 1–10 score with its reasons in the PR body.
 - Accept: `pnpm test` for touched components and `pnpm lint` pass, before/after images committed, and every text/background pair touched meets WCAG AA.
 
-- [ ] **d1 metadata-legibility** (backlog 4): consequential metadata (model names, token counts, tool badges) toward 14px with stronger weight; icon controls get ≥40px hit areas.
+- [x] **d1 metadata-legibility** (backlog 4): https://github.com/dillonmohr8777/deer-flow/pull/18: run metadata, status, chips and composer labels at 13 to 14px with stronger weight; sidebar and agent icon controls at 40px. Left: the sidebar thread-row action is still 20px on desktop.
 - [ ] **d2 work-titles** (backlog 2): two-line titles plus a compact date/project identifier on assignments and recent chats; full title on hover and focus.
 - [ ] **d3 telemetry-labels** (backlog 3): label the scope and period on token figures, explain the percentage, and show "Unavailable" when data is missing.
 - [ ] **d4 agent-identity** (backlog 8): one persistent avatar per agent across the dashboard and Agents views; gold only on Momo's antenna.
