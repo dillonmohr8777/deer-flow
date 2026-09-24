@@ -217,10 +217,10 @@ async def authenticate_pat(app: Any, authorization: str | None) -> tuple[Any, fr
     from app.gateway.deps import get_local_provider
 
     user = await get_local_provider().get_user(str(record["user_id"]))
-    if user is None:
-        # The owning user was deleted or became unresolvable; the token is
-        # dead even though its row survives (deleting a user revokes their
-        # PATs, without needing a FK cascade).
+    if user is None or getattr(user, "disabled_at", None) is not None:
+        # The owning user was deleted, disabled, or became unresolvable; the
+        # token is dead even though its row survives (deleting a user revokes
+        # their PATs, without needing a FK cascade).
         raise HTTPException(status_code=401, detail="Invalid token")
     await pat_repo.touch_last_used(str(record["id"]))
     return user, frozenset(record.get("scopes") or ())

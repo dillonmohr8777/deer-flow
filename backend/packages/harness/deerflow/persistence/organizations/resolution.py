@@ -5,12 +5,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
-from sqlalchemy import select
+from sqlalchemy import exists, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
 from deerflow.persistence.organizations.identity import private_organization_id
 from deerflow.persistence.organizations.model import OrganizationMemberRow, OrganizationRow
+from deerflow.persistence.user.model import UserRow
 
 
 class _OwnedRow(Protocol):
@@ -55,6 +56,9 @@ async def active_organization_for_user(
                 OrganizationRow.id == target_id,
                 OrganizationRow.status == "active",
                 OrganizationMemberRow.status == "active",
+                # A disabled account keeps no organization, which closes its
+                # sessions, PATs and internal delegations in this one place.
+                ~exists().where(UserRow.id == user_id, UserRow.disabled_at.is_not(None)),
             )
         )
     ).first()

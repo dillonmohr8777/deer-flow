@@ -108,6 +108,22 @@ async def test_disable_user_not_found(_patch_provider):
     assert exc_info.value.status_code == 404
 
 
+async def test_disable_user_refuses_to_lock_out_the_caller(_patch_provider):
+    _patch_provider["admin-1"] = _target_user("admin-1")
+    with pytest.raises(HTTPException) as exc_info:
+        await admin_router.disable_user("admin-1", _request(system_role="admin"))
+    assert exc_info.value.status_code == 400
+    assert _patch_provider["admin-1"].disabled_at is None
+
+
+async def test_disable_user_also_ends_existing_sessions(_patch_provider):
+    target = _target_user("target-1")
+    target.token_version = 2
+    _patch_provider["target-1"] = target
+    response = await admin_router.disable_user("target-1", _request(system_role="admin"))
+    assert response.token_version == 3
+
+
 # ── behavior + audit rows ────────────────────────────────────────────────
 
 

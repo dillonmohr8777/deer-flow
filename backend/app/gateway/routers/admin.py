@@ -53,8 +53,12 @@ async def disable_user(user_id: str, request: Request) -> AdminUserActionRespons
     """Disable a user: they cannot log in and any live session stops working."""
     await require_admin_user(request, detail=_ADMIN_REQUIRED_DETAIL)
     actor = await get_current_user_from_request(request)
+    if str(actor.id) == user_id:
+        raise HTTPException(status_code=400, detail="You can't disable your own account")
     user = await _load_target_user(user_id)
     user.disabled_at = datetime.now(UTC)
+    # Also end existing sessions, so re-enabling later doesn't revive them.
+    user.token_version += 1
     user = await get_local_provider().update_user(user)
     await record_audit_event(request, action="admin.user.disabled", outcome="success", actor_user_id=str(actor.id), target_type="user", target_id=user_id, **_network_meta(request))
     return _user_action_response(user)
