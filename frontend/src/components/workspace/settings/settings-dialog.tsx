@@ -132,13 +132,25 @@ export function SettingsDialog(props: SettingsDialogProps) {
     useState<SettingsSection>(defaultSection);
   const navRef = useRef<HTMLElement>(null);
 
+  const { open } = dialogProps;
   useEffect(() => {
-    // On phones the sections are a sideways rail: keep the selected one in
-    // view, or a deep link can land on a tab scrolled off the right edge.
-    navRef.current
-      ?.querySelector<HTMLElement>(`[data-section="${activeSection}"]`)
-      ?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
-  }, [activeSection]);
+    // On phones the sections are a sideways rail: centre the selected one,
+    // or a deep link lands on a tab scrolled off the right edge. Measured a
+    // frame after open, once the rail has its real width.
+    if (!open) return;
+    const frame = requestAnimationFrame(() => {
+      const nav = navRef.current;
+      const tab = nav?.querySelector<HTMLElement>(
+        `[data-section="${activeSection}"]`,
+      );
+      if (!nav || !tab || nav.scrollWidth <= nav.clientWidth) return;
+      const navBox = nav.getBoundingClientRect();
+      const tabBox = tab.getBoundingClientRect();
+      nav.scrollLeft +=
+        tabBox.left - navBox.left - (navBox.width - tabBox.width) / 2;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [activeSection, open]);
 
   useEffect(() => {
     // When opening the dialog, ensure the active section follows the caller's intent.

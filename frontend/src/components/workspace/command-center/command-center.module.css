@@ -101,14 +101,13 @@
   font-size: 15px;
   font-weight: 900;
 }
+/* A scope label, not a control: a bordered pill here read as a button that
+   did nothing when clicked. */
 .account {
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--surface);
-  padding: 6px 11px;
   color: var(--muted);
   font-size: 12px;
   font-weight: 700;
+  letter-spacing: 0.02em;
 }
 .content {
   position: relative;
