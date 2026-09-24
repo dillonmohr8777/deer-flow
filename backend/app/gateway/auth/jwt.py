@@ -1,12 +1,16 @@
 """JWT token creation and verification."""
 
 from datetime import UTC, datetime, timedelta
+from typing import Literal
 
 import jwt
 from pydantic import BaseModel
 
 from app.gateway.auth.config import get_auth_config
 from app.gateway.auth.errors import TokenError
+
+MFA_CHALLENGE_TYPE = "mfa_challenge"
+MFA_CHALLENGE_TTL = timedelta(minutes=5)
 
 
 class TokenPayload(BaseModel):
@@ -52,4 +56,56 @@ def decode_token(token: str) -> TokenPayload | TokenError:
     except jwt.InvalidSignatureError:
         return TokenError.INVALID_SIGNATURE
     except jwt.PyJWTError:
+        return TokenError.MALFORMED
+
+
+class MfaChallengePayload(BaseModel):
+    """Payload for the short-lived, single-use MFA login challenge.
+
+    ``typ`` pins this to its one purpose so a normal access token (or any
+    other future short-lived token this module grows) can never be replayed
+    as an MFA challenge even though both are HS256 JWTs signed with the same
+    secret.
+    """
+
+    sub: str  # user_id
+    jti: str  # opaque id; the single-use / attempt-count record is server-side (routers/auth.py)
+    typ: Literal["mfa_challenge"]
+    exp: datetime
+    iat: datetime | None = None
+
+
+def create_mfa_challenge_token(user_id: str, jti: str, *, expires_delta: timedelta = MFA_CHALLENGE_TTL) -> str:
+    """Sign a short-lived MFA challenge naming *user_id* and the caller-chosen *jti*.
+
+    The caller (routers/auth.py) is responsible for the single-use /
+    rate-limited server-side record keyed by ``jti`` -- this only proves the
+    challenge was minted by this deployment and for this user, not that it
+    is still unconsumed.
+    """
+    config = get_auth_config()
+    now = datetime.now(UTC)
+    payload = {"sub": user_id, "jti": jti, "typ": MFA_CHALLENGE_TYPE, "exp": now + expires_delta, "iat": now}
+    return jwt.encode(payload, config.jwt_secret, algorithm="HS256")
+
+
+def decode_mfa_challenge_token(token: str) -> MfaChallengePayload | TokenError:
+    """Decode and validate an MFA challenge token.
+
+    Returns:
+        MfaChallengePayload if valid, or a specific TokenError variant. A
+        token missing/mismatching the ``typ`` claim -- including a normal
+        access token -- decodes to ``TokenError.MALFORMED``.
+    """
+    config = get_auth_config()
+    try:
+        payload = jwt.decode(token, config.jwt_secret, algorithms=["HS256"])
+        return MfaChallengePayload(**payload)
+    except jwt.ExpiredSignatureError:
+        return TokenError.EXPIRED
+    except jwt.InvalidSignatureError:
+        return TokenError.INVALID_SIGNATURE
+    except (jwt.PyJWTError, ValueError):
+        # ValueError also catches pydantic's ValidationError (e.g. a missing
+        # or wrong `typ`), which is a subclass of ValueError.
         return TokenError.MALFORMED
