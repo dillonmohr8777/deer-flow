@@ -14,6 +14,7 @@ import pytest
 import sqlalchemy as sa
 from alembic import command as alembic_command
 from alembic.config import Config as AlembicConfig
+from alembic.script import ScriptDirectory
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from deerflow.persistence.bootstrap import _MIGRATIONS_DIR
@@ -96,8 +97,12 @@ async def test_audit_events_migration_upgrade_downgrade_cycle(tmp_path: Path) ->
         await engine.dispose()
 
 
-async def test_audit_events_is_current_head(tmp_path: Path) -> None:
-    """0033 is the head as of this lane; 0034 (another lane) chains onto it later."""
+async def test_audit_events_chains_into_the_single_head(tmp_path: Path) -> None:
+    """Upgrading to head passes through 0033 and lands on the one head (0034+ chain on top)."""
+    script = ScriptDirectory(str(_MIGRATIONS_DIR))
+    heads = script.get_heads()
+    assert len(heads) == 1
+    assert _REVISION in {rev.revision for rev in script.walk_revisions(base=_PREVIOUS, head=heads[0])}
     db_path = tmp_path / "audit-events-head.db"
     engine = create_async_engine(f"sqlite+aiosqlite:///{db_path}")
     cfg = _alembic_config(f"sqlite+aiosqlite:///{db_path}")
@@ -106,6 +111,6 @@ async def test_audit_events_is_current_head(tmp_path: Path) -> None:
 
         async with engine.connect() as conn:
             version = await conn.run_sync(lambda sync: sync.execute(sa.text("SELECT version_num FROM alembic_version")).scalar())
-        assert version == _REVISION
+        assert version == heads[0]
     finally:
         await engine.dispose()

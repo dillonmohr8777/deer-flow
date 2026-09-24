@@ -55,6 +55,9 @@ class AgentResponse(BaseModel):
     reasoning_effort: ReasoningEffort | None = Field(default=None, description="Per-agent reasoning-effort default (None = runtime default)")
     memory_enabled: bool = Field(default=True, description="Whether this agent may use memory")
     soul: str | None = Field(default=None, description="SOUL.md content")
+    client_id: str | None = Field(default=None, description="Client this agent was stamped for, if any (fleet templates)")
+    template_id: str | None = Field(default=None, description="Fleet template this agent was stamped from, if any")
+    template_version: str | None = Field(default=None, description="Version of the fleet template this agent was stamped from, if any")
 
 
 class AgentsListResponse(BaseModel):
@@ -216,6 +219,9 @@ def _agent_config_to_response(agent_cfg: AgentConfig, include_soul: bool = False
         reasoning_effort=agent_cfg.reasoning_effort,
         memory_enabled=agent_cfg.memory_enabled,
         soul=soul,
+        client_id=agent_cfg.client_id,
+        template_id=agent_cfg.template_id,
+        template_version=agent_cfg.template_version,
     )
 
 

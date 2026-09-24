@@ -122,6 +122,57 @@
   display: block;
   margin-top: 0.25rem;
 }
+.agentsSection {
+  margin-top: 0.6rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--line);
+}
+.agentsLabel {
+  display: block;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.3rem;
+}
+.agentsList {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 0.5rem;
+  display: grid;
+  gap: 0.3rem;
+}
+.agentsList li {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.82rem;
+  color: var(--ink);
+}
+.agentsList svg {
+  color: var(--blue);
+  flex: 0 0 auto;
+}
+.addAgentForm {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+.addAgentForm select {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--strong);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 0.35rem 0.45rem;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.8rem;
+}
+.addAgentForm .linkButton {
+  margin-left: 0;
+}
 .selectLabel {
   display: block;
   margin-bottom: 0.3rem;

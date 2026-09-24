@@ -554,6 +554,7 @@ async def langgraph_runtime(app: FastAPI, startup_config: AppConfig) -> AsyncGen
         app.state.thread_store = make_thread_store(sf, app.state.store)
         if sf is not None:
             from deerflow.persistence.clients import ClientRepository
+            from deerflow.persistence.fleet import FleetBindingRepository
             from deerflow.persistence.mcp_tasks import McpTaskRepository
             from deerflow.persistence.projects import ProjectDocumentRepository, ProjectRepository
             from deerflow.persistence.scheduled_task_runs import (
@@ -565,6 +566,7 @@ async def langgraph_runtime(app: FastAPI, startup_config: AppConfig) -> AsyncGen
             app.state.project_repo = ProjectRepository(sf)
             app.state.project_document_repo = ProjectDocumentRepository(sf)
             app.state.client_repo = ClientRepository(sf)
+            app.state.fleet_binding_repo = FleetBindingRepository(sf)
             app.state.scheduled_task_repo = ScheduledTaskRepository(
                 sf,
                 run_repository=app.state.run_store,
@@ -692,6 +694,7 @@ get_run_store: Callable[[Request], RunStore] = _require("run_store", "Run store"
 get_project_repo = _require("project_repo", "Projects")
 get_project_document_repo = _require("project_document_repo", "Projects")
 get_client_repo = _require("client_repo", "Clients")
+get_fleet_binding_repo = _require("fleet_binding_repo", "Fleet")
 
 
 def get_store(request: Request):
@@ -837,7 +840,8 @@ def audit_actor_id(request: Request) -> str | None:
     ``.cookies`` at all. Returns ``None`` on that same fallback path, which
     only means the audit row's ``actor_user_id`` is left blank.
     """
-    user = getattr(request.state, "user", None)
+    # Handlers called directly (blocking-I/O tests) may pass request=None.
+    user = getattr(getattr(request, "state", None), "user", None)
     user_id = getattr(user, "id", None)
     return str(user_id) if user_id is not None else None
 

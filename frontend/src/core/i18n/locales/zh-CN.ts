@@ -1858,4 +1858,15 @@ export const zhCN: Translations = {
     mfaBackToLogin: "返回登录",
     mfaInvalidCode: "验证码不正确，请重试。",
   },
+  commandCenter: {
+    clientAgents: {
+      title: "智能体",
+      loading: "正在加载智能体…",
+      empty: "还没有智能体。",
+      selectPlaceholder: "从模板添加…",
+      add: "添加",
+      adding: "添加中…",
+      addError: "添加失败，请重试。",
+    },
+  },
 };

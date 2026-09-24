@@ -1982,4 +1982,15 @@ export const enUS: Translations = {
     mfaBackToLogin: "Back to sign in",
     mfaInvalidCode: "That code isn't valid. Please try again.",
   },
+  commandCenter: {
+    clientAgents: {
+      title: "Agents",
+      loading: "Loading agents…",
+      empty: "No agents yet.",
+      selectPlaceholder: "Add from template…",
+      add: "Add",
+      adding: "Adding…",
+      addError: "Couldn't add that agent.",
+    },
+  },
 };

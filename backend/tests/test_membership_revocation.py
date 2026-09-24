@@ -47,6 +47,7 @@ from deerflow.persistence.organizations.branding import OrganizationBrandingRow
 from deerflow.persistence.organizations.identity import private_organization_id, private_organization_slug
 from deerflow.persistence.organizations.invitation import InvitationRow
 from deerflow.persistence.organizations.model import OrganizationMemberRow, OrganizationRow
+from deerflow.persistence.user.model import UserRow
 
 SHARED_ID = "revocation-workspace-1"
 ADMIN = "actor-admin"
@@ -65,6 +66,8 @@ async def membership_db(monkeypatch):
             lambda sync: Base.metadata.create_all(
                 sync,
                 tables=[
+                    # Organization resolution also checks users.disabled_at.
+                    UserRow.__table__,
                     OrganizationRow.__table__,
                     OrganizationMemberRow.__table__,
                     OrganizationBrandingRow.__table__,
