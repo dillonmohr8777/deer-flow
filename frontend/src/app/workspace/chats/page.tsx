@@ -139,7 +139,7 @@ export default function ChatsPage() {
                           : t.chats.noArchivedChats}
                       </p>
                     ) : (
-                      <div role="status" className="py-6">
+                      <div role="status" className="px-2 py-6">
                         <EmptyState
                           momo="lead"
                           title={t.chats.noActiveChats}

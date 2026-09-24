@@ -235,14 +235,17 @@ export function SettingsDialog(props: SettingsDialogProps) {
             {t.settings.description}
           </p>
         </DialogHeader>
-        {/* minmax(0,1fr), not the implicit auto column: on phones the panel
-            otherwise grows to its widest child and runs past the dialog. */}
+        {/* minmax(0,1fr), not the implicit auto column, plus min-w-0 on
+            both items: on phones they otherwise grow to their widest child
+            and run past the dialog. */}
         <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)] gap-3 md:grid-cols-[220px_minmax(0,1fr)] md:grid-rows-1 md:gap-4">
           <nav
             ref={navRef}
             aria-label={t.settings.title}
             className={cn(
-              "bg-sidebar min-h-0 overflow-x-auto rounded-lg border p-1.5 md:overflow-y-auto md:p-2",
+              // min-w-0: a grid item defaults to its min-content width, so
+              // without it the rail never scrolls and runs off the dialog.
+              "bg-sidebar min-h-0 min-w-0 overflow-x-auto rounded-lg border p-1.5 md:overflow-y-auto md:p-2",
               styles.tabFade,
             )}
           >
@@ -271,7 +274,12 @@ export function SettingsDialog(props: SettingsDialogProps) {
               })}
             </ul>
           </nav>
-          <ScrollArea className="h-full min-h-0 rounded-lg border">
+          <ScrollArea
+            className={cn(
+              "h-full min-h-0 min-w-0 rounded-lg border",
+              styles.panel,
+            )}
+          >
             <div className="space-y-8 p-4 sm:p-6">
               {activeSection === "models" && <ModelSettingsPage />}
               {activeSection === "account" && <AccountSettingsPage />}
