@@ -914,8 +914,9 @@ async def get_current_user_from_request(request: Request):
 
     from app.gateway.auth import decode_token
     from app.gateway.auth.errors import AuthErrorCode, AuthErrorResponse, TokenError, token_error_to_code
+    from app.gateway.auth.session_cookie import ACCESS_TOKEN_COOKIE_NAME
 
-    access_token = request.cookies.get("access_token")
+    access_token = request.cookies.get(ACCESS_TOKEN_COOKIE_NAME)
     if not access_token:
         raise HTTPException(
             status_code=401,

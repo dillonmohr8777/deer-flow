@@ -20,6 +20,7 @@ from langgraph_sdk import Auth
 
 from app.gateway.auth.errors import TokenError
 from app.gateway.auth.jwt import decode_token
+from app.gateway.auth.session_cookie import ACCESS_TOKEN_COOKIE_NAME
 from app.gateway.auth_disabled import AUTH_DISABLED_USER_ID, is_auth_disabled
 from app.gateway.deps import get_local_provider
 
@@ -78,7 +79,7 @@ async def authenticate(request):
     if is_auth_disabled():
         return AUTH_DISABLED_USER_ID
 
-    token = request.cookies.get("access_token")
+    token = request.cookies.get(ACCESS_TOKEN_COOKIE_NAME)
     if not token:
         raise Auth.exceptions.HTTPException(
             status_code=401,
