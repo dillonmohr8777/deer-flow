@@ -11,7 +11,6 @@ import {
   SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { BrandSignature } from "@/components/workspace/command-center/brand-signature";
 import { BrandMotionToggle } from "@/components/workspace/command-center/workspace-appearance";
 import { useI18n } from "@/core/i18n/hooks";
 import { env } from "@/env";
@@ -45,15 +44,17 @@ export function WorkspaceHeader({ className }: { className?: string }) {
                 MomoBot
               </Link>
             ) : (
+              // The product name leads the sidebar on its own; the Momentum
+              // signature sits at the far end of the sidebar footer
+              // (workspace-sidebar.tsx) instead of stacked under it.
               <Link
                 href="/workspace/command-center"
-                className="ml-2 flex min-w-0 flex-1 flex-col gap-0.5"
+                className="ml-2 min-w-0 flex-1"
                 aria-label="MomoBot Command Center"
               >
-                <span className="text-primary font-serif text-sm leading-none font-semibold">
+                <span className="text-primary block font-serif text-2xl leading-none font-bold tracking-tight">
                   MomoBot
                 </span>
-                <BrandSignature />
               </Link>
             )}
             {env.NEXT_PUBLIC_STATIC_WEBSITE_ONLY !== "true" && (

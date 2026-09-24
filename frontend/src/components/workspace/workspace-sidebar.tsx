@@ -13,6 +13,7 @@ import { useWorkspaceAppearance } from "@/components/workspace/command-center/ap
 
 import { WorkspaceChannelsList } from "./channels/workspace-channels-list";
 import { BackgroundJobs } from "./command-center/background-jobs";
+import { BrandSignature } from "./command-center/brand-signature";
 import { PluginNavigation } from "./plugin-navigation";
 import { ProjectsSection } from "./projects-section";
 import { RecentChatList } from "./recent-chat-list";
@@ -59,6 +60,12 @@ export function WorkspaceSidebar({
           )}
           <BackgroundJobs />
           <WorkspaceNavMenu />
+          {/* The maker's signature, at the far end from the MomoBot name. */}
+          {isSidebarOpen && (
+            <div className={styles.signature}>
+              <BrandSignature />
+            </div>
+          )}
         </SidebarFooter>
         <SidebarRail />
       </Sidebar>
