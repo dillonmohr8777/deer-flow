@@ -72,13 +72,17 @@ MomoBot needs:
 - file storage;
 - Cloudflare in front.
 
-It doesn't need GPUs, an Oracle database or Azure. The prices below are rough list prices from memory; confirm them on each provider's calculator before buying.
+It doesn't need GPUs, an Oracle database or Azure.
+
+**Hetzner reprice.** Hetzner raised its CCX and CPX lines 2.1x to 3.1x on 2026-06-15, blaming DRAM prices. The US only offers those two lines. Prices below were checked 2026-09-23 against the DigitalOcean pricing pages and CostGoat's Hetzner tracker (updated 2026-09-05). The Google Cloud row is still from memory.
 
 | Route | Setup | ~$/mo |
 |---|---|---|
-| Lean, recommended under $150 | Hetzner Cloud in Ashburn: an 8 dedicated vCPU, 32 GB app server with Postgres in Docker (`compose.postgres.yaml`), a small test server, nightly encrypted backups to Cloudflare R2, and Cloudflare Free | 65 to 90 |
-| Managed database | DigitalOcean in NYC: a 4 to 8 vCPU droplet, managed Postgres with point-in-time restore, and a small test droplet | 90 to 140 |
-| Enterprise | Google Cloud, already in the access registry: Compute Engine, Cloud SQL, Cloud Storage, Secret Manager, Cloudflare Pro, and paid Sentry and Langfuse | 350 to 420 |
+| Lean, recommended under $150 | DigitalOcean in NYC: a Basic 8 vCPU, 16 GB droplet ($96), managed Postgres ($15 to $30), a small test droplet (~$12), nightly encrypted backups to Cloudflare R2, and Cloudflare Free | 125 to 140 |
+| Most power per dollar, EU data | Hetzner in Germany or Finland: a CX53 with 16 shared vCPU and 32 GB (about EUR 29.50), Postgres in Docker (`compose.postgres.yaml`), a CX23 test server, and backups to R2. Data sits in the EU, about 100 ms from Philly | 45 to 50 |
+| Enterprise | Google Cloud, already in the access registry: Compute Engine, Cloud SQL, Cloud Storage, Secret Manager, Cloudflare Pro, and paid Sentry and Langfuse. Unverified | 350 to 420 |
+
+Hetzner US no longer beats DigitalOcean: a CPX42 with 8 shared vCPU and 16 GB is about EUR 70, with no managed database and 1 TB of traffic. A CCX33 with 8 dedicated vCPU and 32 GB is about EUR 139.
 
 - **Monitoring:** the free tiers of Sentry, Better Stack, Langfuse and Cloudflare cover us at this size.
 - **Oracle's free ARM tier** is a test box only.
