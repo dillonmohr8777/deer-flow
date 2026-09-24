@@ -77,7 +77,7 @@ async def fleet_stamping_world(tmp_path, monkeypatch):
         session.add(OrganizationRow(id=ORG_S, slug=private_organization_slug(STORAGE_S), name="Shared S", status="active", storage_user_id=STORAGE_S, created_at=now, updated_at=now))
         # S: A is owner (org admin path); B is a plain member with no client
         # assignment (must be denied); C is a plain member WITH a client
-        # assignment (must be allowed) -- assignment is granted per-test.
+        # assignment (must be allowed); assignment is granted per-test.
         session.add(OrganizationMemberRow(organization_id=ORG_S, user_id=USER_A, role="owner", status="active", created_at=now, updated_at=now))
         session.add(OrganizationMemberRow(organization_id=ORG_S, user_id=USER_B, role="member", status="active", created_at=now, updated_at=now))
         session.add(OrganizationMemberRow(organization_id=ORG_S, user_id=USER_C, role="member", status="active", created_at=now, updated_at=now))

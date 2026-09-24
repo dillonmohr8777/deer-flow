@@ -1588,7 +1588,7 @@ export interface Translations {
     };
   };
 
-  // Command Center — Client Spaces stamped agents (fleet templates)
+  // Command Center: Client Spaces stamped agents (fleet templates)
   commandCenter: {
     clientAgents: {
       title: string;

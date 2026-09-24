@@ -318,7 +318,7 @@ async def _is_active_org_admin(user_id: str) -> bool:
         return False
     # Lazy import: resolved at call time, not at module import time, so a
     # test's ``monkeypatch.setattr("deerflow.persistence.engine.get_session_factory", ...)``
-    # (org_isolation_fixtures.org_world) takes effect -- a module-level
+    # (org_isolation_fixtures.org_world) takes effect; a module-level
     # ``from ... import get_session_factory`` would bind the pre-patch
     # function forever. Mirrors ``routers/invitations.py``'s ``_session_factory()``.
     from deerflow.persistence.engine import get_session_factory

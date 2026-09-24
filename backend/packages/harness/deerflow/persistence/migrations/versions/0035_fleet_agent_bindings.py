@@ -5,7 +5,7 @@ Revises: 0034_clients
 
 Fleet foundation item 3 (client binding). ``POST /api/clients/{client_id}/agents``
 stamps a fleet template into a real custom agent for one client. Custom agents
-are stored per-user (``agents`` table, JSON ``config`` document — see
+are stored per-user (``agents`` table, JSON ``config`` document; see
 ``deerflow.persistence.agents.model``), so this table is the organization-scoped
 index that answers "which agent did we already stamp for (client, template)"
 without ever calling ``AgentStore.list_all()`` from an org-scoped route (that

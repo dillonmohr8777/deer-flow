@@ -1,7 +1,7 @@
 """Read-only fleet template catalog API.
 
 Templates are curated, versioned files under ``fleet/templates/`` (see
-``deerflow.fleet``), not database rows -- there is nothing to scope by
+``deerflow.fleet``), not database rows; there is nothing to scope by
 organization here, unlike ``clients.py``. Stamping a template onto a client
 lives on the client roster router (``POST /api/clients/{client_id}/agents``),
 since that action *is* organization- and client-scoped.
@@ -65,7 +65,7 @@ async def list_fleet_templates(request: Request) -> FleetTemplateListResponse:
         templates = await asyncio.to_thread(load_fleet_templates)
     except FleetTemplateError as exc:
         # A curated, operator-owned template library that fails to load is a
-        # deployment misconfiguration -- surface it plainly rather than
+        # deployment misconfiguration; surface it plainly rather than
         # silently dropping the broken entry from the catalog.
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     return FleetTemplateListResponse(templates=[_to_response(t) for t in templates])

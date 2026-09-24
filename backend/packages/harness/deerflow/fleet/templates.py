@@ -79,7 +79,7 @@ class FleetTemplate(BaseModel):
     schedule: FleetTemplateSchedule
     acceptance_criteria: list[str] = Field(min_length=1, description="What 'done' looks like for one run of this agent.")
 
-    # Not part of template.yaml -- populated from the sibling SOUL.md by the
+    # Not part of template.yaml; populated from the sibling SOUL.md by the
     # loader. Kept on the model so callers have one object to pass around.
     soul: str = ""
 
@@ -92,7 +92,7 @@ class FleetTemplate(BaseModel):
     def render_soul(self, *, client_name: str) -> str:
         """Fill the ``{client_name}`` placeholder in the SOUL.md body.
 
-        A literal substring replace, not ``str.format`` -- SOUL.md is free-form
+        A literal substring replace, not ``str.format``; SOUL.md is free-form
         prose that may contain unrelated curly braces (a markdown code sample,
         an aside), and those must not be mistaken for format fields.
         """
@@ -135,7 +135,7 @@ def load_fleet_templates() -> list[FleetTemplate]:
     """Load and validate every template under ``fleet/templates/``, sorted by id.
 
     An empty or absent ``fleet/templates/`` directory returns an empty list
-    rather than raising -- the catalog simply has nothing to offer yet. A
+    rather than raising; the catalog simply has nothing to offer yet. A
     malformed template directory raises :class:`FleetTemplateError` (this is
     a deployment's own template library, curated by operators, so a bad file
     should fail loudly rather than being silently skipped).

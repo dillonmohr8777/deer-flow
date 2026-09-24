@@ -4,7 +4,7 @@ One row per ``(client_id, template_id)``: the organization-scoped record of
 "this client already has an agent stamped from this template", so
 ``POST /api/clients/{client_id}/agents`` can answer idempotently without ever
 scanning every owner's agents (``AgentStore.list_all()`` is reserved for the
-GitHub registry and must never be called from an org-scoped route — see
+GitHub registry and must never be called from an org-scoped route; see
 ``persistence/agents/sql.py``). The actual agent definition (name, model,
 skills, SOUL.md) lives in the personal ``agents`` table, owned by whichever
 user stamped it; this table is the org-shared index pointing at it.

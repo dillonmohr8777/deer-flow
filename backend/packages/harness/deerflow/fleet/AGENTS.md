@@ -15,7 +15,7 @@ so an unknown field is a validation error, not a silently ignored key. A
 template's `id` must equal its directory name. `schedule.cron` is validated
 with the same `normalize_cron_expression()` / `croniter` used by
 `scheduler/schedules.py`, and `schedule.timezone` with that module's
-`validate_timezone()` — reuse those, do not re-implement cron/timezone checks
+`validate_timezone()`; reuse those, do not re-implement cron/timezone checks
 here.
 
 Stamping (turning a template + a client into a real custom agent and a paused

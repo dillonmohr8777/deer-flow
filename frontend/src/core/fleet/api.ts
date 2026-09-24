@@ -24,7 +24,7 @@ async function readFleetAPIError(
   return fallback;
 }
 
-/** ``GET /api/fleet/templates`` -- the fleet template catalog. */
+/** ``GET /api/fleet/templates``; the fleet template catalog. */
 export async function listFleetTemplates(): Promise<FleetTemplate[]> {
   const response = await fetchWithAuth(
     `${getBackendBaseURL()}/api/fleet/templates`,
@@ -41,7 +41,7 @@ export async function listFleetTemplates(): Promise<FleetTemplate[]> {
   return body.templates;
 }
 
-/** ``GET /api/clients/{client_id}/agents`` -- this client's stamped agents. */
+/** ``GET /api/clients/{client_id}/agents``; this client's stamped agents. */
 export async function listClientAgents(
   clientId: string,
 ): Promise<FleetAgentBinding[]> {
@@ -61,7 +61,7 @@ export async function listClientAgents(
 }
 
 /**
- * ``POST /api/clients/{client_id}/agents`` -- stamp a template into an agent
+ * ``POST /api/clients/{client_id}/agents``; stamp a template into an agent
  * for this client. Idempotent on the backend: stamping the same template
  * twice for one client returns the existing agent rather than a duplicate.
  */
