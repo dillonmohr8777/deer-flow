@@ -1161,6 +1161,7 @@ export interface Translations {
     sections: {
       models: string;
       account: string;
+      security: string;
       appearance: string;
       channels: string;
       memory: string;
@@ -1547,6 +1548,37 @@ export interface Translations {
       updatePassword: string;
       signOut: string;
     };
+    security: {
+      title: string;
+      description: string;
+      statusEnabled: string;
+      statusDisabledDescription: string;
+      enableButton: string;
+      disableButton: string;
+      enrollScanTitle: string;
+      enrollScanInstructions: string;
+      enrollManualEntryLabel: string;
+      enrollCodeLabel: string;
+      enrollCodePlaceholder: string;
+      enrollConfirmButton: string;
+      enrollCancelButton: string;
+      enrollInvalidCode: string;
+      recoveryCodesTitle: string;
+      recoveryCodesDescription: string;
+      recoveryCodesCopyButton: string;
+      recoveryCodesCopied: string;
+      recoveryCodesDoneButton: string;
+      disableTitle: string;
+      disablePasswordLabel: string;
+      disableCodeLabel: string;
+      disableRecoveryCodeLabel: string;
+      disableUseRecoveryCodeLink: string;
+      disableUseCodeLink: string;
+      disableSubmitButton: string;
+      disableCancelButton: string;
+      disableIncorrect: string;
+      networkError: string;
+    };
     acknowledge: {
       emptyTitle: string;
       emptyDescription: string;
@@ -1586,5 +1618,14 @@ export interface Translations {
       sso_account_exists: string;
       sso_not_allowed: string;
     };
+    mfaTitle: string;
+    mfaDescription: string;
+    mfaCodePlaceholder: string;
+    mfaRecoveryCodePlaceholder: string;
+    mfaUseRecoveryCode: string;
+    mfaUseCode: string;
+    mfaVerifyButton: string;
+    mfaBackToLogin: string;
+    mfaInvalidCode: string;
   };
 }

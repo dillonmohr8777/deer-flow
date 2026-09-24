@@ -67,6 +67,11 @@ export default function LoginPage() {
   // Nudge the user toward the SSO buttons without confirming the account exists.
   const [showSsoHint, setShowSsoHint] = useState(false);
   const [loading, setLoading] = useState(false);
+  // Set once password login returns mfa_required; the challenge is
+  // single-use and short-lived, exchanged at POST /login/mfa below.
+  const [mfaChallenge, setMfaChallenge] = useState<string | null>(null);
+  const [mfaCode, setMfaCode] = useState("");
+  const [mfaUseRecoveryCode, setMfaUseRecoveryCode] = useState(false);
   // Momo's Hello film plays while motion is allowed (reduced motion, hidden
   // tab and pause are decided inside) and holds its poster otherwise.
   const introMotion = useIntroMotion();
@@ -199,9 +204,54 @@ export default function LoginPage() {
         return;
       }
 
+      const data = (await res.json()) as {
+        mfa_required?: boolean;
+        challenge?: string;
+      };
+      if (isLogin && data.mfa_required && data.challenge) {
+        // Password verified but the account has MFA enabled: no session yet,
+        // just the single-use challenge for the second step below.
+        setMfaChallenge(data.challenge);
+        return;
+      }
+
       saveRememberLoginPreference({ email, rememberMe });
 
       // Both login and register set a cookie — redirect to workspace
+      router.push(redirectPath);
+    } catch {
+      setError(t.login.networkError);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleMfaSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+
+    try {
+      const res = await fetch("/api/v1/auth/login/mfa", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          challenge: mfaChallenge,
+          remember_me: rememberMe,
+          ...(mfaUseRecoveryCode
+            ? { recovery_code: mfaCode }
+            : { code: mfaCode }),
+        }),
+        credentials: "include",
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        setError(parseAuthError(data).message || t.login.mfaInvalidCode);
+        return;
+      }
+
+      saveRememberLoginPreference({ email, rememberMe });
       router.push(redirectPath);
     } catch {
       setError(t.login.networkError);
@@ -242,11 +292,69 @@ export default function LoginPage() {
           className={cn("mt-2", mutedClass, paper && "m-voice-serif text-lg")}
           style={mutedStyle}
         >
-          {isLogin ? t.login.signInTitle : t.login.createAccountTitle}
+          {mfaChallenge
+            ? t.login.mfaTitle
+            : isLogin
+              ? t.login.signInTitle
+              : t.login.createAccountTitle}
         </h1>
       </div>
 
-      {showSetupStatusUnavailable && (
+      {mfaChallenge && (
+        <form onSubmit={handleMfaSubmit} className="space-y-2">
+          <p className={cn("text-sm", mutedClass)} style={mutedStyle}>
+            {t.login.mfaDescription}
+          </p>
+          <Input
+            type="text"
+            inputMode={mfaUseRecoveryCode ? "text" : "numeric"}
+            placeholder={
+              mfaUseRecoveryCode
+                ? t.login.mfaRecoveryCodePlaceholder
+                : t.login.mfaCodePlaceholder
+            }
+            value={mfaCode}
+            onChange={(e) => setMfaCode(e.target.value)}
+            required
+            autoFocus
+          />
+          {error && <p className="text-sm text-red-500">{error}</p>}
+          <Button type="submit" className="w-full" disabled={loading}>
+            {loading ? t.login.pleaseWait : t.login.mfaVerifyButton}
+          </Button>
+          <div className="flex items-center justify-between text-sm">
+            <button
+              type="button"
+              onClick={() => {
+                setMfaUseRecoveryCode(!mfaUseRecoveryCode);
+                setMfaCode("");
+                setError("");
+              }}
+              className={cn("hover:underline", linkClass)}
+              style={linkStyle}
+            >
+              {mfaUseRecoveryCode
+                ? t.login.mfaUseCode
+                : t.login.mfaUseRecoveryCode}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setMfaChallenge(null);
+                setMfaCode("");
+                setPassword("");
+                setError("");
+              }}
+              className={cn(mutedClass, "hover:underline")}
+              style={mutedStyle}
+            >
+              {t.login.mfaBackToLogin}
+            </button>
+          </div>
+        </form>
+      )}
+
+      {!mfaChallenge && showSetupStatusUnavailable && (
         <div
           role="status"
           aria-live="polite"
@@ -274,7 +382,7 @@ export default function LoginPage() {
         </div>
       )}
 
-      {systemNeedsAdminSetup && (
+      {!mfaChallenge && systemNeedsAdminSetup && (
         <div className="border-l-2 border-blue-500 ps-3 text-sm">
           <p className="font-medium">{t.login.adminSetupRequiredTitle}</p>
           <p className={cn("mt-1", mutedClass)} style={mutedStyle}>
@@ -293,135 +401,139 @@ export default function LoginPage() {
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="space-y-2">
-        <div className="flex flex-col space-y-1">
-          <label htmlFor="email" className="text-sm font-medium">
-            {t.login.email}
-          </label>
-          <Input
-            id="email"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder={t.login.emailPlaceholder}
-            required
-          />
-        </div>
-        <div className="flex flex-col space-y-1">
-          <label htmlFor="password" className="text-sm font-medium">
-            {t.login.password}
-          </label>
-          <Input
-            id="password"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder={t.login.passwordPlaceholder}
-            required
-            minLength={isLogin ? 6 : 8}
-          />
-        </div>
-
-        <RememberSessionOption
-          checked={rememberMe}
-          onCheckedChange={setRememberMe}
-        />
-
-        {error && <p className="text-sm text-red-500">{error}</p>}
-
-        <Button
-          type="submit"
-          className="w-full"
-          disabled={loading}
-          style={
-            paper
-              ? {
-                  background: "var(--paper-royal)",
-                  color: "var(--paper-cream-hi)",
-                }
-              : undefined
-          }
-        >
-          {loading
-            ? t.login.pleaseWait
-            : isLogin
-              ? t.login.signIn
-              : t.login.createAccount}
-        </Button>
-      </form>
-
-      {ssoProviders.length > 0 && (
-        <div className="space-y-2">
-          {isLogin && (
-            <div className="relative my-4">
-              <div className="absolute inset-0 flex items-center">
-                <span
-                  className="w-full border-t"
-                  style={
-                    paper ? { borderColor: "var(--paper-line)" } : undefined
-                  }
-                />
-              </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span
-                  className={cn(
-                    "px-2",
-                    !paper && "bg-background text-muted-foreground",
-                  )}
-                  style={
-                    paper
-                      ? {
-                          background: "var(--paper-cream-hi)",
-                          color: "var(--paper-ink-muted)",
-                        }
-                      : undefined
-                  }
-                >
-                  {t.login.orContinueWith}
-                </span>
-              </div>
+      {!mfaChallenge && (
+        <>
+          <form onSubmit={handleSubmit} className="space-y-2">
+            <div className="flex flex-col space-y-1">
+              <label htmlFor="email" className="text-sm font-medium">
+                {t.login.email}
+              </label>
+              <Input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder={t.login.emailPlaceholder}
+                required
+              />
             </div>
-          )}
-          {showSsoHint && (
-            <p
-              className={cn("text-center text-sm", mutedClass)}
-              style={mutedStyle}
-            >
-              {t.login.ssoHint}
-            </p>
-          )}
-          {ssoProviders.map((provider) => (
+            <div className="flex flex-col space-y-1">
+              <label htmlFor="password" className="text-sm font-medium">
+                {t.login.password}
+              </label>
+              <Input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder={t.login.passwordPlaceholder}
+                required
+                minLength={isLogin ? 6 : 8}
+              />
+            </div>
+
+            <RememberSessionOption
+              checked={rememberMe}
+              onCheckedChange={setRememberMe}
+            />
+
+            {error && <p className="text-sm text-red-500">{error}</p>}
+
             <Button
-              key={provider.id}
-              type="button"
-              variant="outline"
+              type="submit"
               className="w-full"
               disabled={loading}
-              onClick={() => {
-                window.location.href = `/api/v1/auth/oauth/${provider.id}?next=${encodeURIComponent(redirectPath)}&remember_me=${String(rememberMe)}`;
-              }}
+              style={
+                paper
+                  ? {
+                      background: "var(--paper-royal)",
+                      color: "var(--paper-cream-hi)",
+                    }
+                  : undefined
+              }
             >
-              {t.login.continueWith(provider.display_name)}
+              {loading
+                ? t.login.pleaseWait
+                : isLogin
+                  ? t.login.signIn
+                  : t.login.createAccount}
             </Button>
-          ))}
-        </div>
-      )}
+          </form>
 
-      {regularSignupAllowed && (
-        <div className="text-center text-sm">
-          <button
-            type="button"
-            onClick={() => {
-              setIsLogin(!isLogin);
-              setError("");
-              setShowSsoHint(false);
-            }}
-            className={cn("hover:underline", linkClass)}
-            style={linkStyle}
-          >
-            {isLogin ? t.login.noAccountSignUp : t.login.haveAccountSignIn}
-          </button>
-        </div>
+          {ssoProviders.length > 0 && (
+            <div className="space-y-2">
+              {isLogin && (
+                <div className="relative my-4">
+                  <div className="absolute inset-0 flex items-center">
+                    <span
+                      className="w-full border-t"
+                      style={
+                        paper ? { borderColor: "var(--paper-line)" } : undefined
+                      }
+                    />
+                  </div>
+                  <div className="relative flex justify-center text-xs uppercase">
+                    <span
+                      className={cn(
+                        "px-2",
+                        !paper && "bg-background text-muted-foreground",
+                      )}
+                      style={
+                        paper
+                          ? {
+                              background: "var(--paper-cream-hi)",
+                              color: "var(--paper-ink-muted)",
+                            }
+                          : undefined
+                      }
+                    >
+                      {t.login.orContinueWith}
+                    </span>
+                  </div>
+                </div>
+              )}
+              {showSsoHint && (
+                <p
+                  className={cn("text-center text-sm", mutedClass)}
+                  style={mutedStyle}
+                >
+                  {t.login.ssoHint}
+                </p>
+              )}
+              {ssoProviders.map((provider) => (
+                <Button
+                  key={provider.id}
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  disabled={loading}
+                  onClick={() => {
+                    window.location.href = `/api/v1/auth/oauth/${provider.id}?next=${encodeURIComponent(redirectPath)}&remember_me=${String(rememberMe)}`;
+                  }}
+                >
+                  {t.login.continueWith(provider.display_name)}
+                </Button>
+              ))}
+            </div>
+          )}
+
+          {regularSignupAllowed && (
+            <div className="text-center text-sm">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsLogin(!isLogin);
+                  setError("");
+                  setShowSsoHint(false);
+                }}
+                className={cn("hover:underline", linkClass)}
+                style={linkStyle}
+              >
+                {isLogin ? t.login.noAccountSignUp : t.login.haveAccountSignIn}
+              </button>
+            </div>
+          )}
+        </>
       )}
 
       <div className={cn("text-center text-xs", mutedClass)} style={mutedStyle}>
