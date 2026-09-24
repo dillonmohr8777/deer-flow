@@ -697,6 +697,44 @@ def test_pat_projects_policy_admits_exactly_the_mounted_routes():
     assert is_pat_allowed_route("GET", move_path) is False
 
 
+def test_pat_fleet_agents_scheduled_tasks_policy():
+    """Dillon workspace seed script (2026-09-24): a PAT-driven seeding script
+    reads the fleet template catalog, creates custom agents, and creates plus
+    pauses/resumes scheduled tasks with no browser session available. Every
+    route the script calls is admitted; deliberately unimplemented-for-PAT
+    neighbors (agent delete/update, the agent name-availability probe,
+    scheduled-task delete/trigger/runs, and client-scoped fleet stamping)
+    stay default-denied, pinning today's narrow, enumerated surface."""
+    from app.gateway.auth.pat import is_pat_allowed_route
+
+    for method, path in [
+        ("GET", "/api/fleet/templates"),
+        ("GET", "/api/agents"),
+        ("POST", "/api/agents"),
+        ("GET", "/api/agents/chief-of-staff"),
+        ("GET", "/api/scheduled-tasks"),
+        ("POST", "/api/scheduled-tasks"),
+        ("GET", "/api/scheduled-tasks/task-1"),
+        ("POST", "/api/scheduled-tasks/task-1/pause"),
+        ("POST", "/api/scheduled-tasks/task-1/resume"),
+    ]:
+        assert is_pat_allowed_route(method, path), f"{method} {path} is implemented but PAT-denied"
+
+    for method, path in [
+        ("GET", "/api/agents/check"),
+        ("PATCH", "/api/agents/chief-of-staff"),
+        ("DELETE", "/api/agents/chief-of-staff"),
+        ("PATCH", "/api/scheduled-tasks/task-1"),
+        ("DELETE", "/api/scheduled-tasks/task-1"),
+        ("POST", "/api/scheduled-tasks/task-1/trigger"),
+        ("GET", "/api/scheduled-tasks/task-1/runs"),
+        ("POST", "/api/fleet/templates"),
+        ("GET", "/api/clients/client-1/agents"),
+        ("POST", "/api/clients/client-1/agents"),
+    ]:
+        assert not is_pat_allowed_route(method, path), f"{method} {path} must stay PAT-denied"
+
+
 def test_pat_scopes_enforced_on_stateless_run_entry(client):
     """Follow-up to the review's P1-1: the stateless run entrypoints now
     carry @require_permission("runs", "create"), so a threads:read-only PAT

@@ -121,6 +121,24 @@ _PAT_ROUTE_RULES: tuple[tuple[frozenset[str], re.Pattern[str]], ...] = (
     # endpoint is read-only, requires runs:read, and filters rows to the PAT
     # owner's runs; the rest of /api/console remains default-denied.
     (frozenset({"GET"}), re.compile(r"^/api/console/usage-ledger$")),
+    # Fleet template catalog, custom-agent create/list, and scheduled-task
+    # create/list/pause/resume (Dillon workspace seed script, 2026-09-24): a
+    # PAT-driven seeding script stamps fleet templates into real agents and
+    # schedules with no browser session available. Enumerated per
+    # implemented route, same no-dead-methods discipline as the rest of this
+    # policy: ``GET /api/agents/check`` stays denied (name-availability probe,
+    # not needed by the script), and agent delete/update plus scheduled-task
+    # delete/trigger/runs stay PAT-denied until a script actually needs them.
+    # Every admitted route here is already gated by ``threads``/``runs``
+    # permissions already in ``PAT_ALLOWED_SCOPES`` (scheduled-tasks) or by no
+    # ``@require_permission`` at all (agents), so no scope-enum change is
+    # needed alongside this route widening.
+    (frozenset({"GET"}), re.compile(r"^/api/fleet/templates$")),
+    (frozenset({"GET", "POST"}), re.compile(r"^/api/agents$")),
+    (frozenset({"GET"}), re.compile(r"^/api/agents/(?!check$)[^/]+$")),
+    (frozenset({"GET", "POST"}), re.compile(r"^/api/scheduled-tasks$")),
+    (frozenset({"GET"}), re.compile(r"^/api/scheduled-tasks/[^/]+$")),
+    (frozenset({"POST"}), re.compile(r"^/api/scheduled-tasks/[^/]+/(pause|resume)$")),
 )
 
 _BASE62_ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
