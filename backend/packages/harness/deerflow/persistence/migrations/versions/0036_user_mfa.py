@@ -1,7 +1,7 @@
 """user_mfa: TOTP two-factor authentication.
 
-Revision ID: 0035_user_mfa
-Revises: 0034_clients
+Revision ID: 0036_user_mfa
+Revises: 0035_fleet_agent_bindings
 
 One row per user. ``enabled_at`` is NULL while enrollment is pending
 (started but not yet confirmed with a valid code); ``secret_encrypted``
@@ -18,8 +18,8 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0035_user_mfa"
-down_revision: str | Sequence[str] | None = "0034_clients"
+revision: str = "0036_user_mfa"
+down_revision: str | Sequence[str] | None = "0035_fleet_agent_bindings"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

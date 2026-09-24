@@ -22,7 +22,7 @@ Tests build on `tests/org_isolation_fixtures.py` (private orgs A, B, C; shared w
 
 A disabled account (`users.disabled_at`, migration `0033_audit_events`) resolves no organization in `active_organization_for_user`, so its sessions, PATs and internal delegations all stop at that one check.
 
-`user_mfa` (`persistence/user_mfa/`, migration `0035_user_mfa`) is a 1:1 auth extension of `users`, FK-cascaded on delete like `user_preferences` (unlike `clients`, it is not organization-owned). `enabled_at IS NULL` means enrollment was started but never confirmed; `secret_encrypted` is Fernet ciphertext (`app.gateway.auth.mfa_crypto`), never plaintext; `recovery_codes` is a JSON list of `{hash, used_at}`, only ever replaced wholesale (with `flag_modified`) so the JSON column's change tracking sees a real diff. `mark_recovery_code_used` reads with `with_for_update` to fence two concurrent logins spending the same code.
+`user_mfa` (`persistence/user_mfa/`, migration `0036_user_mfa`) is a 1:1 auth extension of `users`, FK-cascaded on delete like `user_preferences` (unlike `clients`, it is not organization-owned). `enabled_at IS NULL` means enrollment was started but never confirmed; `secret_encrypted` is Fernet ciphertext (`app.gateway.auth.mfa_crypto`), never plaintext; `recovery_codes` is a JSON list of `{hash, used_at}`, only ever replaced wholesale (with `flag_modified`) so the JSON column's change tracking sees a real diff. `mark_recovery_code_used` reads with `with_for_update` to fence two concurrent logins spending the same code.
 
 # Audit log
 

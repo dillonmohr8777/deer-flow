@@ -1,4 +1,4 @@
-"""Migration tests for 0035_user_mfa.
+"""Migration tests for 0036_user_mfa.
 
 Runs the full alembic chain on an empty SQLite database (not
 ``create_all`` + stamp), then exercises the 0035 downgrade/upgrade cycle.
@@ -20,7 +20,7 @@ from deerflow.persistence.bootstrap import _MIGRATIONS_DIR
 pytestmark = pytest.mark.asyncio
 
 _SCRIPT_LOCATION = str(_MIGRATIONS_DIR)
-_PREVIOUS = "0034_clients"
+_PREVIOUS = "0035_fleet_agent_bindings"
 
 _EXPECTED_COLUMNS = {
     "user_id",

@@ -1,4 +1,4 @@
-"""ORM model for TOTP-based two-factor authentication (migration 0035_user_mfa)."""
+"""ORM model for TOTP-based two-factor authentication (migration 0036_user_mfa)."""
 
 from __future__ import annotations
 

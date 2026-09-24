@@ -117,7 +117,7 @@ enum UserScope:
 
 密码账号可以额外启用基于时间的一次性密码（TOTP，RFC 6238），标准 30 秒步长、6 位数字，校验时允许当前步前后各一步的时钟漂移。实现只用标准库（`hmac`、`hashlib`、`base64`），未引入第三方 TOTP 依赖，见 `app/gateway/auth/totp.py`，并用 RFC 6238 附录 B 的官方测试向量校验（`tests/test_totp.py`）。
 
-新表 `user_mfa`（迁移 `0035_user_mfa`，`down_revision` 为 `0034_clients`）：每个用户一行，`user_id` 外键指向 `users.id`（级联删除）；`secret_encrypted` 是加密后的 TOTP 密钥；`enabled_at` 为空表示已开始但尚未确认的注册流程；`recovery_codes` 是一个 JSON 列表，保存十个一次性恢复码的哈希（含各自的 `used_at`），原始恢复码只在确认注册时展示一次，不落库。
+新表 `user_mfa`（迁移 `0036_user_mfa`，`down_revision` 为 `0035_fleet_agent_bindings`）：每个用户一行，`user_id` 外键指向 `users.id`（级联删除）；`secret_encrypted` 是加密后的 TOTP 密钥；`enabled_at` 为空表示已开始但尚未确认的注册流程；`recovery_codes` 是一个 JSON 列表，保存十个一次性恢复码的哈希（含各自的 `used_at`），原始恢复码只在确认注册时展示一次，不落库。
 
 密钥加密：`app/gateway/auth/mfa_crypto.py` 用部署已有的 JWT 密钥（`AUTH_JWT_SECRET`，或回退到持久化的 `.jwt_secret` 文件）通过 HMAC-SHA256 派生一把独立的 Fernet 密钥，不需要再单独配置和备份一份 MFA 专用密钥；派生方式和 `ChannelCredentialCipher.from_key` 已有的 sha256 摘要派生 Fernet key 的做法一致。
 
@@ -509,7 +509,7 @@ SOC 2 风格的最小控制集，为向外部客户开放做准备。
 | `app/gateway/auth/mfa_crypto.py` | 从已有 JWT 密钥派生的 MFA 密钥 Fernet 加解密 |
 | `app/gateway/auth/recovery_codes.py` | 恢复码生成、哈希、常量时间比对 |
 | `deerflow/persistence/user_mfa/` | `UserMfaRow` / `UserMfaRepository`（enroll/confirm/disable、恢复码单次使用） |
-| `packages/harness/deerflow/persistence/migrations/versions/0035_user_mfa.py` | `user_mfa` 建表 |
+| `packages/harness/deerflow/persistence/migrations/versions/0036_user_mfa.py` | `user_mfa` 建表 |
 | `app/gateway/auth/oidc.py` | OIDC 核心服务：discovery、token exchange、ID token 验证、userinfo |
 | `app/gateway/auth/oidc_state.py` | OIDC state 管理：signed cookie 存储 state/nonce/code_verifier |
 | `app/gateway/auth/user_provisioning.py` | OIDC 用户自动创建、email linking、domain 限制 |

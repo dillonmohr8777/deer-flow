@@ -8,7 +8,7 @@ a Fernet key derived via HMAC-SHA256 from the existing JWT secret
 second deployment secret. `recovery_codes.py` mirrors `pat.py`'s pattern:
 raw value shown once, only a SHA-256 hash persisted, `hmac.compare_digest`
 matching. Storage is `deerflow.persistence.user_mfa` (migration
-`0035_user_mfa`); `jwt.py` also defines the signed, single-use MFA challenge
+`0036_user_mfa`); `jwt.py` also defines the signed, single-use MFA challenge
 token (`typ=mfa_challenge`) that `POST /login/local` returns instead of a
 session when MFA is enabled, and that `POST /login/mfa` exchanges for one.
 Single-use + per-challenge attempt tracking is an in-process dict in
