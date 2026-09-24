@@ -27,10 +27,14 @@ the user filter.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 import yaml
+from fastapi import HTTPException
 from org_isolation_fixtures import ORG_A, ORG_B, USER_A, USER_B, acting_as, org_world  # noqa: F401
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
@@ -282,6 +286,78 @@ async def test_subagent_batch_reads_excluded_across_orgs(org_world) -> None:  # 
         assert (await repo.get_batch(batch_id, user_id=USER_A))["status"] not in ("paused", "cancelled")
         assert (await repo.pause_batch(batch_id, user_id=USER_A))["status"] == "paused"
         assert (await repo.resume_batch(batch_id, user_id=USER_A))["status"] == "queued"
+
+
+@pytest.mark.asyncio
+async def test_subagent_batch_results_download_returns_404_across_orgs(org_world, monkeypatch) -> None:  # noqa: F811
+    """The ``/results.jsonl`` router route, not just the repository -- the missing probe.
+
+    ``export_batch_results`` (``app/gateway/routers/subagent_batches.py``) is
+    owner-scoped through the same ``_owned_batch`` helper as ``get_batch``, so
+    it inherits the repository's organization filter, but nothing exercised
+    the download route itself until now.
+    """
+    from app.gateway.routers import subagent_batches
+    from deerflow.persistence.subagent_batches.sql import SubagentBatchRepository
+    from deerflow.persistence.thread_meta.model import ThreadMetaRow
+
+    session_factory = org_world
+    repo = SubagentBatchRepository(session_factory)
+
+    async with session_factory() as session, session.begin():
+        session.add(ThreadMetaRow(thread_id="thread-results", user_id=USER_A, organization_id=ORG_A))
+
+    created = await repo.create_batch(
+        batch_id="batch-results",
+        user_id=USER_A,
+        thread_id="thread-results",
+        run_id=None,
+        tool_call_id=None,
+        submission_key="submit-results",
+        title="Batch Results",
+        subagent_type="general-purpose",
+        items=[{"key": "item-1", "prompt": "do the thing"}],
+        max_live_items=1,
+        max_running_items=1,
+        max_attempts=1,
+        execution_spec={},
+    )
+    batch_id = created["id"]
+
+    def _request() -> SimpleNamespace:
+        return SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(subagent_batch_repo=repo, subagent_batch_service=None, subagent_batches_available=True)))
+
+    async def _download() -> list[dict]:
+        response = await subagent_batches.export_batch_results.__wrapped__(thread_id="thread-results", batch_id=batch_id, request=_request())
+        payload = b"".join([chunk async for chunk in response.body_iterator]).decode()
+        return [json.loads(line) for line in payload.splitlines()]
+
+    # Owner, in its own organization: streams the item.
+    with acting_as(USER_A):
+        monkeypatch.setattr(subagent_batches, "get_current_user", AsyncMock(return_value=USER_A))
+        rows = await _download()
+    assert len(rows) == 1
+
+    # A different organization, its own user_id: already denied pre-existing.
+    with acting_as(USER_B):
+        monkeypatch.setattr(subagent_batches, "get_current_user", AsyncMock(return_value=USER_B))
+        with pytest.raises(HTTPException) as excinfo:
+            await _download()
+    assert excinfo.value.status_code == 404
+
+    # Defense-in-depth: the correct owning user_id, but the active
+    # organization context is B's.
+    with acting_as(USER_B):
+        monkeypatch.setattr(subagent_batches, "get_current_user", AsyncMock(return_value=USER_A))
+        with pytest.raises(HTTPException) as excinfo:
+            await _download()
+    assert excinfo.value.status_code == 404
+
+    # Untouched: still downloadable by the real owner in its own organization.
+    with acting_as(USER_A):
+        monkeypatch.setattr(subagent_batches, "get_current_user", AsyncMock(return_value=USER_A))
+        rows_again = await _download()
+    assert len(rows_again) == 1
 
 
 # ---------------------------------------------------------------------------

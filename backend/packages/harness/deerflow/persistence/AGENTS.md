@@ -22,6 +22,13 @@ Tests build on `tests/org_isolation_fixtures.py` (private orgs A, B, C; shared w
 
 A disabled account (`users.disabled_at`, migration `0033_audit_events`) resolves no organization in `active_organization_for_user`, so its sessions, PATs and internal delegations all stop at that one check.
 
+Deployment-global, not shareable: some state is Gateway-wide infrastructure rather than tenant data, and stays that way regardless of which organization is active. `organization_id == resolve_organization_id()` is the wrong pattern for these; admin-only mutation via `require_admin_user` (a `system_role` check, not an organization-role check) is the actual boundary.
+
+- `managed_subagents` (`persistence/managed_subagents/`) — the deployment-global subagent catalog. `ManagedSubagentRow` has no `organization_id` column at all; see `test_managed_subagents_stay_global_and_admin_only_across_orgs` in `tests/test_org_isolation_d_agents.py`.
+- PUBLIC skills' enabled state, written to the single shared `extensions_config.json` (`app/gateway/routers/skills.py`'s `update_skill`). CUSTOM/LEGACY skills remain per-user (`_skill_states.json`) and are not in this list.
+- MCP server configuration, the `mcpServers` key of that same `extensions_config.json` (`app/gateway/routers/mcp.py`). One file per Gateway process; every read and write is `require_admin_user`-gated. See that router's module docstring and `tests/test_org_isolation_mcp_config.py`.
+- The managed Lark/Feishu integration skill pack install (`deerflow.integrations.lark_cli.lark_integration_root()`, `POST /api/integrations/lark/install`) — extracted once for the whole deployment; its `user_id` parameter is accepted only for source compatibility and does not select a per-user path. Contrast this with that same router's Lark **app credentials and OAuth tokens**, which *are* per-organization (keyed by `get_effective_user_id()`, the storage principal) — see `app/gateway/routers/integrations.py`'s module docstring and `tests/test_org_isolation_integrations.py`.
+
 `user_mfa` (`persistence/user_mfa/`, migration `0036_user_mfa`) is a 1:1 auth extension of `users`, FK-cascaded on delete like `user_preferences` (unlike `clients`, it is not organization-owned). `enabled_at IS NULL` means enrollment was started but never confirmed; `secret_encrypted` is Fernet ciphertext (`app.gateway.auth.mfa_crypto`), never plaintext; `recovery_codes` is a JSON list of `{hash, used_at}`, only ever replaced wholesale (with `flag_modified`) so the JSON column's change tracking sees a real diff. `mark_recovery_code_used` reads with `with_for_update` to fence two concurrent logins spending the same code.
 
 # Audit log
