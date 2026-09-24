@@ -61,7 +61,7 @@ export function WorkflowsView() {
       ) : null}
       {query.isError ? (
         <QueryNotice
-          message="Workflows could not be loaded."
+          message="Workflows couldn't be loaded."
           onRetry={() => void query.refetch()}
         />
       ) : null}
@@ -141,7 +141,7 @@ export function ClientSpacesView() {
       ) : null}
       {query.isError ? (
         <QueryNotice
-          message="Projects could not be loaded."
+          message="Projects couldn't be loaded."
           onRetry={() => void query.refetch()}
         />
       ) : null}
@@ -196,7 +196,7 @@ export function ArtifactLibraryView() {
       </div>
       {projectsQuery.isError ? (
         <QueryNotice
-          message="Projects could not be loaded."
+          message="Projects couldn't be loaded."
           onRetry={() => void projectsQuery.refetch()}
         />
       ) : null}
@@ -228,7 +228,7 @@ export function ArtifactLibraryView() {
       ) : null}
       {project && filesQuery.isError ? (
         <QueryNotice
-          message="Artifacts could not be loaded."
+          message="Artifacts couldn't be loaded."
           onRetry={() => void filesQuery.refetch()}
         />
       ) : null}

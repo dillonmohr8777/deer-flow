@@ -250,7 +250,7 @@ test.each([
     const input = ui.getByLabelText("Run at");
     fireEvent.change(input, { target: { value: "2027-03-14T02:30" } });
     expect(ui.getByRole("alert").textContent).toContain(
-      "This local time does not exist",
+      "This local time doesn't exist",
     );
     expect(onChange).toHaveBeenLastCalledWith({
       ...initial,

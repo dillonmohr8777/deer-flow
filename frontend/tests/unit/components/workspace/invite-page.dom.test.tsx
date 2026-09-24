@@ -51,7 +51,7 @@ describe("workspace invitations", () => {
     fireEvent.submit(
       screen.getByRole("button", { name: "Accept invite" }).closest("form")!,
     );
-    await screen.findByText("Passwords do not match.");
+    await screen.findByText("Passwords don't match.");
     expect(
       fetcher.mock.calls.some(
         ([path]) => path === "/api/v1/auth/invitations/accept",

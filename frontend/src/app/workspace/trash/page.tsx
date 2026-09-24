@@ -22,7 +22,7 @@ export default function TrashPage() {
   const { t } = useI18n();
 
   useEffect(() => {
-    document.title = `${t.trash.title} - ${t.pages.appName}`;
+    document.title = `${t.trash.title} (${t.pages.appName})`;
   }, [t.trash.title, t.pages.appName]);
 
   // Static demo mode has no Gateway and hides every project surface.

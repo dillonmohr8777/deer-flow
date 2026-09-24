@@ -109,7 +109,7 @@ export default function InvitePage() {
         if (!cancelled) {
           setStatus("inspect-error");
           setError(
-            "Could not load this invite. Please reopen the link and try again.",
+            "Couldn't load this invite. Please reopen the link and try again.",
           );
         }
       }
@@ -127,7 +127,7 @@ export default function InvitePage() {
       return;
     }
     if (isNew && password !== confirm) {
-      setError("Passwords do not match.");
+      setError("Passwords don't match.");
       return;
     }
     setStatus("accepting");
@@ -157,7 +157,7 @@ export default function InvitePage() {
       }
     } catch {
       setStatus("ready");
-      setError("Could not accept this invite. Please try again.");
+      setError("Couldn't accept this invite. Please try again.");
     }
   }, [token, password, confirm, isNew, status]);
 

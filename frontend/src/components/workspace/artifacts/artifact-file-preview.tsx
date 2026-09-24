@@ -96,7 +96,7 @@ export function ArtifactDownloadFallback({
           <div className="text-muted-foreground text-sm">{fileType} file</div>
         </div>
         <p className="text-muted-foreground text-sm">
-          This file type cannot be previewed in the browser.
+          This file type can&apos;t be previewed in the browser.
         </p>
         <Button asChild>
           <a

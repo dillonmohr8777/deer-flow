@@ -693,7 +693,7 @@ function isImageFile(filename: string): boolean {
  * Format bytes to human-readable size string
  */
 function formatBytes(bytes: number): string {
-  if (bytes === 0) return "—";
+  if (bytes === 0) return "N/A";
   const kb = bytes / 1024;
   if (kb < 1024) return `${kb.toFixed(1)} KB`;
   return `${(kb / 1024).toFixed(1)} MB`;

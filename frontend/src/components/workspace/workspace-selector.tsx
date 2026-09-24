@@ -40,12 +40,12 @@ export function WorkspaceSelector() {
         body: JSON.stringify({ workspace_id: workspaceId || null }),
       });
       if (!response.ok)
-        throw new Error("Could not switch workspace. Refresh and try again.");
+        throw new Error("Couldn't switch workspace. Refresh and try again.");
       // A full navigation discards cached data from the previous workspace.
       window.location.assign("/workspace/command-center");
     } catch (cause: unknown) {
       setError(
-        cause instanceof Error ? cause.message : "Could not switch workspace.",
+        cause instanceof Error ? cause.message : "Couldn't switch workspace.",
       );
       setBusy(false);
     }

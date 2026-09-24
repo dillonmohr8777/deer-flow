@@ -24,7 +24,7 @@ export function POST() {
       },
       auth: {
         status: "not_authorized",
-        message: "Lark user authorization is not configured",
+        message: "Lark user authorization isn't configured",
         user: null,
         verified: false,
       },

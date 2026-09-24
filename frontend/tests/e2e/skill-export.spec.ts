@@ -143,7 +143,7 @@ test("mobile manifest blockers are readable and cannot download", async ({
     exact: true,
   });
   await expect(
-    dialog.getByText("This package cannot be exported"),
+    dialog.getByText("This package can't be exported"),
   ).toBeVisible();
   await expect(
     dialog.getByRole("button", { name: "Download .skill" }),

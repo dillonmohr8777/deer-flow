@@ -33,7 +33,7 @@ test("opening and dismissing deletion never sends a delete request", async ({
   for (const dismissal of ["Cancel", "Escape", "Close"]) {
     const dialog = await openDeleteDialog(page);
     await expect(dialog).toContainText(TITLE);
-    await expect(dialog).toContainText("cannot be undone");
+    await expect(dialog).toContainText("can't be undone");
     await expect(
       dialog.getByRole("button", { name: "Cancel", exact: true }),
     ).toBeFocused();

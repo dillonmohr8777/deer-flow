@@ -16,11 +16,11 @@ const status = {
     available: false,
     path: null,
     version: null,
-    error: "lark-cli is not on PATH",
+    error: "lark-cli isn't on PATH",
   },
   auth: {
     status: "unavailable",
-    message: "lark-cli is not installed on the Gateway",
+    message: "lark-cli isn't installed on the Gateway",
     user: null,
     verified: false,
   },

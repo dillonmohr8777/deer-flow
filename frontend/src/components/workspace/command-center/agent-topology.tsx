@@ -78,7 +78,7 @@ export function AgentTopology({
         {loading ? (
           <p role="status">Loading agent definitions…</p>
         ) : error ? (
-          <p role="alert">The specialist catalog could not be loaded.</p>
+          <p role="alert">The specialist catalog couldn&apos;t be loaded.</p>
         ) : roster.length === 0 ? (
           <p>No specialist definitions are available to this account.</p>
         ) : (

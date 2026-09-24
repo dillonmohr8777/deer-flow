@@ -195,7 +195,7 @@ function ActiveJobs({ status }: { status: "running" | "pending" }) {
   if (query.isError)
     return (
       <p role="alert" className="py-3 text-sm">
-        Could not load {statusLabel(status).toLowerCase()} jobs. Earlier
+        Couldn&apos;t load {statusLabel(status).toLowerCase()} jobs. Earlier
         receipts below may be stale.
       </p>
     );
@@ -231,7 +231,7 @@ function RecentReceipts() {
   if (query.isError)
     return (
       <p role="alert" className="py-3 text-sm">
-        Could not load latest receipts.
+        Couldn&apos;t load latest receipts.
       </p>
     );
   const receipts = (query.data?.runs ?? []).filter((run) =>

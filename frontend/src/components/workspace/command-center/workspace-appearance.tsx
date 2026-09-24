@@ -126,7 +126,7 @@ export function WorkspaceAppearance({ onClose }: { onClose: () => void }) {
         setError(
           failure instanceof PluginIconError && failure.code === "size"
             ? "Choose a PNG, JPEG or WebP smaller than 2 MB."
-            : "That image could not be used. Choose a valid PNG, JPEG or WebP; SVG and remote URLs are not supported.",
+            : "That image couldn't be used. Choose a valid PNG, JPEG or WebP; SVG and remote URLs aren't supported.",
         );
     } finally {
       if (generation.current === current) setBusy(false);
@@ -204,8 +204,8 @@ export function WorkspaceAppearance({ onClose }: { onClose: () => void }) {
         <div className={styles.personalBrand}>
           <h3>Your brand, locally.</h3>
           <p>
-            Preview a client or team logo in this browser. This does not change
-            the shared workspace.
+            Preview a client or team logo in this browser. This doesn&apos;t
+            change the shared workspace.
           </p>
           <label htmlFor={`${id}-name`}>Brand name</label>
           <input
