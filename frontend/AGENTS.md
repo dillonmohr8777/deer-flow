@@ -266,6 +266,20 @@ presentation fields and masked credentials; cancel/reset/unmount must fence stal
 image-decoding results. Uploaded remote URLs and SVG are never rendered. Existing
 shared-MCP administrator checks remain authoritative; this adds no personal scope.
 
+## Desk (private instance only)
+
+`/workspace/desk` is the owner's home on the private instance. It exists only when
+`/api/features` reports `desk.enabled`, which the Gateway derives from
+`config.yaml -> private_workspace.enabled` (default false). With the flag on,
+`/workspace` redirects to Desk (`core/features/server.ts`, fail closed) and the
+sidebar gains a Desk link; with it off, the route replaces itself with Command
+Center before rendering anything Desk-shaped. Desk only reads existing APIs
+(scheduled tasks, clients and their fleet bindings, fleet templates, console
+usage); department grouping and schedule matching live in
+`components/workspace/desk/desk-data.ts`. There is no approval queue API yet, so
+the Approvals panel says "Not wired". `tests/e2e/desk.spec.ts` proves both flag
+states and the fresh-instance empty states.
+
 <!-- BEGIN:nextjs-agent-rules -->
 
 # This is NOT the Next.js you know

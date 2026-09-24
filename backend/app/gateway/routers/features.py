@@ -64,6 +64,12 @@ class KnowledgeBaseFeature(BaseModel):
     )
 
 
+class DeskFeature(BaseModel):
+    """Availability of the owner-only Desk home."""
+
+    enabled: bool = Field(..., description="Whether this instance is the owner's private workspace, so the Desk home is shown")
+
+
 class FeaturesResponse(BaseModel):
     """Frontend-facing feature availability flags."""
 
@@ -73,6 +79,7 @@ class FeaturesResponse(BaseModel):
     subagent_batches: SubagentBatchesFeature
     conversation_references: ConversationReferencesFeature
     knowledge_base: KnowledgeBaseFeature
+    desk: DeskFeature
 
 
 @router.get(
@@ -111,6 +118,9 @@ async def list_features(request: Request, config: AppConfig = Depends(get_config
         knowledge_base=KnowledgeBaseFeature(
             scope_selection_enabled=_knowledge_scope_selection_enabled(config),
         ),
+        # Config-only, read per request. Off unless config.yaml says
+        # private_workspace.enabled: true, so client-facing MomoBot never shows Desk.
+        desk=DeskFeature(enabled=config.private_workspace.enabled is True),
     )
 
 

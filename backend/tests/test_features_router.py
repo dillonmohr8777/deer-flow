@@ -21,6 +21,7 @@ def _app_with_config(
     knowledge_base_enabled: bool = False,
     scope_selection_enabled: bool = False,
     knowledge_search_provider: str | None = None,
+    private_workspace_enabled: bool = False,
 ) -> FastAPI:
     app = FastAPI()
     app.state.mcp_tasks_available = mcp_tasks_available
@@ -42,6 +43,7 @@ def _app_with_config(
             enabled=knowledge_base_enabled,
             scope_selection_enabled=scope_selection_enabled,
         ),
+        private_workspace=SimpleNamespace(enabled=private_workspace_enabled),
     )
     search_tool = SimpleNamespace(use=knowledge_search_provider) if knowledge_search_provider is not None else None
     fake_config.get_tool_config = lambda name: search_tool if name == "knowledge_search" else None
@@ -67,6 +69,7 @@ def test_features_reports_agents_api_enabled() -> None:
         "knowledge_base": {
             "scope_selection_enabled": False,
         },
+        "desk": {"enabled": False},
     }
 
 
@@ -88,6 +91,7 @@ def test_features_reports_agents_api_disabled() -> None:
         "knowledge_base": {
             "scope_selection_enabled": False,
         },
+        "desk": {"enabled": False},
     }
 
 
@@ -216,3 +220,17 @@ def test_features_reports_browser_control_disabled_for_unguarded_cdp() -> None:
         response = client.get("/api/features")
     assert response.status_code == 200
     assert response.json()["browser_control"] == {"enabled": False}
+
+
+def test_features_reports_desk_only_for_a_private_workspace() -> None:
+    with TestClient(_app_with_config(agents_api_enabled=True, private_workspace_enabled=True)) as client:
+        assert client.get("/api/features").json()["desk"] == {"enabled": True}
+    with TestClient(_app_with_config(agents_api_enabled=True)) as client:
+        assert client.get("/api/features").json()["desk"] == {"enabled": False}
+
+
+def test_desk_is_off_for_a_default_client_facing_config() -> None:
+    """A MomoBot config that never mentions private_workspace must not show Desk."""
+    from deerflow.config.app_config import AppConfig
+
+    assert AppConfig.model_fields["private_workspace"].default_factory().enabled is False

@@ -2271,6 +2271,14 @@ agents_api:
   enabled: false
 
 # ============================================================================
+# Private Workspace
+# ============================================================================
+# true only on the owner's private instance: it turns on the Desk home
+# (/workspace/desk). Every client-facing MomoBot leaves this false.
+private_workspace:
+  enabled: false
+
+# ============================================================================
 # Skill Self-Evolution Configuration
 # ============================================================================
 # Allow the agent to autonomously create and improve skills in skills/custom/.

@@ -18,6 +18,7 @@ export interface FeaturesResponse {
   knowledge_base?: {
     scope_selection_enabled?: boolean;
   };
+  desk?: { enabled?: boolean };
 }
 
 export interface ConversationReferencesCapability {
@@ -83,4 +84,13 @@ export async function fetchKnowledgeBaseFeature(): Promise<{
   return {
     scopeSelectionEnabled: feature?.scope_selection_enabled ?? false,
   };
+}
+
+/** Owner-only Desk home. Anything but an explicit true reads as off. */
+export function isDeskEnabled(features: FeaturesResponse): boolean {
+  return features.desk?.enabled === true;
+}
+
+export async function fetchDeskEnabled(): Promise<boolean> {
+  return isDeskEnabled(await fetchFeatures());
 }

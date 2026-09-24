@@ -6,6 +6,7 @@ rs.mock("@/core/config", () => ({ getBackendBaseURL: () => "" }));
 import { fetch } from "@/core/api/fetcher";
 import {
   fetchConversationReferencesCapability,
+  fetchDeskEnabled,
   fetchSubagentBatchesCapability,
 } from "@/core/features/api";
 
@@ -97,5 +98,23 @@ describe("conversation references feature capability", () => {
       enabled: true,
       maxReferences: 0,
     });
+  });
+});
+
+describe("desk feature", () => {
+  it("is on only for an explicit true from the instance", async () => {
+    mockedFetch.mockResolvedValueOnce(
+      jsonResponse({ agents_api: { enabled: true }, desk: { enabled: true } }),
+    );
+    await expect(fetchDeskEnabled()).resolves.toBe(true);
+    // A client-facing gateway (older, or private_workspace unset) never shows Desk.
+    mockedFetch.mockResolvedValueOnce(
+      jsonResponse({ agents_api: { enabled: true } }),
+    );
+    await expect(fetchDeskEnabled()).resolves.toBe(false);
+    mockedFetch.mockResolvedValueOnce(
+      jsonResponse({ agents_api: { enabled: true }, desk: { enabled: "yes" } }),
+    );
+    await expect(fetchDeskEnabled()).resolves.toBe(false);
   });
 });
