@@ -215,6 +215,46 @@ async def test_draft_approve_reply_lifecycle(org_world):  # noqa: F811
         assert all(e["outcome"] == "success" for e in events)
 
 
+async def test_plain_member_cannot_see_unapproved_draft(org_world):  # noqa: F811
+    """f3: Momo's ``momo``-authored draft stays hidden from non-admins until it's approved."""
+    session_factory = org_world
+    app = _build_app(session_factory)
+    headers_a = auth_headers(USER_A, ORG_S)  # owner
+
+    await _add_plain_member(session_factory, USER_D, ORG_S)
+    headers_d = auth_headers(USER_D, ORG_S)
+
+    async with _client(app) as client:
+        client1 = await _create_client(client, headers_a, "Client One")
+        assign = await client.post(f"/api/clients/{client1['id']}/assignments", json={"user_id": USER_D, "role": "client_contact"}, headers=headers_a)
+        assert assign.status_code == 201
+
+        thread = (await client.post("/api/board/threads", json={"client_id": client1["id"], "subject": "T1"}, headers=headers_a)).json()
+        tid = thread["id"]
+
+        posted = await client.post(f"/api/board/threads/{tid}/messages", json={"body": "It's broken."}, headers=headers_d)
+        assert posted.status_code == 201, posted.text
+
+        drafted = await client.post(f"/api/board/threads/{tid}/draft", json={"body": "Here's the fix."}, headers=headers_a)
+        assert drafted.status_code == 200, drafted.text
+        assert drafted.json()["status"] == "drafted"
+
+        # D has client access but is neither owner nor admin: the draft is invisible while unapproved.
+        d_messages = (await client.get(f"/api/board/threads/{tid}/messages", headers=headers_d)).json()["messages"]
+        assert [m["author_kind"] for m in d_messages] == ["client"]
+
+        # The owner still sees the full history, including the draft.
+        a_messages = (await client.get(f"/api/board/threads/{tid}/messages", headers=headers_a)).json()["messages"]
+        assert {m["author_kind"] for m in a_messages} == {"client", "momo"}
+
+        approved = await client.post(f"/api/board/threads/{tid}/approve", headers=headers_a)
+        assert approved.status_code == 200, approved.text
+
+        # Once approved, the (former) draft is visible to everyone with access.
+        d_messages_after = (await client.get(f"/api/board/threads/{tid}/messages", headers=headers_d)).json()["messages"]
+        assert {m["author_kind"] for m in d_messages_after} == {"client", "momo"}
+
+
 async def test_non_owner_cannot_approve_or_reply(org_world):  # noqa: F811
     """A plain member with client access can draft-adjacent actions but never approve/reply."""
     session_factory = org_world
