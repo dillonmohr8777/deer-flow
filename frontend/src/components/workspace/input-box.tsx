@@ -2629,7 +2629,7 @@ export function InputBox({
                   </div>
                   {/* Ink like every other mode: brass is for objects, and
                       the word carries the mode, not its colour. */}
-                  <div className="truncate text-xs font-normal">
+                  <div className="truncate text-[13px] font-semibold">
                     {(context.mode === "flash" && t.inputBox.flashMode) ||
                       (context.mode === "thinking" &&
                         t.inputBox.reasoningMode) ||
@@ -2779,7 +2779,7 @@ export function InputBox({
                     className="gap-1! px-2!"
                     disabled={composerLocked}
                   >
-                    <span className="text-xs font-normal">
+                    <span className="text-[13px] font-normal">
                       <span className="text-muted-foreground">
                         {t.inputBox.reasoningEffort}
                       </span>{" "}
@@ -2928,7 +2928,7 @@ export function InputBox({
                     disabled={composerLocked}
                   >
                     <div className="flex min-w-0 flex-col text-left">
-                      <span className="flex-1 truncate text-left text-xs font-normal">
+                      <span className="flex-1 truncate text-left text-[13px] font-semibold">
                         {selectedModel?.display_name}
                       </span>
                     </div>

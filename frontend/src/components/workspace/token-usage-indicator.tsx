@@ -87,7 +87,7 @@ export function TokenUsageIndicator({
           type="button"
           variant="ghost"
           className={cn(
-            "text-muted-foreground bg-background/70 hover:bg-background/90 flex h-auto items-center gap-1.5 rounded-full border px-2 py-1 text-xs font-normal",
+            "text-muted-foreground bg-background/70 hover:bg-background/90 flex h-auto items-center gap-1.5 rounded-full border px-2 py-1 text-sm font-normal",
             className,
           )}
         >

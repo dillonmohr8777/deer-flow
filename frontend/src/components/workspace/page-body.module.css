@@ -88,8 +88,9 @@
   border: 1px solid var(--border);
   border-radius: 4px;
   color: var(--muted-foreground);
-  font-size: 0.75rem;
-  line-height: 1.125rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.25rem;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

@@ -849,7 +849,8 @@
   flex-wrap: wrap;
   gap: 2px 10px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
+  font-weight: 600;
 }
 .agentState > span {
   display: inline-flex;
@@ -1020,7 +1021,9 @@
 .jobName small {
   overflow: hidden;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1036,7 +1039,7 @@
   align-items: center;
   gap: 5px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 800;
   white-space: nowrap;
 }
@@ -1222,7 +1225,8 @@
   display: block;
   margin-top: 4px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 13px;
+  font-weight: 600;
   line-height: 1.4;
 }
 .root table {
@@ -1492,7 +1496,7 @@
     font-size: 19px;
   }
   .status {
-    font-size: 10px;
+    font-size: 12px;
   }
   .jobIcon[data-status="running"]::after,
   .status[data-status="running"] svg {

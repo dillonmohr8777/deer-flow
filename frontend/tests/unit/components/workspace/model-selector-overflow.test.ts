@@ -5,7 +5,7 @@ import { describe, expect, it } from "@rstest/core";
 
 const FRONTEND_ROOT = path.resolve(__dirname, "../../../..");
 const SELECTED_MODEL_WRAPPER_PATTERN =
-  /<ModelPickerTrigger asChild>[\s\S]*?<div className="([^"]*)">\s*<span className="flex-1 truncate text-left text-xs font-normal">/;
+  /<ModelPickerTrigger asChild>[\s\S]*?<div className="([^"]*)">\s*<span className="flex-1 truncate text-left[^"]*">/;
 
 function source(relativePath: string) {
   return readFileSync(path.join(FRONTEND_ROOT, relativePath), "utf8");
