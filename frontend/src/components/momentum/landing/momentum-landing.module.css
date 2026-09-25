@@ -636,7 +636,9 @@
 .paperFooter {
   position: relative;
   border-top: 1px solid var(--paper-line);
-  padding-block: 1.75rem 2.5rem;
+  /* The fixed Pause motion control sits 1rem up and about 2.3rem tall at the
+     bottom right; end the footer above it so it never covers a footer link. */
+  padding-block: 1.75rem 4.5rem;
   display: flex;
   flex-wrap: wrap;
   gap: 0.75rem 1.5rem;
