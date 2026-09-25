@@ -3,19 +3,22 @@
     "kind": "flare",
     "w": 1536,
     "h": 1024,
-    "lum": 0.407
+    "lum": 0.407,
+    "l": true
   },
   "g02-huddle": {
     "kind": "flare",
     "w": 1536,
     "h": 1024,
-    "lum": 0.148
+    "lum": 0.148,
+    "l": true
   },
   "g03-skyline": {
     "kind": "flare",
     "w": 1536,
     "h": 1024,
-    "lum": 0.133
+    "lum": 0.133,
+    "l": true
   },
   "g04-assembly": {
     "kind": "flare",
@@ -33,7 +36,8 @@
     "kind": "flare",
     "w": 1536,
     "h": 1024,
-    "lum": 0.328
+    "lum": 0.328,
+    "l": true
   },
   "g07-portal": {
     "kind": "flare",
@@ -47,17 +51,12 @@
     "h": 1536,
     "lum": 0.232
   },
-  "r-analytics-1": {
-    "kind": "flare",
-    "w": 1024,
-    "h": 1536,
-    "lum": 0.203
-  },
   "r-analytics-2": {
     "kind": "flare",
     "w": 1536,
     "h": 1024,
-    "lum": 0.29
+    "lum": 0.29,
+    "l": true
   },
   "r-analytics-3": {
     "kind": "flare",
@@ -75,7 +74,8 @@
     "kind": "flare",
     "w": 1536,
     "h": 1024,
-    "lum": 0.383
+    "lum": 0.383,
+    "l": true
   },
   "r-builder-3": {
     "kind": "flare",
@@ -93,7 +93,8 @@
     "kind": "flare",
     "w": 1536,
     "h": 1024,
-    "lum": 0.306
+    "lum": 0.306,
+    "l": true
   },
   "r-client-success-3": {
     "kind": "flare",
@@ -105,13 +106,8 @@
     "kind": "flare",
     "w": 1536,
     "h": 1024,
-    "lum": 0.287
-  },
-  "r-engineer-2": {
-    "kind": "flare",
-    "w": 1024,
-    "h": 1536,
-    "lum": 0.255
+    "lum": 0.287,
+    "l": true
   },
   "r-engineer-3": {
     "kind": "flare",
@@ -135,13 +131,8 @@
     "kind": "flare",
     "w": 1536,
     "h": 1024,
-    "lum": 0.395
-  },
-  "r-lead-1": {
-    "kind": "flare",
-    "w": 1536,
-    "h": 1024,
-    "lum": 0.315
+    "lum": 0.395,
+    "l": true
   },
   "r-lead-2": {
     "kind": "flare",
@@ -149,17 +140,12 @@
     "h": 1536,
     "lum": 0.303
   },
-  "r-lead-3": {
-    "kind": "flare",
-    "w": 1024,
-    "h": 1536,
-    "lum": 0.228
-  },
   "r-migration-1": {
     "kind": "flare",
     "w": 1536,
     "h": 1024,
-    "lum": 0.31
+    "lum": 0.31,
+    "l": true
   },
   "r-migration-2": {
     "kind": "flare",
@@ -171,7 +157,8 @@
     "kind": "flare",
     "w": 1536,
     "h": 1024,
-    "lum": 0.295
+    "lum": 0.295,
+    "l": true
   },
   "r-qa-1": {
     "kind": "flare",
@@ -183,7 +170,8 @@
     "kind": "flare",
     "w": 1536,
     "h": 1024,
-    "lum": 0.331
+    "lum": 0.331,
+    "l": true
   },
   "r-qa-3": {
     "kind": "flare",
@@ -201,7 +189,8 @@
     "kind": "flare",
     "w": 1536,
     "h": 1024,
-    "lum": 0.131
+    "lum": 0.131,
+    "l": true
   },
   "r-reliability-3": {
     "kind": "flare",
@@ -225,7 +214,8 @@
     "kind": "flare",
     "w": 1536,
     "h": 1024,
-    "lum": 0.295
+    "lum": 0.295,
+    "l": true
   },
   "r-revenue-1": {
     "kind": "flare",
@@ -237,13 +227,8 @@
     "kind": "flare",
     "w": 1536,
     "h": 1024,
-    "lum": 0.321
-  },
-  "r-revenue-3": {
-    "kind": "flare",
-    "w": 1024,
-    "h": 1536,
-    "lum": 0.283
+    "lum": 0.321,
+    "l": true
   },
   "r-verifier-1": {
     "kind": "flare",
@@ -255,7 +240,8 @@
     "kind": "flare",
     "w": 1536,
     "h": 1024,
-    "lum": 0.102
+    "lum": 0.102,
+    "l": true
   },
   "r-verifier-3": {
     "kind": "flare",
@@ -291,12 +277,13 @@
     "kind": "flare",
     "w": 1536,
     "h": 1024,
-    "lum": 0.371
+    "lum": 0.371,
+    "l": true
   },
   "t3-team": {
     "kind": "sunburst",
     "w": 1536,
     "h": 1024,
-    "lum": 0.147
+    "lum": 0.165
   }
 }
