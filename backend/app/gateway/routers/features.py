@@ -14,6 +14,7 @@ from app.gateway.browser_capability import browser_capability
 from app.gateway.conversation_access import conversation_references_enabled
 from app.gateway.deps import get_config
 from app.gateway.knowledge_scope_admission import RAGFLOW_KNOWLEDGE_SEARCH_PROVIDER
+from app.gateway.momentum_internal import is_momentum_staff
 from app.gateway.run_models import MAX_CONVERSATION_REFERENCES
 from deerflow.config.app_config import AppConfig
 from deerflow.subagents.capacity import configured_subagent_max_running
@@ -70,6 +71,12 @@ class DeskFeature(BaseModel):
     enabled: bool = Field(..., description="Whether this instance is the owner's private workspace, so the Desk home is shown")
 
 
+class MomentumInternalFeature(BaseModel):
+    """Availability of staff-only Momentum surfaces (team channels, AI Academy)."""
+
+    enabled: bool = Field(..., description="Whether the caller is Momentum staff on the private instance, so Team and Academy are shown")
+
+
 class FeaturesResponse(BaseModel):
     """Frontend-facing feature availability flags."""
 
@@ -80,6 +87,7 @@ class FeaturesResponse(BaseModel):
     conversation_references: ConversationReferencesFeature
     knowledge_base: KnowledgeBaseFeature
     desk: DeskFeature
+    momentum_internal: MomentumInternalFeature
 
 
 @router.get(
@@ -121,6 +129,9 @@ async def list_features(request: Request, config: AppConfig = Depends(get_config
         # Config-only, read per request. Off unless config.yaml says
         # private_workspace.enabled: true, so client-facing MomoBot never shows Desk.
         desk=DeskFeature(enabled=config.private_workspace.enabled is True),
+        # Per caller, not per instance: the Desk flag plus a staff role in the
+        # active workspace. The routes behind it enforce the same predicate.
+        momentum_internal=MomentumInternalFeature(enabled=is_momentum_staff(request, config)),
     )
 
 

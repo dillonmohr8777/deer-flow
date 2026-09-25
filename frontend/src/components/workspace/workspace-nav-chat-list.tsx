@@ -2,6 +2,8 @@
 
 import {
   BotIcon,
+  GraduationCap,
+  Hash,
   CalendarClock,
   Inbox,
   MessagesSquare,
@@ -25,7 +27,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useAgentsApiEnabled } from "@/core/agents";
-import { useDeskEnabled } from "@/core/features";
+import { useDeskEnabled, useMomentumInternalEnabled } from "@/core/features";
 import { useI18n } from "@/core/i18n/hooks";
 
 export function WorkspaceNavChatList() {
@@ -33,6 +35,7 @@ export function WorkspaceNavChatList() {
   const pathname = usePathname();
   const { enabled: agentsEnabled } = useAgentsApiEnabled();
   const { enabled: deskEnabled } = useDeskEnabled();
+  const { enabled: internalEnabled } = useMomentumInternalEnabled();
   return (
     <SidebarGroup className="pt-1">
       <SidebarMenu>
@@ -60,6 +63,20 @@ export function WorkspaceNavChatList() {
               <Link className="text-muted-foreground" href="/workspace/board">
                 <Inbox />
                 <span>Board</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        )}
+        {/* Momentum staff only: private instance plus a staff role. */}
+        {internalEnabled && (
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              isActive={pathname === "/workspace/team"}
+              asChild
+            >
+              <Link className="text-muted-foreground" href="/workspace/team">
+                <Hash />
+                <span>Team</span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
@@ -164,6 +181,20 @@ export function WorkspaceNavChatList() {
             </Link>
           </SidebarMenuButton>
         </SidebarMenuItem>
+        {/* Momentum staff only, same gate as Team. */}
+        {internalEnabled && (
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              isActive={pathname === "/workspace/academy"}
+              asChild
+            >
+              <Link className="text-muted-foreground" href="/workspace/academy">
+                <GraduationCap />
+                <span>AI Academy</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        )}
       </SidebarMenu>
     </SidebarGroup>
   );

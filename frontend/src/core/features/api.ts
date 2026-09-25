@@ -19,6 +19,7 @@ export interface FeaturesResponse {
     scope_selection_enabled?: boolean;
   };
   desk?: { enabled?: boolean };
+  momentum_internal?: { enabled?: boolean };
 }
 
 export interface ConversationReferencesCapability {
@@ -93,4 +94,16 @@ export function isDeskEnabled(features: FeaturesResponse): boolean {
 
 export async function fetchDeskEnabled(): Promise<boolean> {
   return isDeskEnabled(await fetchFeatures());
+}
+
+/**
+ * Staff-only Momentum surfaces (Team, Academy): the private instance plus a
+ * staff role in the active workspace. Anything but an explicit true is off.
+ */
+export function isMomentumInternalEnabled(features: FeaturesResponse): boolean {
+  return features.momentum_internal?.enabled === true;
+}
+
+export async function fetchMomentumInternalEnabled(): Promise<boolean> {
+  return isMomentumInternalEnabled(await fetchFeatures());
 }

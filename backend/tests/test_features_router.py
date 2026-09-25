@@ -70,6 +70,7 @@ def test_features_reports_agents_api_enabled() -> None:
             "scope_selection_enabled": False,
         },
         "desk": {"enabled": False},
+        "momentum_internal": {"enabled": False},
     }
 
 
@@ -92,6 +93,7 @@ def test_features_reports_agents_api_disabled() -> None:
             "scope_selection_enabled": False,
         },
         "desk": {"enabled": False},
+        "momentum_internal": {"enabled": False},
     }
 
 
@@ -234,3 +236,32 @@ def test_desk_is_off_for_a_default_client_facing_config() -> None:
     from deerflow.config.app_config import AppConfig
 
     assert AppConfig.model_fields["private_workspace"].default_factory().enabled is False
+
+
+def _app_as(role: str | None, *, private_workspace_enabled: bool) -> FastAPI:
+    """A features app whose requests carry *role* the way AuthMiddleware stamps it."""
+    app = _app_with_config(agents_api_enabled=True, private_workspace_enabled=private_workspace_enabled)
+
+    @app.middleware("http")
+    async def _stamp(request, call_next):
+        request.state.organization_id = "org-momentum" if role is not None else None
+        request.state.organization_role = role
+        return await call_next(request)
+
+    return app
+
+
+@pytest.mark.parametrize(
+    ("role", "private_workspace_enabled", "expected"),
+    [
+        ("owner", True, True),
+        ("admin", True, True),
+        ("member", True, True),
+        ("client", True, False),
+        (None, True, False),
+        ("owner", False, False),
+    ],
+)
+def test_momentum_internal_is_staff_on_the_private_instance_only(role, private_workspace_enabled, expected) -> None:
+    with TestClient(_app_as(role, private_workspace_enabled=private_workspace_enabled)) as client:
+        assert client.get("/api/features").json()["momentum_internal"] == {"enabled": expected}
