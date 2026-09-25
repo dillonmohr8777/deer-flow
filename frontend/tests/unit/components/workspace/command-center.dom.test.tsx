@@ -303,6 +303,9 @@ describe("CommandCenter", () => {
   it("names models by display name, never the slug or the Contributor tier", () => {
     mocks.runs = [contributorRun];
     render(<CommandCenter />);
+    // Mission Control's dispatch slips leave the model to the receipt; the
+    // Jobs list still names it on every row.
+    fireEvent.click(screen.getByRole("button", { name: "Jobs" }));
     expect(screen.getByText("Muse Spark 1.3")).toBeDefined();
     fireEvent.click(
       screen.getByRole("button", { name: /Audit the landing page/ }),
@@ -342,6 +345,8 @@ describe("CommandCenter", () => {
       },
     ];
     render(<CommandCenter />);
+    // Token counts live on the Jobs list and the receipt, not on dispatch slips.
+    fireEvent.click(screen.getByRole("button", { name: "Jobs" }));
     expect(screen.getByText("Tokens not recorded")).toBeDefined();
     expect(screen.getByText("Tokens still counting")).toBeDefined();
     expect(document.body.textContent).not.toContain("0 tokens");
