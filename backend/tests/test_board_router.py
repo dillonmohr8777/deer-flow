@@ -215,6 +215,46 @@ async def test_draft_approve_reply_lifecycle(org_world):  # noqa: F811
         assert all(e["outcome"] == "success" for e in events)
 
 
+async def test_message_author_kind_is_never_client_supplied(org_world):  # noqa: F811
+    """f2: the server decides ``author_kind``, never the caller's request body."""
+    session_factory = org_world
+    app = _build_app(session_factory)
+    headers_a = auth_headers(USER_A, ORG_S)  # owner
+
+    await _add_plain_member(session_factory, USER_D, ORG_S)
+    headers_d = auth_headers(USER_D, ORG_S)
+
+    async with _client(app) as client:
+        client1 = await _create_client(client, headers_a, "Client One")
+        assign = await client.post(f"/api/clients/{client1['id']}/assignments", json={"user_id": USER_D, "role": "client_contact"}, headers=headers_a)
+        assert assign.status_code == 201
+
+        thread = (await client.post("/api/board/threads", json={"client_id": client1["id"], "subject": "T1"}, headers=headers_a)).json()
+        tid = thread["id"]
+
+        # A plain member forging author_kind "owner" (or "momo") never gets stored as such.
+        forged_owner = await client.post(f"/api/board/threads/{tid}/messages", json={"author_kind": "owner", "body": "I approve myself"}, headers=headers_d)
+        assert forged_owner.status_code in (201, 422)
+        if forged_owner.status_code == 201:
+            assert forged_owner.json()["author_kind"] == "client"
+
+        forged_momo = await client.post(f"/api/board/threads/{tid}/messages", json={"author_kind": "momo", "body": "I am Momo"}, headers=headers_d)
+        assert forged_momo.status_code in (201, 422)
+        if forged_momo.status_code == 201:
+            assert forged_momo.json()["author_kind"] == "client"
+
+        # A real owner/admin's message is stored as "owner", forged claim or not.
+        owner_posted = await client.post(f"/api/board/threads/{tid}/messages", json={"author_kind": "client", "body": "Looking into it."}, headers=headers_a)
+        assert owner_posted.status_code == 201, owner_posted.text
+        assert owner_posted.json()["author_kind"] == "owner"
+
+        messages = (await client.get(f"/api/board/threads/{tid}/messages", headers=headers_a)).json()["messages"]
+        stored_kinds = {m["body"]: m["author_kind"] for m in messages}
+        assert stored_kinds.get("I approve myself") == "client"
+        assert stored_kinds.get("I am Momo") == "client"
+        assert stored_kinds.get("Looking into it.") == "owner"
+
+
 async def test_non_owner_cannot_approve_or_reply(org_world):  # noqa: F811
     """A plain member with client access can draft-adjacent actions but never approve/reply."""
     session_factory = org_world

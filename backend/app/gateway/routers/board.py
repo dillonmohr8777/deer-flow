@@ -31,7 +31,6 @@ _ORG_ADMIN_ROLES = ("owner", "admin")
 
 BoardKind = Literal["post", "ticket", "concern", "dm"]
 BoardStatus = Literal["new", "triaged", "drafted", "approved", "replied", "closed"]
-BoardAuthorKind = Literal["client", "momo", "owner"]
 
 
 class BoardThreadResponse(BaseModel):
@@ -74,7 +73,6 @@ class BoardMessageListResponse(BaseModel):
 
 
 class BoardMessageCreateRequest(BaseModel):
-    author_kind: BoardAuthorKind = "client"
     body: str = Field(..., min_length=1)
 
 
@@ -236,9 +234,13 @@ async def add_board_message(thread_id: str, body: BoardMessageCreateRequest, req
     if row is None:
         raise _not_found()
     user = await get_current_user_from_request(request)
+    user_id = str(user.id)
     if row.get("client_id") is not None:
-        await _require_client_access(client_repo, row["client_id"], str(user.id))
-    message = await board_repo.add_message(thread_id, author_kind=body.author_kind, author_user_id=str(user.id), body=body.body)
+        await _require_client_access(client_repo, row["client_id"], user_id)
+    # Author identity is never taken from the request body: a "momo" message only
+    # ever comes from the draft workflow, and "owner" only from an actual admin.
+    author_kind = "owner" if await _is_active_org_admin(user_id) else "client"
+    message = await board_repo.add_message(thread_id, author_kind=author_kind, author_user_id=user_id, body=body.body)
     if message is None:
         raise _not_found()
     return _to_message_response(message)
