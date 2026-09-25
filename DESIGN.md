@@ -181,6 +181,7 @@ Items 1, 2 and 5 need both `prefers-reduced-motion: no-preference` and the user'
   5. A four-fact strip: Active runs, Recorded runs, Errors & timeouts, Recorded tokens.
   6. The view. Mission Control shows the agent team (lead plus specialists) beside Latest assignments, then Also in your workspace links, then the footer ("No model calls from this dashboard").
 - **Selection.** Selecting a run opens its receipt drawer on the right.
+- **Catalogs lead with what works.** Capability Center puts connected tools first on their own sheet, then what is available by category, integrations MomoBot can configure before setup guides. A row's one action says what it does: Connect (an account flow, royal outline), Configure (settings the viewer may change, outline), Details or Setup guide (read only, quiet). An unconnected row carries no status tag; its section already says it.
 
 ## States
 

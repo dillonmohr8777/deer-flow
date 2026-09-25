@@ -280,7 +280,7 @@ test("plugin filters remain usable after an MCP refetch fails", async ({
   await page.goto("/workspace/capabilities");
   await expect(page.locator("article")).toHaveCount(17);
   const installed = page.getByRole("button", {
-    name: "Installed",
+    name: "Connected",
     exact: true,
   });
   await installed.click();
@@ -300,7 +300,7 @@ test("plugin filters remain usable after an MCP refetch fails", async ({
     page.locator("article").filter({ hasText: "Lark / Feishu" }),
   ).toBeVisible();
   await page
-    .getByRole("button", { name: "Configure Lark / Feishu", exact: true })
+    .getByRole("button", { name: "Connect Lark / Feishu", exact: true })
     .click();
   await expect(page.getByRole("dialog")).toBeVisible();
 });
@@ -349,14 +349,15 @@ test("plugin categories, setup guides, and installed state remain distinct", asy
     .getByRole("textbox", { name: "搜索插件名称或用途" })
     .fill("firecrawl");
   await expect(page.locator("article")).toHaveCount(1);
-  await expect(page.locator("article")).toContainText("推荐接入");
+  // A setup reference says so on its one action instead of a status tag.
+  await expect(page.locator("article")).not.toContainText("推荐接入");
   await page
     .getByRole("button", { name: "接入指南 Firecrawl", exact: true })
     .click();
   await expect(page.getByRole("dialog")).toContainText("Firecrawl");
   await screenshot(page, "capability-catalog-detail-zh.png");
   await page.keyboard.press("Escape");
-  await page.getByRole("button", { name: "已安装", exact: true }).click();
+  await page.getByRole("button", { name: "已连接", exact: true }).click();
   await expect(page.locator("article")).toHaveCount(0);
   await expect(
     page.getByText("没有找到匹配的内容", { exact: true }),

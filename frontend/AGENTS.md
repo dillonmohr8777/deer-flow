@@ -240,7 +240,9 @@ business projections derive provider IDs from the catalog adapter metadata. The
 sync script uses decoded filesystem paths for formatter configuration lookup.
 `plugin-catalog.ts` only resolves localized text and explicit
 installation metadata; never infer provider identity from server display names.
-`plugin-directory.tsx` groups rows and applies search/category/installed filters.
+`plugin-directory.tsx` groups rows (connected first on one sheet, then available
+by category with setup guides last) and applies search/category/installed filters.
+`plugin-action.ts` picks each row's action (Connect, Configure, Details, Setup guide).
 `core/capabilities` consumes catalog and safe status projections; MCP secrets and
 raw settings remain in the administrator-only editor. `plugin-adapters.tsx`
 registers integration-specific settings flows once, independent of catalog size.
