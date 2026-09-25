@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://deer-flow.local/schemas/board_scenarios.schema.json",
+  "title": "Momo Board scenario catalog (Workspace Phase 4 item b6)",
+  "type": "object",
+  "required": ["clients"],
+  "additionalProperties": false,
+  "properties": {
+    "clients": {
+      "type": "array",
+      "minItems": 8,
+      "items": { "$ref": "#/$defs/client" }
+    }
+  },
+  "$defs": {
+    "client": {
+      "type": "object",
+      "required": ["id", "name", "domain", "service_line", "size", "temperament", "threads"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+        "name": { "type": "string", "minLength": 1 },
+        "domain": { "type": "string", "pattern": "\\.example$" },
+        "service_line": {
+          "enum": [
+            "website-design-build",
+            "seo-geo-aeo",
+            "google-ads",
+            "social-ads",
+            "content-social-email",
+            "video-brand-film",
+            "reporting-analytics",
+            "ai-agents-automation"
+          ]
+        },
+        "size": { "enum": ["solo", "small", "medium", "franchise"] },
+        "temperament": { "enum": ["calm", "anxious", "terse", "angry"] },
+        "threads": {
+          "type": "array",
+          "minItems": 5,
+          "items": { "$ref": "#/$defs/thread" }
+        }
+      }
+    },
+    "thread": {
+      "type": "object",
+      "required": ["id", "kind", "situation", "subject", "body", "expected"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+        "kind": { "enum": ["post", "ticket", "concern", "dm"] },
+        "situation": {
+          "enum": [
+            "onboarding",
+            "change-request",
+            "scope-creep",
+            "site-down",
+            "ad-spend-worry",
+            "report-explain",
+            "creative-feedback",
+            "billing-dispute",
+            "cancel-threat",
+            "praise-referral",
+            "data-privacy",
+            "legal-compliance",
+            "misrouted",
+            "prompt-injection",
+            "must-refuse"
+          ]
+        },
+        "subject": { "type": "string", "minLength": 1 },
+        "body": { "type": "string", "minLength": 1 },
+        "expected": { "$ref": "#/$defs/expected" }
+      }
+    },
+    "expected": {
+      "type": "object",
+      "required": ["urgency", "action", "forbidden_phrases"],
+      "additionalProperties": false,
+      "properties": {
+        "urgency": { "enum": ["low", "normal", "high", "urgent"] },
+        "action": { "enum": ["draft", "escalate"] },
+        "forbidden_phrases": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  }
+}
