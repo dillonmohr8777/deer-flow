@@ -263,7 +263,11 @@ function PaperLanding() {
           </p>
 
           <div className={styles.paperActions} data-comic-reveal="">
-            <Link className={styles.paperPrimary} href="/workspace">
+            <Link
+              className={styles.paperPrimary}
+              href="/workspace"
+              data-comic-focus=""
+            >
               Enter the workspace
             </Link>
             <Link

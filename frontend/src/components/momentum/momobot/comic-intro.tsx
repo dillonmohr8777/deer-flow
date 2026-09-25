@@ -93,6 +93,8 @@ export function claimComicIntro(): boolean {
 /** Ends the intro's hold on the page: the settled hero shows. */
 export function releaseComicIntro() {
   document.documentElement.setAttribute(COMIC_ATTR, "done");
+  // The boot script turned scroll restoration off for the hold; it is per tab, so hand it back.
+  if ("scrollRestoration" in history) history.scrollRestoration = "auto";
 }
 
 const f1 = (n: number) => n.toFixed(1);
@@ -396,7 +398,11 @@ export function ComicIntro({
       restore();
       [...A, ...loose].forEach((a) => a.cancel());
       block.style.transformOrigin = "";
-      if (hadFocus) host.querySelector<HTMLElement>("a[href]")?.focus();
+      if (hadFocus)
+        (
+          host.querySelector<HTMLElement>("[data-comic-focus]") ??
+          host.querySelector<HTMLElement>("a[href]")
+        )?.focus();
       onDone();
     };
     function skip() {

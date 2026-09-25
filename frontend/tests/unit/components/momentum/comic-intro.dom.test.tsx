@@ -150,3 +150,14 @@ describe("front door comic intro", () => {
     expect(overlayPages()).toHaveLength(0);
   });
 });
+
+describe("releaseComicIntro", () => {
+  it("hands scroll restoration back to the tab", async () => {
+    const { releaseComicIntro } =
+      await import("@/components/momentum/momobot/comic-intro");
+    history.scrollRestoration = "manual";
+    releaseComicIntro();
+    expect(history.scrollRestoration).toBe("auto");
+    expect(document.documentElement.getAttribute(COMIC_ATTR)).toBe("done");
+  });
+});
