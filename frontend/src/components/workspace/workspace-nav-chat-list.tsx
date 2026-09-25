@@ -3,6 +3,7 @@
 import {
   BotIcon,
   CalendarClock,
+  Inbox,
   MessagesSquare,
   BlocksIcon,
   LampDesk,
@@ -45,6 +46,20 @@ export function WorkspaceNavChatList() {
               <Link className="text-muted-foreground" href="/workspace/desk">
                 <LampDesk />
                 <span>Desk</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        )}
+        {/* Owner-only: same private-instance boundary as Desk. */}
+        {deskEnabled && (
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              isActive={pathname === "/workspace/board"}
+              asChild
+            >
+              <Link className="text-muted-foreground" href="/workspace/board">
+                <Inbox />
+                <span>Board</span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>

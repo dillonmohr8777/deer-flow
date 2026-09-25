@@ -1,0 +1,170 @@
+/*
+ * Board: client posts, tickets, concerns and DMs. Layout only, in the
+ * Desk's visual language -- colour comes from the shell's semantic tokens
+ * and the shared page-body parts (rows, eyebrow, status).
+ */
+
+.frame {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  width: 100%;
+  max-width: 72rem;
+  min-height: 0;
+  flex: 1;
+  margin-inline: auto;
+  padding: 2rem 1rem 2rem;
+}
+
+@media (min-width: 40rem) {
+  .frame {
+    padding: 2.5rem 1.5rem 2.5rem;
+  }
+}
+
+.layout {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+@media (min-width: 64rem) {
+  .layout {
+    flex-direction: row;
+  }
+}
+
+.list {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+@media (min-width: 64rem) {
+  .list {
+    width: 22rem;
+    flex: 0 0 22rem;
+    overflow-y: auto;
+  }
+}
+
+.threadList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.threadRow {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  gap: 0.375rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+  text-align: left;
+  cursor: pointer;
+}
+
+.threadRow[aria-current="true"] {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 1px var(--primary);
+}
+
+.threadSubject {
+  overflow: hidden;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.threadMeta {
+  display: flex;
+  gap: 0.5rem;
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+}
+
+.detail {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.threadDetail {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.threadHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.messages {
+  min-height: 8rem;
+  flex: 1;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.messageList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.75rem;
+}
+
+.message {
+  padding: 0.625rem 0.75rem;
+  border-radius: var(--radius);
+  background: var(--muted);
+  font-size: 0.875rem;
+}
+
+.message-momo {
+  border: 1px dashed var(--primary);
+  background: transparent;
+}
+
+.messageAuthor {
+  display: block;
+  margin-bottom: 0.125rem;
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.actionPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.875rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+}
+
+.muted {
+  color: var(--muted-foreground);
+}
+
+.errorText {
+  color: var(--destructive);
+  font-size: 0.8125rem;
+}
