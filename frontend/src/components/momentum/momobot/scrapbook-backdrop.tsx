@@ -1,7 +1,8 @@
 "use client";
 
 import { Pause, Play } from "lucide-react";
-import { type CSSProperties, useEffect, useState } from "react";
+import { type CSSProperties, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 import { MomoFilm } from "@/components/momentum/momo-film";
 
@@ -10,9 +11,9 @@ import { type IntroMotion, LANDING_SCRIM_ALPHA } from "./intro-motion";
 import styles from "./momobot.module.css";
 
 /**
- * The scrapbook collage behind the cream sign-in sheet and the landing hero:
- * a 6.4s film of hundreds of cutouts (public/momentum/films/SOURCES.md),
- * looped, under the tone scrim. Momo's own films sit in front of it. The film
+ * The comic-paper sequence behind the cream sign-in sheet and landing hero:
+ * thirty original scenes (public/momentum/films/SOURCES.md), dissolved under
+ * the tone scrim. Momo's own films sit in front of it. The film
  * is fetched only once the page has settled (after load, at idle), so the
  * form is interactive first. Hidden tab, reduced motion or the pause control
  * hold its poster, one still collage.
@@ -25,6 +26,17 @@ export function ScrapbookBackdrop({
   tone: "royal" | "cream";
 }) {
   const [ready, setReady] = useState(false);
+  const backdropRef = useRef<HTMLDivElement>(null);
+  const [portalHost, setPortalHost] = useState<HTMLElement | null>(null);
+
+  useEffect(() => {
+    // The landing backdrop sits inside a masked, lower z-index layer. Place
+    // the control at the paper page root so the foreground cannot cover it.
+    setPortalHost(
+      backdropRef.current?.closest<HTMLElement>('[data-treatment="paper"]') ??
+        null,
+    );
+  }, []);
 
   useEffect(() => {
     let idle: number | undefined;
@@ -50,13 +62,14 @@ export function ScrapbookBackdrop({
   return (
     <>
       <div
+        ref={backdropRef}
         className={styles.backdrop}
         data-tone={tone}
         data-live={motion.live}
         aria-hidden="true"
       >
         <MomoFilm
-          name="momo-collage"
+          name="momo-comic-intro-20260925"
           live={ready && motion.live}
           className={styles.collage}
         />
@@ -69,20 +82,24 @@ export function ScrapbookBackdrop({
         />
         {tone === "royal" && motion.motionOk && <PaperDoves />}
       </div>
-      {motion.motionOk && (
-        <button
-          type="button"
-          className={styles.motionToggle}
-          onClick={() => motion.setPaused(!motion.paused)}
-        >
-          {motion.paused ? (
-            <Play size={14} aria-hidden="true" />
-          ) : (
-            <Pause size={14} aria-hidden="true" />
-          )}
-          <span>{motion.paused ? "Play motion" : "Pause motion"}</span>
-        </button>
-      )}
+      {motion.motionOk && portalHost
+        ? createPortal(
+            <button
+              type="button"
+              className={styles.motionToggle}
+              aria-label={motion.paused ? "Play motion" : "Pause motion"}
+              onClick={() => motion.setPaused(!motion.paused)}
+            >
+              {motion.paused ? (
+                <Play size={14} aria-hidden="true" />
+              ) : (
+                <Pause size={14} aria-hidden="true" />
+              )}
+              <span>{motion.paused ? "Play motion" : "Pause motion"}</span>
+            </button>,
+            portalHost,
+          )
+        : null}
     </>
   );
 }
