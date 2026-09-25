@@ -212,11 +212,13 @@ async def patch_board_thread(thread_id: str, body: BoardThreadPatchRequest, requ
     if row.get("client_id") is not None:
         await _require_client_access(client_repo, row["client_id"], user_id)
     if body.status is not None:
-        if body.status in _WORKFLOW_ONLY_STATUSES:
-            raise HTTPException(status_code=409, detail=f"Status {body.status!r} can only be set via the draft/approve/reply routes")
+        # Check admin standing first so every denied status change is audited,
+        # including a non-admin trying to forge a workflow-only status.
         if not await _is_active_org_admin(user_id):
             await record_audit_event(request, action="board.thread.status_patch", outcome="denied", actor_user_id=user_id, organization_id=resolve_organization_id(), target_type="board_thread", target_id=thread_id)
             raise HTTPException(status_code=403, detail="Only an organization owner/admin may change thread status")
+        if body.status in _WORKFLOW_ONLY_STATUSES:
+            raise HTTPException(status_code=409, detail=f"Status {body.status!r} can only be set via the draft/approve/reply routes")
     updated = await board_repo.patch_thread(thread_id, status=body.status, subject=body.subject)
     if updated is None:
         raise _not_found()

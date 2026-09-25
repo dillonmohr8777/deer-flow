@@ -275,13 +275,17 @@ async def test_patch_cannot_bypass_workflow_status(org_world):  # noqa: F811
 
         # A plain member with client access cannot PATCH the thread straight to approved...
         forged_approved = await client.patch(f"/api/board/threads/{tid}", json={"status": "approved"}, headers=headers_d)
-        assert forged_approved.status_code in (403, 409)
+        assert forged_approved.status_code == 403
         unchanged = await client.get(f"/api/board/threads/{tid}", headers=headers_a)
         assert unchanged.json()["status"] == "new"
 
+        # f14: the forgery attempt itself leaves an audited denial, not a silent 409.
+        events, _ = await audit_repo.list(organization_id=ORG_S, action_prefix="board.thread.status_patch")
+        assert any(e["outcome"] == "denied" and e["actor_user_id"] == USER_D for e in events)
+
         # ...or replied.
         forged_replied = await client.patch(f"/api/board/threads/{tid}", json={"status": "replied"}, headers=headers_d)
-        assert forged_replied.status_code in (403, 409)
+        assert forged_replied.status_code == 403
         still_unchanged = await client.get(f"/api/board/threads/{tid}", headers=headers_a)
         assert still_unchanged.json()["status"] == "new"
 
