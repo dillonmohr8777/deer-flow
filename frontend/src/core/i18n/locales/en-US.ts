@@ -1247,14 +1247,16 @@ export const enUS: Translations = {
 
   // Token Usage
   tokenUsage: {
-    title: "Token Usage",
+    title: "Token usage in this chat",
     label: "Tokens",
     input: "Input",
     output: "Output",
     total: "Total",
     view: "Display",
+    figure: (count: string) => `${count} tokens`,
+    headerUnavailable: "Tokens unavailable",
     unavailable:
-      "No token usage yet. Usage appears only after a successful model response when the provider returns usage_metadata.",
+      "Unavailable. No reply in this chat has reported its token usage yet. Counts appear once a model reply reports them.",
     unavailableShort: "No usage returned",
     collecting: "Collecting tokens",
     note: "Header totals use persisted thread usage, plus visible in-flight usage while a run is still streaming. Per-turn and debug usage come from currently visible messages only. Totals may differ from provider billing pages.",
@@ -1286,6 +1288,12 @@ export const enUS: Translations = {
     title: "Context window",
     badgeAriaLabel: (percentage: string) =>
       `Context window ${percentage}% full`,
+    headerFigure: (percentage: string) => `${percentage}% context`,
+    measured: (count: string, max: string, percentage: string) =>
+      `${count} of ${max} tokens (${percentage}%)`,
+    explanation:
+      "How much of the model's context window this chat fills on its next reply. It measures size, not spend.",
+    unavailable: "Unavailable. No context size is known for this model yet.",
   },
 
   // Shortcuts

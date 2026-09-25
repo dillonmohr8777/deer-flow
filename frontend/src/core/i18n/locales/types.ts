@@ -1077,6 +1077,8 @@ export interface Translations {
     output: string;
     total: string;
     view: string;
+    figure: (count: string) => string;
+    headerUnavailable: string;
     unavailable: string;
     unavailableShort: string;
     collecting: string;
@@ -1107,6 +1109,10 @@ export interface Translations {
     label: string;
     title: string;
     badgeAriaLabel: (percentage: string) => string;
+    headerFigure: (percentage: string) => string;
+    measured: (count: string, max: string, percentage: string) => string;
+    explanation: string;
+    unavailable: string;
   };
 
   // Shortcuts

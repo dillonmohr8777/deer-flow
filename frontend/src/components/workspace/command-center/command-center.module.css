@@ -656,6 +656,14 @@
   font-weight: 900;
   line-height: 1.2;
 }
+/* Scope and period under each figure: a total means nothing until it says
+   whose runs and over what span it counts. */
+.metrics > div > small {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+}
 .metrics > div[data-state="danger"] strong {
   color: var(--danger);
 }
