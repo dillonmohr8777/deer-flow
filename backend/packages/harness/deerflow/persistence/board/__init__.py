@@ -9,10 +9,12 @@ from deerflow.persistence.board.model import (
     BoardThreadRow,
     BoardThreadStatus,
 )
+from deerflow.persistence.board.sql import BoardRepository
 
 __all__ = [
     "TERMINAL_THREAD_STATUSES",
     "BoardMessageRow",
+    "BoardRepository",
     "BoardThreadKind",
     "BoardThreadRow",
     "BoardThreadStatus",
