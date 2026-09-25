@@ -67,13 +67,13 @@ describe("MomoAvatar", () => {
     const { container: withAvatar } = render(
       <MomoAvatar agent={UNKNOWN_AGENT} size={40} />,
     );
-    // MomoAvatar passes the display name through so an unmapped agent gets a
-    // monogram rather than an abstract mark, so the direct comparison has to
-    // hand the glyph the same name.
+    // MomoAvatar passes the stable agent name through so an unmapped agent
+    // gets a monogram rather than an abstract mark, so the direct comparison
+    // has to hand the glyph the same name.
     const { container: direct } = render(
       <MomentumGlyph
         seed={`agent:${UNKNOWN_AGENT.name}`}
-        initial={UNKNOWN_AGENT.display_name}
+        initial={UNKNOWN_AGENT.name}
         size={40}
       />,
     );

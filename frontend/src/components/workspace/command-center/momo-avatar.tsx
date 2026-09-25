@@ -167,7 +167,9 @@ export function MomoAvatar({
         <MomentumGlyph
           seed={seed}
           size={size}
-          initial={label}
+          // From the stable name, not the display name: the mark must not
+          // change letter when the agent record finishes loading.
+          initial={agent.name}
           className={styles.art}
         />
       )}

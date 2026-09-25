@@ -48,6 +48,8 @@ describe("AgentWelcome", () => {
   });
 
   it("keeps the same glyph while the agent is still loading", () => {
+    // The display name starts with a different letter than the stable name,
+    // so a monogram taken from the display name would change on load.
     const loading = render(
       <AgentWelcome agent={undefined} agentName="omega-reporting" />,
     );
@@ -57,16 +59,14 @@ describe("AgentWelcome", () => {
     loading.unmount();
     const { container } = render(
       <AgentWelcome
-        agent={agent({ display_name: "Omega weekly reporting" })}
+        agent={agent({ display_name: "Weekly reporting" })}
         agentName="omega-reporting"
       />,
     );
     const loaded = container
       .querySelector("svg[data-momentum-glyph]")
       ?.getAttribute("data-momentum-glyph");
-    expect(pending).toBeTruthy();
-    // Keyed by the agent's stable name, so the mark does not jump when the
-    // agent record arrives.
+    expect(pending).toBe("O");
     expect(loaded).toBe(pending);
     expect(container.querySelector("img[data-slug]")).toBeNull();
   });
