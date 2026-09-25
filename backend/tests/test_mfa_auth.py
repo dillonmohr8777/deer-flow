@@ -405,3 +405,17 @@ def test_mfa_management_requires_interactive_session(client, mfa_env):
     """
     response = client.post("/api/v1/auth/mfa/enroll/start", headers=_csrf_headers(client))
     assert response.status_code == 401
+
+
+def test_a_replayed_mfa_challenge_is_not_a_session(client, mfa_env):
+    """Password right, TOTP never sent: the challenge must not work as the cookie."""
+    _enroll(client, str(mfa_env.user.id))
+    client.cookies.clear()
+
+    login = _login_local(client, "alice@example.com", TEST_PASSWORD)
+    assert login.status_code == 200, login.text
+    challenge = login.json()["challenge"]
+    assert "access_token" not in login.cookies
+
+    client.cookies.set("access_token", challenge)
+    assert client.get("/api/v1/auth/me").status_code == 401

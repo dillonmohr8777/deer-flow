@@ -20,6 +20,11 @@ disable require interactive session auth (`require_session_source`), the
 same #4849 rule as PAT management and change-password. Audited actions:
 `mfa.enabled`, `mfa.disabled`, `mfa.challenge.failed`,
 `mfa.recovery_code.used`. Full design: `backend/docs/AUTH_DESIGN.md`.
+`decode_token` (the session check) refuses any token whose `typ` claim is
+present and isn't `access`, so a challenge can never be replayed as the
+`access_token` cookie. New access tokens carry `typ: access`; older ones
+without the claim stay valid. Every token here shares one HS256 secret, so
+any new token kind must set its own `typ`.
 
 Google sign-in needs no auth-module code: it is a normal `oidc.py` provider
 entry (`config.yaml` -> `auth.oidc.providers.google`), and
