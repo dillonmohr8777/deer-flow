@@ -23,7 +23,7 @@ Receipts: `docs/momo-week/PROGRESS.md`. Owner: Claude chief for Dillon Mohr.
 
 ### B. Momo Board (Workspace Phase 4): client posts, tickets, concerns, DMs, Momo drafts, owner approves
 Reuse: `backend/app/gateway/routers/clients.py`, the org/membership model, the Desk page (`frontend/src/app/workspace/desk/`), run receipts, and the momo-concierge prompt text (triage, draft only, label claims observed/inferred/unknown). Gate everything behind `config.private_workspace.enabled`, the same way the Desk does.
-- [ ] **b1 board-model**: `board_threads` + `board_messages` tables (kind: post|ticket|concern|dm; status: new|triaged|drafted|approved|replied|closed; client_id + organization_id server-owned), one Alembic migration, single head. Accept: migration up/down test.
+- [x] **b1 board-model**: https://github.com/dillonmohr8777/deer-flow/pull/19 — `board_threads` + `board_messages` tables added (migration `0038_board_threads`, chains after `0037_pat_organization`, single head), `BoardThreadKind`/`BoardThreadStatus` StrEnums, models registered so `create_all` matches the alembic chain for these tables.
 - [ ] **b2 board-api**: CRUD router with per-client isolation; a client member sees only their own threads, the owner sees all. Accept: API tests, including a cross-client 404 probe.
 - [ ] **b3 board-triage**: a service that classifies a new thread (kind, urgency, summary) through the existing model/agent plumbing, with a fake-model test. Accept: unit test with a stubbed LLM.
 - [ ] **b4 board-draft-approve**: Momo drafts a reply into `drafted`. Only the owner can move it to `approved`; `replied` needs an explicit owner action. Every transition writes an audit row. Accept: state-machine tests, including a non-owner approval being rejected.
