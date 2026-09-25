@@ -241,7 +241,10 @@ and `momobot-block.tsx` (the logo block the intro stamps and lands). Comic art
 those components. The intro plays once per session and never under reduced
 motion: an inline script in `app/page.tsx` sets `html[data-comic-intro]`
 before first paint, and `PaperLanding` claims it after hydration. Elements
-marked `data-comic-reveal` stay hidden while it plays. Keep that decision in
+marked `data-comic-reveal` stay hidden and `inert` while it plays, so its visible
+Skip intro button is the only focusable element. Art loads in timeline order
+(the first `EARLY_PAGES` storm pages, then four at a time) behind per-page gates
+that never hold past `LOAD_DEADLINE_MS` after navigation. Keep that decision in
 `decideComicIntro` and `COMIC_BOOT_SCRIPT` together; `comic-data.test.ts` runs
 both against the same truth table.
 

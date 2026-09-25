@@ -70,6 +70,33 @@ afterEach(() => {
 });
 
 describe("front door comic intro", () => {
+  it("offers Skip intro as the only way in while it plays, and it skips", async () => {
+    mockMedia({ reduce: false });
+    mockAnimate();
+    render(<MomentumLanding />);
+    const skipButton = screen.getByRole("button", { name: "Skip intro" });
+    // The page behind the intro is inert: its links take no focus yet.
+    const enter = screen.getByRole("link", {
+      name: "Enter the workspace",
+      hidden: true,
+    });
+    expect(enter.closest("[inert]")).not.toBeNull();
+    // Tab does not skip (it reaches Skip intro); modifiers alone do not skip.
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "Tab" });
+      fireEvent.keyDown(window, { key: "Shift" });
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(html().getAttribute(COMIC_ATTR)).toBe("play");
+    await act(async () => {
+      fireEvent.click(skipButton);
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(html().getAttribute(COMIC_ATTR)).toBe("done");
+    expect(screen.queryByRole("button", { name: "Skip intro" })).toBeNull();
+    expect(enter.closest("[inert]")).toBeNull();
+  });
+
   it("never plays under reduced motion: the settled hero is there at once", () => {
     mockMedia({ reduce: true });
     render(<MomentumLanding />);

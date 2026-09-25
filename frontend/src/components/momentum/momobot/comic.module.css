@@ -48,11 +48,6 @@
   visibility: hidden;
 }
 
-/* The one single-column page sits on dark paper so the storm never strobes white. */
-.dark {
-  background: var(--paper-royal-deep);
-}
-
 .cell {
   position: absolute;
   overflow: hidden;
@@ -83,20 +78,10 @@
   vector-effect: non-scaling-stroke;
 }
 
-.shade {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
-  background: linear-gradient(
-    var(--comic-shade, 90deg),
-    color-mix(in srgb, var(--paper-royal-deep) 5%, transparent),
-    color-mix(in srgb, var(--paper-royal-deep) 75%, transparent)
-  );
-}
-
+/* The cold open's halftone: it drifts, so the layer overscans the page. */
 .dots {
   position: absolute;
-  inset: 0;
+  inset: -28px;
   opacity: 0.08;
   background: radial-gradient(circle, var(--paper-royal) 0 26%, transparent 29%)
     0 0 / 14px 14px;
@@ -134,12 +119,32 @@
   }
 }
 
-/* Phones: square framed panels keep the whole crew and slab in frame. */
+/* Phones: square framed panels inside the screen (the page overscans by 6%)
+   keep the whole slab face in frame. */
 @media (max-aspect-ratio: 1 / 1) {
   .frame {
-    width: 92%;
+    width: 84%;
     aspect-ratio: 1;
   }
+}
+
+/* The peak on tall screens: the team art fills the screen at its own 3:2,
+   wider than the screen, and the camera pans the lineup. */
+.fill .frame {
+  inset: 0;
+  translate: none;
+  width: auto;
+  aspect-ratio: auto;
+  border: 0;
+}
+
+.fill .frame img {
+  right: auto;
+  width: auto;
+  max-width: none;
+  height: 100%;
+  aspect-ratio: 3 / 2;
+  object-fit: fill;
 }
 
 /* The blue wash: "color" turns everything MomoBot blue first (orange never
@@ -169,14 +174,6 @@
   background: var(--paper-royal);
   -webkit-mask: var(--comic-band) left bottom / auto 100% repeat-x;
   mask: var(--comic-band) left bottom / auto 100% repeat-x;
-}
-
-/* The storm climbs into the light before the s03 cut. */
-.light {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
-  background: var(--paper-white);
 }
 
 /* Captions: the DESIGN.md label voice on a white box. */
@@ -224,8 +221,9 @@
   background: var(--paper-signal);
 }
 
-/* The hit: a thin orange edge flash while two streaks shoot across. About 3%
-   of the frame at its peak (measured in the build folder's tools/record.py). */
+/* The hit: two clean tapered orange streaks, one bold and one fine, sweeping
+   across on the beat. About 4% of the frame at its peak (measured in the
+   build folder's tools/record.py). */
 .hit {
   position: fixed;
   inset: 0;
@@ -235,20 +233,52 @@
   pointer-events: none;
 }
 
-.edge {
-  position: absolute;
-  inset: 0;
-  border: 1.3vmin solid var(--paper-signal);
-}
-
 .streak {
   position: absolute;
-  left: -30%;
-  width: 160%;
-  height: 1vmin;
+  left: 0;
+  width: 92vw;
   background: var(--paper-signal);
-  rotate: -13deg;
-  transform: translateX(-100%);
+  rotate: -12deg;
+  transform: translateX(-110vw);
+  clip-path: polygon(0 50%, 7% 0, 100% 0, 93% 100%, 0 100%);
+}
+
+.bold {
+  top: 38%;
+  height: 2.4vmin;
+}
+
+.fine {
+  top: 47%;
+  height: 0.7vmin;
+}
+
+/* Skip intro: subtle, bottom right, the one focusable thing while it plays. */
+.skip {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 45;
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 1rem;
+  border: 1px solid var(--paper-line);
+  background: color-mix(in srgb, var(--paper-cream-hi) 92%, transparent);
+  color: var(--paper-ink);
+  font: 700 0.8125rem / 1
+    var(--m-font-text, "Nunito Sans", system-ui, sans-serif);
+  cursor: pointer;
+  pointer-events: auto; /* the page under the intro ignores the pointer; this does not */
+}
+
+.skip:hover {
+  background: var(--paper-cream-hi);
+}
+
+.skip:focus-visible {
+  outline: 2px solid var(--paper-focus);
+  outline-offset: 3px;
 }
 
 /* ---- The settled wall ---------------------------------------------------- */
@@ -267,6 +297,8 @@
 }
 
 .columns {
+  /* Its own stacking context: the panel captions (z-index 3) stay under the scrim. */
+  isolation: isolate;
   display: flex;
   gap: 14px;
   height: 100%;

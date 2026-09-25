@@ -12,19 +12,27 @@ export type ArtMeta = {
   h: number;
   /** Mean relative luminance, 0..1 (public/momentum/comic/SOURCES.md). */
   lum: number;
+  /** A 1280 px .l variant exists (landscape panels, for full-bleed pages). */
+  l?: boolean;
 };
 export type Manifest = Record<string, ArtMeta>;
 
 export const COMIC_BASE = "/momentum/comic";
 /** Phones (704 px and under) get the lighter .m variants. */
 export const PHONE_MAX_WIDTH = 704;
-export const artSrc = (id: string, phone: boolean) =>
-  `${COMIC_BASE}/${id}${phone ? ".m" : ""}.webp`;
+/** Phones: .m (400 px). Full-bleed on larger screens: .l (1280 px) when it exists. Otherwise 640 px. */
+export const artSrc = (
+  id: string,
+  phone: boolean,
+  fullBleed = false,
+  meta?: ArtMeta,
+) =>
+  `${COMIC_BASE}/${id}${phone ? ".m" : fullBleed && meta?.l ? ".l" : ""}.webp`;
 
 /** The beats, in ms from the first frame. */
 export const T = {
   COLD: 1200, // cold open ends, the storm begins
-  STORM_END: 6000, // storm ends on the s03 cut
+  STORM_END: 6000, // storm ends: ALL IN cuts to the s03 charge
   TEAM: 7000, // the team lineup, the peak
   S05: 8950, // the slab lands
   STAMP: 9150, // the wordmark stamps onto the slab
@@ -49,7 +57,7 @@ export type Quad = readonly [
   number,
   number,
 ];
-export type Layout = "splash" | "split" | "stack3" | "strips" | "tall" | "col";
+export type Layout = "splash" | "split" | "stack3" | "strips" | "tall";
 
 export const LAYOUT: Record<Layout, readonly Quad[]> = {
   splash: [[2, 3, 98, 3, 98, 97, 2, 97]],
@@ -72,7 +80,6 @@ export const LAYOUT: Record<Layout, readonly Quad[]> = {
     [47, 3, 98, 3, 98, 46, 47, 52],
     [47, 55, 98, 49, 98, 97, 47, 97],
   ],
-  col: [[30, 4, 70, 3, 71, 96, 29, 97]],
 };
 
 /** Phones and other tall windows turn every layout on its side. */
@@ -81,9 +88,12 @@ export function orient(q: Quad, portrait: boolean): Quad {
 }
 
 /**
- * The flip storm, one entry per page: 24 pages. It opens on a mixed layout,
- * the two "!" entries are the orange-hit splash pages, and it ends on a
- * full-bleed finale. Pages name only a layout; dealStorm() picks the art.
+ * The flip storm, one entry per page: 17 pages. It opens on a mixed layout,
+ * and its full-bleed finale climbs dark to light into ALL IN, the brightest
+ * page, which cuts straight to the s03 charge. The two "!" entries are the
+ * orange-hit pages. Pages name only a layout; dealStorm() picks the art.
+ * No page cuts faster than ~215 ms: an independent review measured regional
+ * flashing at 4 a second with 90 to 120 ms holds (DESIGN.md motion item 7).
  */
 export const STORM: readonly string[] = [
   "tall",
@@ -95,35 +105,26 @@ export const STORM: readonly string[] = [
   "tall",
   "strips",
   "split",
+  "split",
   "strips",
-  "col",
+  "splash",
+  "splash",
+  "splash",
+  "splash",
+  "splash",
   "!g01-charge",
-  "split",
-  "strips",
-  "splash",
-  "split",
-  "splash",
-  "split",
-  "splash",
-  "splash",
-  "splash",
-  "splash",
-  "splash",
-  "splash",
 ];
+/** The full-bleed finale's pages, before ALL IN. */
+export const FINALE = 5;
 export const HIT_WORD: Record<string, string> = {
   "t2-builder": "Build",
   "g01-charge": "All in",
 };
 /** Close-ups: at most one per page, so a page never becomes a wall of faces. */
 export const CLOSE: ReadonlySet<string> = new Set([
-  "r-analytics-1",
-  "r-engineer-2",
-  "r-lead-3",
   "r-verifier-1",
   "t1-research",
   "r-reliability-3",
-  "r-revenue-3",
   "r-client-success-3",
 ]);
 const VERB: Record<string, string> = {
@@ -155,8 +156,8 @@ export type DealtPage = { layout: Layout; ids: string[] };
  * Deals the art into the storm. Portrait art goes into tall cells and
  * landscape art into wide ones, so no crop turns a panel into a giant face.
  * Art is dealt light to dark by luminance, never two close-ups on a page, and
- * the finale's six splashes run dark to light so the storm climbs into the
- * bright s03 cut. `viewport` is the window: the stack overscans it by 6%.
+ * the finale's splashes run dark to light so the storm climbs into ALL IN and
+ * the bright s03 cut. `viewport` is the window: the stack overscans it by 6%.
  */
 export function dealStorm(
   manifest: Manifest,
@@ -197,17 +198,18 @@ export function dealStorm(
     });
     return { layout, ids };
   });
+  const end = dealt.length - 1; // ALL IN stays last
   const finale = dealt
-    .slice(-6)
+    .slice(end - FINALE, end)
     .sort((a, b) => lumOf(manifest, a.ids[0]) - lumOf(manifest, b.ids[0]));
-  return [...dealt.slice(0, -6), ...finale];
+  return [...dealt.slice(0, end - FINALE), ...finale, ...dealt.slice(end)];
 }
 const lumOf = (m: Manifest, id: string | undefined) =>
   id ? (m[id]?.lum ?? 0) : 0;
 
-/** Storm holds: linear from ~309 ms to ~91 ms, summing to exactly 4.8 s. */
+/** Storm holds: linear from ~351 ms to ~214 ms, summing to exactly 4.8 s. */
 export function stormHolds(): number[] {
-  const raw = STORM.map((_, i) => 90 + 215 * (1 - i / (STORM.length - 1)));
+  const raw = STORM.map((_, i) => 220 + 140 * (1 - i / (STORM.length - 1)));
   const norm = (T.STORM_END - T.COLD) / raw.reduce((a, b) => a + b, 0);
   return raw.map((d) => d * norm);
 }
@@ -220,19 +222,20 @@ export type PagePlan = {
   push?: number;
 };
 
-/** Every page, in order: cold open, the 24 storm pages, s03, the team, s05. */
+/**
+ * Every page, in order: cold open, the 17 storm pages, s03, the team, s05.
+ * Turns take 0.75 of a hold, so two pages never swing at once (that doubled
+ * the flicker); ALL IN cuts straight to the charge.
+ */
 export function planPages(): PagePlan[] {
   const plan: PagePlan[] = [{ shown: 0, exit: T.COLD, out: "turn", turn: 300 }];
   let t = T.COLD;
   for (const hold of stormHolds()) {
-    plan.push({
-      shown: t,
-      exit: t + hold,
-      out: "turn",
-      turn: Math.max(90, hold * 1.4),
-    });
+    plan.push({ shown: t, exit: t + hold, out: "turn", turn: hold * 0.75 });
     t += hold;
   }
+  const last = plan[plan.length - 1];
+  if (last) Object.assign(last, { out: "cut", turn: 0 });
   plan.push({
     shown: T.STORM_END,
     exit: T.TEAM,
@@ -250,8 +253,9 @@ export const pageEnd = (p: PagePlan) =>
   p.out === "turn" ? p.exit + p.turn : p.out === "cut" ? p.exit : T.LIFT + 300;
 
 /**
- * The orange beats: the two storm hit pages (as each is revealed, not when
- * the page above starts turning), the s03 cut, the team and the slab.
+ * The orange beats: the two storm hit pages, BUILD and ALL IN (as each is
+ * revealed, not when the page above starts turning), and the team. The slab
+ * lands on its own camera shake, so no streak crosses the stamped wordmark.
  */
 export function beats(plan: PagePlan[]): number[] {
   const hits = STORM.flatMap((spec, i) => {
@@ -261,14 +265,14 @@ export function beats(plan: PagePlan[]): number[] {
       ? [page.shown + Math.min(160, above.turn * 0.45)]
       : [];
   });
-  return [...hits, T.STORM_END, T.TEAM, T.S05];
+  return [...hits, T.TEAM];
 }
 
 /** Every turn swings the free edge toward the camera. */
 export const HINGE = {
-  L: { origin: "0% 50%", to: "rotateY(-104deg)", shade: "90deg" },
-  R: { origin: "100% 50%", to: "rotateY(104deg)", shade: "270deg" },
-  T: { origin: "50% 0%", to: "rotateX(104deg)", shade: "180deg" },
+  L: { origin: "0% 50%", to: "rotateY(-104deg)" },
+  R: { origin: "100% 50%", to: "rotateY(104deg)" },
+  T: { origin: "50% 0%", to: "rotateX(104deg)" },
 } as const;
 export const hingeOf = (i: number) =>
   i % 7 === 3 ? HINGE.R : i % 4 === 2 ? HINGE.T : HINGE.L;
@@ -385,11 +389,33 @@ export function decideComicIntro(env: {
   return !env.played || /[?&]replay\b/.test(env.search);
 }
 export const COMIC_SESSION_KEY = "momo-intro";
+/** Set on <html> while the intro's timeline runs. */
+export const COMIC_RUNNING_ATTR = "data-comic-running";
+/**
+ * Loading: the cold open and the first storm pages must be ready this soon
+ * after navigation, or the visitor gets the settled page instead of a stall.
+ * Later pages may hold the timeline at most GATE_HOLD_MS.
+ */
+export const LOAD_DEADLINE_MS = 2500;
+export const GATE_HOLD_MS = 400;
+/** Storm pages that load before the rest. */
+export const EARLY_PAGES = 6;
+/** Keys that never skip: Tab reaches Skip intro; modifiers pressed alone. */
+export const NON_SKIP_KEYS: ReadonlySet<string> = new Set([
+  "Tab",
+  "Shift",
+  "Control",
+  "Alt",
+  "Meta",
+]);
 export const COMIC_ATTR = "data-comic-intro";
 
 /**
  * The same decision as an inline script, run before first paint so the
- * settled hero never flashes before the intro. It only sets
- * html[data-comic-intro="play"]; the landing claims it after hydration.
+ * settled hero never flashes before the intro. It sets
+ * html[data-comic-intro="play"]; the landing claims it after hydration. If
+ * the intro's timeline has not started by LOAD_DEADLINE_MS after navigation
+ * (a slow connection still fetching the app), it releases the page instead,
+ * so the hero is never held hidden waiting for code or art.
  */
-export const COMIC_BOOT_SCRIPT = `(function(){try{var d=document.documentElement,s=location.search,p=false;try{p=sessionStorage.getItem(${JSON.stringify(COMIC_SESSION_KEY)})==="1"}catch(e){}var r=!!(window.matchMedia&&matchMedia("(prefers-reduced-motion: reduce)").matches);if(!r&&!/[?&]look=current\\b/.test(s)&&(!p||/[?&]replay\\b/.test(s))){d.setAttribute(${JSON.stringify(COMIC_ATTR)},"play");if("scrollRestoration" in history)history.scrollRestoration="manual"}}catch(e){}})();`;
+export const COMIC_BOOT_SCRIPT = `(function(){try{var d=document.documentElement,s=location.search,p=false,A=${JSON.stringify(COMIC_ATTR)};try{p=sessionStorage.getItem(${JSON.stringify(COMIC_SESSION_KEY)})==="1"}catch(e){}var r=!!(window.matchMedia&&matchMedia("(prefers-reduced-motion: reduce)").matches);if(!r&&!/[?&]look=current\\b/.test(s)&&(!p||/[?&]replay\\b/.test(s))){d.setAttribute(A,"play");if("scrollRestoration" in history)history.scrollRestoration="manual";setTimeout(function(){if(d.getAttribute(A)==="play"&&!d.hasAttribute(${JSON.stringify(COMIC_RUNNING_ATTR)}))d.setAttribute(A,"done")},Math.max(0,${LOAD_DEADLINE_MS}-(window.performance?performance.now():0)))}}catch(e){}})();`;

@@ -16,8 +16,14 @@ import {
 import styles from "./comic.module.css";
 import momobot from "./momobot.module.css";
 
+// The 16 brightest portrait panels: they fit the tall wall columns, read
+// lightest under the scrim, and are the first the storm deals into its tall
+// cells on wide screens (dealStorm), so after the intro the wall downloads
+// nothing new.
 const PANELS = Object.entries(manifest as Manifest)
-  .filter(([, m]) => m.kind === "flare")
+  .filter(([, m]) => m.kind === "flare" && m.h > m.w)
+  .sort((a, b) => b[1].lum - a[1].lum)
+  .slice(0, 16)
   .map(([id]) => id);
 const COLUMNS = 6;
 const PER_COLUMN = 6;

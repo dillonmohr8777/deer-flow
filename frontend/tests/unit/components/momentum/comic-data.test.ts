@@ -3,18 +3,22 @@ import { runInNewContext } from "node:vm";
 import { describe, expect, it } from "@rstest/core";
 
 import {
+  artSrc,
   beats,
   CLOSE,
   COMIC_ATTR,
   COMIC_BOOT_SCRIPT,
+  COMIC_RUNNING_ATTR,
   COMIC_SCRIM_ALPHA,
   COMIC_SESSION_KEY,
   dealStorm,
   decideComicIntro,
+  FINALE,
   HIT_WORD,
   homography,
   LAYOUT,
   type Manifest,
+  NON_SKIP_KEYS,
   orient,
   pageEnd,
   planPages,
@@ -31,16 +35,27 @@ const DESKTOP = { w: 1280, h: 720 };
 const PHONE = { w: 390, h: 844 };
 
 describe("comic intro timeline", () => {
-  it("runs the storm from ~309 ms to ~91 ms a page, exactly 4.8 s in all", () => {
+  it("runs the storm from ~351 ms to ~214 ms a page, exactly 4.8 s in all", () => {
     const holds = stormHolds();
     expect(holds).toHaveLength(STORM.length);
     expect(holds.reduce((a, b) => a + b, 0)).toBeCloseTo(
       T.STORM_END - T.COLD,
       6,
     );
-    expect(holds[0]).toBeCloseTo(309, 0);
-    expect(holds.at(-1)).toBeCloseTo(91, 0);
+    expect(holds[0]).toBeCloseTo(351, 0);
+    expect(holds.at(-1)).toBeCloseTo(214, 0);
     holds.slice(1).forEach((h, i) => expect(h).toBeLessThanOrEqual(holds[i]!));
+  });
+
+  it("never cuts faster than ~200 ms, and never swings two pages at once (flash floor)", () => {
+    // An independent review measured regional flashing at 4 a second with 90 to
+    // 120 ms holds; the build's regional gate passes at this floor.
+    expect(Math.min(...stormHolds())).toBeGreaterThanOrEqual(200);
+    const storm = planPages().slice(1, STORM.length + 1);
+    storm.forEach((p) => expect(p.turn).toBeLessThanOrEqual(p.exit - p.shown));
+    // ALL IN cuts straight to the charge.
+    expect(storm.at(-1)).toMatchObject({ out: "cut", exit: T.STORM_END });
+    expect(pageEnd(storm.at(-1)!)).toBe(T.STORM_END);
   });
 
   it("plans every page in order and settles inside 10.5 s", () => {
@@ -56,9 +71,10 @@ describe("comic intro timeline", () => {
     expect(settleEnd(7)).toBeLessThanOrEqual(10_500);
   });
 
-  it("keeps the orange beats at least a second apart (flash pacing)", () => {
+  it("keeps the orange beats at least a second apart, clear of the stamp", () => {
     const hits = beats(planPages());
-    expect(hits).toHaveLength(5);
+    expect(hits).toHaveLength(3); // BUILD, ALL IN, the team
+    expect(Math.max(...hits) + 420).toBeLessThan(T.S05);
     hits
       .slice(1)
       .forEach((b, i) => expect(b - hits[i]!).toBeGreaterThanOrEqual(1000));
@@ -107,11 +123,30 @@ describe("dealing the storm", () => {
     );
     expect(hits).toEqual([
       [5, "t2-builder"],
-      [11, "g01-charge"],
+      [STORM.length - 1, "g01-charge"],
     ]);
     expect(Object.keys(HIT_WORD).sort()).toEqual(["g01-charge", "t2-builder"]);
-    const finale = pages.slice(-6).map((p) => art[p.ids[0]!]!.lum);
+    const finale = pages.slice(-1 - FINALE, -1).map((p) => art[p.ids[0]!]!.lum);
+    expect(finale).toHaveLength(FINALE);
     expect(finale).toEqual([...finale].sort((a, b) => a - b));
+    // ALL IN is brighter than every finale page: the climb never dips.
+    expect(art["g01-charge"]!.lum).toBeGreaterThanOrEqual(Math.max(...finale));
+  });
+
+  it("serves full-bleed pages sharp on large screens and light on phones", () => {
+    const wide = Object.entries(art).find(([, m]) => m.kind === "flare" && m.l);
+    expect(wide).toBeDefined();
+    const [id, meta] = wide!;
+    expect(artSrc(id, false, true, meta)).toBe(`/momentum/comic/${id}.l.webp`);
+    expect(artSrc(id, false, false, meta)).toBe(`/momentum/comic/${id}.webp`);
+    expect(artSrc(id, true, true, meta)).toBe(`/momentum/comic/${id}.m.webp`);
+  });
+
+  it("skips on any key except Tab and modifiers pressed alone", () => {
+    for (const key of ["Tab", "Shift", "Control", "Alt", "Meta"])
+      expect(NON_SKIP_KEYS.has(key)).toBe(true);
+    for (const key of [" ", "Enter", "Escape", "a"])
+      expect(NON_SKIP_KEYS.has(key)).toBe(false);
   });
 
   it("turns layouts on their side in tall windows", () => {
@@ -185,13 +220,20 @@ describe("once per session, never under reduced motion", () => {
 
   // The boot script is the same decision, inlined before first paint. Run it
   // in a sandbox whose globals are stubs.
-  const boot = (opts: { reduce: boolean; played: boolean; search: string }) => {
+  const boot = (
+    opts: { reduce: boolean; played: boolean; search: string },
+    timers: Array<() => void> = [],
+  ) => {
     const attrs: Record<string, string> = {};
     const matchMedia = () => ({ matches: opts.reduce });
     const sandbox = {
+      setTimeout: (fn: () => void) => timers.push(fn),
+      performance: { now: () => 400 },
       document: {
         documentElement: {
           setAttribute: (k: string, v: string) => (attrs[k] = v),
+          getAttribute: (k: string) => attrs[k] ?? null,
+          hasAttribute: (k: string) => k in attrs,
         },
       },
       location: { search: opts.search },
@@ -204,7 +246,7 @@ describe("once per session, never under reduced motion", () => {
       window: { matchMedia },
     };
     runInNewContext(COMIC_BOOT_SCRIPT, sandbox);
-    return attrs[COMIC_ATTR];
+    return attrs;
   };
 
   it("inlines the same decision for first paint", () => {
@@ -214,8 +256,24 @@ describe("once per session, never under reduced motion", () => {
           const expected = decideComicIntro({ reduce, played, search })
             ? "play"
             : undefined;
-          expect(boot({ reduce, played, search })).toBe(expected);
+          expect(boot({ reduce, played, search })[COMIC_ATTR]).toBe(expected);
         }
+  });
+
+  it("releases the page at the load deadline unless the intro has started", () => {
+    // A slow connection still fetching the app must not hold the hero hidden.
+    const timers: Array<() => void> = [];
+    const waiting = boot({ reduce: false, played: false, search: "" }, timers);
+    expect(waiting[COMIC_ATTR]).toBe("play");
+    expect(timers).toHaveLength(1);
+    timers[0]!();
+    expect(waiting[COMIC_ATTR]).toBe("done");
+
+    const later: Array<() => void> = [];
+    const running = boot({ reduce: false, played: false, search: "" }, later);
+    running[COMIC_RUNNING_ATTR] = ""; // the timeline started in time
+    later[0]!();
+    expect(running[COMIC_ATTR]).toBe("play");
   });
 });
 

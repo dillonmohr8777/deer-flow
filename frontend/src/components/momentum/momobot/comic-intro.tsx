@@ -14,15 +14,20 @@ import {
   artSrc,
   beats,
   COMIC_ATTR,
+  COMIC_RUNNING_ATTR,
   COMIC_SESSION_KEY,
   dealStorm,
   decideComicIntro,
   type DealtPage,
+  EARLY_PAGES,
+  GATE_HOLD_MS,
   hingeOf,
   HIT_WORD,
   homography,
   LAYOUT,
+  LOAD_DEADLINE_MS,
   type Manifest,
+  NON_SKIP_KEYS,
   orient,
   pageEnd,
   PHONE_MAX_WIDTH,
@@ -41,12 +46,15 @@ import styles from "./comic.module.css";
 
 /*
  * The front door's ten-second comic intro (DESIGN.md motion item 7, approved
- * by Dillon 2026-09-24). A cold-open panel, a 24-page flip storm under a
+ * by Dillon 2026-09-24). A cold-open panel, a 17-page flip storm under a
  * rising blue wash, the team splashes, then the slab lands and the real
  * MomoBotBlock is stamped onto it in perspective and flown into the headline.
- * It plays once per session, any click or key skips it, and reduced motion
- * never sees it: the landing claims it with claimComicIntro().
+ * It plays once per session; Skip intro, any click or any key (except Tab and
+ * modifiers alone) skips it; reduced motion never sees it: the landing claims
+ * it with claimComicIntro().
  */
+
+const ART = manifest as Manifest;
 
 /**
  * Claims the intro for this page view. True when it should play. Idempotent,
@@ -118,6 +126,35 @@ function star() {
   return `polygon(${pts.join(",")})`;
 }
 
+/**
+ * An image that loads now (`eager`) or when the loading queue reaches it
+ * (data-src): the first storm pages get the bandwidth before the rest.
+ */
+function Art({
+  src,
+  eager,
+  className,
+  high,
+  slab,
+}: {
+  src: string;
+  eager: boolean;
+  className?: string;
+  high?: boolean;
+  slab?: boolean;
+}) {
+  return (
+    <img
+      className={className}
+      alt=""
+      src={eager ? src : undefined}
+      data-src={eager ? undefined : src}
+      data-comic-slab={slab ? "" : undefined}
+      fetchPriority={high ? "high" : undefined}
+    />
+  );
+}
+
 function StormPage({
   page,
   index,
@@ -130,6 +167,7 @@ function StormPage({
   portrait: boolean;
 }) {
   const polys = LAYOUT[page.layout].map((q) => orient(q, portrait));
+  const fullBleed = page.layout === "splash";
   return (
     <>
       {page.ids.map((raw, k) => {
@@ -160,11 +198,11 @@ function StormPage({
               clipPath: `polygon(${clip})`,
             }}
           >
-            <img
+            <Art
               className={styles.photo}
-              alt=""
-              src={artSrc(id, phone)}
-              fetchPriority={index < 2 ? "high" : undefined}
+              src={artSrc(id, phone, fullBleed, ART[id])}
+              eager={index < EARLY_PAGES}
+              high={index < 2}
             />
           </div>
         );
@@ -217,22 +255,19 @@ function StormPage({
 function Framed({
   id,
   phone,
+  eager = false,
   slab,
 }: {
   id: string;
   phone: boolean;
+  eager?: boolean;
   slab?: boolean;
 }) {
   return (
     <>
       <div className={styles.dots} data-comic-dots="" />
       <div className={styles.frame} data-comic-frame="">
-        <img
-          alt=""
-          src={artSrc(id, phone)}
-          data-comic-slab={slab ? "" : undefined}
-          fetchPriority={id === "s01-coldopen" ? "high" : undefined}
-        />
+        <Art src={artSrc(id, phone)} eager={eager} high={eager} slab={slab} />
       </div>
     </>
   );
@@ -252,7 +287,7 @@ export function ComicIntro({
   );
   const phone = view.w <= PHONE_MAX_WIDTH,
     portrait = view.h > view.w;
-  const dealt = useMemo(() => dealStorm(manifest as Manifest, view), [view]);
+  const dealt = useMemo(() => dealStorm(ART, view), [view]);
   const textures = useMemo(
     () => ({ "--comic-band": band(), "--comic-star": star() }) as CSSProperties,
     [],
@@ -260,13 +295,16 @@ export function ComicIntro({
   const stackRef = useRef<HTMLDivElement>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
   const hitRef = useRef<HTMLDivElement>(null);
+  const skipRef = useRef<HTMLButtonElement>(null);
 
   const pages = useMemo(
     () => [
-      { cls: styles.page, body: <Framed id="s01-coldopen" phone={phone} /> },
+      {
+        cls: styles.page,
+        body: <Framed id="s01-coldopen" phone={phone} eager />,
+      },
       ...dealt.map((page, i) => ({
-        cls:
-          page.layout === "col" ? `${styles.page} ${styles.dark}` : styles.page,
+        cls: styles.page,
         body: (
           <StormPage page={page} index={i} phone={phone} portrait={portrait} />
         ),
@@ -276,7 +314,8 @@ export function ComicIntro({
         body: <Framed id="s03-charge" phone={phone} />,
       },
       {
-        cls: `${styles.page} ${styles.splash}`,
+        // Tall screens: the peak fills the screen and the camera pans the lineup.
+        cls: `${styles.page} ${styles.splash}${portrait ? ` ${styles.fill}` : ""}`,
         body: <Framed id="t3-team" phone={phone} />,
       },
       {
@@ -291,12 +330,14 @@ export function ComicIntro({
     const stack = stackRef.current,
       overlay = overlayRef.current,
       hit = hitRef.current,
+      skipBtn = skipRef.current,
       host = root.current;
     const block = host?.querySelector<HTMLElement>("[data-comic-block]");
     if (
       !stack ||
       !overlay ||
       !hit ||
+      !skipBtn ||
       !host ||
       !block ||
       typeof overlay.animate !== "function"
@@ -310,9 +351,16 @@ export function ComicIntro({
     const pageEls = [...stack.children] as HTMLElement[];
     const plan = planPages();
     const A: Animation[] = []; // the timeline: paused by the loading gates, awaited to finish
-    const loose: Animation[] = []; // ambience that keeps running during a hold
+    const loose: Animation[] = []; // ambience that keeps moving through a loading hold
     const timers: number[] = [];
     let over = false;
+
+    // Nothing behind the intro takes focus: Skip intro is the first stop.
+    const behind = [
+      ...host.querySelectorAll<HTMLElement>("[data-comic-reveal]"),
+    ].filter((el) => el.getAttribute("data-comic-reveal") !== "wall");
+    behind.forEach((el) => (el.inert = true));
+    const restore = () => behind.forEach((el) => (el.inert = false));
 
     const go = (el: Element, kf: Keyframe[], o: KeyframeAnimationOptions) => {
       const a = el.animate(kf, { fill: "both", ...o });
@@ -332,15 +380,23 @@ export function ComicIntro({
         { duration: end },
       );
     };
+    const detach = () => {
+      removeEventListener("pointerdown", skip);
+      removeEventListener("keydown", onKey);
+      skipBtn.removeEventListener("click", skip);
+    };
     const finish = () => {
       if (over) return;
       over = true;
-      removeEventListener("pointerdown", skip);
-      removeEventListener("keydown", skip);
+      detach();
       timers.forEach((t) => clearTimeout(t));
+      const hadFocus = document.activeElement === skipBtn;
       releaseComicIntro(); // show the page first, then drop the animations: no hidden frame between
+      document.documentElement.removeAttribute(COMIC_RUNNING_ATTR);
+      restore();
       [...A, ...loose].forEach((a) => a.cancel());
       block.style.transformOrigin = "";
+      if (hadFocus) host.querySelector<HTMLElement>("a[href]")?.focus();
       onDone();
     };
     function skip() {
@@ -348,14 +404,21 @@ export function ComicIntro({
         try {
           a.finish();
         } catch {
-          // An animation with no end (none here) cannot finish; cancel covers it.
+          // An animation with no end (none in A) cannot finish; cancel covers it.
         }
       });
       finish();
     }
+    function onKey(e: KeyboardEvent) {
+      if (!NON_SKIP_KEYS.has(e.key)) skip();
+    }
 
     const play = () => {
       if (over) return;
+      // The boot script already released a page that waited too long.
+      if (document.documentElement.getAttribute(COMIC_ATTR) !== "play")
+        return finish();
+      document.documentElement.setAttribute(COMIC_RUNNING_ATTR, "");
       pageEls.forEach((page, i) => {
         const P = plan[i];
         if (!P) return;
@@ -390,23 +453,30 @@ export function ComicIntro({
         ]);
         const hinge = hingeOf(i);
         page.style.transformOrigin = hinge.origin;
-        page.style.setProperty("--comic-shade", hinge.shade);
-        if (P.out === "turn") {
+        if (P.out === "turn")
           go(page, [{ transform: "none" }, { transform: hinge.to }], {
             delay: P.exit,
             duration: P.turn,
             easing: "cubic-bezier(.45,0,.9,.5)",
           });
-          const shade = page.querySelector("[data-comic-shade]");
-          if (shade)
-            go(shade, [{ opacity: 0 }, { opacity: 0.2 }], {
-              delay: P.exit,
-              duration: P.turn,
-              easing: "ease-in",
-            });
-        }
-        const art = page.querySelector("[data-comic-frame] img");
-        if (P.push && art)
+        const art = page.querySelector<HTMLElement>("[data-comic-frame] img");
+        if (art && page.classList.contains(styles.fill ?? "")) {
+          // Tall screens: pan the whole lineup, left to right.
+          const box = page.getBoundingClientRect();
+          const span = box.height * 1.5 - box.width;
+          go(
+            art,
+            [
+              { transform: `translateX(${f1(-0.08 * span)}px)` },
+              { transform: `translateX(${f1(-0.92 * span)}px)` },
+            ],
+            {
+              delay: P.shown,
+              duration: P.exit - P.shown,
+              easing: "cubic-bezier(.45,0,.55,1)",
+            },
+          );
+        } else if (P.push && art)
           go(art, [{ transform: "none" }, { transform: `scale(${P.push})` }], {
             delay: P.shown,
             duration: P.exit - P.shown,
@@ -414,10 +484,11 @@ export function ComicIntro({
           });
       });
 
-      // Cold open: the panel drifts onto the page and keeps pushing in; the
-      // halftone breathes on its own loop, so a loading hold never looks frozen.
+      // Cold open: the panel drifts onto the page, then keeps pushing in while
+      // the halftone drifts, even through a loading hold.
       const cold = pageEls[0];
       const coldFrame = cold?.querySelector("[data-comic-frame]"),
+        coldArt = cold?.querySelector("[data-comic-frame] img"),
         coldDots = cold?.querySelector("[data-comic-dots]");
       if (coldFrame)
         go(
@@ -428,15 +499,36 @@ export function ComicIntro({
           ],
           { duration: T.COLD, easing: "cubic-bezier(.15,.6,.3,1)" },
         );
-      if (coldDots)
+      if (coldArt)
         loose.push(
-          coldDots.animate([{ opacity: 0.03 }, { opacity: 0.17 }], {
-            duration: 600,
+          coldArt.animate(
+            [{ transform: "none" }, { transform: "scale(1.4)" }],
+            {
+              duration: 9000,
+              easing: "linear",
+              fill: "both",
+            },
+          ),
+        );
+      if (coldDots) {
+        loose.push(
+          coldDots.animate(
+            [
+              { transform: "translate(0, 0)" },
+              { transform: "translate(-14px, -14px)" },
+            ],
+            { duration: 1400, iterations: Infinity, easing: "linear" },
+          ),
+        );
+        loose.push(
+          coldDots.animate([{ opacity: 0.05 }, { opacity: 0.15 }], {
+            duration: 700,
             direction: "alternate",
             iterations: Infinity,
             easing: "ease-in-out",
           }),
         );
+      }
 
       // Camera: a linear push through the storm, then a shake as the slab lands.
       const camera = overlay.querySelector("[data-comic-camera]");
@@ -455,8 +547,8 @@ export function ComicIntro({
           [T.LAND, { transform: "none" }],
         ]);
 
-      // The blue wash rises through the storm and lifts off the finale; a white
-      // light ramps in, so the storm climbs into the bright s03 cut.
+      // The blue wash rises through the storm and lifts off the finale, which
+      // climbs dark to light into ALL IN and the charge.
       const washKeys = (o: number): Array<[number, Keyframe, string?]> => [
         [0, { transform: "translateY(130%)", opacity: o }],
         [
@@ -480,39 +572,30 @@ export function ComicIntro({
             washKeys(w.getAttribute("data-comic-wash") === "deep" ? 0.25 : 0.8),
           ),
         );
-      const light = overlay.querySelector("[data-comic-light]");
-      if (light)
-        track(light, [
-          [0, { opacity: 0 }],
-          [T.STORM_END - 150, { opacity: 0 }, "ease-in"],
-          [T.STORM_END, { opacity: 0.35 }],
-          [T.STORM_END, { opacity: 0 }],
-          [T.LAND, { opacity: 0 }],
-        ]);
 
-      // Orange beats: a thin edge flash while two streaks shoot across.
+      // Orange beats: two clean tapered streaks sweep across, eased.
       beats(plan).forEach((at) => {
         go(
           hit,
           [
             { opacity: 0 },
-            { opacity: 1, offset: 0.12 },
-            { opacity: 1, offset: 0.55 },
+            { opacity: 1, offset: 0.15 },
+            { opacity: 1, offset: 0.7 },
             { opacity: 0 },
           ],
-          { delay: at, duration: 260, fill: "none" },
+          { delay: at, duration: 420, fill: "none" },
         );
-        hit.querySelectorAll("[data-comic-streak]").forEach((s, k) =>
+        hit.querySelectorAll("[data-comic-streak]").forEach((s) =>
           go(
             s,
             [
-              { transform: "translateX(-100%)" },
-              { transform: "translateX(100%)" },
+              { transform: "translateX(-110vw)" },
+              { transform: "translateX(110vw)" },
             ],
             {
-              delay: at + k * 40,
-              duration: 220,
-              easing: "cubic-bezier(.3,0,.7,1)",
+              delay: at,
+              duration: 420,
+              easing: "cubic-bezier(.65,0,.35,1)",
               fill: "none",
             },
           ),
@@ -630,31 +713,66 @@ export function ComicIntro({
           }
         });
 
-      // Loading gates: hold (the cold open keeps breathing) until the next
-      // images decode; after 5 s give up and show the settled page.
+      // Loading, in timeline order: the first storm pages load first; the rest
+      // load four at a time in page order once those are in, so the next page
+      // is always first in line. Each later page has a gate. A gate holds (the
+      // cold open keeps moving) until LOAD_DEADLINE_MS after navigation, and
+      // later ones at most GATE_HOLD_MS; then the settled page shows.
       const imgsOf = (from: number, to: number) =>
         pageEls.slice(from, to).flatMap((p) => [...p.querySelectorAll("img")]);
+      const early = imgsOf(1, EARLY_PAGES + 1);
+      const queue = imgsOf(EARLY_PAGES + 1, pageEls.length).filter(
+        (im) => im.dataset.src,
+      );
+      let active = 0;
+      const pump = () => {
+        while (!over && active < 4 && queue.length) {
+          const im = queue.shift();
+          if (!im) break;
+          const next = () => {
+            active--;
+            pump();
+          };
+          active++;
+          im.addEventListener("load", next, { once: true });
+          im.addEventListener("error", next, { once: true });
+          im.src = im.dataset.src ?? "";
+        }
+      };
+      void Promise.all(
+        early.map((im) => im.decode().catch(() => undefined)),
+      ).then(pump);
+      const ready = (im: HTMLImageElement) =>
+        im.complete && im.naturalWidth > 0;
       const gate = (atMs: number, imgs: HTMLImageElement[]) => {
         const g = host.animate([], { duration: atMs });
         A.push(g);
         g.finished.then(
           () => {
-            if (over || imgs.every((im) => im.complete && im.naturalWidth))
-              return;
+            if (over || imgs.every(ready)) return;
             A.forEach((a) => {
               if (a !== g && a.playState === "running") a.pause();
             });
+            const budget = Math.max(
+              GATE_HOLD_MS,
+              LOAD_DEADLINE_MS - performance.now(),
+            );
             const late = new Promise<"late">((res) =>
-              timers.push(window.setTimeout(() => res("late"), 5000)),
+              timers.push(window.setTimeout(() => res("late"), budget)),
             );
             void Promise.race([
               Promise.all(
-                imgs.map((im) => im.decode().catch(() => undefined)),
+                imgs.map(
+                  (im) =>
+                    im.src
+                      ? im.decode().catch(() => undefined)
+                      : Promise.resolve(), // not queued yet: checked by ready() below
+                ),
               ).then(() => "ok" as const),
               late,
             ]).then((s) => {
               if (over) return;
-              if (s === "late") skip();
+              if (s === "late" || !imgs.every(ready)) skip();
               else
                 A.forEach((a) => {
                   if (a.playState === "paused") a.play();
@@ -664,36 +782,54 @@ export function ComicIntro({
           () => undefined,
         );
       };
-      gate(T.COLD - 200, imgsOf(1, dealt.length + 1));
-      gate(T.STORM_END - 300, imgsOf(dealt.length + 1, pageEls.length));
+      gate(T.COLD - 200, early);
+      for (let i = EARLY_PAGES + 1; i < pageEls.length; i++) {
+        const P = plan[i],
+          page = pageEls[i];
+        if (P && page) gate(P.shown - 120, [...page.querySelectorAll("img")]);
+      }
 
       Promise.all(A.map((a) => a.finished)).then(finish, () => undefined);
     };
 
-    // Any click or key skips, from the first frame (even while the art loads).
+    // Skip intro, any click, or any key but Tab and modifiers: from the first frame.
+    skipBtn.addEventListener("click", skip);
     addEventListener("pointerdown", skip);
-    addEventListener("keydown", skip);
+    addEventListener("keydown", onKey);
 
-    // First beat: the cold-open art and the display face. Everything else keeps
-    // loading behind it in timeline (DOM) order.
+    // First beat: the cold-open art and the display face, by LOAD_DEADLINE_MS
+    // after navigation, or the settled page instead of a stall.
     const coldImg = pageEls[0]?.querySelector("img");
-    const ready = Promise.all([
+    const firstBeat = Promise.all([
       coldImg?.decode(),
       document.fonts?.load('400 1em "Archivo Black"'),
     ]);
     const late = new Promise<"late">((res) =>
-      timers.push(window.setTimeout(() => res("late"), 4000)),
+      timers.push(
+        window.setTimeout(
+          () => res("late"),
+          Math.max(0, LOAD_DEADLINE_MS - performance.now()),
+        ),
+      ),
     );
-    void Promise.race([ready.then(() => "ok" as const), late]).then(
-      (s) => (s === "ok" ? play() : finish()),
+    void Promise.race([firstBeat.then(() => "ok" as const), late]).then(
+      (s) => {
+        if (s !== "ok") return finish();
+        try {
+          play();
+        } catch {
+          finish(); // a broken timeline never strands the page or its inert links
+        }
+      },
       () => finish(),
     );
 
     return () => {
       over = true;
-      removeEventListener("pointerdown", skip);
-      removeEventListener("keydown", skip);
+      document.documentElement.removeAttribute(COMIC_RUNNING_ATTR);
+      detach();
       timers.forEach((t) => clearTimeout(t));
+      restore();
       [...A, ...loose].forEach((a) => a.cancel());
       block.style.transformOrigin = "";
     };
@@ -712,7 +848,6 @@ export function ComicIntro({
             {pages.map((p, i) => (
               <div key={i} className={p.cls} style={{ zIndex: 100 - i }}>
                 {p.body}
-                <div className={styles.shade} data-comic-shade="" />
               </div>
             ))}
           </div>
@@ -725,22 +860,21 @@ export function ComicIntro({
           >
             <div className={styles.band} />
           </div>
-          <div className={styles.light} data-comic-light="" />
         </div>
       </div>
       <div ref={hitRef} className={styles.hit} aria-hidden="true">
-        <div className={styles.edge} />
         <div
-          className={styles.streak}
-          style={{ top: "34%" }}
+          className={`${styles.streak} ${styles.bold}`}
           data-comic-streak=""
         />
         <div
-          className={styles.streak}
-          style={{ top: "68%" }}
+          className={`${styles.streak} ${styles.fine}`}
           data-comic-streak=""
         />
       </div>
+      <button ref={skipRef} type="button" className={styles.skip}>
+        Skip intro
+      </button>
     </>
   );
 }
