@@ -20,6 +20,9 @@ import { MOCK_THREAD_ID, mockLangGraphAPI } from "./utils/mock-api";
 const enabled = process.env.DESIGN_SHOTS === "1";
 const outDir = process.env.DESIGN_SHOTS_DIR ?? "test-results/design-shots";
 const signedOutURL = process.env.DESIGN_SIGNED_OUT_URL;
+// Comma-separated surface names to capture, e.g. "command-center,chat-thread".
+const only = process.env.DESIGN_SHOTS_ONLY?.split(",").filter(Boolean);
+const wanted = (name: string) => !only || only.includes(name);
 
 const VIEWPORTS = [
   { name: "desktop", width: 1440, height: 900 },
@@ -185,6 +188,42 @@ const RUNS = [
     cost: 0.0122,
     error: null,
   },
+  // Real prompts often share an opening. These three only differ after the
+  // first ~40 characters, which is what backlog item 2 is about.
+  ...[
+    [
+      "run-0005",
+      "thread-0005",
+      "Pull the September leads for Omega Landscaping and split them by campaign source",
+      780,
+    ],
+    [
+      "run-0006",
+      "thread-0006",
+      "Pull the September leads for Omega Landscaping and flag the calls that never booked",
+      1_500,
+    ],
+    [
+      "run-0007",
+      "thread-0007",
+      "Pull the September leads for Kimberly James Bridal and match them to appointments",
+      2_900,
+    ],
+  ].map(([run_id, thread_id, thread_title, minutes]) => ({
+    run_id: run_id as string,
+    thread_id: thread_id as string,
+    thread_title: thread_title as string,
+    assistant_id: "dillon-intelligence",
+    status: "success",
+    model_name: "claude-sonnet",
+    created_at: minutesAgo(minutes as number),
+    updated_at: minutesAgo((minutes as number) - 4),
+    duration_seconds: 240,
+    total_tokens: 22_310,
+    message_count: 8,
+    cost: 0.21,
+    error: null,
+  })),
 ];
 
 const THREAD_MESSAGES = [
@@ -241,6 +280,24 @@ const THREADS = [
     thread_id: "00000000-0000-0000-0000-000000000004",
     title: "Weekly reliability audit",
     updated_at: minutesAgo(600),
+  },
+  {
+    thread_id: "00000000-0000-0000-0000-000000000005",
+    title:
+      "Pull the September leads for Omega Landscaping and split them by campaign source",
+    updated_at: minutesAgo(776),
+  },
+  {
+    thread_id: "00000000-0000-0000-0000-000000000006",
+    title:
+      "Pull the September leads for Omega Landscaping and flag the calls that never booked",
+    updated_at: minutesAgo(1_496),
+  },
+  {
+    thread_id: "00000000-0000-0000-0000-000000000007",
+    title: "Can you look at this again",
+    updated_at: minutesAgo(2_896),
+    metadata: { deerflow_project_id: PROJECT_ID },
   },
 ];
 
@@ -489,6 +546,26 @@ const SIGNED_IN: Surface[] = [
   { name: "chats-empty", path: "/workspace/chats", empty: true },
   { name: "chats-list", path: "/workspace/chats" },
   { name: "chat-thread", path: `/workspace/chats/${MOCK_THREAD_ID}` },
+  {
+    // The recent-chats rows below the fold, with one row keyboard-focused so
+    // the full-title-on-focus behaviour shows up in the capture.
+    name: "sidebar-recent-chats",
+    path: `/workspace/chats/${MOCK_THREAD_ID}`,
+    prepare: async (page) => {
+      await page.evaluate(() => {
+        const content = document.querySelector('[data-sidebar="content"]');
+        if (content) content.scrollTop = content.scrollHeight;
+      });
+      const row = page.getByTitle(
+        "Pull the September leads for Omega Landscaping and flag the calls that never booked",
+      );
+      if (await row.isVisible()) {
+        await row.focus();
+        await page.keyboard.press("Shift+Tab");
+        await page.keyboard.press("Tab");
+      }
+    },
+  },
   { name: "command-center", path: "/workspace/command-center", scrolls: 2 },
   {
     name: "command-center-empty",
@@ -607,14 +684,14 @@ test.describe("design surfaces", () => {
   test.describe.configure({ timeout: 60_000 });
 
   for (const viewport of VIEWPORTS) {
-    for (const surface of SIGNED_IN) {
+    for (const surface of SIGNED_IN.filter((s) => wanted(s.name))) {
       test(`${surface.name} ${viewport.name}`, async ({ page }) => {
         await mockDesignAPI(page, { empty: surface.empty });
         await capture(page, surface, viewport);
       });
     }
 
-    for (const surface of SIGNED_OUT) {
+    for (const surface of SIGNED_OUT.filter((s) => wanted(s.name))) {
       test(`${surface.name} ${viewport.name}`, async ({ page }) => {
         await page.route("**/api/v1/auth/invitations/inspect", (route) =>
           route.fulfill({
@@ -631,7 +708,10 @@ test.describe("design surfaces", () => {
     }
 
     test(`login ${viewport.name}`, async ({ page }) => {
-      test.skip(!signedOutURL, "Set DESIGN_SIGNED_OUT_URL for /login.");
+      test.skip(
+        !signedOutURL || !wanted("login"),
+        "Set DESIGN_SIGNED_OUT_URL for /login.",
+      );
       await page.route("**/api/v1/auth/providers", (route) =>
         route.fulfill({
           json: {
