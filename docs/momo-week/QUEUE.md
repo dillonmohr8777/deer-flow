@@ -13,7 +13,7 @@ Receipts: `docs/momo-week/PROGRESS.md`. Owner: Claude chief for Dillon Mohr.
 5. Mark `[!]` with a one-line reason when blocked on something only Dillon can give: credentials, a product decision, spend, a deploy, a live instance. Then move to the next independent task in the same run if time allows.
 6. No secrets, no deploys, no `.env` edits, no touching `deploy/momentum/*.yaml` image pins, no external sends.
 7. Finish by committing the updated QUEUE.md and a PROGRESS.md line **to `lane/momo-week` directly** (these two files only).
-8. Two routines share this file. **Build routine** (`momo-week`): sections A, B, C only. **Design routine** (`momo-week-design`): section D only. Never take a task from the other routine's sections. When your sections have no `[ ]` or `[~]` left, log `queue empty` in PROGRESS and stop.
+8. Three routines share this file. **Build routine** (`momo-week`): sections A, B, C, E and F. **Design routine** (`momo-week-design`): section D only. **Review routine** (`momo-week-review`): adds tasks to section F only and never takes tasks. Never take a task from the other routine's sections. When your sections have no `[ ]` or `[~]` left, log `queue empty` in PROGRESS and stop.
 
 ## Tasks
 
@@ -55,5 +55,16 @@ Source of truth: `DESIGN.md` ("MomoBot Paper": its tokens, type and rules win ov
 - [ ] **d7 landing-composition** (backlog 5): fill the empty blue paper with a purposeful composition built from existing assets, and tighten vertical spacing.
 - [ ] **d8 board-visual** (after b5's draft PR exists; branch from b5's branch, not lane/momo-week, and target the PR at b5's branch; skip until then): bring `/workspace/board` fully into the Desk's paper language: thread slips, status stamps, the draft on its own sheet.
 - [ ] **d9 dispatch-board** (backlog bold idea): Mission Control as a paper dispatch board. One slip per mission from brief to receipt, pins only while running, a dated ink stamp on completion linked to evidence. Scope it to one slice per run.
+
+### E. Board to product (build routine; added 2026-09-25 when Dillon scaled the week up)
+- [ ] **e1 base-failures**: fix the pre-existing failures every run has flagged: `backend/tests/test_client_langfuse_metadata.py`, the frontend `login-mfa-step` lint error, and the `sidecar-delete-gating` ECONNREFUSED test file. Find the root cause; don't skip or delete tests. Accept: the full backend suite and `pnpm test` plus `pnpm lint` are green.
+- [ ] **e2 triage-on-create**: run b3's triage when a thread is created and persist `urgency` and `summary` (new columns, one Alembic migration, single head). A model failure falls back safely and never blocks creation. Accept: tests for success and for fallback.
+- [ ] **e3 client-post-ui**: a client member can start a thread (post, ticket, concern, DM) from `/workspace/board`, see only their own threads, and see status but never Momo's unapproved draft. Accept: unit tests plus a Playwright spec covering client view vs owner view.
+- [ ] **e4 owner-alerts**: threads waiting on approval show a count on the Desk and in the sidebar; urgent threads outside 8am to 8pm ET are flagged "after hours". No external sends. Accept: tests.
+- [ ] **e5 concierge-loop**: behind a flag (default off), a scheduled job runs the momo-concierge agent over new threads and writes drafts through b4's workflow, never approving or replying. Accept: a test with a stubbed agent proves it drafts and never approves.
+- [ ] **e6 m4-entitlements**: implement the M4 evaluator and snapshot endpoint from c2's design (do c2 first). Accept: tests for allowed, denied and missing entitlement on at least 3 paid mutations.
+- [ ] **e7 board-usage-ledger**: every model call the board makes (triage, drafting) is recorded in the existing usage ledger with client and organization. Accept: tests.
+
+### F. Review findings (the review routine adds these; the build routine works them before section E)
 
 Legend: `[ ]` todo · `[~]` in progress · `[x]` done (PR link) · `[!]` blocked (reason)
