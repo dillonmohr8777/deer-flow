@@ -1575,3 +1575,8 @@
     transition: none !important;
   }
 }
+
+/* Mission Control: the agent team sits under the full-width dispatch board. */
+.missionTeam {
+  margin-top: 24px;
+}
