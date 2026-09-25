@@ -1,0 +1,19 @@
+# Starts MomoBot at boot and after Docker restarts. Install with:
+#   sudo cp deploy/momentum/vps/systemd/momobot*.{service,timer} /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now momobot.service
+[Unit]
+Description=MomoBot (Momentum) always-on stack
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/srv/momobot/deer-flow
+EnvironmentFile=/srv/momobot/deer-flow/.env
+ExecStart=/srv/momobot/deer-flow/deploy/momentum/vps/restart.sh
+TimeoutStartSec=600
+
+[Install]
+WantedBy=multi-user.target

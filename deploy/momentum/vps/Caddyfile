@@ -1,0 +1,24 @@
+# Public front door for always-on MomoBot. TLS is automatic (Let's Encrypt)
+# once DNS for {$MOMOBOT_DOMAIN} points at this server and 80/443 are open.
+{
+	email {$MOMOBOT_ACME_EMAIL}
+}
+
+{$MOMOBOT_DOMAIN} {
+	encode zstd gzip
+
+	# nginx preserves an upstream X-Forwarded-Proto, so the Gateway sees
+	# https and sets Secure cookies (csrf_middleware.is_secure_request).
+	reverse_proxy nginx:2026 {
+		header_up X-Forwarded-Proto https
+		# Streaming (SSE) responses must not be buffered.
+		flush_interval -1
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+}
