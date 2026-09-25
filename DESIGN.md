@@ -179,7 +179,10 @@ Items 1, 2 and 5 need both `prefers-reduced-motion: no-preference` and the user'
   3. Actions: Start a mission (primary) and Appearance (quiet link).
   4. Tabs: Mission Control, Agent Studio, Jobs, Workflows, Client Spaces, Business Intelligence, Artifact Library. A tab the backend only partly supports carries a Preview tag and a one-line note.
   5. A four-fact strip: Active runs, Recorded runs, Errors & timeouts, Recorded tokens.
-  6. The view. Mission Control shows the agent team (lead plus specialists) beside Latest assignments, then Also in your workspace links, then the footer ("No model calls from this dashboard").
+  6. The view. Mission Control leads with the **dispatch board** at full width, then the agent team (lead plus specialists), then Also in your workspace links, then the footer ("No model calls from this dashboard").
+     - The board files each recorded run as a paper slip by its **real** status: On the desk (pending or running), Stamped (success) and Returned (error, timeout or interrupted). Any other status goes to an Unsorted lane with its own word, and that lane appears only when it has slips.
+     - Only a running slip carries the brass pin. A completed slip gets a static, dated ink stamp in ok green. A returned slip loses its top right corner and names the reason. There is no brief or review lane until the backend records those stages.
+     - Slips open the run's receipt drawer. The board shows the latest page of runs and says so; the full, filterable history stays in the Jobs tab.
 - **Selection.** Selecting a run opens its receipt drawer on the right.
 
 ## States
@@ -208,7 +211,7 @@ Use the shared components in `components/workspace/page-body.tsx`. Do not write 
 - Gutters are 16px on every page. No horizontal page scroll (pinned by `ui-polish-mobile.spec.ts`).
 - Icon buttons have a 44px minimum below 640px (`workspace-mobile.css`). Command Center controls are 44 to 48px.
 - Tabs, metric strips and the Settings section list become sideways rails. The active item is scrolled into view, and grid items get `min-width: 0` so a rail scrolls instead of widening its parent.
-- Command Center puts Latest assignments before the agent team on phones. It swaps DOM order, not CSS `order`, so focus order matches reading order.
+- Command Center puts the dispatch board before the agent team at every width, in DOM order, so focus order matches reading order. On phones the board's lanes stack, desk first.
 - The chat composer keeps its disclaimer clear of the bottom edge with safe-area padding. The background-work control never covers the submit button.
 - Dialog headers are left-aligned at every width.
 
