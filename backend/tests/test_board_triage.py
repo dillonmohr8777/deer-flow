@@ -156,3 +156,53 @@ async def test_triage_requires_summary_to_accept_model_response(monkeypatch):
     assert result.kind == "ticket"
     assert result.urgency == "normal"
     assert result.summary
+
+
+# --- action field ---
+
+
+@pytest.mark.anyio
+async def test_triage_parses_action_from_model_response(monkeypatch):
+    _make_env(monkeypatch, '{"kind":"concern","urgency":"high","summary":"Wants a refund.","action":"escalate"}')
+
+    result = await triage_board_thread("I want a refund for last month.")
+
+    assert result.action == "escalate"
+
+
+@pytest.mark.anyio
+async def test_triage_defaults_action_to_draft_when_model_omits_it(monkeypatch):
+    _make_env(monkeypatch, '{"kind":"post","urgency":"low","summary":"Says hi."}')
+
+    result = await triage_board_thread("Just saying hi!")
+
+    assert result.action == "draft"
+
+
+@pytest.mark.anyio
+async def test_triage_defaults_action_to_draft_on_invalid_action(monkeypatch):
+    _make_env(monkeypatch, '{"kind":"post","urgency":"low","summary":"Says hi.","action":"auto-reply"}')
+
+    result = await triage_board_thread("Just saying hi!")
+
+    assert result.action == "draft"
+
+
+@pytest.mark.anyio
+async def test_triage_falls_back_to_escalate_action_on_unparseable_response(monkeypatch):
+    _make_env(monkeypatch, "not json at all")
+
+    result = await triage_board_thread("A message the model can't classify.")
+
+    assert result.action == "escalate"
+
+
+@pytest.mark.anyio
+async def test_triage_falls_back_to_escalate_action_when_model_call_fails(monkeypatch):
+    config = SimpleNamespace()
+    monkeypatch.setattr("deerflow.board.triage.get_app_config", lambda: config)
+    monkeypatch.setattr("deerflow.board.triage.create_chat_model", lambda **kwargs: (_ for _ in ()).throw(RuntimeError("boom")))
+
+    result = await triage_board_thread("A message sent while the model is unavailable.")
+
+    assert result.action == "escalate"
