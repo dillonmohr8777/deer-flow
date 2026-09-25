@@ -253,3 +253,78 @@ async def test_non_owner_cannot_approve_or_reply(org_world):  # noqa: F811
 
         events, _ = await audit_repo.list(organization_id=ORG_S, action_prefix="board.thread.approve")
         assert any(e["outcome"] == "denied" and e["actor_user_id"] == USER_D for e in events)
+
+
+async def test_patch_cannot_bypass_workflow_status(org_world):  # noqa: F811
+    """f1: PATCH must not let a plain member forge ``approved``/``replied`` past the workflow routes."""
+    session_factory = org_world
+    app = _build_app(session_factory)
+    audit_repo = app.state.audit_repo
+    headers_a = auth_headers(USER_A, ORG_S)  # owner
+
+    await _add_plain_member(session_factory, USER_D, ORG_S)
+    headers_d = auth_headers(USER_D, ORG_S)
+
+    async with _client(app) as client:
+        client1 = await _create_client(client, headers_a, "Client One")
+        assign = await client.post(f"/api/clients/{client1['id']}/assignments", json={"user_id": USER_D, "role": "client_contact"}, headers=headers_a)
+        assert assign.status_code == 201
+
+        thread = (await client.post("/api/board/threads", json={"client_id": client1["id"], "subject": "T1"}, headers=headers_a)).json()
+        tid = thread["id"]
+
+        # A plain member with client access cannot PATCH the thread straight to approved...
+        forged_approved = await client.patch(f"/api/board/threads/{tid}", json={"status": "approved"}, headers=headers_d)
+        assert forged_approved.status_code in (403, 409)
+        unchanged = await client.get(f"/api/board/threads/{tid}", headers=headers_a)
+        assert unchanged.json()["status"] == "new"
+
+        # ...or replied.
+        forged_replied = await client.patch(f"/api/board/threads/{tid}", json={"status": "replied"}, headers=headers_d)
+        assert forged_replied.status_code in (403, 409)
+        still_unchanged = await client.get(f"/api/board/threads/{tid}", headers=headers_a)
+        assert still_unchanged.json()["status"] == "new"
+
+        # Even the owner can't skip the workflow routes via PATCH: drafted/approved/replied are workflow-only.
+        owner_forged = await client.patch(f"/api/board/threads/{tid}", json={"status": "approved"}, headers=headers_a)
+        assert owner_forged.status_code == 409
+        still_new = await client.get(f"/api/board/threads/{tid}", headers=headers_a)
+        assert still_new.json()["status"] == "new"
+
+        # The owner's PATCH to a non-workflow status still works.
+        closed = await client.patch(f"/api/board/threads/{tid}", json={"status": "closed"}, headers=headers_a)
+        assert closed.status_code == 200, closed.text
+        assert closed.json()["status"] == "closed"
+
+        events, _ = await audit_repo.list(organization_id=ORG_S, action_prefix="board.thread.status_patch")
+        assert any(e["outcome"] == "success" and e["actor_user_id"] == USER_A for e in events)
+
+
+async def test_non_owner_cannot_patch_status_at_all(org_world):  # noqa: F811
+    """f1: a plain member's PATCH to a non-workflow status (e.g. ``triaged``) is also owner-gated."""
+    session_factory = org_world
+    app = _build_app(session_factory)
+    audit_repo = app.state.audit_repo
+    headers_a = auth_headers(USER_A, ORG_S)
+
+    await _add_plain_member(session_factory, USER_D, ORG_S)
+    headers_d = auth_headers(USER_D, ORG_S)
+
+    async with _client(app) as client:
+        client1 = await _create_client(client, headers_a, "Client One")
+        await client.post(f"/api/clients/{client1['id']}/assignments", json={"user_id": USER_D, "role": "client_contact"}, headers=headers_a)
+        thread = (await client.post("/api/board/threads", json={"client_id": client1["id"], "subject": "T1"}, headers=headers_a)).json()
+        tid = thread["id"]
+
+        denied = await client.patch(f"/api/board/threads/{tid}", json={"status": "triaged"}, headers=headers_d)
+        assert denied.status_code == 403
+        unchanged = await client.get(f"/api/board/threads/{tid}", headers=headers_a)
+        assert unchanged.json()["status"] == "new"
+
+        # Patching only the subject (no status) needs no owner check.
+        subject_only = await client.patch(f"/api/board/threads/{tid}", json={"subject": "updated"}, headers=headers_d)
+        assert subject_only.status_code == 200
+        assert subject_only.json()["subject"] == "updated"
+
+        events, _ = await audit_repo.list(organization_id=ORG_S, action_prefix="board.thread.status_patch")
+        assert any(e["outcome"] == "denied" and e["actor_user_id"] == USER_D for e in events)

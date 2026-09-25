@@ -29,6 +29,10 @@ router = APIRouter(prefix="/api/board", tags=["board"])
 
 _ORG_ADMIN_ROLES = ("owner", "admin")
 
+# These statuses are only reachable through /draft, /approve and /reply, which
+# also write the workflow's message and audit trail -- PATCH must never set them.
+_WORKFLOW_ONLY_STATUSES = frozenset({BoardThreadStatus.DRAFTED, BoardThreadStatus.APPROVED, BoardThreadStatus.REPLIED})
+
 BoardKind = Literal["post", "ticket", "concern", "dm"]
 BoardStatus = Literal["new", "triaged", "drafted", "approved", "replied", "closed"]
 BoardAuthorKind = Literal["client", "momo", "owner"]
@@ -204,11 +208,20 @@ async def patch_board_thread(thread_id: str, body: BoardThreadPatchRequest, requ
     if row is None:
         raise _not_found()
     user = await get_current_user_from_request(request)
+    user_id = str(user.id)
     if row.get("client_id") is not None:
-        await _require_client_access(client_repo, row["client_id"], str(user.id))
+        await _require_client_access(client_repo, row["client_id"], user_id)
+    if body.status is not None:
+        if body.status in _WORKFLOW_ONLY_STATUSES:
+            raise HTTPException(status_code=409, detail=f"Status {body.status!r} can only be set via the draft/approve/reply routes")
+        if not await _is_active_org_admin(user_id):
+            await record_audit_event(request, action="board.thread.status_patch", outcome="denied", actor_user_id=user_id, organization_id=resolve_organization_id(), target_type="board_thread", target_id=thread_id)
+            raise HTTPException(status_code=403, detail="Only an organization owner/admin may change thread status")
     updated = await board_repo.patch_thread(thread_id, status=body.status, subject=body.subject)
     if updated is None:
         raise _not_found()
+    if body.status is not None:
+        await record_audit_event(request, action="board.thread.status_patch", outcome="success", actor_user_id=user_id, organization_id=resolve_organization_id(), target_type="board_thread", target_id=thread_id)
     return _to_thread_response(updated)
 
 
