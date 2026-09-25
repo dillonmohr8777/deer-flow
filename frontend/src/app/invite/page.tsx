@@ -163,19 +163,23 @@ export default function InvitePage() {
 
   const busy = status === "loading" || status === "accepting";
   const released = status === "done";
+  // A pin means work in progress: the sheet rests in photo corners and is
+  // pinned only while the accept request runs, then the release lifts it.
+  const pinned = status === "accepting" || released;
 
   return (
     <main className={styles.field} data-treatment="paper">
       <div
         className={[
           styles.frame,
-          "pinned",
+          pinned ? "pinned" : "",
           released ? styles.sheetReleased : "",
         ]
           .filter(Boolean)
           .join(" ")}
       >
         {error ? <span className={styles.errorTag} aria-hidden="true" /> : null}
+        <span className="paper-corners" aria-hidden="true" />
         <div
           className={[
             styles.sheet,

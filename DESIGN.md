@@ -151,7 +151,8 @@ Row titles stay Nunito Sans. Fraunces is for headings, never labels, buttons or 
 - **Decoration** (paper.css; every piece is aria-hidden and dropped under `forced-colors`):
   - `.paper-torn` and `.paper-torn-alt` give a 24px torn top edge; alternate them across a run of sheets.
   - `.sheet::after` adds a 5% grain.
-  - `.pinned::before` adds a 14px brass pin, which means working.
+  - `.pinned::before` adds a 14px brass pin, which means working. Put it on only while the work runs: a Command Center specialist with an active run, a running scheduled task, the /login sheet while a sign-in request is in flight, the /invite sheet while it is being accepted.
+  - `.paper-corners` (an aria-hidden span inside a positioned sheet) draws two kraft photo corners over the bottom edge. This is how paper **at rest** is held: the landing's capability cards and the /login and /invite sheets sit in corners, never on a pin.
 - **Scraps** (`components/momentum/scraps.tsx`) appear only in the sidebar footer, in `EmptyState`, and in the Momo Daily margins at desktop widths. Never in chat threads, forms, dialogs or dense tables.
 - **The blueprint grid** on royal-deep is the /invite and /login field, a landing scrap and the Command Center hero scrap. It is intentional there and nowhere else.
 
@@ -160,7 +161,7 @@ Row titles stay Nunito Sans. Fraunces is for headings, never labels, buttons or 
 Paper motion is a closed list of six items (items 1 to 5 in `@layer paper-motion`, item 6 in `momobot.module.css`):
 
 1. Front-door letters settle in 380ms, with a 40ms stagger.
-2. Invite release: the pin lifts and the sheet slides away in 420ms.
+2. Invite release: the pin placed while the invite was being accepted lifts, and the sheet slides away in 420ms.
 3. Working squares tick in `steps(3)` over 1.2s while the work is active.
 4. Cards lift 2px on hover over 140ms.
 5. The brand signature drifts.
@@ -238,6 +239,7 @@ This is where code still departs from the rules above, recorded so no one copies
 
 - The landing hero heading uses gradient text ending in violet (`momentum-landing.module.css`, `globals.css` violet stops).
 - `workspace-appearance.module.css` carries raw hex for its treatment previews.
+- The Momo Hello film on `/` and `/login` has brass pushpins painted into the artwork itself. They are photo content, not UI state, but they still read as pins; new film art should hold its photos with tape or corners.
 - `command-center.module.css` keeps a pre-paper local palette on `.root`, which paper overrides.
 - `.impeccable/design.json` still describes the retired "Momentum Current" palette.
 - Operate pages still use several header patterns and several selected-state styles, including a kraft fill for pressed filters where the rule says royal. One shared header and one selected rule are open follow-ups.

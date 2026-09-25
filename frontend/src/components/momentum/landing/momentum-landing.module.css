@@ -679,7 +679,8 @@
   outline-offset: 3px;
 }
 
-/* Four pinned cards, staggered — never a three/four-equal-card row. */
+/* Four cards in photo corners, staggered — never a three/four-equal-card
+   row. Unpinned on purpose: a pin means work in progress. */
 .paperCards {
   position: relative;
   display: grid;
@@ -702,18 +703,6 @@
   background: var(--paper-cream-hi);
   border: 1px solid var(--paper-line);
   padding: 1.5rem 1.25rem 1.25rem;
-}
-
-/*
- * Re-centre paper.css's .pinned::before dome over the card's top edge.
- * Matches [data-treatment="paper"] explicitly too so this rule's
- * specificity (attribute + 2 classes + pseudo-element) beats paper.css's
- * own (attribute + 1 class + pseudo-element) regardless of CSS load order.
- */
-:global([data-treatment="paper"]) .paperCard:global(.pinned)::before {
-  top: 14px; /* below the 24px tear band, so the pin pierces paper */
-  left: 50%;
-  transform: translateX(-50%);
 }
 
 .paperCardKey {
