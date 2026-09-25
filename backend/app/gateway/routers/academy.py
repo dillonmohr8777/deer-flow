@@ -13,10 +13,12 @@ from pydantic import BaseModel
 from app.gateway.academy_content import TRACKS, lesson_ids
 from app.gateway.authz import require_permission
 from app.gateway.deps import get_academy_progress_repo, get_config
-from app.gateway.momentum_internal import require_momentum_staff
+from app.gateway.momentum_internal import momentum_staff_only, require_momentum_staff
 from deerflow.config.app_config import AppConfig
 
-router = APIRouter(prefix="/api/academy", tags=["academy"])
+# Gate first (404 for anyone who isn't Momentum staff), and keep these
+# routes out of the public OpenAPI schema.
+router = APIRouter(prefix="/api/academy", tags=["academy"], dependencies=[Depends(momentum_staff_only)], include_in_schema=False)
 
 
 class AcademyLessonResponse(BaseModel):

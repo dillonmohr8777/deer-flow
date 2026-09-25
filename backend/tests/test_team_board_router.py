@@ -21,6 +21,7 @@ from app.gateway.auth_middleware import AuthMiddleware
 from app.gateway.deps import get_config
 from app.gateway.routers import team_board
 from deerflow.persistence.audit_events import AuditEventRepository
+from deerflow.persistence.clients.model import ClientAssignmentRow
 from deerflow.persistence.organizations.identity import private_organization_slug
 from deerflow.persistence.organizations.model import OrganizationMemberRow
 from deerflow.persistence.team_board import DEFAULT_TEAM_CHANNELS, TeamBoardRepository
@@ -53,11 +54,27 @@ def _client(app: FastAPI) -> httpx.AsyncClient:
     return httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test")
 
 
-async def _add_member(session_factory, user_id: str, role: str) -> None:
+async def _add_member(session_factory, user_id: str, role: str, *, client_contact_for: str | None = None, disabled: bool = False) -> None:
+    """Seed a workspace member. ``client_contact_for`` makes them a client's
+    person the way the product does: an ordinary ``member`` plus a
+    ``client_contact`` client assignment (as ``test_board_router.py`` builds one)."""
     now = datetime.now(UTC)
     async with session_factory() as session, session.begin():
-        session.add(UserRow(id=user_id, email=f"{user_id}@example.com", password_hash=None, system_role="user", needs_setup=False, token_version=0, created_at=now))
+        session.add(
+            UserRow(
+                id=user_id,
+                email=f"{user_id}@example.com",
+                password_hash=None,
+                system_role="user",
+                needs_setup=False,
+                token_version=0,
+                created_at=now,
+                disabled_at=now if disabled else None,
+            )
+        )
         session.add(OrganizationMemberRow(organization_id=ORG_S, user_id=user_id, role=role, status="active", created_at=now, updated_at=now))
+        if client_contact_for is not None:
+            session.add(ClientAssignmentRow(client_id=client_contact_for, user_id=user_id, organization_id=ORG_S, role="client_contact", created_at=now, updated_at=now))
 
 
 async def test_staff_get_default_channels_and_can_talk(org_world):  # noqa: F811
@@ -166,3 +183,53 @@ async def test_team_board_is_off_unless_this_workspace_is_configured(org_world, 
         assert (await client.get("/api/team/members", headers=owner)).status_code == 404
         assert (await client.post("/api/team/channels", json={"name": "x"}, headers=owner)).status_code == 404
         assert (await client.get("/api/team/channels/any/messages", headers=owner)).status_code == 404
+
+
+USER_CLIENT_CONTACT = "user-client-contact"
+USER_ACCOUNT_MANAGER = "user-account-manager"
+USER_DISABLED = "user-disabled"
+
+
+async def test_a_real_client_member_sees_nothing(org_world):  # noqa: F811
+    """The product's client: role ``member`` plus a ``client_contact`` assignment."""
+    await _add_member(org_world, USER_CLIENT_CONTACT, "member", client_contact_for="acme")
+    await _add_member(org_world, USER_ACCOUNT_MANAGER, "member")
+    now = datetime.now(UTC)
+    async with org_world() as session, session.begin():
+        # A staff assignment (account manager) never counts against being staff.
+        session.add(ClientAssignmentRow(client_id="acme", user_id=USER_ACCOUNT_MANAGER, organization_id=ORG_S, role="account_manager", created_at=now, updated_at=now))
+    app = _build_app(org_world)
+    staff = auth_headers(USER_A, ORG_S)
+    client_contact = auth_headers(USER_CLIENT_CONTACT, ORG_S)
+    async with _client(app) as client:
+        channel_id = (await client.get("/api/team/channels", headers=staff)).json()["channels"][1]["id"]
+        await client.post(f"/api/team/channels/{channel_id}/messages", json={"body": "Acme renewal is at risk"}, headers=staff)
+
+        assert (await client.get("/api/team/channels", headers=client_contact)).status_code == 404
+        assert (await client.get(f"/api/team/channels/{channel_id}/messages", headers=client_contact)).status_code == 404
+        assert (await client.post(f"/api/team/channels/{channel_id}/messages", json={"body": "hi"}, headers=client_contact)).status_code == 404
+        assert (await client.get("/api/team/members", headers=client_contact)).status_code == 404
+
+        # The account manager is staff; the client contact never shows in the directory.
+        assert (await client.get("/api/team/channels", headers=auth_headers(USER_ACCOUNT_MANAGER, ORG_S))).status_code == 200
+        members = {m["user_id"] for m in (await client.get("/api/team/members", headers=staff)).json()["members"]}
+        assert USER_ACCOUNT_MANAGER in members
+        assert USER_CLIENT_CONTACT not in members
+
+
+async def test_disabled_accounts_leave_the_directory(org_world):  # noqa: F811
+    await _add_member(org_world, USER_DISABLED, "member", disabled=True)
+    app = _build_app(org_world)
+    async with _client(app) as client:
+        members = {m["user_id"] for m in (await client.get("/api/team/members", headers=auth_headers(USER_A, ORG_S))).json()["members"]}
+    assert USER_DISABLED not in members
+
+
+async def test_team_and_academy_routes_stay_out_of_the_public_schema():
+    from app.gateway.routers import academy
+
+    app = FastAPI()
+    app.include_router(team_board.router)
+    app.include_router(academy.router)
+    paths = set(app.openapi()["paths"])
+    assert not any(path.startswith(("/api/team", "/api/academy")) for path in paths)

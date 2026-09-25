@@ -16,12 +16,15 @@ from sqlalchemy import select
 
 from app.gateway.authz import require_permission
 from app.gateway.deps import get_config, get_team_board_repo, record_audit_event
-from app.gateway.momentum_internal import ADMIN_ROLES, STAFF_ROLES, require_momentum_staff
+from app.gateway.momentum_internal import ADMIN_ROLES, CLIENT_ASSIGNMENT_ROLES, STAFF_ROLES, momentum_staff_only, require_momentum_staff
 from deerflow.config.app_config import AppConfig
+from deerflow.persistence.clients.model import ClientAssignmentRow
 from deerflow.persistence.organizations.model import OrganizationMemberRow
 from deerflow.persistence.user.model import UserRow
 
-router = APIRouter(prefix="/api/team", tags=["team"])
+# Gate first (404 for anyone who isn't Momentum staff), and keep these
+# routes out of the public OpenAPI schema.
+router = APIRouter(prefix="/api/team", tags=["team"], dependencies=[Depends(momentum_staff_only)], include_in_schema=False)
 
 _SLUG_RE = re.compile(r"[^a-z0-9]+")
 
@@ -151,8 +154,9 @@ async def post_team_message(channel_id: str, body: TeamMessageCreateRequest, req
 async def list_team_members(request: Request, config: AppConfig = Depends(get_config)) -> TeamMemberListResponse:
     """Active staff in this workspace, so the board can name message authors.
 
-    Only staff roles are listed; a client account in the same organization
-    never appears here, matching who can read the channels.
+    Only staff are listed: staff roles, not disabled, and no client_contact
+    assignment. A client in the same organization never appears here,
+    matching who can read the channels.
     """
     organization_id, _, _ = await require_momentum_staff(request, config)
     # Lazy import so a test's monkeypatched session factory takes effect,
@@ -169,6 +173,14 @@ async def list_team_members(request: Request, config: AppConfig = Depends(get_co
             OrganizationMemberRow.organization_id == organization_id,
             OrganizationMemberRow.status == "active",
             OrganizationMemberRow.role.in_(sorted(STAFF_ROLES)),
+            UserRow.disabled_at.is_(None),
+            ~select(ClientAssignmentRow.user_id)
+            .where(
+                ClientAssignmentRow.organization_id == organization_id,
+                ClientAssignmentRow.user_id == UserRow.id,
+                ClientAssignmentRow.role.in_(sorted(CLIENT_ASSIGNMENT_ROLES)),
+            )
+            .exists(),
         )
         .order_by(UserRow.email.asc())
     )

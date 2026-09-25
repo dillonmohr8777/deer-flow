@@ -15,6 +15,7 @@ from app.gateway.auth_middleware import AuthMiddleware
 from app.gateway.deps import get_config
 from app.gateway.routers import academy
 from deerflow.persistence.academy import AcademyProgressRepository
+from deerflow.persistence.clients.model import ClientAssignmentRow
 from deerflow.persistence.organizations.identity import private_organization_slug
 from deerflow.persistence.organizations.model import OrganizationMemberRow
 from deerflow.persistence.user.model import UserRow
@@ -111,3 +112,18 @@ def test_curriculum_is_well_formed():
             text = " ".join([lesson["title"], lesson["summary"], lesson["try_it"], *lesson["steps"]])
             # House style: no em dashes in product copy.
             assert "—" not in text, lesson["id"]
+
+
+@pytest.mark.asyncio
+async def test_a_real_client_member_cannot_open_the_academy(org_world):  # noqa: F811
+    """The product's client: role ``member`` plus a ``client_contact`` assignment."""
+    now = datetime.now(UTC)
+    async with org_world() as session, session.begin():
+        session.add(UserRow(id="acme-contact", email="contact@acme.example", password_hash=None, system_role="user", needs_setup=False, token_version=0, created_at=now))
+        session.add(OrganizationMemberRow(organization_id=ORG_S, user_id="acme-contact", role="member", status="active", created_at=now, updated_at=now))
+        session.add(ClientAssignmentRow(client_id="acme", user_id="acme-contact", organization_id=ORG_S, role="client_contact", created_at=now, updated_at=now))
+    first = TRACKS[0]["lessons"][0]["id"]
+    async with _client(_build_app(org_world)) as client:
+        headers = auth_headers("acme-contact", ORG_S)
+        assert (await client.get("/api/academy", headers=headers)).status_code == 404
+        assert (await client.put(f"/api/academy/lessons/{first}/progress", json={"completed": True}, headers=headers)).status_code == 404

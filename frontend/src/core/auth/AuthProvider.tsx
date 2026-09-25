@@ -10,6 +10,8 @@ import React, {
   type ReactNode,
 } from "react";
 
+import { queryClient } from "@/components/query-client-provider";
+
 import { isStaticWebsiteOnly } from "../static-mode";
 
 import { type User, buildLoginUrl } from "./types";
@@ -133,6 +135,9 @@ export function AuthProvider({ children, initialUser }: AuthProviderProps) {
       return;
     }
 
+    // Drop every cached response (staff-only Team and Academy data among
+    // them) before the soft navigation keeps this tab's query cache alive.
+    queryClient.clear();
     // Redirect to home page
     router.push("/");
   }, [staticMode, router]);
