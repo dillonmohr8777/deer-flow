@@ -20,6 +20,7 @@ from org_isolation_fixtures import ORG_S, USER_A, USER_B, USER_C, auth_headers, 
 
 from app.gateway.auth_middleware import AuthMiddleware
 from app.gateway.routers import board, clients
+from deerflow.persistence.audit_events import AuditEventRepository
 from deerflow.persistence.board import BoardRepository
 from deerflow.persistence.clients import ClientRepository
 from deerflow.persistence.fleet import FleetBindingRepository
@@ -37,6 +38,7 @@ def _build_app(session_factory) -> FastAPI:
     app.state.client_repo = ClientRepository(session_factory)
     app.state.board_repo = BoardRepository(session_factory)
     app.state.fleet_binding_repo = FleetBindingRepository(session_factory)
+    app.state.audit_repo = AuditEventRepository(session_factory)
     app.include_router(clients.router)
     app.include_router(board.router)
     return app
@@ -161,3 +163,93 @@ async def test_board_routes_404_across_organizations(org_world):  # noqa: F811
         listing = await client.get("/api/board/threads", headers=headers_b)
         assert listing.status_code == 200
         assert thread["id"] not in [t["id"] for t in listing.json()["threads"]]
+
+
+async def test_draft_approve_reply_lifecycle(org_world):  # noqa: F811
+    """b4: Momo drafts into ``drafted``; only an owner/admin approves or replies."""
+    session_factory = org_world
+    app = _build_app(session_factory)
+    audit_repo = app.state.audit_repo
+    headers_a = auth_headers(USER_A, ORG_S)  # owner
+    headers_c = auth_headers(USER_C, ORG_S)  # admin
+
+    async with _client(app) as client:
+        acme = await _create_client(client, headers_a, "Acme")
+        thread = (await client.post("/api/board/threads", json={"client_id": acme["id"], "subject": "T"}, headers=headers_a)).json()
+        tid = thread["id"]
+        assert thread["status"] == "new"
+
+        # Reply and approve are both unreachable before a draft exists.
+        assert (await client.post(f"/api/board/threads/{tid}/approve", headers=headers_a)).status_code == 409
+        assert (await client.post(f"/api/board/threads/{tid}/reply", json={"body": "too soon"}, headers=headers_a)).status_code == 409
+
+        drafted = await client.post(f"/api/board/threads/{tid}/draft", json={"body": "Here's a fix for that."}, headers=headers_a)
+        assert drafted.status_code == 200, drafted.text
+        assert drafted.json()["status"] == "drafted"
+
+        messages = (await client.get(f"/api/board/threads/{tid}/messages", headers=headers_a)).json()["messages"]
+        assert any(m["author_kind"] == "momo" and m["body"] == "Here's a fix for that." for m in messages)
+
+        # Drafting again while already drafted is not a valid transition.
+        assert (await client.post(f"/api/board/threads/{tid}/draft", json={"body": "again"}, headers=headers_a)).status_code == 409
+
+        # Sending the reply before approval is rejected.
+        assert (await client.post(f"/api/board/threads/{tid}/reply", json={"body": "jumping the gun"}, headers=headers_a)).status_code == 409
+
+        approved = await client.post(f"/api/board/threads/{tid}/approve", headers=headers_c)
+        assert approved.status_code == 200, approved.text
+        assert approved.json()["status"] == "approved"
+
+        replied = await client.post(f"/api/board/threads/{tid}/reply", json={"body": "Fixed — thanks for flagging it!"}, headers=headers_a)
+        assert replied.status_code == 200, replied.text
+        assert replied.json()["status"] == "replied"
+
+        messages = (await client.get(f"/api/board/threads/{tid}/messages", headers=headers_a)).json()["messages"]
+        assert any(m["author_kind"] == "owner" and m["body"] == "Fixed — thanks for flagging it!" for m in messages)
+
+        events, _ = await audit_repo.list(organization_id=ORG_S, action_prefix="board.thread.")
+        actions = [e["action"] for e in events]
+        assert "board.thread.drafted" in actions
+        assert "board.thread.approved" in actions
+        assert "board.thread.replied" in actions
+        assert all(e["outcome"] == "success" for e in events)
+
+
+async def test_non_owner_cannot_approve_or_reply(org_world):  # noqa: F811
+    """A plain member with client access can draft-adjacent actions but never approve/reply."""
+    session_factory = org_world
+    app = _build_app(session_factory)
+    audit_repo = app.state.audit_repo
+    headers_a = auth_headers(USER_A, ORG_S)
+
+    await _add_plain_member(session_factory, USER_D, ORG_S)
+    headers_d = auth_headers(USER_D, ORG_S)
+
+    async with _client(app) as client:
+        client1 = await _create_client(client, headers_a, "Client One")
+        assign = await client.post(f"/api/clients/{client1['id']}/assignments", json={"user_id": USER_D, "role": "client_contact"}, headers=headers_a)
+        assert assign.status_code == 201
+
+        thread = (await client.post("/api/board/threads", json={"client_id": client1["id"], "subject": "T1"}, headers=headers_a)).json()
+        tid = thread["id"]
+
+        drafted = await client.post(f"/api/board/threads/{tid}/draft", json={"body": "draft"}, headers=headers_a)
+        assert drafted.status_code == 200
+        assert drafted.json()["status"] == "drafted"
+
+        # D has client access to thread1 but is neither owner nor admin: rejected, not merely a status conflict.
+        denied = await client.post(f"/api/board/threads/{tid}/approve", headers=headers_d)
+        assert denied.status_code == 403
+
+        # The thread is untouched -- D's rejected attempt did not sneak the transition through.
+        still_drafted = await client.get(f"/api/board/threads/{tid}", headers=headers_a)
+        assert still_drafted.json()["status"] == "drafted"
+
+        approved = await client.post(f"/api/board/threads/{tid}/approve", headers=headers_a)
+        assert approved.status_code == 200
+
+        denied_reply = await client.post(f"/api/board/threads/{tid}/reply", json={"body": "sneaky"}, headers=headers_d)
+        assert denied_reply.status_code == 403
+
+        events, _ = await audit_repo.list(organization_id=ORG_S, action_prefix="board.thread.approve")
+        assert any(e["outcome"] == "denied" and e["actor_user_id"] == USER_D for e in events)

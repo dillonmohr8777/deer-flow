@@ -19,7 +19,9 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from app.gateway.authz import require_permission
-from app.gateway.deps import get_board_repo, get_client_repo, get_current_user_from_request
+from app.gateway.deps import get_board_repo, get_client_repo, get_current_user_from_request, record_audit_event
+from deerflow.board.workflow import BoardOwnerRequiredError, BoardTransitionError, assert_can_approve, assert_can_draft, assert_can_reply
+from deerflow.persistence.board.model import BoardThreadStatus
 from deerflow.persistence.organizations.model import OrganizationMemberRow
 from deerflow.runtime.user_context import resolve_organization_id
 
@@ -73,6 +75,14 @@ class BoardMessageListResponse(BaseModel):
 
 class BoardMessageCreateRequest(BaseModel):
     author_kind: BoardAuthorKind = "client"
+    body: str = Field(..., min_length=1)
+
+
+class BoardDraftRequest(BaseModel):
+    body: str = Field(..., min_length=1)
+
+
+class BoardReplyRequest(BaseModel):
     body: str = Field(..., min_length=1)
 
 
@@ -232,3 +242,79 @@ async def add_board_message(thread_id: str, body: BoardMessageCreateRequest, req
     if message is None:
         raise _not_found()
     return _to_message_response(message)
+
+
+async def _load_thread_for_actor(board_repo, client_repo, thread_id: str, request: Request) -> tuple[dict, str]:
+    """Fetch *thread_id*, enforcing per-client access; returns ``(row, actor_user_id)``."""
+    row = await board_repo.get_thread(thread_id)
+    if row is None:
+        raise _not_found()
+    user = await get_current_user_from_request(request)
+    user_id = str(user.id)
+    if row.get("client_id") is not None:
+        await _require_client_access(client_repo, row["client_id"], user_id)
+    return row, user_id
+
+
+@router.post("/threads/{thread_id}/draft", response_model=BoardThreadResponse)
+@require_permission("board", "write")
+async def draft_board_reply(thread_id: str, body: BoardDraftRequest, request: Request) -> BoardThreadResponse:
+    """Momo drafts a reply: adds a ``momo``-authored message and moves the thread to ``drafted``."""
+    board_repo = get_board_repo(request)
+    client_repo = get_client_repo(request)
+    row, user_id = await _load_thread_for_actor(board_repo, client_repo, thread_id, request)
+    try:
+        assert_can_draft(row["status"])
+    except BoardTransitionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    await board_repo.add_message(thread_id, author_kind="momo", author_user_id=None, body=body.body)
+    updated = await board_repo.patch_thread(thread_id, status=BoardThreadStatus.DRAFTED)
+    if updated is None:
+        raise _not_found()
+    await record_audit_event(request, action="board.thread.drafted", outcome="success", actor_user_id=user_id, organization_id=resolve_organization_id(), target_type="board_thread", target_id=thread_id)
+    return _to_thread_response(updated)
+
+
+@router.post("/threads/{thread_id}/approve", response_model=BoardThreadResponse)
+@require_permission("board", "write")
+async def approve_board_reply(thread_id: str, request: Request) -> BoardThreadResponse:
+    """Only an org owner/admin may move a drafted reply to ``approved``."""
+    board_repo = get_board_repo(request)
+    client_repo = get_client_repo(request)
+    row, user_id = await _load_thread_for_actor(board_repo, client_repo, thread_id, request)
+    actor_is_owner = await _is_active_org_admin(user_id)
+    try:
+        assert_can_approve(row["status"], actor_is_owner=actor_is_owner)
+    except BoardOwnerRequiredError as exc:
+        await record_audit_event(request, action="board.thread.approve", outcome="denied", actor_user_id=user_id, organization_id=resolve_organization_id(), target_type="board_thread", target_id=thread_id)
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except BoardTransitionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    updated = await board_repo.patch_thread(thread_id, status=BoardThreadStatus.APPROVED)
+    if updated is None:
+        raise _not_found()
+    await record_audit_event(request, action="board.thread.approved", outcome="success", actor_user_id=user_id, organization_id=resolve_organization_id(), target_type="board_thread", target_id=thread_id)
+    return _to_thread_response(updated)
+
+
+@router.post("/threads/{thread_id}/reply", response_model=BoardThreadResponse)
+@require_permission("board", "write")
+async def send_board_reply(thread_id: str, body: BoardReplyRequest, request: Request) -> BoardThreadResponse:
+    """``replied`` needs its own explicit owner action, separate from ``approve``."""
+    board_repo = get_board_repo(request)
+    client_repo = get_client_repo(request)
+    row, user_id = await _load_thread_for_actor(board_repo, client_repo, thread_id, request)
+    actor_is_owner = await _is_active_org_admin(user_id)
+    try:
+        assert_can_reply(row["status"], actor_is_owner=actor_is_owner)
+    except BoardOwnerRequiredError as exc:
+        await record_audit_event(request, action="board.thread.reply", outcome="denied", actor_user_id=user_id, organization_id=resolve_organization_id(), target_type="board_thread", target_id=thread_id)
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except BoardTransitionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    await board_repo.add_message(thread_id, author_kind="owner", author_user_id=user_id, body=body.body)
+    updated = await board_repo.patch_thread(thread_id, status=BoardThreadStatus.REPLIED)
+    if updated is None:
+        raise _not_found()
+    await record_audit_event(request, action="board.thread.replied", outcome="success", actor_user_id=user_id, organization_id=resolve_organization_id(), target_type="board_thread", target_id=thread_id)
+    return _to_thread_response(updated)
