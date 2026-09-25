@@ -131,7 +131,13 @@
 .message {
   padding: 0.625rem 0.75rem;
   border-radius: var(--radius);
-  background: var(--muted);
+  /* The quiet-fill surface, not --muted: paper.css defines --muted as the
+     ink-muted TEXT colour (#3a4a6b), so the sent reply read ink on
+     ink-muted (1.85:1) and its "Owner" label vanished (1:1). --muted-surface
+     is what bg-muted resolves to in every treatment (cream-lo in paper:
+     ink 12.34, ink-muted 6.66). Proven by tests/unit/contrast-fixes.test.ts. */
+  background: var(--muted-surface);
+  color: var(--foreground);
   font-size: 0.875rem;
 }
 

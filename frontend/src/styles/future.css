@@ -120,7 +120,17 @@
     :root:not(.dark) [data-workspace-shell][data-treatment="future"]
   )
   :is([data-slot="sidebar-inner"], [data-slot="sidebar"][data-mobile="true"]) {
-  background-image: var(--future-chrome);
+  /* The sidebar is text all the way down (nav labels, recent chats), so the
+     chrome sits under a white veil: its chrome-deep stop alone put
+     graphite-lo labels at 2.06:1. At 82% the darkest band composites to
+     #e7e8eb (graphite-lo 6.52, graphite 12.38). Proven by
+     tests/unit/contrast-fixes.test.ts. */
+  background-image:
+    linear-gradient(
+      color-mix(in srgb, var(--future-white) 82%, transparent),
+      color-mix(in srgb, var(--future-white) 82%, transparent)
+    ),
+    var(--future-chrome);
   background-color: var(--future-white);
   color: var(--future-graphite);
 }
