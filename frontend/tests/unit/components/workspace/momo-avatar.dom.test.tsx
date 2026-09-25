@@ -217,6 +217,20 @@ describe("MomoAvatar", () => {
     }
   });
 
+  it("stays silent when decorative, because the name is written beside it", () => {
+    for (const agent of [KNOWN_AGENT, UNKNOWN_AGENT]) {
+      const { container, unmount } = render(
+        <MomoAvatar agent={agent} size={26} decorative />,
+      );
+      const wrapper = container.firstElementChild;
+      expect(wrapper?.getAttribute("aria-hidden")).toBe("true");
+      expect(wrapper?.getAttribute("role")).toBeNull();
+      expect(wrapper?.getAttribute("aria-label")).toBeNull();
+      expect(screen.queryByRole("img")).toBeNull();
+      unmount();
+    }
+  });
+
   it("renders Dillon Brain as a flat image below 40px, no PaperLayers stage", () => {
     const { container } = render(
       <MomoAvatar
