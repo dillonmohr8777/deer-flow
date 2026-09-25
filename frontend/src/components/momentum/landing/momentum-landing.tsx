@@ -19,18 +19,26 @@
  */
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 
-import { CutPaper } from "@/components/momentum/cut-paper";
-import { MomoFilm } from "@/components/momentum/momo-film";
-import { BouncingMomo } from "@/components/momentum/momobot/bouncing-momo";
+import {
+  ComicIntro,
+  claimComicIntro,
+} from "@/components/momentum/momobot/comic-intro";
+import { ComicWall } from "@/components/momentum/momobot/comic-wall";
 import { useIntroMotion } from "@/components/momentum/momobot/intro-motion";
 import {
   MomentumMark,
   MomoBotLockup,
   MomoBotWordmark,
 } from "@/components/momentum/momobot/lockup";
-import { ScrapbookBackdrop } from "@/components/momentum/momobot/scrapbook-backdrop";
+import { MomoBotBlock } from "@/components/momentum/momobot/momobot-block";
 import {
   FUNNEL_TREATMENT,
   resolveFunnelTreatment,
@@ -187,24 +195,28 @@ export function MomentumLanding() {
  * [data-treatment="paper"] (paper.css) so it wins over the `.dark` class the
  * theme provider pins on this route (theme-provider.tsx:14) — nothing here
  * reads a `--momentum-*`/shadcn dark-mode token, only `--paper-*` ones.
+ *
+ * The front door opens on the ten-second comic intro (momobot/comic-intro.tsx),
+ * once per session: it stamps the MomoBot block onto a slab and lands it in
+ * the headline, then the page settles over a slow wall of the comic panels.
+ * Elements marked data-comic-reveal stay hidden while it plays and arrive with
+ * the settle.
  */
 function PaperLanding() {
   const motion = useIntroMotion();
-  // Momo's intro plays once, then his Hello loop stays pinned in front of
-  // the moving collage for as long as the page is open.
-  const [introDone, setIntroDone] = useState(false);
-  return (
-    <div className={styles.paperPage} data-treatment="paper">
-      <div className={styles.paperIntro}>
-        <ScrapbookBackdrop motion={motion} tone="cream" />
-      </div>
-      <div
-        className={`${styles.paperBlueprintB} paper-torn-alt`}
-        aria-hidden="true"
-      />
+  const pageRef = useRef<HTMLDivElement>(null);
+  const [intro, setIntro] = useState(false);
 
+  // Before paint: COMIC_BOOT_SCRIPT (app/page.tsx) has usually decided already.
+  useLayoutEffect(() => {
+    if (claimComicIntro()) setIntro(true);
+  }, []);
+  const endIntro = useCallback(() => setIntro(false), []);
+
+  return (
+    <div ref={pageRef} className={styles.paperPage} data-treatment="paper">
       <div className={styles.paperShell}>
-        <header className={styles.paperHeader}>
+        <header className={styles.paperHeader} data-comic-reveal="">
           {/* The product leads on the left; the maker signs off at the far
               right, apart from it, after the one action. */}
           <Link className={styles.paperWordmark} href="/">
@@ -218,39 +230,39 @@ function PaperLanding() {
           </div>
         </header>
 
+        <ComicWall
+          live={motion.live && !intro}
+          motionOk={motion.motionOk}
+          paused={motion.paused}
+          showControl={!intro}
+          onTogglePause={() => motion.setPaused(!motion.paused)}
+        />
+
         <main className={styles.paperHero}>
-          <p className={`${styles.paperScrap} m-voice-annotation`}>
+          <p
+            className={`${styles.paperScrap} m-voice-annotation`}
+            data-comic-reveal=""
+          >
             still invite only, for now
           </p>
 
-          {/* Before the headline in the DOM so phones meet Momo first; wide
-              screens lift him beside the headline (position: absolute). */}
-          <BouncingMomo live={motion.live} className={styles.paperMomos}>
-            <MomoFilm
-              key={introDone ? "hello" : "intro"}
-              name={introDone ? "momo-hello" : "momo-intro"}
-              live={motion.live}
-              loop={introDone}
-              onEnded={() => setIntroDone(true)}
-            />
-          </BouncingMomo>
-
           <h1 className={styles.paperTitle}>
-            <span className="m-voice-serif">Say hello to</span>
-            <CutPaper
-              word="MomoBot"
-              className={`${styles.paperCutWord} m-voice-cut-paper`}
-              letterClassName={styles.paperCutLetter}
-            />
+            <span className="m-voice-serif" data-comic-reveal="">
+              Say hello to
+            </span>
+            <MomoBotBlock />
           </h1>
 
-          <p className={`${styles.paperLede} m-voice-body`}>
+          <p
+            className={`${styles.paperLede} m-voice-body`}
+            data-comic-reveal=""
+          >
             MomoBot is a private workspace where a team of agents takes on real
             work and leaves a record you can check. You were invited here
             because someone wants you in the room.
           </p>
 
-          <div className={styles.paperActions}>
+          <div className={styles.paperActions} data-comic-reveal="">
             <Link className={styles.paperPrimary} href="/workspace">
               Enter the workspace
             </Link>
@@ -262,7 +274,7 @@ function PaperLanding() {
             </Link>
           </div>
 
-          <ul className={styles.paperCards}>
+          <ul className={styles.paperCards} data-comic-reveal="">
             {CAPABILITIES.map((item, index) => (
               <li
                 key={item.key}
@@ -288,7 +300,7 @@ function PaperLanding() {
           </ul>
         </main>
 
-        <footer className={styles.paperFooter}>
+        <footer className={styles.paperFooter} data-comic-reveal="">
           <span className="m-voice-body">
             © {new Date().getFullYear()} Momentum
           </span>
@@ -299,6 +311,8 @@ function PaperLanding() {
             Have an invitation? Sign in
           </Link>
         </footer>
+
+        {intro ? <ComicIntro root={pageRef} onDone={endIntro} /> : null}
       </div>
     </div>
   );

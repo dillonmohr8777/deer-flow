@@ -18,6 +18,8 @@ colors:
   cyan-text: "#0a6183"
   ok: "#0a6b4f"
   danger: "#9a2b3c"
+  white: "#ffffff"
+  signal: "#e27113"
 typography:
   display:
     fontFamily: "Fraunces, Georgia, serif"
@@ -104,10 +106,13 @@ Every token lives under `[data-treatment="paper"]`. Ratios are WCAG contrast, as
 | `--paper-danger`     | #9a2b3c | Real failures and errors only                                          | 6.46              |
 | `--paper-brass`      | #c8a04a | **Object only** (2.75): pins, status dots, the Light theme preview dot |                   |
 | `--paper-cyan`       | #17a9e8 | **Object only** (2.28)                                                 |                   |
+| `--paper-white`      | #ffffff | Comic intro page paper; the logo word on royal (8.25)                  | ink 16.41         |
+| `--paper-signal`     | #e27113 | **Object only** (2.72): comic intro hits, logo stripe; ink on it 5.16  |                   |
 
 Rules:
 
 - **Colour carries state.** Royal marks the selected or acting thing. Green means verified done. Danger means a real failure. Nothing is coloured for decoration.
+- **Orange is a hit.** `--paper-signal` is Momentum's orange (`--m-signal`). It marks only the comic intro's beats, beat-caption fills and the logo stripe: letter on it in ink, never with it (3.18 on white).
 - **Brass is a hint.** A brass pin means something is working right now, so it is never a resting ornament. Brass and cyan as _words_ use their `-text` variants.
 - **The shell remaps shadcn.** Under paper, paper.css maps `--background`, `--card`, `--primary`, `--border`, `--input`, `--ring`, `--muted-surface`, `--accent` and the sidebar tokens to paper tokens. Components use the semantic tokens (`bg-card`, `border-border`, `text-muted-foreground`), never hard-coded hex.
 - **Command Center locals follow paper too.** `command-center.module.css` maps its own palette (`--canvas`, `--surface`, `--surface-blue`, `--ink`, `--line`, `--blue`) to paper tokens under `.root[data-treatment="paper"]`. `--surface-blue` is cream-lo.
@@ -157,20 +162,21 @@ Row titles stay Nunito Sans. Fraunces is for headings, never labels, buttons or 
 
 ## Motion
 
-Paper motion is a closed list of six items (items 1 to 5 in `@layer paper-motion`, item 6 in `momobot.module.css`):
+Paper motion is a closed list of seven items (items 1 to 5 in `@layer paper-motion`, item 6 in `momobot.module.css`, item 7 in `comic.module.css` and `comic-intro.tsx`):
 
-1. Front-door letters settle in 380ms, with a 40ms stagger.
+1. Front-door letters settle in 380ms, with a 40ms stagger (`cut-paper.tsx`; retired from `/` by item 7 on 2026-09-24, which replaced the cut-paper headline with the logo block).
 2. Invite release: the pin lifts and the sheet slides away in 420ms.
 3. Working squares tick in `steps(3)` over 1.2s while the work is active.
 4. Cards lift 2px on hover over 140ms.
 5. The brand signature drifts.
-6. Front-door Momo bounces: on `/` and `/login` a Momo film on a cream photo floats 26px and tilts in 3D (rotateX and rotateY) over 2.6s above a ground shadow that shrinks as it rises (`bouncing-momo.tsx`). Transform and opacity only. Approved by Dillon, 2026-09-24.
+6. Front-door Momo bounces: on `/login` (and on `/` until item 7 replaced it) a Momo film on a cream photo floats 26px and tilts in 3D (rotateX and rotateY) over 2.6s above a ground shadow that shrinks as it rises (`bouncing-momo.tsx`). Transform and opacity only. Approved by Dillon, 2026-09-24.
+7. The front-door comic intro: on `/`, once per browser session, a ten-second opening on generated comic art of the Momos, then a slow comic-panel wall behind the hero (`components/momentum/momobot/comic-intro.tsx`, `comic-wall.tsx`, `momobot-block.tsx`; art and provenance in `public/momentum/comic/`). A cold-open panel (0 to 1.2s); a 24-page flip storm with 3D page turns, page holds falling from about 300ms to 90ms, a linear camera push and a rising blue wash (to 6.0s); the team splashes (to 8.95s); then a slab lands and the real logo block is stamped onto it in perspective and flown into the headline (to 10.0s), and the page settles by about 10.3s. Orange is only a thin edge flash with two streaks on five beats (at least 1s apart, about 3% of the frame) and the logo's stripe. Any click or key skips to the settled page; the wall drifts slowly and holds on Pause motion. Transform, opacity and a discrete visibility cull only. Approved by Dillon, 2026-09-24: "a marvel comic book movie intro type of deal", in MomoBot blue and white with some orange.
 
-Items 1, 2 and 5 need both `prefers-reduced-motion: no-preference` and the user's brand-motion setting, which is **off by default**. Item 6 follows the front door's own switch (`useIntroMotion().live`: reduced motion, tab visibility and the Pause motion control). Reduced motion turns every item off, not down; Momo then stands still, slightly tilted, on the film's poster. Nothing moves to fake activity.
+Items 1, 2 and 5 need both `prefers-reduced-motion: no-preference` and the user's brand-motion setting, which is **off by default**. Items 6 and 7 follow the front door's own switch (`useIntroMotion().live`: reduced motion, tab visibility and the Pause motion control). Item 7 never plays under reduced motion: the page arrives settled at first paint, decided before paint by an inline script in `app/page.tsx`. A whole-screen flash check of its recording found at most one flash in any second. Reduced motion turns every item off, not down; Momo then stands still, slightly tilted, on the film's poster. Nothing moves to fake activity.
 
 ## Layout
 
-- **Front door names.** The product leads and the maker signs off apart from it. On `/` the MomoBot name sits top left and "by Momentum" (the unchanged wordmark artwork) sits on a cream tab at the far top right, after Sign in; phones drop the header Sign in because the hero's Enter the workspace goes to the same place. On `/login` the name heads the sheet and the Momentum tab sits in the page's top right corner. In the workspace sidebar the MomoBot name leads the header and the Momentum signature closes the footer, right-aligned. Momo is the focal point: beside the headline or the sheet on wide screens, above them on phones.
+- **Front door names.** The product leads and the maker signs off apart from it. On `/` the MomoBot name sits top left and "by Momentum" (the unchanged wordmark artwork) sits on a cream tab at the far top right, after Sign in; phones drop the header Sign in because the hero's Enter the workspace goes to the same place. On `/login` the name heads the sheet and the Momentum tab sits in the page's top right corner. In the workspace sidebar the MomoBot name leads the header and the Momentum signature closes the footer, right-aligned. On `/` the MomoBot logo block (royal plate, orange stripe, brass-tipped antenna, the display face) is the headline word over a slow wall of comic panels: a cream scrim keeps the whole hero column at contrast on wide screens, and phones get the wall as a band under the header. On `/login` Momo is the focal point: beside the sheet on wide screens, above it on phones.
 - **Page frame.** Operate pages sit in `WorkspaceContainer`, with a max width of `--container-width-md` (816px) or `-lg` (1024px). Command Center has its own 1560px frame, with 32px gutters on desktop and 16px on phones.
 - **Page header.** The h1 and a one-sentence lede sit on the left. One primary action sits on the right and wraps under the lede on phones. The work leads: when a page has records, show them before any create form (Scheduled tasks puts its list first and a "New scheduled task" button jumps to the form).
 - **Command Center order.**

@@ -1,0 +1,459 @@
+/*
+ * The front door's comic intro, its settled panel wall and the MomoBot logo
+ * block (comic-intro.tsx, comic-wall.tsx, momobot-block.tsx). Colours are
+ * --paper-* tokens only (paper.css): MomoBot blue on white, orange
+ * (--paper-signal) only for the hits and the logo stripe. Motion is DESIGN.md
+ * item 7; everything that moves animates transform, opacity or a discrete
+ * visibility cull, never layout.
+ */
+
+/* ---- Intro overlay ------------------------------------------------------ */
+
+.intro {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  overflow: hidden;
+  pointer-events: none;
+  /* Failsafe: if the script dies mid-intro, the page still arrives. */
+  animation: comicLeave 0s 15s forwards;
+}
+
+@keyframes comicLeave {
+  to {
+    opacity: 0;
+    visibility: hidden;
+  }
+}
+
+.camera {
+  position: absolute;
+  inset: 0;
+}
+
+/* Overscan: a camera tilt never shows a page corner. */
+.stack {
+  position: absolute;
+  inset: -3%;
+  perspective: 220vmax;
+}
+
+.page {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: var(--paper-white);
+  backface-visibility: hidden;
+  opacity: 0;
+  visibility: hidden;
+}
+
+/* The one single-column page sits on dark paper so the storm never strobes white. */
+.dark {
+  background: var(--paper-royal-deep);
+}
+
+.cell {
+  position: absolute;
+  overflow: hidden;
+  background: var(--paper-royal-deep);
+}
+
+.photo {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 40%;
+}
+
+.frames {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.frames polygon {
+  fill: none;
+  stroke: var(--paper-royal-deep);
+  stroke-width: 5px;
+  stroke-linejoin: miter;
+  vector-effect: non-scaling-stroke;
+}
+
+.shade {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  background: linear-gradient(
+    var(--comic-shade, 90deg),
+    color-mix(in srgb, var(--paper-royal-deep) 5%, transparent),
+    color-mix(in srgb, var(--paper-royal-deep) 75%, transparent)
+  );
+}
+
+.dots {
+  position: absolute;
+  inset: 0;
+  opacity: 0.08;
+  background: radial-gradient(circle, var(--paper-royal) 0 26%, transparent 29%)
+    0 0 / 14px 14px;
+}
+
+/* Cold open and phone splashes: the art as a framed panel on a white page. */
+.frame {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  translate: -50% -50%;
+  width: min(80%, 112vh);
+  aspect-ratio: 3 / 2;
+  overflow: hidden;
+  border: 5px solid var(--paper-royal-deep);
+  background: var(--paper-white);
+}
+
+.frame img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Landscape windows: splash pages go full bleed. */
+@media (min-aspect-ratio: 1 / 1) {
+  .splash .frame {
+    inset: 0;
+    translate: none;
+    width: auto;
+    aspect-ratio: auto;
+    border: 0;
+  }
+}
+
+/* Phones: square framed panels keep the whole crew and slab in frame. */
+@media (max-aspect-ratio: 1 / 1) {
+  .frame {
+    width: 92%;
+    aspect-ratio: 1;
+  }
+}
+
+/* The blue wash: "color" turns everything MomoBot blue first (orange never
+   mixes into olive), then a light multiply deepens it. */
+.wash {
+  position: absolute;
+  left: -6%;
+  right: -6%;
+  top: 0;
+  height: 100%;
+  background: var(--paper-royal);
+  mix-blend-mode: color;
+  transform: translateY(130%);
+}
+
+.deep {
+  mix-blend-mode: multiply;
+}
+
+/* The wash's leading edge: halftone dots swelling into solid. */
+.band {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 100%;
+  height: 24vh;
+  background: var(--paper-royal);
+  -webkit-mask: var(--comic-band) left bottom / auto 100% repeat-x;
+  mask: var(--comic-band) left bottom / auto 100% repeat-x;
+}
+
+/* The storm climbs into the light before the s03 cut. */
+.light {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  background: var(--paper-white);
+}
+
+/* Captions: the DESIGN.md label voice on a white box. */
+.cap {
+  position: absolute;
+  z-index: 3;
+  padding: 0.34em 0.55em 0.28em;
+  border: 3px solid var(--paper-royal-deep);
+  background: var(--paper-white);
+  box-shadow: 4px 4px 0 var(--paper-royal-deep);
+  color: var(--paper-royal-deep);
+  font: 700 clamp(12px, 2.5vmin, 22px) / 1
+    var(--m-font-text, "Nunito Sans", system-ui, sans-serif);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* The beat caption: ink lettering on an orange starburst. */
+.burst {
+  padding: 1.1em 1.3em 1em;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  color: var(--paper-ink);
+  font-size: clamp(16px, 4vmin, 36px);
+  letter-spacing: 0.08em;
+}
+
+.burst::before,
+.burst::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  clip-path: var(--comic-star);
+}
+
+.burst::before {
+  inset: -5px -7px;
+  background: var(--paper-royal-deep);
+}
+
+.burst::after {
+  inset: 0;
+  background: var(--paper-signal);
+}
+
+/* The hit: a thin orange edge flash while two streaks shoot across. About 3%
+   of the frame at its peak (measured in the build folder's tools/record.py). */
+.hit {
+  position: fixed;
+  inset: 0;
+  z-index: 25;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.edge {
+  position: absolute;
+  inset: 0;
+  border: 1.3vmin solid var(--paper-signal);
+}
+
+.streak {
+  position: absolute;
+  left: -30%;
+  width: 160%;
+  height: 1vmin;
+  background: var(--paper-signal);
+  rotate: -13deg;
+  transform: translateX(-100%);
+}
+
+/* ---- The settled wall ---------------------------------------------------- */
+
+/* Full bleed behind the hero on wide screens; a band under the header on phones. */
+.wall {
+  position: absolute;
+  z-index: -1;
+  top: 0;
+  left: 50%;
+  width: 100vw;
+  height: 100vh;
+  translate: -50% 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.columns {
+  display: flex;
+  gap: 14px;
+  height: 100%;
+  padding: 0 14px;
+}
+
+.col {
+  flex: 1;
+  min-width: 0;
+  animation: comicDrift var(--dur) linear infinite;
+  animation-play-state: paused;
+}
+
+.wall[data-live="true"] .col {
+  animation-play-state: running;
+}
+
+.down {
+  animation-direction: reverse;
+}
+
+@keyframes comicDrift {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(-50%);
+  }
+}
+
+.wallPanel {
+  position: relative;
+  height: var(--h);
+  margin-bottom: 14px;
+  overflow: hidden;
+  border: 4px solid var(--paper-royal-deep);
+  background: var(--paper-white);
+}
+
+.wallPanel .cap {
+  left: 8px;
+  top: 8px;
+  border-width: 2px;
+  box-shadow: 2px 2px 0 var(--paper-royal-deep);
+  font-size: 11px;
+}
+
+/* Wall columns past the viewport's width are not drawn. */
+@media (max-width: 90rem) {
+  .col:nth-child(n + 6) {
+    display: none;
+  }
+}
+
+@media (max-width: 72rem) {
+  .col:nth-child(n + 5) {
+    display: none;
+  }
+}
+
+/* The cream scrim: solid (COMIC_SCRIM_ALPHA, contrast pinned by a unit test)
+   under the whole hero column, fading only beyond its right edge. */
+.scrim {
+  position: absolute;
+  inset: 0;
+  --text-edge: calc((100% - min(80rem, 100% - 3rem)) / 2 + 44rem);
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--paper-cream) var(--comic-scrim), transparent) 0
+      var(--text-edge),
+    color-mix(in srgb, var(--paper-cream) 30%, transparent)
+      calc(var(--text-edge) + 10rem),
+    color-mix(in srgb, var(--paper-cream) 22%, transparent) 100%
+  );
+}
+
+@media (max-width: 44rem) {
+  .wall {
+    position: relative;
+    left: auto;
+    width: 100vw;
+    height: 31vh;
+    margin-left: calc(50% - 50vw);
+    translate: none;
+  }
+
+  .columns {
+    gap: 10px;
+    padding: 0 10px;
+  }
+
+  .col:nth-child(n + 4) {
+    display: none;
+  }
+
+  .wallPanel {
+    margin-bottom: 10px;
+    border-width: 3px;
+  }
+
+  /* No copy sits on the phone band: only a fade into the page. */
+  .scrim {
+    background: linear-gradient(180deg, transparent 72%, var(--paper-cream));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .col {
+    animation: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .wall {
+    display: none;
+  }
+}
+
+/* ---- The MomoBot logo block ------------------------------------------------ */
+
+/* The intro stamps this exact element onto the slab, then lands it here. */
+.block {
+  position: relative;
+  z-index: 30;
+  display: inline-block;
+  justify-self: start;
+  margin-top: 0.1em;
+  padding: 0.14em 0.2em 0.22em;
+  color: var(--paper-white);
+  font: 400 clamp(3.25rem, 8.6vw, 6.75rem) / 0.95
+    var(--m-font-display, "Archivo Black", system-ui, sans-serif);
+  letter-spacing: -0.01em;
+}
+
+.plate {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: 2px 5px 3px 6px;
+  background: var(--paper-royal);
+  box-shadow: 0.06em 0.07em 0 var(--paper-ink);
+}
+
+.stripe {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 0.085em;
+  border-radius: 0 0 3px 6px;
+  background: var(--paper-signal);
+  transform-origin: 0 50%;
+}
+
+.word {
+  display: block;
+}
+
+/* Momo's antenna: canon grey stem (ink-muted), canon brass ball. */
+.antenna {
+  position: absolute;
+  left: 84%;
+  bottom: 100%;
+  width: 0.07em;
+  height: 0.3em;
+  background: var(--paper-ink-muted);
+  transform-origin: 50% 100%;
+}
+
+.antenna::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: 0.17em;
+  height: 0.17em;
+  border-radius: 50%;
+  background: var(--paper-brass);
+  translate: -50% -60%;
+}
+
+@media (forced-colors: active) {
+  .plate {
+    border: 2px solid CanvasText;
+  }
+
+  .word {
+    color: CanvasText;
+  }
+}

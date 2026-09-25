@@ -232,6 +232,18 @@ page margins at desktop widths. They stay out of chat threads, forms, dialogs, a
 dense tables, where a moving decoration would distract rather than help. `data-live`
 (the same `motionOn`/`useDailyMotion()` switch as Momo films) pauses their sway, and
 they are hidden entirely under the future and retro treatments.
+The front door's comic intro (DESIGN.md motion item 7) lives in
+`components/momentum/momobot/`: `comic-data.ts` (timeline, dealing, stamp
+geometry, the pre-paint decision; pure and unit-tested), `comic-intro.tsx`
+(the overlay and its Web Animations), `comic-wall.tsx` (the settled panel wall)
+and `momobot-block.tsx` (the logo block the intro stamps and lands). Comic art
+(`public/momentum/comic/`, provenance in its SOURCES.md) renders only through
+those components. The intro plays once per session and never under reduced
+motion: an inline script in `app/page.tsx` sets `html[data-comic-intro]`
+before first paint, and `PaperLanding` claims it after hydration. Elements
+marked `data-comic-reveal` stay hidden while it plays. Keep that decision in
+`decideComicIntro` and `COMIC_BOOT_SCRIPT` together; `comic-data.test.ts` runs
+both against the same truth table.
 
 `backend/packages/harness/deerflow/capabilities/builtin.json` owns localized
 catalog manifests. Refresh the generated demo snapshot with `pnpm catalog:sync`

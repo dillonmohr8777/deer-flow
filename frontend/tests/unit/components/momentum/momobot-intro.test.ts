@@ -18,8 +18,10 @@ function contrast(a: number[], b: number[]) {
 const hex = (value: string) =>
   [1, 3, 5].map((i) => parseInt(value.slice(i, i + 2), 16));
 
+// The landing hero now sits on the comic wall (its scrim is pinned in
+// comic-data.test.ts); this pins ScrapbookBackdrop's cream collage scrim.
 describe("MomoBot intro motion contract", () => {
-  it("keeps landing hero copy at 4.5:1 over any collage frame", () => {
+  it("keeps copy at 4.5:1 over any frame of the cream collage", () => {
     const cream = hex("#f2ede3"); // --paper-cream
     for (const ink of ["#101e3f", "#3a4a6b"]) {
       // --paper-ink, --paper-ink-muted

@@ -30,6 +30,15 @@
  * --paper-brass and --paper-cyan are OBJECT-ONLY colours (2.75 and 2.28 on
  * cream) — never use them as a text colour. A brass or cyan *word* uses the
  * -text variant instead.
+ *
+ * Added 2026-09-24 for the front door's comic intro (DESIGN.md motion item 7):
+ *   --paper-white       #FFFFFF  comic page paper, the logo word
+ *                                ink on it 16.41, royal-deep on it 12.03,
+ *                                it on royal 8.25
+ *   --paper-signal      #E27113  Momentum's orange (momentum-design-system
+ *                                --m-signal). OBJECT-ONLY: hits, the logo
+ *                                stripe, the beat-caption fill. 2.72 on cream,
+ *                                3.18 on white; lettering on it is ink, 5.16.
  */
 
 [data-treatment="paper"] {
@@ -64,6 +73,11 @@
   /* Object-only colours — never text. A word uses the -text variant. */
   --paper-brass: #c8a04a;
   --paper-cyan: #17a9e8;
+
+  /* The comic intro (components/momentum/momobot/comic.module.css): white
+     page paper, and Momentum's orange as an object-only hit colour. */
+  --paper-white: #ffffff;
+  --paper-signal: #e27113;
 
   /*
    * Surface remap: command-center.module.css defines a first-pass local
