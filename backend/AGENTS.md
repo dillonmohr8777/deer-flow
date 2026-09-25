@@ -242,9 +242,11 @@ only `AUTH_SOURCE_INTERNAL` run input may retain them.
 
 `/api/team` (staff channels, members) and `/api/academy` (curriculum plus
 per-person progress) share one gate, `app/gateway/momentum_internal.py`:
-`config.private_workspace.enabled` **and** the caller's active-organization role
-in `owner`/`admin`/`member`. Anything else (a `client` role, no organization, a
-client-facing instance) gets 404, never 403. Team channels live in their own
+`config.momentum_internal.enabled`, the active organization's slug in
+`config.momentum_internal.organization_slugs` (the agency's own workspace, never
+a client's), **and** the caller's role there in `owner`/`admin`/`member`.
+Anything else (a client workspace on the same instance, even its owner; a
+`client` role; no organization; the feature left off) gets 404, never 403. Team channels live in their own
 `team_channels`/`team_messages` tables, not `board_threads`: the Momo Board
 router skips its per-client check when a thread has no `client_id`, so staff
 chatter must never share those tables. Message authors are always the caller.

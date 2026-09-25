@@ -74,7 +74,7 @@ class DeskFeature(BaseModel):
 class MomentumInternalFeature(BaseModel):
     """Availability of staff-only Momentum surfaces (team channels, AI Academy)."""
 
-    enabled: bool = Field(..., description="Whether the caller is Momentum staff on the private instance, so Team and Academy are shown")
+    enabled: bool = Field(..., description="Whether the caller is staff in the agency's own workspace, so Team and Academy are shown")
 
 
 class FeaturesResponse(BaseModel):
@@ -129,9 +129,10 @@ async def list_features(request: Request, config: AppConfig = Depends(get_config
         # Config-only, read per request. Off unless config.yaml says
         # private_workspace.enabled: true, so client-facing MomoBot never shows Desk.
         desk=DeskFeature(enabled=config.private_workspace.enabled is True),
-        # Per caller, not per instance: the Desk flag plus a staff role in the
-        # active workspace. The routes behind it enforce the same predicate.
-        momentum_internal=MomentumInternalFeature(enabled=is_momentum_staff(request, config)),
+        # Per caller, not per instance: the agency's own workspace (by slug,
+        # from config) plus a staff role in it. The routes behind it enforce
+        # the same predicate.
+        momentum_internal=MomentumInternalFeature(enabled=await is_momentum_staff(request, config)),
     )
 
 

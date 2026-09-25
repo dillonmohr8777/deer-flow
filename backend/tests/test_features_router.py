@@ -238,30 +238,42 @@ def test_desk_is_off_for_a_default_client_facing_config() -> None:
     assert AppConfig.model_fields["private_workspace"].default_factory().enabled is False
 
 
-def _app_as(role: str | None, *, private_workspace_enabled: bool) -> FastAPI:
+def _app_as(role: str | None, organization_id: str | None, *, internal_enabled: bool) -> FastAPI:
     """A features app whose requests carry *role* the way AuthMiddleware stamps it."""
-    app = _app_with_config(agents_api_enabled=True, private_workspace_enabled=private_workspace_enabled)
+    app = _app_with_config(agents_api_enabled=True)
+    base = app.dependency_overrides[get_config]()
+    base.momentum_internal = SimpleNamespace(enabled=internal_enabled, organization_slugs=["momentum"])
+    app.dependency_overrides[get_config] = lambda: base
 
     @app.middleware("http")
     async def _stamp(request, call_next):
-        request.state.organization_id = "org-momentum" if role is not None else None
+        request.state.organization_id = organization_id
         request.state.organization_role = role
         return await call_next(request)
 
     return app
 
 
+_SLUGS = {"org-momentum": "momentum", "org-client": "acme-co"}
+
+
 @pytest.mark.parametrize(
-    ("role", "private_workspace_enabled", "expected"),
+    ("role", "organization_id", "internal_enabled", "expected"),
     [
-        ("owner", True, True),
-        ("admin", True, True),
-        ("member", True, True),
-        ("client", True, False),
-        (None, True, False),
-        ("owner", False, False),
+        ("owner", "org-momentum", True, True),
+        ("admin", "org-momentum", True, True),
+        ("member", "org-momentum", True, True),
+        ("client", "org-momentum", True, False),
+        (None, None, True, False),
+        # The owner of a client workspace on the same instance.
+        ("owner", "org-client", True, False),
+        ("owner", "org-momentum", False, False),
     ],
 )
-def test_momentum_internal_is_staff_on_the_private_instance_only(role, private_workspace_enabled, expected) -> None:
-    with TestClient(_app_as(role, private_workspace_enabled=private_workspace_enabled)) as client:
+def test_momentum_internal_is_staff_in_the_configured_workspace_only(monkeypatch, role, organization_id, internal_enabled, expected) -> None:
+    async def _slug(org_id: str) -> str | None:
+        return _SLUGS.get(org_id)
+
+    monkeypatch.setattr("app.gateway.momentum_internal._organization_slug", _slug)
+    with TestClient(_app_as(role, organization_id, internal_enabled=internal_enabled)) as client:
         assert client.get("/api/features").json()["momentum_internal"] == {"enabled": expected}

@@ -96,7 +96,7 @@ export function useDeskEnabled() {
   return { enabled: data ?? false, isLoading: isPending };
 }
 
-/** Team channels and AI Academy: Momentum staff on the private instance only. */
+/** Team channels and AI Academy: staff in the agency's own workspace only. */
 export function useMomentumInternalEnabled() {
   const { data, isPending } = useQuery({
     queryKey: ["features", "momentum_internal"],

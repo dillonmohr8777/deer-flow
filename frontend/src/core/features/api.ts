@@ -97,7 +97,8 @@ export async function fetchDeskEnabled(): Promise<boolean> {
 }
 
 /**
- * Staff-only Momentum surfaces (Team, Academy): the private instance plus a
+ * Staff-only Momentum surfaces (Team, Academy): the agency's own workspace
+ * (config.momentum_internal.organization_slugs) plus a
  * staff role in the active workspace. Anything but an explicit true is off.
  */
 export function isMomentumInternalEnabled(features: FeaturesResponse): boolean {

@@ -67,7 +67,7 @@ export function WorkspaceNavChatList() {
             </SidebarMenuButton>
           </SidebarMenuItem>
         )}
-        {/* Momentum staff only: private instance plus a staff role. */}
+        {/* Momentum staff only: the agency's own workspace plus a staff role. */}
         {internalEnabled && (
           <SidebarMenuItem>
             <SidebarMenuButton

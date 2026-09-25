@@ -8,25 +8,27 @@ from types import SimpleNamespace
 import httpx
 import pytest
 from fastapi import FastAPI
-from org_isolation_fixtures import ORG_S, USER_A, USER_C, auth_headers, org_world  # noqa: F401
+from org_isolation_fixtures import ORG_S, STORAGE_S, USER_A, USER_B, USER_C, auth_headers, org_world  # noqa: F401
 
 from app.gateway.academy_content import TRACKS, lesson_ids
 from app.gateway.auth_middleware import AuthMiddleware
 from app.gateway.deps import get_config
 from app.gateway.routers import academy
 from deerflow.persistence.academy import AcademyProgressRepository
+from deerflow.persistence.organizations.identity import private_organization_slug
 from deerflow.persistence.organizations.model import OrganizationMemberRow
 from deerflow.persistence.user.model import UserRow
 
 USER_CLIENT = "user-client"
+MOMENTUM_SLUG = private_organization_slug(STORAGE_S)
 
 
-def _build_app(session_factory, *, private_workspace: bool = True) -> FastAPI:
+def _build_app(session_factory, *, enabled: bool = True) -> FastAPI:
     app = FastAPI()
     app.add_middleware(AuthMiddleware)
     app.state.academy_progress_repo = AcademyProgressRepository(session_factory)
     app.include_router(academy.router)
-    app.dependency_overrides[get_config] = lambda: SimpleNamespace(private_workspace=SimpleNamespace(enabled=private_workspace))
+    app.dependency_overrides[get_config] = lambda: SimpleNamespace(momentum_internal=SimpleNamespace(enabled=enabled, organization_slugs=[MOMENTUM_SLUG]))
     return app
 
 
@@ -70,7 +72,7 @@ async def test_staff_read_curriculum_and_track_their_own_progress(org_world):  #
 
 
 @pytest.mark.asyncio
-async def test_clients_and_client_facing_instances_get_404(org_world):  # noqa: F811
+async def test_clients_and_unconfigured_instances_get_404(org_world):  # noqa: F811
     now = datetime.now(UTC)
     async with org_world() as session, session.begin():
         session.add(UserRow(id=USER_CLIENT, email="client@example.com", password_hash=None, system_role="user", needs_setup=False, token_version=0, created_at=now))
@@ -82,7 +84,12 @@ async def test_clients_and_client_facing_instances_get_404(org_world):  # noqa: 
         assert (await client.get("/api/academy", headers=headers)).status_code == 404
         assert (await client.put(f"/api/academy/lessons/{first}/progress", json={"completed": True}, headers=headers)).status_code == 404
 
-    async with _client(_build_app(org_world, private_workspace=False)) as client:
+    # The owner of a different (client) workspace on the same instance.
+    async with _client(_build_app(org_world)) as client:
+        headers = auth_headers(USER_B)
+        assert (await client.get("/api/academy", headers=headers)).status_code == 404
+
+    async with _client(_build_app(org_world, enabled=False)) as client:
         headers = auth_headers(USER_A, ORG_S)
         assert (await client.get("/api/academy", headers=headers)).status_code == 404
         assert (await client.put(f"/api/academy/lessons/{first}/progress", json={"completed": True}, headers=headers)).status_code == 404

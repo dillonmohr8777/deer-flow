@@ -284,8 +284,10 @@ states and the fresh-instance empty states.
 
 `/workspace/team` (staff channels) and `/workspace/academy` (AI training) render
 only when `/api/features` reports `momentum_internal.enabled`, which the Gateway
-computes per caller: `private_workspace.enabled` **and** a staff role
-(`owner`/`admin`/`member`) in the active workspace. Anyone else is replaced to
+computes per caller: `momentum_internal.enabled`, the active workspace's slug
+listed in `momentum_internal.organization_slugs` (the agency's own workspace),
+**and** a staff role (`owner`/`admin`/`member`) in it. Client workspaces on the
+same instance never qualify. Anyone else is replaced to
 Command Center and the sidebar links are hidden. The data comes from `/api/team`
 and `/api/academy`, which enforce the same rule server-side (404), so lesson
 content is never shipped to a client. `core/team` and `core/academy` wrap the

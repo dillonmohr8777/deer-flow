@@ -49,7 +49,8 @@ import styles from "./team-board.module.css";
 
 /**
  * Team: Momentum staff channels, a small in-product Slack. Renders only when
- * features.momentum_internal.enabled (the private instance plus a staff
+ * features.momentum_internal.enabled (the agency's own workspace, named in
+ * config, plus a staff
  * role); the /api/team routes enforce the same rule and 404 everyone else.
  */
 export function TeamBoard() {

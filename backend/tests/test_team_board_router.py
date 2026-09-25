@@ -15,12 +15,13 @@ from types import SimpleNamespace
 import httpx
 import pytest
 from fastapi import FastAPI
-from org_isolation_fixtures import ORG_S, USER_A, USER_B, USER_C, auth_headers, org_world  # noqa: F401
+from org_isolation_fixtures import ORG_S, STORAGE_S, USER_A, USER_B, USER_C, auth_headers, org_world  # noqa: F401
 
 from app.gateway.auth_middleware import AuthMiddleware
 from app.gateway.deps import get_config
 from app.gateway.routers import team_board
 from deerflow.persistence.audit_events import AuditEventRepository
+from deerflow.persistence.organizations.identity import private_organization_slug
 from deerflow.persistence.organizations.model import OrganizationMemberRow
 from deerflow.persistence.team_board import DEFAULT_TEAM_CHANNELS, TeamBoardRepository
 from deerflow.persistence.user.model import UserRow
@@ -29,15 +30,22 @@ pytestmark = pytest.mark.asyncio
 
 USER_MEMBER = "user-member"
 USER_CLIENT = "user-client"
+# The shared workspace S plays "Momentum"; every private workspace plays a client.
+MOMENTUM_SLUG = private_organization_slug(STORAGE_S)
 
 
-def _build_app(session_factory, *, private_workspace: bool = True) -> FastAPI:
+def _config(*, enabled: bool = True, slugs: list[str] | None = None) -> SimpleNamespace:
+    return SimpleNamespace(momentum_internal=SimpleNamespace(enabled=enabled, organization_slugs=[MOMENTUM_SLUG] if slugs is None else slugs))
+
+
+def _build_app(session_factory, *, config: SimpleNamespace | None = None) -> FastAPI:
     app = FastAPI()
     app.add_middleware(AuthMiddleware)
     app.state.team_board_repo = TeamBoardRepository(session_factory)
     app.state.audit_repo = AuditEventRepository(session_factory)
     app.include_router(team_board.router)
-    app.dependency_overrides[get_config] = lambda: SimpleNamespace(private_workspace=SimpleNamespace(enabled=private_workspace))
+    resolved = config or _config()
+    app.dependency_overrides[get_config] = lambda: resolved
     return app
 
 
@@ -136,20 +144,22 @@ async def test_client_role_sees_nothing(org_world):  # noqa: F811
         assert {m["user_id"]: m["role"] for m in members} == {USER_A: "owner", USER_C: "admin"}
 
 
-async def test_another_organization_cannot_reach_channels(org_world):  # noqa: F811
+async def test_client_workspace_owner_on_the_same_instance_sees_nothing(org_world):  # noqa: F811
+    """B owns their own workspace on this instance, like a client would: still 404."""
     app = _build_app(org_world)
     async with _client(app) as client:
         channel_id = (await client.get("/api/team/channels", headers=auth_headers(USER_A, ORG_S))).json()["channels"][0]["id"]
-        # B owns a different (private) workspace: S's channel is a plain 404 there.
-        outsider = auth_headers(USER_B)
-        assert (await client.get(f"/api/team/channels/{channel_id}/messages", headers=outsider)).status_code == 404
-        assert (await client.post(f"/api/team/channels/{channel_id}/messages", json={"body": "x"}, headers=outsider)).status_code == 404
-        own = (await client.get("/api/team/channels", headers=outsider)).json()["channels"]
-        assert channel_id not in {c["id"] for c in own}
+        client_owner = auth_headers(USER_B)
+        assert (await client.get("/api/team/channels", headers=client_owner)).status_code == 404
+        assert (await client.get("/api/team/members", headers=client_owner)).status_code == 404
+        assert (await client.post("/api/team/channels", json={"name": "x"}, headers=client_owner)).status_code == 404
+        assert (await client.get(f"/api/team/channels/{channel_id}/messages", headers=client_owner)).status_code == 404
+        assert (await client.post(f"/api/team/channels/{channel_id}/messages", json={"body": "x"}, headers=client_owner)).status_code == 404
 
 
-async def test_client_facing_instance_has_no_team_board(org_world):  # noqa: F811
-    app = _build_app(org_world, private_workspace=False)
+@pytest.mark.parametrize("config", [_config(enabled=False), _config(slugs=[]), _config(slugs=["some-other-agency"])], ids=["disabled", "no-slugs", "other-slug"])
+async def test_team_board_is_off_unless_this_workspace_is_configured(org_world, config):  # noqa: F811
+    app = _build_app(org_world, config=config)
     owner = auth_headers(USER_A, ORG_S)
     async with _client(app) as client:
         assert (await client.get("/api/team/channels", headers=owner)).status_code == 404
