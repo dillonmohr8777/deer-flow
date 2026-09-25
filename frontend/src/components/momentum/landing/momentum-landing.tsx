@@ -266,11 +266,13 @@ function PaperLanding() {
             {CAPABILITIES.map((item, index) => (
               <li
                 key={item.key}
-                // "pinned" / "sheet" / "paper-torn(-alt)" are paper.css's
-                // own (unscoped) hooks — literal strings, not CSS-module
-                // classes, so its [data-treatment="paper"] .pinned::before
-                // etc. selectors still match.
-                className={`${styles.paperCard} pinned sheet ${
+                // "sheet" / "paper-torn(-alt)" / "paper-corners" are
+                // paper.css's own (unscoped) hooks — literal strings, not
+                // CSS-module classes, so its [data-treatment="paper"]
+                // selectors still match. No "pinned": these describe the
+                // product at rest, and a pin means work in progress, so
+                // the cards sit in photo corners instead.
+                className={`${styles.paperCard} sheet ${
                   index % 2 === 0 ? "paper-torn" : "paper-torn-alt"
                 }`}
                 style={{
@@ -283,6 +285,7 @@ function PaperLanding() {
                 <p className={`${styles.paperCardBody} m-voice-body`}>
                   {item.body}
                 </p>
+                <span className="paper-corners" aria-hidden="true" />
               </li>
             ))}
           </ul>
