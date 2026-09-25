@@ -175,6 +175,22 @@ const RUNS = [
     error: "Sandbox timed out after 900 seconds while running the build.",
   },
   {
+    // Started a minute ago; the model has not picked a tool yet.
+    run_id: "run-0008",
+    thread_id: "thread-0008",
+    thread_title: "Check the Pro Fence proposal against the brief",
+    assistant_id: "dillon-critic",
+    status: "pending",
+    model_name: "claude-sonnet",
+    created_at: minutesAgo(1),
+    updated_at: minutesAgo(1),
+    duration_seconds: null,
+    total_tokens: 0,
+    message_count: 1,
+    cost: null,
+    error: null,
+  },
+  {
     run_id: "run-0004",
     thread_id: "thread-0004",
     thread_title: "Weekly reliability audit",
@@ -598,6 +614,21 @@ const SIGNED_IN: Surface[] = [
     prepare: openUsageMenu,
   },
   { name: "command-center", path: "/workspace/command-center", scrolls: 2 },
+  {
+    // The agent team, scrolled into view: one avatar per recorded run state
+    // (running lead, thinking Critic, done, failed Builder, idle).
+    name: "agent-team",
+    path: "/workspace/command-center",
+    prepare: async (page) => {
+      const team = page.getByRole("group", { name: /Specialist definitions/ });
+      await expect(team).toBeVisible();
+      await page
+        .getByRole("link", { name: "Open lead agent conversation" })
+        .evaluate((node) =>
+          node.parentElement?.scrollIntoView({ block: "start" }),
+        );
+    },
+  },
   {
     name: "command-center-empty",
     path: "/workspace/command-center",
