@@ -76,6 +76,9 @@ class Permissions:
     CLIENTS_READ = "clients:read"
     CLIENTS_WRITE = "clients:write"
     CLIENTS_DELETE = "clients:delete"
+    # Momo Board
+    BOARD_READ = "board:read"
+    BOARD_WRITE = "board:write"
 
 
 class AuthContext:
@@ -179,6 +182,8 @@ _ALL_PERMISSIONS: list[str] = [
     Permissions.CLIENTS_READ,
     Permissions.CLIENTS_WRITE,
     Permissions.CLIENTS_DELETE,
+    Permissions.BOARD_READ,
+    Permissions.BOARD_WRITE,
 ]
 
 
