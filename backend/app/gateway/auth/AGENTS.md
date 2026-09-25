@@ -28,3 +28,12 @@ already apply generically in `user_provisioning.py`. The login page already
 renders a button per enabled provider from `GET /api/v1/auth/providers`;
 adding Google is a config change plus the Cloud Console steps in
 `AUTH_DESIGN.md`, not a frontend change.
+
+Workspace invitations work with it too. `POST /invitations/inspect` returns
+`sign_in` (`new`, `password` or `sso`), and an SSO account (no password hash)
+accepts with an empty password as long as its own browser session matches the
+invited user; a new recipient still needs a 12+ character password and an
+existing password account still has to verify it. `/invite` offers "Continue
+with <provider>" to new and SSO invitees, parks the fragment token in
+`sessionStorage` for the round trip (never in a URL or `next=`), and resumes
+from it on return.

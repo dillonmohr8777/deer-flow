@@ -349,3 +349,97 @@ async def test_revoked_issuer_cannot_consume_pending_invitation(invitation_db, m
     async with invitation_db() as session:
         invitation = await session.get(InvitationRow, created.id)
         assert invitation is not None and invitation.consumed_at is None
+
+
+async def _add_user(session_factory, user_id: str, email: str, *, password: str | None = None, oauth_provider: str | None = None) -> None:
+    now = datetime.now(UTC)
+    password_hash = await hash_password_async(password) if password else None
+    async with session_factory() as session:
+        async with session.begin():
+            session.add(
+                UserRow(
+                    id=user_id,
+                    email=email,
+                    password_hash=password_hash,
+                    oauth_provider=oauth_provider,
+                    oauth_id=f"{oauth_provider}-{user_id}" if oauth_provider else None,
+                    system_role="user",
+                    needs_setup=False,
+                    token_version=0,
+                    created_at=now,
+                )
+            )
+
+
+@pytest.mark.asyncio
+async def test_inspect_reports_how_the_invited_email_signs_in(invitation_db, monkeypatch):
+    organization_id = await _seed_workspace(invitation_db)
+    await _add_user(invitation_db, "pw-user", "pw@example.com", password="Existing-password-123!")
+    await _add_user(invitation_db, "sso-user", "sso@example.com", oauth_provider="google")
+
+    expected = {"new@example.com": "new", "pw@example.com": "password", "sso@example.com": "sso"}
+    for email, sign_in in expected.items():
+        created = await _create(monkeypatch, invitation_db, organization_id, email=email)
+        inspected = await invitations.inspect_invitation(invitations.InvitationTokenRequest(token=created.token), Response())
+        assert inspected.sign_in == sign_in, email
+        assert inspected.requires_login is (sign_in != "new")
+
+
+@pytest.mark.asyncio
+async def test_sso_account_accepts_with_its_session_and_no_password(invitation_db, monkeypatch):
+    organization_id = await _seed_workspace(invitation_db)
+    await _add_user(invitation_db, "sso-user", "sso@example.com", oauth_provider="google")
+    created = await _create(monkeypatch, invitation_db, organization_id, email="sso@example.com")
+
+    # Not signed in: refused, whatever password is sent, and nothing is consumed.
+    for password in ("", "anything-at-all"):
+        with pytest.raises(Exception) as anonymous:
+            await invitations.accept_invitation(invitations.AcceptInvitationRequest(token=created.token, password=password), _request(), Response())
+        assert getattr(anonymous.value, "status_code", None) == 403
+
+    # Signed in as somebody else: still refused.
+    with pytest.raises(Exception) as someone_else:
+        await invitations.accept_invitation(
+            invitations.AcceptInvitationRequest(token=created.token),
+            _request(user=SimpleNamespace(id="owner-1"), source=AUTH_SOURCE_SESSION),
+            Response(),
+        )
+    assert getattr(someone_else.value, "status_code", None) == 403
+    async with invitation_db() as session:
+        invitation = await session.get(InvitationRow, created.id)
+        assert invitation is not None and invitation.consumed_at is None
+
+    # Signed in as the invited SSO account: no password needed.
+    accepted = await invitations.accept_invitation(
+        invitations.AcceptInvitationRequest(token=created.token),
+        _request(user=SimpleNamespace(id="sso-user"), source=AUTH_SOURCE_SESSION),
+        Response(),
+    )
+    assert accepted.workspace_id == organization_id
+    async with invitation_db() as session:
+        membership = await session.get(OrganizationMemberRow, {"organization_id": organization_id, "user_id": "sso-user"})
+        assert membership is not None and membership.status == "active"
+        user = await session.get(UserRow, "sso-user")
+        assert user is not None and user.password_hash is None
+
+
+@pytest.mark.asyncio
+async def test_empty_password_never_creates_or_unlocks_a_password_account(invitation_db, monkeypatch):
+    organization_id = await _seed_workspace(invitation_db)
+    await _add_user(invitation_db, "pw-user", "pw@example.com", password="Existing-password-123!")
+    fresh = await _create(monkeypatch, invitation_db, organization_id, email="brand-new@example.com")
+    existing = await _create(monkeypatch, invitation_db, organization_id, email="pw@example.com")
+
+    with pytest.raises(Exception) as new_account:
+        await invitations.accept_invitation(invitations.AcceptInvitationRequest(token=fresh.token), _request(), Response())
+    assert getattr(new_account.value, "status_code", None) == 422
+
+    with pytest.raises(Exception) as password_account:
+        await invitations.accept_invitation(invitations.AcceptInvitationRequest(token=existing.token), _request(), Response())
+    assert getattr(password_account.value, "status_code", None) == 403
+
+    async with invitation_db() as session:
+        assert await session.scalar(select(UserRow).where(UserRow.email == "brand-new@example.com")) is None
+        for invitation_id in (fresh.id, existing.id):
+            invitation = await session.get(InvitationRow, invitation_id)
+            assert invitation is not None and invitation.consumed_at is None

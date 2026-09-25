@@ -65,7 +65,11 @@ class InvitationTokenRequest(BaseModel):
 
 
 class AcceptInvitationRequest(InvitationTokenRequest):
-    password: str = Field(min_length=1, max_length=1024)
+    # Empty is allowed only because an SSO account (Google etc.) has no
+    # password: it proves itself with a matching browser session instead.
+    # A new recipient still fails the 12-character rule and an existing
+    # password account still fails verification, so empty never slips by.
+    password: str = Field(default="", max_length=1024)
 
 
 class CreateInvitationResponse(BaseModel):
@@ -81,6 +85,10 @@ class InspectInvitationResponse(BaseModel):
     workspace_name: str
     expires_at: datetime
     requires_login: bool
+    # How the invited email signs in, so the page asks for the right thing:
+    # "new" (create a password or use SSO), "password" (current password) or
+    # "sso" (sign in with the provider, then accept with no password).
+    sign_in: Literal["new", "password", "sso"]
 
 
 class AcceptInvitationResponse(BaseModel):
@@ -265,11 +273,18 @@ async def inspect_invitation(body: InvitationTokenRequest, response: Response) -
             raise _forbidden()
         existing = await _find_user_by_email(session, invitation.email)
 
+    if existing is None:
+        sign_in = "new"
+    elif existing.oauth_provider is not None or existing.password_hash is None:
+        sign_in = "sso"
+    else:
+        sign_in = "password"
     return InspectInvitationResponse(
         email=invitation.email,
         workspace_name=organization.name,
         expires_at=_as_utc(invitation.expires_at),
         requires_login=existing is not None,
+        sign_in=sign_in,
     )
 
 
