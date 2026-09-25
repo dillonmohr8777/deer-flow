@@ -9,9 +9,12 @@ import type { ConsoleRunItem } from "@/core/console/types";
  * - done: the latest settled run succeeded; `at` dates the stamp
  * - failed: the latest settled run errored or timed out
  * - idle: no runs, or the latest one was interrupted (a stop is not a failure)
+ * - unknown: no run in a truncated page of history, so its latest run may be
+ *   older than the page; drawn still, like idle, but never worded as idle
  */
 export type AgentLifeState =
   | "idle"
+  | "unknown"
   | "thinking"
   | "running"
   | "done"
@@ -31,6 +34,8 @@ export function agentLife(
     "assistant_id" | "status" | "created_at" | "updated_at"
   >[],
   name: string,
+  /** True when `runs` is one page of a longer history (`has_more`). */
+  truncated = false,
 ): AgentLife {
   const own = runs.filter((run) => run.assistant_id === name);
   if (own.some((run) => run.status === "running")) return { state: "running" };
@@ -39,7 +44,9 @@ export function agentLife(
     (best, run) => (!best || settledAt(run) > settledAt(best) ? run : best),
     null,
   );
-  if (!latest) return IDLE;
+  // Missing from a partial page is unknown, not idle: the latest run may
+  // have failed just beyond it.
+  if (!latest) return truncated ? { state: "unknown" } : IDLE;
   const at = latest.updated_at ?? latest.created_at;
   if (latest.status === "success") return { state: "done", at };
   if (latest.status === "error" || latest.status === "timeout")
@@ -50,8 +57,11 @@ export function agentLife(
 export function agentLives(
   runs: Parameters<typeof agentLife>[0],
   names: readonly string[],
+  truncated = false,
 ): Record<string, AgentLife> {
-  return Object.fromEntries(names.map((name) => [name, agentLife(runs, name)]));
+  return Object.fromEntries(
+    names.map((name) => [name, agentLife(runs, name, truncated)]),
+  );
 }
 
 /** "Sep 24": the stamp's date, in the viewer's time zone. */
@@ -75,6 +85,8 @@ export function agentLifeLabel(life: AgentLife): string {
       return date ? `Done ${date}` : "Done";
     case "failed":
       return date ? `Failed ${date}` : "Last run failed";
+    case "unknown":
+      return "No recent run";
     default:
       return "Idle";
   }

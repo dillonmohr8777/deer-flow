@@ -18,6 +18,7 @@ import styles from "./agent-alive.module.css";
  * - done: a dated ink stamp, which lands once, and only when this view saw
  *   the run finish (loading a page with a finished run is not a change)
  * - failed: a torn corner, no motion
+ * - unknown: still, like idle (no run in a truncated history page)
  *
  * `motion` is the workspace's brandMotionAllowed() result. paper.css also
  * gates the animations on `prefers-reduced-motion: no-preference`, so either
@@ -37,13 +38,20 @@ export function AgentAlive({
 }) {
   // A stamp only lands on a real transition from work to done. Tracked with
   // the render-time "previous value" pattern, so no effect re-renders.
+  // It is marked fresh only when motion is on at that moment, and cleared
+  // when the landing ends or motion drops, so a tab switch or a motion
+  // toggle never replays it.
   const [seen, setSeen] = useState<AgentLifeState>(life.state);
   const [fresh, setFresh] = useState(false);
   if (seen !== life.state) {
     setSeen(life.state);
     setFresh(
-      life.state === "done" && (seen === "running" || seen === "thinking"),
+      motion &&
+        life.state === "done" &&
+        (seen === "running" || seen === "thinking"),
     );
+  } else if (fresh && !motion) {
+    setFresh(false);
   }
   const date = life.state === "done" ? stampDate(life.at) : null;
 
@@ -63,7 +71,10 @@ export function AgentAlive({
       <span className={cn(styles.art, "paper-alive-art")}>{children}</span>
       {life.state === "failed" && <span className={styles.tear} />}
       {life.state === "done" && (
-        <span className={cn(styles.stamp, "paper-alive-stamp")}>
+        <span
+          className={cn(styles.stamp, "paper-alive-stamp")}
+          onAnimationEnd={() => setFresh(false)}
+        >
           {date ?? "Done"}
         </span>
       )}

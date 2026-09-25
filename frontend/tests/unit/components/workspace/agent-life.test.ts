@@ -70,6 +70,30 @@ describe("agentLife", () => {
     ).toEqual({ state: "idle" });
   });
 
+  it("says unknown, not idle, for an agent missing from a truncated page", () => {
+    // Builder's last run failed, then the lead filled the 20-run page.
+    const page = Array.from({ length: 20 }, (_, index) =>
+      run(
+        "dillon-brain",
+        "success",
+        new Date(
+          Date.parse("2026-09-24T14:00:00Z") - index * 60_000,
+        ).toISOString(),
+      ),
+    );
+    const builder = agentLife(page, "dillon-builder", true);
+    expect(builder.state).toBe("unknown");
+    expect(agentLifeLabel(builder)).not.toBe("Idle");
+    expect(agentLifeLabel(builder)).toBe("No recent run");
+    // A complete history really is idle.
+    expect(agentLife(page, "dillon-builder", false).state).toBe("idle");
+    // An agent inside the page keeps its real state either way.
+    expect(agentLife(page, "dillon-brain", true).state).toBe("done");
+    expect(
+      agentLives(page, ["dillon-builder"], true)["dillon-builder"]?.state,
+    ).toBe("unknown");
+  });
+
   it("keys every requested name", () => {
     const lives = agentLives(
       [run("dillon-growth", "success")],

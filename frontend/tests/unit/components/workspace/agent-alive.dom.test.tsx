@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "@rstest/core";
-import { cleanup, render } from "@testing-library/react";
+import { cleanup, fireEvent, render } from "@testing-library/react";
 
 import { AgentAlive } from "@/components/workspace/command-center/agent-alive";
 import type { AgentLife } from "@/components/workspace/command-center/agent-life";
@@ -105,5 +105,58 @@ describe("AgentAlive", () => {
       </AgentAlive>,
     );
     expect(alive().dataset.stamp).toBeUndefined();
+  });
+
+  it("never replays the stamp after it has landed", () => {
+    const tree = (life: AgentLife, motion: boolean) => (
+      <AgentAlive life={life} motion={motion}>
+        <img alt="" src="/momentum/momos/qa.svg" />
+      </AgentAlive>
+    );
+    const { alive, rerender } = renderAlive({ state: "running" });
+    rerender(tree(DONE, true));
+    expect(alive().dataset.stamp).toBe("fresh");
+    fireEvent.animationEnd(alive().querySelector(".paper-alive-stamp")!);
+    expect(alive().dataset.stamp).toBeUndefined();
+    // A tab switch or motion toggle flips data-live off and on.
+    rerender(tree(DONE, false));
+    rerender(tree(DONE, true));
+    expect(alive().dataset.stamp).toBeUndefined();
+  });
+
+  it("drops a pending landing when motion goes off before it ends", () => {
+    const tree = (life: AgentLife, motion: boolean) => (
+      <AgentAlive life={life} motion={motion}>
+        <img alt="" src="/momentum/momos/qa.svg" />
+      </AgentAlive>
+    );
+    const { alive, rerender } = renderAlive({ state: "running" });
+    rerender(tree(DONE, true));
+    rerender(tree(DONE, false));
+    rerender(tree(DONE, true));
+    expect(alive().dataset.stamp).toBeUndefined();
+  });
+
+  it("does not mark a landing when the run finishes with motion off", () => {
+    const { alive, rerender } = renderAlive({ state: "running" }, false);
+    rerender(
+      <AgentAlive life={DONE} motion={false}>
+        <img alt="" src="/momentum/momos/qa.svg" />
+      </AgentAlive>,
+    );
+    expect(alive().dataset.stamp).toBeUndefined();
+    rerender(
+      <AgentAlive life={DONE} motion>
+        <img alt="" src="/momentum/momos/qa.svg" />
+      </AgentAlive>,
+    );
+    expect(alive().dataset.stamp).toBeUndefined();
+  });
+
+  it("unknown: still, unpinned and unstamped, like idle", () => {
+    const { alive } = renderAlive({ state: "unknown" });
+    expect(alive().dataset.alive).toBe("unknown");
+    expect(alive().classList.contains("pinned")).toBe(false);
+    expect(alive().querySelector(".paper-alive-stamp")).toBeNull();
   });
 });

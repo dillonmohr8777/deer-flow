@@ -262,10 +262,11 @@ export function CommandCenter() {
       .map((run) => run.assistant_id)
       .filter((name): name is string => Boolean(name)) ?? null;
   const lives = activityRuns.data
-    ? agentLives(activityRuns.data.runs, [
-        "dillon-brain",
-        ...roster.map((agent) => agent.name),
-      ])
+    ? agentLives(
+        activityRuns.data.runs,
+        ["dillon-brain", ...roster.map((agent) => agent.name)],
+        activityRuns.data.has_more,
+      )
     : null;
   // Same guard as AgentTopology's leadActive: an unknown live state must
   // never read as the lead working.
