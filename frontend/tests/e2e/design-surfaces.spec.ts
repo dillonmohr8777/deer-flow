@@ -168,7 +168,8 @@ const RUNS = [
     created_at: minutesAgo(130),
     updated_at: minutesAgo(126),
     duration_seconds: 231,
-    total_tokens: 12_004,
+    // Timed out before the model reported usage: the backend stores 0.
+    total_tokens: 0,
     message_count: 6,
     cost: 0.0381,
     error: "Sandbox timed out after 900 seconds while running the build.",
@@ -532,10 +533,27 @@ async function mockDesignAPI(page: Page, { empty = false } = {}) {
   );
 }
 
+// A thread whose backend usage was recorded, with a known context window.
+const RECORDED_THREAD_USAGE = {
+  total_tokens: 48_210,
+  total_input_tokens: 41_380,
+  total_output_tokens: 6_830,
+  total_runs: 3,
+  by_model: {},
+  by_caller: { lead_agent: 48_210, subagent: 0, middleware: 0 },
+  context_usage: {
+    token_count: 72_800,
+    max_context_tokens: 200_000,
+    percentage: 36.4,
+  },
+};
+
 type Surface = {
   name: string;
   path: string;
   empty?: boolean;
+  /** Answer the thread token-usage read with recorded usage. */
+  recordedUsage?: boolean;
   /** Extra captures after scrolling the main scroller by ~a screen. */
   scrolls?: number;
   prepare?: (page: Page) => Promise<void>;
@@ -565,6 +583,19 @@ const SIGNED_IN: Surface[] = [
         await page.keyboard.press("Tab");
       }
     },
+  },
+  {
+    // The header usage menu opened on a thread with no recorded usage.
+    name: "chat-usage-missing",
+    path: `/workspace/chats/${MOCK_THREAD_ID}`,
+    prepare: openUsageMenu,
+  },
+  {
+    // The same menu on a thread with recorded usage and a context reading.
+    name: "chat-usage-recorded",
+    path: `/workspace/chats/${MOCK_THREAD_ID}`,
+    recordedUsage: true,
+    prepare: openUsageMenu,
   },
   { name: "command-center", path: "/workspace/command-center", scrolls: 2 },
   {
@@ -611,6 +642,14 @@ const SIGNED_IN: Surface[] = [
   },
   { name: "daily", path: "/daily", scrolls: 2 },
 ];
+
+async function openUsageMenu(page: Page) {
+  await page
+    .getByRole("button", { name: /tokens/i })
+    .first()
+    .click();
+  await expect(page.getByRole("menu")).toBeVisible();
+}
 
 const SIGNED_OUT: Surface[] = [
   { name: "landing", path: "/", scrolls: 3 },
@@ -687,6 +726,13 @@ test.describe("design surfaces", () => {
     for (const surface of SIGNED_IN.filter((s) => wanted(s.name))) {
       test(`${surface.name} ${viewport.name}`, async ({ page }) => {
         await mockDesignAPI(page, { empty: surface.empty });
+        if (surface.recordedUsage) {
+          await page.route("**/api/threads/*/token-usage", (route) =>
+            route.fulfill({
+              json: { thread_id: MOCK_THREAD_ID, ...RECORDED_THREAD_USAGE },
+            }),
+          );
+        }
         await capture(page, surface, viewport);
       });
     }

@@ -1166,14 +1166,16 @@ export const zhCN: Translations = {
 
   // Token Usage
   tokenUsage: {
-    title: "Token 用量",
+    title: "本对话的 Token 用量",
     label: "Tokens",
     input: "输入",
     output: "输出",
     total: "总计",
     view: "显示方式",
+    figure: (count: string) => `${count} tokens`,
+    headerUnavailable: "用量不可用",
     unavailable:
-      "暂无 Token 用量。只有模型成功返回且供应商提供 usage_metadata 时才会显示。",
+      "不可用。本对话中还没有回复上报 token 用量，模型回复上报后才会显示。",
     unavailableShort: "未返回用量",
     collecting: "统计中",
     note: "顶部总量优先使用后端持久化的线程用量；当当前回复仍在流式返回时，还会叠加可见的进行中用量。每轮和调试用量只来自当前可见消息，可能与平台账单页不完全一致。",
@@ -1203,6 +1205,12 @@ export const zhCN: Translations = {
     label: "上下文",
     title: "上下文窗口",
     badgeAriaLabel: (percentage: string) => `上下文窗口已使用 ${percentage}%`,
+    headerFigure: (percentage: string) => `上下文 ${percentage}%`,
+    measured: (count: string, max: string, percentage: string) =>
+      `${count} / ${max} tokens（${percentage}%）`,
+    explanation:
+      "本对话下一次回复将占用模型上下文窗口的比例。它衡量的是长度，不是花费。",
+    unavailable: "不可用。暂不知道该模型的上下文大小。",
   },
 
   // Shortcuts

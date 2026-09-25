@@ -253,7 +253,7 @@ describe("CommandCenter", () => {
   it("makes the totals rail a labelled region the keyboard can reach", () => {
     render(<CommandCenter />);
     const rail = screen.getByRole("region", {
-      name: "Recorded workspace totals",
+      name: "Your recorded runs, all time",
     });
     expect(rail.tabIndex).toBe(0);
   });
@@ -330,6 +330,28 @@ describe("CommandCenter", () => {
     expect(rows[1]?.querySelector("time")).toBeNull();
   });
 
+  it("says a run's tokens were not recorded instead of printing 0 tokens", () => {
+    mocks.runs = [
+      { ...contributorRun, total_tokens: 0 },
+      {
+        ...contributorRun,
+        run_id: "run-8",
+        thread_title: "Still working",
+        status: "running",
+        total_tokens: 0,
+      },
+    ];
+    render(<CommandCenter />);
+    expect(screen.getByText("Tokens not recorded")).toBeDefined();
+    expect(screen.getByText("Tokens still counting")).toBeDefined();
+    expect(document.body.textContent).not.toContain("0 tokens");
+    fireEvent.click(
+      screen.getByRole("button", { name: /Audit the landing page/ }),
+    );
+    const tokens = screen.getByText("Tokens", { selector: "dt" });
+    expect(tokens.nextElementSibling?.textContent).toBe("Not recorded");
+  });
+
   it("labels the tabs the backend only partly supports as Preview", () => {
     render(<CommandCenter />);
     for (const name of ["Mission Control", "Agent Studio", "Jobs", "Workflows"])
@@ -402,16 +424,44 @@ describe("CommandCenter", () => {
     mocks.statsLoading = true;
     const { unmount } = render(<CommandCenter />);
     expect(metric("Recorded tokens").textContent).toBe(
-      "Recorded tokensLoading",
+      "Recorded tokensLoadingAll time, input and output",
     );
     unmount();
     mocks.statsLoading = false;
     mocks.stats = { ...baseStats, total_tokens: undefined };
     render(<CommandCenter />);
     expect(metric("Recorded tokens").textContent).toBe(
-      "Recorded tokensUnavailable",
+      "Recorded tokensUnavailableAll time, input and output",
     );
-    expect(metric("Recorded runs").textContent).toBe("Recorded runs1");
+    expect(metric("Recorded runs").textContent).toBe(
+      "Recorded runs1All time, your runs",
+    );
+  });
+
+  it("labels every total with its scope and period", () => {
+    render(<CommandCenter />);
+    expect(metric("Active runs").textContent).toBe("Active runs0Right now");
+    expect(metric("Errors & timeouts").textContent).toBe(
+      "Errors & timeouts0All time, your runs",
+    );
+    expect(metric("Recorded tokens").textContent).toBe(
+      "Recorded tokens30All time, input and output",
+    );
+  });
+
+  it("reads zero tokens across recorded runs as not recorded, not zero", () => {
+    mocks.stats = { ...baseStats, total_runs: 4, total_tokens: 0 };
+    const { unmount } = render(<CommandCenter />);
+    expect(metric("Recorded tokens").textContent).toBe(
+      "Recorded tokensNot recordedAll time, input and output",
+    );
+    unmount();
+    // With no runs at all, zero is the true count.
+    mocks.stats = { ...baseStats, total_runs: 0, total_tokens: 0 };
+    render(<CommandCenter />);
+    expect(metric("Recorded tokens").textContent).toBe(
+      "Recorded tokens0All time, input and output",
+    );
   });
 
   it("surfaces provider attempt receipts without presenting estimates as invoices", () => {

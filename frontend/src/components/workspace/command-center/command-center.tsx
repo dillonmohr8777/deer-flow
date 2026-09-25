@@ -36,6 +36,7 @@ import {
   useConsoleUsage,
   useConsoleUsageLedger,
   type ConsoleRunItem,
+  type ConsoleStats,
 } from "@/core/console";
 import { useModels } from "@/core/models/hooks";
 import { useSubagents } from "@/core/subagents";
@@ -70,6 +71,23 @@ import styles from "./command-center.module.css";
 const HERO_CREW = ["growth", "builder", "research", "dillon-brain"] as const;
 const number = (value: number) => new Intl.NumberFormat("en-US").format(value);
 const active = (status: string) => status === "pending" || status === "running";
+/**
+ * The backend stores 0 when a run never reported usage, so 0 tokens across
+ * recorded runs is missing data, not a measurement (DESIGN.md, States).
+ */
+export function recordedTokens(stats: ConsoleStats | undefined) {
+  if (!stats) return undefined;
+  return stats.total_runs > 0 && stats.total_tokens === 0
+    ? undefined
+    : stats.total_tokens;
+}
+/** A run's token figure, or the reason there isn't one yet. */
+export function runTokens(
+  run: Pick<ConsoleRunItem, "status" | "total_tokens">,
+) {
+  if (run.total_tokens > 0) return `${number(run.total_tokens)} tokens`;
+  return active(run.status) ? "Tokens still counting" : "Tokens not recorded";
+}
 const tabs = [
   "Mission Control",
   "Agent Studio",
@@ -389,7 +407,7 @@ export function CommandCenter() {
                     </span>{" "}
                     <span aria-hidden="true">·</span>{" "}
                     <span className={styles.metaTokens}>
-                      {number(run.total_tokens)} tokens
+                      {runTokens(run)}
                     </span>
                   </small>
                 </span>
@@ -630,18 +648,33 @@ export function CommandCenter() {
           <div
             className={styles.metrics}
             role="region"
-            aria-label="Recorded workspace totals"
+            aria-label="Your recorded runs, all time"
             tabIndex={0}
           >
             {[
-              { label: "Active runs", value: stats.data?.active_runs },
-              { label: "Recorded runs", value: stats.data?.total_runs },
+              {
+                label: "Active runs",
+                value: stats.data?.active_runs,
+                scope: "Right now",
+              },
+              {
+                label: "Recorded runs",
+                value: stats.data?.total_runs,
+                scope: "All time, your runs",
+              },
               {
                 label: "Errors & timeouts",
                 value: failedRuns,
                 state: errorState,
+                scope: "All time, your runs",
               },
-              { label: "Recorded tokens", value: stats.data?.total_tokens },
+              {
+                label: "Recorded tokens",
+                value: recordedTokens(stats.data),
+                missing:
+                  stats.data?.total_tokens === 0 ? "Not recorded" : undefined,
+                scope: "All time, input and output",
+              },
             ].map((metric) => (
               <div key={metric.label} data-state={metric.state}>
                 <span>{metric.label}</span>
@@ -649,11 +682,12 @@ export function CommandCenter() {
                   {stats.isLoading ? (
                     <span>Loading</span>
                   ) : metric.value == null ? (
-                    <span>Unavailable</span>
+                    <span>{metric.missing ?? "Unavailable"}</span>
                   ) : (
                     number(metric.value)
                   )}
                 </strong>
+                <small>{metric.scope}</small>
               </div>
             ))}
           </div>
@@ -966,7 +1000,13 @@ export function CommandCenter() {
                 </div>
                 <div>
                   <dt>Tokens</dt>
-                  <dd>{number(selectedRun.total_tokens)}</dd>
+                  <dd>
+                    {selectedRun.total_tokens > 0
+                      ? number(selectedRun.total_tokens)
+                      : active(selectedRun.status)
+                        ? "Still counting"
+                        : "Not recorded"}
+                  </dd>
                 </div>
                 <div>
                   <dt>Estimated cost</dt>
