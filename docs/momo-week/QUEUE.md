@@ -51,7 +51,7 @@ Source of truth: `DESIGN.md` ("MomoBot Paper": its tokens, type and rules win ov
 - [ ] **d5 pins-mean-running** (backlog 7): pins only on actively executing work; static cards use folds, slots or overlaps.
 - [ ] **d6 catalog-priority** (backlog 6): connected tools first; separate Connect, Configure and Details actions.
 - [ ] **d7 landing-composition** (backlog 5): fill the empty blue paper with a purposeful composition built from existing assets, and tighten vertical spacing.
-- [ ] **d8 board-visual** (after b5 merges into lane/momo-week; skip until then): bring `/workspace/board` fully into the Desk's paper language: thread slips, status stamps, the draft on its own sheet.
+- [ ] **d8 board-visual** (after b5's draft PR exists; branch from b5's branch, not lane/momo-week, and target the PR at b5's branch; skip until then): bring `/workspace/board` fully into the Desk's paper language: thread slips, status stamps, the draft on its own sheet.
 - [ ] **d9 dispatch-board** (backlog bold idea): Mission Control as a paper dispatch board. One slip per mission from brief to receipt, pins only while running, a dated ink stamp on completion linked to evidence. Scope it to one slice per run.
 
 Legend: `[ ]` todo · `[~]` in progress · `[x]` done (PR link) · `[!]` blocked (reason)
