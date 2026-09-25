@@ -390,71 +390,26 @@
 }
 
 /*
- * A torn blueprint scrap behind the sheet content, deckled by paper.css's
- * .paper-torn-alt mask and placed where no copy sits: behind the Momos above
- * the footer. Never under words: ink on royal
- * fails contrast, and a scrap under text reads as a bug, not craft.
+ * The comic intro (momobot/comic-intro.tsx) holds the page while it plays:
+ * html[data-comic-intro="play"] is set before first paint by
+ * COMIC_BOOT_SCRIPT or by the landing's claim, and cleared when the intro
+ * ends or is skipped. The intro animates each [data-comic-reveal] element in
+ * as it settles and stamps [data-comic-block] onto the slab. If the script
+ * dies, the page still arrives at 15 s.
  */
-.paperBlueprintB {
-  position: absolute;
-  pointer-events: none;
-  z-index: 0;
-  background-color: var(--paper-royal-deep);
-  background-image:
-    linear-gradient(
-      to right,
-      color-mix(in srgb, var(--paper-cream) 10%, transparent) 1px,
-      transparent 1px
-    ),
-    linear-gradient(
-      to bottom,
-      color-mix(in srgb, var(--paper-cream) 10%, transparent) 1px,
-      transparent 1px
-    );
-  background-size: 28px 28px;
+:global(html[data-comic-intro="play"]) .paperPage [data-comic-reveal],
+:global(html[data-comic-intro="play"]) .paperPage [data-comic-block] {
+  opacity: 0;
+  animation: paperComicArrive 0s 15s forwards;
 }
 
-/*
- * The MomoBot scrapbook collage (momobot/scrapbook-backdrop.tsx) fills the
- * hero band in place of the old right-column blueprint scrap. Its cream
- * scrim keeps every word in the hero column at 4.5:1 or better.
- */
-.paperIntro {
-  position: absolute;
-  inset: 0 0 auto;
-  height: min(100vh, 54rem);
-  z-index: 0;
-  /* The collage fades out into the page instead of ending on a hard line. */
-  mask-image: linear-gradient(to bottom, #000 78%, transparent);
+:global(html[data-comic-intro="play"]) .paperShell {
+  pointer-events: none; /* no clicking links nobody can see yet */
 }
 
-.paperBlueprintB {
-  bottom: 8rem;
-  left: -5rem;
-  width: 26rem;
-  height: 14rem;
-  transform: rotate(1.5deg);
-  /* Kraft, not royal: a royal Momo on a royal scrap disappears. */
-  background-color: var(--paper-kraft);
-  background-image:
-    linear-gradient(
-      to right,
-      color-mix(in srgb, var(--paper-ink) 10%, transparent) 1px,
-      transparent 1px
-    ),
-    linear-gradient(
-      to bottom,
-      color-mix(in srgb, var(--paper-ink) 10%, transparent) 1px,
-      transparent 1px
-    );
-}
-
-@media (max-width: 48rem) {
-  .paperBlueprintB {
-    width: 18rem;
-    height: 10rem;
-    left: -4rem;
-    bottom: 7rem;
+@keyframes paperComicArrive {
+  to {
+    opacity: 1;
   }
 }
 
@@ -560,56 +515,6 @@
   display: block;
   font-size: clamp(1.75rem, 3.6vw, 2.75rem);
   color: var(--paper-ink-muted);
-}
-
-.paperCutWord {
-  display: block;
-  font-size: clamp(3.25rem, 11vw, 7.5rem);
-  line-height: 1;
-  letter-spacing: -0.01em;
-}
-
-/*
- * The brief's undegraded headline: the word knocked out of a torn navy paper
- * collage. cut-paper.tsx shipped the degrade path (solid --paper-ink at
- * 14.07:1) because no art existed that held contrast as TEXT; brass and cyan
- * are object-only for exactly this reason.
- *
- * collage-navy.png is measured, not assumed: mean 13.02:1 on cream, worst
- * pixel 4.52:1, zero pixels below AA large. The generated original had cream
- * hairlines at 0.91:1 where a torn edge lifted, so its highlights were clamped
- * to a 4.5:1 floor before shipping. Provenance in public/momentum/SOURCES.md.
- *
- * Behind @supports because without background-clip this would paint
- * transparent text on cream and the headline would vanish. Unsupported
- * browsers keep the solid-ink degrade, which is why the fill is only ever
- * added here and never on .paperCutWord itself.
- */
-/*
- * The fill goes on each LETTER, not the wrapper. cut-paper.tsx gives every
- * letter its own rotate() for the jitter, and a transform creates a stacking
- * context, so a background-clip on the wrapper cannot paint through them: the
- * word came out completely invisible, transparent letters over nothing.
- * Per-letter is also the truer reading of the idea, since each letter becomes
- * its own torn scrap rather than a window onto one shared sheet.
- */
-@supports (background-clip: text) or (-webkit-background-clip: text) {
-  .paperCutLetter {
-    background-image: url("/momentum/collage-navy.png");
-    background-size: cover;
-    background-position: center;
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-  }
-
-  /* Forced-colours users get the system's own text colour, not a texture. */
-  @media (forced-colors: active) {
-    .paperCutLetter {
-      background-image: none;
-      color: CanvasText;
-    }
-  }
 }
 
 .paperLede {
@@ -728,43 +633,12 @@
   color: var(--paper-ink);
 }
 
-/*
- * Momo, pinned as a scrapbook photo in front of the moving collage: cream
- * border, a brass pin, a hand-stuck tilt. The intro plays once, then his
- * Hello loop stays. On wide screens he sits in the open space right of the
- * hero copy, where the scrim thins; on narrow screens he follows the cards.
- */
-/*
- * Momo, the page's focal point (bouncing-momo.tsx owns the photo, the 3D
- * bounce and the ground shadow). Phones and tablets meet him first, centred
- * above the headline; from 72rem he stands beside it, as large as the
- * shell's spare width allows.
- */
-.paperHero .paperMomos {
-  width: min(100%, 15rem);
-  margin: 0 auto clamp(0.5rem, 3vw, 1.5rem);
-}
-
-@media (min-width: 40rem) {
-  .paperHero .paperMomos {
-    width: 20rem;
-  }
-}
-
-@media (min-width: 72rem) {
-  .paperHero .paperMomos {
-    position: absolute;
-    top: clamp(1rem, 3vw, 2.5rem);
-    left: calc(100% + clamp(2rem, 4vw, 4rem));
-    width: clamp(18rem, 100vw - 56rem, 30rem);
-    margin: 0;
-  }
-}
-
 .paperFooter {
   position: relative;
   border-top: 1px solid var(--paper-line);
-  padding-block: 1.75rem 2.5rem;
+  /* The fixed Pause motion control sits 1rem up and about 2.3rem tall at the
+     bottom right; end the footer above it so it never covers a footer link. */
+  padding-block: 1.75rem 4.5rem;
   display: flex;
   flex-wrap: wrap;
   gap: 0.75rem 1.5rem;
