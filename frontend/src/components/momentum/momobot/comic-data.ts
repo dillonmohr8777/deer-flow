@@ -34,10 +34,10 @@ export const T = {
   COLD: 1200, // cold open ends, the storm begins
   STORM_END: 6000, // storm ends: ALL IN cuts to the s03 charge
   TEAM: 7000, // the team lineup, the peak
-  S05: 8950, // the slab lands
-  STAMP: 9150, // the wordmark stamps onto the slab
-  LIFT: 9450, // the block lifts out of the art
-  LAND: 10000, // the block lands in the headline
+  S05: 8750, // the slab lands
+  STAMP: 8950, // the wordmark stamps onto the slab, and holds 0.6 s
+  LIFT: 9550, // the block lifts off on its plate; the slab page drops away
+  LAND: 10100, // the block lands in the headline
 } as const;
 /** The hero copy starts arriving here. */
 export const SETTLE = T.LIFT + 150;
@@ -217,7 +217,8 @@ export function stormHolds(): number[] {
 export type PagePlan = {
   shown: number;
   exit: number;
-  out: "turn" | "cut" | "fade";
+  /** turn: a 3D page turn; cut: a hard cut; drop: the slab page falls out of frame at LIFT. */
+  out: "turn" | "cut" | "drop";
   turn: number;
   push?: number;
 };
@@ -244,7 +245,7 @@ export function planPages(): PagePlan[] {
     push: 1.08,
   });
   plan.push({ shown: T.TEAM, exit: T.S05, out: "cut", turn: 0, push: 1.12 });
-  plan.push({ shown: T.S05, exit: T.LIFT, out: "fade", turn: 0 });
+  plan.push({ shown: T.S05, exit: T.LIFT, out: "drop", turn: 0 });
   return plan;
 }
 
@@ -286,6 +287,22 @@ export const SLAB_FACE: ReadonlyArray<readonly [number, number]> = [
 ];
 /** The wordmark spans this share of the slab face. */
 export const STAMP_SHARE = 0.7;
+
+/**
+ * Tall screens show splash art filling the frame at its own 3:2 (wider than
+ * the screen). The team pans its lineup; the charge and the slab are cropped
+ * on their action, at these horizontal fractions of the art.
+ */
+export const FOCAL: Readonly<Record<string, number>> = {
+  "s03-charge": 0.5,
+  "s05-slab-close":
+    SLAB_FACE.reduce((sum, [x]) => sum + x, 0) / SLAB_FACE.length,
+};
+/** translateX (px) that centres `focal` of a 3:2 image `boxH` tall in a `boxW` frame, never showing past its edges. */
+export function fillCrop(focal: number, boxW: number, boxH: number): number {
+  const imgW = boxH * 1.5;
+  return Math.min(0, Math.max(boxW - imgW, boxW / 2 - focal * imgW));
+}
 
 type Pt = readonly [number, number];
 /**
@@ -338,6 +355,7 @@ export function homography(
 export function stampQuad(
   face: readonly [Pt, Pt, Pt, Pt],
   block: { width: number; height: number },
+  share = STAMP_SHARE,
 ): [Pt, Pt, Pt, Pt] {
   const lerp = (p: Pt, q: Pt, s: number): Pt => [
     p[0] + (q[0] - p[0]) * s,
@@ -346,11 +364,8 @@ export function stampQuad(
   const len = (p: Pt, q: Pt) => Math.hypot(q[0] - p[0], q[1] - p[1]);
   const faceW = (len(face[0], face[1]) + len(face[3], face[2])) / 2;
   const faceH = (len(face[0], face[3]) + len(face[1], face[2])) / 2;
-  const fu = STAMP_SHARE,
-    fv = Math.min(
-      STAMP_SHARE,
-      (fu * faceW * block.height) / (block.width * faceH),
-    );
+  const fu = share,
+    fv = Math.min(share, (fu * faceW * block.height) / (block.width * faceH));
   const at = (u: number, v: number) =>
     lerp(lerp(face[0], face[1], u), lerp(face[3], face[2], u), v);
   const u0 = (1 - fu) / 2,

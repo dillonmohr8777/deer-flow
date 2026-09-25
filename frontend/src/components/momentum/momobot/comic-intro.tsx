@@ -20,6 +20,8 @@ import {
   decideComicIntro,
   type DealtPage,
   EARLY_PAGES,
+  FOCAL,
+  fillCrop,
   GATE_HOLD_MS,
   hingeOf,
   HIT_WORD,
@@ -38,6 +40,7 @@ import {
   SETTLE,
   SLAB_FACE,
   stampQuad,
+  STAMP_SHARE,
   T,
   verb,
 } from "./comic-data";
@@ -259,17 +262,25 @@ function Framed({
   phone,
   eager = false,
   slab,
+  fill = false,
 }: {
   id: string;
   phone: boolean;
   eager?: boolean;
   slab?: boolean;
+  /** Fills a tall frame at full height: use the 1536 px art, not the phone variant. */
+  fill?: boolean;
 }) {
   return (
     <>
       <div className={styles.dots} data-comic-dots="" />
-      <div className={styles.frame} data-comic-frame="">
-        <Art src={artSrc(id, phone)} eager={eager} high={eager} slab={slab} />
+      <div className={styles.frame} data-comic-frame="" data-art={id}>
+        <Art
+          src={artSrc(id, phone && !fill)}
+          eager={eager}
+          high={eager}
+          slab={slab}
+        />
       </div>
     </>
   );
@@ -299,6 +310,7 @@ export function ComicIntro({
   const hitRef = useRef<HTMLDivElement>(null);
   const skipRef = useRef<HTMLButtonElement>(null);
 
+  const splashCls = `${styles.page} ${styles.splash}${portrait ? ` ${styles.fill}` : ""}`;
   const pages = useMemo(
     () => [
       {
@@ -311,21 +323,22 @@ export function ComicIntro({
           <StormPage page={page} index={i} phone={phone} portrait={portrait} />
         ),
       })),
+      // Tall screens: every splash fills the frame, cropped on its action
+      // (the team pans its lineup).
       {
-        cls: `${styles.page} ${styles.splash}`,
-        body: <Framed id="s03-charge" phone={phone} />,
+        cls: splashCls,
+        body: <Framed id="s03-charge" phone={phone} fill={portrait} />,
       },
       {
-        // Tall screens: the peak fills the screen and the camera pans the lineup.
-        cls: `${styles.page} ${styles.splash}${portrait ? ` ${styles.fill}` : ""}`,
-        body: <Framed id="t3-team" phone={phone} />,
+        cls: splashCls,
+        body: <Framed id="t3-team" phone={phone} fill={portrait} />,
       },
       {
-        cls: `${styles.page} ${styles.splash}`,
-        body: <Framed id="s05-slab-close" phone={phone} slab />,
+        cls: splashCls,
+        body: <Framed id="s05-slab-close" phone={phone} slab fill={portrait} />,
       },
     ],
-    [dealt, phone, portrait],
+    [dealt, phone, portrait, splashCls],
   );
 
   useEffect(() => {
@@ -437,16 +450,11 @@ export function ComicIntro({
                 [P.shown, { opacity: 0 }],
                 [P.shown, { opacity: 1 }],
               ];
-        const off: Array<[number, Keyframe]> =
-          P.out === "fade"
-            ? [
-                [T.LIFT, { opacity: 1 }],
-                [end, { opacity: 0 }],
-              ]
-            : [
-                [end, { opacity: 1 }],
-                [end, { opacity: 0 }],
-              ];
+        // No crossfades anywhere: pages cut, turn or drop.
+        const off: Array<[number, Keyframe]> = [
+          [end, { opacity: 1 }],
+          [end, { opacity: 0 }],
+        ];
         track(page, [...on, ...off]);
         // Cull: a page is painted only from 0.7 s before it shows until it is gone.
         const from = Math.max(0, P.shown - 700);
@@ -465,23 +473,54 @@ export function ComicIntro({
             duration: P.turn,
             easing: "cubic-bezier(.45,0,.9,.5)",
           });
+        // Lift-off: the slab page drops out of frame as the block lifts off it.
+        if (P.out === "drop")
+          go(page, [{ transform: "none" }, { transform: "translateY(110%)" }], {
+            delay: T.LIFT,
+            duration: 300,
+            easing: "cubic-bezier(.55,0,.85,.35)",
+          });
         const art = page.querySelector<HTMLElement>("[data-comic-frame] img");
+        const artId =
+          page.querySelector<HTMLElement>("[data-comic-frame]")?.dataset.art ??
+          "";
+        const focal = FOCAL[artId];
         if (art && page.classList.contains(styles.fill ?? "")) {
-          // Tall screens: pan the whole lineup, left to right.
           const box = page.getBoundingClientRect();
-          const span = box.height * 1.5 - box.width;
-          go(
-            art,
-            [
-              { transform: `translateX(${f1(-0.08 * span)}px)` },
-              { transform: `translateX(${f1(-0.92 * span)}px)` },
-            ],
-            {
-              delay: P.shown,
-              duration: P.exit - P.shown,
-              easing: "cubic-bezier(.45,0,.55,1)",
-            },
-          );
+          if (focal === undefined) {
+            // The team: pan the whole lineup, left to right.
+            const span = box.height * 1.5 - box.width;
+            go(
+              art,
+              [
+                { transform: `translateX(${f1(-0.08 * span)}px)` },
+                { transform: `translateX(${f1(-0.92 * span)}px)` },
+              ],
+              {
+                delay: P.shown,
+                duration: P.exit - P.shown,
+                easing: "cubic-bezier(.45,0,.55,1)",
+              },
+            );
+          } else {
+            // The charge and the slab: a crop centred on the action.
+            const tx = f1(fillCrop(focal, box.width, box.height));
+            art.style.transformOrigin = `${f1(focal * box.height * 1.5)}px 50%`;
+            art.style.transform = `translateX(${tx}px)`;
+            if (P.push)
+              go(
+                art,
+                [
+                  { transform: `translateX(${tx}px)` },
+                  { transform: `translateX(${tx}px) scale(${P.push})` },
+                ],
+                {
+                  delay: P.shown,
+                  duration: P.exit - P.shown,
+                  easing: "cubic-bezier(.3,0,.6,1)",
+                },
+              );
+          }
         } else if (P.push && art)
           go(art, [{ transform: "none" }, { transform: `scale(${P.push})` }], {
             delay: P.shown,
@@ -625,7 +664,26 @@ export function ComicIntro({
         const face = SLAB_FACE.map(onArt) as unknown as Parameters<
           typeof stampQuad
         >[0];
-        const H = `matrix3d(${homography(r.width, r.height, stampQuad(face, r))
+        // 70% of the slab face, smaller until the whole wordmark is on screen
+        // (a phone shows only the middle of the slab).
+        const vw = document.documentElement.clientWidth,
+          vh = document.documentElement.clientHeight;
+        const onScreen = (q: ReturnType<typeof stampQuad>) =>
+          q.every(
+            ([x, y]) =>
+              x + r.left >= 16 &&
+              x + r.left <= vw - 16 &&
+              y + r.top >= 16 &&
+              y + r.top <= vh - 16,
+          );
+        let share = STAMP_SHARE;
+        while (share > 0.2 && !onScreen(stampQuad(face, r, share)))
+          share -= 0.02;
+        const H = `matrix3d(${homography(
+          r.width,
+          r.height,
+          stampQuad(face, r, share),
+        )
           .map((n) => +n.toFixed(6))
           .join(",")})`;
         block.style.transformOrigin = "0 0";
@@ -672,7 +730,7 @@ export function ComicIntro({
         );
         go(plate, [{ opacity: 0 }, { opacity: 1 }], {
           delay: T.LIFT,
-          duration: 240,
+          duration: 60,
           fill: "forwards",
         });
       }
@@ -693,15 +751,16 @@ export function ComicIntro({
           { delay: T.LAND - 140, duration: 300, easing: "ease-out" },
         );
 
-      // Settle: the wall fades up and the page arrives around the block.
+      // Settle: the wall is revealed as the slab drops; the copy arrives around the block.
       let k = 0;
       host
         .querySelectorAll<HTMLElement>("[data-comic-reveal]")
         .forEach((el) => {
           if (el.getAttribute("data-comic-reveal") === "wall") {
+            // In place under the slab, so the drop reveals it: no crossfade.
             go(el, [{ opacity: 0 }, { opacity: 1 }], {
-              delay: SETTLE,
-              duration: 600,
+              delay: T.LIFT,
+              duration: 1,
             });
           } else {
             go(

@@ -14,6 +14,8 @@ import {
   dealStorm,
   decideComicIntro,
   FINALE,
+  fillCrop,
+  FOCAL,
   HIT_WORD,
   homography,
   LAYOUT,
@@ -66,7 +68,7 @@ describe("comic intro timeline", () => {
       .forEach((p, i) =>
         expect(p.shown).toBeGreaterThanOrEqual(plan[i]!.shown),
       );
-    expect(plan.at(-1)).toMatchObject({ shown: T.S05, out: "fade" });
+    expect(plan.at(-1)).toMatchObject({ shown: T.S05, out: "drop" });
     expect(pageEnd(plan.at(-1)!)).toBe(T.LIFT + 300);
     expect(settleEnd(7)).toBeLessThanOrEqual(10_500);
   });
@@ -166,6 +168,17 @@ describe("dealing the storm", () => {
 });
 
 describe("the slab stamp", () => {
+  it("holds the stamped wordmark 0.6 s before a clean lift-off", () => {
+    expect(T.STAMP).toBeGreaterThan(T.S05);
+    expect(T.LIFT - T.STAMP).toBeGreaterThanOrEqual(600);
+    expect(T.LAND).toBeGreaterThan(T.LIFT);
+    const slab = planPages().at(-1)!;
+    expect(slab).toMatchObject({ out: "drop", exit: T.LIFT });
+    // The peak still gets its moment, and the whole intro stays under 10.5 s.
+    expect(T.S05 - T.TEAM).toBeGreaterThanOrEqual(1500);
+    expect(settleEnd(7)).toBeLessThanOrEqual(10_500);
+  });
+
   it("maps the block's corners exactly onto the slab quad", () => {
     const w = 600,
       h = 150;
@@ -192,6 +205,24 @@ describe("the slab stamp", () => {
       expect(px).toBeCloseTo(quad[i]![0], 6);
       expect(py).toBeCloseTo(quad[i]![1], 6);
     });
+  });
+});
+
+describe("phone splashes fill the frame", () => {
+  it("crops the charge and the slab on their action, never past the art's edges", () => {
+    const [w, h] = [390, 894]; // a 390x844 phone page with the 6% overscan
+    const imgW = h * 1.5;
+    for (const id of ["s03-charge", "s05-slab-close"]) {
+      const focal = FOCAL[id]!;
+      const tx = fillCrop(focal, w, h);
+      expect(tx).toBeLessThanOrEqual(0);
+      expect(tx).toBeGreaterThanOrEqual(w - imgW);
+      // The action's column sits in the middle of the screen.
+      expect(Math.abs(tx + focal * imgW - w / 2)).toBeLessThan(1);
+    }
+    // A focal point at the art's edge clamps instead of showing empty frame.
+    expect(fillCrop(0, w, h)).toBe(0);
+    expect(fillCrop(1, w, h)).toBeCloseTo(w - imgW, 6);
   });
 });
 
