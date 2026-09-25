@@ -19,16 +19,23 @@ rs.mock("next/navigation", () => ({
   useParams: () => ({}),
 }));
 
-function makeThread(id: string, title: string): AgentThread {
+function makeThread(
+  id: string,
+  title: string,
+  metadata: Record<string, unknown> = {},
+): AgentThread {
   return {
     thread_id: id,
     created_at: "2026-01-01T00:00:00Z",
     updated_at: "2026-01-02T00:00:00Z",
     status: "idle",
-    metadata: {},
+    metadata,
     values: { title },
   } as unknown as AgentThread;
 }
+
+const LONG_TITLE =
+  "Pull the September leads for Omega Landscaping and flag the calls that never booked";
 
 function renderList() {
   const queryClient = new QueryClient({
@@ -38,11 +45,17 @@ function renderList() {
     [...INFINITE_THREADS_QUERY_KEY_PREFIX, { archived: false }],
     {
       pages: [
-        [makeThread("t1", "First chat"), makeThread("t2", "Second chat")],
+        [
+          makeThread("t1", "First chat"),
+          makeThread("t2", LONG_TITLE, { deerflow_project_id: "p1" }),
+        ],
       ],
       pageParams: [0],
     },
   );
+  const project = { id: "p1", name: "Omega relaunch" };
+  queryClient.setQueryData(["projects", { status: "active" }], [project]);
+  queryClient.setQueryData(["projects", { status: "archived" }], []);
   return render(
     <I18nProvider initialLocale={DEFAULT_LOCALE}>
       <QueryClientProvider client={queryClient}>
@@ -89,5 +102,25 @@ describe("RecentChatList", () => {
     const { container } = renderList();
     await screen.findByText("First chat");
     expect(container.querySelector("svg[data-momentum-glyph]")).toBeNull();
+  });
+
+  it("gives titles two lines, the full title on hover and a date/project line", async () => {
+    renderList();
+    const title = await screen.findByText(LONG_TITLE);
+    expect(title.className).toContain("line-clamp-2");
+    expect(title.className).toContain(
+      "group-focus-visible/thread-link:line-clamp-none",
+    );
+    const link = title.closest("a");
+    expect(link?.getAttribute("title")).toBe(LONG_TITLE);
+    const metas = screen.getAllByTestId("thread-row-meta");
+    expect(metas).toHaveLength(2);
+    for (const meta of metas) {
+      expect(meta.querySelector("time")?.getAttribute("dateTime")).toBe(
+        "2026-01-02T00:00:00Z",
+      );
+    }
+    expect(metas[1]?.textContent).toContain("Omega relaunch");
+    expect(metas[0]?.textContent).not.toContain("·");
   });
 });

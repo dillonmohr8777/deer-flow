@@ -21,11 +21,13 @@ import {
   WorkspaceHeader,
 } from "@/components/workspace/workspace-container";
 import { useI18n } from "@/core/i18n/hooks";
+import { useProjects } from "@/core/projects";
 import { useInfiniteThreads } from "@/core/threads/hooks";
 import { buildThreadListModel } from "@/core/threads/thread-list-model";
 import {
   channelSourceOfThread,
   pathOfThread,
+  projectIdOfThread,
   titleOfThread,
 } from "@/core/threads/utils";
 import { formatTimeAgo } from "@/core/utils/datetime";
@@ -51,6 +53,26 @@ export default function ChatsPage() {
     [infiniteThreads?.pages],
   );
   const { threads } = threadListModel;
+  // Rows name their project so chats that open with the same prompt can be
+  // told apart; the lookup only runs when a loaded thread has a project.
+  const anyThreadInProject = threads.some(
+    (thread) => projectIdOfThread(thread) !== null,
+  );
+  const { data: activeProjects } = useProjects("active", {
+    enabled: anyThreadInProject,
+  });
+  const { data: archivedProjects } = useProjects("archived", {
+    enabled: anyThreadInProject,
+  });
+  const projectNames = useMemo(
+    () =>
+      new Map(
+        [...(activeProjects ?? []), ...(archivedProjects ?? [])].map(
+          (project) => [project.id, project.name],
+        ),
+      ),
+    [activeProjects, archivedProjects],
+  );
   const [search, setSearch] = useState("");
   const isSearching = search.trim().length > 0;
 
@@ -162,29 +184,46 @@ export default function ChatsPage() {
                     scrollParentSelector='[data-slot="scroll-area-viewport"]'
                     renderItem={(thread) => {
                       const channelSource = channelSourceOfThread(thread);
+                      const title = titleOfThread(thread);
+                      const projectName = projectNames.get(
+                        projectIdOfThread(thread) ?? "",
+                      );
                       return (
                         <div
                           key={thread.thread_id}
                           className="flex items-center gap-2 border-b"
                         >
                           <Link
-                            className="min-w-0 flex-1"
+                            className="group/chat-row min-w-0 flex-1"
                             href={pathOfThread(thread)}
+                            title={title}
                           >
                             <div className="flex flex-col gap-2 p-4">
-                              <div className="flex min-w-0 items-center gap-2">
+                              <div className="flex min-w-0 items-start gap-2">
                                 <ThreadChannelIcon source={channelSource} />
-                                <div className="min-w-0 flex-1 truncate">
-                                  {titleOfThread(thread)}
+                                <div className="line-clamp-2 min-w-0 flex-1 break-words group-focus-visible/chat-row:line-clamp-none">
+                                  {title}
                                 </div>
                                 <ThreadChannelBadge
                                   source={channelSource}
                                   className="hidden sm:inline-flex"
                                 />
                               </div>
-                              {thread.updated_at && (
-                                <div className="text-muted-foreground text-sm">
-                                  {formatTimeAgo(thread.updated_at)}
+                              {(thread.updated_at ?? projectName) && (
+                                <div className="text-muted-foreground truncate text-sm">
+                                  {thread.updated_at && (
+                                    <time dateTime={thread.updated_at}>
+                                      {formatTimeAgo(thread.updated_at)}
+                                    </time>
+                                  )}
+                                  {thread.updated_at && projectName && (
+                                    <span aria-hidden="true"> · </span>
+                                  )}
+                                  {projectName && (
+                                    <span className="text-foreground font-semibold">
+                                      {projectName}
+                                    </span>
+                                  )}
                                 </div>
                               )}
                             </div>

@@ -40,6 +40,7 @@ import {
 import { useModels } from "@/core/models/hooks";
 import { useSubagents } from "@/core/subagents";
 import { pathOfThread } from "@/core/threads/utils";
+import { formatCompactStamp } from "@/core/utils/datetime";
 import { useIsMobile } from "@/hooks/use-mobile";
 
 import { AgentTopology } from "./agent-topology";
@@ -355,32 +356,48 @@ export function CommandCenter() {
         </div>
       ) : (
         <div className={styles.jobRows}>
-          {visibleRuns.map((run) => (
-            <button
-              className={styles.jobRow}
-              key={run.run_id}
-              aria-pressed={selectedRunId === run.run_id}
-              onClick={() => openRun(run)}
-            >
-              <span className={styles.jobIcon} data-status={run.status}>
-                <MomentumGlyph seed={`thread:${run.thread_id}`} size={34} />
-              </span>
-              <span className={styles.jobName}>
-                <strong>{run.thread_title ?? "Untitled assignment"}</strong>
-                <small>
-                  <span className={styles.metaModel}>
-                    {modelName(run.model_name) || "Model not recorded"}
-                  </span>{" "}
-                  <span aria-hidden="true">·</span>{" "}
-                  <span className={styles.metaTokens}>
-                    {number(run.total_tokens)} tokens
-                  </span>
-                </small>
-              </span>
-              <Status status={run.status} />
-              <ChevronRight size={16} />
-            </button>
-          ))}
+          {visibleRuns.map((run) => {
+            const title = run.thread_title ?? "Untitled assignment";
+            const stamp = formatCompactStamp(run.created_at, "en-US");
+            return (
+              <button
+                className={styles.jobRow}
+                key={run.run_id}
+                aria-pressed={selectedRunId === run.run_id}
+                onClick={() => openRun(run)}
+                title={title}
+              >
+                <span className={styles.jobIcon} data-status={run.status}>
+                  <MomentumGlyph seed={`thread:${run.thread_id}`} size={34} />
+                </span>
+                <span className={styles.jobName}>
+                  <strong>{title}</strong>
+                  <small>
+                    {stamp && run.created_at && (
+                      <>
+                        <time
+                          className={styles.metaStamp}
+                          dateTime={run.created_at}
+                        >
+                          {stamp}
+                        </time>{" "}
+                        <span aria-hidden="true">·</span>{" "}
+                      </>
+                    )}
+                    <span className={styles.metaModel}>
+                      {modelName(run.model_name) || "Model not recorded"}
+                    </span>{" "}
+                    <span aria-hidden="true">·</span>{" "}
+                    <span className={styles.metaTokens}>
+                      {number(run.total_tokens)} tokens
+                    </span>
+                  </small>
+                </span>
+                <Status status={run.status} />
+                <ChevronRight size={16} />
+              </button>
+            );
+          })}
         </div>
       )}
       <div className={styles.pagination}>

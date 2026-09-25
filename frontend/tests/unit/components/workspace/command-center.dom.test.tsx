@@ -313,6 +313,23 @@ describe("CommandCenter", () => {
     expect(document.body.textContent).not.toContain("openrouter-");
   });
 
+  it("dates each assignment and keeps its full title on hover", () => {
+    mocks.runs = [contributorRun, { ...contributorRun, created_at: null }];
+    render(<CommandCenter />);
+    const rows = screen.getAllByRole("button", {
+      name: /Audit the landing page/,
+    });
+    expect(rows).toHaveLength(2);
+    for (const row of rows) {
+      expect(row.getAttribute("title")).toBe("Audit the landing page");
+    }
+    const stamp = rows[0]?.querySelector("time");
+    expect(stamp?.getAttribute("dateTime")).toBe(contributorRun.created_at);
+    expect(stamp?.textContent).toMatch(/^Sep (20|21)(, 2026)?$/);
+    // A run with no recorded start omits the stamp instead of inventing one.
+    expect(rows[1]?.querySelector("time")).toBeNull();
+  });
+
   it("labels the tabs the backend only partly supports as Preview", () => {
     render(<CommandCenter />);
     for (const name of ["Mission Control", "Agent Studio", "Jobs", "Workflows"])
