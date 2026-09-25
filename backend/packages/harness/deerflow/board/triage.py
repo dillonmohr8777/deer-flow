@@ -7,9 +7,9 @@ used for skill security screening (``deerflow.models.create_chat_model`` +
 ``deerflow.skills.security_scanner.scan_skill_content`` for the pattern this
 mirrors. ``action`` is the caller's signal for whether Momo may attempt a
 draft reply at all (see ``deerflow.board.workflow``) or must leave the thread
-for an owner without drafting -- it defaults to ``draft`` when a model
-response omits it, and falls back to the safer ``escalate`` when triage
-itself fails or is unparseable.
+for an owner without drafting -- it fails closed to ``escalate`` unless the
+model response names ``draft`` explicitly and validly; a missing, unknown or
+unparseable value, or a failed model call, all escalate.
 
 Deliberately ephemeral: ``board_threads`` has no ``urgency``/``summary``
 column yet, so this module has no persistence dependency of its own. Callers
@@ -41,8 +41,9 @@ VALID_KINDS: frozenset[str] = frozenset(k.value for k in BoardThreadKind)
 VALID_URGENCIES: tuple[str, ...] = ("low", "normal", "high", "urgent")
 VALID_ACTIONS: tuple[str, ...] = ("draft", "escalate")
 _DEFAULT_URGENCY = "normal"
-_DEFAULT_ACTION = "draft"
-_FALLBACK_ACTION = "escalate"
+# Fails closed: only an explicit, valid "draft" counts as draft. Missing,
+# unknown, or unparseable all escalate -- see the module docstring.
+_DEFAULT_ACTION = "escalate"
 _FALLBACK_SUMMARY_LEN = 140
 
 
@@ -162,7 +163,7 @@ async def triage_board_thread(
             kind = str(parsed.get("kind", "")).lower()
             urgency = str(parsed.get("urgency", "")).lower()
             summary = str(parsed.get("summary") or "").strip()
-            action = str(parsed.get("action") or _DEFAULT_ACTION).lower()
+            action = str(parsed.get("action") or "").lower()
             if action not in VALID_ACTIONS:
                 action = _DEFAULT_ACTION
             if kind in VALID_KINDS and urgency in VALID_URGENCIES and summary:
@@ -171,4 +172,4 @@ async def triage_board_thread(
     except Exception:
         logger.warning("Board triage model call failed; falling back to a default classification", exc_info=True)
 
-    return BoardThreadTriage(kind=BoardThreadKind.TICKET.value, urgency=_DEFAULT_URGENCY, summary=_fallback_summary(content), action=_FALLBACK_ACTION)
+    return BoardThreadTriage(kind=BoardThreadKind.TICKET.value, urgency=_DEFAULT_URGENCY, summary=_fallback_summary(content), action=_DEFAULT_ACTION)

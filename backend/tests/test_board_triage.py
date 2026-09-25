@@ -171,8 +171,8 @@ async def test_triage_parses_action_from_model_response(monkeypatch):
 
 
 @pytest.mark.anyio
-async def test_triage_defaults_action_to_draft_when_model_omits_it(monkeypatch):
-    _make_env(monkeypatch, '{"kind":"post","urgency":"low","summary":"Says hi."}')
+async def test_triage_honors_an_explicit_draft_action(monkeypatch):
+    _make_env(monkeypatch, '{"kind":"post","urgency":"low","summary":"Says hi.","action":"draft"}')
 
     result = await triage_board_thread("Just saying hi!")
 
@@ -180,12 +180,21 @@ async def test_triage_defaults_action_to_draft_when_model_omits_it(monkeypatch):
 
 
 @pytest.mark.anyio
-async def test_triage_defaults_action_to_draft_on_invalid_action(monkeypatch):
+async def test_triage_fails_closed_to_escalate_when_model_omits_action(monkeypatch):
+    _make_env(monkeypatch, '{"kind":"post","urgency":"low","summary":"Says hi."}')
+
+    result = await triage_board_thread("Just saying hi!")
+
+    assert result.action == "escalate"
+
+
+@pytest.mark.anyio
+async def test_triage_fails_closed_to_escalate_on_invalid_action(monkeypatch):
     _make_env(monkeypatch, '{"kind":"post","urgency":"low","summary":"Says hi.","action":"auto-reply"}')
 
     result = await triage_board_thread("Just saying hi!")
 
-    assert result.action == "draft"
+    assert result.action == "escalate"
 
 
 @pytest.mark.anyio

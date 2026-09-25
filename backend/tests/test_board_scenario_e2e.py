@@ -12,6 +12,17 @@ catalog scale: with one staff member assigned to each of the 8 clients (the
 same ``client_assignments`` shape ``test_board_router.py`` exercises
 narrowly), no client's staff can see another client's threads, messages, or
 name.
+
+Plumbing, not a product guarantee (yet): the main scenario test's own control
+flow is what decides not to call ``/draft`` when the stub says ``escalate``
+-- the backend has no column for triage's ``action`` and does not check it
+(that's e2's job), so ``/draft``, ``/approve`` and ``/reply`` today accept a
+thread regardless of what triage would have said. The main test proves the
+*intended* pipeline is safe end to end once something calls it faithfully;
+``test_backend_does_not_yet_block_a_draft_on_an_escalate_class_thread``
+below is the negative case proving today's actual gap, and is marked
+``xfail(strict=True)`` so it turns into a hard failure -- telling the next
+change to remove the marker -- the moment a real guard makes it pass.
 """
 
 from __future__ import annotations
@@ -247,3 +258,31 @@ async def test_no_client_can_see_another_clients_threads_messages_or_name(board_
 
         cross_messages = await client.get(f"/api/board/threads/{other_thread['thread_id']}/messages", headers=info["staff_headers"])
         assert cross_messages.status_code == 404
+
+
+@pytest.mark.xfail(
+    reason="known gap tracked in e2 (triage-on-create): the backend does not persist or check triage's action, "
+    "so /draft accepts any triaged thread regardless of what triage said. Flip this to a plain assertion (drop "
+    "the xfail marker) once /draft enforces it.",
+    strict=True,
+)
+async def test_backend_does_not_yet_block_a_draft_on_an_escalate_class_thread(board_world):  # noqa: F811
+    """The main scenario test above never calls ``/draft`` on an escalate-class
+    thread because *the test itself* chooses not to -- it is not proof the
+    backend would refuse. This proves the actual gap: today, drafting a
+    reply that contains one of that thread's own forbidden phrases on a
+    thread triage marked ``escalate`` succeeds anyway."""
+    client = board_world.client
+    owner_headers = board_world.owner_headers
+
+    escalate_thread = next(t for t in board_world.threads_by_slug.values() if t["expected"]["action"] == "escalate" and t["expected"]["forbidden_phrases"])
+    forbidden_phrase = escalate_thread["expected"]["forbidden_phrases"][0]
+    thread_id = escalate_thread["thread_id"]
+
+    triaged = await client.patch(f"/api/board/threads/{thread_id}", json={"status": "triaged"}, headers=owner_headers)
+    assert triaged.status_code == 200, triaged.text
+
+    unsafe_body = f"Sure, {forbidden_phrase}."
+    drafted = await client.post(f"/api/board/threads/{thread_id}/draft", json={"body": unsafe_body}, headers=owner_headers)
+
+    assert drafted.status_code == 409, "the backend should refuse to draft a reply on a thread triage marked escalate, but nothing enforces that yet"
