@@ -12,6 +12,7 @@ mirroring ``clients.py``'s ``_require_stamp_authorized`` and its
 
 from __future__ import annotations
 
+import logging
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Request
@@ -20,10 +21,13 @@ from sqlalchemy import select
 
 from app.gateway.authz import require_permission
 from app.gateway.deps import get_board_repo, get_client_repo, get_current_user_from_request, record_audit_event
+from deerflow.board.triage import triage_board_thread
 from deerflow.board.workflow import BoardOwnerRequiredError, BoardTransitionError, assert_can_approve, assert_can_draft, assert_can_reply
 from deerflow.persistence.board.model import BoardThreadStatus
 from deerflow.persistence.organizations.model import OrganizationMemberRow
 from deerflow.runtime.user_context import resolve_organization_id
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/board", tags=["board"])
 
@@ -40,6 +44,8 @@ class BoardThreadResponse(BaseModel):
     kind: str
     status: str
     subject: str
+    urgency: str | None = None
+    summary: str | None = None
     created_by_user_id: str | None
     created_at: str
     updated_at: str
@@ -98,6 +104,8 @@ def _to_thread_response(row: dict) -> BoardThreadResponse:
         kind=row["kind"],
         status=row["status"],
         subject=row.get("subject", ""),
+        urgency=row.get("urgency"),
+        summary=row.get("summary"),
         created_by_user_id=row.get("created_by_user_id"),
         created_at=row.get("created_at", ""),
         updated_at=row.get("updated_at", ""),
@@ -160,6 +168,16 @@ async def create_board_thread(body: BoardThreadCreateRequest, request: Request) 
     user = await get_current_user_from_request(request)
     await _require_client_access(client_repo, body.client_id, str(user.id))
     row = await board_repo.create_thread(client_id=body.client_id, kind=body.kind, subject=body.subject, created_by_user_id=str(user.id))
+    try:
+        triage = await triage_board_thread(body.subject)
+        updated = await board_repo.patch_thread(row["id"], status=BoardThreadStatus.TRIAGED, urgency=triage.urgency, summary=triage.summary)
+        if updated is not None:
+            row = updated
+    except Exception:
+        # Triage is an aid, not a gate: never let a classification failure
+        # (including one triage_board_thread itself didn't already swallow)
+        # turn a created thread into a 500.
+        logger.warning("Board triage-on-create failed; thread created without a triage classification", exc_info=True)
     return _to_thread_response(row)
 
 
