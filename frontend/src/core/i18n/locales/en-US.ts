@@ -83,7 +83,7 @@ export const enUS: Translations = {
       unknownStatus: "Status unavailable",
       notConnected: "Not connected",
       connectedSection: "Connected",
-      connectedHint: "Set up for this workspace. Switch one off to pause it.",
+      connectedHint: "Working for your agents now.",
       availableSection: "Available to connect",
       connect: "Connect",
       detailsShort: "Details",

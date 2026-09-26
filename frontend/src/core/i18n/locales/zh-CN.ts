@@ -80,7 +80,7 @@ export const zhCN: Translations = {
       unknownStatus: "状态不可用",
       notConnected: "未连接",
       connectedSection: "已连接",
-      connectedHint: "已为此工作空间配置，关闭开关即可暂停。",
+      connectedHint: "你的 Agent 现在即可使用。",
       availableSection: "可接入",
       connect: "连接",
       detailsShort: "详情",

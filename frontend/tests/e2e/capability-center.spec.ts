@@ -284,7 +284,8 @@ test("plugin filters remain usable after an MCP refetch fails", async ({
     exact: true,
   });
   await installed.click();
-  await expect(page.locator("article")).toHaveCount(5);
+  // PostgreSQL is installed but switched off, so it is not Connected.
+  await expect(page.locator("article")).toHaveCount(4);
   await page
     .getByRole("switch", { name: "Enabled GitHub", exact: true })
     .click();
@@ -363,7 +364,7 @@ test("plugin categories, setup guides, and installed state remain distinct", asy
     page.getByText("没有找到匹配的内容", { exact: true }),
   ).toBeVisible();
   await page.getByRole("textbox", { name: "搜索插件名称或用途" }).fill("");
-  await expect(page.locator("article")).toHaveCount(5);
+  await expect(page.locator("article")).toHaveCount(4);
   await page.getByRole("button", { name: "全部插件", exact: true }).click();
   await page.setViewportSize({ width: 390, height: 844 });
   expect(

@@ -44,7 +44,7 @@ import {
   type PluginDirectoryEntry,
 } from "./plugin-directory";
 import { PluginIcon } from "./plugin-icon";
-import { getPluginStatus } from "./plugin-status";
+import { getPluginStatus, isPluginConnected } from "./plugin-status";
 
 function pluginActionLabel(action: PluginAction, t: Translations) {
   const copy = t.capabilities.directory;
@@ -122,7 +122,7 @@ export function PluginGallery({ query }: { query: string }) {
       return {
         id: plugin.id,
         category: plugin.category,
-        installed: !!status,
+        installed: isPluginConnected(status, unavailable),
         guide: plugin.adapter === "guide",
         search: `${Object.values(plugin.name).join(" ")} ${Object.values(plugin.description).join(" ")} ${plugin.aliases.join(" ")}`,
         node: (
@@ -167,7 +167,7 @@ export function PluginGallery({ query }: { query: string }) {
         id: item.id,
         category: manifest?.category ?? "custom",
         search: `${item.name} ${item.description}`,
-        installed: true,
+        installed: isPluginConnected(item),
         node: (
           <PluginRow
             name={item.name}
