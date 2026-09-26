@@ -12,7 +12,9 @@ and is never merged into this instance.
 | `Caddyfile` | The public site: HTTPS, HSTS, no response buffering (streaming works). |
 | `restart.sh` | Start or restart: base compose + dood + `compose.momentum.yaml` + Postgres + public overlay. `--what-if` prints the merged config and changes nothing. Never builds. |
 | `health.sh` | Docker, loopback UI, `/health/ready`, the public URL, and a backup receipt under 26 h. One JSON line per run to `/var/log/momobot/health.jsonl`; exit 1 means look. |
-| `systemd/` | `momobot.service` (start at boot), `momobot-health.timer` (every 15 min), `momobot-backup.timer` (nightly, encrypted, via `../offsite_backup.py`). |
+| `backup.sh` | Nightly encrypted backup via `../offsite_backup.py`, with the snapshot image taken from `MOMENTUM_GATEWAY_IMAGE` in `.env` so it always exists on this server. |
+| `dotenv-get.sh` | Reads one non-secret value from `.env` without sourcing it. systemd never loads `.env`: its parser differs from compose's and would outrank `--env-file`. |
+| `systemd/` | `momobot.service` (start at boot), `momobot-health.timer` (every 15 min), `momobot-backup.timer` (nightly). |
 
 ## Who does what
 
@@ -29,11 +31,15 @@ and is never merged into this instance.
 ```bash
 sudo apt-get update && sudo apt-get install -y docker.io docker-compose-v2 python3-cryptography curl git ufw
 sudo usermod -aG docker "$USER"
+# Log out and back in (or run `newgrp docker`) before step 4: group
+# membership only applies to new sessions.
 # Public: only 80/443. SSH stays reachable over Tailscale only.
 sudo ufw default deny incoming && sudo ufw allow 80/tcp && sudo ufw allow 443/tcp && sudo ufw allow 443/udp
-sudo ufw allow in on tailscale0 && sudo ufw enable
+sudo ufw allow in on tailscale0 && sudo ufw --force enable
 sudo mkdir -p /srv/momobot/{backups,secrets} /var/log/momobot && sudo chown -R "$USER" /srv/momobot /var/log/momobot
-git clone https://github.com/dillonmohr8777/deer-flow.git /srv/momobot/deer-flow
+# <release> is the tag cut after this kit and the app changes it depends on
+# are merged (see step 3). Never a draft branch, never plain `main`.
+git clone --branch <release> https://github.com/dillonmohr8777/deer-flow.git /srv/momobot/deer-flow
 ```
 
 ## 2. Secrets and config (outside git)
@@ -43,6 +49,8 @@ git clone https://github.com/dillonmohr8777/deer-flow.git /srv/momobot/deer-flow
 ```
 MOMOBOT_DOMAIN=momobot.needmomentum.com
 MOMOBOT_ACME_EMAIL=<address for certificate notices>
+MOMENTUM_GATEWAY_IMAGE=<the gateway tag you loaded or built in step 3>
+MOMENTUM_FRONTEND_IMAGE=<the frontend tag>
 POSTGRES_PASSWORD=<long random>
 GOOGLE_OAUTH_CLIENT_ID=<from Google Cloud>
 GOOGLE_OAUTH_CLIENT_SECRET=<from Google Cloud>

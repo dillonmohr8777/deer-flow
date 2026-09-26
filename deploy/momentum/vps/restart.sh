@@ -60,4 +60,5 @@ if [[ "$code" != "200" ]]; then
   echo "http://127.0.0.1:$PORT/ did not return 200 (got $code). Check: ${compose[*]} ps" >&2
   exit 3
 fi
-echo "UI http://127.0.0.1:$PORT/ -> 200. Public: https://${MOMOBOT_DOMAIN:-<MOMOBOT_DOMAIN from .env>}/"
+domain="$("$REPO/deploy/momentum/vps/dotenv-get.sh" "$ENV_FILE" MOMOBOT_DOMAIN "<MOMOBOT_DOMAIN in .env>")"
+echo "UI http://127.0.0.1:$PORT/ -> 200. Public: https://$domain/"

@@ -1,16 +1,13 @@
-# Encrypted nightly backup of the gateway volume (offsite_backup.py) into
-# /srv/momobot/backups. The key lives outside the backup folder and outside
-# the repo; keep a second copy in a password manager. The Mac pulls the
-# encrypted files over Tailscale for the off-machine copy (see README).
+# Encrypted nightly backup of the gateway volume (via backup.sh and
+# offsite_backup.py) into /srv/momobot/backups. The key lives outside the
+# backup folder and outside the repo; keep a second copy in a password
+# manager. The Mac pulls the encrypted files over Tailscale for the
+# off-machine copy (see README).
 [Unit]
 Description=MomoBot encrypted volume backup
 After=momobot.service
 
 [Service]
 Type=oneshot
-WorkingDirectory=/srv/momobot/deer-flow/deploy/momentum
-Environment=MOMOBOT_BACKUP_KEY=/srv/momobot/secrets/momobot-backup.key
-Environment=MOMOBOT_BACKUP_DEST=/srv/momobot/backups
-Environment=MOMOBOT_BACKUP_VOLUME=deer-flow_gateway-data
-EnvironmentFile=/srv/momobot/deer-flow/.env
-ExecStart=/usr/bin/python3 offsite_backup.py
+WorkingDirectory=/srv/momobot/deer-flow
+ExecStart=/srv/momobot/deer-flow/deploy/momentum/vps/backup.sh

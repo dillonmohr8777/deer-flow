@@ -5,5 +5,4 @@ After=momobot.service
 [Service]
 Type=oneshot
 WorkingDirectory=/srv/momobot/deer-flow
-EnvironmentFile=/srv/momobot/deer-flow/.env
 ExecStart=/srv/momobot/deer-flow/deploy/momentum/vps/health.sh

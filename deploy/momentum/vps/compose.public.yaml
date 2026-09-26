@@ -34,10 +34,15 @@ services:
 
   nginx:
     restart: unless-stopped
+  # The gateway and frontend images are built or loaded on purpose (README
+  # step 3) and never pushed anywhere: a missing tag must fail as "missing",
+  # not as a confusing registry pull error.
   gateway:
     restart: unless-stopped
+    pull_policy: never
   frontend:
     restart: unless-stopped
+    pull_policy: never
 
 volumes:
   caddy-data:

@@ -5,7 +5,18 @@
 }
 
 {$MOMOBOT_DOMAIN} {
-	encode zstd gzip
+	# Match nginx: compress documents and code, never text/event-stream,
+	# where compression delays streamed tokens.
+	encode zstd gzip {
+		match {
+			header Content-Type text/html*
+			header Content-Type text/css*
+			header Content-Type text/plain*
+			header Content-Type application/javascript*
+			header Content-Type application/json*
+			header Content-Type image/svg+xml*
+		}
+	}
 
 	# nginx preserves an upstream X-Forwarded-Proto, so the Gateway sees
 	# https and sets Secure cookies (csrf_middleware.is_secure_request).
