@@ -455,10 +455,21 @@
   border-color: var(--strong);
   border-radius: 2px;
 }
-.agent:global(.pinned)::before {
+.agent:global(.pinned)::before,
+.topologyLead:global(.pinned)::before {
   top: -7px;
   left: 50%;
   transform: translateX(-50%);
+}
+/* State words: running is the acting thing, so royal; queued, idle and
+   unknown stay ink-muted. Royal on cream-hi is 7.07:1 or better. */
+.root[data-treatment="paper"] .agentState [data-state="running"],
+.root[data-treatment="paper"]
+  .topologyLead
+  div
+  .leadState[data-state="running"] {
+  color: var(--paper-royal);
+  font-weight: 700;
 }
 /* Pinned-board placement, not a spreadsheet: columns sit at uneven heights,
    as the landing staggers its cards. `translate` composes with paper.css's
@@ -803,6 +814,63 @@
 @container topology (min-width: 700px) {
   .topologyRoster {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+/* The lead says its own live state, as each specialist does. */
+.leadState {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+.topologyLead div .leadState {
+  display: inline-flex;
+}
+/* The delegation count only earns its line on the tall column sheet. */
+.leadCount {
+  display: none;
+}
+.topologyLead div .leadCount {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  font-weight: 700;
+}
+/* Full-width Mission Control (d9): a 160px lead spanning 1000px was a
+   banner, not a hierarchy. With room, the lead stands as a column sheet
+   left of the specialists it delegates to, its height set by theirs. */
+@container topology (min-width: 900px) {
+  .topologyFrame {
+    display: grid;
+    grid-template-columns: 216px minmax(0, 1fr);
+    align-items: stretch;
+    gap: 24px;
+  }
+  .topologyFrame > .topologyLead {
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: flex-start;
+    gap: 14px;
+    padding: 20px 18px;
+  }
+  .topologyFrame .leadMomo {
+    width: 120px;
+    height: 120px;
+  }
+  .topologyFrame > .topologyLead > div {
+    flex: 0 0 auto;
+  }
+  .topologyFrame > .topologyLead a {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+  }
+  .topologyFrame .leadCount {
+    display: block;
+  }
+  .topologyFrame > .topologyRoster {
+    align-content: start;
+    margin-top: 0;
   }
 }
 .agent {
@@ -1189,8 +1257,11 @@
   color: var(--muted);
   font-size: 11px;
 }
+/* Agent Studio's team sheet runs the frame's full width, as the metric
+   strip above it and Mission Control's team do: a 960px cap left a 160px
+   bare margin at 1440 and kept the lead sheet from standing as a column. */
 .studio {
-  max-width: 960px;
+  width: 100%;
 }
 .studio .team {
   width: 100%;
@@ -1574,4 +1645,9 @@
     animation: none !important;
     transition: none !important;
   }
+}
+
+/* Mission Control: the agent team sits under the full-width dispatch board. */
+.missionTeam {
+  margin-top: 24px;
 }
