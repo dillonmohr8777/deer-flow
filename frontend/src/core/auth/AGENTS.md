@@ -8,8 +8,8 @@ code), set from `login/local`'s `mfa_required` response and cleared by
 changes for Google: enabling a `google` OIDC provider in `config.yaml` is
 enough, the button appears on its own.
 
-`components/workspace/settings/security-settings-page.tsx` is the Settings
-> Security tab (registered in `settings-dialog.tsx`'s section list): enroll
+`components/workspace/settings/security-settings-page.tsx` is the Security
+tab in Settings (registered in `settings-dialog.tsx`'s section list): enroll
 (QR via the already-installed `qrcode.react`, plus the raw `otpauth://` URI
 and secret for manual entry), confirm, show the ten recovery codes once
 with a copy button (`core/clipboard.ts`'s `writeTextToClipboard`), and

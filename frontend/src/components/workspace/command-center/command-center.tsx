@@ -406,9 +406,7 @@ export function CommandCenter() {
                       {modelName(run.model_name) || "Model not recorded"}
                     </span>{" "}
                     <span aria-hidden="true">·</span>{" "}
-                    <span className={styles.metaTokens}>
-                      {runTokens(run)}
-                    </span>
+                    <span className={styles.metaTokens}>{runTokens(run)}</span>
                   </small>
                 </span>
                 <Status status={run.status} />
