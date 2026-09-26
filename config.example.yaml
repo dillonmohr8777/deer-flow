@@ -3087,6 +3087,12 @@ authorization:
 #         token_endpoint_auth_method: client_secret_post
 #
 #         auto_create_users: true
+#         # Only create an account on first Google sign-in when that verified
+#         # email holds a pending workspace invitation (not used, not expired,
+#         # sent by a still-active owner/admin). Anyone else gets the same
+#         # refusal as auto_create_users: false. Accounts it created keep
+#         # signing in after their invitation is used. Default: false.
+#         auto_create_requires_invitation: true
 #         require_verified_email: true
 #         # Restrict sign-in to a Google Workspace domain (leave unset to allow
 #         # any Google account, including personal gmail.com addresses):
