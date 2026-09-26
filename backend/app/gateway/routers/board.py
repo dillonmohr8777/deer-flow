@@ -225,9 +225,13 @@ async def list_board_messages(thread_id: str, request: Request) -> BoardMessageL
     if row.get("client_id") is not None:
         await _require_client_access(client_repo, row["client_id"], user_id)
     messages = await board_repo.list_messages(thread_id) or []
-    if row["status"] == BoardThreadStatus.DRAFTED and not await _is_active_org_admin(user_id):
-        # Momo's unapproved draft is only visible to an org owner/admin until it's approved.
-        messages = [m for m in messages if m["author_kind"] != "momo"]
+    if not await _is_active_org_admin(user_id):
+        # An unapproved (or rejected/superseded) momo draft stays hidden from
+        # non-admins regardless of the thread's current status -- approval is
+        # tracked per-message, not derived from thread status, so a thread
+        # cycling back through `drafted`/`approved` after a redraft never
+        # re-exposes an earlier draft that was never actually approved.
+        messages = [m for m in messages if m["author_kind"] != "momo" or m.get("approved_at") is not None]
     return BoardMessageListResponse(messages=[_to_message_response(m) for m in messages])
 
 
@@ -294,6 +298,7 @@ async def approve_board_reply(thread_id: str, request: Request) -> BoardThreadRe
         raise HTTPException(status_code=403, detail=str(exc)) from exc
     except BoardTransitionError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    await board_repo.approve_latest_draft(thread_id)
     updated = await board_repo.patch_thread(thread_id, status=BoardThreadStatus.APPROVED)
     if updated is None:
         raise _not_found()
