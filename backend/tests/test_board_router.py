@@ -200,12 +200,12 @@ async def test_draft_approve_reply_lifecycle(org_world):  # noqa: F811
         assert approved.status_code == 200, approved.text
         assert approved.json()["status"] == "approved"
 
-        replied = await client.post(f"/api/board/threads/{tid}/reply", json={"body": "Fixed — thanks for flagging it!"}, headers=headers_a)
+        replied = await client.post(f"/api/board/threads/{tid}/reply", json={"body": "Here's a fix for that."}, headers=headers_a)
         assert replied.status_code == 200, replied.text
         assert replied.json()["status"] == "replied"
 
         messages = (await client.get(f"/api/board/threads/{tid}/messages", headers=headers_a)).json()["messages"]
-        assert any(m["author_kind"] == "owner" and m["body"] == "Fixed — thanks for flagging it!" for m in messages)
+        assert any(m["author_kind"] == "owner" and m["body"] == "Here's a fix for that." for m in messages)
 
         events, _ = await audit_repo.list(organization_id=ORG_S, action_prefix="board.thread.")
         actions = [e["action"] for e in events]
@@ -213,6 +213,37 @@ async def test_draft_approve_reply_lifecycle(org_world):  # noqa: F811
         assert "board.thread.approved" in actions
         assert "board.thread.replied" in actions
         assert all(e["outcome"] == "success" for e in events)
+
+
+async def test_reply_must_match_approved_draft_verbatim(org_world):  # noqa: F811
+    """f7: an approved draft can't be swapped out for different text at send time."""
+    session_factory = org_world
+    app = _build_app(session_factory)
+    headers_a = auth_headers(USER_A, ORG_S)  # owner
+
+    async with _client(app) as client:
+        acme = await _create_client(client, headers_a, "Acme")
+        thread = (await client.post("/api/board/threads", json={"client_id": acme["id"], "subject": "T"}, headers=headers_a)).json()
+        tid = thread["id"]
+
+        drafted = await client.post(f"/api/board/threads/{tid}/draft", json={"body": "Here's a fix for that."}, headers=headers_a)
+        assert drafted.status_code == 200
+        approved = await client.post(f"/api/board/threads/{tid}/approve", headers=headers_a)
+        assert approved.status_code == 200
+
+        mismatched = await client.post(f"/api/board/threads/{tid}/reply", json={"body": "Something else entirely."}, headers=headers_a)
+        assert mismatched.status_code == 409
+
+        # The rejected attempt left the thread approved and sent nothing as the owner.
+        still_approved = await client.get(f"/api/board/threads/{tid}", headers=headers_a)
+        assert still_approved.json()["status"] == "approved"
+        messages = (await client.get(f"/api/board/threads/{tid}/messages", headers=headers_a)).json()["messages"]
+        assert not any(m["author_kind"] == "owner" for m in messages)
+
+        # The draft's own text verbatim (including surrounding whitespace) still goes through.
+        matching = await client.post(f"/api/board/threads/{tid}/reply", json={"body": "  Here's a fix for that.  "}, headers=headers_a)
+        assert matching.status_code == 200, matching.text
+        assert matching.json()["status"] == "replied"
 
 
 async def test_non_owner_cannot_approve_or_reply(org_world):  # noqa: F811

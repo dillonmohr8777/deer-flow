@@ -187,6 +187,8 @@ test.describe("Board, the Momo Board thread queue", () => {
     await expect(detail.getByText("Approved", { exact: true })).toBeVisible();
     const replyBox = detail.getByLabel("Approved — send it");
     await expect(replyBox).toHaveValue("We're on it, restoring the site now.");
+    await expect(replyBox).toHaveAttribute("readonly", "");
+    await expect(replyBox).not.toBeEditable();
 
     await detail.getByRole("button", { name: "Send reply" }).click();
     await expect(detail.getByText("Replied")).toBeVisible();

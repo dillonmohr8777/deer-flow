@@ -333,7 +333,8 @@ function ThreadDetail({
           <Textarea
             id="board-reply"
             value={replyText}
-            onChange={(event) => setReplyText(event.target.value)}
+            readOnly
+            aria-readonly="true"
             rows={4}
           />
           {sendMutation.isError ? (
