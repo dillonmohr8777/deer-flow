@@ -244,6 +244,15 @@ async def add_board_message(thread_id: str, body: BoardMessageCreateRequest, req
     return _to_message_response(message)
 
 
+async def _latest_momo_draft_body(board_repo, thread_id: str) -> str | None:
+    """The body of the most recent ``momo``-authored message, or ``None`` if there is none."""
+    messages = await board_repo.list_messages(thread_id) or []
+    for message in reversed(messages):
+        if message["author_kind"] == "momo":
+            return message.get("body")
+    return None
+
+
 async def _load_thread_for_actor(board_repo, client_repo, thread_id: str, request: Request) -> tuple[dict, str]:
     """Fetch *thread_id*, enforcing per-client access; returns ``(row, actor_user_id)``."""
     row = await board_repo.get_thread(thread_id)
@@ -300,7 +309,13 @@ async def approve_board_reply(thread_id: str, request: Request) -> BoardThreadRe
 @router.post("/threads/{thread_id}/reply", response_model=BoardThreadResponse)
 @require_permission("board", "write")
 async def send_board_reply(thread_id: str, body: BoardReplyRequest, request: Request) -> BoardThreadResponse:
-    """``replied`` needs its own explicit owner action, separate from ``approve``."""
+    """``replied`` needs its own explicit owner action, separate from ``approve``.
+
+    The sent body must match the approved draft verbatim -- an owner's approval
+    stamps a specific message, not a blank check to send anything under it. A
+    body that differs from the latest ``momo`` draft is rejected rather than
+    silently substituted or accepted.
+    """
     board_repo = get_board_repo(request)
     client_repo = get_client_repo(request)
     row, user_id = await _load_thread_for_actor(board_repo, client_repo, thread_id, request)
@@ -312,6 +327,9 @@ async def send_board_reply(thread_id: str, body: BoardReplyRequest, request: Req
         raise HTTPException(status_code=403, detail=str(exc)) from exc
     except BoardTransitionError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    draft_body = await _latest_momo_draft_body(board_repo, thread_id)
+    if draft_body is not None and body.body.strip() != draft_body.strip():
+        raise HTTPException(status_code=409, detail="Reply body must match the approved draft verbatim; edit the draft and re-approve instead")
     await board_repo.add_message(thread_id, author_kind="owner", author_user_id=user_id, body=body.body)
     updated = await board_repo.patch_thread(thread_id, status=BoardThreadStatus.REPLIED)
     if updated is None:
