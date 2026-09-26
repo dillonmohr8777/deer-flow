@@ -5,6 +5,10 @@ import { afterEach, beforeEach, describe, expect, it, rs } from "@rstest/core";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 
+import {
+  agentLifeLabel,
+  type AgentLife,
+} from "@/components/workspace/command-center/agent-life";
 import { CommandCenter } from "@/components/workspace/command-center/command-center";
 
 const baseStats = {
@@ -23,6 +27,11 @@ const mocks = rs.hoisted(() => ({
   runs: [] as unknown[],
   clients: [] as unknown[],
   clientsError: false,
+  hasMore: false,
+  subagents: [] as unknown[],
+  topology: undefined as
+    | { lives?: Record<string, { state: string; at?: string | null }> | null }
+    | undefined,
 }));
 const contributorRun = {
   run_id: "run-7",
@@ -76,7 +85,10 @@ rs.mock("@/components/workspace/thread-subagent-batches", () => ({
 }));
 
 rs.mock("@/components/workspace/command-center/agent-topology", () => ({
-  AgentTopology: () => <div data-testid="agent-topology" />,
+  AgentTopology: (props: NonNullable<typeof mocks.topology>) => {
+    mocks.topology = props;
+    return <div data-testid="agent-topology" />;
+  },
 }));
 
 rs.mock("@/components/workspace/command-center/business-views", () => ({
@@ -120,7 +132,11 @@ rs.mock("@/core/clients", () => ({
 }));
 
 rs.mock("@/core/subagents", () => ({
-  useSubagents: () => ({ subagents: [], isLoading: false, error: null }),
+  useSubagents: () => ({
+    subagents: mocks.subagents,
+    isLoading: false,
+    error: null,
+  }),
 }));
 
 rs.mock("@/core/threads/utils", () => ({
@@ -135,7 +151,7 @@ rs.mock("@/core/console", () => ({
     reset: rs.fn(),
   }),
   useConsoleRuns: () => ({
-    data: { runs: mocks.runs, has_more: false },
+    data: { runs: mocks.runs, has_more: mocks.hasMore },
     error: null,
     isError: false,
     isFetching: false,
@@ -221,6 +237,9 @@ beforeEach(() => {
   mocks.statsLoading = false;
   mocks.runs = [];
   mocks.clients = [];
+  mocks.hasMore = false;
+  mocks.subagents = [];
+  mocks.topology = undefined;
   mocks.clientsError = false;
 });
 
@@ -234,6 +253,24 @@ function metric(label: string) {
 }
 
 describe("CommandCenter", () => {
+  it("passes has_more through, so an agent past the run page is not Idle", () => {
+    // Builder's last run failed long ago; 20 newer lead runs fill the page.
+    mocks.runs = Array.from({ length: 20 }, (_, index) => ({
+      ...contributorRun,
+      run_id: `run-lead-${index}`,
+      assistant_id: "dillon-brain",
+    }));
+    mocks.hasMore = true;
+    mocks.subagents = [
+      { name: "dillon-builder", display_name: "Builder", source: "managed" },
+    ];
+    render(<CommandCenter />);
+    const builder = mocks.topology?.lives?.["dillon-builder"];
+    expect(builder?.state).toBe("unknown");
+    expect(agentLifeLabel(builder as AgentLife)).toBe("No recent run");
+    expect(mocks.topology?.lives?.["dillon-brain"]?.state).toBe("done");
+  });
+
   it("colours the error count for state only: danger, ok, or plain ink", () => {
     mocks.stats = { ...baseStats, total_runs: 0 };
     const first = render(<CommandCenter />);

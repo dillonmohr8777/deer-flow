@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
 
@@ -53,6 +53,14 @@ export function AgentAlive({
   } else if (fresh && !motion) {
     setFresh(false);
   }
+  // Fallback clear for when the landing never runs (a treatment without the
+  // paper motion layer, so no animationend): a stale fresh stamp must not
+  // land later when paper comes back. 400ms outlasts the 280ms landing.
+  useEffect(() => {
+    if (!fresh) return;
+    const timer = window.setTimeout(() => setFresh(false), 400);
+    return () => window.clearTimeout(timer);
+  }, [fresh]);
   const date = life.state === "done" ? stampDate(life.at) : null;
 
   return (

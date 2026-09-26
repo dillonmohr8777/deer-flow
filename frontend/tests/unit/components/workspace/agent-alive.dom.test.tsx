@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, it } from "@rstest/core";
-import { cleanup, fireEvent, render } from "@testing-library/react";
+import { afterEach, describe, expect, it, rs } from "@rstest/core";
+import { act, cleanup, fireEvent, render } from "@testing-library/react";
 
 import { AgentAlive } from "@/components/workspace/command-center/agent-alive";
 import type { AgentLife } from "@/components/workspace/command-center/agent-life";
@@ -158,5 +158,26 @@ describe("AgentAlive", () => {
     expect(alive().dataset.alive).toBe("unknown");
     expect(alive().classList.contains("pinned")).toBe(false);
     expect(alive().querySelector(".paper-alive-stamp")).toBeNull();
+  });
+
+  it("clears a landing that never ran, so it cannot land late", () => {
+    rs.useFakeTimers();
+    try {
+      const tree = (life: AgentLife, motion: boolean) => (
+        <AgentAlive life={life} motion={motion}>
+          <img alt="" src="/momentum/momos/qa.svg" />
+        </AgentAlive>
+      );
+      const { alive, rerender } = renderAlive({ state: "running" });
+      rerender(tree(DONE, true));
+      expect(alive().dataset.stamp).toBe("fresh");
+      // No animationend: a treatment without the paper motion layer.
+      act(() => {
+        rs.advanceTimersByTime(400);
+      });
+      expect(alive().dataset.stamp).toBeUndefined();
+    } finally {
+      rs.useRealTimers();
+    }
   });
 });
