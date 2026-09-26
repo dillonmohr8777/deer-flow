@@ -7,35 +7,55 @@
  * feMorphology) whose step size is driven from here. The filter is removed
  * entirely once the resolve finishes — nothing is left applied.
  *
- * Two things are built with raw DOM APIs, not JSX:
+ * The <svg><filter> tree is built with raw DOM APIs (createElementNS), not
+ * JSX. A React-rendered filter subtree — confirmed byte-identical markup,
+ * correct SVG namespace, single instance, portalled straight to <body> —
+ * measurably had zero visual effect in this app (diffed screenshots showed
+ * 0 changed pixels), while the same primitives built with createElementNS
+ * and appended directly rendered correctly. Root cause not identified.
  *
- * 1. The <svg><filter> tree (createElementNS). A React-rendered filter
- *    subtree — confirmed byte-identical markup, correct SVG namespace,
- *    single instance, portalled straight to <body> — measurably had zero
- *    visual effect in this app (diffed screenshots showed 0 changed
- *    pixels), while the same primitives built with createElementNS and
- *    appended directly rendered correctly. Root cause not identified.
+ * The filter itself is applied to #workspace-main-content
+ * (WORKSPACE_MAIN_CONTENT_ID, skip-to-content.tsx): a plain div that
+ * `WorkspaceContent` always renders as the sole child of #workspace-main,
+ * carrying every page's real content, including the two connectivity
+ * banners. This effect only ever reads and writes that node's own
+ * `style.filter` — never its children — so nothing here can race React's
+ * reconciliation of that content, however it changes shape mid-resolve
+ * (loading states swapping to real content or an error, banners appearing
+ * or disappearing, client-side navigation swapping the whole route).
  *
- * 2. A plain wrapper div around #workspace-main's children, which the
- *    filter is actually applied to. Applying the filter directly to
- *    #workspace-main (the flex SidebarInset, already mounted and painted
- *    before this effect runs) also measurably had zero visual effect;
- *    moving the same content into a freshly created wrapper and filtering
- *    that instead worked. The wrapper mirrors #workspace-main's own flex
- *    container properties so layout is unaffected, and is unwrapped
- *    (children moved back, wrapper removed) the moment the resolve
- *    finishes or the effect is cleaned up — nothing lingers in the DOM.
+ * An earlier version instead built its own wrapper div with createElement,
+ * physically moved #workspace-main's *existing* children into it, applied
+ * the filter to that wrapper, and moved the children back out (or removed
+ * the wrapper on cleanup) once the resolve finished. That worked for the
+ * pixelation effect itself, but it silently broke React's bookkeeping:
+ * React still believed those children were direct children of
+ * #workspace-main, because nothing told its fiber tree they had been
+ * relocated. The instant React next needed to add or remove one of them —
+ * for example /workspace/agents replacing its loading state with the real
+ * page (or a disabled/error state) the moment /api/features answered,
+ * while the moved-out wrapper was still in place — it called
+ * `#workspace-main.removeChild(node)` on a node that was actually a child
+ * of the wrapper, and the browser threw "Failed to execute 'removeChild' on
+ * 'Node': The node to be removed is not a child of this node." Uncaught
+ * (this app defines no error.tsx/global-error.tsx), that took down the
+ * whole app to Next's built-in fallback. Applying the filter directly to
+ * #workspace-main itself (no wrapper at all) was tried before introducing
+ * that wrapper and "measurably had zero visual effect" (same
+ * diffed-screenshot method) — the persistent, React-owned target below
+ * keeps the working technique (a dedicated filtered element, not
+ * #workspace-main itself) without ever touching its children.
  *
  * Gated on brandMotionAllowed (appearance-preferences.ts); reduced motion or
  * brand motion off means no resolve at all: content stays exactly as
- * rendered, no wrapper, no filter. Retriggers per route (usePathname) —
- * #workspace-main is not remounted by client-side navigation.
+ * rendered, filter never applied. Retriggers per route (usePathname) —
+ * #workspace-main-content is not remounted by client-side navigation.
  */
 
 import { usePathname } from "next/navigation";
 import { useEffect, useId } from "react";
 
-import { WORKSPACE_MAIN_ID } from "@/components/workspace/skip-to-content";
+import { WORKSPACE_MAIN_CONTENT_ID } from "@/components/workspace/skip-to-content";
 
 import { useWorkspaceAppearance } from "./appearance-provider";
 
@@ -43,7 +63,6 @@ import { useWorkspaceAppearance } from "./appearance-provider";
 const STEPS = [16, 8, 4, 2, 0] as const;
 const STEP_MS = 150; // 4 intervals between the 5 steps * 150ms = 600ms total.
 const SVG_NS = "http://www.w3.org/2000/svg";
-const WRAPPER_ATTR = "data-retro-resolve-wrapper";
 
 export function RetroResolve() {
   const { preferences, motionOn } = useWorkspaceAppearance();
@@ -55,8 +74,8 @@ export function RetroResolve() {
 
   useEffect(() => {
     if (!active || !motionOn) return;
-    const main = document.getElementById(WORKSPACE_MAIN_ID);
-    if (!main) return;
+    const target = document.getElementById(WORKSPACE_MAIN_CONTENT_ID);
+    if (!target) return;
 
     // feFlood paints a small fixed dot near one corner of each tile cell;
     // feTile repeats that cell (sized by the first feComposite's width/
@@ -107,20 +126,7 @@ export function RetroResolve() {
     svg.append(filter);
     document.body.append(svg);
 
-    // Move #workspace-main's current children into a fresh wrapper that
-    // mirrors its flex-container layout, so the resolve is invisible to
-    // layout — only the filter target changes.
-    const wrapper = document.createElement("div");
-    wrapper.setAttribute(WRAPPER_ATTR, "true");
-    wrapper.style.display = "flex";
-    wrapper.style.flexDirection = "column";
-    wrapper.style.flex = "1 1 auto";
-    wrapper.style.minHeight = "0";
-    wrapper.style.minWidth = "0";
-    wrapper.style.width = "100%";
-    while (main.firstChild) wrapper.append(main.firstChild);
-    main.append(wrapper);
-    wrapper.style.filter = `url(#${filterId})`;
+    target.style.filter = `url(#${filterId})`;
 
     const setStep = (px: number) => {
       const tileSize = String(Math.max(px, 1));
@@ -129,9 +135,11 @@ export function RetroResolve() {
       morphology.setAttribute("radius", String(Math.max(px / 2, 1)));
     };
 
-    const unwrap = () => {
-      while (wrapper.firstChild) main.insertBefore(wrapper.firstChild, wrapper);
-      wrapper.remove();
+    // Idempotent by design (plain style clear + remove()), unlike the old
+    // wrapper's move-children-back dance, so natural completion and effect
+    // cleanup can never double-run into each other.
+    const clearFilter = () => {
+      target.style.filter = "";
       svg.remove();
     };
 
@@ -143,7 +151,7 @@ export function RetroResolve() {
       const px = STEPS[index];
       if (px === undefined || px === 0) {
         window.clearInterval(timer);
-        unwrap();
+        clearFilter();
         return;
       }
       setStep(px);
@@ -151,9 +159,7 @@ export function RetroResolve() {
 
     return () => {
       window.clearInterval(timer);
-      // A cleanup can fire after unwrap() already ran (natural completion);
-      // guard against double-removal.
-      if (wrapper.isConnected) unwrap();
+      clearFilter();
     };
   }, [active, motionOn, pathname, filterId]);
 
