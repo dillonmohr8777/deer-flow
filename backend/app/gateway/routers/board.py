@@ -259,12 +259,21 @@ async def _load_thread_for_actor(board_repo, client_repo, thread_id: str, reques
 @router.post("/threads/{thread_id}/draft", response_model=BoardThreadResponse)
 @require_permission("board", "write")
 async def draft_board_reply(thread_id: str, body: BoardDraftRequest, request: Request) -> BoardThreadResponse:
-    """Momo drafts a reply: adds a ``momo``-authored message and moves the thread to ``drafted``."""
+    """Momo drafts a reply: adds a ``momo``-authored message and moves the thread to ``drafted``.
+
+    Only an org owner/admin may trigger this -- mirroring approve/reply --
+    since a client-assigned plain member has no business writing a message
+    labelled as Momo's or moving the thread's status themselves.
+    """
     board_repo = get_board_repo(request)
     client_repo = get_client_repo(request)
     row, user_id = await _load_thread_for_actor(board_repo, client_repo, thread_id, request)
+    actor_is_owner = await _is_active_org_admin(user_id)
     try:
-        assert_can_draft(row["status"])
+        assert_can_draft(row["status"], actor_is_owner=actor_is_owner)
+    except BoardOwnerRequiredError as exc:
+        await record_audit_event(request, action="board.thread.draft", outcome="denied", actor_user_id=user_id, organization_id=resolve_organization_id(), target_type="board_thread", target_id=thread_id)
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
     except BoardTransitionError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     await board_repo.add_message(thread_id, author_kind="momo", author_user_id=None, body=body.body)

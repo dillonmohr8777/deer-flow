@@ -215,8 +215,42 @@ async def test_draft_approve_reply_lifecycle(org_world):  # noqa: F811
         assert all(e["outcome"] == "success" for e in events)
 
 
+async def test_non_owner_cannot_draft(org_world):  # noqa: F811
+    """A plain member with client access cannot trigger a Momo draft either."""
+    session_factory = org_world
+    app = _build_app(session_factory)
+    audit_repo = app.state.audit_repo
+    headers_a = auth_headers(USER_A, ORG_S)
+
+    await _add_plain_member(session_factory, USER_D, ORG_S)
+    headers_d = auth_headers(USER_D, ORG_S)
+
+    async with _client(app) as client:
+        client1 = await _create_client(client, headers_a, "Client One")
+        assign = await client.post(f"/api/clients/{client1['id']}/assignments", json={"user_id": USER_D, "role": "client_contact"}, headers=headers_a)
+        assert assign.status_code == 201
+
+        thread = (await client.post("/api/board/threads", json={"client_id": client1["id"], "subject": "T1"}, headers=headers_a)).json()
+        tid = thread["id"]
+
+        # D has client access to the thread but is neither owner nor admin: rejected outright.
+        denied = await client.post(f"/api/board/threads/{tid}/draft", json={"body": "sneaky draft"}, headers=headers_d)
+        assert denied.status_code == 403
+
+        # The thread stayed in its original status; D's rejected attempt did not sneak the transition through.
+        still_new = await client.get(f"/api/board/threads/{tid}", headers=headers_a)
+        assert still_new.json()["status"] == "new"
+
+        # Nor did D's forged draft message land.
+        messages = (await client.get(f"/api/board/threads/{tid}/messages", headers=headers_a)).json()["messages"]
+        assert messages == []
+
+        events, _ = await audit_repo.list(organization_id=ORG_S, action_prefix="board.thread.draft")
+        assert any(e["outcome"] == "denied" and e["actor_user_id"] == USER_D for e in events)
+
+
 async def test_non_owner_cannot_approve_or_reply(org_world):  # noqa: F811
-    """A plain member with client access can draft-adjacent actions but never approve/reply."""
+    """An owner-drafted thread still can't be approved or replied to by a plain member."""
     session_factory = org_world
     app = _build_app(session_factory)
     audit_repo = app.state.audit_repo
