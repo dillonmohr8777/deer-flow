@@ -35,6 +35,31 @@ rs.mock("@/core/models/hooks", () => ({
   }),
 }));
 
+// The delete-button gating comes from `hasPermission`, not from live thread
+// data. `useThreadStream` otherwise reaches `useStream` from the LangGraph
+// SDK, which issues a real fetch on mount (reconnectOnMount) that has no
+// server to answer under happy-dom, leaving an unhandled rejection behind.
+rs.mock("@/core/threads/hooks", () => ({
+  useThreadStream: () => ({
+    thread: {
+      messages: [],
+      isLoading: false,
+      error: undefined,
+      getMessagesMetadata: () => undefined,
+      values: { artifacts: [] },
+    } as never,
+    sendMessage: rs.fn(),
+    isUploading: false,
+    isHistoryLoading: false,
+    hasMoreHistory: false,
+    loadMoreHistory: rs.fn(),
+  }),
+  useDeleteThread: () => ({
+    mutateAsync: rs.fn(),
+    isPending: false,
+  }),
+}));
+
 function makeUser(permissions: string[] | null | undefined): User {
   return {
     id: "user-1",
