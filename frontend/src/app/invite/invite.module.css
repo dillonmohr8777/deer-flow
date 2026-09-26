@@ -202,7 +202,9 @@
   outline-offset: 2px;
 }
 
-/* SSO: a quiet secondary action beside the royal primary. */
+/* Sign-in options (SSO buttons and the password sign-in link): a quiet
+   secondary action beside the royal primary. Flex so the link gets the same
+   44px target as the buttons. */
 .ssoList {
   display: grid;
   gap: 0.5rem;
@@ -210,8 +212,12 @@
 }
 
 .sso {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-height: 2.75rem;
   padding: 0 1.25rem;
+  text-decoration: none;
   border: 1px solid var(--paper-royal);
   border-radius: 0.375rem;
   background: var(--paper-cream-hi);

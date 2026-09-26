@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from urllib.parse import quote
+from uuid import uuid4
 
 import pytest
 import pytest_asyncio
@@ -14,9 +15,15 @@ from sqlalchemy.pool import StaticPool
 from starlette.requests import Request
 from starlette.responses import Response
 
+from app.gateway import deps
 from app.gateway.auth.config import AuthConfig
+from app.gateway.auth.jwt import create_access_token
+from app.gateway.auth.local_provider import LocalAuthProvider
 from app.gateway.auth.password import hash_password_async
+from app.gateway.auth.repositories.sqlite import SQLiteUserRepository
+from app.gateway.auth.session_cookie import ACCESS_TOKEN_COOKIE_NAME
 from app.gateway.auth_disabled import AUTH_SOURCE_SESSION
+from app.gateway.csrf_middleware import CSRF_COOKIE_NAME, CSRF_HEADER_NAME
 from app.gateway.routers import invitations
 from deerflow.config.authorization_config import AuthorizationConfig
 from deerflow.persistence.base import Base
@@ -25,16 +32,18 @@ from deerflow.persistence.organizations.model import OrganizationMemberRow, Orga
 from deerflow.persistence.user.model import UserRow
 
 
-def _request(*, user=None, source=None, cookies: dict[str, str] | None = None) -> Request:
-    headers = []
+def _request(*, user=None, source=None, cookies: dict[str, str] | None = None, headers: dict[str, str] | None = None) -> Request:
+    raw_headers = []
     if cookies:
-        headers.append((b"cookie", "; ".join(f"{quote(k)}={quote(v)}" for k, v in cookies.items()).encode()))
+        raw_headers.append((b"cookie", "; ".join(f"{quote(k)}={quote(v)}" for k, v in cookies.items()).encode()))
+    for name, value in (headers or {}).items():
+        raw_headers.append((name.lower().encode(), value.encode()))
     request = Request(
         {
             "type": "http",
             "method": "POST",
             "path": "/api/v1/auth/invitations",
-            "headers": headers,
+            "headers": raw_headers,
             "scheme": "http",
             "server": ("testserver", 80),
             "client": ("testclient", 1234),
@@ -46,6 +55,18 @@ def _request(*, user=None, source=None, cookies: dict[str, str] | None = None) -
     if source is not None:
         request.state.auth_source = source
     return request
+
+
+# The double-submit pair a browser that went through a normal sign-in holds:
+# the JS-readable csrf_token cookie, echoed back in X-CSRF-Token.
+_CSRF = "invitation-csrf-double-submit"
+
+
+def _signed_in(user_id: str, *, csrf_cookie: str | None = _CSRF, csrf_header: str | None = _CSRF) -> Request:
+    """A request carrying a verified browser session for ``user_id``."""
+    cookies = {CSRF_COOKIE_NAME: csrf_cookie} if csrf_cookie is not None else None
+    headers = {CSRF_HEADER_NAME: csrf_header} if csrf_header is not None else None
+    return _request(user=SimpleNamespace(id=user_id), source=AUTH_SOURCE_SESSION, cookies=cookies, headers=headers)
 
 
 @pytest_asyncio.fixture()
@@ -231,7 +252,11 @@ async def test_new_recipient_requires_twelve_char_non_common_password(invitation
 
 
 @pytest.mark.asyncio
-async def test_wrong_existing_password_does_not_consume_invitation(invitation_db, monkeypatch):
+async def test_existing_password_account_must_sign_in_then_accept(invitation_db, monkeypatch):
+    """Sign in, then accept. /accept never takes an existing account's
+    password: that would be a login that hands out a session cookie without
+    the account's MFA step. Only the account's own verified session accepts.
+    """
     organization_id = await _seed_workspace(invitation_db)
     now = datetime.now(UTC)
     password_hash = await hash_password_async("Existing-password-123!")
@@ -249,26 +274,37 @@ async def test_wrong_existing_password_does_not_consume_invitation(invitation_db
                 )
             )
     created = await _create(monkeypatch, invitation_db, organization_id, email="existing@example.com")
-    with pytest.raises(Exception) as wrong:
-        await invitations.accept_invitation(
-            invitations.AcceptInvitationRequest(token=created.token, password="wrong-password"),
-            _request(),
-            Response(),
-        )
-    assert getattr(wrong.value, "status_code", None) == 403
+
+    # No session: refused whether the password is right, wrong or absent,
+    # no session cookie is issued, and the token stays usable.
+    for password in ("Existing-password-123!", "wrong-password", ""):
+        response = Response()
+        with pytest.raises(Exception) as refused:
+            await invitations.accept_invitation(
+                invitations.AcceptInvitationRequest(token=created.token, password=password),
+                _request(),
+                response,
+            )
+        assert getattr(refused.value, "status_code", None) == 403, password
+        assert "access_token=" not in response.headers.get("set-cookie", "")
     async with invitation_db() as session:
         invitation = await session.get(InvitationRow, created.id)
         assert invitation is not None and invitation.consumed_at is None
 
-    response = Response()
-    await invitations.accept_invitation(
-        invitations.AcceptInvitationRequest(token=created.token, password="Existing-password-123!"),
-        _request(),
-        response,
+    # The same account's own session accepts, with no password in the body.
+    accepted = await invitations.accept_invitation(
+        invitations.AcceptInvitationRequest(token=created.token),
+        _signed_in("existing-user"),
+        Response(),
     )
+    assert accepted.workspace_id == organization_id
     async with invitation_db() as session:
         user = await session.get(UserRow, "existing-user")
         assert user is not None and user.password_hash == password_hash
+        membership = await session.get(OrganizationMemberRow, {"organization_id": organization_id, "user_id": "existing-user"})
+        assert membership is not None and membership.role == "member" and membership.status == "active"
+        invitation = await session.get(InvitationRow, created.id)
+        assert invitation is not None and invitation.consumed_at is not None
 
 
 @pytest.mark.asyncio
@@ -372,17 +408,20 @@ async def _add_user(session_factory, user_id: str, email: str, *, password: str 
 
 
 @pytest.mark.asyncio
-async def test_inspect_reports_how_the_invited_email_signs_in(invitation_db, monkeypatch):
+async def test_inspect_says_only_whether_the_invited_email_has_an_account(invitation_db, monkeypatch):
+    """The page needs new vs existing, nothing more. How an existing account
+    signs in (password or SSO) is not the token holder's business."""
+    assert "sign_in" not in invitations.InspectInvitationResponse.model_fields
     organization_id = await _seed_workspace(invitation_db)
     await _add_user(invitation_db, "pw-user", "pw@example.com", password="Existing-password-123!")
     await _add_user(invitation_db, "sso-user", "sso@example.com", oauth_provider="google")
 
-    expected = {"new@example.com": "new", "pw@example.com": "password", "sso@example.com": "sso"}
-    for email, sign_in in expected.items():
+    expected = {"new@example.com": False, "pw@example.com": True, "sso@example.com": True}
+    for email, requires_login in expected.items():
         created = await _create(monkeypatch, invitation_db, organization_id, email=email)
         inspected = await invitations.inspect_invitation(invitations.InvitationTokenRequest(token=created.token), Response())
-        assert inspected.sign_in == sign_in, email
-        assert inspected.requires_login is (sign_in != "new")
+        assert inspected.requires_login is requires_login, email
+        assert set(inspected.model_dump()) == {"email", "workspace_name", "expires_at", "requires_login"}, email
 
 
 @pytest.mark.asyncio
@@ -412,7 +451,7 @@ async def test_sso_account_accepts_with_its_session_and_no_password(invitation_d
     # Signed in as the invited SSO account: no password needed.
     accepted = await invitations.accept_invitation(
         invitations.AcceptInvitationRequest(token=created.token),
-        _request(user=SimpleNamespace(id="sso-user"), source=AUTH_SOURCE_SESSION),
+        _signed_in("sso-user"),
         Response(),
     )
     assert accepted.workspace_id == organization_id
@@ -443,3 +482,110 @@ async def test_empty_password_never_creates_or_unlocks_a_password_account(invita
         for invitation_id in (fresh.id, existing.id):
             invitation = await session.get(InvitationRow, invitation_id)
             assert invitation is not None and invitation.consumed_at is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("csrf_cookie", "csrf_header"),
+    [(_CSRF, "a-different-value"), (_CSRF, None), (None, _CSRF), (None, None)],
+    ids=["mismatch", "header-missing", "cookie-missing", "both-missing"],
+)
+async def test_session_accept_refuses_a_missing_or_mismatched_csrf_pair(invitation_db, monkeypatch, csrf_cookie, csrf_header):
+    """/accept stays CSRF-exempt at the middleware so a brand-new recipient
+    (no session yet, so no csrf cookie) can accept. Accepting through an
+    existing session rides ambient cookies, so the handler itself requires
+    the double-submit pair, before anything is consumed."""
+    organization_id = await _seed_workspace(invitation_db)
+    await _add_user(invitation_db, "pw-user", "pw@example.com", password="Existing-password-123!")
+    created = await _create(monkeypatch, invitation_db, organization_id, email="pw@example.com")
+
+    with pytest.raises(Exception) as refused:
+        await invitations.accept_invitation(
+            invitations.AcceptInvitationRequest(token=created.token),
+            _signed_in("pw-user", csrf_cookie=csrf_cookie, csrf_header=csrf_header),
+            Response(),
+        )
+    assert getattr(refused.value, "status_code", None) == 403
+    assert "CSRF" in str(getattr(refused.value, "detail", ""))
+    async with invitation_db() as session:
+        invitation = await session.get(InvitationRow, created.id)
+        assert invitation is not None and invitation.consumed_at is None
+        assert await session.get(OrganizationMemberRow, {"organization_id": organization_id, "user_id": "pw-user"}) is None
+
+
+@pytest.mark.asyncio
+async def test_session_accept_with_a_matching_csrf_pair_joins_the_workspace(invitation_db, monkeypatch):
+    organization_id = await _seed_workspace(invitation_db)
+    await _add_user(invitation_db, "pw-user", "pw@example.com", password="Existing-password-123!")
+    created = await _create(monkeypatch, invitation_db, organization_id, email="pw@example.com")
+
+    response = Response()
+    accepted = await invitations.accept_invitation(
+        invitations.AcceptInvitationRequest(token=created.token),
+        _signed_in("pw-user", csrf_cookie=_CSRF, csrf_header=_CSRF),
+        response,
+    )
+    assert accepted.workspace_id == organization_id
+    assert any(key == b"set-cookie" and b"deerflow_workspace=workspace-1" in value for key, value in response.raw_headers)
+    async with invitation_db() as session:
+        membership = await session.get(OrganizationMemberRow, {"organization_id": organization_id, "user_id": "pw-user"})
+        assert membership is not None and membership.role == "member" and membership.status == "active"
+        invitation = await session.get(InvitationRow, created.id)
+        assert invitation is not None and invitation.consumed_at is not None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("account", ["password", "google"])
+async def test_accept_verifies_a_real_access_token_cookie_like_production(invitation_db, monkeypatch, account):
+    """Production path: AuthMiddleware skips this public route, so nothing
+    stamps request.state. The handler has to verify the access_token cookie
+    itself (signature, user lookup, token_version), and only the invited
+    account's own verified session may accept."""
+    import jwt as pyjwt
+
+    organization_id = await _seed_workspace(invitation_db)
+    invitee_id, other_id = str(uuid4()), str(uuid4())
+    if account == "password":
+        await _add_user(invitation_db, invitee_id, "invitee@example.com", password="Existing-password-123!")
+    else:
+        await _add_user(invitation_db, invitee_id, "invitee@example.com", oauth_provider="google")
+    await _add_user(invitation_db, other_id, "someone-else@example.com", password="Another-password-456!")
+    created = await _create(monkeypatch, invitation_db, organization_id, email="invitee@example.com")
+    # _create stubs the user resolver for the inviter. Put the real cookie
+    # pipeline back, reading the real user table.
+    monkeypatch.setattr(invitations, "get_current_user_from_request", deps.get_current_user_from_request)
+    monkeypatch.setattr(deps, "get_local_provider", lambda: LocalAuthProvider(SQLiteUserRepository(invitation_db)))
+
+    def cookie_request(access_token: str) -> Request:
+        return _request(
+            cookies={ACCESS_TOKEN_COOKIE_NAME: access_token, CSRF_COOKIE_NAME: _CSRF},
+            headers={CSRF_HEADER_NAME: _CSRF},
+        )
+
+    forged = pyjwt.encode(
+        {"sub": invitee_id, "exp": datetime.now(UTC) + timedelta(hours=1), "iat": datetime.now(UTC), "ver": 0},
+        "not-the-gateway-secret-but-long-enough-for-hs256",
+        algorithm="HS256",
+    )
+    refused_cookies = {
+        "someone else's session": create_access_token(other_id),
+        "a forged signature naming the invitee": forged,
+        "a revoked token version": create_access_token(invitee_id, token_version=1),
+        "junk": "not-a-jwt",
+    }
+    for label, access_token in refused_cookies.items():
+        with pytest.raises(Exception) as refused:
+            await invitations.accept_invitation(invitations.AcceptInvitationRequest(token=created.token), cookie_request(access_token), Response())
+        assert getattr(refused.value, "status_code", None) == 403, label
+    async with invitation_db() as session:
+        invitation = await session.get(InvitationRow, created.id)
+        assert invitation is not None and invitation.consumed_at is None
+
+    request = cookie_request(create_access_token(invitee_id))
+    assert getattr(request.state, "auth_source", None) is None and getattr(request.state, "user", None) is None
+    accepted = await invitations.accept_invitation(invitations.AcceptInvitationRequest(token=created.token), request, Response())
+    assert accepted.workspace_id == organization_id
+    async with invitation_db() as session:
+        membership = await session.get(OrganizationMemberRow, {"organization_id": organization_id, "user_id": invitee_id})
+        assert membership is not None and membership.status == "active"
+        assert await session.get(OrganizationMemberRow, {"organization_id": organization_id, "user_id": other_id}) is None

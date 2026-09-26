@@ -29,11 +29,31 @@ renders a button per enabled provider from `GET /api/v1/auth/providers`;
 adding Google is a config change plus the Cloud Console steps in
 `AUTH_DESIGN.md`, not a frontend change.
 
-Workspace invitations work with it too. `POST /invitations/inspect` returns
-`sign_in` (`new`, `password` or `sso`), and an SSO account (no password hash)
-accepts with an empty password as long as its own browser session matches the
-invited user; a new recipient still needs a 12+ character password and an
-existing password account still has to verify it. `/invite` offers "Continue
-with <provider>" to new and SSO invitees, parks the fragment token in
-`sessionStorage` for the round trip (never in a URL or `next=`), and resumes
-from it on return.
+Workspace invitations work with it too, as "sign in, then accept".
+`POST /invitations/inspect` says only `requires_login` (does the invited email
+already have an account); it never says how that account signs in. A new
+recipient accepts with a 12+ character, non-common password, which creates
+the account. Any existing account, password or SSO, accepts only with a
+verified browser session for that exact user (`_authenticated_session_user_id`:
+the route is public, so AuthMiddleware stamps nothing and the handler verifies
+the `access_token` cookie itself) plus the CSRF double-submit pair, which the
+handler checks because the middleware exempts `/accept` for session-less new
+recipients. `/accept` never takes an existing account's password: that was a
+login that skipped MFA. A failed check rolls back the token reservation, so
+the invitation stays usable. `/invite` offers existing invitees "Continue with
+<provider>" and "Sign in with password" (`/login?next=%2Finvite`), and new
+invitees the password form plus the providers. It reads and removes the
+fragment-token stash on load, keeps the token in React state, and re-stashes
+`{token, savedAt}` in `sessionStorage` only right before sending the person to
+sign in; stashes older than 10 minutes are dropped. The token only ever
+travels in `/inspect` and `/accept` request bodies, never in a URL or `next=`.
+
+`auto_create_requires_invitation` (per provider, default false) turns SSO
+auto-create into invite-only: a first login creates an account only when the
+provider-verified email (case-insensitive) holds a pending invitation (not
+consumed, not expired, active shared workspace, issuer still an active owner
+or admin: `deerflow.persistence.organizations.invitation_policy`, the same
+rule `/inspect` and `/accept` apply). Otherwise it is the same 403 as
+`auto_create_users: false`, so logins cannot probe who is invited. Accounts it
+created keep signing in after their invitation is used, because the gate only
+applies to creating a user.

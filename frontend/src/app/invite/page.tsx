@@ -6,17 +6,16 @@ import { brandMotionAllowed } from "@/components/workspace/command-center/appear
 
 import {
   clearStashedInviteToken,
-  inviteSignInMode,
-  readStashedInviteToken,
+  passwordSignInUrl,
   signedInAsInvitee,
   ssoStartUrl,
   stashInviteToken,
+  takeStashedInviteToken,
   type InviteInfo,
 } from "./invite-mode";
 
 import styles from "./invite.module.css";
 
-type InspectOk = InviteInfo;
 type SsoProvider = { id: string; display_name: string };
 
 // Highest-emotion moment in the funnel: the pin lifts, the sheet tilts and
@@ -61,8 +60,10 @@ function getCsrfHeader(): Record<string, string> {
 
 export default function InvitePage() {
   const initialized = useRef(false);
+  // The token lives only here once the page has it: never in a URL, and in
+  // sessionStorage only for the moment of a sign-in trip.
   const [token, setToken] = useState<string | null>(null);
-  const [info, setInfo] = useState<InspectOk | null>(null);
+  const [info, setInfo] = useState<InviteInfo | null>(null);
   const [status, setStatus] = useState<
     "loading" | "ready" | "inspect-error" | "accepting" | "done"
   >("loading");
@@ -74,17 +75,21 @@ export default function InvitePage() {
   const [sessionEmail, setSessionEmail] = useState<string | null | undefined>(
     undefined,
   );
-  const mode = info ? inviteSignInMode(info) : null;
+  // "new": no account yet, so create one here. "existing": sign in, then
+  // accept with that session.
+  const mode = info ? (info.requires_login ? "existing" : "new") : null;
   const isNew = mode === "new";
-  const isSso = mode === "sso";
-  const ssoReady =
-    isSso && !!info && signedInAsInvitee(sessionEmail, info.email);
+  const isExisting = mode === "existing";
+  const signedIn =
+    isExisting && !!info && signedInAsInvitee(sessionEmail, info.email);
 
   useEffect(() => {
     if (initialized.current) return;
     initialized.current = true;
-    const h = window.location.hash || "";
-    const m = /#token=([^&]+)/.exec(h);
+    // Any stash from an earlier sign-in trip is read once and removed right
+    // away, whichever token wins, so it never outlives this page load.
+    const stashed = takeStashedInviteToken();
+    const m = /#token=([^&]+)/.exec(window.location.hash || "");
     if (m?.[1]) {
       setToken(m[1]);
       window.history.replaceState(
@@ -92,17 +97,25 @@ export default function InvitePage() {
         "",
         window.location.pathname + window.location.search,
       );
+    } else if (stashed) {
+      setToken(stashed);
     } else {
-      const stashed = readStashedInviteToken();
-      if (stashed) {
-        setToken(stashed);
-        return;
-      }
       setStatus("inspect-error");
       setError(
         "Missing invite token. Please reopen the invite link from your DM.",
       );
     }
+  }, []);
+
+  useEffect(() => {
+    // Back from an abandoned sign-in (Back button, page restored from the
+    // back-forward cache without remounting): the token is still in state,
+    // so the stash left for that trip can go now.
+    const onPageShow = (event: PageTransitionEvent) => {
+      if (event.persisted) clearStashedInviteToken();
+    };
+    window.addEventListener("pageshow", onPageShow);
+    return () => window.removeEventListener("pageshow", onPageShow);
   }, []);
 
   useEffect(() => {
@@ -119,12 +132,11 @@ export default function InvitePage() {
         const data = await res.json().catch(() => null);
         if (cancelled) return;
         if (!res.ok) {
-          clearStashedInviteToken();
           setStatus("inspect-error");
           setError(getDetailMessage(data));
           return;
         }
-        setInfo(data as InspectOk);
+        setInfo(data as InviteInfo);
         setStatus("ready");
       } catch {
         if (!cancelled) {
@@ -141,7 +153,7 @@ export default function InvitePage() {
   }, [token]);
 
   useEffect(() => {
-    if (mode !== "new" && mode !== "sso") return;
+    if (!mode) return;
     let cancelled = false;
     void fetch("/api/v1/auth/providers")
       .then((res) => (res.ok ? res.json() : null))
@@ -151,7 +163,7 @@ export default function InvitePage() {
         }
       })
       .catch(() => {
-        // No SSO buttons; the password path still works for new people.
+        // No SSO buttons; the password paths still work.
       });
     return () => {
       cancelled = true;
@@ -159,7 +171,7 @@ export default function InvitePage() {
   }, [mode]);
 
   useEffect(() => {
-    if (mode !== "sso") return;
+    if (mode !== "existing") return;
     let cancelled = false;
     void fetch("/api/v1/auth/me", { credentials: "include" })
       .then((res) => (res.ok ? res.json() : null))
@@ -175,6 +187,8 @@ export default function InvitePage() {
     };
   }, [mode]);
 
+  // The only two ways off this page mid-invite. Each re-stashes the token
+  // just before leaving, so the page can pick it up again on the way back.
   const startSso = useCallback(
     (providerId: string) => {
       if (!token) return;
@@ -184,9 +198,13 @@ export default function InvitePage() {
     [token],
   );
 
+  const startPasswordSignIn = useCallback(() => {
+    if (token) stashInviteToken(token);
+  }, [token]);
+
   const accept = useCallback(async () => {
-    if (!token || status === "accepting") return;
-    if (isSso && !ssoReady) return;
+    if (!token || !mode || status === "accepting") return;
+    if (isExisting && !signedIn) return;
     setError("");
     if (isNew && password.length < 12) {
       setError("Password must be at least 12 characters.");
@@ -202,7 +220,9 @@ export default function InvitePage() {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json", ...getCsrfHeader() },
-        body: JSON.stringify(isSso ? { token } : { token, password }),
+        // An existing account proves itself with its session; only a new
+        // account sends the password it is creating.
+        body: JSON.stringify(isNew ? { token, password } : { token }),
       });
       const data = await res.json().catch(() => null);
       if (!res.ok) {
@@ -226,7 +246,7 @@ export default function InvitePage() {
       setStatus("ready");
       setError("Couldn't accept this invite. Please try again.");
     }
-  }, [token, password, confirm, isNew, isSso, ssoReady, status]);
+  }, [token, mode, password, confirm, isNew, isExisting, signedIn, status]);
 
   const busy = status === "loading" || status === "accepting";
   const released = status === "done";
@@ -297,18 +317,16 @@ export default function InvitePage() {
               <p className={`${styles.hint} m-voice-body`}>
                 {isNew
                   ? "Create a password of at least 12 characters to join."
-                  : !isSso
-                    ? "Enter your current account password to join this workspace."
-                    : sessionEmail === undefined
-                      ? "Checking your sign-in…"
-                      : ssoReady
-                        ? `You're signed in as ${info.email}. Accept to join.`
-                        : sessionEmail
-                          ? `You're signed in as ${sessionEmail}, but this invite is for ${info.email}. Sign in as ${info.email} to accept.`
-                          : `Sign in as ${info.email} to accept.`}
+                  : sessionEmail === undefined
+                    ? "Checking your sign-in…"
+                    : signedIn
+                      ? `You're signed in as ${info.email}. Accept to join.`
+                      : sessionEmail
+                        ? `You're signed in as ${sessionEmail}, but this invite is for ${info.email}. Sign in as ${info.email} to accept.`
+                        : `Sign in as ${info.email} to accept.`}
               </p>
-              {isSso ? (
-                ssoReady ? (
+              {isNew ? (
+                <>
                   <form
                     className={styles.form}
                     onSubmit={(e) => {
@@ -316,46 +334,26 @@ export default function InvitePage() {
                       void accept();
                     }}
                   >
-                    <button
-                      type="submit"
-                      disabled={busy || !token}
-                      className={styles.submit}
-                    >
-                      {status === "accepting" ? "Accepting…" : "Accept invite"}
-                    </button>
-                  </form>
-                ) : sessionEmail === undefined ? null : (
-                  <SsoButtons providers={providers} onStart={startSso} />
-                )
-              ) : (
-                <form
-                  className={styles.form}
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    void accept();
-                  }}
-                >
-                  <div className={styles.field2}>
-                    <label
-                      htmlFor="invite-password"
-                      className={`${styles.label} m-voice-label`}
-                    >
-                      {isNew ? "New password" : "Current password"}
-                    </label>
-                    <input
-                      id="invite-password"
-                      name="password"
-                      type="password"
-                      autoComplete={isNew ? "new-password" : "current-password"}
-                      minLength={isNew ? 12 : 1}
-                      required
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      disabled={busy}
-                      className={styles.input}
-                    />
-                  </div>
-                  {isNew ? (
+                    <div className={styles.field2}>
+                      <label
+                        htmlFor="invite-password"
+                        className={`${styles.label} m-voice-label`}
+                      >
+                        New password
+                      </label>
+                      <input
+                        id="invite-password"
+                        name="password"
+                        type="password"
+                        autoComplete="new-password"
+                        minLength={12}
+                        required
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        disabled={busy}
+                        className={styles.input}
+                      />
+                    </div>
                     <div className={styles.field2}>
                       <label
                         htmlFor="invite-confirm"
@@ -376,7 +374,31 @@ export default function InvitePage() {
                         className={styles.input}
                       />
                     </div>
+                    <button
+                      type="submit"
+                      disabled={busy || !token}
+                      className={styles.submit}
+                    >
+                      {status === "accepting" ? "Accepting…" : "Accept invite"}
+                    </button>
+                  </form>
+                  {providers.length > 0 ? (
+                    <>
+                      <p className={`${styles.hint} m-voice-body`}>
+                        Or skip the password: sign in with {info.email}.
+                      </p>
+                      <SignInOptions providers={providers} onSso={startSso} />
+                    </>
                   ) : null}
+                </>
+              ) : signedIn ? (
+                <form
+                  className={styles.form}
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    void accept();
+                  }}
+                >
                   <button
                     type="submit"
                     disabled={busy || !token}
@@ -385,15 +407,13 @@ export default function InvitePage() {
                     {status === "accepting" ? "Accepting…" : "Accept invite"}
                   </button>
                 </form>
+              ) : sessionEmail === undefined ? null : (
+                <SignInOptions
+                  providers={providers}
+                  onSso={startSso}
+                  onPasswordSignIn={startPasswordSignIn}
+                />
               )}
-              {isNew && providers.length > 0 ? (
-                <>
-                  <p className={`${styles.hint} m-voice-body`}>
-                    Or skip the password: sign in with {info.email}.
-                  </p>
-                  <SsoButtons providers={providers} onStart={startSso} />
-                </>
-              ) : null}
             </section>
           ) : null}
         </div>
@@ -402,23 +422,20 @@ export default function InvitePage() {
   );
 }
 
-function SsoButtons({
+/**
+ * Ways to sign in and come back to /invite. Each one stashes the token right
+ * before the page is left; neither puts it in a URL.
+ */
+function SignInOptions({
   providers,
-  onStart,
+  onSso,
+  onPasswordSignIn,
 }: {
   providers: SsoProvider[];
-  onStart: (providerId: string) => void;
+  onSso: (providerId: string) => void;
+  /** Offered to existing accounts; a new invitee creates a password above. */
+  onPasswordSignIn?: () => void;
 }) {
-  if (providers.length === 0) {
-    return (
-      <p className={`${styles.hint} m-voice-body`}>
-        <Link className={styles.link} href="/login">
-          Sign in
-        </Link>
-        , then reopen your invite link.
-      </p>
-    );
-  }
   return (
     <div className={styles.ssoList}>
       {providers.map((provider) => (
@@ -426,11 +443,20 @@ function SsoButtons({
           key={provider.id}
           type="button"
           className={styles.sso}
-          onClick={() => onStart(provider.id)}
+          onClick={() => onSso(provider.id)}
         >
           Continue with {provider.display_name}
         </button>
       ))}
+      {onPasswordSignIn ? (
+        <Link
+          className={styles.sso}
+          href={passwordSignInUrl()}
+          onClick={onPasswordSignIn}
+        >
+          Sign in with password
+        </Link>
+      ) : null}
     </div>
   );
 }
