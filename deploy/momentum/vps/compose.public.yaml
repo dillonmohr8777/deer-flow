@@ -1,0 +1,49 @@
+# Always-on public overlay for a Linux VPS. Layer it on
+#   docker/docker-compose.yaml + docker/docker-compose.dood.yaml
+#   + deploy/momentum/compose.momentum.yaml (+ compose.postgres.yaml)
+# with deploy/momentum/vps/restart.sh, never by hand.
+#
+# Caddy is the only thing on the public internet: it takes 80/443, gets and
+# renews the TLS certificate for $MOMOBOT_DOMAIN, and proxies to nginx on the
+# compose network. nginx keeps its loopback-only host port (the base file's
+# ${BIND_HOST:-127.0.0.1}), so health checks and SSH tunnels still work and
+# nothing else is reachable from outside. Every published port names its bind
+# address explicitly (test_compose_default_bind_host.py's rule).
+services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: ${COMPOSE_PROJECT_NAME:-deer-flow}-caddy
+    restart: unless-stopped
+    environment:
+      - MOMOBOT_DOMAIN=${MOMOBOT_DOMAIN:?MOMOBOT_DOMAIN must be set, e.g. momobot.needmomentum.com}
+      - MOMOBOT_ACME_EMAIL=${MOMOBOT_ACME_EMAIL:?MOMOBOT_ACME_EMAIL must be set for certificate notices}
+    ports:
+      - "0.0.0.0:80:80"
+      - "0.0.0.0:443:443"
+      - "0.0.0.0:443:443/udp"
+    volumes:
+      # Absolute path from restart.sh: compose resolves relative paths against
+      # the first -f file's folder (docker/), not this overlay's.
+      - ${MOMOBOT_CADDYFILE:?run via deploy/momentum/vps/restart.sh}:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - nginx
+    networks:
+      - deer-flow
+
+  nginx:
+    restart: unless-stopped
+  # The gateway and frontend images are built or loaded on purpose (README
+  # step 3) and never pushed anywhere: a missing tag must fail as "missing",
+  # not as a confusing registry pull error.
+  gateway:
+    restart: unless-stopped
+    pull_policy: never
+  frontend:
+    restart: unless-stopped
+    pull_policy: never
+
+volumes:
+  caddy-data:
+  caddy-config:
