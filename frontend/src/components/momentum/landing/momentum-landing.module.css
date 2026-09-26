@@ -508,6 +508,9 @@
     max-width: 44rem;
   }
 
+  /* Until Momo goes absolute at 72rem he centres over the headline
+     column, not across the widened grid. */
+  .paperHero > .paperMomos,
   .paperHero > .paperCards {
     grid-column: 1;
   }

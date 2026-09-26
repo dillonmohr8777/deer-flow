@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, rs } from "@rstest/core";
 import { cleanup, render, screen, within } from "@testing-library/react";
 
 import { MomentumLanding } from "@/components/momentum/landing/momentum-landing";
+import { BRAIN_FLAT } from "@/components/workspace/command-center/momo-avatar";
 
 rs.mock("next/navigation", () => ({
   useRouter: () => ({ push: () => undefined }),
@@ -48,14 +49,19 @@ describe("landing team sheet (d7)", () => {
     }
   });
 
-  it("draws canon Momo art as decoration, with the name as the text", () => {
+  it("draws the roster art as decoration, with the name as the text", () => {
     render(<MomentumLanding />);
 
     const team = screen.getByRole("region", { name: "Your team" });
-    const art = team.querySelectorAll("img");
+    const art = [...team.querySelectorAll("img")];
     expect(art).toHaveLength(6);
     for (const img of art) {
       expect(img.getAttribute("alt")).toBe("");
+    }
+    // The lead is Dillon Brain, the art the Command Center draws for the
+    // lead, not the unused generic lead Momo.
+    expect(art[0]!.getAttribute("src")).toBe(BRAIN_FLAT);
+    for (const img of art.slice(1)) {
       expect(img.getAttribute("src")).toMatch(
         /^\/momentum\/momos\/[a-z-]+\.svg$/,
       );

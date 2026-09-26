@@ -35,6 +35,10 @@ import {
   FUNNEL_TREATMENT,
   resolveFunnelTreatment,
 } from "@/components/momentum/treatment";
+import {
+  BRAIN_ASPECT,
+  BRAIN_FLAT,
+} from "@/components/workspace/command-center/momo-avatar";
 
 import styles from "./momentum-landing.module.css";
 
@@ -84,17 +88,24 @@ const CAPABILITIES = [
 
 /*
  * The team sheet beside the cards: the lead and the five specialists the
- * Agents card names, drawn with the same canon Momo art the Command Center
- * roster uses (public/momentum/momos, momo-avatar.tsx), so the front door
- * shows the team people will actually meet. The lead comes first and larger.
+ * Agents card names, drawn with the art the Command Center roster uses. The
+ * lead is Dillon Brain (the flat render of the BRAIN_LAYERS stack that
+ * MomoAvatar draws for "dillon-brain"); the specialists are canon Momos from
+ * public/momentum/momos. The lead comes first and larger.
  */
+const momo = (slug: string) => `/momentum/momos/${slug}.svg`;
 const TEAM = [
-  { slug: "lead", name: "Lead" },
-  { slug: "research", name: "Research" },
-  { slug: "growth", name: "Growth" },
-  { slug: "revenue", name: "Revenue" },
-  { slug: "client-success", name: "Client success" },
-  { slug: "qa", name: "Release review" },
+  { key: "lead", name: "Lead", src: BRAIN_FLAT, aspect: BRAIN_ASPECT },
+  { key: "research", name: "Research", src: momo("research"), aspect: 1 },
+  { key: "growth", name: "Growth", src: momo("growth"), aspect: 1 },
+  { key: "revenue", name: "Revenue", src: momo("revenue"), aspect: 1 },
+  {
+    key: "client-success",
+    name: "Client success",
+    src: momo("client-success"),
+    aspect: 1,
+  },
+  { key: "qa", name: "Release review", src: momo("qa"), aspect: 1 },
 ] as const;
 
 // Staggered pin offsets for the four paper cards — deliberately uneven, never
@@ -316,13 +327,13 @@ function PaperLanding() {
             </p>
             <ul className={styles.paperTeamList}>
               {TEAM.map((member) => (
-                <li className={styles.paperTeamMember} key={member.slug}>
+                <li className={styles.paperTeamMember} key={member.key}>
                   <img
                     className={styles.paperTeamArt}
-                    src={`/momentum/momos/${member.slug}.svg`}
+                    src={member.src}
                     alt=""
                     width={120}
-                    height={120}
+                    height={Math.round(120 / member.aspect)}
                     loading="lazy"
                     decoding="async"
                   />
