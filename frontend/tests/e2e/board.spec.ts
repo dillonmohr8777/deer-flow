@@ -157,6 +157,46 @@ async function mockBoard(
   );
 }
 
+/** WCAG contrast of an element's text against the first opaque background behind it. */
+async function textContrast(page: Page, selector: string): Promise<number> {
+  return page
+    .locator(selector)
+    .first()
+    .evaluate((el) => {
+      const parse = (value: string) => {
+        const m = /rgba?\(([^)]+)\)/.exec(value);
+        const [r = 0, g = 0, b = 0, a = 1] = (m?.[1] ?? "0,0,0,0")
+          .split(/[ ,/]+/)
+          .filter(Boolean)
+          .map(Number);
+        return { r, g, b, a: m ? a : 0 };
+      };
+      const lum = ({ r, g, b }: { r: number; g: number; b: number }) => {
+        const c = [r, g, b].map((v) => {
+          const x = v / 255;
+          return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4;
+        });
+        return 0.2126 * c[0]! + 0.7152 * c[1]! + 0.0722 * c[2]!;
+      };
+      const fg = parse(getComputedStyle(el).color);
+      let node: Element | null = el;
+      let bg = { r: 255, g: 255, b: 255, a: 1 };
+      while (node) {
+        const candidate = parse(getComputedStyle(node).backgroundColor);
+        if (candidate.a >= 1) {
+          bg = candidate;
+          break;
+        }
+        node = node.parentElement;
+      }
+      const [hi, lo] = [lum(fg), lum(bg)].sort((a, b) => b - a) as [
+        number,
+        number,
+      ];
+      return (hi + 0.05) / (lo + 0.05);
+    });
+}
+
 test.describe("Board, the Momo Board thread queue", () => {
   test("walks a thread through draft, approve and send", async ({ page }) => {
     await mockBoard(page, {
@@ -185,12 +225,78 @@ test.describe("Board, the Momo Board thread queue", () => {
 
     await detail.getByRole("button", { name: "Approve" }).click();
     await expect(detail.getByText("Approved", { exact: true })).toBeVisible();
-    const replyBox = detail.getByLabel("Approved — send it");
+    const replyBox = detail.getByLabel("Approved reply");
     await expect(replyBox).toHaveValue("We're on it, restoring the site now.");
 
     await detail.getByRole("button", { name: "Send reply" }).click();
     await expect(detail.getByText("Replied")).toBeVisible();
     await expect(detail.getByText("Reply sent.")).toBeVisible();
+
+    // The sent reply is a letter from Momentum, and the draft it came from
+    // is not repeated beside it.
+    const letters = detail.locator("li[data-author]");
+    await expect(letters).toHaveCount(1);
+    await expect(letters.first()).toHaveAttribute("data-author", "owner");
+    await expect(letters.first()).toContainText("Momentum");
+    for (const part of ["p:last-child", "p:first-child time"]) {
+      expect(
+        await textContrast(page, `[data-author="owner"] ${part}`),
+      ).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  test("puts Momo's draft on its own sheet, readable in paper", async ({
+    page,
+  }) => {
+    await mockBoard(page, {
+      threads: [thread("t1", { subject: "Site is down", kind: "ticket" })],
+    });
+    await page.goto("/workspace/board");
+    const board = page.getByTestId("board");
+    await board.getByText("Site is down").click({ timeout: 15_000 });
+    const detail = page.getByTestId("board-thread");
+    await detail.getByLabel("Draft a reply").fill("Restoring it now.");
+    await detail.getByRole("button", { name: "Save draft" }).click();
+
+    const sheet = page.getByTestId("board-draft-sheet");
+    await expect(
+      sheet.getByRole("heading", { name: "Momo's draft" }),
+    ).toBeVisible();
+    await expect(sheet.getByText("Restoring it now.")).toBeVisible();
+    // Shown once: on the sheet, not also as a letter.
+    await expect(detail.locator("li[data-author='momo']")).toHaveCount(0);
+    for (const selector of [
+      "[data-testid='board-draft-sheet'] h3",
+      "[data-testid='board-draft-sheet'] h3 + p",
+      "[data-testid='board-draft-sheet'] > p",
+    ]) {
+      expect(await textContrast(page, selector)).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  test("shows one pane at a time on a phone", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await mockBoard(page, {
+      threads: [
+        thread("t1", { subject: "Site is down" }),
+        thread("t2", { subject: "Invoice question", kind: "dm" }),
+      ],
+    });
+    await page.goto("/workspace/board");
+    const board = page.getByTestId("board");
+    const slip = board.getByRole("button", { name: /Invoice question/ });
+    await slip.click({ timeout: 15_000 });
+
+    const detail = page.getByTestId("board-thread");
+    await expect(
+      detail.getByRole("heading", { level: 2, name: "Invoice question" }),
+    ).toBeFocused();
+    await expect(board.getByRole("region", { name: "Threads" })).toBeHidden();
+
+    await detail.getByRole("button", { name: "All threads" }).click();
+    await expect(board.getByRole("region", { name: "Threads" })).toBeVisible();
+    await expect(slip).toBeFocused();
+    await expect(page.getByTestId("board-thread")).toHaveCount(0);
   });
 
   test("is absent on client-facing MomoBot when the flag is off", async ({
