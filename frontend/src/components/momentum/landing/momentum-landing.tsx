@@ -35,6 +35,10 @@ import {
   FUNNEL_TREATMENT,
   resolveFunnelTreatment,
 } from "@/components/momentum/treatment";
+import {
+  BRAIN_ASPECT,
+  BRAIN_FLAT,
+} from "@/components/workspace/command-center/momo-avatar";
 
 import styles from "./momentum-landing.module.css";
 
@@ -49,7 +53,7 @@ const CAPABILITIES = [
     body: (
       <>
         A <strong>lead</strong> that plans and delegates, with specialists for
-        research, brand, revenue, client success and release review.
+        research, growth, revenue, client success and release review.
       </>
     ),
   },
@@ -81,6 +85,28 @@ const CAPABILITIES = [
     ),
   },
 ];
+
+/*
+ * The team sheet beside the cards: the lead and the five specialists the
+ * Agents card names, drawn with the art the Command Center roster uses. The
+ * lead is Dillon Brain (the flat render of the BRAIN_LAYERS stack that
+ * MomoAvatar draws for "dillon-brain"); the specialists are canon Momos from
+ * public/momentum/momos. The lead comes first and larger.
+ */
+const momo = (slug: string) => `/momentum/momos/${slug}.svg`;
+const TEAM = [
+  { key: "lead", name: "Lead", src: BRAIN_FLAT, aspect: BRAIN_ASPECT },
+  { key: "research", name: "Research", src: momo("research"), aspect: 1 },
+  { key: "growth", name: "Growth", src: momo("growth"), aspect: 1 },
+  { key: "revenue", name: "Revenue", src: momo("revenue"), aspect: 1 },
+  {
+    key: "client-success",
+    name: "Client success",
+    src: momo("client-success"),
+    aspect: 1,
+  },
+  { key: "qa", name: "Release review", src: momo("qa"), aspect: 1 },
+] as const;
 
 // Staggered pin offsets for the four paper cards — deliberately uneven, never
 // a three/four-equal-card row.
@@ -198,10 +224,6 @@ function PaperLanding() {
       <div className={styles.paperIntro}>
         <ScrapbookBackdrop motion={motion} tone="cream" />
       </div>
-      <div
-        className={`${styles.paperBlueprintB} paper-torn-alt`}
-        aria-hidden="true"
-      />
 
       <div className={styles.paperShell}>
         <header className={styles.paperHeader}>
@@ -286,6 +308,40 @@ function PaperLanding() {
               </li>
             ))}
           </ul>
+
+          {/* Fills the paper right of the cards on wide screens and follows
+              them on phones. A kraft sheet, not pinned: nothing here is
+              running. */}
+          <section
+            className={`${styles.paperTeam} paper-torn-alt`}
+            aria-labelledby="paper-team-title"
+          >
+            <h2
+              className={`${styles.paperTeamTitle} m-voice-label`}
+              id="paper-team-title"
+            >
+              Your team
+            </h2>
+            <p className={`${styles.paperTeamLede} m-voice-body`}>
+              One lead plans the work and hands each part to a specialist.
+            </p>
+            <ul className={styles.paperTeamList}>
+              {TEAM.map((member) => (
+                <li className={styles.paperTeamMember} key={member.key}>
+                  <img
+                    className={styles.paperTeamArt}
+                    src={member.src}
+                    alt=""
+                    width={120}
+                    height={Math.round(120 / member.aspect)}
+                    loading="lazy"
+                    decoding="async"
+                  />
+                  <span className={styles.paperTeamName}>{member.name}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
         </main>
 
         <footer className={styles.paperFooter}>
