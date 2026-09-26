@@ -18,7 +18,7 @@ Gaps this file fills:
      read path had a regression test. An admin who loses membership must
      also lose the ability to overwrite or reset workspace branding.
   2. Invitation creation (POST /api/v1/auth/invitations) does its own
-     in-handler membership check (`_active_shared_workspace_member`)
+     in-handler membership check (`active_shared_workspace_member`)
      independent of AuthMiddleware/require_permission — it was untested
      against a revoked admin trying to invite new members into a workspace
      they no longer belong to.

@@ -69,6 +69,10 @@ _AUTH_EXEMPT_PATHS: frozenset[str] = frozenset(
         "/api/v1/auth/register",
         "/api/v1/auth/initialize",
         "/api/v1/auth/invitations/inspect",
+        # Exempt here because a brand-new recipient has no session (so no
+        # csrf_token cookie) yet. When accept acts on an existing account's
+        # session instead, the handler enforces the double-submit pair itself
+        # (routers/invitations.py::_csrf_double_submit_matches).
         "/api/v1/auth/invitations/accept",
     }
 )

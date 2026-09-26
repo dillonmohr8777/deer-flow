@@ -29,6 +29,16 @@ class OIDCProviderConfig(BaseModel):
         default=True,
         description="Automatically create a DeerFlow user on first SSO login",
     )
+    auto_create_requires_invitation: bool = Field(
+        default=False,
+        description=(
+            "Only auto-create a user on first SSO login when the provider-verified email holds a pending "
+            "workspace invitation: not consumed, not expired, in an active shared workspace, issued by a "
+            "still-active owner or admin. Without one the login gets the same 403 as auto_create_users: false. "
+            "Needs auto_create_users: true to have any effect; existing linked accounts keep signing in "
+            "after their invitation is used."
+        ),
+    )
     require_verified_email: bool = Field(
         default=True,
         description="Reject authentication if the provider does not report the email as verified",
