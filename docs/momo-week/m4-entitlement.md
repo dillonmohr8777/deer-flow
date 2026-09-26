@@ -99,22 +99,34 @@ async def evaluate_entitlement(
     rather than trusting a denormalized count.
 
     Degraded provider (DB read fails after retry, or config marks the
-    provider unavailable): return the last snapshot read within
-    `entitlements.grace_period_seconds` if one was cached this request cycle;
-    past the grace window, fail closed for every key except the ones already
+    provider unavailable): serve the last snapshot successfully read for this
+    `organization_id`, from a process-level cache keyed by `organization_id`
+    (not a per-request cache -- an outage spans many requests, and a cache
+    that only lived for one request could never make the grace period mean
+    anything). Once `entitlements.grace_period_seconds` has elapsed since
+    that cached read, fail closed for every key except the ones already
     excluded by contract §5 ("leaving export/account access available") --
     console.read stays allowed, everything else denies.
     """
 ```
 
-New decorator, same shape as `require_permission`, composed after it (RBAC
-first, entitlement second — contract §4's ordered checklist: authenticated →
-route permission → org membership → resource org match → resource rule →
-entitlement):
+New decorator, same shape as `require_permission`, composed the same way
+`require_permission` itself is used (RBAC first, entitlement second —
+contract §4's ordered checklist: authenticated → route permission → org
+membership → resource org match → resource rule → entitlement). It must
+run *after* `require_permission` has already populated `request.state.auth`,
+not after a fresh `require_auth` -- no router in this codebase uses
+`@require_auth` today, and stacking it back in would be actively wrong:
+`require_auth`'s wrapper unconditionally replaces `request.state.auth` with
+a bare `AuthContext(user=..., permissions=...)` built by `_authenticate()`,
+which carries no `organization_id`/`organization_role` (only
+`AuthMiddleware`, and `require_permission`'s own reuse-if-already-set
+`_authenticate()` call, populate those fields). Putting `require_auth` above
+`require_permission` in the decorator stack would wipe the org context right
+before the entitlement check needed it:
 
 ```python
 @router.post("/runs")
-@require_auth
 @require_permission("runs", "create")
 @require_entitlement("runs.create")
 async def create_run(request: Request): ...
@@ -123,9 +135,12 @@ async def create_run(request: Request): ...
 `require_entitlement` reads `request.state.auth.organization_id` (already
 populated by `AuthContext` — see `app/gateway/authz.py`'s
 `organization_id`/`organization_role` fields) — no new context plumbing
-needed. A request with no resolved organization (legacy personal boundary,
-contract §2) skips the entitlement check entirely until that user's private
-organization carries entitlement rows (§4).
+needed. A request with no resolved organization is **denied** (403) while
+entitlements are enabled, the same fail-closed default contract §4 already
+requires for every other check in its list ("Failure defaults closed") --
+it must not be treated as an exemption. The legacy personal boundary
+(contract §2) stays unaffected only because `entitlements.enabled` stays
+`false` until every personal org has been backfilled (§4).
 
 A limit key (`projects.max`, `workflows.max`, `brands.max`) cannot be a bare
 decorator, since it needs the attempted count from the request body. Those
@@ -200,17 +215,22 @@ Per QUEUE.md e6: "tests for allowed, denied and missing entitlement on at
 least 3 paid mutations." Concretely:
 
 - `runs:create` (gate key) — active row → 2xx; `status="suspended"` row →
-  403; no row at all → 403 (missing = denied, not allow-by-default).
-- `agents:manage` (gate key) — same three cases.
+  403; no row at all → 403 (missing = denied, not allow-by-default); with
+  entitlements enabled, a request whose `organization_id` never resolved
+  (no active membership) → 403, not a silent skip.
+- `agents:manage` (gate key) — same four cases.
 - `projects.max` (limit key) — under limit → 2xx; at limit → 403 with a
   distinguishable error body (`entitlement_exceeded`, not a generic 403) so
   the frontend can show "upgrade" copy instead of a bare permission error;
   missing limit row → treated as limit `0` → 403.
-- Degraded-provider path: force the DB lookup to raise, assert the cached
-  snapshot is served inside the grace window and a hard 403 (except
-  `console.read`) once the window elapses — mirrors contract §5's
-  "provider outages preserve the last verified entitlement snapshot for a
-  bounded... grace period, then fail closed."
+- Degraded-provider path: force the DB lookup to raise across *multiple*
+  requests (not just one call within a single request) to prove the
+  process-level cache (§3), not a per-request one, is what serves the grace
+  window; assert the cached snapshot is served for
+  `entitlements.grace_period_seconds` after the last successful read and a
+  hard 403 (except `console.read`) once that window elapses — mirrors
+  contract §5's "provider outages preserve the last verified entitlement
+  snapshot for a bounded... grace period, then fail closed."
 - Snapshot endpoint returns the same `allowed`/`limit`/`used` values the
   route-level evaluator used in the same test run (no drift between display
   and enforcement).
