@@ -253,3 +253,47 @@ async def test_non_owner_cannot_approve_or_reply(org_world):  # noqa: F811
 
         events, _ = await audit_repo.list(organization_id=ORG_S, action_prefix="board.thread.approve")
         assert any(e["outcome"] == "denied" and e["actor_user_id"] == USER_D for e in events)
+
+
+async def test_client_member_never_sees_unapproved_momo_draft(org_world):  # noqa: F811
+    """e3: a client contact sees a thread's status but never Momo's unapproved draft."""
+    session_factory = org_world
+    app = _build_app(session_factory)
+    headers_a = auth_headers(USER_A, ORG_S)  # owner
+
+    await _add_plain_member(session_factory, USER_D, ORG_S)
+    headers_d = auth_headers(USER_D, ORG_S)
+
+    async with _client(app) as client:
+        client1 = await _create_client(client, headers_a, "Client One")
+        assign = await client.post(f"/api/clients/{client1['id']}/assignments", json={"user_id": USER_D, "role": "client_contact"}, headers=headers_a)
+        assert assign.status_code == 201
+
+        thread = (await client.post("/api/board/threads", json={"client_id": client1["id"], "subject": "T1"}, headers=headers_d)).json()
+        tid = thread["id"]
+
+        # D can see its own client's post through to a real thread.
+        seen = await client.get(f"/api/board/threads/{tid}", headers=headers_d)
+        assert seen.status_code == 200
+        assert seen.json()["status"] == "new"
+
+        drafted = await client.post(f"/api/board/threads/{tid}/draft", json={"body": "Here's a fix for that."}, headers=headers_a)
+        assert drafted.status_code == 200
+        assert drafted.json()["status"] == "drafted"
+
+        # D sees the status change but not the unapproved draft's content.
+        d_messages = (await client.get(f"/api/board/threads/{tid}/messages", headers=headers_d)).json()["messages"]
+        assert all(m["author_kind"] != "momo" for m in d_messages)
+        d_status = await client.get(f"/api/board/threads/{tid}", headers=headers_d)
+        assert d_status.json()["status"] == "drafted"
+
+        # An owner/admin still sees the draft while it's unapproved.
+        a_messages = (await client.get(f"/api/board/threads/{tid}/messages", headers=headers_a)).json()["messages"]
+        assert any(m["author_kind"] == "momo" and m["body"] == "Here's a fix for that." for m in a_messages)
+
+        approved = await client.post(f"/api/board/threads/{tid}/approve", headers=headers_a)
+        assert approved.status_code == 200
+
+        # Once approved, the reply is no longer a hidden draft -- D sees it too.
+        d_messages_after = (await client.get(f"/api/board/threads/{tid}/messages", headers=headers_d)).json()["messages"]
+        assert any(m["author_kind"] == "momo" and m["body"] == "Here's a fix for that." for m in d_messages_after)

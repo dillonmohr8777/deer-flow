@@ -221,9 +221,15 @@ async def list_board_messages(thread_id: str, request: Request) -> BoardMessageL
     if row is None:
         raise _not_found()
     user = await get_current_user_from_request(request)
+    user_id = str(user.id)
     if row.get("client_id") is not None:
-        await _require_client_access(client_repo, row["client_id"], str(user.id))
+        await _require_client_access(client_repo, row["client_id"], user_id)
     messages = await board_repo.list_messages(thread_id) or []
+    # While a thread sits in ``drafted``, its momo message is Momo's
+    # unreviewed draft -- only an org owner/admin sees it. It becomes visible
+    # to everyone else once the status moves past ``drafted`` (approved).
+    if row["status"] == "drafted" and not await _is_active_org_admin(user_id):
+        messages = [m for m in messages if m["author_kind"] != "momo"]
     return BoardMessageListResponse(messages=[_to_message_response(m) for m in messages])
 
 
