@@ -4,11 +4,12 @@ from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 import jwt
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from app.gateway.auth.config import get_auth_config
 from app.gateway.auth.errors import TokenError
 
+ACCESS_TOKEN_TYPE = "access"
 MFA_CHALLENGE_TYPE = "mfa_challenge"
 MFA_CHALLENGE_TTL = timedelta(minutes=5)
 
@@ -37,7 +38,7 @@ def create_access_token(user_id: str, expires_delta: timedelta | None = None, to
     expiry = expires_delta or timedelta(days=config.token_expiry_days)
 
     now = datetime.now(UTC)
-    payload = {"sub": user_id, "exp": now + expiry, "iat": now, "ver": token_version}
+    payload = {"sub": user_id, "exp": now + expiry, "iat": now, "ver": token_version, "typ": ACCESS_TOKEN_TYPE}
     return jwt.encode(payload, config.jwt_secret, algorithm="HS256")
 
 
@@ -50,7 +51,20 @@ def decode_token(token: str) -> TokenPayload | TokenError:
     config = get_auth_config()
     try:
         payload = jwt.decode(token, config.jwt_secret, algorithms=["HS256"])
+        # Every token this module signs shares one secret, so the type claim
+        # is what keeps them apart. An MFA challenge (issued after the
+        # password, before the TOTP code) carries ``typ: mfa_challenge`` and
+        # would otherwise decode as a session with ver=0, skipping MFA.
+        # Access tokens minted before ``typ`` existed have no claim and stay
+        # valid; anything that declares another type is refused.
+        token_type = payload.get("typ")
+        if token_type is not None and token_type != ACCESS_TOKEN_TYPE:
+            return TokenError.MALFORMED
         return TokenPayload(**payload)
+    except ValidationError:
+        # Signed by us but not shaped like a session (e.g. an OIDC state
+        # cookie): refuse it cleanly instead of raising into the request.
+        return TokenError.MALFORMED
     except jwt.ExpiredSignatureError:
         return TokenError.EXPIRED
     except jwt.InvalidSignatureError:
