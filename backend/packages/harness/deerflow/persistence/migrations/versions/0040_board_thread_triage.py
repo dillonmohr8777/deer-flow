@@ -7,8 +7,12 @@ Momo Board item e2: persists b3's triage classification (urgency, a
 one-sentence summary) on the thread itself instead of discarding it, so
 owner alerts (e4) and the concierge loop (e5) have something to read. Both
 columns are nullable: a thread created before this migration, or one whose
-triage call failed in a way that skipped the patch entirely, simply has no
-recorded triage yet.
+triage call fell back to a safe default (model failure, timeout, or an
+unparseable response) rather than a real classification, is never patched
+at all and simply has no recorded triage yet -- see
+``deerflow.board.triage.BoardThreadTriage.fallback`` and its router-side
+check in ``app.gateway.routers.board.create_board_thread``, which exists
+precisely so a fallback result never gets stored as if it were real.
 """
 
 from __future__ import annotations

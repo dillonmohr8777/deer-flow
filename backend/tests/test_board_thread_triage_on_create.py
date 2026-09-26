@@ -8,6 +8,7 @@ Mirrors ``test_board_triage.py``'s fake-model monkeypatch pattern (mocks
 
 from __future__ import annotations
 
+import asyncio
 from types import SimpleNamespace
 
 import httpx
@@ -82,8 +83,11 @@ async def test_thread_creation_persists_triage_classification(org_world, monkeyp
 
 
 async def test_thread_creation_falls_back_when_model_call_fails(org_world, monkeypatch):  # noqa: F811
-    """A model failure never blocks creation -- the thread still lands with
-    ``triage_board_thread``'s own safe-default classification."""
+    """A model failure never blocks creation -- but a fallback classification
+    must never be persisted as if it were real (review finding on PR #53):
+    the thread stays ``new`` with no urgency/summary, so something can
+    retrigger triage on it later instead of it silently reading as
+    "normal"."""
 
     config = SimpleNamespace()
 
@@ -107,9 +111,9 @@ async def test_thread_creation_falls_back_when_model_call_fails(org_world, monke
         assert created.status_code == 201, created.text
         thread = created.json()
 
-        assert thread["status"] == "triaged"
-        assert thread["urgency"] == "normal"
-        assert thread["summary"] == "Broken widget"
+        assert thread["status"] == "new"
+        assert thread["urgency"] is None
+        assert thread["summary"] is None
 
 
 async def test_thread_creation_survives_triage_itself_raising(org_world, monkeypatch):  # noqa: F811
@@ -131,6 +135,41 @@ async def test_thread_creation_survives_triage_itself_raising(org_world, monkeyp
             "/api/board/threads",
             json={"client_id": client_row["id"], "kind": "ticket", "subject": "Broken widget"},
             headers=headers_a,
+        )
+        assert created.status_code == 201, created.text
+        thread = created.json()
+
+        assert thread["status"] == "new"
+        assert thread["urgency"] is None
+        assert thread["summary"] is None
+
+
+async def test_thread_creation_falls_back_when_model_call_hangs(org_world, monkeypatch):  # noqa: F811
+    """A model call that never returns must not hang thread creation."""
+
+    config = SimpleNamespace()
+
+    class HangingModel:
+        async def ainvoke(self, *args, **kwargs):
+            await asyncio.sleep(10)
+            raise AssertionError("should have been cancelled by the timeout")
+
+    monkeypatch.setattr("deerflow.board.triage.get_app_config", lambda: config)
+    monkeypatch.setattr("deerflow.board.triage.create_chat_model", lambda **kwargs: HangingModel())
+    monkeypatch.setattr("app.gateway.routers.board._TRIAGE_TIMEOUT_SECONDS", 0.05)
+
+    app = _build_app(org_world)
+    headers_a = auth_headers(USER_A, ORG_S)
+
+    async with _client(app) as client:
+        client_row = (await client.post("/api/clients", json={"display_name": "Acme"}, headers=headers_a)).json()
+        created = await asyncio.wait_for(
+            client.post(
+                "/api/board/threads",
+                json={"client_id": client_row["id"], "kind": "ticket", "subject": "Broken widget"},
+                headers=headers_a,
+            ),
+            timeout=5,
         )
         assert created.status_code == 201, created.text
         thread = created.json()
