@@ -34,7 +34,12 @@ function routeFetch(
   overrides: Partial<Record<string, () => Response | Promise<Response>>>,
 ) {
   return async (input: RequestInfo | URL) => {
-    const url = typeof input === "string" ? input : input.toString();
+    const url =
+      typeof input === "string"
+        ? input
+        : input instanceof URL
+          ? input.toString()
+          : input.url;
     if (url.includes("/api/v1/auth/providers")) {
       return jsonResponse({ providers: [] });
     }
