@@ -14,11 +14,13 @@
  * deckle-edged ink disc, and the seed only chooses between hand-drawn marks that
  * are each composed on purpose. Callers with a real name pass `initial` and get
  * a monogram, which beats any abstract mark for telling two agents apart.
+ *
+ * No brass pin: gold on an agent's mark belongs to Momo's antenna, and a pin
+ * means working (DESIGN.md), which a resting identity never is.
  */
 
 const INK = "#101e3f";
 const CREAM = "#fbf8f1";
-const BRASS = "#c8a04a";
 
 /**
  * The torn-paper disc every glyph is cut from. Agents with shipped art render
@@ -89,12 +91,7 @@ export function MomentumGlyph({
   const hash = hashSeed(seed);
   const markIndex = hash % MARKS.length;
   const monogram = monogramOf(initial);
-  // Four resting angles rather than twelve free ones: enough to tell two discs
-  // apart, never enough to look knocked over.
-  const pinAngle = [-34, -14, 14, 34][(hash >>> 8) % 4]!;
-  const pinX = 24 + Math.sin((pinAngle * Math.PI) / 180) * 17.4;
-  const pinY = 24 - Math.cos((pinAngle * Math.PI) / 180) * 17.4;
-  const signature = `${monogram ?? markIndex}-${pinAngle}`;
+  const signature = `${monogram ?? markIndex}`;
 
   return (
     <svg
@@ -126,18 +123,6 @@ export function MomentumGlyph({
       ) : (
         <path d={MARKS[markIndex]} {...STROKE} />
       )}
-      {size > 48 ? (
-        <>
-          <circle cx={pinX} cy={pinY} r="2.5" fill={BRASS} />
-          <circle
-            cx={pinX - 0.7}
-            cy={pinY - 0.8}
-            r="0.8"
-            fill={CREAM}
-            opacity="0.55"
-          />
-        </>
-      ) : null}
     </svg>
   );
 }

@@ -228,6 +228,7 @@ Use the shared components in `components/workspace/page-body.tsx`. Do not write 
 - **No neon glow**, no glassmorphism or decorative blur, and no floating gradient orbs.
 - **No three equal cards in a feature row.** No generic same-size card grids for the agent team.
 - **No emoji or platform pictograms as identity.** Agents use canon Momo art or the deterministic `MomentumGlyph`.
+- **One avatar per agent, everywhere.** Every place that names an agent draws it through `MomoAvatar`: the Command Center team, the Agents roster, the agent chat header and its welcome. A generic robot icon never stands in for an agent. Gold on an agent is the antenna ball and nothing else; tools and rivets are grey, and the glyph carries no pin.
 - **No gradient text**, and no coloured left-border stripes on cards or alerts.
 - **No decorative motion or fake progress.** No glow on resting content.
 - **No new hex values.** If a colour is missing, it belongs in paper.css with a measured ratio and a test.

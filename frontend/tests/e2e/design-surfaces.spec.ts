@@ -605,6 +605,13 @@ const SIGNED_IN: Surface[] = [
     scrolls: 1,
   },
   { name: "agents", path: "/workspace/agents" },
+  // The same agents opened for a chat: the header badge and welcome must
+  // carry the avatar the roster and Command Center show.
+  { name: "agent-chat", path: "/workspace/agents/dillon-brain/chats/new" },
+  {
+    name: "agent-chat-custom",
+    path: "/workspace/agents/omega-reporting/chats/new",
+  },
   {
     name: "agent-settings",
     path: "/workspace/agents",
