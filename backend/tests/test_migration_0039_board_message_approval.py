@@ -7,11 +7,26 @@ import asyncio
 import pytest
 import sqlalchemy as sa
 from alembic import command
+from alembic.script import ScriptDirectory
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from deerflow.persistence.bootstrap import _get_alembic_config
+from deerflow.persistence.bootstrap import _MIGRATIONS_DIR, _get_alembic_config
 
 pytestmark = pytest.mark.asyncio
+
+
+async def test_0039_chains_into_the_single_head():
+    """Guards against a repeat of the #38/#41 collision: two branches independently
+
+    adding their own next revision after ``0038_board_threads`` (each PR here
+    branches from ``lane/momo-week`` in isolation, so nothing merges this week --
+    see the migration's docstring). Whichever PR's migration lands second must
+    rename its file and re-chain ``down_revision`` onto the other's revision id,
+    exactly like the ``0023``/``0025``/``0026`` precedents in this same
+    directory; this test fails loudly the moment that hasn't happened yet.
+    """
+    script = ScriptDirectory(str(_MIGRATIONS_DIR))
+    assert len(script.get_heads()) == 1
 
 
 async def test_0039_adds_approved_at_column(tmp_path):
