@@ -79,6 +79,10 @@ async def test_board_thread_crud_and_messages(org_world):  # noqa: F811
         created = await client.post("/api/board/threads", json={"client_id": cid, "kind": "ticket", "subject": "Broken widget"}, headers=headers_a)
         assert created.status_code == 201, created.text
         thread = created.json()
+        # e2: creation runs triage, but no model is configured in this suite,
+        # so it falls back and the thread is left `new`/unclassified rather
+        # than persisting a fake "normal" -- see
+        # test_board_thread_triage_on_create.py for the mocked-model cases.
         assert thread["status"] == "new"
         assert thread["kind"] == "ticket"
         tid = thread["id"]
@@ -177,7 +181,7 @@ async def test_draft_approve_reply_lifecycle(org_world):  # noqa: F811
         acme = await _create_client(client, headers_a, "Acme")
         thread = (await client.post("/api/board/threads", json={"client_id": acme["id"], "subject": "T"}, headers=headers_a)).json()
         tid = thread["id"]
-        assert thread["status"] == "new"
+        assert thread["status"] == "new"  # e2: creation runs triage, but falls back (no model configured) and leaves the thread new
 
         # Reply and approve are both unreachable before a draft exists.
         assert (await client.post(f"/api/board/threads/{tid}/approve", headers=headers_a)).status_code == 409
