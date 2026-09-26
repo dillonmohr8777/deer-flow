@@ -39,3 +39,25 @@ export async function listClients(): Promise<Client[]> {
   const body = (await response.json()) as ClientListResponse;
   return body.clients;
 }
+
+/**
+ * ``GET /api/clients/mine`` -- only the clients the caller is assigned to.
+ * An org owner/admin sees every client through {@link listClients}; a plain
+ * member or client contact must use this instead so a client-scoped picker
+ * (e.g. "start a thread for...") never leaks the full client roster to them.
+ */
+export async function listMyClients(): Promise<Client[]> {
+  const response = await fetchWithAuth(
+    `${getBackendBaseURL()}/api/clients/mine`,
+    { method: "GET" },
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      await readClientAPIError(response, "Failed to load your clients."),
+    );
+  }
+
+  const body = (await response.json()) as ClientListResponse;
+  return body.clients;
+}

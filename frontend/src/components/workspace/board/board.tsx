@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -24,16 +25,19 @@ import {
   useBoardMessages,
   useBoardThread,
   useBoardThreads,
+  useCreateBoardThread,
   useDraftBoardReply,
   useSendBoardReply,
+  type BoardThreadKind,
   type BoardThreadStatus,
 } from "@/core/board";
-import { useClients } from "@/core/clients";
+import { useClients, useMyClients } from "@/core/clients";
 import { useDeskEnabled } from "@/core/features";
 import { cn } from "@/lib/utils";
 
 import {
   KIND_LABEL,
+  KIND_OPTIONS,
   STATUS_FILTERS,
   STATUS_LABEL,
   canApprove,
@@ -76,11 +80,12 @@ export function Board() {
   );
 }
 
-function BoardBody() {
+export function BoardBody() {
   const [statusFilter, setStatusFilter] = useState<BoardThreadStatus | "all">(
     "all",
   );
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
   const threads = useBoardThreads(
     statusFilter === "all" ? undefined : { status: statusFilter },
   );
@@ -99,21 +104,46 @@ function BoardBody() {
   );
 
   useEffect(() => {
-    if (selectedId && !sorted.some((t) => t.id === selectedId)) {
+    // Skip while a fetch is in flight: a just-created thread's list refetch
+    // (invalidated by useCreateBoardThread's onSuccess) briefly still holds
+    // the pre-create list, and clearing selectedId on that stale snapshot
+    // would drop the very thread the caller just started and selected.
+    if (
+      selectedId &&
+      !threads.isFetching &&
+      !sorted.some((t) => t.id === selectedId)
+    ) {
       setSelectedId(null);
     }
-  }, [selectedId, sorted]);
+  }, [selectedId, sorted, threads.isFetching]);
 
   return (
     <div className={styles.frame} data-testid="board">
-      <header>
-        <p className={pageStyles.eyebrow}>Momo Board</p>
-        <h1 className="mt-1">Board</h1>
-        <p className={cn(pageStyles.lede, "mt-1")}>
-          Every client post, ticket, concern and DM, with Momo&apos;s drafts
-          waiting on your review.
-        </p>
+      <header className={styles.pageHead}>
+        <div>
+          <p className={pageStyles.eyebrow}>Momo Board</p>
+          <h1 className="mt-1">Board</h1>
+          <p className={cn(pageStyles.lede, "mt-1")}>
+            Every client post, ticket, concern and DM, with Momo&apos;s drafts
+            waiting on your review.
+          </p>
+        </div>
+        <Button
+          variant={showCreate ? "outline" : "default"}
+          onClick={() => setShowCreate((v) => !v)}
+        >
+          {showCreate ? "Cancel" : "New thread"}
+        </Button>
       </header>
+      {showCreate ? (
+        <NewThreadForm
+          onCreated={(id) => {
+            setSelectedId(id);
+            setShowCreate(false);
+          }}
+          onCancel={() => setShowCreate(false)}
+        />
+      ) : null}
       <FilterGroup
         label="Status"
         showLabel
@@ -182,6 +212,120 @@ function BoardBody() {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Start a post, ticket, concern or DM. The client picker is scoped to the
+ * caller's own clients (``/api/clients/mine``): a client contact starting a
+ * thread never sees the rest of the org's client roster to do it.
+ */
+function NewThreadForm({
+  onCreated,
+  onCancel,
+}: {
+  onCreated: (threadId: string) => void;
+  onCancel: () => void;
+}) {
+  const myClients = useMyClients();
+  const createMutation = useCreateBoardThread();
+
+  const options = useMemo(() => myClients.data ?? [], [myClients.data]);
+  const [clientId, setClientId] = useState("");
+  const [kind, setKind] = useState<BoardThreadKind>("post");
+  const [subject, setSubject] = useState("");
+
+  useEffect(() => {
+    if (!clientId && options.length > 0) {
+      setClientId(options[0]!.id);
+    }
+  }, [clientId, options]);
+
+  return (
+    <div className={styles.actionPanel} aria-label="New thread">
+      {myClients.isLoading ? (
+        <WorkingState label="Loading your clients" />
+      ) : options.length === 0 ? (
+        <p className={styles.muted}>
+          You aren&apos;t assigned to any client yet, so there&apos;s nowhere to
+          start a thread.
+        </p>
+      ) : (
+        <>
+          <div className={styles.formRow}>
+            <label htmlFor="board-new-client" className={pageStyles.eyebrow}>
+              Client
+            </label>
+            <select
+              id="board-new-client"
+              className={styles.select}
+              value={clientId}
+              onChange={(event) => setClientId(event.target.value)}
+            >
+              {options.map((client) => (
+                <option key={client.id} value={client.id}>
+                  {client.display_name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className={styles.formRow}>
+            <label htmlFor="board-new-kind" className={pageStyles.eyebrow}>
+              Kind
+            </label>
+            <select
+              id="board-new-kind"
+              className={styles.select}
+              value={kind}
+              onChange={(event) =>
+                setKind(event.target.value as BoardThreadKind)
+              }
+            >
+              {KIND_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className={styles.formRow}>
+            <label htmlFor="board-new-subject" className={pageStyles.eyebrow}>
+              Subject
+            </label>
+            <Input
+              id="board-new-subject"
+              value={subject}
+              onChange={(event) => setSubject(event.target.value)}
+              placeholder="What's this about?"
+            />
+          </div>
+          {createMutation.isError ? (
+            <p className={styles.errorText}>{createMutation.error.message}</p>
+          ) : null}
+          <div className={styles.formActions}>
+            <Button
+              variant="outline"
+              type="button"
+              onClick={onCancel}
+              disabled={createMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              disabled={!clientId || createMutation.isPending}
+              onClick={() =>
+                createMutation.mutate(
+                  { clientId, kind, subject },
+                  { onSuccess: (thread) => onCreated(thread.id) },
+                )
+              }
+            >
+              {createMutation.isPending ? "Starting..." : "Start thread"}
+            </Button>
+          </div>
+        </>
+      )}
     </div>
   );
 }

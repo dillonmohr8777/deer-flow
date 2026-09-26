@@ -23,6 +23,16 @@ export const KIND_LABEL: Record<BoardThreadKind, string> = {
   dm: "DM",
 };
 
+export const KIND_OPTIONS: ReadonlyArray<{
+  value: BoardThreadKind;
+  label: string;
+}> = [
+  { value: "post", label: KIND_LABEL.post },
+  { value: "ticket", label: KIND_LABEL.ticket },
+  { value: "concern", label: KIND_LABEL.concern },
+  { value: "dm", label: KIND_LABEL.dm },
+];
+
 export const STATUS_FILTERS: ReadonlyArray<{
   value: BoardThreadStatus | "all";
   label: string;

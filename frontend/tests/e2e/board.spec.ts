@@ -47,12 +47,34 @@ function thread(id: string, patch: Partial<Thread> = {}): Thread {
 
 async function mockBoard(
   page: Page,
-  { desk = true, threads = [] }: { desk?: boolean; threads?: Thread[] } = {},
+  {
+    desk = true,
+    threads = [],
+    myClients,
+    hideUnapprovedDraft = false,
+    initialMessages = {},
+  }: {
+    desk?: boolean;
+    threads?: Thread[];
+    /** Clients the create-thread picker offers. Defaults to just Acme. */
+    myClients?: { id: string; display_name: string }[];
+    /**
+     * Mirrors the backend's per-caller filter on
+     * ``GET .../messages``: a client contact never sees a ``momo`` message
+     * while the thread is ``drafted``, only once it's approved. An owner/
+     * admin caller leaves this false and sees the draft immediately.
+     */
+    hideUnapprovedDraft?: boolean;
+    /** Seeded message history, keyed by thread id. */
+    initialMessages?: Record<string, Message[]>;
+  } = {},
 ) {
   mockLangGraphAPI(page, { scheduledTasks: [] });
 
   const state = new Map<string, Thread>(threads.map((t) => [t.id, t]));
-  const messages = new Map<string, Message[]>();
+  const messages = new Map<string, Message[]>(
+    Object.entries(initialMessages).map(([id, list]) => [id, [...list]]),
+  );
   let nextMessageId = 1;
 
   await page.route("**/api/features", (route) =>
@@ -60,30 +82,53 @@ async function mockBoard(
       json({ agents_api: { enabled: true }, desk: { enabled: desk } }),
     ),
   );
+  const clientRow = (id: string, display_name: string) => ({
+    id,
+    display_name,
+    aliases: [],
+    status: "active",
+    email_domains: [],
+    slack_channel_ids: [],
+    registry_id: null,
+    notes: "",
+    created_at: at(-200),
+    updated_at: at(-200),
+    assignments: [],
+    project_count: 0,
+  });
+
   await page.route("**/api/clients", (route) =>
+    route.fulfill(json({ clients: [clientRow("acme", "Acme Landscaping")] })),
+  );
+  await page.route("**/api/clients/mine", (route) =>
     route.fulfill(
       json({
-        clients: [
-          {
-            id: "acme",
-            display_name: "Acme Landscaping",
-            aliases: [],
-            status: "active",
-            email_domains: [],
-            slack_channel_ids: [],
-            registry_id: null,
-            notes: "",
-            created_at: at(-200),
-            updated_at: at(-200),
-            assignments: [],
-            project_count: 0,
-          },
-        ],
+        clients: (
+          myClients ?? [{ id: "acme", display_name: "Acme Landscaping" }]
+        ).map((c) => clientRow(c.id, c.display_name)),
       }),
     ),
   );
 
+  let nextThreadId = threads.length + 1;
+
   await page.route("**/api/board/threads", async (route: Route) => {
+    if (route.request().method() === "POST") {
+      const body = route.request().postDataJSON() as {
+        client_id: string;
+        kind: string;
+        subject: string;
+      };
+      const row = thread(`t${nextThreadId++}`, {
+        client_id: body.client_id,
+        kind: body.kind,
+        subject: body.subject,
+        status: "new",
+      });
+      state.set(row.id, row);
+      await route.fulfill({ ...json(row), status: 201 });
+      return;
+    }
     if (route.request().method() !== "GET") return route.fallback();
     const url = new URL(route.request().url());
     const status = url.searchParams.get("status");
@@ -104,7 +149,11 @@ async function mockBoard(
     /\/api\/board\/threads\/([^/]+)\/messages$/,
     async (route: Route) => {
       const id = /threads\/([^/]+)\/messages/.exec(route.request().url())![1]!;
-      await route.fulfill(json({ messages: messages.get(id) ?? [] }));
+      let list = messages.get(id) ?? [];
+      if (hideUnapprovedDraft && state.get(id)?.status === "drafted") {
+        list = list.filter((m) => m.author_kind !== "momo");
+      }
+      await route.fulfill(json({ messages: list }));
     },
   );
 
@@ -215,6 +264,93 @@ test.describe("Board, the Momo Board thread queue", () => {
     ).toBeVisible({ timeout: 15_000 });
     await expect(
       page.locator("[data-sidebar='sidebar'] a[href='/workspace/board']"),
+    ).toBeVisible();
+  });
+
+  test("a client member can start a thread for their own client", async ({
+    page,
+  }) => {
+    // A client contact assigned to Widget Co, a client that never appears
+    // on the org's full "**/api/clients" roster in this fixture -- if the
+    // picker ever fell back to that endpoint, this would show "Acme
+    // Landscaping" instead and the assertion below would catch it.
+    await mockBoard(page, {
+      threads: [],
+      myClients: [{ id: "widget-co", display_name: "Widget Co" }],
+    });
+    await page.goto("/workspace/board");
+
+    const board = page.getByTestId("board");
+    await expect(
+      board.getByRole("heading", { level: 1, name: "Board" }),
+    ).toBeVisible({ timeout: 15_000 });
+
+    await board.getByRole("button", { name: "New thread" }).click();
+    const clientSelect = board.getByLabel("Client");
+    await expect(clientSelect).toBeVisible();
+    // The picker is scoped to the caller's own clients (``/api/clients/mine``),
+    // never the full org roster.
+    await expect(clientSelect.locator("option")).toHaveText(["Widget Co"]);
+
+    await board.getByLabel("Kind").selectOption("concern");
+    await board.getByLabel("Subject").fill("Can we adjust the invoice?");
+    await board.getByRole("button", { name: "Start thread" }).click();
+
+    // Creating closes the form and selects the new thread.
+    await expect(
+      board.getByRole("button", { name: "Start thread" }),
+    ).toHaveCount(0);
+    const detail = page.getByTestId("board-thread");
+    await expect(detail.getByText("Can we adjust the invoice?")).toBeVisible();
+    await expect(detail.getByText("New")).toBeVisible();
+  });
+
+  test("a client member sees a thread's status but never Momo's unapproved draft", async ({
+    page,
+  }) => {
+    await mockBoard(page, {
+      threads: [
+        thread("t1", {
+          subject: "Site is down",
+          kind: "ticket",
+          status: "drafted",
+        }),
+      ],
+      initialMessages: {
+        t1: [
+          {
+            id: "msg-1",
+            thread_id: "t1",
+            author_kind: "momo",
+            author_user_id: null,
+            body: "We're on it, restoring the site now.",
+            created_at: at(-2),
+          },
+        ],
+      },
+      hideUnapprovedDraft: true,
+    });
+    await page.goto("/workspace/board");
+
+    const board = page.getByTestId("board");
+    await expect(board.getByText("Site is down")).toBeVisible({
+      timeout: 15_000,
+    });
+    await board.getByText("Site is down").click();
+
+    const detail = page.getByTestId("board-thread");
+    await expect(detail.getByText("Drafted")).toBeVisible();
+    // The status is visible, but Momo's still-unapproved draft body is not.
+    await expect(
+      detail.getByText("We're on it, restoring the site now."),
+    ).toHaveCount(0);
+
+    await detail.getByRole("button", { name: "Approve" }).click();
+    await expect(detail.getByText("Approved", { exact: true })).toBeVisible();
+    // Once approved, it's the reply, not a hidden draft -- now visible (the
+    // message body and the reply-editor prefill both carry the same text).
+    await expect(
+      detail.getByText("We're on it, restoring the site now.").first(),
     ).toBeVisible();
   });
 });
