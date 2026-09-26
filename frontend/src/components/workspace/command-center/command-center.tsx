@@ -44,6 +44,7 @@ import { pathOfThread } from "@/core/threads/utils";
 import { formatCompactStamp } from "@/core/utils/datetime";
 import { useIsMobile } from "@/hooks/use-mobile";
 
+import { agentLives } from "./agent-life";
 import { AgentTopology } from "./agent-topology";
 import { useWorkspaceAppearance } from "./appearance-provider";
 import {
@@ -260,6 +261,13 @@ export function CommandCenter() {
       .filter((run) => active(run.status))
       .map((run) => run.assistant_id)
       .filter((name): name is string => Boolean(name)) ?? null;
+  const lives = activityRuns.data
+    ? agentLives(
+        activityRuns.data.runs,
+        ["dillon-brain", ...roster.map((agent) => agent.name)],
+        activityRuns.data.has_more,
+      )
+    : null;
   // Same guard as AgentTopology's leadActive: an unknown live state must
   // never read as the lead working.
   const heroBrainActive =
@@ -406,9 +414,7 @@ export function CommandCenter() {
                       {modelName(run.model_name) || "Model not recorded"}
                     </span>{" "}
                     <span aria-hidden="true">·</span>{" "}
-                    <span className={styles.metaTokens}>
-                      {runTokens(run)}
-                    </span>
+                    <span className={styles.metaTokens}>{runTokens(run)}</span>
                   </small>
                 </span>
                 <Status status={run.status} />
@@ -464,6 +470,7 @@ export function CommandCenter() {
         error={Boolean(agentsError)}
         runtimeKnown={canReadRuns && activityRuns.isSuccess}
         activeAgentNames={activeAgentNames}
+        lives={lives}
         onSelect={setSelectedAgentName}
       />
       {selectedAgent ? (

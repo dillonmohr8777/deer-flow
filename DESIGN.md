@@ -157,7 +157,7 @@ Row titles stay Nunito Sans. Fraunces is for headings, never labels, buttons or 
 
 ## Motion
 
-Paper motion is a closed list of six items (items 1 to 5 in `@layer paper-motion`, item 6 in `momobot.module.css`):
+Paper motion is a closed list of seven items (items 1 to 5 and 7 in `@layer paper-motion`, item 6 in `momobot.module.css`):
 
 1. Front-door letters settle in 380ms, with a 40ms stagger.
 2. Invite release: the pin lifts and the sheet slides away in 420ms.
@@ -165,8 +165,9 @@ Paper motion is a closed list of six items (items 1 to 5 in `@layer paper-motion
 4. Cards lift 2px on hover over 140ms.
 5. The brand signature drifts.
 6. Front-door Momo bounces: on `/` and `/login` a Momo film on a cream photo floats 26px and tilts in 3D (rotateX and rotateY) over 2.6s above a ground shadow that shrinks as it rises (`bouncing-momo.tsx`). Transform and opacity only. Approved by Dillon, 2026-09-24.
+7. Agents alive: each agent's avatar shows its recorded run state (`agent-alive.tsx`, states from `agent-life.ts` over the console runs). Idle: still. Thinking (a pending run): a slow paper tilt. Running: pinned, swaying 2deg from the pin. Done: a dated ink stamp that lands once, only when the view saw the run finish. Failed: a torn, folded corner, no motion. An interrupted run is idle, not failed; an agent with no run in a truncated history page reads "No recent run", never idle. The stamp never replays on a tab switch or motion toggle. The words beside the avatar always say the state too. Transform and opacity only. Approved by Dillon, 2026-09-24.
 
-Items 1, 2 and 5 need both `prefers-reduced-motion: no-preference` and the user's brand-motion setting, which is **off by default**. Item 6 follows the front door's own switch (`useIntroMotion().live`: reduced motion, tab visibility and the Pause motion control). Reduced motion turns every item off, not down; Momo then stands still, slightly tilted, on the film's poster. Nothing moves to fake activity.
+Items 1, 2, 5 and 7 need both `prefers-reduced-motion: no-preference` and the user's brand-motion setting, which is **off by default**. Item 6 follows the front door's own switch (`useIntroMotion().live`: reduced motion, tab visibility and the Pause motion control). Reduced motion turns every item off, not down; Momo then stands still, slightly tilted, on the film's poster. Nothing moves to fake activity.
 
 ## Layout
 

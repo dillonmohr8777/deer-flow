@@ -448,17 +448,19 @@
   border-color: var(--strong);
   color: var(--paper-ink);
 }
-/* Specialists are cards on the board. A brass pin (paper.css's .pinned)
-   means working, so only a specialist with an active run wears one; it
-   pierces the top edge, so no card keeps room for a pin it may never get. */
+/* Specialists are cards on the board. The run state lives on the avatar
+   (agent-alive.tsx): a running agent's Momo is pinned there, so no card
+   keeps room for a pin it may never get. */
 .root[data-treatment="paper"] .agent {
   border-color: var(--strong);
   border-radius: 2px;
 }
-.agent:global(.pinned)::before {
-  top: -7px;
-  left: 50%;
-  transform: translateX(-50%);
+/* A failed last run is the one state worded in colour: danger, a real
+   failure. Done stays ink; a finished run is not a verified one. */
+.root[data-treatment="paper"]
+  :is(.agentState, .topologyLead div)
+  [data-life="failed"] {
+  color: var(--danger);
 }
 /* Pinned-board placement, not a spreadsheet: columns sit at uneven heights,
    as the landing staggers its cards. `translate` composes with paper.css's

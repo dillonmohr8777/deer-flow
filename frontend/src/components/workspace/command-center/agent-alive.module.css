@@ -1,0 +1,131 @@
+/* The layout half of Motion item 7. The motion itself lives in paper.css's
+   paper-motion layer, gated with items 1, 2 and 5. */
+/* Size comes from the caller's class (the 160px lead, the 56px card). */
+.alive {
+  position: relative;
+  display: grid;
+}
+
+.art {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  transform-origin: 50% 100%;
+}
+
+.art > span,
+.art :is(img, svg) {
+  width: 100%;
+  height: 100%;
+}
+
+/* Thinking, held still: the sheet rests slightly turned, as if read. */
+.alive[data-alive="thinking"] .art {
+  transform: rotate(-3deg);
+}
+
+/* Running: hung from the pin, so any sway swings from the top. */
+.alive[data-alive="running"] .art {
+  transform-origin: 50% 0;
+}
+.alive:global(.pinned)::before {
+  z-index: 1;
+  top: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+/* Failed: the top right corner is torn away and folded back, showing the
+   kraft underside. No motion, ever. */
+.alive[data-alive="failed"] .art {
+  clip-path: polygon(
+    0 0,
+    52% 0,
+    58% 7%,
+    63% 3%,
+    70% 12%,
+    76% 9%,
+    82% 20%,
+    89% 18%,
+    92% 30%,
+    100% 36%,
+    100% 100%,
+    0 100%
+  );
+}
+/* The torn piece, folded down over the avatar: its jagged edge is the
+   same line the clip above tears along. */
+.alive > .tear {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 48%;
+  height: 36%;
+  background: var(--paper-kraft, var(--muted));
+  clip-path: polygon(
+    0 0,
+    12.5% 19.4%,
+    22.9% 8.3%,
+    37.5% 33.3%,
+    50% 25%,
+    62.5% 55.6%,
+    77.1% 50%,
+    83.3% 83.3%,
+    100% 100%,
+    0 100%
+  );
+}
+
+/* Done: a dated rubber stamp in ink, across the avatar's feet, spilling
+   into the card's left padding so it never touches the words. The
+   words beside the avatar say the same, so the stamp is decoration. */
+.alive > .stamp {
+  position: absolute;
+  width: auto;
+  height: auto;
+  bottom: -4px;
+  left: -6px;
+  border: 3px double var(--paper-ink, currentColor);
+  border-radius: 2px;
+  background: color-mix(
+    in srgb,
+    var(--paper-cream-hi, var(--background)) 90%,
+    transparent
+  );
+  color: var(--paper-ink, currentColor);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  line-height: 1;
+  padding: 3px 4px 2px 5px;
+  text-transform: uppercase;
+  transform: rotate(-8deg);
+  white-space: nowrap;
+}
+
+/* Phones draw the specialist Momo at 40px: a tighter stamp keeps clear of
+   the words at the same 11px. */
+@media (max-width: 390px) {
+  .alive > .stamp {
+    border-width: 2px;
+    border-style: solid;
+    letter-spacing: 0.04em;
+    padding: 2px 3px 1px;
+    left: -8px;
+  }
+}
+
+@media (forced-colors: active) {
+  .alive[data-alive="failed"] .art {
+    clip-path: none;
+  }
+  .alive > .tear {
+    display: none;
+  }
+  .alive > .stamp {
+    border-color: CanvasText;
+    background: Canvas;
+    color: CanvasText;
+  }
+}
