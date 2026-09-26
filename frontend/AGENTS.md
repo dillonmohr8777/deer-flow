@@ -23,6 +23,8 @@ upstream dependency chain resolves a patched version without it; regenerate
 
 ## Commands
 
+Easy-mode guided starters in `src/components/workspace/input-box.tsx` fill an empty composer and focus it; they do not submit a turn. Hide the row while a draft is present, and preserve an explicit row dismissal across subsequent Easy-mode turns. Standard-mode generated follow-ups retain their separate one-tap send behavior.
+
 | Command          | Purpose                                       |
 | ---------------- | --------------------------------------------- |
 | `pnpm dev`       | Start the development server with Webpack     |
