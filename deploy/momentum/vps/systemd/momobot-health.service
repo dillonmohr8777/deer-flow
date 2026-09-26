@@ -1,0 +1,8 @@
+[Unit]
+Description=MomoBot health check (receipt in /var/log/momobot/health.jsonl)
+After=momobot.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/srv/momobot/deer-flow
+ExecStart=/srv/momobot/deer-flow/deploy/momentum/vps/health.sh

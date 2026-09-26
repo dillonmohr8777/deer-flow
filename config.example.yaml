@@ -2280,6 +2280,14 @@ agents_api:
 private_workspace:
   enabled: false
 
+# Momentum-internal surfaces: Team channels (/workspace/team) and the AI
+# Academy (/workspace/academy). Shown only to owners, admins and members of
+# the workspaces listed by slug here -- the agency's own workspace. Never list
+# a client workspace; client workspaces on the same instance get 404.
+momentum_internal:
+  enabled: false
+  organization_slugs: []
+
 # ============================================================================
 # Skill Self-Evolution Configuration
 # ============================================================================
@@ -3079,6 +3087,12 @@ authorization:
 #         token_endpoint_auth_method: client_secret_post
 #
 #         auto_create_users: true
+#         # Only create an account on first Google sign-in when that verified
+#         # email holds a pending workspace invitation (not used, not expired,
+#         # sent by a still-active owner/admin). Anyone else gets the same
+#         # refusal as auto_create_users: false. Accounts it created keep
+#         # signing in after their invitation is used. Default: false.
+#         auto_create_requires_invitation: true
 #         require_verified_email: true
 #         # Restrict sign-in to a Google Workspace domain (leave unset to allow
 #         # any Google account, including personal gmail.com addresses):

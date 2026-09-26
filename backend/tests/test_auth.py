@@ -1934,6 +1934,16 @@ def test_authenticate_skips_rehash_for_v2_hash():
     mock_repo.update_user.assert_not_called()
 
 
+def test_validate_next_param_rejects_control_characters():
+    """Browsers drop tab/newline/CR inside URLs, so "/\t/evil.example" is
+    parsed as "//evil.example": an open redirect after sign-in."""
+    from app.gateway.routers.auth import validate_next_param
+
+    for unsafe in ("/\t/evil.example", "/\n/evil.example", "/\r/evil.example", "/ /evil.example", "/\x00x", "/\x7fx", "/work space"):
+        assert validate_next_param(unsafe) is None, repr(unsafe)
+    assert validate_next_param("/invite") == "/invite"
+
+
 def test_validate_next_param_rejects_unsafe_paths():
     from app.gateway.routers.auth import validate_next_param
 

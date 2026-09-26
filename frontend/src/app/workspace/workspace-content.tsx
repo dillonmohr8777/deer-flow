@@ -12,6 +12,7 @@ import { ModelLoadErrorBanner } from "@/components/workspace/model-load-error-ba
 import { SettingsDialogHost } from "@/components/workspace/settings";
 import {
   SkipToContent,
+  WORKSPACE_MAIN_CONTENT_ID,
   WORKSPACE_MAIN_ID,
 } from "@/components/workspace/skip-to-content";
 import { WorkspaceSettingsDeepLink } from "@/components/workspace/workspace-settings-deep-link";
@@ -56,9 +57,24 @@ export async function WorkspaceContent({
               className="min-w-0 focus:outline-none"
               style={{ width: "auto" }}
             >
-              <GatewayOfflineBanner gatewayUnavailable={gatewayUnavailable} />
-              <ModelLoadErrorBanner gatewayUnavailable={gatewayUnavailable} />
-              {children}
+              {/* Always-present target for RetroResolve's pixelation filter
+                  (retro-resolve.tsx). React owns this node and everything
+                  inside it for the lifetime of the app, so an imperative
+                  effect can safely set a style property on it without ever
+                  restructuring its children — see that file for why an
+                  effect-created, moved-and-restored wrapper crashed React's
+                  own reconciliation of this same content. The inline flex
+                  styles mirror #workspace-main's own so this extra layer is
+                  invisible to layout. */}
+              <div
+                id={WORKSPACE_MAIN_CONTENT_ID}
+                className="min-h-0 w-full min-w-0 flex-col"
+                style={{ display: "flex", flex: "1 1 auto" }}
+              >
+                <GatewayOfflineBanner gatewayUnavailable={gatewayUnavailable} />
+                <ModelLoadErrorBanner gatewayUnavailable={gatewayUnavailable} />
+                {children}
+              </div>
             </SidebarInset>
           </SidebarProvider>
           <RetroResolve />
