@@ -1485,4 +1485,8 @@ def validate_next_param(next_param: str | None) -> str | None:
         return None
     if ":" in next_param:
         return None
+    # Browsers strip tab/newline/CR from URLs, so "/\t/evil.example" becomes
+    # "//evil.example". Refuse every control character and space outright.
+    if any(ord(ch) <= 0x20 or ord(ch) == 0x7F for ch in next_param):
+        return None
     return next_param
