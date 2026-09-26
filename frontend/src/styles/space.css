@@ -110,6 +110,30 @@
   --space-font: "Space Mono", ui-monospace, "SF Mono", Consolas, monospace;
 }
 
+/* Generated copy has its own palette, so remap it along with the dark canvas. */
+:is(
+    :root:not(.dark)[data-treatment="space"],
+    :root:not(.dark) [data-workspace-shell][data-treatment="space"]
+  )
+  .momentum-generated-copy {
+  --momentum-copy-body: var(--space-cream);
+  --momentum-copy-heading: var(--space-cream);
+  --momentum-copy-heading-from: var(--space-cream);
+  --momentum-copy-heading-mid: var(--space-cyan);
+  --momentum-copy-heading-to: var(--space-cream);
+  --momentum-copy-strong: var(--space-cream);
+  --momentum-copy-link: var(--space-cyan);
+  --momentum-copy-link-line: var(--space-cyan);
+  --momentum-copy-marker: var(--space-cyan);
+  --momentum-copy-quote-line: var(--space-cyan);
+  --momentum-copy-quote-wash: var(--space-panel);
+  --momentum-copy-quote: var(--space-cream-muted);
+  --momentum-copy-code: var(--space-cyan);
+  --momentum-copy-code-bg: var(--space-panel-hi);
+  --momentum-copy-rule-from: var(--space-cyan);
+  --momentum-copy-rule-to: var(--space-line);
+}
+
 /*
  * Shell remap: sidebar, headers, page canvas, dialogs, menus. Matches the
  * appearance provider's wrapper ([data-workspace-shell]) and <html>, so
