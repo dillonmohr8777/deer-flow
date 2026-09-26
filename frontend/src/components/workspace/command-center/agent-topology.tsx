@@ -47,92 +47,103 @@ export function AgentTopology({
 
   return (
     <div className={styles.topology}>
-      <div className={styles.topologyLead}>
-        {/* The lead is Dillon Brain (agent name "dillon-brain"), a pulsing
+      {/* The frame lets the topology's own container query move the lead
+          beside the roster when there is room (a container cannot restyle
+          itself, only its descendants). */}
+      <div className={styles.topologyFrame}>
+        <div className={styles.topologyLead}>
+          {/* The lead is Dillon Brain (agent name "dillon-brain"), a pulsing
             brain rather than a robot Momo. Hidden from assistive tech: the
             name beside it says who this is. */}
-        <span className={styles.leadMomo} aria-hidden="true">
-          <MomoAvatar
-            agent={{ name: "dillon-brain", display_name: leadLabel }}
-            size={160}
-            active={leadActive}
-          />
-        </span>
-        <div>
-          <strong>{leadLabel}</strong>
-          <span>Orchestration &amp; delegation</span>
+          <span className={styles.leadMomo} aria-hidden="true">
+            <MomoAvatar
+              agent={{ name: "dillon-brain", display_name: leadLabel }}
+              size={160}
+              active={leadActive}
+            />
+          </span>
+          <div>
+            <strong>{leadLabel}</strong>
+            <span>Orchestration &amp; delegation</span>
+            {!loading && !error && roster.length > 0 ? (
+              <span className={styles.leadCount}>
+                Delegates to {roster.length}{" "}
+                {roster.length === 1 ? "specialist" : "specialists"}
+              </span>
+            ) : null}
+          </div>
+          <Link aria-label="Open lead agent conversation" href={leadHref}>
+            <ArrowUpRight size={20} />
+          </Link>
         </div>
-        <Link aria-label="Open lead agent conversation" href={leadHref}>
-          <ArrowUpRight size={20} />
-        </Link>
-      </div>
-      <div
-        className={styles.topologyRoster}
-        role="group"
-        aria-label={
-          runtimeKnown
-            ? "Specialist definitions with recorded live state"
-            : "Specialist definitions (live state unknown)"
-        }
-      >
-        {loading ? (
-          <p role="status">Loading agent definitions…</p>
-        ) : error ? (
-          <p role="alert">The specialist catalog couldn&apos;t be loaded.</p>
-        ) : roster.length === 0 ? (
-          <p>No specialist definitions are available to this account.</p>
-        ) : (
-          roster.map((agent) => {
-            const hasActiveRun =
-              runtimeKnown && (activeAgentNames ?? []).includes(agent.name);
-            return (
-              // "paper-card" (2px hover lift), "pinned" (brass pin) and
-              // "paper-pixels" (steps(3) tick) are paper.css hooks, inert
-              // outside the paper treatment. A pin means working: only a
-              // specialist with an active recorded run wears one, with the
-              // three working squares. The words carry the state either way.
-              <button
-                key={agent.name}
-                className={cn(
-                  styles.agent,
-                  "paper-card",
-                  hasActiveRun && "pinned",
-                )}
-                aria-pressed={selectedName === agent.name}
-                onClick={() => onSelect(agent.name)}
-              >
-                <span className={styles.agentMomo} aria-hidden="true">
-                  <MomoAvatar agent={agent} size={56} />
-                </span>
-                <span className={styles.agentText}>
-                  <strong>
-                    {agent.display_name ?? agent.name.replace("dillon-", "")}
-                  </strong>
-                  <span className={styles.agentState}>
-                    <span>
-                      {hasActiveRun && (
-                        <span
-                          className={`${styles.working} paper-pixels`}
-                          data-active="true"
-                          aria-hidden="true"
-                        />
-                      )}
-                      {runtimeKnown
-                        ? hasActiveRun
-                          ? "Active run recorded"
-                          : "Idle"
-                        : "Live state unknown"}
-                    </span>
-                    <span>
-                      <i data-enabled={agent.enabled} />
-                      {agent.enabled ? "Enabled" : "Disabled"}
+        <div
+          className={styles.topologyRoster}
+          role="group"
+          aria-label={
+            runtimeKnown
+              ? "Specialist definitions with recorded live state"
+              : "Specialist definitions (live state unknown)"
+          }
+        >
+          {loading ? (
+            <p role="status">Loading agent definitions…</p>
+          ) : error ? (
+            <p role="alert">The specialist catalog couldn&apos;t be loaded.</p>
+          ) : roster.length === 0 ? (
+            <p>No specialist definitions are available to this account.</p>
+          ) : (
+            roster.map((agent) => {
+              const hasActiveRun =
+                runtimeKnown && (activeAgentNames ?? []).includes(agent.name);
+              return (
+                // "paper-card" (2px hover lift), "pinned" (brass pin) and
+                // "paper-pixels" (steps(3) tick) are paper.css hooks, inert
+                // outside the paper treatment. A pin means working: only a
+                // specialist with an active recorded run wears one, with the
+                // three working squares. The words carry the state either way.
+                <button
+                  key={agent.name}
+                  className={cn(
+                    styles.agent,
+                    "paper-card",
+                    hasActiveRun && "pinned",
+                  )}
+                  aria-pressed={selectedName === agent.name}
+                  onClick={() => onSelect(agent.name)}
+                >
+                  <span className={styles.agentMomo} aria-hidden="true">
+                    <MomoAvatar agent={agent} size={56} />
+                  </span>
+                  <span className={styles.agentText}>
+                    <strong>
+                      {agent.display_name ?? agent.name.replace("dillon-", "")}
+                    </strong>
+                    <span className={styles.agentState}>
+                      <span>
+                        {hasActiveRun && (
+                          <span
+                            className={`${styles.working} paper-pixels`}
+                            data-active="true"
+                            aria-hidden="true"
+                          />
+                        )}
+                        {runtimeKnown
+                          ? hasActiveRun
+                            ? "Active run recorded"
+                            : "Idle"
+                          : "Live state unknown"}
+                      </span>
+                      <span>
+                        <i data-enabled={agent.enabled} />
+                        {agent.enabled ? "Enabled" : "Disabled"}
+                      </span>
                     </span>
                   </span>
-                </span>
-              </button>
-            );
-          })
-        )}
+                </button>
+              );
+            })
+          )}
+        </div>
       </div>
       <p className={styles.diagramNote}>
         {runtimeKnown

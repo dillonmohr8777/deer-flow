@@ -10,6 +10,7 @@ import {
 } from "@/components/workspace/page-body";
 import type { ConsoleRunItem } from "@/core/console";
 import { formatCompactStamp } from "@/core/utils/datetime";
+import { cn } from "@/lib/utils";
 
 import styles from "./dispatch-board.module.css";
 
@@ -19,12 +20,17 @@ import styles from "./dispatch-board.module.css";
  * One slip per recorded run, filed into a lane by the run's REAL status:
  *   On the desk  pending / running   brass pin, because pins mean working
  *   Stamped      success             a dated ink stamp, no pin
- *   Returned     error / timeout /   a torn corner and the reason word
- *                interrupted
+ *   Returned     error / timeout     a torn corner folded back, the reason
+ *                interrupted         the reason only: a stop is not a failure
  * Any other status lands in "Unsorted" with its raw word, never in a lane
  * that would claim more than the backend said. There is no brief or review
  * lane yet: nothing records those stages, so the board does not invent them.
  * Static state only; no motion is added (DESIGN.md's motion list is closed).
+ *
+ * Slice 2: stamped slips carry the stamp beside the words, not under them,
+ * so a long run of finished work stays short; the tear folds back to show
+ * the kraft underside (the same language as the Command Center's failed
+ * agent); an interrupted run and a queued one read in neutral ink.
  */
 
 export type DispatchLane = "desk" | "stamped" | "returned" | "unsorted";
@@ -95,6 +101,11 @@ function Started({ value }: { value: string | null }) {
       Started <time dateTime={value}>{stamp}</time>
     </span>
   );
+}
+
+/** Real failures only. An interrupted run was stopped, not broken. */
+export function isFailure(status: string): boolean {
+  return status === "error" || status === "timeout";
 }
 
 export function groupRuns(runs: ConsoleRunItem[]) {
@@ -213,6 +224,12 @@ function Lanes({
             key={lane.id}
             className={styles.lane}
             data-lane={lane.id}
+            data-failed={
+              lane.id === "returned" &&
+              groups.returned.some((run) => isFailure(run.status))
+                ? "true"
+                : undefined
+            }
             aria-labelledby={`lane-${lane.id}`}
           >
             <h3 className={styles.laneTitle} id={`lane-${lane.id}`}>
@@ -265,6 +282,7 @@ function Slip({
   onOpen: (run: ConsoleRunItem) => void;
 }) {
   const working = run.status === "running";
+  const failed = isFailure(run.status);
   const date = stampDate(run.updated_at);
   const title = run.thread_title ?? "Untitled assignment";
   return (
@@ -272,9 +290,10 @@ function Slip({
       type="button"
       // "pinned" is paper.css's own unscoped hook: a brass pin, which means
       // working. Only a running slip gets it; a queued one waits unpinned.
-      className={`${styles.slip}${working ? " pinned" : ""}`}
+      className={cn(styles.slip, working && "pinned")}
       data-lane={lane}
       data-status={run.status}
+      data-failed={failed ? "true" : undefined}
       data-tilt={tilt}
       aria-pressed={selected}
       // Titles clamp to two lines; the native tooltip keeps the whole one.
@@ -288,7 +307,10 @@ function Slip({
         <Started value={run.created_at} />
       </span>
       {lane === "desk" ? (
-        <span className={styles.word} data-tone="active">
+        <span
+          className={styles.word}
+          data-tone={working ? "active" : "unknown"}
+        >
           {working ? "Working" : "Queued"}
         </span>
       ) : null}
@@ -299,9 +321,13 @@ function Slip({
         </span>
       ) : null}
       {lane === "returned" ? (
-        <span className={styles.word} data-tone="danger">
+        <span className={styles.word} data-tone={failed ? "danger" : "unknown"}>
           {RETURN_WORD[run.status] ?? run.status}
         </span>
+      ) : null}
+      {failed ? (
+        // The torn piece, folded down: decoration, the word says it.
+        <span className={styles.tear} data-part="tear" aria-hidden="true" />
       ) : null}
       {lane === "unsorted" ? (
         <span className={styles.word} data-tone="unknown">

@@ -805,6 +805,53 @@
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
+/* The delegation count only earns its line on the tall column sheet. */
+.leadCount {
+  display: none;
+}
+.topologyLead div .leadCount {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  font-weight: 700;
+}
+/* Full-width Mission Control (d9): a 160px lead spanning 1000px was a
+   banner, not a hierarchy. With room, the lead stands as a column sheet
+   left of the specialists it delegates to, its height set by theirs. */
+@container topology (min-width: 900px) {
+  .topologyFrame {
+    display: grid;
+    grid-template-columns: 216px minmax(0, 1fr);
+    align-items: stretch;
+    gap: 24px;
+  }
+  .topologyFrame > .topologyLead {
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: flex-start;
+    gap: 14px;
+    padding: 20px 18px;
+  }
+  .topologyFrame .leadMomo {
+    width: 120px;
+    height: 120px;
+  }
+  .topologyFrame > .topologyLead > div {
+    flex: 0 0 auto;
+  }
+  .topologyFrame > .topologyLead a {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+  }
+  .topologyFrame .leadCount {
+    display: block;
+  }
+  .topologyFrame > .topologyRoster {
+    align-content: start;
+    margin-top: 0;
+  }
+}
 .agent {
   position: relative;
   display: grid;

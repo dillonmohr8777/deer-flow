@@ -51,7 +51,9 @@
 .lane[data-lane="stamped"] {
   border-top-color: var(--green);
 }
-.lane[data-lane="returned"] {
+/* Danger only when the lane holds a real failure; a lane of stopped runs
+   keeps the neutral rule. */
+.lane[data-lane="returned"][data-failed="true"] {
   border-top-color: var(--danger);
 }
 
@@ -123,18 +125,54 @@
   outline-offset: 2px;
 }
 
-/* Returned work: the top right corner is torn away. */
-.slip[data-lane="returned"] {
+/* Stamped work: the stamp sits beside the words, not under them, so five
+   finished slips stay short enough to scan. */
+.slip[data-lane="stamped"] {
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 12px;
+  align-items: center;
+}
+.slip[data-lane="stamped"] > :not(.stamp) {
+  grid-column: 1;
+}
+
+/* A failed run: the top right corner is folded down along a straight
+   crease (clip) and the flap (.tear) lies over the slip, kraft underside
+   up, its outer edges ragged where it tore. The flap is the cut corner
+   reflected across the crease, so the two always meet. An interrupted run
+   was stopped, not broken, so it keeps its corner. */
+.slip[data-failed="true"] {
+  padding-right: 46px;
+  clip-path: polygon(0 0, calc(100% - 48px) 0, 100% 32px, 100% 100%, 0 100%);
+}
+/* clip-path clips everything outside the slip, outlines and outer rings
+   included, so a torn slip draws its focus and selected rings inside. */
+.slip[data-failed="true"]:focus-visible {
+  outline-offset: -5px;
+}
+.slip[data-failed="true"][aria-pressed="true"] {
+  box-shadow: inset 0 0 0 1px var(--blue);
+}
+.tear {
+  position: absolute;
+  top: -1px;
+  right: -1px;
+  width: 48px;
+  height: 46px;
+  background: var(--paper-kraft, var(--line));
   clip-path: polygon(
     0 0,
-    calc(100% - 38px) 0,
-    calc(100% - 30px) 7px,
-    calc(100% - 22px) 4px,
-    calc(100% - 15px) 13px,
-    calc(100% - 7px) 11px,
-    100% 22px,
-    100% 100%,
-    0 100%
+    48px 32px,
+    41px 35px,
+    35px 36px,
+    29px 40px,
+    23px 41px,
+    18px 45px,
+    14px 36px,
+    11px 30px,
+    8px 21px,
+    4px 14px,
+    3px 7px
   );
 }
 
@@ -180,9 +218,10 @@
 /* The ink stamp: a dated mark, pressed once, slightly askew. Static. */
 .stamp {
   display: inline-grid;
+  grid-column: 2;
+  grid-row: 1 / span 2;
   justify-self: end;
   justify-items: center;
-  margin-top: 2px;
   padding: 3px 9px 2px;
   border: 2px solid var(--green);
   border-radius: 3px;
@@ -231,6 +270,9 @@
   .slip {
     clip-path: none;
     transform: none;
+  }
+  .tear {
+    display: none;
   }
   .stamp {
     border-color: CanvasText;
