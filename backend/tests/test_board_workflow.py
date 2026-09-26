@@ -19,21 +19,26 @@ from deerflow.board.workflow import (
 )
 from deerflow.persistence.board.model import BoardThreadStatus
 
-# --- draft: new/triaged -> drafted, no owner required ---
+# --- draft: new/triaged -> drafted, owner only ---
 
 
 @pytest.mark.parametrize("status", [BoardThreadStatus.NEW, BoardThreadStatus.TRIAGED])
-def test_can_draft_from_new_or_triaged(status):
-    assert_can_draft(status)  # must not raise
+def test_owner_can_draft_from_new_or_triaged(status):
+    assert_can_draft(status, actor_is_owner=True)  # must not raise
+
+
+def test_non_owner_draft_is_rejected_even_from_new():
+    with pytest.raises(BoardOwnerRequiredError):
+        assert_can_draft(BoardThreadStatus.NEW, actor_is_owner=False)
 
 
 @pytest.mark.parametrize(
     "status",
     [BoardThreadStatus.DRAFTED, BoardThreadStatus.APPROVED, BoardThreadStatus.REPLIED, BoardThreadStatus.CLOSED],
 )
-def test_cannot_draft_outside_new_or_triaged(status):
+def test_owner_cannot_draft_outside_new_or_triaged(status):
     with pytest.raises(BoardTransitionError):
-        assert_can_draft(status)
+        assert_can_draft(status, actor_is_owner=True)
 
 
 # --- approve: drafted -> approved, owner only ---
