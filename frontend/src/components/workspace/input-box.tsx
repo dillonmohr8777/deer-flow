@@ -1152,7 +1152,9 @@ export function InputBox({
       promptHistoryDraftRef.current = "";
       setInputPolishUndo(null);
       setFollowups([]);
-      setFollowupsHidden(false);
+      // In Easy mode, dismissing guided starters should survive later turns.
+      // Standard mode still resets its generated follow-ups for each reply.
+      setFollowupsHidden((hidden) => (isEasyMode ? hidden : false));
       setFollowupsLoading(false);
       const quotes = sidecar?.conversationQuotes ?? [];
       const quoteIds = quotes.map((quote) => quote.id);
@@ -1238,6 +1240,7 @@ export function InputBox({
       conversationReferences,
       draftKey,
       invalidateDraftSaveTimer,
+      isEasyMode,
       onContextChange,
       onSubmit,
       projectAttachments,
@@ -2140,6 +2143,7 @@ export function InputBox({
     !showSkillSuggestions &&
     !selectedSlashSkill &&
     !followupsHidden &&
+    !(textInput.value ?? "").trim() &&
     status !== "streaming";
 
   useEffect(() => {
@@ -2282,7 +2286,11 @@ export function InputBox({
                   key={s.label}
                   className="paper-card py-1.5"
                   suggestion={s.label}
-                  onClick={() => handleFollowupClick(s.prompt)}
+                  onClick={() => {
+                    // Match welcome starters: let the person edit before sending.
+                    textInput.setInput(s.prompt);
+                    requestAnimationFrame(() => textareaRef.current?.focus());
+                  }}
                 />
               ))}
               <Button

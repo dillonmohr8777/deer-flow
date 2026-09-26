@@ -1029,6 +1029,8 @@ Use it as-is. Or tear it apart and make it yours.
 
 ## Core Features
 
+In the Momentum workspace, Easy mode's guided starters fill the chat composer for review. A starter never sends a message on tap, and closing the starter row keeps it hidden on later replies in that chat.
+
 ### Skills & Tools
 
 Open **Capability Center** from the workspace sidebar to manage **Plugins**
