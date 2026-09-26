@@ -29,7 +29,8 @@ describe("AgentTopology", () => {
     ).toBe("/workspace/chats/new");
     expect(screen.getByText("Enabled")).toBeTruthy();
     expect(screen.getByText("Disabled")).toBeTruthy();
-    expect(screen.getAllByText("Live state unknown")).toHaveLength(2);
+    // Two specialists and the lead.
+    expect(screen.getAllByText("Live state unknown")).toHaveLength(3);
     expect(
       screen
         .getByRole("button", { name: /Reviewer/ })
@@ -70,7 +71,7 @@ describe("AgentTopology", () => {
         leadHref="/workspace/chats/new"
         selectedName={null}
         runtimeKnown
-        activeAgentNames={["dillon-reviewer"]}
+        runningAgentNames={["dillon-reviewer"]}
         onSelect={rs.fn()}
         roster={[
           { name: "dillon-reviewer", display_name: "Reviewer", enabled: true },
@@ -79,12 +80,13 @@ describe("AgentTopology", () => {
       />,
     );
 
-    expect(screen.getByText("Active run recorded")).toBeTruthy();
-    expect(screen.getByText("Idle")).toBeTruthy();
+    expect(screen.getByText("Working")).toBeTruthy();
+    // The lead and the writer are both idle.
+    expect(screen.getAllByText("Idle")).toHaveLength(2);
     expect(screen.getByText("Disabled")).toBeTruthy();
   });
 
-  it("pins only a specialist with an active run, with the working squares", () => {
+  it("pins only a specialist with a running run, with the working squares", () => {
     const roster = [
       { name: "dillon-reviewer", display_name: "Reviewer", enabled: true },
       { name: "dillon-writer", display_name: "Writer", enabled: true },
@@ -95,7 +97,7 @@ describe("AgentTopology", () => {
         leadHref="/workspace/chats/new"
         selectedName={null}
         runtimeKnown
-        activeAgentNames={["dillon-reviewer"]}
+        runningAgentNames={["dillon-reviewer"]}
         onSelect={rs.fn()}
         roster={roster}
       />,
@@ -118,7 +120,7 @@ describe("AgentTopology", () => {
         leadHref="/workspace/chats/new"
         selectedName={null}
         runtimeKnown
-        activeAgentNames={[]}
+        runningAgentNames={[]}
         onSelect={rs.fn()}
         roster={roster}
       />,
@@ -132,12 +134,81 @@ describe("AgentTopology", () => {
         leadHref="/workspace/chats/new"
         selectedName={null}
         runtimeKnown={false}
-        activeAgentNames={["dillon-reviewer"]}
+        runningAgentNames={["dillon-reviewer"]}
         onSelect={rs.fn()}
         roster={roster}
       />,
     );
     expect(document.querySelectorAll(".pinned, .paper-pixels")).toHaveLength(0);
+  });
+
+  it("reads a queued specialist as Queued, unpinned and still, as its board slip does", () => {
+    render(
+      <AgentTopology
+        leadLabel="Dillon Brain"
+        leadHref="/workspace/chats/new"
+        selectedName={null}
+        runtimeKnown
+        runningAgentNames={["dillon-writer"]}
+        queuedAgentNames={["dillon-reviewer"]}
+        onSelect={rs.fn()}
+        roster={[
+          { name: "dillon-reviewer", display_name: "Reviewer", enabled: true },
+          { name: "dillon-writer", display_name: "Writer", enabled: true },
+        ]}
+      />,
+    );
+
+    const queued = screen.getByRole("button", { name: /Reviewer/ });
+    expect(queued.textContent).toContain("Queued");
+    expect(queued.classList.contains("pinned")).toBe(false);
+    expect(queued.querySelector(".paper-pixels")).toBeNull();
+    const running = screen.getByRole("button", { name: /Writer/ });
+    expect(running.textContent).toContain("Working");
+    expect(running.classList.contains("pinned")).toBe(true);
+  });
+
+  it("pins the lead sheet and says Working only while the lead's own run is going", () => {
+    const props = {
+      leadLabel: "Dillon Brain",
+      leadHref: "/workspace/chats/new",
+      selectedName: null,
+      onSelect: rs.fn(),
+      roster: [
+        { name: "dillon-reviewer", display_name: "Reviewer", enabled: true },
+      ],
+    };
+    const leadSheet = () =>
+      screen.getByText("Orchestration & delegation").closest("div")!
+        .parentElement!;
+
+    render(
+      <AgentTopology
+        {...props}
+        runtimeKnown
+        runningAgentNames={["dillon-brain"]}
+      />,
+    );
+    expect(leadSheet().classList.contains("pinned")).toBe(true);
+    expect(leadSheet().textContent).toContain("Working");
+    cleanup();
+
+    // Queued is waiting: the word, no pin.
+    render(
+      <AgentTopology
+        {...props}
+        runtimeKnown
+        queuedAgentNames={["dillon-brain"]}
+      />,
+    );
+    expect(leadSheet().classList.contains("pinned")).toBe(false);
+    expect(leadSheet().textContent).toContain("Queued");
+    cleanup();
+
+    // Unknown history is never activity, whatever names are passed.
+    render(<AgentTopology {...props} runningAgentNames={["dillon-brain"]} />);
+    expect(leadSheet().classList.contains("pinned")).toBe(false);
+    expect(leadSheet().textContent).toContain("Live state unknown");
   });
 
   it("draws the lead as Dillon Brain's PaperLayers art at 160 and specialists at 56, not a lettered monogram", () => {

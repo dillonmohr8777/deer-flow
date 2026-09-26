@@ -144,6 +144,22 @@ const RUNS = [
     cost: null,
     error: null,
   },
+  // A specialist at work: pinned on the board and on the team.
+  {
+    run_id: "run-0010",
+    thread_id: "thread-0010",
+    thread_title: "Reconcile September invoices against collected revenue",
+    assistant_id: "dillon-revenue",
+    status: "running",
+    model_name: "claude-sonnet",
+    created_at: minutesAgo(6),
+    updated_at: minutesAgo(1),
+    duration_seconds: null,
+    total_tokens: 7_310,
+    message_count: 5,
+    cost: null,
+    error: null,
+  },
   {
     run_id: "run-0001",
     thread_id: MOCK_THREAD_ID,
@@ -440,7 +456,7 @@ async function mockDesignAPI(page: Page, { empty = false } = {}) {
           }
         : {
             total_runs: 128,
-            active_runs: 1,
+            active_runs: 3,
             failed_runs: 3,
             total_threads: 46,
             total_agents: AGENTS.length,
@@ -635,6 +651,15 @@ const SIGNED_IN: Surface[] = [
     path: "/workspace/command-center",
     empty: true,
     scrolls: 1,
+  },
+  {
+    // The team on its own tab: at 1440 the lead stands as a column sheet.
+    name: "agent-studio",
+    path: "/workspace/command-center",
+    scrolls: 1,
+    prepare: async (page) => {
+      await page.getByRole("button", { name: "Agent Studio" }).click();
+    },
   },
   { name: "agents", path: "/workspace/agents" },
   {

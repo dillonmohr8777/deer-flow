@@ -254,17 +254,25 @@ export function CommandCenter() {
     (agent) => agent.source === "managed",
   );
   const roster = displayedAgents.length ? displayedAgents : subagents;
-  const activeAgentNames =
+  // Running and queued are different states on the board, so the team
+  // keeps them apart too: only a running run pins its agent. An agent with
+  // a running run and a queued one is running.
+  const agentsWith = (status: string) =>
     activityRuns.data?.runs
-      .filter((run) => active(run.status))
+      .filter((run) => run.status === status)
       .map((run) => run.assistant_id)
       .filter((name): name is string => Boolean(name)) ?? null;
-  // Same guard as AgentTopology's leadActive: an unknown live state must
-  // never read as the lead working.
+  const runningAgentNames = agentsWith("running");
+  const queuedAgentNames =
+    agentsWith("pending")?.filter(
+      (name) => !(runningAgentNames ?? []).includes(name),
+    ) ?? null;
+  // Same guard as AgentTopology's lead state: an unknown live state must
+  // never read as the lead working, and neither must a queued run.
   const heroBrainActive =
     canReadRuns &&
     activityRuns.isSuccess &&
-    (activeAgentNames ?? []).includes("dillon-brain");
+    (runningAgentNames ?? []).includes("dillon-brain");
 
   function openRun(run: ConsoleRunItem) {
     receiptTrigger.current = document.activeElement as HTMLElement | null;
@@ -420,9 +428,7 @@ export function CommandCenter() {
                       {modelName(run.model_name) || "Model not recorded"}
                     </span>{" "}
                     <span aria-hidden="true">·</span>{" "}
-                    <span className={styles.metaTokens}>
-                      {runTokens(run)}
-                    </span>
+                    <span className={styles.metaTokens}>{runTokens(run)}</span>
                   </small>
                 </span>
                 <Status status={run.status} />
@@ -477,7 +483,8 @@ export function CommandCenter() {
         loading={agentsLoading}
         error={Boolean(agentsError)}
         runtimeKnown={canReadRuns && activityRuns.isSuccess}
-        activeAgentNames={activeAgentNames}
+        runningAgentNames={runningAgentNames}
+        queuedAgentNames={queuedAgentNames}
         onSelect={setSelectedAgentName}
       />
       {selectedAgent ? (
