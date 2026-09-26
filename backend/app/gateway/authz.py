@@ -79,6 +79,11 @@ class Permissions:
     # Momo Board
     BOARD_READ = "board:read"
     BOARD_WRITE = "board:write"
+    # Momentum-internal: team channels and AI Academy (staff only)
+    TEAM_READ = "team:read"
+    TEAM_WRITE = "team:write"
+    ACADEMY_READ = "academy:read"
+    ACADEMY_WRITE = "academy:write"
 
 
 class AuthContext:
@@ -184,6 +189,10 @@ _ALL_PERMISSIONS: list[str] = [
     Permissions.CLIENTS_DELETE,
     Permissions.BOARD_READ,
     Permissions.BOARD_WRITE,
+    Permissions.TEAM_READ,
+    Permissions.TEAM_WRITE,
+    Permissions.ACADEMY_READ,
+    Permissions.ACADEMY_WRITE,
 ]
 
 

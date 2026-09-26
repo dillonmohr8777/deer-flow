@@ -553,6 +553,7 @@ async def langgraph_runtime(app: FastAPI, startup_config: AppConfig) -> AsyncGen
 
         app.state.thread_store = make_thread_store(sf, app.state.store)
         if sf is not None:
+            from deerflow.persistence.academy import AcademyProgressRepository
             from deerflow.persistence.board import BoardRepository
             from deerflow.persistence.clients import ClientRepository
             from deerflow.persistence.fleet import FleetBindingRepository
@@ -563,11 +564,14 @@ async def langgraph_runtime(app: FastAPI, startup_config: AppConfig) -> AsyncGen
             )
             from deerflow.persistence.scheduled_tasks import ScheduledTaskRepository
             from deerflow.persistence.subagent_batches import SubagentBatchRepository
+            from deerflow.persistence.team_board import TeamBoardRepository
 
             app.state.project_repo = ProjectRepository(sf)
             app.state.project_document_repo = ProjectDocumentRepository(sf)
             app.state.client_repo = ClientRepository(sf)
             app.state.board_repo = BoardRepository(sf)
+            app.state.team_board_repo = TeamBoardRepository(sf)
+            app.state.academy_progress_repo = AcademyProgressRepository(sf)
             app.state.fleet_binding_repo = FleetBindingRepository(sf)
             app.state.scheduled_task_repo = ScheduledTaskRepository(
                 sf,
@@ -585,6 +589,8 @@ async def langgraph_runtime(app: FastAPI, startup_config: AppConfig) -> AsyncGen
             app.state.project_document_repo = None
             app.state.client_repo = None
             app.state.board_repo = None
+            app.state.team_board_repo = None
+            app.state.academy_progress_repo = None
             app.state.subagent_batch_repo = None
             app.state.scheduled_task_repo = None
             app.state.scheduled_task_run_repo = None
@@ -698,6 +704,8 @@ get_project_repo = _require("project_repo", "Projects")
 get_project_document_repo = _require("project_document_repo", "Projects")
 get_client_repo = _require("client_repo", "Clients")
 get_board_repo = _require("board_repo", "Board")
+get_team_board_repo = _require("team_board_repo", "Team board")
+get_academy_progress_repo = _require("academy_progress_repo", "Academy")
 get_fleet_binding_repo = _require("fleet_binding_repo", "Fleet")
 
 

@@ -85,6 +85,19 @@ class PrivateWorkspaceConfig(BaseModel):
     )
 
 
+class MomentumInternalConfig(BaseModel):
+    """Staff-only surfaces (Team channels, AI Academy) for the agency's own workspace."""
+
+    enabled: bool = Field(
+        default=False,
+        description="Turns on Team channels and the AI Academy for the workspaces listed in organization_slugs. Off by default.",
+    )
+    organization_slugs: list[str] = Field(
+        default_factory=list,
+        description="Slugs of the agency's own workspaces (organizations). Only owners, admins and members of these see Team and AI Academy. Never list a client workspace.",
+    )
+
+
 class LlmCallConfig(BaseModel):
     """Configuration for LLM call execution (concurrency / rate shaping).
 
@@ -262,6 +275,7 @@ class AppConfig(BaseModel):
     )
     agents_api: AgentsApiConfig = Field(default_factory=AgentsApiConfig, description="Custom-agent management API configuration")
     private_workspace: PrivateWorkspaceConfig = Field(default_factory=PrivateWorkspaceConfig, description="Owner-only private workspace switches (the Desk home)")
+    momentum_internal: MomentumInternalConfig = Field(default_factory=MomentumInternalConfig, description="Staff-only Team channels and AI Academy for the agency's own workspace")
     acp_agents: dict[str, ACPAgentConfig] = Field(default_factory=dict, description="ACP-compatible agent configuration")
     subagents: SubagentsAppConfig = Field(default_factory=SubagentsAppConfig, description="Subagent runtime configuration")
     guardrails: GuardrailsConfig = Field(default_factory=GuardrailsConfig, description="Guardrail middleware configuration")

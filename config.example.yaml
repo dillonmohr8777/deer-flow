@@ -2280,6 +2280,14 @@ agents_api:
 private_workspace:
   enabled: false
 
+# Momentum-internal surfaces: Team channels (/workspace/team) and the AI
+# Academy (/workspace/academy). Shown only to owners, admins and members of
+# the workspaces listed by slug here -- the agency's own workspace. Never list
+# a client workspace; client workspaces on the same instance get 404.
+momentum_internal:
+  enabled: false
+  organization_slugs: []
+
 # ============================================================================
 # Skill Self-Evolution Configuration
 # ============================================================================

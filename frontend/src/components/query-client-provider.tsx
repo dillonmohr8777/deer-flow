@@ -5,7 +5,10 @@ import {
   QueryClientProvider as TanStackQueryClientProvider,
 } from "@tanstack/react-query";
 
-const queryClient = new QueryClient();
+// One client per browser tab. Exported so logout can drop every cached
+// response: a soft navigation keeps this module alive, and the next person
+// to sign in on the same tab must not see the previous user's data.
+export const queryClient = new QueryClient();
 
 export function QueryClientProvider({
   children,

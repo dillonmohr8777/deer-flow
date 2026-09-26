@@ -15,6 +15,7 @@ from app.gateway.csrf_middleware import CORS_EXPOSED_HEADERS, CSRFMiddleware, ge
 from app.gateway.deps import langgraph_runtime
 from app.gateway.health import READINESS_CHECKPOINTER_CONFIG_ATTR, readiness_payload
 from app.gateway.routers import (
+    academy,
     admin,
     agents,
     artifacts,
@@ -49,6 +50,7 @@ from app.gateway.routers import (
     subagent_batches,
     subagents,
     suggestions,
+    team_board,
     thread_runs,
     threads,
     trash,
@@ -974,6 +976,10 @@ This gateway provides runtime endpoints for agent runs plus custom endpoints for
     app.include_router(clients.router)
     # Momo Board API (client posts/tickets/concerns/DMs) is mounted at /api/board
     app.include_router(board.router)
+    # Momentum-internal, staff only (private instance + staff role, else 404):
+    # team channels at /api/team and the AI Academy at /api/academy
+    app.include_router(team_board.router)
+    app.include_router(academy.router)
     # Fleet template catalog (read-only) is mounted at /api/fleet
     app.include_router(fleet.router)
 

@@ -1,0 +1,191 @@
+/*
+ * AI Academy. Layout only, in the Desk's visual language: colour from the
+ * shell's semantic tokens, cards on --card with a border.
+ */
+
+.frame {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  width: 100%;
+  max-width: 56rem;
+  margin-inline: auto;
+  padding: 2rem 1rem;
+}
+
+@media (min-width: 40rem) {
+  .frame {
+    padding: 2.5rem 1.5rem;
+  }
+}
+
+.progressCard {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+  color: var(--card-foreground);
+}
+
+.progressRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.track {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.trackHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.count {
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.lessons {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.lesson {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+  color: var(--card-foreground);
+}
+
+.lesson[data-done="true"] {
+  border-color: var(--primary);
+}
+
+.lessonSummary {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 2.75rem;
+  padding: 0.75rem 1rem;
+  cursor: pointer;
+  list-style: none;
+}
+
+.lessonSummary::-webkit-details-marker {
+  display: none;
+}
+
+.lessonSummary:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.lessonTitle {
+  flex: 1;
+  min-width: 0;
+  font-weight: 700;
+}
+
+.minutes {
+  flex: none;
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+}
+
+.doneMark {
+  flex: none;
+  width: 1.25rem;
+  color: var(--primary);
+  font-weight: 700;
+  text-align: center;
+}
+
+.lessonBody {
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+  padding: 0 1rem 1rem;
+}
+
+.steps {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  padding-left: 1.25rem;
+  list-style: decimal;
+}
+
+.video {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: var(--radius);
+  background: var(--secondary);
+}
+
+.videoPending {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+  text-align: center;
+  aspect-ratio: 16 / 5;
+}
+
+.tryIt {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  border-left: 3px solid var(--primary);
+  background: var(--secondary);
+  color: var(--secondary-foreground);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.actions button,
+.actions a {
+  min-height: 2.75rem;
+}
+
+.checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 2.75rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.checkbox input {
+  width: 1.25rem;
+  height: 1.25rem;
+  accent-color: var(--primary);
+}
+
+.errorText {
+  color: var(--destructive);
+  font-size: 0.8125rem;
+}

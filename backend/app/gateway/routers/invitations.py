@@ -44,13 +44,17 @@ class CreateInvitationRequest(BaseModel):
     privilege (no member management, no org settings -- see the
     _SHARED_MEMBER_ROLES / _EDIT_ROLES allowlists elsewhere) and is the
     default; "admin" stays available when the inviter explicitly chooses it.
+    "client" is for a client's own people joining the agency workspace: the
+    same access as "member" everywhere except that it is never staff, so
+    Momentum-internal surfaces (Team, AI Academy) stay hidden from them even
+    before they are given a client assignment.
     """
 
     model_config = ConfigDict(extra="forbid")
 
     organization_id: str = Field(min_length=1, max_length=64)
     email: EmailStr
-    role: Literal["member", "admin"] = "member"
+    role: Literal["member", "admin", "client"] = "member"
 
     @field_validator("email")
     @classmethod
