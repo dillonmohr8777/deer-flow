@@ -49,7 +49,7 @@ const CAPABILITIES = [
     body: (
       <>
         A <strong>lead</strong> that plans and delegates, with specialists for
-        research, brand, revenue, client success and release review.
+        research, growth, revenue, client success and release review.
       </>
     ),
   },
@@ -81,6 +81,21 @@ const CAPABILITIES = [
     ),
   },
 ];
+
+/*
+ * The team sheet beside the cards: the lead and the five specialists the
+ * Agents card names, drawn with the same canon Momo art the Command Center
+ * roster uses (public/momentum/momos, momo-avatar.tsx), so the front door
+ * shows the team people will actually meet. The lead comes first and larger.
+ */
+const TEAM = [
+  { slug: "lead", name: "Lead" },
+  { slug: "research", name: "Research" },
+  { slug: "growth", name: "Growth" },
+  { slug: "revenue", name: "Revenue" },
+  { slug: "client-success", name: "Client success" },
+  { slug: "qa", name: "Release review" },
+] as const;
 
 // Staggered pin offsets for the four paper cards — deliberately uneven, never
 // a three/four-equal-card row.
@@ -198,10 +213,6 @@ function PaperLanding() {
       <div className={styles.paperIntro}>
         <ScrapbookBackdrop motion={motion} tone="cream" />
       </div>
-      <div
-        className={`${styles.paperBlueprintB} paper-torn-alt`}
-        aria-hidden="true"
-      />
 
       <div className={styles.paperShell}>
         <header className={styles.paperHeader}>
@@ -286,6 +297,40 @@ function PaperLanding() {
               </li>
             ))}
           </ul>
+
+          {/* Fills the paper right of the cards on wide screens and follows
+              them on phones. A kraft sheet, not pinned: nothing here is
+              running. */}
+          <section
+            className={`${styles.paperTeam} paper-torn-alt`}
+            aria-labelledby="paper-team-title"
+          >
+            <h2
+              className={`${styles.paperTeamTitle} m-voice-label`}
+              id="paper-team-title"
+            >
+              Your team
+            </h2>
+            <p className={`${styles.paperTeamLede} m-voice-body`}>
+              One lead plans the work and hands each part to a specialist.
+            </p>
+            <ul className={styles.paperTeamList}>
+              {TEAM.map((member) => (
+                <li className={styles.paperTeamMember} key={member.slug}>
+                  <img
+                    className={styles.paperTeamArt}
+                    src={`/momentum/momos/${member.slug}.svg`}
+                    alt=""
+                    width={120}
+                    height={120}
+                    loading="lazy"
+                    decoding="async"
+                  />
+                  <span className={styles.paperTeamName}>{member.name}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
         </main>
 
         <footer className={styles.paperFooter}>
