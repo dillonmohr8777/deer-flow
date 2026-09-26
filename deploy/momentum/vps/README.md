@@ -79,6 +79,7 @@ auth:
         scopes: [openid, email, profile]
         token_endpoint_auth_method: client_secret_post
         auto_create_users: true
+        auto_create_requires_invitation: true   # PR #42: only invited emails get accounts
         require_verified_email: true
         admin_emails: []
         pkce_enabled: true
@@ -92,9 +93,11 @@ momentum_internal:                     # Team channels + AI Academy (PR #38)
 Also set the team's default chat model to one allowed to see client data
 (not Muse Spark).
 
-Keep the Google consent screen in **Testing** with only the invited people as
-test users. Most of the team signs in with personal @gmail.com accounts, so
-`allowed_email_domains` can't fence sign-ups; Testing mode does, at Google.
+Most of the team signs in with personal @gmail.com accounts, so
+`allowed_email_domains` can't fence sign-ups. Two fences instead:
+`auto_create_requires_invitation: true` (only emails holding a pending invite
+get an account, PR #42), and the Google consent screen kept in **Testing**
+with only the invited people as test users.
 
 ## 3. Images
 
