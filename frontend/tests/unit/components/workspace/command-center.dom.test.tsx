@@ -316,6 +316,35 @@ describe("CommandCenter", () => {
     expect(document.body.textContent).not.toContain("openrouter-");
   });
 
+  it("names each slip's agent in words through the real agentLabel", () => {
+    mocks.runs = [
+      { ...contributorRun, run_id: "r1", thread_title: "Lead slip" },
+      {
+        ...contributorRun,
+        run_id: "r2",
+        thread_title: "Growth slip",
+        assistant_id: "dillon-growth",
+      },
+      {
+        ...contributorRun,
+        run_id: "r3",
+        thread_title: "Nobody slip",
+        assistant_id: null,
+      },
+    ];
+    render(<CommandCenter />);
+    const slip = (name: string) =>
+      screen.getAllByRole("button", { name: new RegExp(name) })[0]!;
+    // "lead" resolves to the lead agent's display name.
+    expect(slip("Lead slip").textContent).toContain("Lead");
+    expect(slip("Lead slip").textContent).not.toMatch(/\blead\b/);
+    // An unknown specialist id is spelled out, never shown raw.
+    expect(slip("Growth slip").textContent).toContain("Dillon Growth");
+    expect(slip("Growth slip").textContent).not.toContain("dillon-growth");
+    // A missing id says so instead of inventing an agent.
+    expect(slip("Nobody slip").textContent).toContain("Agent not recorded");
+  });
+
   it("dates each assignment and keeps its full title on hover", () => {
     mocks.runs = [contributorRun, { ...contributorRun, created_at: null }];
     render(<CommandCenter />);

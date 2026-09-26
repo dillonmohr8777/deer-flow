@@ -39,6 +39,30 @@ describe("AgentTopology", () => {
     expect(onSelect).toHaveBeenCalledWith("dillon-writer");
   });
 
+  it("says how many specialists the lead delegates to, only once they load", () => {
+    const props = {
+      leadLabel: "Dillon Brain",
+      leadHref: "/workspace/chats/new",
+      selectedName: null,
+      onSelect: rs.fn(),
+      roster: [
+        { name: "dillon-reviewer", display_name: "Reviewer", enabled: true },
+        { name: "dillon-writer", display_name: "Writer", enabled: false },
+      ],
+    };
+    render(<AgentTopology {...props} />);
+    expect(screen.getByText("Delegates to 2 specialists")).toBeTruthy();
+    cleanup();
+    render(<AgentTopology {...props} loading />);
+    expect(screen.queryByText(/Delegates to/)).toBeNull();
+    cleanup();
+    render(<AgentTopology {...props} error />);
+    expect(screen.queryByText(/Delegates to/)).toBeNull();
+    cleanup();
+    render(<AgentTopology {...props} roster={props.roster.slice(0, 1)} />);
+    expect(screen.getByText("Delegates to 1 specialist")).toBeTruthy();
+  });
+
   it("keeps definition state separate from recorded runtime state", () => {
     render(
       <AgentTopology

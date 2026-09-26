@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import {
   DispatchBoard,
   groupRuns,
+  isFailure,
   laneOf,
   stampDate,
 } from "@/components/workspace/command-center/dispatch-board";
@@ -129,6 +130,61 @@ describe("DispatchBoard", () => {
     expect(
       slip("Failed slip").querySelector('[data-testid="ink-stamp"]'),
     ).toBeNull();
+  });
+
+  it("tears only a real failure; an interrupted run reads in neutral ink", () => {
+    expect(isFailure("error")).toBe(true);
+    expect(isFailure("timeout")).toBe(true);
+    expect(isFailure("interrupted")).toBe(false);
+    board({
+      runs: [
+        ...RUNS,
+        run({ run_id: "i", status: "interrupted", thread_title: "Stop slip" }),
+      ],
+    });
+    const word = (title: string, text: string) =>
+      [...slip(title).querySelectorAll("[data-tone]")].find(
+        (node) => node.textContent === text,
+      );
+    // A stop is not a failure: no danger tone, no torn corner.
+    expect(word("Stop slip", "Interrupted")?.getAttribute("data-tone")).toBe(
+      "unknown",
+    );
+    expect(slip("Stop slip").getAttribute("data-failed")).toBeNull();
+    expect(slip("Stop slip").querySelector('[data-part="tear"]')).toBeNull();
+    // Failures keep both, and the folded flap is hidden from assistive tech.
+    for (const title of ["Failed slip", "Slow slip"]) {
+      expect(slip(title).getAttribute("data-failed")).toBe("true");
+      const tear = slip(title).querySelectorAll('[data-part="tear"]');
+      expect(tear).toHaveLength(1);
+      expect(tear[0]?.getAttribute("aria-hidden")).toBe("true");
+    }
+    expect(word("Failed slip", "Failed")?.getAttribute("data-tone")).toBe(
+      "danger",
+    );
+    // Queued is waiting, not acting: neutral ink, royal only while working.
+    expect(word("Queued slip", "Queued")?.getAttribute("data-tone")).toBe(
+      "unknown",
+    );
+    expect(word("Working slip", "Working")?.getAttribute("data-tone")).toBe(
+      "active",
+    );
+  });
+
+  it("rules the Returned lane in danger only when it holds a real failure", () => {
+    const lane = () =>
+      screen
+        .getByRole("heading", { name: /Returned/ })
+        .closest("section[data-lane]");
+    board();
+    expect(lane()?.getAttribute("data-failed")).toBe("true");
+    cleanup();
+    board({
+      runs: [
+        run({ run_id: "i", status: "interrupted", thread_title: "Stop slip" }),
+      ],
+    });
+    expect(lane()?.getAttribute("data-failed")).toBeNull();
   });
 
   it("names the agent in words, never the raw id", () => {

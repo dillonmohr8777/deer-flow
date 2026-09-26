@@ -128,6 +128,22 @@ const SUBAGENTS = SUBAGENT_NAMES.map(([name, display, description]) => ({
 }));
 
 const RUNS = [
+  // Queued, not yet picked up: on the desk without a pin.
+  {
+    run_id: "run-0009",
+    thread_id: "thread-0009",
+    thread_title: "Prepare the Fagan Painting onboarding checklist",
+    assistant_id: "dillon-client-operations",
+    status: "pending",
+    model_name: "claude-sonnet",
+    created_at: minutesAgo(1),
+    updated_at: minutesAgo(1),
+    duration_seconds: null,
+    total_tokens: 0,
+    message_count: 1,
+    cost: null,
+    error: null,
+  },
   {
     run_id: "run-0001",
     thread_id: MOCK_THREAD_ID,
@@ -173,6 +189,22 @@ const RUNS = [
     message_count: 6,
     cost: 0.0381,
     error: "Sandbox timed out after 900 seconds while running the build.",
+  },
+  // Stopped by a person, not a failure: returned without the torn corner.
+  {
+    run_id: "run-0008",
+    thread_id: "thread-0008",
+    thread_title: "Review the Pro Fence & Deck landing page copy",
+    assistant_id: "dillon-critic",
+    status: "interrupted",
+    model_name: "claude-sonnet",
+    created_at: minutesAgo(300),
+    updated_at: minutesAgo(296),
+    duration_seconds: 240,
+    total_tokens: 6_120,
+    message_count: 4,
+    cost: 0.0611,
+    error: null,
   },
   {
     run_id: "run-0004",
