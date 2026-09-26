@@ -47,7 +47,16 @@ function thread(id: string, patch: Partial<Thread> = {}): Thread {
 
 async function mockBoard(
   page: Page,
-  { desk = true, threads = [] }: { desk?: boolean; threads?: Thread[] } = {},
+  {
+    desk = true,
+    threads = [],
+    seed = {},
+  }: {
+    desk?: boolean;
+    threads?: Thread[];
+    /** Messages already on a thread, by thread id: [author_kind, body]. */
+    seed?: Record<string, [string, string][]>;
+  } = {},
 ) {
   mockLangGraphAPI(page, { scheduledTasks: [] });
 
@@ -155,6 +164,10 @@ async function mockBoard(
       await route.fulfill(json(row));
     },
   );
+
+  for (const [id, list] of Object.entries(seed)) {
+    for (const [authorKind, body] of list) addMessage(id, authorKind, body);
+  }
 }
 
 /** WCAG contrast of an element's text against the first opaque background behind it. */
@@ -249,11 +262,38 @@ test.describe("Board, the Momo Board thread queue", () => {
     page,
   }) => {
     await mockBoard(page, {
-      threads: [thread("t1", { subject: "Site is down", kind: "ticket" })],
+      threads: [
+        thread("t1", { subject: "Site is down", kind: "ticket" }),
+        thread("t2", { subject: "Thanks", kind: "post", status: "replied" }),
+      ],
+      seed: { t1: [["client", "The site shows a blank page."]] },
     });
     await page.goto("/workspace/board");
     const board = page.getByTestId("board");
     await board.getByText("Site is down").click({ timeout: 15_000 });
+
+    // The client's letter: ink on cream-lo, signed with the client's name.
+    const clientLetter = page.locator("li[data-author='client']");
+    await expect(clientLetter).toContainText("Acme Landscaping");
+    await expect(clientLetter).toContainText("The site shows a blank page.");
+    for (const part of [
+      "p:first-child span",
+      "p:first-child time",
+      "p:last-child",
+    ]) {
+      expect(
+        await textContrast(page, `[data-author="client"] ${part}`),
+      ).toBeGreaterThanOrEqual(4.5);
+    }
+
+    // A decision is a stamp: 11px heavy caps, its date read after a comma.
+    const stamp = board
+      .getByRole("button", { name: /Thanks/ })
+      .locator("[data-tone='ok']");
+    await expect(stamp).toHaveCSS("font-size", "11px");
+    await expect(stamp).toHaveCSS("font-weight", "800");
+    await expect(stamp).toContainText(/^Replied, \w{3} \d{1,2}$/);
+
     const detail = page.getByTestId("board-thread");
     await detail.getByLabel("Draft a reply").fill("Restoring it now.");
     await detail.getByRole("button", { name: "Save draft" }).click();
@@ -297,6 +337,27 @@ test.describe("Board, the Momo Board thread queue", () => {
     await expect(board.getByRole("region", { name: "Threads" })).toBeVisible();
     await expect(slip).toBeFocused();
     await expect(page.getByTestId("board-thread")).toHaveCount(0);
+  });
+
+  test("keeps the way back while a thread is still loading on a phone", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await mockBoard(page, {
+      threads: [thread("t1", { subject: "Site is down" })],
+    });
+    // The thread read never answers.
+    await page.route(/\/api\/board\/threads\/t1$/, () => undefined);
+    await page.goto("/workspace/board");
+    const board = page.getByTestId("board");
+    const slip = board.getByRole("button", { name: /Site is down/ });
+    await slip.click({ timeout: 15_000 });
+
+    await expect(board.getByText("Loading thread")).toBeVisible();
+    const back = board.getByRole("button", { name: "All threads" });
+    await expect(back).toBeFocused();
+    await back.click();
+    await expect(slip).toBeFocused();
   });
 
   test("is absent on client-facing MomoBot when the flag is off", async ({

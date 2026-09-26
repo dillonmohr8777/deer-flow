@@ -117,7 +117,12 @@ function ThreadStatus({ thread }: { thread: BoardThread }) {
   return (
     <StatusTag tone={statusTone(status)} className={styles.stamp}>
       {STATUS_LABEL[status]}
-      {date ? <span className={styles.stampDate}>{date}</span> : null}
+      {date ? (
+        <>
+          <span className="sr-only">, </span>
+          <span className={styles.stampDate}>{date}</span>
+        </>
+      ) : null}
     </StatusTag>
   );
 }
@@ -303,17 +308,27 @@ function ThreadDetail({
   }, [draft, replySeededFor]);
 
   // One pane at a time on phones: the slip that opened this is now hidden,
-  // so the thread's heading takes focus and the page starts at its top.
+  // so focus moves into the pane. Until the thread has loaded (or when it
+  // fails) the way back takes it; once loaded, the thread's heading does.
   const headingRef = useRef<HTMLHeadingElement>(null);
+  const backRef = useRef<HTMLButtonElement>(null);
   const loaded = Boolean(thread.data);
+  const failed = thread.isError;
   useEffect(() => {
-    if (!loaded || !window.matchMedia(ONE_PANE).matches) return;
-    headingRef.current?.focus({ preventScroll: true });
-    headingRef.current?.scrollIntoView({ block: "start" });
-  }, [loaded]);
+    if (!window.matchMedia(ONE_PANE).matches) return;
+    const target = loaded && !failed ? headingRef.current : backRef.current;
+    target?.focus({ preventScroll: true });
+    target?.scrollIntoView({ block: "start" });
+  }, [loaded, failed]);
 
   const back = (
-    <Button variant="ghost" size="sm" className={styles.back} onClick={onBack}>
+    <Button
+      ref={backRef}
+      variant="ghost"
+      size="sm"
+      className={styles.back}
+      onClick={onBack}
+    >
       <ArrowLeftIcon aria-hidden />
       All threads
     </Button>
@@ -340,7 +355,12 @@ function ThreadDetail({
     );
   }
   if (thread.isLoading || !thread.data) {
-    return <WorkingState label="Loading thread" />;
+    return (
+      <>
+        {back}
+        <WorkingState label="Loading thread" />
+      </>
+    );
   }
   const status = thread.data.status;
   const client = clientName(thread.data.client_id);
@@ -380,6 +400,15 @@ function ThreadDetail({
         <ErrorState
           message="Couldn't load messages."
           detail={messages.error.message}
+          action={
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void messages.refetch()}
+            >
+              Try again
+            </Button>
+          }
         />
       ) : messages.isLoading ? (
         <WorkingState label="Loading messages" />

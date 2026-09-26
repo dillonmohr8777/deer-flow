@@ -150,7 +150,9 @@
  * inside a hand-set border, set a touch off square. Open states keep the
  * plain tag so the stamps mean something.
  */
-.stamp {
+/* span.stamp: one step above the shared .status rule, which sets its own
+   size and weight at single-class specificity. */
+span.stamp {
   gap: 0.375rem;
   padding: 0.125rem 0.4375rem;
   border: 1.5px solid currentColor;
