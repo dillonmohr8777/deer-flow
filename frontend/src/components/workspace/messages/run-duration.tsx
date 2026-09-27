@@ -33,7 +33,7 @@ export function RunActivity({ startTime }: { startTime: number | null }) {
 
   return (
     <div
-      className="text-muted-foreground flex items-center gap-2 text-sm"
+      className="text-foreground flex items-center gap-2 text-sm"
       data-testid="run-activity"
     >
       {/* Momo's Thinking film as a tiny pinned photo; poster when motion is off. */}
@@ -62,7 +62,7 @@ export function RunDuration({ durationSeconds }: { durationSeconds: number }) {
 
   return (
     <div
-      className="text-muted-foreground flex items-center gap-2 text-sm"
+      className="text-foreground flex items-center gap-2 text-sm"
       data-receipt=""
       data-testid="run-duration"
       title={t.runDuration.description}

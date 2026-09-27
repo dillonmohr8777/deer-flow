@@ -70,7 +70,7 @@ export function WorkspaceHeader({ className }: { className?: string }) {
             isActive={pathname === "/workspace/chats/new"}
             asChild
           >
-            <Link className="text-muted-foreground" href="/workspace/chats/new">
+            <Link href="/workspace/chats/new">
               <MessageSquarePlus size={16} />
               <span>{t.sidebar.newChat}</span>
             </Link>

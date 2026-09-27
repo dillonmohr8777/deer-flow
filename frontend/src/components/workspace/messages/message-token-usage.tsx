@@ -29,7 +29,7 @@ function TokenUsageSummary({
   return (
     <div
       className={cn(
-        "text-muted-foreground border-border/60 mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 border-t pt-2 text-[11px]",
+        "text-foreground border-border/60 mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 border-t pt-2 text-[11px]",
         className,
       )}
       data-receipt=""
@@ -134,7 +134,7 @@ export function MessageTokenUsageDebugList({
           >
             <div className="min-w-0 flex-1 space-y-1">
               <div className="text-foreground flex items-center gap-2 text-xs font-medium">
-                <CoinsIcon className="text-muted-foreground size-3" />
+                <CoinsIcon className="text-foreground size-3" />
                 <span className="truncate">{step.label}</span>
               </div>
               {step.secondaryLabels.length > 0 && (
@@ -151,11 +151,11 @@ export function MessageTokenUsageDebugList({
                 </div>
               )}
               {step.sharedAttribution && (
-                <div className="text-muted-foreground text-[11px]">
+                <div className="text-foreground text-[11px]">
                   {t.tokenUsage.sharedAttribution}
                 </div>
               )}
-              <div className="text-muted-foreground text-[11px]">
+              <div className="text-foreground text-[11px]">
                 {step.usage ? (
                   <>
                     {t.tokenUsage.input}:{" "}
