@@ -12,6 +12,15 @@ function stylesheet(treatment: Treatment): string {
   );
 }
 
+function generatedCopyRule(css: string): string {
+  const match =
+    /:is\(([\s\S]*?)\)\s*\.momentum-generated-copy\s*\{([^}]+)\}/.exec(css);
+  if (!match?.[1] || !match[2]) {
+    throw new Error("Missing scoped generated-copy palette");
+  }
+  return `${match[1]} {${match[2]}`;
+}
+
 function token(css: string, name: string): string {
   const match = new RegExp(`--${name}:\\s*(#[0-9a-f]{6})\\s*;`, "i").exec(css);
   if (!match?.[1]) throw new Error(`Missing color token --${name}`);
@@ -40,10 +49,10 @@ describe.each([
   ["retro", "retro-navy"],
 ] as const)("%s generated response contrast", (treatment, backgroundName) => {
   const css = stylesheet(treatment);
-  const copyRule = /\.momentum-generated-copy\s*\{([^}]+)\}/.exec(css)?.[1];
+  const copyRule = generatedCopyRule(css);
 
   it("scopes a readable generated-copy palette to the treatment", () => {
-    expect(css).toContain(`:root:not(.dark)[data-treatment="${treatment}"]`);
+    expect(css).toContain(`:root[data-treatment="${treatment}"]`);
     expect(css).toContain(
       `[data-workspace-shell][data-treatment="${treatment}"]`,
     );
@@ -71,5 +80,44 @@ describe.each([
         `${role} should be readable on the dark chat canvas`,
       ).toBeGreaterThanOrEqual(4.5);
     }
+  });
+});
+
+describe("default dark generated response palette", () => {
+  const css = readFileSync(
+    join(__dirname, "..", "..", "src", "styles", "globals.css"),
+    "utf8",
+  );
+
+  it("applies the light-on-dark base palette in every dark mode", () => {
+    expect(css).toContain(".dark .momentum-generated-copy {");
+  });
+
+  it.each([
+    ["space", "space-void", "space-cream"],
+    ["retro", "retro-navy", "retro-cream"],
+  ] as const)(
+    "keeps dark %s copy on its treatment palette",
+    (treatment, backgroundName, bodyName) => {
+      const treatmentCss = stylesheet(treatment);
+      const scopedRule = generatedCopyRule(treatmentCss);
+      expect(scopedRule).toContain(`:root[data-treatment="${treatment}"]`);
+
+      const bodyToken = new RegExp(
+        `--momentum-copy-body:\\s*var\\(--([\\w-]+)\\)`,
+      ).exec(scopedRule)?.[1];
+      expect(bodyToken).toBe(bodyName);
+      expect(
+        contrast(
+          token(treatmentCss, bodyName),
+          token(treatmentCss, backgroundName),
+        ),
+      ).toBeGreaterThanOrEqual(4.5);
+    },
+  );
+
+  it("leaves generated copy dark in the light theme and light in dark mode", () => {
+    expect(css).toContain("--momentum-copy-body: #102f52;");
+    expect(css).toContain("--momentum-copy-body: #dbe7ff;");
   });
 });

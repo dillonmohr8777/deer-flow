@@ -112,8 +112,8 @@
 
 /* Generated copy has its own palette, so remap it along with the dark canvas. */
 :is(
-    :root:not(.dark)[data-treatment="space"],
-    :root:not(.dark) [data-workspace-shell][data-treatment="space"]
+    :root[data-treatment="space"],
+    :root [data-workspace-shell][data-treatment="space"]
   )
   .momentum-generated-copy {
   --momentum-copy-body: var(--space-cream);
