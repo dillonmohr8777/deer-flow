@@ -28,8 +28,11 @@ import { useI18n } from "@/core/i18n/hooks";
 import {
   completedSubagentBatchItems,
   isActiveSubagentBatch,
+  subagentBatchAcceptanceStatus,
+  subagentBatchCriterionStatus,
   subagentBatchProgress,
   subagentBatchResultsUrl,
+  subagentBatchWaitingItems,
   type SubagentBatch,
   type SubagentBatchItem,
   useControlSubagentBatch,
@@ -66,13 +69,20 @@ export function ThreadSubagentBatches({ threadId }: { threadId: string }) {
           variant="outline"
           size="sm"
           className="relative"
-          aria-label={t.subagentBatches.label}
+          aria-label={
+            activeCount > 0
+              ? `${t.subagentBatches.label}: ${activeCount} ${t.subagentBatches.active.toLowerCase()}`
+              : t.subagentBatches.label
+          }
           data-testid="subagent-batches-trigger"
         >
           <Layers3Icon />
           <span className="hidden xl:inline">{t.subagentBatches.label}</span>
           {activeCount > 0 && (
-            <span className="bg-primary text-primary-foreground grid size-4 place-items-center rounded-full text-[10px] font-semibold">
+            <span
+              aria-hidden="true"
+              className="bg-primary text-primary-foreground grid size-4 place-items-center rounded-full text-[10px] font-semibold"
+            >
               {activeCount > 9 ? "9+" : activeCount}
             </span>
           )}
@@ -171,11 +181,7 @@ function BatchCard({
             {batch.title}
           </p>
           <p className="text-muted-foreground mt-1 text-xs">
-            {batch.subagent_type} ·{" "}
-            {t.subagentBatches.limits(
-              batch.max_live_items,
-              batch.max_running_items,
-            )}
+            {batch.subagent_type}
           </p>
         </div>
         <Badge variant="outline">{labels[batch.status]}</Badge>
@@ -184,11 +190,28 @@ function BatchCard({
       <div className="text-muted-foreground mt-1.5 flex flex-wrap gap-x-3 text-[11px]">
         <span>{t.subagentBatches.progress(completed, batch.total_items)}</span>
         <span>
-          {batch.counts.running} {labels.running.toLowerCase()}
+          {t.subagentBatches.runningCapacity(
+            batch.counts.running,
+            batch.max_running_items,
+          )}
         </span>
+        <span>{t.subagentBatches.liveWindow(batch.max_live_items)}</span>
+        {subagentBatchWaitingItems(batch) > 0 && (
+          <span>
+            {t.subagentBatches.waiting(subagentBatchWaitingItems(batch))}
+          </span>
+        )}
+        {batch.counts.leased > 0 && (
+          <span>{t.subagentBatches.starting(batch.counts.leased)}</span>
+        )}
         {batch.counts.failed > 0 && (
           <span className="text-destructive">
             {batch.counts.failed} {labels.failed.toLowerCase()}
+          </span>
+        )}
+        {batch.counts.cancelled > 0 && (
+          <span>
+            {batch.counts.cancelled} {labels.cancelled.toLowerCase()}
           </span>
         )}
       </div>
@@ -320,13 +343,16 @@ function BatchItemRow({
   onRetry: () => void;
 }) {
   const { t } = useI18n();
+  const labels = t.subagentBatches.itemStatus;
+  const acceptanceStatus = subagentBatchAcceptanceStatus(item);
+
   return (
     <div className="bg-muted/40 rounded-lg p-2 text-xs">
       <div className="flex items-center justify-between gap-2">
         <span className="min-w-0 truncate font-medium" title={item.item_key}>
           {item.item_key}
         </span>
-        <Badge variant="outline">{item.status}</Badge>
+        <Badge variant="outline">{labels[item.status]}</Badge>
       </div>
       {item.result_preview && (
         <p className="mt-1 line-clamp-3 whitespace-pre-wrap">
@@ -335,6 +361,50 @@ function BatchItemRow({
       )}
       {item.error && (
         <p className="text-destructive mt-1 break-words">{item.error}</p>
+      )}
+      {acceptanceStatus && (
+        <div className="border-border mt-2 border-t pt-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="font-medium">
+              {t.subagentBatches.acceptance.heading}
+            </p>
+            <Badge
+              variant={
+                acceptanceStatus === "not_met" ? "destructive" : "outline"
+              }
+            >
+              {t.subagentBatches.acceptance[acceptanceStatus]}
+            </Badge>
+          </div>
+          <ul className="mt-2 space-y-1.5">
+            {(item.acceptance_criteria ?? []).map((criterion, index) => {
+              const leaf = item.acceptance_verdict?.leaves.find(
+                (candidate) => candidate.criterion === criterion,
+              );
+              const status = subagentBatchCriterionStatus(item, criterion);
+              return (
+                <li className="space-y-0.5" key={`${index}-${criterion}`}>
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="min-w-0 flex-1 break-words">
+                      {criterion}
+                    </span>
+                    <span className="text-muted-foreground shrink-0">
+                      {t.subagentBatches.acceptance[status]}
+                    </span>
+                  </div>
+                  {leaf?.detail && (
+                    <p className="text-muted-foreground break-words">
+                      {leaf.detail}
+                    </p>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+          <p className="text-muted-foreground mt-2">
+            {t.subagentBatches.acceptance.disclaimer}
+          </p>
+        </div>
       )}
       {item.status === "failed" && (
         <Button
