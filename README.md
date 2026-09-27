@@ -1605,6 +1605,15 @@ Durable `batch_task` workers use one app-owned plugin snapshot for tool assembly
 
 Ordinary `task` delegation and explicit durable `batch_task` execution share the startup-scoped `subagent_runtime` process capacity. Batch mode keeps large independent item sets in SQL with separate total, live, and running limits, restart recovery, bounded results, and a thread-scoped Web UI panel. The panel pages through bounded previews on demand; full stored result text is available only through the owner-scoped JSONL export, while internal execution and authorization context never enters owner-facing responses. If the batch worker is later stopped or disabled, threads with persisted batches retain read-only item inspection and JSONL export; execution controls remain disabled until the worker is running again. See `config.example.yaml` and [the implementation contract](docs/plans/2026-08-24-subagent-batch-capacity-implementation.md) for limits and recovery semantics.
 
+Private Momentum issue batches can be classified offline with
+[`issue_artifact_gate.py`](backend/packages/harness/deerflow/subagents/issue_artifact_gate.py).
+It keeps batch execution status separate from a source-backed artifact disposition:
+`needs-evidence`, `rework`, or `ready-for-owner`. The gate requires a canonical
+work order, held acceptance criteria, artifact readback and an independent
+review receipt before it can return `ready-for-owner`. It never claims a live
+client fix or publication approval. See the
+[private issue gate guide](backend/docs/momo-issue-artifact-gate.md).
+
 Direct `create_deerflow_agent(...)` integrations can own the same boundary explicitly instead of relying on Gateway startup. Construct one `SubagentRuntime` and share it across every graph in that application; its `max_running`, ordinary per-run total, bound `task` tool, and optional durable-batch tools then use the same caller-owned snapshot and execution controller. A runtime with a batch repository owns a worker and must be started before graph construction and stopped during application shutdown:
 
 ```python
