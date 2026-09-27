@@ -127,7 +127,7 @@ rs.mock("@/core/subagent-batches", () => ({
     const leaf = item.acceptance_verdict.leaves.find(
       (candidate) => candidate.criterion === criterion,
     );
-    if (!leaf || !leaf.checked) return "needs_review";
+    if (!leaf?.checked) return "needs_review";
     return leaf.holds ? "met" : "not_met";
   },
   subagentBatchProgress: () => 50,
