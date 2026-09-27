@@ -34,14 +34,14 @@ function NavMenuButtonContent({
   t: ReturnType<typeof useI18n>["t"];
 }) {
   return isSidebarOpen ? (
-    <div className="text-muted-foreground flex w-full items-center gap-2 text-left text-sm">
+    <div className="text-sidebar-foreground flex w-full items-center gap-2 text-left text-sm">
       <SettingsIcon className="size-4" />
       <span>{t.workspace.settingsAndMore}</span>
-      <ChevronsUpDown className="text-muted-foreground ml-auto size-4" />
+      <ChevronsUpDown className="ml-auto size-4" />
     </div>
   ) : (
     <div className="flex size-full items-center justify-center">
-      <SettingsIcon className="text-muted-foreground size-4" />
+      <SettingsIcon className="text-sidebar-foreground size-4" />
     </div>
   );
 }

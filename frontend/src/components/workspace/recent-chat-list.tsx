@@ -238,7 +238,7 @@ export function ThreadSidebarItem({
       >
         <Link
           aria-label={branchLabel}
-          className="group/thread-link text-muted-foreground min-w-0 whitespace-nowrap group-hover/side-menu-item:overflow-hidden"
+          className="group/thread-link text-sidebar-foreground min-w-0 whitespace-nowrap group-hover/side-menu-item:overflow-hidden"
           data-branch-depth={
             branchEntry && branchEntry.depth > 0 ? branchEntry.depth : undefined
           }
@@ -249,7 +249,7 @@ export function ThreadSidebarItem({
           {branchEntry && branchEntry.depth > 0 && (
             <span
               aria-hidden="true"
-              className="text-muted-foreground/70 shrink-0 font-mono text-[10px] leading-none"
+              className="text-sidebar-foreground shrink-0 font-mono text-[10px] leading-none"
               data-testid="thread-branch-stem"
               style={{
                 marginLeft: `${Math.min(branchEntry.depth - 1, 1) * 8}px`,
@@ -276,7 +276,7 @@ export function ThreadSidebarItem({
             </span>
             {(stamp ?? projectName) && (
               <span
-                className="text-muted-foreground truncate text-xs leading-4 font-medium"
+                className="text-sidebar-foreground truncate text-xs leading-4 font-medium"
                 data-testid="thread-row-meta"
               >
                 {stamp && thread.updated_at && (

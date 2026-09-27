@@ -46,7 +46,7 @@ export function WorkspaceNavChatList() {
               isActive={pathname === "/workspace/desk"}
               asChild
             >
-              <Link className="text-muted-foreground" href="/workspace/desk">
+              <Link href="/workspace/desk">
                 <LampDesk />
                 <span>Desk</span>
               </Link>
@@ -60,7 +60,7 @@ export function WorkspaceNavChatList() {
               isActive={pathname === "/workspace/board"}
               asChild
             >
-              <Link className="text-muted-foreground" href="/workspace/board">
+              <Link href="/workspace/board">
                 <Inbox />
                 <span>Board</span>
               </Link>
@@ -74,7 +74,7 @@ export function WorkspaceNavChatList() {
               isActive={pathname === "/workspace/team"}
               asChild
             >
-              <Link className="text-muted-foreground" href="/workspace/team">
+              <Link href="/workspace/team">
                 <Hash />
                 <span>Team</span>
               </Link>
@@ -86,10 +86,7 @@ export function WorkspaceNavChatList() {
             isActive={pathname === "/workspace/command-center"}
             asChild
           >
-            <Link
-              className="text-muted-foreground"
-              href="/workspace/command-center"
-            >
+            <Link href="/workspace/command-center">
               <Network />
               <span>Command Center</span>
             </Link>
@@ -97,7 +94,7 @@ export function WorkspaceNavChatList() {
         </SidebarMenuItem>
         <SidebarMenuItem>
           <SidebarMenuButton isActive={pathname === "/workspace/chats"} asChild>
-            <Link className="text-muted-foreground" href="/workspace/chats">
+            <Link href="/workspace/chats">
               <MessagesSquare />
               <span>{t.sidebar.chats}</span>
             </Link>
@@ -109,7 +106,7 @@ export function WorkspaceNavChatList() {
               isActive={pathname.startsWith("/workspace/agents")}
               asChild
             >
-              <Link className="text-muted-foreground" href="/workspace/agents">
+              <Link href="/workspace/agents">
                 <BotIcon />
                 <span>{t.sidebar.agents}</span>
               </Link>
@@ -127,7 +124,7 @@ export function WorkspaceNavChatList() {
                     still receives pointer events), not the inert button. */}
                 <span className="block w-full cursor-not-allowed">
                   <SidebarMenuButton
-                    className="text-muted-foreground/50"
+                    className="text-sidebar-foreground aria-disabled:opacity-80"
                     aria-disabled
                     aria-describedby="agents-disabled-reason"
                   >
@@ -150,10 +147,7 @@ export function WorkspaceNavChatList() {
             isActive={pathname.startsWith("/workspace/scheduled-tasks")}
             asChild
           >
-            <Link
-              className="text-muted-foreground"
-              href="/workspace/scheduled-tasks"
-            >
+            <Link href="/workspace/scheduled-tasks">
               <CalendarClock />
               <span>{t.sidebar.scheduledTasks}</span>
             </Link>
@@ -164,10 +158,7 @@ export function WorkspaceNavChatList() {
             isActive={pathname.startsWith("/workspace/capabilities")}
             asChild
           >
-            <Link
-              className="text-muted-foreground"
-              href="/workspace/capabilities"
-            >
+            <Link href="/workspace/capabilities">
               <BlocksIcon />
               <span>{t.capabilities.title}</span>
             </Link>
@@ -175,7 +166,7 @@ export function WorkspaceNavChatList() {
         </SidebarMenuItem>
         <SidebarMenuItem>
           <SidebarMenuButton isActive={pathname.startsWith("/daily")} asChild>
-            <Link className="text-muted-foreground" href="/daily">
+            <Link href="/daily">
               <Newspaper />
               <span>The Momo Daily</span>
             </Link>
@@ -188,7 +179,7 @@ export function WorkspaceNavChatList() {
               isActive={pathname === "/workspace/academy"}
               asChild
             >
-              <Link className="text-muted-foreground" href="/workspace/academy">
+              <Link href="/workspace/academy">
                 <GraduationCap />
                 <span>AI Academy</span>
               </Link>

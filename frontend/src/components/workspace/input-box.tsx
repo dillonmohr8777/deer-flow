@@ -2529,7 +2529,7 @@ export function InputBox({
           ) : (
             <PromptInputTextarea
               className={cn(
-                "min-h-6! w-full min-w-0 p-0! leading-6!",
+                "min-h-6! w-full min-w-0 p-0! leading-6! placeholder:text-foreground placeholder:opacity-100",
                 context.experience_mode === "easy" && "text-base!",
               )}
               disabled={composerLocked}
@@ -2648,7 +2648,7 @@ export function InputBox({
                       className={cn(
                         context.mode === "flash"
                           ? "text-accent-foreground"
-                          : "text-muted-foreground/65",
+                          : "text-muted-foreground",
                       )}
                       onSelect={() => handleModeSelect("flash")}
                     >
@@ -2678,7 +2678,7 @@ export function InputBox({
                         className={cn(
                           context.mode === "thinking"
                             ? "text-accent-foreground"
-                            : "text-muted-foreground/65",
+                            : "text-muted-foreground",
                         )}
                         onSelect={() => handleModeSelect("thinking")}
                       >
@@ -2708,7 +2708,7 @@ export function InputBox({
                       className={cn(
                         context.mode === "pro"
                           ? "text-accent-foreground"
-                          : "text-muted-foreground/65",
+                          : "text-muted-foreground",
                       )}
                       onSelect={() => handleModeSelect("pro")}
                     >
@@ -2738,7 +2738,7 @@ export function InputBox({
                         className={cn(
                           context.mode === "ultra"
                             ? "text-accent-foreground"
-                            : "text-muted-foreground/65",
+                            : "text-muted-foreground",
                         )}
                         onSelect={() => handleModeSelect("ultra")}
                       >
@@ -2804,7 +2804,7 @@ export function InputBox({
                           className={cn(
                             context.reasoning_effort === "minimal"
                               ? "text-accent-foreground"
-                              : "text-muted-foreground/65",
+                              : "text-muted-foreground",
                           )}
                           onSelect={() =>
                             handleReasoningEffortSelect("minimal")
@@ -2828,7 +2828,7 @@ export function InputBox({
                           className={cn(
                             context.reasoning_effort === "low"
                               ? "text-accent-foreground"
-                              : "text-muted-foreground/65",
+                              : "text-muted-foreground",
                           )}
                           onSelect={() => handleReasoningEffortSelect("low")}
                         >
@@ -2851,7 +2851,7 @@ export function InputBox({
                             context.reasoning_effort === "medium" ||
                               !context.reasoning_effort
                               ? "text-accent-foreground"
-                              : "text-muted-foreground/65",
+                              : "text-muted-foreground",
                           )}
                           onSelect={() => handleReasoningEffortSelect("medium")}
                         >
@@ -2874,7 +2874,7 @@ export function InputBox({
                           className={cn(
                             context.reasoning_effort === "high"
                               ? "text-accent-foreground"
-                              : "text-muted-foreground/65",
+                              : "text-muted-foreground",
                           )}
                           onSelect={() => handleReasoningEffortSelect("high")}
                         >

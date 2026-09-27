@@ -1025,7 +1025,7 @@ export const PromptInputButton = ({
 }: PromptInputButtonProps) => {
   return (
     <InputGroupButton
-      className={cn(className)}
+      className={cn("text-foreground disabled:opacity-80", className)}
       size="sm"
       type="button"
       variant={variant}
@@ -1101,7 +1101,7 @@ export const PromptInputSubmit = ({
   return (
     <InputGroupButton
       aria-label="Submit"
-      className={cn(className)}
+      className={cn("text-foreground disabled:opacity-80", className)}
       size={size}
       type="submit"
       variant={variant}
