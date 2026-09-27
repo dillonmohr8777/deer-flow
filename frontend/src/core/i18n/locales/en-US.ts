@@ -669,14 +669,15 @@ export const enUS: Translations = {
   },
 
   subagentBatches: {
-    label: "Batches",
-    title: "Subagent batches",
-    description: "Durable, restart-safe work for many independent items.",
+    label: "Missions",
+    title: "Missions",
+    description:
+      "Durable missions coordinate independent items. See what is waiting, what is running, and each mission's limit for work at once.",
     workerUnavailable:
-      "The batch worker isn't running. Historical batches remain available in read-only mode.",
-    empty: "No subagent batches yet",
-    emptyHint: "Explicit batch_task submissions in this chat will appear here.",
-    loadFailed: "Couldn't load subagent batches",
+      "The mission worker isn't running. Existing results remain readable, but work is not progressing and controls are unavailable.",
+    empty: "No missions yet",
+    emptyHint: "Missions started in this conversation will appear here.",
+    loadFailed: "Couldn't load missions",
     active: "Active",
     recent: "Recent",
     pause: "Pause",
@@ -686,9 +687,32 @@ export const enUS: Translations = {
     exportResults: "Export JSONL",
     viewItems: "View items",
     hideItems: "Hide items",
-    itemsFailed: "Couldn't load batch items",
-    progress: (completed, total) => `${completed} of ${total} terminal`,
-    limits: (live, running) => `Live ${live} · running ${running}`,
+    itemsFailed: "Couldn't load mission items",
+    progress: (completed, total) => `${completed} of ${total} items finished`,
+    liveWindow: (count) => `Live window ${count}`,
+    runningCapacity: (running, maximum) =>
+      `${running} running · up to ${maximum} at once`,
+    waiting: (count) => `${count} waiting`,
+    starting: (count) => `${count} starting`,
+    itemStatus: {
+      pending: "Pending",
+      queued: "Queued",
+      leased: "Starting",
+      running: "Running",
+      succeeded: "Execution finished",
+      failed: "Execution failed",
+      cancelled: "Cancelled",
+    },
+    acceptance: {
+      heading: "Acceptance checks",
+      disclaimer:
+        "These checks cover recorded evidence; they do not judge the full result.",
+      checking: "Checks pending",
+      met: "Checks met",
+      not_met: "Checks not met",
+      needs_review: "Review needed",
+      unverified: "Unverified",
+    },
     status: {
       queued: "Queued",
       running: "Running",

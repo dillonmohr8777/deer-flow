@@ -590,7 +590,28 @@ export interface Translations {
     hideItems: string;
     itemsFailed: string;
     progress: (completed: number, total: number) => string;
-    limits: (live: number, running: number) => string;
+    liveWindow: (count: number) => string;
+    runningCapacity: (running: number, maximum: number) => string;
+    waiting: (count: number) => string;
+    starting: (count: number) => string;
+    itemStatus: {
+      pending: string;
+      queued: string;
+      leased: string;
+      running: string;
+      succeeded: string;
+      failed: string;
+      cancelled: string;
+    };
+    acceptance: {
+      heading: string;
+      disclaimer: string;
+      checking: string;
+      met: string;
+      not_met: string;
+      needs_review: string;
+      unverified: string;
+    };
     status: {
       queued: string;
       running: string;
