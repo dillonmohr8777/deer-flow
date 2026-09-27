@@ -1021,8 +1021,6 @@ export function MessageList({
             isLoading={thread.isLoading}
             messages={turnUsageMessages ?? []}
             showModelDetail={activeContext.experience_mode === "hard"}
-            modelName={activeContext.model_name}
-            reasoningEffort={activeContext.reasoning_effort}
           />
         );
       }
@@ -1050,8 +1048,6 @@ export function MessageList({
     },
     [
       activeContext.experience_mode,
-      activeContext.model_name,
-      activeContext.reasoning_effort,
       showTokenDebugSummaries,
       thread.isLoading,
       tokenDebugSteps,

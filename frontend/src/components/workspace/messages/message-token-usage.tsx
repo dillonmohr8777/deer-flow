@@ -3,7 +3,11 @@ import { CoinsIcon } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { useI18n } from "@/core/i18n/hooks";
-import { accumulateUsage, formatTokenCount } from "@/core/messages/usage";
+import {
+  accumulateUsage,
+  formatTokenCount,
+  getRecordedTurnModel,
+} from "@/core/messages/usage";
 import type { TokenDebugStep } from "@/core/messages/usage-model";
 import { cn } from "@/lib/utils";
 
@@ -62,16 +66,12 @@ export function MessageTokenUsageList({
   enabled = false,
   isLoading: _isLoading = false,
   messages,
-  modelName,
-  reasoningEffort,
   showModelDetail = false,
 }: {
   className?: string;
   enabled?: boolean;
   isLoading?: boolean;
   messages: Message[];
-  modelName?: string;
-  reasoningEffort?: string;
   showModelDetail?: boolean;
 }) {
   if (!enabled) {
@@ -96,8 +96,7 @@ export function MessageTokenUsageList({
       inputTokens={usage.inputTokens}
       outputTokens={usage.outputTokens}
       totalTokens={usage.totalTokens}
-      modelName={modelName}
-      reasoningEffort={reasoningEffort}
+      modelName={getRecordedTurnModel(aiMessages)}
       showModelDetail={showModelDetail}
     />
   );

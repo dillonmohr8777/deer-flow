@@ -1,7 +1,11 @@
 import type { Message } from "@langchain/langgraph-sdk";
 import { expect, test } from "@rstest/core";
 
-import { accumulateUsage, selectHeaderTokenUsage } from "@/core/messages/usage";
+import {
+  accumulateUsage,
+  getRecordedTurnModel,
+  selectHeaderTokenUsage,
+} from "@/core/messages/usage";
 import {
   getAssistantTurnUsageMessages,
   getMessageGroups,
@@ -61,6 +65,32 @@ test("reads usage metadata from additional kwargs when the SDK nests it there", 
     outputTokens: 3,
     totalTokens: 11,
   });
+});
+
+test("labels a turn only when its usage-bearing messages record one model", () => {
+  const withModel = (id: string, model?: string) =>
+    ({
+      id,
+      type: "ai",
+      content: "Answer",
+      usage_metadata: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+      response_metadata: model ? { model_name: model } : {},
+    }) as Message;
+
+  expect(getRecordedTurnModel([withModel("one", "model-a")])).toBe("model-a");
+  expect(
+    getRecordedTurnModel([
+      withModel("one", "model-a"),
+      withModel("two", "model-a"),
+    ]),
+  ).toBe("model-a");
+  expect(getRecordedTurnModel([withModel("one")])).toBeUndefined();
+  expect(
+    getRecordedTurnModel([
+      withModel("one", "model-a"),
+      withModel("two", "model-b"),
+    ]),
+  ).toBeUndefined();
 });
 
 test("keeps header and per-turn aggregation consistent for a reasoning+answer message", () => {

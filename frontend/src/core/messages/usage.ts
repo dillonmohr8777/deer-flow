@@ -78,6 +78,30 @@ export function accumulateUsage(messages: Message[]): TokenUsage | null {
 }
 
 /**
+ * A turn's model label must come from the completed messages, never the
+ * currently selected composer model. Mixed or missing receipts have no
+ * truthful single-model label.
+ */
+export function getRecordedTurnModel(messages: Message[]): string | undefined {
+  let recordedModel: string | undefined;
+  let hasUsage = false;
+  for (const message of messages) {
+    if (!getUsageMetadata(message)) continue;
+    hasUsage = true;
+    const metadata = (message as Record<string, unknown>).response_metadata;
+    const record =
+      metadata && typeof metadata === "object"
+        ? (metadata as Record<string, unknown>)
+        : null;
+    const value = record?.model_name ?? record?.model;
+    if (typeof value !== "string" || !value.trim()) return undefined;
+    if (recordedModel && recordedModel !== value) return undefined;
+    recordedModel = value;
+  }
+  return hasUsage ? recordedModel : undefined;
+}
+
+/**
  * Validate a raw `{input,output,total}_tokens` object into {@link TokenUsage}.
  *
  * The single shared validator for both sub-agent usage surfaces — the live
