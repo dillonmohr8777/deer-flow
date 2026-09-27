@@ -1,6 +1,6 @@
 /**
- * Design-review screenshot harness. Not a regression test: it is skipped
- * unless DESIGN_SHOTS=1, and it asserts nothing beyond "the page rendered".
+ * Design-review screenshot harness with focused chat UI assertions. It is
+ * skipped unless DESIGN_SHOTS=1.
  *
  *   DESIGN_SHOTS=1 DESIGN_SHOTS_DIR=<dir> pnpm exec playwright test design-surfaces
  *
@@ -728,6 +728,26 @@ async function capture(
 test.describe("design surfaces", () => {
   test.skip(!enabled, "Set DESIGN_SHOTS=1 to capture design screenshots.");
   test.describe.configure({ timeout: 60_000 });
+
+  test("Easy mode starter fills an editable chat draft", async ({ page }) => {
+    test.skip(!wanted("chat-thread"), "Only run with chat-thread review.");
+    await mockDesignAPI(page, {});
+    await page.addInitScript(() => {
+      localStorage.setItem(
+        "deerflow.local-settings",
+        JSON.stringify({ context: { experience_mode: "easy" } }),
+      );
+    });
+    await page.goto(`/workspace/chats/${MOCK_THREAD_ID}`);
+    const starter = page.getByRole("button", {
+      name: "Help me with something, step by step",
+    });
+    await expect(starter).toBeVisible();
+    await starter.click();
+    await expect(page.locator("textarea").first()).toHaveValue(
+      "Help me with something, step by step",
+    );
+  });
 
   for (const viewport of VIEWPORTS) {
     test(`chat-thread reply contrast ${viewport.name}`, async ({ page }) => {
