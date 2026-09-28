@@ -35,6 +35,14 @@ unconstrained `openrouter/auto-beta` router is pinned to a non-GPT model,
 Vercel AI Gateway entries go through OpenRouter, and Ollama entries are
 limited to models this Mac actually has.
 
+## Docker engine
+
+The scripts pin `DOCKER_HOST` to OrbStack (the CLI's default context on this
+Mac is Docker Desktop). If `~/momobot-prod/docker-config` exists they use it:
+a config with `"credsStore": "none"` and a no-op `docker-credential-none` in
+`~/momobot-prod/bin`, so anonymous pulls never wait on a macOS keychain prompt
+(the stock osxkeychain helper hangs there when nobody answers the dialog).
+
 ## Images
 
 Build from the deployed commit, tag with the short SHA, then set both tags in `.env`:

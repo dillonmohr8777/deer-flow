@@ -19,12 +19,13 @@ services:
     restart: unless-stopped
     volumes:
       - ${MOMOBOT_REALIP_CONF:?run via deploy/momentum/mac/restart.sh}:/etc/nginx/momentum-realip.conf:ro
-    # Same as the base command plus the realip include. The grep makes a
-    # failed injection stop nginx instead of silently serving with one shared
-    # rate-limit bucket.
+    # Same as the base command plus the realip include, kept on the http {
+    # line: compose turns a \n in this folded string into a real newline,
+    # which broke sed. The grep makes a failed injection stop nginx instead of
+    # silently serving with one shared rate-limit bucket.
     command: >
       sh -c "cp /etc/nginx/nginx.conf.template /etc/nginx/nginx.conf
-      && sed -i 's|^http {$$|http {\n    include /etc/nginx/momentum-realip.conf;|' /etc/nginx/nginx.conf
+      && sed -i 's|^http {$$|http { include /etc/nginx/momentum-realip.conf;|' /etc/nginx/nginx.conf
       && grep -q 'include /etc/nginx/momentum-realip.conf;' /etc/nginx/nginx.conf
       && nginx -g 'daemon off;'"
     networks:

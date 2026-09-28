@@ -10,6 +10,7 @@
   <key>EnvironmentVariables</key>
   <dict>
     <key>PATH</key><string>__HOME__/.orbstack/bin:__HOME__/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+    <key>DOCKER_HOST</key><string>unix://__HOME__/.orbstack/run/docker.sock</string>
     <key>MOMOBOT_ENV_FILE</key><string>__DEPLOY__/.env</string>
     <key>MOMOBOT_BACKUP_DEST</key><string>__DEPLOY__/backups</string>
     <key>MOMOBOT_HEALTH_LOG</key><string>__DEPLOY__/logs/health.jsonl</string>
