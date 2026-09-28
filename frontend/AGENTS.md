@@ -275,10 +275,15 @@ shared-MCP administrator checks remain authoritative; this adds no personal scop
 sidebar gains a Desk link; with it off, the route replaces itself with Command
 Center before rendering anything Desk-shaped. Desk only reads existing APIs
 (scheduled tasks, clients and their fleet bindings, fleet templates, console
-usage); department grouping and schedule matching live in
-`components/workspace/desk/desk-data.ts`. There is no approval queue API yet, so
-the Approvals panel says "Not wired". `tests/e2e/desk.spec.ts` proves both flag
-states and the fresh-instance empty states.
+usage, and the Momo Board's `GET /api/board/threads?status=drafted`);
+department grouping and schedule matching live in
+`components/workspace/desk/desk-data.ts`. The Approvals panel and the sidebar's
+Board badge both read that same drafted-threads query (e4): a count of threads
+waiting on the owner, plus an "After hours" flag when an `urgent`-triage thread
+is waiting outside 8am-8pm ET (`isAfterHoursET`/`hasUrgentAfterHoursApproval` in
+`desk-data.ts`). No external send is triggered by either alert.
+`tests/e2e/desk.spec.ts` proves both flag states, the fresh-instance empty
+states, and the approvals count/badge wiring.
 
 ## Team and AI Academy (Momentum staff only)
 

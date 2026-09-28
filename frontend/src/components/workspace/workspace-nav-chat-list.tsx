@@ -18,6 +18,7 @@ import { usePathname } from "next/navigation";
 import {
   SidebarGroup,
   SidebarMenu,
+  SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
@@ -27,6 +28,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useAgentsApiEnabled } from "@/core/agents";
+import { useBoardThreads } from "@/core/board";
 import { useDeskEnabled, useMomentumInternalEnabled } from "@/core/features";
 import { useI18n } from "@/core/i18n/hooks";
 
@@ -36,6 +38,13 @@ export function WorkspaceNavChatList() {
   const { enabled: agentsEnabled } = useAgentsApiEnabled();
   const { enabled: deskEnabled } = useDeskEnabled();
   const { enabled: internalEnabled } = useMomentumInternalEnabled();
+  // Threads with a Momo draft waiting on the owner; same query Desk's
+  // Approvals panel runs, so React Query shares one cache entry.
+  const waitingApproval = useBoardThreads({
+    status: "drafted",
+    enabled: deskEnabled,
+  });
+  const waitingCount = deskEnabled ? (waitingApproval.data?.length ?? 0) : 0;
   return (
     <SidebarGroup className="pt-1">
       <SidebarMenu>
@@ -65,6 +74,11 @@ export function WorkspaceNavChatList() {
                 <span>Board</span>
               </Link>
             </SidebarMenuButton>
+            {waitingCount > 0 && (
+              <SidebarMenuBadge aria-label={`${waitingCount} waiting on you`}>
+                {waitingCount}
+              </SidebarMenuBadge>
+            )}
           </SidebarMenuItem>
         )}
         {/* Momentum staff only: the agency's own workspace plus a staff role. */}
