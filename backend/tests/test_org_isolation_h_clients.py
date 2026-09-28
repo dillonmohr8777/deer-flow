@@ -188,3 +188,49 @@ async def test_client_contact_full_roster_scoped_to_assignments(org_world):  # n
             full_list = await client.get("/api/clients", headers=headers)
             assert full_list.status_code == 200
             assert {c["id"] for c in full_list.json()["clients"]} == {client1["id"], client2["id"]}
+
+
+async def test_client_contact_cannot_self_reassign_to_regain_visibility(org_world):  # noqa: F811
+    """f58 (review follow-up on PR #69): scoping ``GET /api/clients`` off
+    ``client_assignments`` is only real isolation if a plain member can't
+    write to ``client_assignments`` itself. Reproduces the reviewer's exact
+    repro: D is assigned to c1 and c2, then removed from c2 -- D must not be
+    able to re-add itself to c2 (nor read/patch/archive it, nor read its
+    agents) just because ``clients:write``/``clients:read`` are open to every
+    member while route-level authorization is disabled (the default).
+    """
+    session_factory = org_world
+    app = _build_app(session_factory)
+    headers_a = auth_headers(USER_A, ORG_S)
+
+    await _add_plain_member(session_factory, USER_D, ORG_S)
+    headers_d = auth_headers(USER_D, ORG_S)
+
+    async with _client(app) as client:
+        client1 = await _create_client(client, headers_a, "Client One")
+        client2 = await _create_client(client, headers_a, "Client Two Secret")
+
+        assert (await client.post(f"/api/clients/{client1['id']}/assignments", json={"user_id": USER_D, "role": "client_contact"}, headers=headers_a)).status_code == 201
+        assert (await client.post(f"/api/clients/{client2['id']}/assignments", json={"user_id": USER_D, "role": "client_contact"}, headers=headers_a)).status_code == 201
+        assert (await client.delete(f"/api/clients/{client2['id']}/assignments/{USER_D}", headers=headers_a)).status_code == 204
+
+        # D no longer sees client2 anywhere...
+        assert client2["id"] not in [c["id"] for c in (await client.get("/api/clients", headers=headers_d)).json()["clients"]]
+        assert (await client.get(f"/api/clients/{client2['id']}", headers=headers_d)).status_code == 404
+        assert (await client.get(f"/api/clients/{client2['id']}/agents", headers=headers_d)).status_code == 404
+
+        # ...and, critically, can't write its own way back in: self-assignment,
+        # patch, and archive on a client it's not assigned to are all refused.
+        assert (await client.post(f"/api/clients/{client2['id']}/assignments", json={"user_id": USER_D, "role": "client_contact"}, headers=headers_d)).status_code == 403
+        assert (await client.patch(f"/api/clients/{client2['id']}", json={"notes": "hijacked"}, headers=headers_d)).status_code == 403
+        assert (await client.post(f"/api/clients/{client2['id']}/archive", headers=headers_d)).status_code == 403
+        assert (await client.post("/api/clients", json={"display_name": "D's rogue client"}, headers=headers_d)).status_code == 403
+
+        # D's own view is unaffected: still sees only client1.
+        assert [c["id"] for c in (await client.get("/api/clients", headers=headers_d)).json()["clients"]] == [client1["id"]]
+        assert (await client.get(f"/api/clients/{client1['id']}", headers=headers_d)).status_code == 200
+        assert (await client.get(f"/api/clients/{client1['id']}/agents", headers=headers_d)).status_code == 200
+
+        # An admin can still do all of the above.
+        assert (await client.patch(f"/api/clients/{client2['id']}", json={"notes": "admin edit"}, headers=headers_a)).status_code == 200
+        assert (await client.post(f"/api/clients/{client2['id']}/archive", headers=headers_a)).status_code == 200
