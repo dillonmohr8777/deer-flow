@@ -1,7 +1,9 @@
 /*
- * Board: client posts, tickets, concerns and DMs. Layout only, in the
- * Desk's visual language -- colour comes from the shell's semantic tokens
- * and the shared page-body parts (rows, eyebrow, status).
+ * Board: client posts, tickets, concerns and DMs, in the Desk's paper
+ * language. Threads are slips, a recorded decision is an ink stamp, the
+ * conversation reads as letters and the reply waits on its own torn sheet.
+ * Colour comes from the shell's semantic tokens (paper.css maps them) and
+ * the shared page-body parts (sheet, eyebrow, status, pin).
  */
 
 .frame {
@@ -33,61 +35,143 @@
 @media (min-width: 64rem) {
   .layout {
     flex-direction: row;
+    gap: 2rem;
   }
 }
+
+/* ---------- The slips ---------- */
 
 .list {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 0.5rem;
 }
 
 @media (min-width: 64rem) {
   .list {
     width: 22rem;
     flex: 0 0 22rem;
+    /* Room for the selected slip's ring and the 2px hover lift. */
+    margin: -4px;
+    padding: 4px;
     overflow-y: auto;
   }
 }
 
-.threadList {
+.slips {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.625rem;
 }
 
-.threadRow {
+.slip {
   display: flex;
   width: 100%;
   flex-direction: column;
   gap: 0.375rem;
-  padding: 0.75rem;
+  padding: 0.75rem 0.875rem 0.8125rem;
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: 2px 5px 3px 6px;
   background: var(--card);
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--foreground) 10%, transparent);
+  color: var(--foreground);
   text-align: left;
   cursor: pointer;
 }
 
-.threadRow[aria-current="true"] {
+.slips > li:nth-child(even) > .slip {
+  border-radius: 5px 2px 6px 3px;
+}
+
+/* Selected: royal edge, per the one selected-state rule. */
+.slip[aria-current="true"] {
   border-color: var(--primary);
   box-shadow: 0 0 0 1px var(--primary);
 }
 
-.threadSubject {
-  overflow: hidden;
+.slipMeta {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 0.5rem;
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.25rem;
+}
+
+.kind {
+  flex: none;
+  font-size: 11px;
   font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.slipClient {
+  min-width: 0;
+  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.threadMeta {
-  display: flex;
-  gap: 0.5rem;
-  color: var(--muted-foreground);
-  font-size: 0.8125rem;
+.slipTime {
+  flex: none;
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
 }
+
+/* Two lines, then the native tooltip carries the rest. */
+.slipSubject {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  line-height: 1.3125rem;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.slip:focus-visible .slipSubject {
+  display: block;
+}
+
+.slipStatus {
+  display: flex;
+  min-height: 1.5rem;
+  align-items: center;
+  margin-top: 0.125rem;
+}
+
+/* ---------- Status stamps ---------- */
+
+/*
+ * A recorded decision is inked, not tagged: the StatusTag's shape and word
+ * inside a hand-set border, set a touch off square. Open states keep the
+ * plain tag so the stamps mean something.
+ */
+/* span.stamp: one step above the shared .status rule, which sets its own
+   size and weight at single-class specificity. */
+span.stamp {
+  gap: 0.375rem;
+  padding: 0.125rem 0.4375rem;
+  border: 1.5px solid currentColor;
+  border-radius: 2px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  line-height: 1rem;
+  text-transform: uppercase;
+  transform: rotate(-2deg);
+}
+
+.stampDate {
+  padding-left: 0.375rem;
+  border-left: 1px solid currentColor;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- The open thread ---------- */
 
 .detail {
   display: flex;
@@ -96,68 +180,229 @@
   flex-direction: column;
 }
 
+@media (min-width: 64rem) {
+  .detail {
+    /* Room for a stamp's tilt at the right edge. */
+    margin: -4px;
+    padding: 4px;
+    overflow-y: auto;
+  }
+}
+
+/* One pane at a time below 64rem: the slips, or the thread they opened. */
+@media (max-width: 63.99rem) {
+  .frame[data-open="thread"] :is(.pageHead, .filters, .list) {
+    display: none;
+  }
+
+  .frame[data-open="list"] .detail {
+    display: none;
+  }
+}
+
+.back {
+  align-self: flex-start;
+  min-height: 44px;
+  margin-left: -0.625rem;
+  color: var(--primary);
+  font-weight: 700;
+}
+
+@media (min-width: 64rem) {
+  .back {
+    display: none;
+  }
+}
+
 .threadDetail {
   display: flex;
   min-height: 0;
-  flex: 1;
   flex-direction: column;
-  gap: 1rem;
+  gap: 1.25rem;
 }
 
 .threadHead {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 0.5rem;
-  padding-bottom: 0.75rem;
+  gap: 0.5rem 1rem;
+  padding-bottom: 0.875rem;
   border-bottom: 1px solid var(--border);
 }
 
-.messages {
-  min-height: 8rem;
-  flex: 1;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+.threadTitle {
+  margin-top: 0.25rem;
+  font-size: 1.375rem;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
 }
 
-.messageList {
+.threadTitle:focus {
+  outline: none;
+}
+
+.threadTitle:focus-visible {
+  outline: 3px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.threadSub {
+  margin-top: 0.25rem;
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+/* ---------- Letters ---------- */
+
+.letters {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
-  padding: 0.75rem;
 }
 
-.message {
-  padding: 0.625rem 0.75rem;
-  border-radius: var(--radius);
-  background: var(--muted);
+.letter {
+  max-width: 44rem;
+  padding: 0.75rem 1rem 0.875rem;
+  border: 1px solid color-mix(in srgb, var(--border) 45%, transparent);
+  border-radius: 2px 5px 3px 6px;
   font-size: 0.875rem;
 }
 
-.message-momo {
-  border: 1px dashed var(--primary);
-  background: transparent;
+/* The client writes in; the team writes back from the other side. */
+.letter[data-author="client"] {
+  margin-right: 2.5rem;
+  background: var(--secondary);
+  color: var(--secondary-foreground);
 }
 
-.messageAuthor {
-  display: block;
-  margin-bottom: 0.125rem;
-  color: var(--muted-foreground);
-  font-size: 0.75rem;
+.letter[data-author="owner"],
+.letter[data-author="momo"] {
+  margin-left: 2.5rem;
+  background: var(--card);
+  color: var(--card-foreground);
+}
+
+/* An older Momo draft that was never sent stays readable, but reads as a draft. */
+.letter[data-author="momo"] {
+  border-style: dashed;
+  border-color: var(--border);
+}
+
+@media (max-width: 39.99rem) {
+  .letter[data-author="client"] {
+    margin-right: 1.25rem;
+  }
+
+  .letter[data-author="owner"],
+  .letter[data-author="momo"] {
+    margin-left: 1.25rem;
+  }
+}
+
+.letterHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0 0.75rem;
+  margin-bottom: 0.25rem;
+}
+
+.letterAuthor {
+  font-size: 0.8125rem;
   font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
 }
 
-.actionPanel {
+.letterTime {
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.letterBody {
+  line-height: 1.5rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* ---------- The draft, on its own sheet ---------- */
+
+.draftSheet {
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  padding: 0.875rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--card);
+  gap: 0.75rem;
+  /* The torn edge eats the top 14px or so. */
+  padding: 1.75rem 1.25rem 1.25rem;
+}
+
+@media (min-width: 40rem) {
+  .draftSheet {
+    padding: 1.875rem 1.5rem 1.5rem;
+  }
+}
+
+.sheetHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.sheetHead:has(.sheetMomo) {
+  justify-content: flex-start;
+}
+
+.sheetMomo {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  object-fit: contain;
+}
+
+.sheetTitle {
+  display: block;
+  font-family: var(--m-font-serif, inherit);
+  font-size: 1.125rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+}
+
+.sheetNote {
+  margin-top: 0.125rem;
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+  line-height: 1.375rem;
+}
+
+.draftBody {
+  padding-top: 0.75rem;
+  border-top: 1px solid color-mix(in srgb, var(--border) 45%, transparent);
+  font-size: 0.9375rem;
+  line-height: 1.625rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.field {
+  background: var(--background);
+  font-size: 0.9375rem;
+  line-height: 1.5rem;
+}
+
+.sheetActions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+@media (max-width: 39.99rem) {
+  .sheetActions > * {
+    width: 100%;
+    min-height: 44px;
+  }
 }
 
 .muted {

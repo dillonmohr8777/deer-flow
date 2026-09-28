@@ -89,3 +89,55 @@ export function latestMomoDraft(
   }
   return latest;
 }
+
+/**
+ * A decision someone recorded: approved, replied or closed. The board draws
+ * these as ink stamps; open states (new, triaged, drafted) stay plain tags.
+ */
+export function isDecided(status: BoardThreadStatus): boolean {
+  return status === "approved" || status === "replied" || status === "closed";
+}
+
+/**
+ * Whether the draft sheet holds Momo's latest draft for this status. While
+ * it does, the conversation leaves that draft out so it is shown once.
+ */
+export function draftOnSheet(status: BoardThreadStatus): boolean {
+  return status === "drafted" || status === "approved";
+}
+
+/**
+ * The letters in the conversation. A draft on the sheet is shown there, not
+ * here, and a draft that went out word for word is already the team's reply,
+ * so it is not repeated. Other drafts (say, one sent back for a redraft)
+ * stay, labelled as drafts.
+ */
+export function conversationMessages(
+  messages: BoardMessage[],
+  status: BoardThreadStatus,
+): BoardMessage[] {
+  const onSheet = draftOnSheet(status) ? latestMomoDraft(messages) : undefined;
+  const sent = new Set(
+    messages.filter((m) => m.author_kind === "owner").map((m) => m.body.trim()),
+  );
+  return messages.filter(
+    (m) =>
+      m.author_kind !== "momo" ||
+      (m.id !== onSheet?.id && !sent.has(m.body.trim())),
+  );
+}
+
+/** Who wrote a letter, in words: the client's name, Momentum or Momo. */
+export function authorLabel(
+  kind: BoardMessage["author_kind"],
+  clientName: string,
+): string {
+  switch (kind) {
+    case "client":
+      return clientName;
+    case "owner":
+      return "Momentum";
+    case "momo":
+      return "Momo, draft";
+  }
+}

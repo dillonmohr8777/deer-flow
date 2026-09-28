@@ -181,6 +181,7 @@ Items 1, 2 and 5 need both `prefers-reduced-motion: no-preference` and the user'
   5. A four-fact strip: Active runs, Recorded runs, Errors & timeouts, Recorded tokens.
   6. The view. Mission Control shows the agent team (lead plus specialists) beside Latest assignments, then Also in your workspace links, then the footer ("No model calls from this dashboard").
 - **Selection.** Selecting a run opens its receipt drawer on the right.
+- **Board.** Threads are slips: kind, client and time on one line, a two-line title, then the state. An open state (New, Triaged, Drafted) is a plain `StatusTag`; a recorded decision (Approved, Replied, Closed) is an ink stamp, dated once it is final. The conversation reads as letters, the client's on cream-lo and the team's on cream-hi from the other side. Momo's draft waits on its own torn sheet with the one action for its state (Save draft, Approve, Send reply), pinned only while that request is in flight, and is not repeated in the conversation. Below 64rem the board shows one pane at a time, with an "All threads" link back.
 
 ## States
 
