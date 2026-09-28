@@ -55,6 +55,14 @@ def test_overlay_trusts_exactly_one_hop_at_each_layer():
     subnet, network_gateway, nginx_ip, trusted = _addresses()
     assert network_gateway in subnet and nginx_ip in subnet and nginx_ip != network_gateway
 
+    # redis/frontend/gateway attach to this network with no static address,
+    # so Docker auto-assigns them one from ip_range. If that range weren't
+    # carved out away from nginx's static address, one of them could start
+    # before nginx and take the address the trust chain above depends on.
+    ipam = _overlay()["networks"]["deer-flow"]["ipam"]["config"][0]
+    ip_range = ipaddress.ip_network(ipam["ip_range"])
+    assert nginx_ip not in ip_range
+
     directives = _realip_directives()
     # nginx believes X-Forwarded-For only from the host side of the bridge
     # (tailscaled's connections), never from another container.
