@@ -193,20 +193,38 @@ async def get_board_thread(thread_id: str, request: Request) -> BoardThreadRespo
     return _to_thread_response(row)
 
 
+_WORKFLOW_ONLY_STATUSES = frozenset({BoardThreadStatus.DRAFTED, BoardThreadStatus.APPROVED, BoardThreadStatus.REPLIED})
+
+
 @router.patch("/threads/{thread_id}", response_model=BoardThreadResponse)
 @require_permission("board", "write")
 async def patch_board_thread(thread_id: str, body: BoardThreadPatchRequest, request: Request) -> BoardThreadResponse:
+    """A direct status write can't reach ``drafted``/``approved``/``replied`` -- those are
+    workflow-only (``draft``/``approve``/``reply``), which is what ``send_board_reply``'s
+    "latest momo draft" check relies on actually having gone through. Any other status
+    change still requires an org owner/admin, checked before the workflow-only gate so a
+    non-admin's forged transition is an audited denial, not a bare 409.
+    """
     board_repo = get_board_repo(request)
     client_repo = get_client_repo(request)
     row = await board_repo.get_thread(thread_id)
     if row is None:
         raise _not_found()
     user = await get_current_user_from_request(request)
+    user_id = str(user.id)
     if row.get("client_id") is not None:
-        await _require_client_access(client_repo, row["client_id"], str(user.id))
+        await _require_client_access(client_repo, row["client_id"], user_id)
+    if body.status is not None:
+        if not await _is_active_org_admin(user_id):
+            await record_audit_event(request, action="board.thread.status_patch", outcome="denied", actor_user_id=user_id, organization_id=resolve_organization_id(), target_type="board_thread", target_id=thread_id)
+            raise HTTPException(status_code=403, detail="Only an organization owner/admin may change a board thread's status")
+        if body.status in _WORKFLOW_ONLY_STATUSES:
+            raise HTTPException(status_code=409, detail=f"Status {body.status!r} can only be reached through the draft/approve/reply workflow")
     updated = await board_repo.patch_thread(thread_id, status=body.status, subject=body.subject)
     if updated is None:
         raise _not_found()
+    if body.status is not None:
+        await record_audit_event(request, action="board.thread.status_patch", outcome="success", actor_user_id=user_id, organization_id=resolve_organization_id(), target_type="board_thread", target_id=thread_id)
     return _to_thread_response(updated)
 
 
@@ -275,12 +293,23 @@ async def _load_thread_for_actor(board_repo, client_repo, thread_id: str, reques
 @router.post("/threads/{thread_id}/draft", response_model=BoardThreadResponse)
 @require_permission("board", "write")
 async def draft_board_reply(thread_id: str, body: BoardDraftRequest, request: Request) -> BoardThreadResponse:
-    """Momo drafts a reply: adds a ``momo``-authored message and moves the thread to ``drafted``."""
+    """Momo drafts a reply: adds a ``momo``-authored message and moves the thread to ``drafted``.
+
+    There is no separate internal "Momo" caller yet, so this endpoint is
+    reachable by any authenticated org member with client access -- gated to
+    an org owner/admin the same way ``approve``/``reply`` are, so a plain
+    client-assigned member can't write their own text into what ``reply``
+    treats as the approved draft.
+    """
     board_repo = get_board_repo(request)
     client_repo = get_client_repo(request)
     row, user_id = await _load_thread_for_actor(board_repo, client_repo, thread_id, request)
+    actor_is_owner = await _is_active_org_admin(user_id)
     try:
-        assert_can_draft(row["status"])
+        assert_can_draft(row["status"], actor_is_owner=actor_is_owner)
+    except BoardOwnerRequiredError as exc:
+        await record_audit_event(request, action="board.thread.draft", outcome="denied", actor_user_id=user_id, organization_id=resolve_organization_id(), target_type="board_thread", target_id=thread_id)
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
     except BoardTransitionError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     await board_repo.add_message(thread_id, author_kind="momo", author_user_id=None, body=body.body)

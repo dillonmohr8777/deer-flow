@@ -22,6 +22,7 @@ from app.gateway.auth_middleware import AuthMiddleware
 from app.gateway.routers import board, clients
 from deerflow.persistence.audit_events import AuditEventRepository
 from deerflow.persistence.board import BoardRepository
+from deerflow.persistence.board.model import BoardThreadRow
 from deerflow.persistence.clients import ClientRepository
 from deerflow.persistence.fleet import FleetBindingRepository
 from deerflow.persistence.organizations.model import OrganizationMemberRow
@@ -251,9 +252,12 @@ async def test_reply_must_match_approved_draft_verbatim(org_world):  # noqa: F81
 
 
 async def test_reply_fails_closed_with_no_draft_to_check_against(org_world):  # noqa: F811
-    """f34 finding 2: a thread forced straight to ``approved`` with no ``momo`` message ever
-    written on it (e.g. via the still-open f1 PATCH-bypass on this branch) must not let
-    ``/reply`` send an arbitrary body just because there's nothing to compare it against."""
+    """f34 finding 2 (and its own review follow-up, the f1 PATCH-bypass exploit chain): a
+    thread with no ``momo`` message ever written on it must not let ``/reply`` send an
+    arbitrary body just because there's nothing to compare it against, and the PATCH-bypass
+    path that used to reach ``approved`` with no draft (client PATCH -> draft -> PATCH
+    approved) is itself closed: PATCH now requires an org owner/admin for any status change
+    and refuses every workflow-only status (``drafted``/``approved``/``replied``) outright."""
     session_factory = org_world
     app = _build_app(session_factory)
     headers_a = auth_headers(USER_A, ORG_S)  # owner
@@ -263,9 +267,13 @@ async def test_reply_fails_closed_with_no_draft_to_check_against(org_world):  # 
         thread = (await client.post("/api/board/threads", json={"client_id": acme["id"], "subject": "T"}, headers=headers_a)).json()
         tid = thread["id"]
 
-        forced = await client.patch(f"/api/board/threads/{tid}", json={"status": "approved"}, headers=headers_a)
-        assert forced.status_code == 200
-        assert forced.json()["status"] == "approved"
+        # The router itself now refuses to PATCH straight to "approved" with no draft
+        # (the f1 PATCH-bypass this test originally forced is closed below), so force the
+        # otherwise-unreachable "approved, no momo message" state directly at the ORM layer
+        # to prove /reply's own check is still a real backstop, not dead code.
+        async with session_factory() as session, session.begin():
+            row = await session.get(BoardThreadRow, tid)
+            row.status = "approved"
 
         reply = await client.post(f"/api/board/threads/{tid}/reply", json={"body": "anything at all"}, headers=headers_a)
         assert reply.status_code == 409
@@ -274,6 +282,16 @@ async def test_reply_fails_closed_with_no_draft_to_check_against(org_world):  # 
         assert still_approved.json()["status"] == "approved"
         messages = (await client.get(f"/api/board/threads/{tid}/messages", headers=headers_a)).json()["messages"]
         assert not any(m["author_kind"] == "owner" for m in messages)
+
+        # And the PATCH bypass itself is closed: a non-admin can't force any status change...
+        await _add_plain_member(session_factory, USER_D, ORG_S)
+        assign = await client.post(f"/api/clients/{acme['id']}/assignments", json={"user_id": USER_D, "role": "client_contact"}, headers=headers_a)
+        assert assign.status_code == 201
+        denied = await client.patch(f"/api/board/threads/{tid}", json={"status": "triaged"}, headers=auth_headers(USER_D, ORG_S))
+        assert denied.status_code == 403
+        # ...and even an admin can't reach a workflow-only status by PATCH.
+        blocked = await client.patch(f"/api/board/threads/{tid}", json={"status": "replied"}, headers=headers_a)
+        assert blocked.status_code == 409
 
 
 async def test_reply_ignores_a_momo_message_forged_by_a_non_admin(org_world):  # noqa: F811
@@ -309,6 +327,42 @@ async def test_reply_ignores_a_momo_message_forged_by_a_non_admin(org_world):  #
         legit = await client.post(f"/api/board/threads/{tid}/reply", json={"body": "Approved text"}, headers=headers_a)
         assert legit.status_code == 200, legit.text
         assert legit.json()["status"] == "replied"
+
+
+async def test_client_contact_cannot_run_the_patch_draft_patch_exploit_chain(org_world):  # noqa: F811
+    """Review follow-up on f34 (2026-09-28): a client contact (client access, not owner/admin)
+    used to be able to (1) PATCH status to ``triaged``, (2) POST ``/draft`` with their own
+    body, (3) PATCH status to ``approved`` -- reaching ``approved`` with their own text as the
+    only ``momo`` message, so the owner's real approved text got 409 and the injected text
+    sent 200. Both PATCH (owner/admin only) and ``/draft`` (owner/admin only, mirroring
+    approve/reply) now refuse a non-admin outright, so the chain never gets past step 1."""
+    session_factory = org_world
+    app = _build_app(session_factory)
+    headers_a = auth_headers(USER_A, ORG_S)  # owner
+
+    await _add_plain_member(session_factory, USER_D, ORG_S)
+    headers_d = auth_headers(USER_D, ORG_S)
+
+    async with _client(app) as client:
+        client1 = await _create_client(client, headers_a, "Client One")
+        assign = await client.post(f"/api/clients/{client1['id']}/assignments", json={"user_id": USER_D, "role": "client_contact"}, headers=headers_a)
+        assert assign.status_code == 201
+
+        thread = (await client.post("/api/board/threads", json={"client_id": client1["id"], "subject": "T"}, headers=headers_a)).json()
+        tid = thread["id"]
+
+        step1 = await client.patch(f"/api/board/threads/{tid}", json={"status": "triaged"}, headers=headers_d)
+        assert step1.status_code == 403
+        step2 = await client.post(f"/api/board/threads/{tid}/draft", json={"body": "EVIL"}, headers=headers_d)
+        assert step2.status_code == 403
+        step3 = await client.patch(f"/api/board/threads/{tid}", json={"status": "approved"}, headers=headers_d)
+        assert step3.status_code == 403
+
+        # The thread never moved and carries no injected message.
+        still_new = await client.get(f"/api/board/threads/{tid}", headers=headers_a)
+        assert still_new.json()["status"] == "new"
+        messages = (await client.get(f"/api/board/threads/{tid}/messages", headers=headers_a)).json()["messages"]
+        assert messages == []
 
 
 async def test_non_owner_cannot_approve_or_reply(org_world):  # noqa: F811
