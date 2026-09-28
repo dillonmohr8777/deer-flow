@@ -75,8 +75,45 @@ rs.mock("@/components/workspace/thread-subagent-batches", () => ({
   ThreadSubagentBatches: () => null,
 }));
 
+// The topology renders its own states (command-center-agent-topology tests);
+// here it only shows which names Command Center hands it as running/queued.
 rs.mock("@/components/workspace/command-center/agent-topology", () => ({
-  AgentTopology: () => <div data-testid="agent-topology" />,
+  AgentTopology: ({
+    runningAgentNames,
+    queuedAgentNames,
+  }: {
+    runningAgentNames?: readonly string[] | null;
+    queuedAgentNames?: readonly string[] | null;
+  }) => (
+    <div
+      data-testid="agent-topology"
+      data-running={(runningAgentNames ?? []).join(",")}
+      data-queued={(queuedAgentNames ?? []).join(",")}
+    />
+  ),
+}));
+
+// The flattened fallback PaperLayers draws with motion off, plus the state
+// it was asked for, so a test can see whether the hero brain would pulse.
+rs.mock("@/components/momentum/paper-layers", () => ({
+  PaperLayers: ({
+    flatSrc,
+    size,
+    state,
+  }: {
+    flatSrc: string;
+    size: number;
+    state?: string;
+  }) => (
+    <img
+      data-paper-layers="root"
+      data-state={state ?? "idle"}
+      src={flatSrc}
+      alt=""
+      aria-hidden
+      width={size}
+    />
+  ),
 }));
 
 rs.mock("@/components/workspace/command-center/business-views", () => ({
@@ -303,6 +340,9 @@ describe("CommandCenter", () => {
   it("names models by display name, never the slug or the Contributor tier", () => {
     mocks.runs = [contributorRun];
     render(<CommandCenter />);
+    // Mission Control's dispatch slips leave the model to the receipt; the
+    // Jobs list still names it on every row.
+    fireEvent.click(screen.getByRole("button", { name: "Jobs" }));
     expect(screen.getByText("Muse Spark 1.3")).toBeDefined();
     fireEvent.click(
       screen.getByRole("button", { name: /Audit the landing page/ }),
@@ -311,6 +351,93 @@ describe("CommandCenter", () => {
     expect(screen.getAllByText("Muse Spark 1.3").length).toBe(2);
     expect(document.body.textContent).not.toMatch(/contributor/i);
     expect(document.body.textContent).not.toContain("openrouter-");
+  });
+
+  it("names each slip's agent in words through the real agentLabel", () => {
+    mocks.runs = [
+      { ...contributorRun, run_id: "r1", thread_title: "Lead slip" },
+      {
+        ...contributorRun,
+        run_id: "r2",
+        thread_title: "Growth slip",
+        assistant_id: "dillon-growth",
+      },
+      {
+        ...contributorRun,
+        run_id: "r3",
+        thread_title: "Nobody slip",
+        assistant_id: null,
+      },
+    ];
+    render(<CommandCenter />);
+    const slip = (name: string) =>
+      screen.getAllByRole("button", { name: new RegExp(name) })[0]!;
+    // "lead" resolves to the lead agent's display name.
+    expect(slip("Lead slip").textContent).toContain("Lead");
+    expect(slip("Lead slip").textContent).not.toMatch(/\blead\b/);
+    // An unknown specialist id is spelled out, never shown raw.
+    expect(slip("Growth slip").textContent).toContain("Dillon Growth");
+    expect(slip("Growth slip").textContent).not.toContain("dillon-growth");
+    // A missing id says so instead of inventing an agent.
+    expect(slip("Nobody slip").textContent).toContain("Agent not recorded");
+  });
+
+  it("hands the team running and queued agents apart, so a queued run never pins or pulses", () => {
+    mocks.runs = [
+      // Pending only: queued, waiting, not working.
+      {
+        ...contributorRun,
+        run_id: "q1",
+        assistant_id: "dillon-growth",
+        status: "pending",
+      },
+      // Pending and running: the running run wins.
+      {
+        ...contributorRun,
+        run_id: "q2",
+        assistant_id: "dillon-builder",
+        status: "pending",
+      },
+      {
+        ...contributorRun,
+        run_id: "r2",
+        assistant_id: "dillon-builder",
+        status: "running",
+      },
+      // The lead's only live run is queued: the hero brain stays still.
+      {
+        ...contributorRun,
+        run_id: "q3",
+        assistant_id: "dillon-brain",
+        status: "pending",
+      },
+    ];
+    const { container, unmount } = render(<CommandCenter />);
+    const topology = screen.getByTestId("agent-topology");
+    expect(topology.getAttribute("data-running")).toBe("dillon-builder");
+    expect(topology.getAttribute("data-queued")).toBe(
+      "dillon-growth,dillon-brain",
+    );
+    const heroBrain = () =>
+      container.querySelector('[data-crew="dillon-brain"] [data-paper-layers]');
+    expect(heroBrain()?.getAttribute("data-state")).toBe("idle");
+    unmount();
+
+    // Once the lead's run is running, the hero brain works.
+    mocks.runs = [
+      {
+        ...contributorRun,
+        run_id: "r3",
+        assistant_id: "dillon-brain",
+        status: "running",
+      },
+    ];
+    const second = render(<CommandCenter />);
+    expect(
+      second.container
+        .querySelector('[data-crew="dillon-brain"] [data-paper-layers]')
+        ?.getAttribute("data-state"),
+    ).toBe("working");
   });
 
   it("dates each assignment and keeps its full title on hover", () => {
@@ -342,6 +469,8 @@ describe("CommandCenter", () => {
       },
     ];
     render(<CommandCenter />);
+    // Token counts live on the Jobs list and the receipt, not on dispatch slips.
+    fireEvent.click(screen.getByRole("button", { name: "Jobs" }));
     expect(screen.getByText("Tokens not recorded")).toBeDefined();
     expect(screen.getByText("Tokens still counting")).toBeDefined();
     expect(document.body.textContent).not.toContain("0 tokens");
