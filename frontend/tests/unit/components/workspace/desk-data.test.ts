@@ -189,6 +189,14 @@ describe("owner alerts (e4)", () => {
     expect(isAfterHoursET(new Date("2026-09-24T23:59:00Z"))).toBe(false); // 19:59 ET
   });
 
+  it("also computes correctly in EST (winter, UTC-5), not just EDT", () => {
+    // 2026-01-15 is EST (UTC-5): 07:00Z = 02:00 ET, 17:00Z = 12:00 ET.
+    expect(isAfterHoursET(new Date("2026-01-15T07:00:00Z"))).toBe(true); // 02:00 ET
+    expect(isAfterHoursET(new Date("2026-01-15T17:00:00Z"))).toBe(false); // 12:00 ET
+    expect(isAfterHoursET(new Date("2026-01-15T13:00:00Z"))).toBe(false); // 08:00 ET
+    expect(isAfterHoursET(new Date("2026-01-16T01:00:00Z"))).toBe(true); // 20:00 ET
+  });
+
   it("only counts drafted threads as waiting on the owner's approval", () => {
     const threads = [
       boardThread({ id: "a", status: "drafted" }),
