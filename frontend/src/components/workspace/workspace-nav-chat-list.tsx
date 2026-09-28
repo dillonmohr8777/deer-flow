@@ -69,13 +69,24 @@ export function WorkspaceNavChatList() {
               isActive={pathname === "/workspace/board"}
               asChild
             >
-              <Link className="text-muted-foreground" href="/workspace/board">
+              <Link
+                className="text-muted-foreground"
+                href="/workspace/board"
+                aria-label={
+                  waitingCount > 0
+                    ? `Board, ${waitingCount} waiting on you`
+                    : undefined
+                }
+              >
                 <Inbox />
                 <span>Board</span>
               </Link>
             </SidebarMenuButton>
             {waitingCount > 0 && (
-              <SidebarMenuBadge aria-label={`${waitingCount} waiting on you`}>
+              // The link's own aria-label already carries the count; hide
+              // this visual badge from assistive tech so it isn't announced
+              // a second time as an unlabeled number.
+              <SidebarMenuBadge aria-hidden="true">
                 {waitingCount}
               </SidebarMenuBadge>
             )}

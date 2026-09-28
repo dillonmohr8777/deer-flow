@@ -249,8 +249,8 @@ function Approvals() {
         <>
           {afterHours ? (
             <p className={styles.muted}>
-              <StatusTag tone="danger">After hours</StatusTag> An urgent thread
-              is waiting outside 8am&ndash;8pm ET.
+              <StatusTag tone="attention">After hours</StatusTag> An urgent
+              thread is waiting outside 8am to 8pm ET.
             </p>
           ) : null}
           {!waiting.isLoading && count === 0 ? (
