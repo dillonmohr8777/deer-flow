@@ -74,6 +74,12 @@ networks:
       config:
         - subnet: 172.30.27.0/24
           gateway: 172.30.27.1
+          # postgres/redis/frontend/gateway attach with no static address and
+          # get one auto-assigned from the whole subnet starting at .2 --
+          # without this, one of them could land on .5 or .10 before Caddy
+          # or nginx starts and take the address a static container needs.
+          # Keep every static ipv4_address below .128, out of this range.
+          ip_range: 172.30.27.128/25
 
 volumes:
   caddy-data:

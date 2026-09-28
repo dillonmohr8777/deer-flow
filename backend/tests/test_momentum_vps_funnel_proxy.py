@@ -57,6 +57,16 @@ def test_overlay_trusts_exactly_one_hop_at_each_layer():
     subnet, caddy_ip, nginx_ip, trusted = _addresses()
     assert caddy_ip in subnet and nginx_ip in subnet and nginx_ip != caddy_ip
 
+    # postgres/redis/frontend/gateway attach to this network with no static
+    # address, so Docker auto-assigns them one from ip_range. If that range
+    # weren't carved out away from the static addresses, one of them could
+    # start before Caddy or nginx and take the address a static container
+    # needs, and the trust chain above would key on the wrong container.
+    ipam = _overlay()["networks"]["deer-flow"]["ipam"]["config"][0]
+    ip_range = ipaddress.ip_network(ipam["ip_range"])
+    assert caddy_ip not in ip_range
+    assert nginx_ip not in ip_range
+
     directives = _realip_directives()
     # nginx believes X-Forwarded-For only from Caddy's fixed address, never
     # from another container on the compose network.
