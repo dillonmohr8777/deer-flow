@@ -136,17 +136,37 @@ class TeamBoardRepository:
         return rows
 
     async def add_message(self, channel_id: str, *, author_user_id: str, body: str) -> dict | None:
-        """Append one message; ``None`` for a missing/foreign channel."""
+        """Append one message; ``None`` for a missing/foreign channel.
+
+        A caller's ``since`` cursor (``team_board_tools.py``) is a plain
+        timestamp with no id, so two messages in one channel must never
+        share ``created_at`` — a tie would make the query's strict ``>``
+        skip whichever message ties the cursor forever. Nudge forward by the
+        smallest unit past the channel's latest message when ``now()`` would
+        otherwise tie or (clock adjustment) regress it.
+        # ponytail: read-then-write, not a per-channel sequence or lock — a
+        # race between two concurrent posts to the same channel could still
+        # tie or invert order. Add a DB-level monotonic guarantee if fleet
+        # posting throughput ever makes that concurrent.
+        """
         if await self.get_channel(channel_id) is None:
             return None
-        row = TeamMessageRow(
-            id=uuid.uuid4().hex,
-            channel_id=channel_id,
-            author_user_id=author_user_id,
-            body=body,
-            created_at=datetime.now(UTC),
-        )
         async with self._sf() as session:
+            latest_at = (await session.execute(select(TeamMessageRow.created_at).where(TeamMessageRow.channel_id == channel_id).order_by(TeamMessageRow.created_at.desc()).limit(1))).scalars().first()
+            now = datetime.now(UTC)
+            if latest_at is not None and latest_at.tzinfo is None:
+                # SQLite round-trips ``DateTime(timezone=True)`` as naive;
+                # every stored value is UTC (see ``coerce_iso``), so treat it
+                # the same way here rather than crash comparing aware to naive.
+                latest_at = latest_at.replace(tzinfo=UTC)
+            created_at = now if latest_at is None or now > latest_at else latest_at + timedelta(microseconds=1)
+            row = TeamMessageRow(
+                id=uuid.uuid4().hex,
+                channel_id=channel_id,
+                author_user_id=author_user_id,
+                body=body,
+                created_at=created_at,
+            )
             session.add(row)
             await session.commit()
             await session.refresh(row)

@@ -34,6 +34,7 @@ from app.gateway.internal_auth import (
     get_trusted_internal_owner_user_id,
 )
 from app.gateway.knowledge_scope_admission import admit_message_knowledge_scope
+from app.gateway.momentum_internal import is_momentum_staff
 from app.gateway.run_models import RunCreateRequest
 from app.gateway.utils import sanitize_log_param
 from app.mcp_tasks.errors import PermanentNotificationError
@@ -589,12 +590,17 @@ _CONTEXT_INTERNAL_CALLER_KEYS: frozenset[str] = frozenset({"interaction_mode", "
 #   ``channel_user_id``         — accepted only from trusted internal context.
 #   ``langgraph_auth_user*``    — populated only by LangGraph Server auth.
 #   ``sandbox_*_id``           — created only inside the run/subagent lifecycle.
+#   ``momentum_staff``          — the same ``is_momentum_staff`` router check,
+#                                 run once at run start and stamped here; see
+#                                 ``inject_authenticated_user_context``. Team
+#                                 board tools trust only this flag.
 _SERVER_OWNED_RUNTIME_CONTEXT_KEYS: frozenset[str] = (
     frozenset(
         {
             "is_internal",
             "authz_attributes",
             "channel_user_id",
+            "momentum_staff",
             "is_subagent",
             "agent_id",
             "__run_loop_detection_recorder",
@@ -736,6 +742,7 @@ def inject_authenticated_user_context(
     *,
     internal_owner_user: Any | None = None,
     request_context: Mapping[str, Any] | None = None,
+    momentum_staff: bool = False,
 ) -> None:
     """Stamp the authenticated user into the run context for background tools.
 
@@ -746,6 +753,14 @@ def inject_authenticated_user_context(
     ``request_context.channel_user_id`` is the sole exception: it is honored
     only after ``request.state.auth_source`` proves the caller is internal.
     Values copied through the free-form RunnableConfig are always cleared.
+
+    ``momentum_staff`` is likewise server-owned: the caller (``start_run``)
+    runs the same ``is_momentum_staff`` check the ``/api/team`` router uses
+    and passes the result in here explicitly, rather than this function
+    resolving it itself, so it stays a plain sync stamp like every other
+    field below. It is always written — before any early return, like
+    ``is_internal`` — so a client-supplied value (cleared above with the rest
+    of ``_SERVER_OWNED_RUNTIME_CONTEXT_KEYS``) never survives.
     """
 
     # --- Server-owned authorization and sandbox lifecycle identity fields ---
@@ -775,6 +790,7 @@ def inject_authenticated_user_context(
         if isinstance(configurable, dict):
             configurable.pop("user_id", None)
     runtime_context["is_internal"] = auth_source == AUTH_SOURCE_INTERNAL
+    runtime_context["momentum_staff"] = bool(momentum_staff)
     if auth_source == AUTH_SOURCE_INTERNAL and request_context is not None:
         channel_user_id = request_context.get("channel_user_id")
         if channel_user_id is not None:
@@ -1891,11 +1907,16 @@ async def start_run(
 
         # Attribution names the delegation owner (a person), never the storage principal.
         internal_owner_user = await resolve_trusted_internal_owner_for_attribution(request, actor_user_id if owner_user_id else None)
+        # Same check the ``/api/team`` router runs, computed once here so the
+        # team-board tools never have to (and never get to) decide staff-ness
+        # themselves — see ``momentum_staff`` on ``_SERVER_OWNED_RUNTIME_CONTEXT_KEYS``.
+        momentum_staff = await is_momentum_staff(request, get_app_config())
         inject_authenticated_user_context(
             config,
             request,
             internal_owner_user=internal_owner_user,
             request_context=getattr(body, "context", None),
+            momentum_staff=momentum_staff,
         )
 
         conversation_references = list(getattr(body, "conversation_references", None) or [])
