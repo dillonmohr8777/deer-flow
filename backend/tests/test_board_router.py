@@ -253,3 +253,35 @@ async def test_non_owner_cannot_approve_or_reply(org_world):  # noqa: F811
 
         events, _ = await audit_repo.list(organization_id=ORG_S, action_prefix="board.thread.approve")
         assert any(e["outcome"] == "denied" and e["actor_user_id"] == USER_D for e in events)
+
+
+async def test_draft_write_race_does_not_reset_a_thread_that_moved_on(org_world, monkeypatch):  # noqa: F811
+    """f64: draft_board_reply's own status check runs before its write, so a
+    thread that moves on (e.g. gets approved) in between must not have that
+    later status reset back to `drafted` by a losing write. The read-time
+    check is bypassed here to isolate and prove the write-time guard
+    (`BoardRepository.try_add_momo_draft`'s compare-and-set) on its own.
+    """
+    session_factory = org_world
+    app = _build_app(session_factory)
+    headers_a = auth_headers(USER_A, ORG_S)
+
+    async with _client(app) as client:
+        acme = await _create_client(client, headers_a, "Acme")
+        thread = (await client.post("/api/board/threads", json={"client_id": acme["id"], "subject": "T"}, headers=headers_a)).json()
+        tid = thread["id"]
+
+        board_repo = app.state.board_repo
+        await board_repo.add_message(tid, author_kind="momo", author_user_id=None, body="Existing draft")
+        await board_repo.patch_thread(tid, status="drafted")
+        await board_repo.patch_thread(tid, status="approved")
+
+        monkeypatch.setattr("app.gateway.routers.board.assert_can_draft", lambda status: None)
+
+        response = await client.post(f"/api/board/threads/{tid}/draft", json={"body": "a stale draft that must never land"}, headers=headers_a)
+        assert response.status_code == 409
+
+        row = await board_repo.get_thread(tid)
+        assert row["status"] == "approved"
+        messages = await board_repo.list_messages(tid)
+        assert not any(m["body"] == "a stale draft that must never land" for m in messages)

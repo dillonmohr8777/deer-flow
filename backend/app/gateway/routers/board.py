@@ -259,7 +259,15 @@ async def _load_thread_for_actor(board_repo, client_repo, thread_id: str, reques
 @router.post("/threads/{thread_id}/draft", response_model=BoardThreadResponse)
 @require_permission("board", "write")
 async def draft_board_reply(thread_id: str, body: BoardDraftRequest, request: Request) -> BoardThreadResponse:
-    """Momo drafts a reply: adds a ``momo``-authored message and moves the thread to ``drafted``."""
+    """Momo drafts a reply: adds a ``momo``-authored message and moves the thread to ``drafted``.
+
+    Writes through ``BoardRepository.try_add_momo_draft()``'s compare-and-set
+    (the same write the background board concierge uses) rather than a plain
+    check-then-write: a slow request racing an owner's own action on this
+    thread (approving a concierge-drafted reply, or another /draft call)
+    would otherwise reset that later status back to ``drafted`` with a
+    second, unapproved draft message.
+    """
     board_repo = get_board_repo(request)
     client_repo = get_client_repo(request)
     row, user_id = await _load_thread_for_actor(board_repo, client_repo, thread_id, request)
@@ -267,10 +275,9 @@ async def draft_board_reply(thread_id: str, body: BoardDraftRequest, request: Re
         assert_can_draft(row["status"])
     except BoardTransitionError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-    await board_repo.add_message(thread_id, author_kind="momo", author_user_id=None, body=body.body)
-    updated = await board_repo.patch_thread(thread_id, status=BoardThreadStatus.DRAFTED)
+    updated = await board_repo.try_add_momo_draft(thread_id, from_statuses=(BoardThreadStatus.NEW, BoardThreadStatus.TRIAGED), body=body.body)
     if updated is None:
-        raise _not_found()
+        raise HTTPException(status_code=409, detail="Cannot draft a reply: thread status changed")
     await record_audit_event(request, action="board.thread.drafted", outcome="success", actor_user_id=user_id, organization_id=resolve_organization_id(), target_type="board_thread", target_id=thread_id)
     return _to_thread_response(updated)
 
