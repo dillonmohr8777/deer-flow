@@ -2,12 +2,16 @@ import { describe, expect, it } from "@rstest/core";
 
 import {
   groupByDepartment,
+  hasUrgentAfterHoursApproval,
+  isAfterHoursET,
   receiptPath,
   recentOutputs,
   summarizeTasks,
   tasksOfBindings,
   tasksOfTemplate,
+  threadsWaitingApproval,
 } from "@/components/workspace/desk/desk-data";
+import type { BoardThread } from "@/core/board/types";
 import type { FleetAgentBinding, FleetTemplate } from "@/core/fleet/types";
 import type { ScheduledTask } from "@/core/scheduled-tasks/types";
 
@@ -150,5 +154,81 @@ describe("desk data", () => {
     expect(
       receiptPath(task({ assistant_id: "lead_agent", last_thread_id: "t" })),
     ).toBe("/workspace/chats/t");
+  });
+});
+
+function boardThread(patch: Partial<BoardThread>): BoardThread {
+  return {
+    id: "t1",
+    client_id: "acme",
+    kind: "ticket",
+    status: "drafted",
+    subject: "Site is down",
+    urgency: null,
+    summary: null,
+    created_by_user_id: "client-1",
+    created_at: "2026-09-20T00:00:00Z",
+    updated_at: "2026-09-20T00:00:00Z",
+    ...patch,
+  };
+}
+
+describe("owner alerts (e4)", () => {
+  it("flags 2am and 11pm ET as after hours, and noon and 9am ET as within business hours", () => {
+    // 2026-09-24 is EDT (UTC-4): 06:00Z = 02:00 ET, 16:00Z = 12:00 ET.
+    expect(isAfterHoursET(new Date("2026-09-24T06:00:00Z"))).toBe(true);
+    expect(isAfterHoursET(new Date("2026-09-25T03:00:00Z"))).toBe(true); // 23:00 ET
+    expect(isAfterHoursET(new Date("2026-09-24T16:00:00Z"))).toBe(false);
+    expect(isAfterHoursET(new Date("2026-09-24T13:00:00Z"))).toBe(false); // 09:00 ET
+  });
+
+  it("treats 8am ET as business hours and 8pm ET as already after hours", () => {
+    expect(isAfterHoursET(new Date("2026-09-24T12:00:00Z"))).toBe(false); // 08:00 ET
+    expect(isAfterHoursET(new Date("2026-09-24T11:59:00Z"))).toBe(true); // 07:59 ET
+    expect(isAfterHoursET(new Date("2026-09-25T00:00:00Z"))).toBe(true); // 20:00 ET
+    expect(isAfterHoursET(new Date("2026-09-24T23:59:00Z"))).toBe(false); // 19:59 ET
+  });
+
+  it("only counts drafted threads as waiting on the owner's approval", () => {
+    const threads = [
+      boardThread({ id: "a", status: "drafted" }),
+      boardThread({ id: "b", status: "new" }),
+      boardThread({ id: "c", status: "approved" }),
+      boardThread({ id: "d", status: "drafted" }),
+    ];
+    expect(threadsWaitingApproval(threads).map((t) => t.id)).toEqual([
+      "a",
+      "d",
+    ]);
+  });
+
+  it("flags an urgent waiting thread after hours, never during business hours", () => {
+    const urgentWaiting = [boardThread({ urgency: "urgent" })];
+    expect(
+      hasUrgentAfterHoursApproval(
+        urgentWaiting,
+        new Date("2026-09-24T06:00:00Z"), // 02:00 ET
+      ),
+    ).toBe(true);
+    expect(
+      hasUrgentAfterHoursApproval(
+        urgentWaiting,
+        new Date("2026-09-24T16:00:00Z"), // 12:00 ET
+      ),
+    ).toBe(false);
+  });
+
+  it("never flags after hours without an urgent thread actually waiting", () => {
+    const now = new Date("2026-09-24T06:00:00Z"); // 02:00 ET, after hours
+    expect(
+      hasUrgentAfterHoursApproval([boardThread({ urgency: "high" })], now),
+    ).toBe(false);
+    expect(
+      hasUrgentAfterHoursApproval(
+        [boardThread({ urgency: "urgent", status: "new" })],
+        now,
+      ),
+    ).toBe(false);
+    expect(hasUrgentAfterHoursApproval([], now)).toBe(false);
   });
 });
