@@ -780,6 +780,7 @@ tool_groups:
   - name: bash
   - name: browser
   - name: knowledge
+  - name: team
 
 # ============================================================================
 # Tools Configuration
@@ -1235,6 +1236,20 @@ tools:
   - name: bash
     group: bash
     use: deerflow.sandbox.tools:bash_tool
+
+  # Momentum staff Team Board (e.g. #fleet): read/post to a channel that
+  # already exists. Scoped to the run's organization; posts are signed
+  # with the agent's name. Give this group only to agents that should talk
+  # to the rest of the team — it carries repo/public information only,
+  # never client data, so keep it off any agent whose model lane must not
+  # see private data before also seeing a private channel.
+  - name: team_read_messages
+    group: team
+    use: deerflow.tools.team_board_tools:team_read_messages
+
+  - name: team_post_message
+    group: team
+    use: deerflow.tools.team_board_tools:team_post_message
 
 # ============================================================================
 # Tool Search Configuration (Deferred Tool Loading)
