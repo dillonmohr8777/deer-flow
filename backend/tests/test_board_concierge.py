@@ -144,11 +144,18 @@ async def test_run_concierge_pass_skips_threads_outside_new_or_triaged(board_rep
     await board_repo.add_message(thread["id"], author_kind="momo", body="An existing draft.")
     await board_repo.patch_thread(thread["id"], status=BoardThreadStatus.DRAFTED)
 
-    async def _fail_if_called(*args, **kwargs):
-        raise AssertionError("generate_draft must not be called for a non-eligible thread")
+    # Records rather than raises: a per-thread try/except elsewhere in the
+    # pass must not be able to swallow evidence that this was called for a
+    # thread whose status makes it ineligible.
+    calls: list[str] = []
 
-    drafted_ids = await run_concierge_pass(board_repo, generate_draft=_fail_if_called)
+    async def _record_call(content, **kwargs):
+        calls.append(content)
+        return None
 
+    drafted_ids = await run_concierge_pass(board_repo, generate_draft=_record_call)
+
+    assert calls == []
     assert drafted_ids == []
     row = await board_repo.get_thread(thread["id"])
     assert row["status"] == BoardThreadStatus.DRAFTED
