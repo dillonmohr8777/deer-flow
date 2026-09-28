@@ -14,19 +14,20 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from deerflow.persistence.exec_seats.model import AgentSeatRow, AgentSeatStatus
 from deerflow.persistence.organizations.resolution import organization_for_write
+from deerflow.persistence.run.model import RunRow
 from deerflow.runtime.user_context import AUTO, resolve_organization_id, resolve_user_id
 from deerflow.utils.time import coerce_iso
 
 
 def _to_dict(row: AgentSeatRow) -> dict[str, Any]:
     d = row.to_dict()
-    for key in ("created_at", "updated_at"):
+    for key in ("created_at", "updated_at", "paused_at"):
         val = d.get(key)
         if isinstance(val, datetime):
             d[key] = coerce_iso(val)
@@ -162,3 +163,32 @@ class AgentSeatRepository:
             await session.commit()
             await session.refresh(row)
             return _to_dict(row)
+
+    async def set_paused(self, seat_id: str, *, paused: bool, now: datetime | None = None) -> dict | None:
+        """Set or clear ``paused_at``; ``None`` for a missing/foreign seat.
+
+        Orthogonal to ``status`` -- pausing/resuming a seat for a budget
+        overrun never touches the claim/ratify/reopen state machine.
+        """
+        organization_id = resolve_organization_id()
+        async with self._sf() as session:
+            row = await session.get(AgentSeatRow, seat_id)
+            if row is None or (organization_id is not None and row.organization_id != organization_id):
+                return None
+            row.paused_at = (now or datetime.now(UTC)) if paused else None
+            await session.commit()
+            await session.refresh(row)
+            return _to_dict(row)
+
+    async def token_burn_since(self, *, organization_id: str | None, agent_name: str, since: datetime) -> int:
+        """Total tokens every run stamped with *agent_name* has burned since *since*.
+
+        Reads the same ``runs`` table (``RunRow``) the operations console's
+        usage ledger reads -- ``assistant_id`` is the run's custom-agent
+        identifier, the same value ``AgentSeatRow.agent_name`` stores.
+        """
+        stmt = select(func.coalesce(func.sum(RunRow.total_tokens), 0)).where(RunRow.assistant_id == agent_name, RunRow.created_at >= since)
+        if organization_id is not None:
+            stmt = stmt.where(RunRow.organization_id == organization_id)
+        async with self._sf() as session:
+            return int(await session.scalar(stmt) or 0)
