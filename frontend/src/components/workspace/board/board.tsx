@@ -244,7 +244,21 @@ function NewThreadForm({
 
   return (
     <div className={styles.actionPanel} aria-label="New thread">
-      {myClients.isLoading ? (
+      {myClients.isError ? (
+        <ErrorState
+          message="Couldn't load your clients."
+          detail={myClients.error.message}
+          action={
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void myClients.refetch()}
+            >
+              Try again
+            </Button>
+          }
+        />
+      ) : myClients.isLoading ? (
         <WorkingState label="Loading your clients" />
       ) : options.length === 0 ? (
         <p className={styles.muted}>

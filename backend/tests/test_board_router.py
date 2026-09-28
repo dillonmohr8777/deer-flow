@@ -297,3 +297,51 @@ async def test_client_member_never_sees_unapproved_momo_draft(org_world):  # noq
         # Once approved, the reply is no longer a hidden draft -- D sees it too.
         d_messages_after = (await client.get(f"/api/board/threads/{tid}/messages", headers=headers_d)).json()["messages"]
         assert any(m["author_kind"] == "momo" and m["body"] == "Here's a fix for that." for m in d_messages_after)
+
+
+async def test_rejected_and_superseded_drafts_stay_hidden_from_non_admin(org_world):  # noqa: F811
+    """f20/f35: a draft the owner rejects (or a redraft supersedes) never becomes visible.
+
+    Approval is tracked per-message, not derived from the thread's current
+    status: PATCHing a drafted thread back to ``triaged`` (a reject, with no
+    dedicated reject route) must not expose the rejected draft, and once a
+    second draft is later approved, the first (rejected) draft must stay
+    hidden even though the thread has cycled back through ``drafted`` ->
+    ``approved``. This is the regression the status-only filter (this file's
+    ``test_client_member_never_sees_unapproved_momo_draft``) doesn't catch.
+    """
+    session_factory = org_world
+    app = _build_app(session_factory)
+    headers_a = auth_headers(USER_A, ORG_S)  # owner
+
+    await _add_plain_member(session_factory, USER_D, ORG_S)
+    headers_d = auth_headers(USER_D, ORG_S)
+
+    async with _client(app) as client:
+        client1 = await _create_client(client, headers_a, "Client One")
+        assign = await client.post(f"/api/clients/{client1['id']}/assignments", json={"user_id": USER_D, "role": "client_contact"}, headers=headers_a)
+        assert assign.status_code == 201
+
+        thread = (await client.post("/api/board/threads", json={"client_id": client1["id"], "subject": "T1"}, headers=headers_a)).json()
+        tid = thread["id"]
+
+        first_draft = await client.post(f"/api/board/threads/{tid}/draft", json={"body": "SECRET DRAFT ONE"}, headers=headers_a)
+        assert first_draft.status_code == 200, first_draft.text
+
+        # Owner rejects the draft: there's no dedicated reject route, so this is a plain PATCH
+        # back to `triaged`. A plain member must still see no momo message at all.
+        rejected = await client.patch(f"/api/board/threads/{tid}", json={"status": "triaged"}, headers=headers_a)
+        assert rejected.status_code == 200, rejected.text
+        d_messages_rejected = (await client.get(f"/api/board/threads/{tid}/messages", headers=headers_d)).json()["messages"]
+        assert [m["author_kind"] for m in d_messages_rejected] == []
+
+        second_draft = await client.post(f"/api/board/threads/{tid}/draft", json={"body": "approved fix"}, headers=headers_a)
+        assert second_draft.status_code == 200, second_draft.text
+
+        approved = await client.post(f"/api/board/threads/{tid}/approve", headers=headers_a)
+        assert approved.status_code == 200, approved.text
+
+        # Only the approved (second) draft is visible; the rejected first draft never surfaces.
+        d_messages_after = (await client.get(f"/api/board/threads/{tid}/messages", headers=headers_d)).json()["messages"]
+        momo_bodies = [m["body"] for m in d_messages_after if m["author_kind"] == "momo"]
+        assert momo_bodies == ["approved fix"]
