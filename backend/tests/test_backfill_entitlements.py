@@ -197,6 +197,24 @@ async def test_dry_run_against_an_unbootstrapped_database_refuses_and_creates_no
     assert not sqlite_dir.exists()  # never created -- the bug's exact symptom
 
 
+@pytest.mark.asyncio
+async def test_dry_run_with_an_existing_dir_but_no_db_file_creates_no_file(tmp_path):
+    """Review finding (f76 low): when sqlite_dir exists but deerflow.db does
+    not, aiosqlite creates an empty deerflow.db on connect() -- the file must
+    never appear, dry-run or not, since this database was never bootstrapped."""
+    sqlite_dir = tmp_path / "dir-exists-no-db-file"
+    sqlite_dir.mkdir()
+    config = SimpleNamespace(
+        entitlements=EntitlementConfig(default_limits=NO_DEFAULTS),
+        database=DatabaseConfig(backend="sqlite", sqlite_dir=str(sqlite_dir)),
+    )
+
+    result = await backfill.run_backfill(config, dry_run=True, session_factory=None)
+
+    assert result == 1
+    assert list(sqlite_dir.iterdir()) == []  # no deerflow.db, no -wal/-shm either
+
+
 async def _bootstrap_sqlite_at_head(sqlite_dir) -> None:
     from alembic import command
 
@@ -271,6 +289,85 @@ async def test_real_run_against_a_bootstrapped_database_writes_rows(tmp_path):
         assert {r["key"] for r in rows} == set(backfill.GATE_KEYS)
     finally:
         await verify_engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_refuses_a_database_not_at_alembic_head(tmp_path):
+    """Review test gap (f82): disabling the `current != head` check leaves
+    every other test green, since they only ever exercise "no alembic_version
+    at all" (unbootstrapped) or "already at head" (bootstrapped). This is the
+    missing middle case -- a real database, correctly stamped, just behind."""
+    from alembic import command
+
+    from deerflow.persistence.bootstrap import _get_alembic_config
+
+    sqlite_dir = tmp_path / "behind-head"
+    sqlite_dir.mkdir()
+    engine = create_async_engine(f"sqlite+aiosqlite:///{sqlite_dir / 'deerflow.db'}")
+    try:
+        import asyncio
+
+        await asyncio.to_thread(command.upgrade, _get_alembic_config(engine), "0039_team_board_academy")
+    finally:
+        await engine.dispose()
+
+    config = SimpleNamespace(
+        entitlements=EntitlementConfig(default_limits=NO_DEFAULTS),
+        database=DatabaseConfig(backend="sqlite", sqlite_dir=str(sqlite_dir)),
+    )
+
+    result = await backfill.run_backfill(config, dry_run=False, session_factory=None)
+
+    # organization_entitlements doesn't exist at 0039 yet (it's added by
+    # 0040), so a successful write would itself raise -- result == 1 alone
+    # already proves the check refused before ever reaching that code.
+    assert result == 1
+
+
+@pytest.mark.asyncio
+async def test_postgres_backend_pins_the_configured_schema_on_connect(monkeypatch):
+    """Review finding (f81, medium): create_async_engine(db_path) dropped
+    build_asyncpg_connect_args(postgres_schema), which init_engine_from_config
+    applied before this script stopped using it -- only the alembic config got
+    the schema, so the org read and the upserts would have run against the
+    server's default search_path instead of the configured one.
+
+    This sandbox has no asyncpg driver installed (no real postgres to talk
+    to either), so a fake engine stands in -- real enough for
+    _get_alembic_config's engine.url read, refusing on .connect() the same
+    way an unreachable server would.
+    """
+    import sqlalchemy.ext.asyncio as sa_asyncio
+    from sqlalchemy.engine import make_url
+
+    captured: dict = {}
+
+    class _FakeAsyncEngine:
+        def __init__(self, url: str) -> None:
+            self.url = make_url(url)
+
+        def connect(self):
+            raise RuntimeError("no real postgres in this sandbox")
+
+        async def dispose(self) -> None:
+            pass
+
+    def spy_create_async_engine(url, **kwargs):
+        captured["url"] = url
+        captured["connect_args"] = kwargs.get("connect_args")
+        return _FakeAsyncEngine(url)
+
+    monkeypatch.setattr(sa_asyncio, "create_async_engine", spy_create_async_engine)
+
+    config = SimpleNamespace(
+        entitlements=EntitlementConfig(default_limits=NO_DEFAULTS),
+        database=DatabaseConfig(backend="postgres", postgres_url="postgresql://user:pass@db.example.internal/deerflow", postgres_schema="tenant_a"),
+    )
+
+    result = await backfill.run_backfill(config, dry_run=True, session_factory=None)
+
+    assert result == 1  # connection refused -- expected, the fake engine always refuses
+    assert captured["connect_args"] == {"server_settings": {"search_path": "tenant_a"}}
 
 
 # -- main(): argv wiring ------------------------------------------------------

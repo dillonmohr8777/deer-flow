@@ -121,10 +121,30 @@ async def _connect_without_migrating(config):
 
     from deerflow.persistence.bootstrap import _get_alembic_config
 
+    postgres_schema = database.postgres_schema if backend == "postgres" else ""
     db_path = database.app_sqlalchemy_url
-    engine = create_async_engine(db_path)
+
+    if backend == "sqlite":
+        from pathlib import Path
+
+        # aiosqlite creates an empty file on connect if the path doesn't
+        # exist yet -- checking first means a refusal (unbootstrapped
+        # database) never leaves a stray file behind, in either mode.
+        if not Path(database.sqlite_path).is_file():
+            logger.error("No database file at %s. This database has not been bootstrapped yet -- start the Gateway once first. A backfill script must never create or migrate the schema itself.", database.sqlite_path)
+            return None, None
+        engine = create_async_engine(db_path)
+    else:
+        from deerflow.persistence.postgres_schema import build_asyncpg_connect_args
+
+        # Mirrors init_engine()'s own postgres connect_args: without this,
+        # the org read and the upserts below would run against the server's
+        # default search_path instead of the configured schema, even though
+        # the alembic head-check right below already looks at the right one.
+        engine = create_async_engine(db_path, connect_args=build_asyncpg_connect_args(postgres_schema))
+
     try:
-        cfg = _get_alembic_config(engine, postgres_schema=database.postgres_schema if backend == "postgres" else "")
+        cfg = _get_alembic_config(engine, postgres_schema=postgres_schema)
         from alembic.script import ScriptDirectory
 
         head = ScriptDirectory.from_config(cfg).get_current_head()

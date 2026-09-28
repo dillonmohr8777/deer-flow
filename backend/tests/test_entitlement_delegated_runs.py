@@ -17,7 +17,7 @@ the fix:
 from __future__ import annotations
 
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastapi import FastAPI, HTTPException
@@ -236,3 +236,77 @@ def test_trigger_route_unaffected_when_entitlements_disabled(monkeypatch):
 
     assert resp.status_code == 200, resp.text
     assert service.dispatched is True
+
+
+# ---------------------------------------------------------------------------
+# HTTP routes: create / update / resume (review test gap f82 -- only trigger
+# was covered, so removing @require_entitlement from any of these three
+# left every test green)
+# ---------------------------------------------------------------------------
+
+
+def _make_gated_app(monkeypatch, *, organization_id: str | None, entitlement_rows: list[dict]) -> TestClient:
+    """A bare app for denied-case tests: the entitlement check 403s before
+    the handler ever touches get_config/get_scheduled_task_repo/thread_store,
+    so none of those need to be wired for this case."""
+    monkeypatch.setattr(scheduled_tasks, "get_optional_user_from_request", AsyncMock(return_value=SimpleNamespace(id="user-1")))
+    app = FastAPI()
+    app.add_middleware(_StubAuthMiddleware, organization_id=organization_id)
+    app.state.entitlement_repo = _FakeEntitlementRepo(entitlement_rows)
+    app.include_router(scheduled_tasks.router)
+    return TestClient(app, raise_server_exceptions=False)
+
+
+def test_create_route_is_gated_when_denied(monkeypatch):
+    _enable_entitlements()
+    client = _make_gated_app(monkeypatch, organization_id=ORG_A, entitlement_rows=[])
+
+    resp = client.post(
+        "/api/scheduled-tasks",
+        json={"title": "T", "prompt": "P", "schedule_type": "cron", "schedule_spec": {"cron": "0 9 * * *"}, "timezone": "UTC"},
+    )
+
+    assert resp.status_code == 403, resp.text
+    assert resp.json()["detail"]["error"] == "entitlement_exceeded"
+
+
+def test_create_route_allowed_with_active_row(monkeypatch):
+    _enable_entitlements()
+    task_repo = _FakeTaskRepo({"id": "task-1", "user_id": "user-1"})
+    task_repo.create = AsyncMock(return_value={"id": "task-1"})
+    monkeypatch.setattr(scheduled_tasks, "get_scheduled_task_repo", lambda _request: task_repo)
+    monkeypatch.setattr(scheduled_tasks, "get_optional_user_from_request", AsyncMock(return_value=SimpleNamespace(id="user-1")))
+    app = FastAPI()
+    app.add_middleware(_StubAuthMiddleware, organization_id=ORG_A)
+    app.state.entitlement_repo = _FakeEntitlementRepo([_row(ORG_A, "runs.create")])
+    app.state.thread_store = MagicMock()
+    app.include_router(scheduled_tasks.router)
+    client = TestClient(app, raise_server_exceptions=False)
+
+    resp = client.post(
+        "/api/scheduled-tasks",
+        json={"title": "T", "prompt": "P", "schedule_type": "cron", "schedule_spec": {"cron": "0 9 * * *"}, "timezone": "UTC"},
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert task_repo.create.await_count == 1
+
+
+def test_update_route_is_gated_when_denied(monkeypatch):
+    _enable_entitlements()
+    client = _make_gated_app(monkeypatch, organization_id=ORG_A, entitlement_rows=[])
+
+    resp = client.patch("/api/scheduled-tasks/task-1", json={})
+
+    assert resp.status_code == 403, resp.text
+    assert resp.json()["detail"]["error"] == "entitlement_exceeded"
+
+
+def test_resume_route_is_gated_when_denied(monkeypatch):
+    _enable_entitlements()
+    client = _make_gated_app(monkeypatch, organization_id=ORG_A, entitlement_rows=[])
+
+    resp = client.post("/api/scheduled-tasks/task-1/resume")
+
+    assert resp.status_code == 403, resp.text
+    assert resp.json()["detail"]["error"] == "entitlement_exceeded"
