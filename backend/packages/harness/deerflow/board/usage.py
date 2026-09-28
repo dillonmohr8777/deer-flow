@@ -24,6 +24,17 @@ request context (an HTTP handler or similar), never from a background loop
 with no such context, where it resolves to a synthetic default no real
 account's ledger query can ever match.
 
+That per-caller filter itself resolves through ``get_current_user()``
+(``app/gateway/deps.py``), which returns ``request.state.storage_user_id``
+when set -- a *shared* organization has its own dedicated storage principal
+(``OrganizationRow.storage_user_id``), distinct from any individual member's
+id, and every run made inside it (board or otherwise) is stamped with that
+principal, not the acting person's id. Only a *private* organization uses
+the actor's own id as its storage principal. So the ``user_id`` a caller
+passes in here is only a starting point: this module resolves the thread's
+actual organization to the org's real storage principal when it has one,
+falling back to the passed-in id only for that person's own private org.
+
 Recording is best-effort and must never break triage or drafting: any
 persistence failure (including a memory-backend deployment, which has no SQL
 tables to write to) is logged and swallowed, matching
@@ -40,6 +51,8 @@ from datetime import UTC, datetime
 from typing import Any, Protocol
 
 from deerflow.persistence.engine import get_session_factory
+from deerflow.persistence.organizations.identity import private_organization_id
+from deerflow.persistence.organizations.model import OrganizationRow
 from deerflow.persistence.run.model import RunRow
 from deerflow.runtime.events.catalog import LLM_AI_RESPONSE_EVENT, LLM_ERROR_EVENT
 from deerflow.runtime.events.store.db import DbRunEventStore
@@ -62,6 +75,23 @@ class RecordBoardUsage(Protocol):
         response: Any = None,
         error_type: str | None = None,
     ) -> None: ...
+
+
+async def _resolve_ledger_user_id(session: Any, *, organization_id: str | None, fallback_user_id: str | None) -> str | None:
+    """Return the ``RunRow.user_id`` that ``get_current_user()`` will actually filter on.
+
+    A shared organization's dedicated ``storage_user_id`` wins whenever the
+    org has one; ``fallback_user_id`` (typically the board thread's creator)
+    is only correct when that person's own private organization is the one
+    in play. See the module docstring for why.
+    """
+    if organization_id:
+        organization = await session.get(OrganizationRow, organization_id)
+        if organization is not None and organization.storage_user_id:
+            return organization.storage_user_id
+        if fallback_user_id and organization_id == private_organization_id(fallback_user_id):
+            return fallback_user_id
+    return fallback_user_id
 
 
 def _usage_and_resolved_model(response: Any) -> tuple[dict[str, Any], str | None]:
@@ -94,9 +124,12 @@ async def record_board_model_usage(
 
     ``caller`` becomes the synthetic run's ``assistant_id`` (``board_triage``
     or ``board_concierge``), matching ``ConsoleUsageLedgerItem.assistant_id``.
-    ``user_id`` is the real owner to stamp the run with (see the module
-    docstring); when omitted this falls back to ``get_effective_user_id()``
-    for callers made from a real request context.
+    ``user_id`` is a starting point for the real owner to stamp the run with
+    (see the module docstring): when ``organization_id`` names a shared
+    organization with its own storage principal, that principal wins over
+    ``user_id``; ``user_id`` (falling back to ``get_effective_user_id()`` for
+    callers made from a real request context) is used as-is only for a
+    private organization.
     """
     try:
         session_factory = get_session_factory()
@@ -113,7 +146,7 @@ async def record_board_model_usage(
         run_id = str(uuid.uuid4())
         now = datetime.now(UTC)
         status = "success" if attempt_status == "success" else "error"
-        resolved_user_id = user_id or get_effective_user_id()
+        fallback_user_id = user_id or get_effective_user_id()
 
         input_tokens = int(usage.get("input_tokens") or 0)
         output_tokens = int(usage.get("output_tokens") or 0)
@@ -150,6 +183,7 @@ async def record_board_model_usage(
         )
 
         async with session_factory() as session:
+            resolved_user_id = await _resolve_ledger_user_id(session, organization_id=organization_id, fallback_user_id=fallback_user_id)
             session.add(
                 RunRow(
                     run_id=run_id,

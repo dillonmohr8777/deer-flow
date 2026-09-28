@@ -26,6 +26,8 @@ from app.gateway.routers.console import _owner_filters
 from deerflow.board.usage import record_board_model_usage
 from deerflow.persistence.base import Base
 from deerflow.persistence.models.run_event import RunEventRow
+from deerflow.persistence.organizations.identity import private_organization_id
+from deerflow.persistence.organizations.model import OrganizationRow
 from deerflow.persistence.run.model import RunRow
 from deerflow.runtime.user_context import WorkspaceStorageContext, reset_storage_context, set_storage_context
 
@@ -235,3 +237,73 @@ async def test_an_error_call_records_zero_tokens_and_no_llm_call(session_factory
     assert run.total_tokens == 0
     assert run.llm_call_count == 0
     assert run.token_usage_by_model == {}
+
+
+# --- shared-org storage principal (review follow-up 2 on PR #67, f60) ---
+#
+# get_current_user() (app/gateway/deps.py), which every /api/console/* route
+# uses to scope its query, returns request.state.storage_user_id when set --
+# a SHARED organization's own dedicated storage principal, not any individual
+# member's id. Stamping the board thread creator's raw id (the first fix's
+# approach) only happens to work for a private org, where the actor is their
+# own storage principal; on any board with client contacts (who can only
+# exist via an invited, shared org) the creator's id never matches, so no
+# owner, admin or contact ever sees the row -- the reviewer's exact repro.
+
+
+@pytest.mark.anyio
+async def test_shared_org_board_usage_visible_to_org_storage_principal(session_factory):
+    async with session_factory() as session:
+        session.add(OrganizationRow(id="org-team", slug="org-team", name="Team Org", status="active", storage_user_id="org-team-storage"))
+        await session.commit()
+
+    # The creator is a client contact -- their own id, not the org's storage principal.
+    await record_board_model_usage(
+        caller="board_triage",
+        attempt_status="success",
+        organization_id="org-team",
+        client_id="client-1",
+        board_thread_id="thread-5",
+        user_id="client-contact-1",
+        response=SimpleNamespace(usage_metadata={"input_tokens": 1, "output_tokens": 1, "total_tokens": 2}, response_metadata={}),
+    )
+
+    async with session_factory() as session:
+        run = (await session.execute(select(RunRow).where(RunRow.thread_id == "board:thread-5"))).scalar_one()
+    assert run.user_id == "org-team-storage"
+
+    token = set_storage_context(WorkspaceStorageContext(actor_user_id="owner-1", organization_id="org-team", storage_user_id="org-team-storage"))
+    try:
+        stmt = (
+            select(RunEventRow, RunRow)
+            .join(RunRow, (RunRow.run_id == RunEventRow.run_id) & (RunRow.thread_id == RunEventRow.thread_id))
+            .where(RunRow.operation_kind == "run", RunEventRow.event_type.in_(("llm.ai.response", "llm.error")), *_owner_filters(RunRow, "org-team-storage"))
+        )
+        async with session_factory() as session:
+            rows = (await session.execute(stmt)).all()
+    finally:
+        reset_storage_context(token)
+
+    assert len(rows) == 1
+
+
+@pytest.mark.anyio
+async def test_private_org_board_usage_still_uses_the_creators_own_id(session_factory):
+    """A private org has no dedicated storage_user_id -- the creator IS the principal."""
+    private_org_id = private_organization_id("creator-1")
+    async with session_factory() as session:
+        session.add(OrganizationRow(id=private_org_id, slug="creator-1-private", name="creator-1", status="active", storage_user_id=None))
+        await session.commit()
+
+    await record_board_model_usage(
+        caller="board_triage",
+        attempt_status="success",
+        organization_id=private_org_id,
+        board_thread_id="thread-6",
+        user_id="creator-1",
+        response=SimpleNamespace(),
+    )
+
+    async with session_factory() as session:
+        run = (await session.execute(select(RunRow).where(RunRow.thread_id == "board:thread-6"))).scalar_one()
+    assert run.user_id == "creator-1"
