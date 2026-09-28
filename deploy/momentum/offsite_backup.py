@@ -55,10 +55,21 @@ def docker(*args, **kw):
     return subprocess.run(["docker", *args], check=True, capture_output=True, creationflags=NO_WINDOW, **kw)
 
 
+def _write_private(path: pathlib.Path, data: bytes) -> None:
+    """Create `path` owner-only (0600) regardless of umask, refusing to follow
+    or reuse anything already there (O_EXCL also refuses a planted symlink).
+    The mode is ignored on Windows, where the profile folder's ACLs apply."""
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0), 0o600)
+    with os.fdopen(fd, "wb") as fh:
+        fh.write(data)
+
+
 def load_key() -> bytes:
     if not KEY.exists():
-        KEY.parent.mkdir(parents=True, exist_ok=True)
-        KEY.write_bytes(secrets.token_bytes(32))
+        if not KEY.parent.exists():
+            KEY.parent.mkdir(mode=0o700, parents=True)
+            os.chmod(KEY.parent, 0o700)  # mkdir's mode is filtered by the umask
+        _write_private(KEY, secrets.token_bytes(32))
     key = KEY.read_bytes()
     if len(key) != 32:
         sys.exit("backup key must be 32 bytes")
@@ -151,7 +162,15 @@ def restore(path: pathlib.Path) -> None:
     plain = _decrypt_bytes(blob, load_key())
     # Never decrypt into the synced folder: plaintext would upload.
     target = pathlib.Path(os.environ.get("TEMP", "/tmp")) / path.with_suffix("").name
-    target.write_bytes(plain)
+    # Plaintext client data: owner-only, and never through a pre-existing
+    # file or symlink at this predictable name in a shared temp folder.
+    if target.is_symlink():
+        sys.exit(f"refusing to write through a symlink at {target}")
+    target.unlink(missing_ok=True)
+    try:
+        _write_private(target, plain)
+    except FileExistsError:
+        sys.exit(f"refusing to overwrite {target}: something recreated it")
     if path.name.startswith("postgres-"):
         print(f"decrypted to {target}; restore into a running Postgres with: "
               f"docker cp {target} <postgres-container>:/tmp/{target.name} && "
