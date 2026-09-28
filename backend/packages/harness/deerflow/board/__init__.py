@@ -3,6 +3,7 @@
 next to ``deerflow.persistence.scheduled_tasks``.
 """
 
+from deerflow.board.concierge import generate_draft_body, run_concierge_pass
 from deerflow.board.triage import BoardThreadTriage, triage_board_thread
 from deerflow.board.workflow import (
     BoardOwnerRequiredError,
@@ -19,5 +20,7 @@ __all__ = [
     "assert_can_approve",
     "assert_can_draft",
     "assert_can_reply",
+    "generate_draft_body",
+    "run_concierge_pass",
     "triage_board_thread",
 ]
