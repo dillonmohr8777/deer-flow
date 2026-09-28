@@ -223,3 +223,16 @@ async def test_triage_records_usage_as_error_when_the_model_call_fails(monkeypat
     assert calls[0]["error_type"] == "RuntimeError"
     assert calls[0]["organization_id"] == "org-1"
     assert calls[0]["client_id"] == "client-1"
+
+
+@pytest.mark.anyio
+async def test_triage_forwards_an_explicit_user_id_to_the_recorder(monkeypatch):
+    _make_env(monkeypatch, '{"kind":"ticket","urgency":"high","summary":"Needs a fix."}')
+    calls = []
+
+    async def _record(**kwargs):
+        calls.append(kwargs)
+
+    await triage_board_thread("Something is broken.", user_id="creator-1", record_usage=_record)
+
+    assert calls[0]["user_id"] == "creator-1"

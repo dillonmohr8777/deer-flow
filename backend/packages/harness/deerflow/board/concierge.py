@@ -51,6 +51,7 @@ async def generate_draft_body(
     organization_id: str | None = None,
     client_id: str | None = None,
     board_thread_id: str | None = None,
+    user_id: str | None = None,
     record_usage: RecordBoardUsageFn | None = None,
 ) -> str | None:
     """Draft a reply body for one board thread's opening message.
@@ -62,7 +63,11 @@ async def generate_draft_body(
 
     The model call itself is recorded into the usage ledger regardless of
     whether it produces a usable draft (blank response still counts as a
-    successful model call).
+    successful model call). ``user_id`` should be the real owner the recorded
+    run belongs to -- see ``triage_board_thread``'s own docstring for why:
+    this function runs from a background loop with no request context, so
+    without an explicit value the row would be invisible to every real
+    account.
     """
     record_fn = record_usage or record_board_model_usage
     rubric = (
@@ -102,6 +107,7 @@ async def generate_draft_body(
             organization_id=organization_id,
             client_id=client_id,
             board_thread_id=board_thread_id,
+            user_id=user_id,
             requested_model=model_name,
             error_type=type(exc).__name__,
         )
@@ -113,6 +119,7 @@ async def generate_draft_body(
         organization_id=organization_id,
         client_id=client_id,
         board_thread_id=board_thread_id,
+        user_id=user_id,
         requested_model=model_name,
         response=response,
     )
@@ -156,6 +163,7 @@ async def run_concierge_pass(
                 organization_id=thread.get("organization_id"),
                 client_id=thread.get("client_id"),
                 board_thread_id=thread_id,
+                user_id=thread.get("created_by_user_id"),
             )
             if not draft:
                 continue

@@ -14,6 +14,16 @@ The ledger has no ``client_id`` column (only ``organization_id``, read from
 ``RunRow``), so the client is carried in the event's own metadata alongside
 ``board_thread_id`` for traceability.
 
+``GET /api/console/usage-ledger`` (and ``/api/console/stats``,
+``/api/console/usage``) filter every query on the *querying user's own*
+``RunRow.user_id`` (``app/gateway/routers/console.py::_owner_filters``) --
+this endpoint is per-caller, not per-organization. Callers of this module
+must therefore pass a real, resolvable ``user_id`` (e.g. the board thread's
+creator); the ``get_effective_user_id()`` fallback only works inside a real
+request context (an HTTP handler or similar), never from a background loop
+with no such context, where it resolves to a synthetic default no real
+account's ledger query can ever match.
+
 Recording is best-effort and must never break triage or drafting: any
 persistence failure (including a memory-backend deployment, which has no SQL
 tables to write to) is logged and swallowed, matching
@@ -47,6 +57,7 @@ class RecordBoardUsage(Protocol):
         organization_id: str | None = None,
         client_id: str | None = None,
         board_thread_id: str | None = None,
+        user_id: str | None = None,
         requested_model: str | None = None,
         response: Any = None,
         error_type: str | None = None,
@@ -74,6 +85,7 @@ async def record_board_model_usage(
     organization_id: str | None = None,
     client_id: str | None = None,
     board_thread_id: str | None = None,
+    user_id: str | None = None,
     requested_model: str | None = None,
     response: Any = None,
     error_type: str | None = None,
@@ -82,6 +94,9 @@ async def record_board_model_usage(
 
     ``caller`` becomes the synthetic run's ``assistant_id`` (``board_triage``
     or ``board_concierge``), matching ``ConsoleUsageLedgerItem.assistant_id``.
+    ``user_id`` is the real owner to stamp the run with (see the module
+    docstring); when omitted this falls back to ``get_effective_user_id()``
+    for callers made from a real request context.
     """
     try:
         session_factory = get_session_factory()
@@ -98,24 +113,21 @@ async def record_board_model_usage(
         run_id = str(uuid.uuid4())
         now = datetime.now(UTC)
         status = "success" if attempt_status == "success" else "error"
+        resolved_user_id = user_id or get_effective_user_id()
 
-        async with session_factory() as session:
-            session.add(
-                RunRow(
-                    run_id=run_id,
-                    thread_id=thread_id,
-                    assistant_id=caller,
-                    user_id=get_effective_user_id(),
-                    organization_id=organization_id,
-                    status=status,
-                    operation_kind="run",
-                    model_name=resolved_model or requested_model,
-                    created_at=now,
-                    updated_at=now,
-                )
-            )
-            await session.commit()
+        input_tokens = int(usage.get("input_tokens") or 0)
+        output_tokens = int(usage.get("output_tokens") or 0)
+        total_tokens = int(usage.get("total_tokens") or 0) or (input_tokens + output_tokens)
+        usage_model_key = resolved_model or requested_model
+        token_usage_by_model = {usage_model_key: usage} if usage_model_key and usage else {}
 
+        # The RunRow and the event are two separate transactions (DbRunEventStore.put()
+        # manages its own session/locking for seq assignment, so there is no cheap way
+        # to share one transaction without duplicating that locking here). Write the
+        # event first: an event with no matching RunRow is invisible everywhere (the
+        # ledger's inner join excludes it, and /console/stats/usage read RunRow alone),
+        # while the reverse order risks an orphaned RunRow whose token totals would
+        # still count in that user's aggregate stats with no ledger line to explain them.
         event = LLM_AI_RESPONSE_EVENT if attempt_status == "success" else LLM_ERROR_EVENT
         store = DbRunEventStore(session_factory)
         await store.put(
@@ -136,6 +148,28 @@ async def record_board_model_usage(
                 "board_thread_id": board_thread_id,
             },
         )
+
+        async with session_factory() as session:
+            session.add(
+                RunRow(
+                    run_id=run_id,
+                    thread_id=thread_id,
+                    assistant_id=caller,
+                    user_id=resolved_user_id,
+                    organization_id=organization_id,
+                    status=status,
+                    operation_kind="run",
+                    model_name=resolved_model or requested_model,
+                    total_input_tokens=input_tokens,
+                    total_output_tokens=output_tokens,
+                    total_tokens=total_tokens,
+                    llm_call_count=1 if attempt_status == "success" else 0,
+                    token_usage_by_model=token_usage_by_model,
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+            await session.commit()
     except Exception:
         logger.warning("Failed to record board model usage (%s) into the usage ledger", caller, exc_info=True)
 

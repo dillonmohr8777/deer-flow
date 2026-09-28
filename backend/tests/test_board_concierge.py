@@ -28,6 +28,8 @@ from deerflow.board.concierge import generate_draft_body, run_concierge_pass
 from deerflow.persistence.base import Base
 from deerflow.persistence.board import BoardRepository
 from deerflow.persistence.board.model import BoardThreadStatus
+from deerflow.persistence.organizations.identity import private_organization_id
+from deerflow.runtime.user_context import WorkspaceStorageContext, reset_storage_context, set_storage_context
 
 
 def _make_model_env(monkeypatch, response_content):
@@ -126,6 +128,19 @@ async def test_generate_draft_body_records_usage_as_success_even_on_a_blank_resp
     assert result is None
     assert len(calls) == 1
     assert calls[0]["attempt_status"] == "success"
+
+
+@pytest.mark.anyio
+async def test_generate_draft_body_forwards_an_explicit_user_id_to_the_recorder(monkeypatch):
+    _make_model_env(monkeypatch, "Thanks -- we'll take a look.")
+    calls = []
+
+    async def _record(**kwargs):
+        calls.append(kwargs)
+
+    await generate_draft_body("The checkout button is broken.", user_id="creator-1", record_usage=_record)
+
+    assert calls[0]["user_id"] == "creator-1"
 
 
 @pytest.mark.anyio
@@ -235,8 +250,18 @@ async def test_run_concierge_pass_leaves_thread_untouched_when_draft_generation_
 
 
 @pytest.mark.anyio
-async def test_run_concierge_pass_forwards_thread_org_and_client_to_draft_generation(board_repo):
-    thread = await board_repo.create_thread(client_id="c1", kind="ticket", subject="Broken widget")
+async def test_run_concierge_pass_forwards_thread_org_client_and_creator_to_draft_generation(board_repo):
+    # A real storage context, not no-context: organization_id must land as an
+    # actual, non-None org id (a prior version of this test compared None == None,
+    # which stayed green even with organization_id hard-coded to None in
+    # concierge.py -- see review follow-up on PR #67).
+    org_id = private_organization_id("creator-1")
+    token = set_storage_context(WorkspaceStorageContext(actor_user_id="creator-1", organization_id=org_id, storage_user_id="creator-1"))
+    try:
+        thread = await board_repo.create_thread(client_id="c1", kind="ticket", subject="Broken widget", created_by_user_id="creator-1")
+    finally:
+        reset_storage_context(token)
+    assert thread["organization_id"] == org_id  # sanity check the fixture actually exercises a real org
     await board_repo.add_message(thread["id"], author_kind="client", body="It's still broken.")
 
     seen_kwargs = []
@@ -250,9 +275,8 @@ async def test_run_concierge_pass_forwards_thread_org_and_client_to_draft_genera
     assert len(seen_kwargs) == 1
     assert seen_kwargs[0]["client_id"] == "c1"
     assert seen_kwargs[0]["board_thread_id"] == thread["id"]
-    # This fixture's BoardRepository has no request/org context, so organization_id is None here --
-    # the important thing is that the thread's own value, whatever it is, is what gets forwarded.
-    assert seen_kwargs[0]["organization_id"] == thread.get("organization_id")
+    assert seen_kwargs[0]["organization_id"] == org_id
+    assert seen_kwargs[0]["user_id"] == "creator-1"
 
 
 @pytest.mark.anyio

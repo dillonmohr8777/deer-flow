@@ -113,6 +113,7 @@ async def triage_board_thread(
     organization_id: str | None = None,
     client_id: str | None = None,
     board_thread_id: str | None = None,
+    user_id: str | None = None,
     record_usage: RecordBoardUsageFn | None = None,
 ) -> BoardThreadTriage:
     """Classify a new board thread's kind, urgency and summary.
@@ -126,7 +127,12 @@ async def triage_board_thread(
     (``deerflow.board.usage.record_board_model_usage``) with
     ``organization_id``/``client_id``/``board_thread_id`` when the caller has
     them, regardless of whether the response parses into a usable
-    classification.
+    classification. ``user_id`` should be the real owner the recorded run
+    belongs to (e.g. the thread's creator): without an explicit value the
+    recording falls back to ``get_effective_user_id()``, which outside a
+    request context resolves to a synthetic default that no real account's
+    usage-ledger query (``GET /api/console/usage-ledger``, filtered by the
+    querying user's own id) will ever match.
     """
     record_fn = record_usage or record_board_model_usage
     rubric = (
@@ -168,6 +174,7 @@ async def triage_board_thread(
             organization_id=organization_id,
             client_id=client_id,
             board_thread_id=board_thread_id,
+            user_id=user_id,
             requested_model=model_name,
             error_type=type(exc).__name__,
         )
@@ -179,6 +186,7 @@ async def triage_board_thread(
         organization_id=organization_id,
         client_id=client_id,
         board_thread_id=board_thread_id,
+        user_id=user_id,
         requested_model=model_name,
         response=response,
     )
