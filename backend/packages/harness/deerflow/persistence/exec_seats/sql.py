@@ -94,6 +94,22 @@ class AgentSeatRepository:
             result = await session.execute(stmt)
             return [_to_dict(r) for r in result.scalars()]
 
+    async def latest_claim_for_seat(self, seat: str) -> dict | None:
+        """The most recent claim row for *seat* in the active organization, whatever its status.
+
+        ``assert_can_claim`` needs the seat title's *current* status (``None``
+        for a title nobody has ever claimed), not just a ratified holder --
+        the most recent row can be ``claimed`` (already contested) or
+        ``reopened`` (open again after an owner veto).
+        """
+        organization_id = resolve_organization_id()
+        stmt = self._scope(select(AgentSeatRow), organization_id).where(AgentSeatRow.seat == seat)
+        stmt = stmt.order_by(AgentSeatRow.created_at.desc(), AgentSeatRow.id.desc()).limit(1)
+        async with self._sf() as session:
+            result = await session.execute(stmt)
+            row = result.scalars().first()
+            return _to_dict(row) if row is not None else None
+
     async def ratified_holder(self, seat: str) -> dict | None:
         """The currently ratified claim for *seat* in the active organization, if any."""
         organization_id = resolve_organization_id()
