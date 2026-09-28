@@ -299,6 +299,70 @@ def test_runs_cancel_denied_with_missing_row():
 
 
 # ---------------------------------------------------------------------------
+# runs.cancel bypass via POST .../stream?action=interrupt|rollback (review
+# finding f65, low): the dedicated /cancel route is gated, but the join-stream
+# route's own cancel-then-stream branch was not.
+# ---------------------------------------------------------------------------
+
+
+def _make_stream_cancel_app(monkeypatch, mgr: RunManager, *, organization_id: str | None, entitlement_rows: list[dict]) -> TestClient:
+    monkeypatch.setattr(thread_runs, "sse_consumer", _fake_sse_consumer)
+    app = FastAPI()
+    app.add_middleware(_StubAuthMiddleware, organization_id=organization_id, permissions=[Permissions.RUNS_CREATE, Permissions.RUNS_CANCEL, Permissions.RUNS_READ, Permissions.THREADS_READ, Permissions.THREADS_WRITE])
+    thread_store = MagicMock()
+    thread_store.check_access = AsyncMock(return_value=True)
+    app.state.thread_store = thread_store
+    app.state.run_manager = mgr
+    app.state.stream_bridge = MagicMock(stream_exists=AsyncMock(return_value=False), supports_cross_process=False)
+    app.state.entitlement_repo = _FakeEntitlementRepo(entitlement_rows)
+    app.include_router(thread_runs.router)
+    return TestClient(app, raise_server_exceptions=False)
+
+
+def test_stream_route_cancel_action_is_gated_when_denied(monkeypatch):
+    _enable_entitlements()
+    mgr = RunManager()
+    run_id = _create_running_run(mgr)
+    client = _make_stream_cancel_app(monkeypatch, mgr, organization_id=ORG_A, entitlement_rows=[])
+    resp = client.post(f"/api/threads/{THREAD_ID}/runs/{run_id}/stream", params={"action": "interrupt"})
+    assert resp.status_code == 403, resp.text
+    assert resp.json()["detail"]["error"] == "entitlement_exceeded"
+    assert resp.json()["detail"]["key"] == "runs.cancel"
+
+    async def _status():
+        record = await mgr.get(run_id)
+        return record.status
+
+    assert asyncio.run(_status()) == RunStatus.running  # denial happened before any cancel logic ran
+
+
+def test_stream_route_cancel_action_allowed_with_active_row(monkeypatch):
+    _enable_entitlements()
+    mgr = RunManager()
+    run_id = _create_running_run(mgr)
+    client = _make_stream_cancel_app(monkeypatch, mgr, organization_id=ORG_A, entitlement_rows=[_row(ORG_A, "runs.cancel")])
+    resp = client.post(f"/api/threads/{THREAD_ID}/runs/{run_id}/stream", params={"action": "interrupt"})
+    assert resp.status_code == 200, resp.text
+
+    async def _status():
+        record = await mgr.get(run_id)
+        return record.status
+
+    assert asyncio.run(_status()) != RunStatus.running  # the cancel actually ran
+
+
+def test_stream_route_plain_join_is_unaffected_by_runs_cancel_entitlement(monkeypatch):
+    """An action-less join is read-only observation, never a cancel -- it
+    must not require the runs.cancel entitlement at all."""
+    _enable_entitlements()
+    mgr = RunManager()
+    run_id = _create_running_run(mgr)
+    client = _make_stream_cancel_app(monkeypatch, mgr, organization_id=ORG_A, entitlement_rows=[])
+    resp = client.post(f"/api/threads/{THREAD_ID}/runs/{run_id}/stream")
+    assert resp.status_code == 200, resp.text
+
+
+# ---------------------------------------------------------------------------
 # projects.max — POST /api/projects (limit key, inline check)
 # ---------------------------------------------------------------------------
 

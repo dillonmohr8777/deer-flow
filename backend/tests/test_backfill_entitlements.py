@@ -153,7 +153,10 @@ async def test_run_backfill_is_idempotent_across_runs(two_org_session_factory):
 
 
 @pytest.mark.asyncio
-async def test_run_backfill_reports_zero_with_no_organizations():
+async def test_run_backfill_refuses_when_no_organizations_found():
+    """Review finding (f63): zero orgs almost always means "pointed at the
+    wrong database", not "nothing to do" -- a silent 0 return let a dry run
+    from the wrong working directory look like success."""
     engine = create_async_engine("sqlite+aiosqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
     async with engine.begin() as connection:
         await connection.run_sync(Base.metadata.create_all)
@@ -161,22 +164,113 @@ async def test_run_backfill_reports_zero_with_no_organizations():
     try:
         config = _config(NO_DEFAULTS)
         result = await backfill.run_backfill(config, dry_run=False, session_factory=session_factory)
-        assert result == 0
+        assert result == 1
     finally:
         await engine.dispose()
 
 
 @pytest.mark.asyncio
-async def test_run_backfill_returns_1_when_no_session_factory_is_available(monkeypatch):
-    async def _noop_init(_config):
-        return None
-
-    monkeypatch.setattr("deerflow.persistence.engine.init_engine_from_config", _noop_init)
-    monkeypatch.setattr("deerflow.persistence.engine.get_session_factory", lambda: None)
-
-    config = _config(NO_DEFAULTS)
+async def test_run_backfill_returns_1_for_an_unsupported_backend():
+    config = _config(NO_DEFAULTS)  # database=DatabaseConfig(backend="memory")
     result = await backfill.run_backfill(config, dry_run=False, session_factory=None)
     assert result == 1
+
+
+# -- run_backfill without an injected session_factory: the real connection
+# path (review finding f63: --dry-run must never migrate the schema) --------
+
+
+@pytest.mark.asyncio
+async def test_dry_run_against_an_unbootstrapped_database_refuses_and_creates_nothing(tmp_path):
+    """Reproduces the review's exact repro: pointing --dry-run at a sqlite
+    dir that doesn't exist (or was never bootstrapped by the Gateway) must
+    refuse, not silently create the database and report success."""
+    sqlite_dir = tmp_path / "does-not-exist-yet"
+    config = SimpleNamespace(
+        entitlements=EntitlementConfig(default_limits=NO_DEFAULTS),
+        database=DatabaseConfig(backend="sqlite", sqlite_dir=str(sqlite_dir)),
+    )
+
+    result = await backfill.run_backfill(config, dry_run=True, session_factory=None)
+
+    assert result == 1
+    assert not sqlite_dir.exists()  # never created -- the bug's exact symptom
+
+
+async def _bootstrap_sqlite_at_head(sqlite_dir) -> None:
+    from alembic import command
+
+    from deerflow.persistence.bootstrap import _get_alembic_config
+
+    sqlite_dir.mkdir(parents=True, exist_ok=True)
+    engine = create_async_engine(f"sqlite+aiosqlite:///{sqlite_dir / 'deerflow.db'}")
+    try:
+        import asyncio
+
+        await asyncio.to_thread(command.upgrade, _get_alembic_config(engine), "head")
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_dry_run_against_a_bootstrapped_database_succeeds_and_writes_nothing(tmp_path):
+    sqlite_dir = tmp_path / "already-bootstrapped"
+    await _bootstrap_sqlite_at_head(sqlite_dir)
+
+    engine = create_async_engine(f"sqlite+aiosqlite:///{sqlite_dir / 'deerflow.db'}")
+    try:
+        session_factory = async_sessionmaker(engine, expire_on_commit=False)
+        async with session_factory() as session:
+            session.add(OrganizationRow(id=ORG_A, slug="org-a", name="Org A", status="active"))
+            await session.commit()
+    finally:
+        await engine.dispose()
+
+    config = SimpleNamespace(
+        entitlements=EntitlementConfig(default_limits=SOME_DEFAULTS),
+        database=DatabaseConfig(backend="sqlite", sqlite_dir=str(sqlite_dir)),
+    )
+
+    result = await backfill.run_backfill(config, dry_run=True, session_factory=None)
+    assert result == 0
+
+    verify_engine = create_async_engine(f"sqlite+aiosqlite:///{sqlite_dir / 'deerflow.db'}")
+    try:
+        entitlement_repo = EntitlementRepository(async_sessionmaker(verify_engine, expire_on_commit=False))
+        assert await entitlement_repo.list_for_org(ORG_A) == []  # dry-run wrote nothing
+    finally:
+        await verify_engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_real_run_against_a_bootstrapped_database_writes_rows(tmp_path):
+    sqlite_dir = tmp_path / "already-bootstrapped"
+    await _bootstrap_sqlite_at_head(sqlite_dir)
+
+    engine = create_async_engine(f"sqlite+aiosqlite:///{sqlite_dir / 'deerflow.db'}")
+    try:
+        session_factory = async_sessionmaker(engine, expire_on_commit=False)
+        async with session_factory() as session:
+            session.add(OrganizationRow(id=ORG_A, slug="org-a", name="Org A", status="active"))
+            await session.commit()
+    finally:
+        await engine.dispose()
+
+    config = SimpleNamespace(
+        entitlements=EntitlementConfig(default_limits=NO_DEFAULTS),
+        database=DatabaseConfig(backend="sqlite", sqlite_dir=str(sqlite_dir)),
+    )
+
+    result = await backfill.run_backfill(config, dry_run=False, session_factory=None)
+    assert result == 0
+
+    verify_engine = create_async_engine(f"sqlite+aiosqlite:///{sqlite_dir / 'deerflow.db'}")
+    try:
+        entitlement_repo = EntitlementRepository(async_sessionmaker(verify_engine, expire_on_commit=False))
+        rows = await entitlement_repo.list_for_org(ORG_A)
+        assert {r["key"] for r in rows} == set(backfill.GATE_KEYS)
+    finally:
+        await verify_engine.dispose()
 
 
 # -- main(): argv wiring ------------------------------------------------------

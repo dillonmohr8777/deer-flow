@@ -92,45 +92,102 @@ async def _list_organization_ids(session_factory) -> list[str]:
         return [row[0] for row in result.all()]
 
 
+async def _connect_without_migrating(config):
+    """Build a bare engine/session factory for an *already-bootstrapped* database.
+
+    Deliberately does not go through ``init_engine_from_config`` -- that
+    function's ``bootstrap_schema`` step runs ``create_all`` and stamps/
+    upgrades the schema as a side effect (the right thing for the Gateway to
+    do once at startup, wrong for a one-off operator script). A backfill
+    script -- especially in ``--dry-run`` -- must never create tables, create
+    a database file, or migrate a schema itself; it only ever writes
+    ``organization_entitlements`` rows into a database the Gateway has
+    already bootstrapped. Mirrors how
+    ``scripts/benchmark/concurrency/worker.py`` connects directly via
+    SQLAlchemy to skip the same bootstrap cost/side-effect.
+
+    Returns ``(session_factory, engine)`` on success, or ``(None, None)`` if
+    the backend is unsupported or the database isn't at the expected
+    Alembic head yet (a message explaining why is already logged).
+    """
+    database = config.database
+    backend = getattr(database, "backend", None)
+    if backend not in ("sqlite", "postgres"):
+        logger.error("database.backend is %r; this backfill needs 'sqlite' or 'postgres' (the same database the gateway uses).", backend)
+        return None, None
+
+    from sqlalchemy import text
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+    from deerflow.persistence.bootstrap import _get_alembic_config
+
+    db_path = database.app_sqlalchemy_url
+    engine = create_async_engine(db_path)
+    try:
+        cfg = _get_alembic_config(engine, postgres_schema=database.postgres_schema if backend == "postgres" else "")
+        from alembic.script import ScriptDirectory
+
+        head = ScriptDirectory.from_config(cfg).get_current_head()
+
+        try:
+            async with engine.connect() as conn:
+                result = await conn.execute(text("SELECT version_num FROM alembic_version"))
+                rows = list(result.scalars())
+        except Exception as exc:
+            logger.error("Could not read alembic_version at %s (%s). This database has not been bootstrapped yet -- start the Gateway once first. A backfill script must never migrate the schema itself.", db_path, exc)
+            await engine.dispose()
+            return None, None
+
+        current = rows[0] if len(rows) == 1 else None
+        if current != head:
+            logger.error(
+                "Database at %s is at alembic revision %r, not head (%r). Run the Gateway (or `alembic upgrade head`) first -- refusing to proceed, especially in --dry-run, rather than migrate the schema myself.", db_path, current, head
+            )
+            await engine.dispose()
+            return None, None
+
+        return async_sessionmaker(engine, expire_on_commit=False), engine
+    except Exception:
+        await engine.dispose()
+        raise
+
+
 async def run_backfill(config, *, dry_run: bool, session_factory=None) -> int:
     """Backfill every organization. ``session_factory`` is test-only injection."""
     from deerflow.persistence.entitlements import EntitlementRepository
 
+    engine = None
     if session_factory is None:
-        from deerflow.persistence.engine import get_session_factory, init_engine_from_config
+        session_factory, engine = await _connect_without_migrating(config)
+        if session_factory is None:
+            return 1
 
-        await init_engine_from_config(config.database)
-        session_factory = get_session_factory()
+    try:
+        organization_ids = await _list_organization_ids(session_factory)
+        if not organization_ids:
+            logger.error("No organizations found at %s -- refusing to report success. Check this is pointed at the right database.", config.database.app_sqlalchemy_url if engine is not None else "<injected session_factory>")
+            return 1
 
-    if session_factory is None:
-        logger.error(
-            "database.backend is %r; this backfill needs 'sqlite' or 'postgres' (the same database the gateway uses).",
-            getattr(config.database, "backend", None),
+        repo = EntitlementRepository(session_factory)
+        total_created = 0
+        total_skipped = 0
+        for organization_id in organization_ids:
+            created, skipped = await backfill_organization(repo, organization_id, config.entitlements.default_limits, dry_run=dry_run)
+            total_created += created
+            total_skipped += skipped
+
+        logger.info(
+            "%s%d organization(s): %d row(s) %s, %d already present.",
+            "[dry-run] " if dry_run else "",
+            len(organization_ids),
+            total_created,
+            "would be created" if dry_run else "created",
+            total_skipped,
         )
-        return 1
-
-    organization_ids = await _list_organization_ids(session_factory)
-    if not organization_ids:
-        logger.info("No organizations found -- nothing to backfill.")
         return 0
-
-    repo = EntitlementRepository(session_factory)
-    total_created = 0
-    total_skipped = 0
-    for organization_id in organization_ids:
-        created, skipped = await backfill_organization(repo, organization_id, config.entitlements.default_limits, dry_run=dry_run)
-        total_created += created
-        total_skipped += skipped
-
-    logger.info(
-        "%s%d organization(s): %d row(s) %s, %d already present.",
-        "[dry-run] " if dry_run else "",
-        len(organization_ids),
-        total_created,
-        "would be created" if dry_run else "created",
-        total_skipped,
-    )
-    return 0
+    finally:
+        if engine is not None:
+            await engine.dispose()
 
 
 def main() -> int:
