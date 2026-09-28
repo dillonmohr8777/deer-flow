@@ -24,7 +24,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.gateway.auth.models import User
 from app.gateway.authz import AuthContext, Permissions
-from app.gateway.routers import console, projects, thread_runs
+from app.gateway.routers import console, projects, runs, thread_runs
 from deerflow.config.app_config import AppConfig, reset_app_config, set_app_config
 from deerflow.config.entitlement_config import EntitlementConfig
 from deerflow.config.sandbox_config import SandboxConfig
@@ -90,7 +90,16 @@ def _run_record(run_id: str) -> RunRecord:
     return RunRecord(run_id=run_id, thread_id=THREAD_ID, assistant_id=None, status=RunStatus.pending, on_disconnect=DisconnectMode.continue_)
 
 
-def _make_create_run_app(monkeypatch, *, organization_id: str | None, entitlement_rows: list[dict]) -> TestClient:
+async def _fake_sse_consumer(bridge, record, request, run_mgr, **kwargs):
+    del bridge, record, request, run_mgr, kwargs
+    yield "data: {}\n\n"
+
+
+def _make_create_run_app(monkeypatch, *, organization_id: str | None, entitlement_rows: list[dict], module=thread_runs, router=None) -> TestClient:
+    """Builds an app around a run-creation router (thread_runs.router or the
+    stateless runs.router), with start_run/sse_consumer faked so the same
+    helper covers create_run, stream_run, wait_run and their stateless
+    counterparts without needing a real agent/bridge/checkpointer."""
     started = {"called": False}
 
     async def fake_start_run(body, thread_id, request, *, idempotency_key=None, require_existing_thread=False):
@@ -98,7 +107,9 @@ def _make_create_run_app(monkeypatch, *, organization_id: str | None, entitlemen
         started["called"] = True
         return _run_record("run-1")
 
-    monkeypatch.setattr(thread_runs, "start_run", fake_start_run)
+    monkeypatch.setattr(module, "start_run", fake_start_run)
+    if hasattr(module, "sse_consumer"):
+        monkeypatch.setattr(module, "sse_consumer", _fake_sse_consumer)
 
     app = FastAPI()
     app.add_middleware(_StubAuthMiddleware, organization_id=organization_id, permissions=[Permissions.RUNS_CREATE, Permissions.RUNS_CANCEL, Permissions.THREADS_READ, Permissions.THREADS_WRITE])
@@ -108,7 +119,7 @@ def _make_create_run_app(monkeypatch, *, organization_id: str | None, entitlemen
     app.state.stream_bridge = MagicMock(stream_exists=AsyncMock(return_value=False))
     app.state.run_manager = MagicMock()
     app.state.entitlement_repo = _FakeEntitlementRepo(entitlement_rows)
-    app.include_router(thread_runs.router)
+    app.include_router(router or module.router)
     client = TestClient(app, raise_server_exceptions=False)
     client._started = started  # type: ignore[attr-defined]
     return client
@@ -155,6 +166,73 @@ def test_runs_create_unaffected_when_entitlements_disabled(monkeypatch):
     resp = client.post(f"/api/threads/{THREAD_ID}/runs", json={})
     assert resp.status_code == 200, resp.text
     assert client._started["called"] is True
+
+
+# ---------------------------------------------------------------------------
+# runs.create bypass routes (review finding, high): every route that calls
+# start_run() must carry the same gate as POST /runs, or entitlements are
+# trivially bypassed by hitting /stream or /wait instead.
+# ---------------------------------------------------------------------------
+
+
+def test_runs_stream_route_is_gated_when_denied(monkeypatch):
+    _enable_entitlements()
+    client = _make_create_run_app(monkeypatch, organization_id=ORG_A, entitlement_rows=[])
+    resp = client.post(f"/api/threads/{THREAD_ID}/runs/stream", json={})
+    assert resp.status_code == 403, resp.text
+    assert resp.json()["detail"]["error"] == "entitlement_exceeded"
+    assert client._started["called"] is False
+
+
+def test_runs_stream_route_allowed_with_active_row(monkeypatch):
+    _enable_entitlements()
+    client = _make_create_run_app(monkeypatch, organization_id=ORG_A, entitlement_rows=[_row(ORG_A, "runs.create")])
+    resp = client.post(f"/api/threads/{THREAD_ID}/runs/stream", json={})
+    assert resp.status_code == 200, resp.text
+    assert client._started["called"] is True
+
+
+def test_runs_wait_route_is_gated_when_denied(monkeypatch):
+    _enable_entitlements()
+    client = _make_create_run_app(monkeypatch, organization_id=ORG_A, entitlement_rows=[])
+    resp = client.post(f"/api/threads/{THREAD_ID}/runs/wait", json={})
+    assert resp.status_code == 403, resp.text
+    assert resp.json()["detail"]["error"] == "entitlement_exceeded"
+    assert client._started["called"] is False
+
+
+def test_runs_wait_route_allowed_with_active_row(monkeypatch):
+    _enable_entitlements()
+    client = _make_create_run_app(monkeypatch, organization_id=ORG_A, entitlement_rows=[_row(ORG_A, "runs.create")])
+    resp = client.post(f"/api/threads/{THREAD_ID}/runs/wait", json={})
+    assert resp.status_code == 200, resp.text
+    assert client._started["called"] is True
+
+
+def test_stateless_runs_stream_is_gated_when_denied(monkeypatch):
+    _enable_entitlements()
+    client = _make_create_run_app(monkeypatch, organization_id=ORG_A, entitlement_rows=[], module=runs, router=runs.router)
+    resp = client.post("/api/runs/stream", json={})
+    assert resp.status_code == 403, resp.text
+    assert resp.json()["detail"]["error"] == "entitlement_exceeded"
+    assert client._started["called"] is False
+
+
+def test_stateless_runs_stream_allowed_with_active_row(monkeypatch):
+    _enable_entitlements()
+    client = _make_create_run_app(monkeypatch, organization_id=ORG_A, entitlement_rows=[_row(ORG_A, "runs.create")], module=runs, router=runs.router)
+    resp = client.post("/api/runs/stream", json={})
+    assert resp.status_code == 200, resp.text
+    assert client._started["called"] is True
+
+
+def test_stateless_runs_wait_is_gated_when_denied(monkeypatch):
+    _enable_entitlements()
+    client = _make_create_run_app(monkeypatch, organization_id=ORG_A, entitlement_rows=[], module=runs, router=runs.router)
+    resp = client.post("/api/runs/wait", json={})
+    assert resp.status_code == 403, resp.text
+    assert resp.json()["detail"]["error"] == "entitlement_exceeded"
+    assert client._started["called"] is False
 
 
 # ---------------------------------------------------------------------------
@@ -315,3 +393,17 @@ def test_snapshot_requires_console_read_entitlement():
     client = _make_console_app(organization_id=ORG_A, entitlement_rows=[], project_count=0)
     resp = client.get("/api/console/entitlements")
     assert resp.status_code == 403, resp.text
+
+
+def test_snapshot_limit_is_null_when_entitlements_disabled_not_zero():
+    """Review finding: a disabled gate must not read the same as an enabled,
+    exhausted one. POST /api/projects still succeeds while disabled (see
+    test_projects_max_unaffected_when_entitlements_disabled), so the
+    snapshot's `limit: 0` for the same state was actively misleading."""
+    # No _enable_entitlements() call -- default config (disabled).
+    client = _make_console_app(organization_id=ORG_A, entitlement_rows=[], project_count=7)
+    resp = client.get("/api/console/entitlements")
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["entitlements"]["projects.max"]["limit"] is None
+    assert body["entitlements"]["projects.max"]["used"] == 7  # live count is still real

@@ -965,6 +965,7 @@ async def create_run(
 
 @router.post("/{thread_id}/runs/stream")
 @require_permission("runs", "create", owner_check=True, require_existing=True)
+@require_entitlement("runs.create")
 async def stream_run(
     thread_id: ThreadId,
     body: RunCreateRequest,
@@ -1020,6 +1021,7 @@ async def stream_run(
 
 @router.post("/{thread_id}/runs/wait", response_model=dict)
 @require_permission("runs", "create", owner_check=True, require_existing=True)
+@require_entitlement("runs.create")
 async def wait_run(
     thread_id: ThreadId,
     body: RunCreateRequest,

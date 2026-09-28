@@ -225,6 +225,56 @@ async def test_degraded_provider_with_no_prior_read_fails_closed(repo):
     assert decision.reason == "provider_error"
 
 
+async def test_degraded_provider_cache_does_not_leak_between_organizations(repo):
+    """Review finding: the process-level cache is keyed per organization_id --
+    org B's snapshot must never answer for org A once org A's own provider
+    read fails. Populate the two orgs differently, warm both caches, then
+    degrade only org A and assert its decision still reflects its own
+    (suspended) row, never org B's (active) one."""
+    await repo.upsert(ORG_A, "runs.create", status="suspended")
+    await repo.upsert(ORG_B, "runs.create", status="active")
+
+    flaky_a = _FlakyRepo(repo)
+    flaky_b = _FlakyRepo(repo)
+    warm_a = await evaluate_entitlement(flaky_a, ORG_A, "runs.create", config=ENABLED)
+    warm_b = await evaluate_entitlement(flaky_b, ORG_B, "runs.create", config=ENABLED)
+    assert warm_a.allowed is False
+    assert warm_b.allowed is True
+
+    flaky_a.raise_next = True
+    degraded_a = await evaluate_entitlement(flaky_a, ORG_A, "runs.create", config=ENABLED)
+    assert degraded_a.degraded is True
+    assert degraded_a.allowed is False  # org A's own cached row is suspended, never org B's active one
+
+
+async def test_degraded_provider_allows_when_fail_closed_is_false(repo, monkeypatch):
+    """Review finding: EntitlementConfig.fail_closed was accepted but never
+    read. An operator who sets it False wants the gate to degrade open
+    (through an outage) rather than lock every org out."""
+    degrade_open = EntitlementConfig(enabled=True, fail_closed=False, grace_period_seconds=1)
+    await repo.upsert(ORG_A, "runs.create", status="active")
+    flaky = _FlakyRepo(repo)
+
+    first = await evaluate_entitlement(flaky, ORG_A, "runs.create", config=degrade_open)
+    assert first.allowed is True
+
+    flaky.raise_next = True
+    real_monotonic = time.monotonic
+    monkeypatch.setattr(time, "monotonic", lambda: real_monotonic() + 1000)
+    decision = await evaluate_entitlement(flaky, ORG_A, "runs.create", config=degrade_open)
+    assert decision.allowed is True
+    assert decision.degraded is True
+
+
+async def test_degraded_provider_with_no_prior_read_allows_when_fail_closed_is_false(repo):
+    degrade_open = EntitlementConfig(enabled=True, fail_closed=False)
+    flaky = _FlakyRepo(repo)
+    flaky.raise_next = True
+    decision = await evaluate_entitlement(flaky, ORG_A, "runs.create", config=degrade_open)
+    assert decision.allowed is True
+    assert decision.degraded is True
+
+
 # ---------------------------------------------------------------------------
 # Isolation: org A never sees org B's rows
 # ---------------------------------------------------------------------------

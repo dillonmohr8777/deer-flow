@@ -678,7 +678,7 @@ class EntitlementGateSnapshot(BaseModel):
 
 
 class EntitlementLimitSnapshot(BaseModel):
-    limit: int
+    limit: int | None = Field(description="None when entitlements are disabled or not enforced for this key -- distinct from 0, which means enforced-and-exhausted")
     used: int
 
 
@@ -714,9 +714,14 @@ async def console_entitlements(request: Request) -> EntitlementSnapshotResponse:
 
     project_repo = get_project_repo(request)
     for key in _ENTITLEMENT_LIMIT_KEYS:
+        # Live usage is real regardless of enforcement state; the evaluator's
+        # own `limit` already carries the distinction the UI needs: None
+        # (entitlements disabled -- unenforced) vs 0 (enabled, no row --
+        # enforced and exhausted) vs a real number. Coercing None to 0 here
+        # would make a disabled gate look identical to an exhausted one.
         current_usage = len(await project_repo.list(status="active"))
         decision = await evaluate_entitlement(repo, organization_id, key, current_usage=current_usage, config=entitlement_config)
-        entitlements[key] = EntitlementLimitSnapshot(limit=decision.limit or 0, used=decision.used or 0)
+        entitlements[key] = EntitlementLimitSnapshot(limit=decision.limit, used=current_usage)
         degraded = degraded or decision.degraded
 
     return EntitlementSnapshotResponse(organization_id=organization_id, entitlements=entitlements, degraded=degraded)

@@ -17,9 +17,12 @@ Two kinds of key, distinguished by whether the caller passes ``current_usage``:
 Degraded provider handling (design §3): a process-level cache keeps the last
 successfully-read snapshot per ``organization_id``. An outage spans many
 requests, so this is deliberately not a per-request cache. Once
-``entitlements.grace_period_seconds`` has elapsed since that cached read,
-every key fails closed except ``console.read`` (design §5: "leaving
-export/account access available").
+``entitlements.grace_period_seconds`` has elapsed since that cached read (or
+no snapshot was ever read for this organization), the key fails closed
+except ``console.read`` (design §5: "leaving export/account access
+available") -- unless ``entitlements.fail_closed`` is set to ``False``, which
+degrades every key open instead, for an operator who would rather serve
+through a flaky provider than lock every organization out of it.
 """
 
 from __future__ import annotations
@@ -106,13 +109,22 @@ def _decide_from_row(row: dict | None, key: str, *, requested_amount: int, curre
 
 
 def _degraded_decision(organization_id: str, key: str, *, requested_amount: int, current_usage: int | None, config: EntitlementConfig) -> EntitlementDecision:
+    # config.fail_closed governs what happens once the cache can no longer
+    # answer for this key (no snapshot yet, or the grace period elapsed):
+    # True (default) denies, matching AuthorizationConfig's "block on
+    # provider error" default; False allows through instead, for an operator
+    # who would rather degrade open than lock every org out of a flaky
+    # provider. console.read is unconditionally allowed either way (design
+    # §5's export/account-access carve-out).
+    allow_on_unanswerable = key in ALWAYS_ALLOWED_DURING_OUTAGE or not config.fail_closed
+
     snapshot, read_at = _cache.get(organization_id)
     if snapshot is None or read_at is None:
-        return EntitlementDecision(key=key, allowed=key in ALWAYS_ALLOWED_DURING_OUTAGE, degraded=True, reason="provider_error")
+        return EntitlementDecision(key=key, allowed=allow_on_unanswerable, degraded=True, reason="provider_error")
 
     elapsed = time.monotonic() - read_at
     if elapsed > config.grace_period_seconds:
-        return EntitlementDecision(key=key, allowed=key in ALWAYS_ALLOWED_DURING_OUTAGE, degraded=True, reason="provider_error")
+        return EntitlementDecision(key=key, allowed=allow_on_unanswerable, degraded=True, reason="provider_error")
 
     row = snapshot.get(key)
     return _decide_from_row(row, key, requested_amount=requested_amount, current_usage=current_usage, degraded=True)
