@@ -138,3 +138,70 @@ def test_postgres_dump_failure_is_not_silently_marked_pass(monkeypatch, tmp_path
 
     with pytest.raises(SystemExit):
         module.backup()
+
+
+# ── f24: the AES key and restore plaintext must not be world-readable ─────────
+
+
+@pytest.mark.skipif(__import__("os").name == "nt", reason="POSIX permission bits")
+def test_load_key_creates_a_fresh_key_file_mode_600(monkeypatch, tmp_path):
+    """Run as root under umask 022 (the systemd unit before f24), write_bytes
+    left the key 0644. The key must be created 0600 whatever the umask, and a
+    parent directory it creates must be 0700."""
+    import os
+
+    module = _load_module(monkeypatch, tmp_path, with_postgres=False)
+    old = os.umask(0o022)
+    try:
+        key = module.load_key()
+    finally:
+        os.umask(old)
+    assert len(key) == 32
+    key_path = tmp_path / "secrets" / "momobot-backup.key"
+    assert (key_path.stat().st_mode & 0o777) == 0o600
+    assert (key_path.parent.stat().st_mode & 0o777) == 0o700
+    # A second call reads the same key back rather than replacing it.
+    assert module.load_key() == key
+
+
+@pytest.mark.skipif(__import__("os").name == "nt", reason="POSIX permission bits")
+def test_restore_writes_plaintext_mode_600(monkeypatch, tmp_path):
+    import os
+
+    module = _load_module(monkeypatch, tmp_path, with_postgres=False)
+    monkeypatch.setattr(module.subprocess, "run", _fake_run_factory())
+    result = module.backup()
+    restore_dir = tmp_path / "restore-tmp"
+    restore_dir.mkdir()
+    monkeypatch.setenv("TEMP", str(restore_dir))
+    old = os.umask(0o022)
+    try:
+        module.restore(tmp_path / "backups" / result["file"])
+    finally:
+        os.umask(old)
+    target = restore_dir / Path(result["file"]).with_suffix("").name
+    assert target.read_bytes() == TAR_BYTES
+    assert (target.stat().st_mode & 0o777) == 0o600
+
+
+@pytest.mark.skipif(__import__("os").name == "nt", reason="POSIX symlinks")
+def test_restore_refuses_to_follow_a_planted_symlink(monkeypatch, tmp_path):
+    """/tmp is shared: a symlink planted at the predictable output name must
+    not redirect the decrypted plaintext somewhere else."""
+    module = _load_module(monkeypatch, tmp_path, with_postgres=False)
+    monkeypatch.setattr(module.subprocess, "run", _fake_run_factory())
+    result = module.backup()
+    restore_dir = tmp_path / "restore-tmp"
+    restore_dir.mkdir()
+    monkeypatch.setenv("TEMP", str(restore_dir))
+    elsewhere = tmp_path / "elsewhere.txt"
+    elsewhere.write_bytes(b"untouched")
+    (restore_dir / Path(result["file"]).with_suffix("").name).symlink_to(elsewhere)
+    with pytest.raises(SystemExit):
+        module.restore(tmp_path / "backups" / result["file"])
+    assert elsewhere.read_bytes() == b"untouched"
+
+
+def test_backup_unit_sets_umask_0077():
+    unit = (REPO_ROOT / "deploy" / "momentum" / "vps" / "systemd" / "momobot-backup.service").read_text(encoding="utf-8")
+    assert "UMask=0077" in unit

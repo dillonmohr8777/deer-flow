@@ -1680,6 +1680,45 @@ async def _load_scope_agent_config(
         ) from exc
 
 
+async def _require_run_agent_visible(
+    *,
+    agent_name: str | None,
+    agent_config: Any | None,
+    is_bootstrap: bool,
+    content_user_id: str | None,
+    actor_user_id: str | None,
+) -> None:
+    """Refuse a session/PAT run on a client-stamped agent the actor may not see (f85).
+
+    Same rule as ``get_agent``/``update_agent``/``delete_agent``: an agent
+    with a ``client_id`` is visible to an org owner/admin, or to a member
+    assigned to that client. A foreign agent answers exactly like a missing
+    one (``_load_scope_agent_config``'s 422), so a run can't probe which
+    agent names exist. A bootstrap run skips the normal config load, but
+    ``setup_agent`` would upsert the named agent -- overwriting a foreign
+    agent's SOUL -- so an existing agent is peeked at and checked too.
+    """
+    if not agent_name or agent_name == _DEFAULT_ASSISTANT_ID:
+        return
+    if agent_config is None and is_bootstrap:
+        try:
+            agent_config = await _load_scope_agent_config(assistant_id=agent_name, user_id=content_user_id)
+        except HTTPException:
+            return  # Nothing exists yet: bootstrap creates a fresh agent.
+    client_id = getattr(agent_config, "client_id", None)
+    if client_id is None:
+        return
+    # Lazy import: the agents router imports this module.
+    from app.gateway.routers.agents import _visible_client_ids
+
+    visible_client_ids = await _visible_client_ids(actor_user_id)
+    if visible_client_ids is not None and client_id not in visible_client_ids:
+        raise HTTPException(
+            status_code=422,
+            detail="knowledge_scope assistant configuration could not be resolved",
+        )
+
+
 async def _validate_scope_thread_binding(
     run_ctx: RunContext,
     *,
@@ -1883,6 +1922,16 @@ async def start_run(
             if not scope_runtime_config.get("is_bootstrap")
             else None
         )
+        # Internal launchers (scheduler, channels, MCP notifications) act
+        # through an organization delegation, not a person's client scope.
+        if user is not None and not is_internal_caller:
+            await _require_run_agent_visible(
+                agent_name=scope_assistant_id,
+                agent_config=agent_config,
+                is_bootstrap=bool(scope_runtime_config.get("is_bootstrap")),
+                content_user_id=content_user_id,
+                actor_user_id=actor_user_id,
+            )
         # Keep the pre-default identity even when the agent is initially
         # unbound: adding a default must not reject an already-accepted retry.
         # The durable input still exposes the original accepted scope.

@@ -403,3 +403,52 @@ async def test_non_owner_cannot_approve_or_reply(org_world):  # noqa: F811
 
         events, _ = await audit_repo.list(organization_id=ORG_S, action_prefix="board.thread.approve")
         assert any(e["outcome"] == "denied" and e["actor_user_id"] == USER_D for e in events)
+
+
+async def test_null_client_thread_is_owner_admin_only(org_world):  # noqa: F811
+    """f66: a thread whose ``client_id`` is null is not a free-for-all.
+
+    Every thread-loading route used to skip the per-client check when
+    ``client_id`` was null, so any org member (including a future client-role
+    account) could read and write such a thread. It is now owner/admin-only:
+    a plain member, assigned or not, gets the same 404 as a missing thread.
+    """
+    session_factory = org_world
+    app = _build_app(session_factory)
+    headers_a = auth_headers(USER_A, ORG_S)
+    headers_c = auth_headers(USER_C, ORG_S)
+    await _add_plain_member(session_factory, USER_D, ORG_S)
+    headers_d = auth_headers(USER_D, ORG_S)
+
+    async with _client(app) as client:
+        acme = await _create_client(client, headers_a, "Acme")
+        assign = await client.post(f"/api/clients/{acme['id']}/assignments", json={"user_id": USER_D, "role": "client_contact"}, headers=headers_a)
+        assert assign.status_code == 201
+        tid = (await client.post("/api/board/threads", json={"client_id": acme["id"], "subject": "orphan"}, headers=headers_a)).json()["id"]
+
+        # No route creates one today; seed the state directly at the ORM layer.
+        async with session_factory() as session, session.begin():
+            row = await session.get(BoardThreadRow, tid)
+            row.client_id = None
+
+        for path, method, body in (
+            (f"/api/board/threads/{tid}", "get", None),
+            (f"/api/board/threads/{tid}", "patch", {"subject": "mine now"}),
+            (f"/api/board/threads/{tid}/messages", "get", None),
+            (f"/api/board/threads/{tid}/messages", "post", {"body": "hi"}),
+            (f"/api/board/threads/{tid}/draft", "post", {"body": "draft"}),
+            (f"/api/board/threads/{tid}/approve", "post", None),
+            (f"/api/board/threads/{tid}/reply", "post", {"body": "draft"}),
+        ):
+            response = await client.request(method, path, json=body, headers=headers_d)
+            assert response.status_code == 404, (method, path, response.status_code, response.text)
+
+        d_list = await client.get("/api/board/threads", headers=headers_d)
+        assert tid not in [t["id"] for t in d_list.json()["threads"]]
+
+        # Owner and admin still see and work the thread.
+        assert (await client.get(f"/api/board/threads/{tid}", headers=headers_a)).status_code == 200
+        assert (await client.get(f"/api/board/threads/{tid}/messages", headers=headers_c)).status_code == 200
+        assert (await client.post(f"/api/board/threads/{tid}/messages", json={"body": "ok"}, headers=headers_c)).status_code == 201
+        a_list = await client.get("/api/board/threads", headers=headers_a)
+        assert tid in [t["id"] for t in a_list.json()["threads"]]

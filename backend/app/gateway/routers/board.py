@@ -150,6 +150,22 @@ async def _require_client_access(client_repo, client_id: str, user_id: str) -> N
         raise _not_found()
 
 
+async def _require_thread_access(client_repo, row: dict, user_id: str) -> None:
+    """Raise 404 unless *user_id* may act on the loaded thread *row*.
+
+    A client-stamped thread follows ``_require_client_access``. A thread with
+    no client (f66) is owner/admin-only: no client assignment can grant it,
+    so without this every org member, including a client-role account, could
+    read and write it.
+    """
+    client_id = row.get("client_id")
+    if client_id is None:
+        if not await _is_active_org_admin(user_id):
+            raise _not_found()
+        return
+    await _require_client_access(client_repo, client_id, user_id)
+
+
 @router.post("/threads", response_model=BoardThreadResponse, status_code=201)
 @require_permission("board", "write")
 async def create_board_thread(body: BoardThreadCreateRequest, request: Request) -> BoardThreadResponse:
@@ -188,8 +204,7 @@ async def get_board_thread(thread_id: str, request: Request) -> BoardThreadRespo
     if row is None:
         raise _not_found()
     user = await get_current_user_from_request(request)
-    if row.get("client_id") is not None:
-        await _require_client_access(client_repo, row["client_id"], str(user.id))
+    await _require_thread_access(client_repo, row, str(user.id))
     return _to_thread_response(row)
 
 
@@ -212,8 +227,7 @@ async def patch_board_thread(thread_id: str, body: BoardThreadPatchRequest, requ
         raise _not_found()
     user = await get_current_user_from_request(request)
     user_id = str(user.id)
-    if row.get("client_id") is not None:
-        await _require_client_access(client_repo, row["client_id"], user_id)
+    await _require_thread_access(client_repo, row, user_id)
     if body.status is not None:
         if not await _is_active_org_admin(user_id):
             await record_audit_event(request, action="board.thread.status_patch", outcome="denied", actor_user_id=user_id, organization_id=resolve_organization_id(), target_type="board_thread", target_id=thread_id)
@@ -237,8 +251,7 @@ async def list_board_messages(thread_id: str, request: Request) -> BoardMessageL
     if row is None:
         raise _not_found()
     user = await get_current_user_from_request(request)
-    if row.get("client_id") is not None:
-        await _require_client_access(client_repo, row["client_id"], str(user.id))
+    await _require_thread_access(client_repo, row, str(user.id))
     messages = await board_repo.list_messages(thread_id) or []
     return BoardMessageListResponse(messages=[_to_message_response(m) for m in messages])
 
@@ -260,8 +273,7 @@ async def add_board_message(thread_id: str, body: BoardMessageCreateRequest, req
         raise _not_found()
     user = await get_current_user_from_request(request)
     user_id = str(user.id)
-    if row.get("client_id") is not None:
-        await _require_client_access(client_repo, row["client_id"], user_id)
+    await _require_thread_access(client_repo, row, user_id)
     author_kind = "owner" if await _is_active_org_admin(user_id) else "client"
     message = await board_repo.add_message(thread_id, author_kind=author_kind, author_user_id=user_id, body=body.body)
     if message is None:
@@ -285,8 +297,7 @@ async def _load_thread_for_actor(board_repo, client_repo, thread_id: str, reques
         raise _not_found()
     user = await get_current_user_from_request(request)
     user_id = str(user.id)
-    if row.get("client_id") is not None:
-        await _require_client_access(client_repo, row["client_id"], user_id)
+    await _require_thread_access(client_repo, row, user_id)
     return row, user_id
 
 
