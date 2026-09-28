@@ -27,7 +27,7 @@ from pydantic import BaseModel, Field
 from starlette.background import BackgroundTask
 
 from app.gateway.artifact_archive import ArtifactArchiveError, ArtifactArchiveResult, build_artifact_archive
-from app.gateway.authz import require_cancel_permission_if, require_permission
+from app.gateway.authz import require_cancel_permission_if, require_entitlement, require_permission
 from app.gateway.checkpoint_lineage import (
     CheckpointLineageError,
     CheckpointParentMissingError,
@@ -946,6 +946,7 @@ async def prepare_edit_regenerate_run(
 
 @router.post("/{thread_id}/runs", response_model=RunResponse)
 @require_permission("runs", "create", owner_check=True, require_existing=True)
+@require_entitlement("runs.create")
 async def create_run(
     thread_id: ThreadId,
     body: RunCreateRequest,
@@ -1239,6 +1240,7 @@ async def get_run(thread_id: ThreadId, run_id: str, request: Request) -> RunResp
 
 @router.post("/{thread_id}/runs/{run_id}/cancel")
 @require_permission("runs", "cancel", owner_check=True, require_existing=True)
+@require_entitlement("runs.cancel")
 async def cancel_run(
     thread_id: ThreadId,
     run_id: str,
