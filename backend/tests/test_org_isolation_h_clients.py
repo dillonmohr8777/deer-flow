@@ -226,6 +226,10 @@ async def test_client_contact_cannot_self_reassign_to_regain_visibility(org_worl
         assert (await client.post(f"/api/clients/{client2['id']}/archive", headers=headers_d)).status_code == 403
         assert (await client.post("/api/clients", json={"display_name": "D's rogue client"}, headers=headers_d)).status_code == 403
 
+        # f74: removing an assignment is admin-only too, even on a client D
+        # *is* assigned to and even targeting D's own assignment.
+        assert (await client.delete(f"/api/clients/{client1['id']}/assignments/{USER_D}", headers=headers_d)).status_code == 403
+
         # D's own view is unaffected: still sees only client1.
         assert [c["id"] for c in (await client.get("/api/clients", headers=headers_d)).json()["clients"]] == [client1["id"]]
         assert (await client.get(f"/api/clients/{client1['id']}", headers=headers_d)).status_code == 200

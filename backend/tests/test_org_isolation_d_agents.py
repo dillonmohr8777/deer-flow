@@ -35,7 +35,7 @@ from unittest.mock import AsyncMock
 import pytest
 import yaml
 from fastapi import HTTPException
-from org_isolation_fixtures import ORG_A, ORG_B, USER_A, USER_B, acting_as, org_world  # noqa: F401
+from org_isolation_fixtures import ORG_A, ORG_B, ORG_S, USER_A, USER_B, USER_C, acting_as, org_world  # noqa: F401
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
@@ -51,13 +51,17 @@ from deerflow.config.agents_api_config import load_agents_api_config_from_dict
 from deerflow.config.app_config import AppConfig, reset_app_config, set_app_config
 from deerflow.config.database_config import DatabaseConfig
 from deerflow.config.sandbox_config import SandboxConfig
+from deerflow.persistence.agents import get_agent_store
 from deerflow.persistence.agents.model import AgentRow
 from deerflow.persistence.agents.sql import SqlAgentStore
 from deerflow.persistence.base import Base
+from deerflow.persistence.clients import ClientRepository
 from deerflow.persistence.organizations.delegation import OrganizationDelegationRepository
 from deerflow.persistence.organizations.model import OrganizationRow
+from deerflow.runtime.user_context import get_effective_user_id
 
 GATEWAY_ROOT = Path(__file__).parent.parent / "app" / "gateway"
+USER_D = "user-d"
 
 
 def _seed_organizations(url: str) -> None:
@@ -519,3 +523,51 @@ async def test_github_dispatch_revoked_delegation_skips_again(org_world, github_
 
     assert result["fired_agents"] == []
     assert {"agent": "reviewer", "reason": "no_active_delegation"} in result["skipped"]
+
+
+# ---------------------------------------------------------------------------
+# f82 (review follow-up on PR #69): a fleet-stamped agent's client_id must be
+# as invisible to an unassigned member as the client itself already is
+# through GET /api/clients -- same org-admin-or-assigned check.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_client_scoped_agent_hidden_from_unassigned_member(org_world, tmp_path, monkeypatch) -> None:  # noqa: F811
+    monkeypatch.setenv("DEER_FLOW_HOME", str(tmp_path))
+    monkeypatch.setattr("deerflow.config.paths._paths", None)
+    load_agents_api_config_from_dict({"enabled": True})
+    try:
+        from app.gateway.routers.agents import get_agent, list_agents
+
+        client_repo = ClientRepository(org_world)
+        with acting_as(USER_A, ORG_S):
+            c1 = await client_repo.create(display_name="Client One")
+            c2 = await client_repo.create(display_name="Client Two Secret")
+            await client_repo.add_assignment(c1["id"], USER_D, "client_contact")
+
+            owner_user_id = get_effective_user_id()
+            store = get_agent_store()
+            store.create("c1-agent", {"name": "c1-agent", "description": "stamped for c1", "client_id": c1["id"]}, "soul", user_id=owner_user_id)
+            store.create("c2-agent", {"name": "c2-agent", "description": "stamped for c2", "client_id": c2["id"]}, "soul", user_id=owner_user_id)
+
+        # D is only assigned to c1: c2's agent is excluded from the list and
+        # 404s directly, same as c2 itself through GET /api/clients.
+        with acting_as(USER_D, ORG_S):
+            names = [a.name for a in (await list_agents()).agents]
+            assert "c1-agent" in names
+            assert "c2-agent" not in names
+
+            assert (await get_agent("c1-agent")).client_id == c1["id"]
+            with pytest.raises(HTTPException) as excinfo:
+                await get_agent("c2-agent")
+            assert excinfo.value.status_code == 404
+
+        # An org owner and an org admin both still see everything.
+        for actor in (USER_A, USER_C):
+            with acting_as(actor, ORG_S):
+                names = [a.name for a in (await list_agents()).agents]
+                assert {"c1-agent", "c2-agent"} <= set(names)
+                assert (await get_agent("c2-agent")).client_id == c2["id"]
+    finally:
+        load_agents_api_config_from_dict({})
