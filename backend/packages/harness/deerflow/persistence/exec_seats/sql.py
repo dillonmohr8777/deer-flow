@@ -15,6 +15,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from deerflow.persistence.exec_seats.model import AgentSeatRow, AgentSeatStatus
@@ -52,13 +53,22 @@ class AgentSeatRepository:
         weekly_token_budget: int = 0,
         claimed_by_user_id: str | None = None,
     ) -> dict:
-        """Create a new claim. Does not check for an existing claim on *seat*
-        (EXECUTIVE.md's "Confirm" step is where overlap gets caught; a
-        contested seat can have more than one open claim at once)."""
+        """Create a new claim.
+
+        Does not itself re-derive ``assert_can_claim``'s sequential check
+        (callers already do that via ``latest_claim_for_seat``) -- but
+        ``uq_agent_seats_open_claim`` (a partial unique index on
+        ``(organization_id, seat)`` covering ``status IN ('claimed',
+        'ratified')``) is the last line of defense against two concurrent
+        claims that both read "no open claim" before either commits. A
+        losing insert here raises ``SeatTransitionError``, the same error a
+        sequential caller already gets from ``assert_can_claim``.
+        """
         now = datetime.now(UTC)
+        organization_id = organization_for_write(resolve_organization_id(), None, resolve_user_id(AUTO, method_name="AgentSeatRepository.claim_seat"))
         row = AgentSeatRow(
             id=uuid.uuid4().hex,
-            organization_id=organization_for_write(resolve_organization_id(), None, resolve_user_id(AUTO, method_name="AgentSeatRepository.claim_seat")),
+            organization_id=organization_id,
             seat=seat,
             agent_name=agent_name,
             scope=scope,
@@ -71,7 +81,21 @@ class AgentSeatRepository:
         )
         async with self._sf() as session:
             session.add(row)
-            await session.commit()
+            try:
+                await session.commit()
+            except IntegrityError:
+                await session.rollback()
+                # Confirm the loss was actually the open-claim guard (not,
+                # say, an id collision) before reporting it as one.
+                still_open = self._scope(select(AgentSeatRow.id), organization_id).where(
+                    AgentSeatRow.seat == seat,
+                    AgentSeatRow.status.in_((AgentSeatStatus.CLAIMED, AgentSeatStatus.RATIFIED)),
+                )
+                if (await session.execute(still_open)).first() is not None:
+                    from deerflow.exec_seats.workflow import SeatTransitionError
+
+                    raise SeatTransitionError(f"Cannot claim a seat with status {AgentSeatStatus.CLAIMED!r}") from None
+                raise
             await session.refresh(row)
             return _to_dict(row)
 

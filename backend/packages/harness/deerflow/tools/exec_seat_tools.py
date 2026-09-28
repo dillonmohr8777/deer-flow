@@ -141,7 +141,12 @@ async def _exec_claim_seat_impl(seat: str, scope: str, kpi: str, weekly_token_bu
         return _error(str(exc))
     agent_name = _agent_name(runtime)
     claimed_by_user_id = resolve_runtime_actor_user_id(runtime)
-    claimed = await repo.claim_seat(seat=seat, agent_name=agent_name, scope=scope, kpi=kpi, weekly_token_budget=weekly_token_budget, claimed_by_user_id=claimed_by_user_id)
+    try:
+        claimed = await repo.claim_seat(seat=seat, agent_name=agent_name, scope=scope, kpi=kpi, weekly_token_budget=weekly_token_budget, claimed_by_user_id=claimed_by_user_id)
+    except SeatTransitionError as exc:
+        # Lost a race against another concurrent claim on the same seat;
+        # uq_agent_seats_open_claim caught what the check above couldn't.
+        return _error(str(exc))
     await _announce(runtime, f"claimed {seat} (kpi: {kpi}, weekly budget: {weekly_token_budget})")
     return claimed
 

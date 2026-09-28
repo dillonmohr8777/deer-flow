@@ -12,7 +12,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from enum import StrEnum
 
-from sqlalchemy import DateTime, Integer, String, Text
+from sqlalchemy import DateTime, Index, Integer, String, Text, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from deerflow.persistence.base import Base
@@ -45,3 +45,24 @@ class AgentSeatRow(Base):
     ratified_by_user_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now, onupdate=_utc_now)
+
+    __table_args__ = (
+        # At most one open (claimed or ratified) row per (organization_id, seat):
+        # closes the race the tool layer's assert_can_claim alone can't (two
+        # concurrent exec_claim_seat calls both reading "no open claim" before
+        # either commits). A losing insert raises IntegrityError, which the
+        # repository translates into the same SeatTransitionError the
+        # sequential check already raises. Must live in ORM __table_args__
+        # (not just the migration) because the empty-DB bootstrap path runs
+        # create_all() + stamp head and never executes the migration that
+        # also defines this index -- same reasoning as
+        # uq_scheduled_task_run_active.
+        Index(
+            "uq_agent_seats_open_claim",
+            "organization_id",
+            "seat",
+            unique=True,
+            sqlite_where=text("status IN ('claimed', 'ratified')"),
+            postgresql_where=text("status IN ('claimed', 'ratified')"),
+        ),
+    )

@@ -119,6 +119,52 @@ async def test_claim_on_an_already_ratified_seat_is_rejected(org_world):  # noqa
 
 
 @pytest.mark.asyncio
+async def test_claim_seat_rejects_a_second_open_claim_at_the_storage_layer(org_world):  # noqa: F811
+    """DB-level guard for the race assert_can_claim's sequential read-then-write
+    can't close: two claims on the same seat racing each other could both read
+    "no open claim" before either commits. uq_agent_seats_open_claim (partial
+    unique index on (organization_id, seat) for status in claimed/ratified) is
+    the actual barrier; this bypasses the sequential check entirely (calling
+    claim_seat directly, twice, with no latest_claim_for_seat/assert_can_claim
+    in between) to prove the repository itself refuses the second row."""
+    repo = AgentSeatRepository(org_world)
+    with acting_as(USER_A, ORG_A):
+        first = await repo.claim_seat(seat=CMO_SEAT, agent_name="cmo-agent-1")
+        with pytest.raises(SeatTransitionError):
+            await repo.claim_seat(seat=CMO_SEAT, agent_name="cmo-agent-2")
+
+        # The losing claim never landed; the original claim is untouched.
+        seats = await repo.list_seats()
+    assert [s["id"] for s in seats] == [first["id"]]
+    assert seats[0]["agent_name"] == "cmo-agent-1"
+
+
+@pytest.mark.asyncio
+async def test_claim_seat_allows_a_fresh_claim_after_reopen_at_the_storage_layer(org_world):  # noqa: F811
+    """The same guard must not block the legitimate reopened -> claimed path."""
+    repo = AgentSeatRepository(org_world)
+    with acting_as(USER_A, ORG_A):
+        first = await repo.claim_seat(seat=CMO_SEAT, agent_name="cmo-agent-1")
+        await repo.patch_seat(first["id"], status=AgentSeatStatus.REOPENED)
+
+        second = await repo.claim_seat(seat=CMO_SEAT, agent_name="cmo-agent-2")
+    assert second["status"] == AgentSeatStatus.CLAIMED
+    assert second["agent_name"] == "cmo-agent-2"
+
+
+@pytest.mark.asyncio
+async def test_claim_seat_open_claim_guard_is_per_organization(org_world):  # noqa: F811
+    """uq_agent_seats_open_claim must not leak across organizations."""
+    repo = AgentSeatRepository(org_world)
+    with acting_as(USER_A, ORG_A):
+        await repo.claim_seat(seat=CMO_SEAT, agent_name="cmo-agent-a")
+
+    with acting_as(USER_B, ORG_B):
+        other_org_claim = await repo.claim_seat(seat=CMO_SEAT, agent_name="cmo-agent-b")
+    assert other_org_claim["status"] == AgentSeatStatus.CLAIMED
+
+
+@pytest.mark.asyncio
 async def test_org_isolation_a_seat_in_one_org_is_invisible_from_another(org_world):  # noqa: F811
     repo = AgentSeatRepository(org_world)
     with acting_as(USER_A, ORG_A):

@@ -45,11 +45,22 @@ def upgrade() -> None:
         op.create_index("ix_agent_seats_organization_id", "agent_seats", ["organization_id"])
         op.create_index("ix_agent_seats_seat", "agent_seats", ["seat"])
         op.create_index("ix_agent_seats_status", "agent_seats", ["status"])
+        # At most one open (claimed/ratified) row per (organization_id, seat);
+        # see the matching Index in AgentSeatRow.__table_args__.
+        op.create_index(
+            "uq_agent_seats_open_claim",
+            "agent_seats",
+            ["organization_id", "seat"],
+            unique=True,
+            sqlite_where=sa.text("status IN ('claimed', 'ratified')"),
+            postgresql_where=sa.text("status IN ('claimed', 'ratified')"),
+        )
 
 
 def downgrade() -> None:
     inspector = sa.inspect(op.get_bind())
     if inspector.has_table("agent_seats"):
+        op.drop_index("uq_agent_seats_open_claim", table_name="agent_seats")
         op.drop_index("ix_agent_seats_status", table_name="agent_seats")
         op.drop_index("ix_agent_seats_seat", table_name="agent_seats")
         op.drop_index("ix_agent_seats_organization_id", table_name="agent_seats")
