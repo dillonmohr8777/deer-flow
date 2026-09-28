@@ -5,8 +5,14 @@
 set -euo pipefail
 umask 077
 export PATH="$HOME/.orbstack/bin:$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
-REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+# Pin the engine to OrbStack (the CLI's default context may be Docker Desktop)
+# and, when present, use the deploy dir's docker config: anonymous pulls with a
+# no-op credential helper, so nothing waits on a macOS keychain prompt.
+export DOCKER_HOST="${DOCKER_HOST:-unix://$HOME/.orbstack/run/docker.sock}"
 DEPLOY_DIR="${MOMOBOT_DEPLOY_DIR:-$HOME/momobot-prod}"
+[[ -d "$DEPLOY_DIR/docker-config" ]] && export DOCKER_CONFIG="$DEPLOY_DIR/docker-config"
+[[ -d "$DEPLOY_DIR/bin" ]] && export PATH="$DEPLOY_DIR/bin:$PATH"
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 PROJECT="${MOMOBOT_PROJECT:-momobot-prod}"
 image="$("$REPO/deploy/momentum/vps/dotenv-get.sh" "$DEPLOY_DIR/.env" MOMENTUM_GATEWAY_IMAGE)"
 [[ -n "$image" ]] || { echo "MOMENTUM_GATEWAY_IMAGE missing from $DEPLOY_DIR/.env" >&2; exit 2; }

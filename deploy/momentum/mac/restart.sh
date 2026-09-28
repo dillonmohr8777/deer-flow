@@ -17,9 +17,15 @@
 # Never commit any of them.
 set -euo pipefail
 export PATH="$HOME/.orbstack/bin:$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+# Pin the engine to OrbStack (the CLI's default context may be Docker Desktop)
+# and, when present, use the deploy dir's docker config: anonymous pulls with a
+# no-op credential helper, so nothing waits on a macOS keychain prompt.
+export DOCKER_HOST="${DOCKER_HOST:-unix://$HOME/.orbstack/run/docker.sock}"
+DEPLOY_DIR="${MOMOBOT_DEPLOY_DIR:-$HOME/momobot-prod}"
+[[ -d "$DEPLOY_DIR/docker-config" ]] && export DOCKER_CONFIG="$DEPLOY_DIR/docker-config"
+[[ -d "$DEPLOY_DIR/bin" ]] && export PATH="$DEPLOY_DIR/bin:$PATH"
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
-DEPLOY_DIR="${MOMOBOT_DEPLOY_DIR:-$HOME/momobot-prod}"
 PROJECT="${MOMOBOT_PROJECT:-momobot-prod}"
 ENV_FILE="$DEPLOY_DIR/.env"
 CONFIG="$DEPLOY_DIR/config.yaml"

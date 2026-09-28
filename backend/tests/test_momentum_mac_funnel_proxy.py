@@ -74,6 +74,9 @@ def test_overlay_publishes_nothing_beyond_the_base_loopback_port():
     # The include is verified before nginx starts, so a failed injection
     # fails closed instead of serving with one shared bucket.
     assert "include /etc/nginx/momentum-realip.conf;" in command
+    # Compose turns a "\\n" in this string into a real newline, which broke
+    # the sed on first deploy (nginx restart-looped, failing closed).
+    assert "\\n" not in command
     assert re.search(r"grep -q 'include /etc/nginx/momentum-realip\.conf;'", command)
 
 
