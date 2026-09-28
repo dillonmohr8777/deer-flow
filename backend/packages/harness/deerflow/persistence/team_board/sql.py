@@ -112,11 +112,23 @@ class TeamBoardRepository:
             await session.refresh(row)
             return _to_dict(row)
 
-    async def list_messages(self, channel_id: str, *, limit: int = 200) -> list[dict] | None:
-        """The newest *limit* messages, oldest first; ``None`` for a missing/foreign channel."""
+    async def list_messages(self, channel_id: str, *, limit: int = 200, since: datetime | None = None) -> list[dict] | None:
+        """Messages for a channel; ``None`` for a missing/foreign channel.
+
+        With ``since`` omitted: the newest *limit* messages, oldest first (the
+        human Team Board's page). With ``since``: up to *limit* messages
+        posted strictly after it, oldest first — a forward page for a caller
+        (e.g. a fleet-agent tool) resuming from the last message it saw.
+        """
         if await self.get_channel(channel_id) is None:
             return None
-        stmt = select(TeamMessageRow).where(TeamMessageRow.channel_id == channel_id).order_by(TeamMessageRow.created_at.desc(), TeamMessageRow.id.desc()).limit(limit)
+        stmt = select(TeamMessageRow).where(TeamMessageRow.channel_id == channel_id)
+        if since is not None:
+            stmt = stmt.where(TeamMessageRow.created_at > since).order_by(TeamMessageRow.created_at.asc(), TeamMessageRow.id.asc()).limit(limit)
+            async with self._sf() as session:
+                result = await session.execute(stmt)
+                return [_to_dict(r) for r in result.scalars()]
+        stmt = stmt.order_by(TeamMessageRow.created_at.desc(), TeamMessageRow.id.desc()).limit(limit)
         async with self._sf() as session:
             result = await session.execute(stmt)
             rows = [_to_dict(r) for r in result.scalars()]
