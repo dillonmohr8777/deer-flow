@@ -31,7 +31,6 @@ _ORG_ADMIN_ROLES = ("owner", "admin")
 
 BoardKind = Literal["post", "ticket", "concern", "dm"]
 BoardStatus = Literal["new", "triaged", "drafted", "approved", "replied", "closed"]
-BoardAuthorKind = Literal["client", "momo", "owner"]
 
 
 class BoardThreadResponse(BaseModel):
@@ -74,7 +73,6 @@ class BoardMessageListResponse(BaseModel):
 
 
 class BoardMessageCreateRequest(BaseModel):
-    author_kind: BoardAuthorKind = "client"
     body: str = Field(..., min_length=1)
 
 
@@ -230,15 +228,24 @@ async def list_board_messages(thread_id: str, request: Request) -> BoardMessageL
 @router.post("/threads/{thread_id}/messages", response_model=BoardMessageResponse, status_code=201)
 @require_permission("board", "write")
 async def add_board_message(thread_id: str, body: BoardMessageCreateRequest, request: Request) -> BoardMessageResponse:
+    """``author_kind`` is derived server-side, never taken from the request body.
+
+    A caller cannot label their own message ``momo`` (or someone else's
+    ``owner``): only ``draft_board_reply``'s own ``add_message`` call ever
+    writes a ``momo``-authored message, which is what ``send_board_reply``
+    relies on when it checks a reply against "the latest momo draft".
+    """
     board_repo = get_board_repo(request)
     client_repo = get_client_repo(request)
     row = await board_repo.get_thread(thread_id)
     if row is None:
         raise _not_found()
     user = await get_current_user_from_request(request)
+    user_id = str(user.id)
     if row.get("client_id") is not None:
-        await _require_client_access(client_repo, row["client_id"], str(user.id))
-    message = await board_repo.add_message(thread_id, author_kind=body.author_kind, author_user_id=str(user.id), body=body.body)
+        await _require_client_access(client_repo, row["client_id"], user_id)
+    author_kind = "owner" if await _is_active_org_admin(user_id) else "client"
+    message = await board_repo.add_message(thread_id, author_kind=author_kind, author_user_id=user_id, body=body.body)
     if message is None:
         raise _not_found()
     return _to_message_response(message)
@@ -314,7 +321,10 @@ async def send_board_reply(thread_id: str, body: BoardReplyRequest, request: Req
     The sent body must match the approved draft verbatim -- an owner's approval
     stamps a specific message, not a blank check to send anything under it. A
     body that differs from the latest ``momo`` draft is rejected rather than
-    silently substituted or accepted.
+    silently substituted or accepted, and so is a reply with no draft to check
+    against at all (fail closed, not open): reaching ``approved`` with no
+    ``momo`` message on the thread is not a state this router's own workflow
+    can produce, so it is treated the same as a mismatch rather than let through.
     """
     board_repo = get_board_repo(request)
     client_repo = get_client_repo(request)
@@ -328,9 +338,10 @@ async def send_board_reply(thread_id: str, body: BoardReplyRequest, request: Req
     except BoardTransitionError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     draft_body = await _latest_momo_draft_body(board_repo, thread_id)
-    if draft_body is not None and body.body.strip() != draft_body.strip():
+    if draft_body is None or body.body.strip() != draft_body.strip():
+        await record_audit_event(request, action="board.thread.reply", outcome="denied", actor_user_id=user_id, organization_id=resolve_organization_id(), target_type="board_thread", target_id=thread_id)
         raise HTTPException(status_code=409, detail="Reply body must match the approved draft verbatim; edit the draft and re-approve instead")
-    await board_repo.add_message(thread_id, author_kind="owner", author_user_id=user_id, body=body.body)
+    await board_repo.add_message(thread_id, author_kind="owner", author_user_id=user_id, body=draft_body)
     updated = await board_repo.patch_thread(thread_id, status=BoardThreadStatus.REPLIED)
     if updated is None:
         raise _not_found()

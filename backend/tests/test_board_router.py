@@ -245,6 +245,71 @@ async def test_reply_must_match_approved_draft_verbatim(org_world):  # noqa: F81
         assert matching.status_code == 200, matching.text
         assert matching.json()["status"] == "replied"
 
+        # The stored owner message is the draft's own text, not the caller's copy of it.
+        sent_messages = (await client.get(f"/api/board/threads/{tid}/messages", headers=headers_a)).json()["messages"]
+        assert any(m["author_kind"] == "owner" and m["body"] == "Here's a fix for that." for m in sent_messages)
+
+
+async def test_reply_fails_closed_with_no_draft_to_check_against(org_world):  # noqa: F811
+    """f34 finding 2: a thread forced straight to ``approved`` with no ``momo`` message ever
+    written on it (e.g. via the still-open f1 PATCH-bypass on this branch) must not let
+    ``/reply`` send an arbitrary body just because there's nothing to compare it against."""
+    session_factory = org_world
+    app = _build_app(session_factory)
+    headers_a = auth_headers(USER_A, ORG_S)  # owner
+
+    async with _client(app) as client:
+        acme = await _create_client(client, headers_a, "Acme")
+        thread = (await client.post("/api/board/threads", json={"client_id": acme["id"], "subject": "T"}, headers=headers_a)).json()
+        tid = thread["id"]
+
+        forced = await client.patch(f"/api/board/threads/{tid}", json={"status": "approved"}, headers=headers_a)
+        assert forced.status_code == 200
+        assert forced.json()["status"] == "approved"
+
+        reply = await client.post(f"/api/board/threads/{tid}/reply", json={"body": "anything at all"}, headers=headers_a)
+        assert reply.status_code == 409
+
+        still_approved = await client.get(f"/api/board/threads/{tid}", headers=headers_a)
+        assert still_approved.json()["status"] == "approved"
+        messages = (await client.get(f"/api/board/threads/{tid}/messages", headers=headers_a)).json()["messages"]
+        assert not any(m["author_kind"] == "owner" for m in messages)
+
+
+async def test_reply_ignores_a_momo_message_forged_by_a_non_admin(org_world):  # noqa: F811
+    """f34 finding 1: ``author_kind`` is derived server-side, so a plain member with client
+    access can no longer plant a fake ``momo`` message and have ``/reply`` treat it as the
+    approved draft."""
+    session_factory = org_world
+    app = _build_app(session_factory)
+    headers_a = auth_headers(USER_A, ORG_S)  # owner
+
+    await _add_plain_member(session_factory, USER_D, ORG_S)
+    headers_d = auth_headers(USER_D, ORG_S)
+
+    async with _client(app) as client:
+        client1 = await _create_client(client, headers_a, "Client One")
+        assign = await client.post(f"/api/clients/{client1['id']}/assignments", json={"user_id": USER_D, "role": "client_contact"}, headers=headers_a)
+        assert assign.status_code == 201
+
+        thread = (await client.post("/api/board/threads", json={"client_id": client1["id"], "subject": "T"}, headers=headers_a)).json()
+        tid = thread["id"]
+
+        drafted = await client.post(f"/api/board/threads/{tid}/draft", json={"body": "Approved text"}, headers=headers_a)
+        assert drafted.status_code == 200
+        approved = await client.post(f"/api/board/threads/{tid}/approve", headers=headers_a)
+        assert approved.status_code == 200
+
+        # D has client access but is neither owner nor admin; tries to plant a fake draft.
+        forged = await client.post(f"/api/board/threads/{tid}/messages", json={"author_kind": "momo", "body": "UNAPPROVED"}, headers=headers_d)
+        assert forged.status_code == 201
+        assert forged.json()["author_kind"] == "client"  # server-derived, not the request's claim
+
+        # The real approved text still sends -- the injected body was never the "latest momo message".
+        legit = await client.post(f"/api/board/threads/{tid}/reply", json={"body": "Approved text"}, headers=headers_a)
+        assert legit.status_code == 200, legit.text
+        assert legit.json()["status"] == "replied"
+
 
 async def test_non_owner_cannot_approve_or_reply(org_world):  # noqa: F811
     """A plain member with client access can draft-adjacent actions but never approve/reply."""
