@@ -25,7 +25,7 @@ Types: `handoff`, `finding`, `question`, `blocked`, `done`, `ack`. Eight lines m
 
 ## Every run
 
-1. Read your inbox. Find your tasks with `grep -n '^- \[[ ~]\]' docs/momo-week/QUEUE.md`. Read PROGRESS.md with `tail -3` only.
+1. Code with the `ponytail` skill (`.claude/skills/ponytail`, level full). Reviewer runs `ponytail-review` after its normal correctness pass. Read your inbox. Find your tasks with `grep -n '^- \[[ ~]\]' docs/momo-week/QUEUE.md`. Read PROGRESS.md with `tail -3` only.
 2. Empty inbox and no open task in your section: stop. No commit, no PROGRESS line.
 3. Handle messages before taking a task.
 4. After any change, post one message to the next role (builder → reviewer, reviewer → builder, anyone → dillon when blocked).
