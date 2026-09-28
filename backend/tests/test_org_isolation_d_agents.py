@@ -571,3 +571,58 @@ async def test_client_scoped_agent_hidden_from_unassigned_member(org_world, tmp_
                 assert (await get_agent("c2-agent")).client_id == c2["id"]
     finally:
         load_agents_api_config_from_dict({})
+
+
+@pytest.mark.asyncio
+async def test_client_scoped_agent_write_routes_hidden_from_unassigned_member(org_world, tmp_path, monkeypatch) -> None:  # noqa: F811
+    """f85 (review follow-up on PR #69): the read fix (f74) filtered list/get,
+    but update_agent and delete_agent skipped the same check -- an unassigned
+    client contact could still PUT an empty body to re-read a foreign
+    client's SOUL (update_agent re-reads on success), PUT a new soul to
+    overwrite it, or DELETE the agent outright. Reproduces the reviewer's
+    exact three-step chain.
+    """
+    monkeypatch.setenv("DEER_FLOW_HOME", str(tmp_path))
+    monkeypatch.setattr("deerflow.config.paths._paths", None)
+    load_agents_api_config_from_dict({"enabled": True})
+    try:
+        from app.gateway.routers.agents import AgentUpdateRequest, delete_agent, get_agent, update_agent
+
+        client_repo = ClientRepository(org_world)
+        with acting_as(USER_A, ORG_S):
+            c1 = await client_repo.create(display_name="Client One")
+            c2 = await client_repo.create(display_name="Client Two Secret")
+            await client_repo.add_assignment(c1["id"], USER_D, "client_contact")
+
+            owner_user_id = get_effective_user_id()
+            store = get_agent_store()
+            store.create("c1-agent", {"name": "c1-agent", "description": "stamped for c1", "client_id": c1["id"]}, "soul", user_id=owner_user_id)
+            store.create("c2-agent", {"name": "c2-agent", "description": "stamped for c2", "client_id": c2["id"]}, "soul", user_id=owner_user_id)
+
+        with acting_as(USER_D, ORG_S):
+            # An empty PUT must not re-read (and leak) c2's SOUL.
+            with pytest.raises(HTTPException) as excinfo:
+                await update_agent("c2-agent", AgentUpdateRequest())
+            assert excinfo.value.status_code == 404
+
+            # A PUT that supplies a new soul must not overwrite c2's agent.
+            with pytest.raises(HTTPException) as excinfo:
+                await update_agent("c2-agent", AgentUpdateRequest(soul="pwned"))
+            assert excinfo.value.status_code == 404
+
+            # DELETE must not remove c2's agent.
+            with pytest.raises(HTTPException) as excinfo:
+                await delete_agent("c2-agent")
+            assert excinfo.value.status_code == 404
+
+            # D's own agent is untouched by every denied attempt above.
+            assert (await update_agent("c1-agent", AgentUpdateRequest(description="D's own update"))).description == "D's own update"
+
+        # c2's agent survived every attempt: unchanged soul/description, still
+        # reachable by its owner.
+        with acting_as(USER_A, ORG_S):
+            untouched = await get_agent("c2-agent")
+            assert untouched.soul == "soul"
+            assert untouched.description == "stamped for c2"
+    finally:
+        load_agents_api_config_from_dict({})

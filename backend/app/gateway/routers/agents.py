@@ -278,6 +278,22 @@ async def _visible_client_ids(user_id: str) -> frozenset[str] | None:
     return frozenset(c["id"] for c in await ClientRepository(session_factory).list_mine())
 
 
+async def _require_visible_client_id(client_id: str | None, name: str) -> None:
+    """Raise 404 for *name* unless *client_id* is None or the caller may see it.
+
+    Shared by every route that reads, writes or deletes a single agent by
+    name (``get_agent``, ``update_agent``, ``delete_agent``) so a client
+    contact can't reach a foreign client's stamped agent through any of
+    them, not just the list/get routes -- a foreign agent is indistinguishable
+    from a missing one, same as ``clients.py``/``board.py``'s own 404s.
+    """
+    if client_id is None:
+        return
+    visible_client_ids = await _visible_client_ids(get_effective_actor_user_id())
+    if visible_client_ids is not None and client_id not in visible_client_ids:
+        raise HTTPException(status_code=404, detail=f"Agent '{name}' not found")
+
+
 @router.get(
     "/agents",
     response_model=AgentsListResponse,
@@ -381,12 +397,7 @@ async def get_agent(name: str) -> AgentResponse:
         logger.error(f"Failed to get agent '{name}': {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to get agent: {str(e)}")
 
-    if response.client_id is not None:
-        # A foreign or unassigned client's agent is indistinguishable from a
-        # missing one, same as clients.py/board.py's own client-scoped 404s.
-        visible_client_ids = await _visible_client_ids(get_effective_actor_user_id())
-        if visible_client_ids is not None and response.client_id not in visible_client_ids:
-            raise HTTPException(status_code=404, detail=f"Agent '{name}' not found")
+    await _require_visible_client_id(response.client_id, name)
     return response
 
 
@@ -483,6 +494,7 @@ async def update_agent(name: str, request: AgentUpdateRequest) -> AgentResponse:
         agent_cfg = await asyncio.to_thread(load_agent_config, name, user_id=user_id)
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail=f"Agent '{name}' not found")
+    await _require_visible_client_id(agent_cfg.client_id, name)
 
     def _is_legacy_only_layout() -> bool:
         # Require config.yaml, not bare directory existence — a per-user agent
@@ -705,6 +717,18 @@ async def delete_agent(name: str) -> None:
     _validate_agent_name(name)
     name = _normalize_agent_name(name)
     user_id = get_effective_user_id()
+
+    try:
+        agent_cfg = await asyncio.to_thread(load_agent_config, name, user_id=user_id)
+    except FileNotFoundError:
+        # No genuine (config.yaml-backed) agent under this name -- a
+        # client-stamped agent always has one, so there is no client_id to
+        # protect here. Fall through to the store's own delete(), whose
+        # legacy/missing/not-custom-agent outcomes below give the precise
+        # answer (e.g. a memory-only directory is preserved, not 404'd).
+        agent_cfg = None
+    if agent_cfg is not None:
+        await _require_visible_client_id(agent_cfg.client_id, name)
 
     try:
         # Off the event loop: resolve store + cancel → delete → cancel-on-success
