@@ -55,8 +55,9 @@ describe("AgentTopology", () => {
       />,
     );
 
-    expect(screen.getByText("Active run recorded")).toBeTruthy();
-    expect(screen.getByText("Idle")).toBeTruthy();
+    expect(screen.getByText("Running")).toBeTruthy();
+    // The idle writer, and the lead, which has no recorded run either.
+    expect(screen.getAllByText("Idle")).toHaveLength(2);
     expect(screen.getByText("Disabled")).toBeTruthy();
   });
 
@@ -79,12 +80,14 @@ describe("AgentTopology", () => {
 
     const working = screen.getByRole("button", { name: /Reviewer/ });
     const idle = screen.getByRole("button", { name: /Writer/ });
-    expect(working.classList.contains("pinned")).toBe(true);
+    // The pin sits on the running agent's Momo, not on the card.
+    expect(working.querySelector(".paper-alive.pinned")).not.toBeNull();
+    expect(working.classList.contains("pinned")).toBe(false);
     const squares = working.querySelector(".paper-pixels");
     expect(squares?.getAttribute("data-active")).toBe("true");
     expect(squares?.getAttribute("aria-hidden")).toBe("true");
     // An idle card is not pinned: a pin says something is happening.
-    expect(idle.classList.contains("pinned")).toBe(false);
+    expect(idle.querySelector(".pinned")).toBeNull();
     expect(idle.querySelector(".paper-pixels")).toBeNull();
 
     // Nobody is working: no pins anywhere, however many specialists exist.
@@ -148,5 +151,56 @@ describe("AgentTopology", () => {
       screen.getByRole("button", { name: /Reviewer/ }).textContent,
     ).toContain("Reviewer");
     expect(screen.queryAllByRole("img")).toHaveLength(0);
+  });
+
+  it("shows each agent's recorded run state on its avatar and in words", () => {
+    render(
+      <AgentTopology
+        leadLabel="Dillon Brain"
+        leadHref="/workspace/chats/new"
+        selectedName={null}
+        runtimeKnown
+        lives={{
+          "dillon-brain": { state: "running" },
+          "dillon-critic": { state: "thinking" },
+          "dillon-growth": { state: "done", at: "2026-09-24T12:00:00Z" },
+          "dillon-builder": { state: "failed", at: "2026-09-24T12:00:00Z" },
+        }}
+        onSelect={rs.fn()}
+        roster={[
+          { name: "dillon-critic", display_name: "Critic", enabled: true },
+          { name: "dillon-growth", display_name: "Growth", enabled: true },
+          { name: "dillon-builder", display_name: "Builder", enabled: true },
+          { name: "dillon-revenue", display_name: "Revenue", enabled: true },
+        ]}
+      />,
+    );
+    const avatar = (name: RegExp) =>
+      screen
+        .getByRole("button", { name })
+        .querySelector<HTMLElement>(".paper-alive");
+    expect(avatar(/Critic/)?.dataset.alive).toBe("thinking");
+    expect(avatar(/Growth/)?.dataset.alive).toBe("done");
+    expect(avatar(/Builder/)?.dataset.alive).toBe("failed");
+    expect(avatar(/Revenue/)?.dataset.alive).toBe("idle");
+    // The lead wears the pin while it runs.
+    expect(
+      document.querySelector('.paper-alive[data-alive="running"]')?.classList,
+    ).toContain("pinned");
+    // Words carry every state; colour and motion never carry it alone.
+    expect(screen.getByText("Running")).toBeTruthy();
+    expect(screen.getByText("Thinking")).toBeTruthy();
+    expect(screen.getByText("Done Sep 24")).toBeTruthy();
+    expect(screen.getByText("Failed Sep 24")).toBeTruthy();
+    expect(screen.getByText("Idle")).toBeTruthy();
+    // Thinking works too: the squares tick, but only running is pinned.
+    expect(
+      screen
+        .getByRole("button", { name: /Critic/ })
+        .querySelector(".paper-pixels"),
+    ).not.toBeNull();
+    expect(document.querySelectorAll(".pinned")).toHaveLength(1);
+    // The context default is motion off: nothing is live.
+    expect(document.querySelectorAll('[data-live="true"]')).toHaveLength(0);
   });
 });

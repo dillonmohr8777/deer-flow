@@ -347,7 +347,7 @@
 }
 
 /*
- * Paper motion layer — the five-item product motion list, and no more.
+ * Paper motion layer — items 1 to 5 and 7 of the product motion list.
  * (A sixth item, the front-door Momo bounce, lives with its component in
  * components/momentum/momobot/momobot.module.css; see DESIGN.md, Motion.)
  * Source: C:\Users\dillo\Documents\Qwen\block-shots\W0-motion-vocabulary.md
@@ -472,6 +472,57 @@
   /* 5 — BrandSignature drift already exists in workspace-appearance.module.css
      (.signature[data-animated="true"]), already gated the same way. Left
      alone, per instruction — nothing to add here. */
+
+  /* 7 — agents alive (agent-alive.tsx). An agent's avatar moves only while
+     its recorded run state says so: thinking tilts slowly, running sways
+     from its pin, done lands its stamp once when the run finishes in view.
+     Idle and failed never move. Gated like 1, 2 and 5: reduced motion OR
+     the brand-motion setting (off by default) leaves the static state that
+     agent-alive.module.css draws. Transform and opacity only. Approved by
+     Dillon, 2026-09-24. */
+  @media (prefers-reduced-motion: no-preference) {
+    [data-treatment="paper"][data-motion="on"]
+      .paper-alive[data-live="true"][data-alive="thinking"]
+      .paper-alive-art {
+      animation: paper-alive-think 3.6s ease-in-out infinite alternate;
+    }
+    [data-treatment="paper"][data-motion="on"]
+      .paper-alive[data-live="true"][data-alive="running"]
+      .paper-alive-art {
+      animation: paper-alive-sway 2.4s ease-in-out infinite alternate;
+    }
+    [data-treatment="paper"][data-motion="on"]
+      .paper-alive[data-live="true"][data-stamp="fresh"]
+      .paper-alive-stamp {
+      animation: paper-alive-stamp 280ms cubic-bezier(0.2, 0.9, 0.3, 1) both;
+    }
+  }
+  @keyframes paper-alive-think {
+    from {
+      transform: rotate(-3deg);
+    }
+    to {
+      transform: rotate(2deg);
+    }
+  }
+  @keyframes paper-alive-sway {
+    from {
+      transform: rotate(-2deg);
+    }
+    to {
+      transform: rotate(2deg);
+    }
+  }
+  @keyframes paper-alive-stamp {
+    from {
+      opacity: 0;
+      transform: rotate(-14deg) scale(1.8);
+    }
+    to {
+      opacity: 1;
+      transform: rotate(-8deg) scale(1);
+    }
+  }
 }
 
 /* Inactive tabs are foreground at 60% opacity upstream, about 4.2:1 on cream.

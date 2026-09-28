@@ -3,6 +3,9 @@ import Link from "next/link";
 
 import { cn } from "@/lib/utils";
 
+import { AgentAlive } from "./agent-alive";
+import { agentLifeLabel, type AgentLife } from "./agent-life";
+import { useWorkspaceAppearance } from "./appearance-provider";
 import { MomoAvatar } from "./momo-avatar";
 
 import styles from "./command-center.module.css";
@@ -26,6 +29,12 @@ type AgentTopologyProps = {
   runtimeKnown?: boolean;
   /** Names with an active recorded run. Only meaningful when runtimeKnown. */
   activeAgentNames?: readonly string[] | null;
+  /**
+   * Each agent's recorded run state (agent-life.ts), keyed by agent name.
+   * Only meaningful when runtimeKnown. A name missing here falls back to
+   * activeAgentNames: running if listed, else idle.
+   */
+  lives?: Readonly<Record<string, AgentLife>> | null;
   onSelect: (name: string) => void;
 };
 
@@ -38,12 +47,22 @@ export function AgentTopology({
   error,
   runtimeKnown = false,
   activeAgentNames = null,
+  lives = null,
   onSelect,
 }: AgentTopologyProps) {
+  const { motionOn } = useWorkspaceAppearance();
   // Only meaningful when runtimeKnown: an unknown live state must never
-  // read as an accelerated pulse.
+  // read as work, a finish or a failure.
+  const lifeOf = (name: string): AgentLife =>
+    !runtimeKnown
+      ? { state: "idle" }
+      : (lives?.[name] ??
+        ((activeAgentNames ?? []).includes(name)
+          ? { state: "running" }
+          : { state: "idle" }));
+  const leadLife = lifeOf("dillon-brain");
   const leadActive =
-    runtimeKnown && (activeAgentNames ?? []).includes("dillon-brain");
+    leadLife.state === "running" || leadLife.state === "thinking";
 
   return (
     <div className={styles.topology}>
@@ -51,16 +70,23 @@ export function AgentTopology({
         {/* The lead is Dillon Brain (agent name "dillon-brain"), a pulsing
             brain rather than a robot Momo. Hidden from assistive tech: the
             name beside it says who this is. */}
-        <span className={styles.leadMomo} aria-hidden="true">
+        <AgentAlive
+          className={styles.leadMomo}
+          life={leadLife}
+          motion={motionOn}
+        >
           <MomoAvatar
             agent={{ name: "dillon-brain", display_name: leadLabel }}
             size={160}
             active={leadActive}
           />
-        </span>
+        </AgentAlive>
         <div>
           <strong>{leadLabel}</strong>
           <span>Orchestration &amp; delegation</span>
+          {runtimeKnown && (
+            <span data-life={leadLife.state}>{agentLifeLabel(leadLife)}</span>
+          )}
         </div>
         <Link aria-label="Open lead agent conversation" href={leadHref}>
           <ArrowUpRight size={20} />
@@ -83,34 +109,36 @@ export function AgentTopology({
           <p>No specialist definitions are available to this account.</p>
         ) : (
           roster.map((agent) => {
-            const hasActiveRun =
-              runtimeKnown && (activeAgentNames ?? []).includes(agent.name);
+            const life = lifeOf(agent.name);
+            const working =
+              life.state === "running" || life.state === "thinking";
             return (
-              // "paper-card" (2px hover lift), "pinned" (brass pin) and
-              // "paper-pixels" (steps(3) tick) are paper.css hooks, inert
-              // outside the paper treatment. A pin means working: only a
-              // specialist with an active recorded run wears one, with the
-              // three working squares. The words carry the state either way.
+              // "paper-card" (2px hover lift) and "paper-pixels" (steps(3)
+              // tick) are paper.css hooks, inert outside the paper
+              // treatment. AgentAlive draws the run state on the avatar:
+              // only a running agent wears the brass pin. The words carry
+              // the state either way.
               <button
                 key={agent.name}
-                className={cn(
-                  styles.agent,
-                  "paper-card",
-                  hasActiveRun && "pinned",
-                )}
+                className={cn(styles.agent, "paper-card")}
+                data-life={life.state}
                 aria-pressed={selectedName === agent.name}
                 onClick={() => onSelect(agent.name)}
               >
-                <span className={styles.agentMomo} aria-hidden="true">
+                <AgentAlive
+                  className={styles.agentMomo}
+                  life={life}
+                  motion={motionOn}
+                >
                   <MomoAvatar agent={agent} size={56} />
-                </span>
+                </AgentAlive>
                 <span className={styles.agentText}>
                   <strong>
                     {agent.display_name ?? agent.name.replace("dillon-", "")}
                   </strong>
                   <span className={styles.agentState}>
-                    <span>
-                      {hasActiveRun && (
+                    <span data-life={life.state}>
+                      {working && (
                         <span
                           className={`${styles.working} paper-pixels`}
                           data-active="true"
@@ -118,9 +146,7 @@ export function AgentTopology({
                         />
                       )}
                       {runtimeKnown
-                        ? hasActiveRun
-                          ? "Active run recorded"
-                          : "Idle"
+                        ? agentLifeLabel(life)
                         : "Live state unknown"}
                     </span>
                     <span>
