@@ -32,6 +32,11 @@
   --green: #087d62;
   --danger: #b4233e;
   --focus: #003da5;
+  /* Text and icons that sit ON a --blue or --blue-deep fill (the primary
+     action, the lead agent card, text selection). White works on the dark
+     cobalt/royal/accent fills; space and retro swap --blue for a light
+     accent (pale cyan, amber), so they set this to their own dark canvas. */
+  --on-blue: #ffffff;
   position: relative;
   isolation: isolate;
   min-height: 100%;
@@ -54,7 +59,7 @@
 }
 .root ::selection {
   background: var(--blue);
-  color: white;
+  color: var(--on-blue);
 }
 .root :is(button, a, input, select, [tabindex]):focus-visible {
   outline: 3px solid var(--focus);
@@ -289,6 +294,9 @@
   --green: var(--space-ok);
   --danger: var(--space-danger);
   --focus: var(--space-focus);
+  /* White on pale cyan is 1.48:1; the void canvas on it is 12.86:1,
+     the same pairing space.css already uses for --primary-foreground. */
+  --on-blue: var(--space-void);
   background: var(--space-void) var(--space-stars);
 }
 .root[data-treatment="space"] .heading h1 {
@@ -332,6 +340,9 @@
   --green: var(--retro-ok);
   --danger: var(--retro-danger);
   --focus: var(--retro-amber);
+  /* White on amber is 2.17:1; navy on it is 8.05:1, the same pairing
+     retro.css already uses for --primary-foreground. */
+  --on-blue: var(--retro-navy);
   background: var(--retro-navy);
 }
 .root[data-treatment="retro"] .heading h1 {
@@ -554,7 +565,7 @@
      --blue/--blue-deep to royal, so both treatments inherit the decision. */
   background: var(--blue);
   box-shadow: 0 1px 2px rgba(7, 23, 47, 0.12);
-  color: white;
+  color: var(--on-blue);
   padding: 12px 18px;
   font-weight: 900;
   text-decoration: none;
@@ -727,10 +738,11 @@
   gap: 18px;
   border: 1px solid var(--blue-deep);
   border-radius: 16px;
-  /* Solid deep cobalt: white on #06439d is 9.1:1. No violet, no glow. */
+  /* Solid deep cobalt: white on #06439d is 9.1:1. No violet, no glow.
+     --on-blue keeps the text dark where a treatment's --blue-deep is light. */
   background: var(--blue-deep);
   box-shadow: 0 1px 2px rgba(7, 23, 47, 0.12);
-  color: white;
+  color: var(--on-blue);
   padding: 18px;
 }
 /* The canon lead Momo at 160 (96 on phones). Its own cream cut-paper margin
@@ -760,7 +772,7 @@
   line-height: 1.25;
 }
 .topologyLead div span {
-  color: white;
+  color: var(--on-blue);
   font-size: 13px;
 }
 .topologyLead a {
@@ -769,15 +781,15 @@
   height: 38px;
   flex: 0 0 auto;
   place-items: center;
-  border: 1px solid rgba(255, 255, 255, 0.34);
+  border: 1px solid color-mix(in srgb, var(--on-blue) 34%, transparent);
   border-radius: 10px;
-  color: white;
+  color: var(--on-blue);
 }
 .topologyLead a:hover {
-  background: rgba(255, 255, 255, 0.12);
+  background: color-mix(in srgb, var(--on-blue) 12%, transparent);
 }
 .topologyLead a:focus-visible {
-  outline-color: white;
+  outline-color: var(--on-blue);
   box-shadow: 0 0 0 6px var(--focus);
 }
 .root[data-treatment="paper"] .topologyLead a:focus-visible {
