@@ -292,11 +292,21 @@ async def test_real_run_against_a_bootstrapped_database_writes_rows(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_refuses_a_database_not_at_alembic_head(tmp_path):
+async def test_refuses_a_database_not_at_alembic_head(tmp_path, caplog):
     """Review test gap (f82): disabling the `current != head` check leaves
     every other test green, since they only ever exercise "no alembic_version
     at all" (unbootstrapped) or "already at head" (bootstrapped). This is the
-    missing middle case -- a real database, correctly stamped, just behind."""
+    missing middle case -- a real database, correctly stamped, just behind.
+
+    Review follow-up (f87's sibling low finding): asserting only `result == 1`
+    doesn't actually test the head check -- this database also has zero
+    organizations, so `run_backfill`'s separate "no organizations found"
+    branch returns 1 for that reason alone even if the head comparison is
+    disabled entirely. Assert on the specific "not head" log line instead,
+    which only the head-check branch itself can produce.
+    """
+    import logging
+
     from alembic import command
 
     from deerflow.persistence.bootstrap import _get_alembic_config
@@ -316,11 +326,10 @@ async def test_refuses_a_database_not_at_alembic_head(tmp_path):
         database=DatabaseConfig(backend="sqlite", sqlite_dir=str(sqlite_dir)),
     )
 
-    result = await backfill.run_backfill(config, dry_run=False, session_factory=None)
+    with caplog.at_level(logging.ERROR, logger="backfill_entitlements"):
+        result = await backfill.run_backfill(config, dry_run=False, session_factory=None)
 
-    # organization_entitlements doesn't exist at 0039 yet (it's added by
-    # 0040), so a successful write would itself raise -- result == 1 alone
-    # already proves the check refused before ever reaching that code.
+    assert "not head" in caplog.text
     assert result == 1
 
 
