@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from collections.abc import Awaitable, Callable
 
 from deerflow.config import get_app_config
@@ -99,6 +100,24 @@ async def generate_draft_body(
         return None
 
 
+_BASE_BACKOFF_SECONDS = 60.0
+_MAX_BACKOFF_SECONDS = 3600.0
+_GIVE_UP_AFTER_ATTEMPTS = 5
+
+AttemptState = dict[str, dict[str, object]]
+
+
+def _backoff_seconds(fail_count: int) -> float:
+    return min(_MAX_BACKOFF_SECONDS, _BASE_BACKOFF_SECONDS * (2 ** (fail_count - 1)))
+
+
+def _record_failure(state: AttemptState, thread_id: str, *, updated_at: str | None, now: float) -> int:
+    """Bump *thread_id*'s failure count and set its next-retry time; returns the new count."""
+    fail_count = int(state[thread_id]["fail_count"]) + 1 if thread_id in state else 1
+    state[thread_id] = {"fail_count": fail_count, "next_retry_at": now + _backoff_seconds(fail_count), "updated_at": updated_at}
+    return fail_count
+
+
 async def run_concierge_pass(
     board_repo,
     *,
@@ -106,6 +125,8 @@ async def run_concierge_pass(
     model_name: str | None = None,
     generate_draft: GenerateDraft | None = None,
     audit_repo=None,
+    attempt_state: AttemptState | None = None,
+    now: float | None = None,
 ) -> list[str]:
     """Draft a reply once for every ``new``/``triaged`` thread that has one.
 
@@ -114,20 +135,63 @@ async def run_concierge_pass(
     the write lands (raced with another actor, or another concierge pass
     under multiple Gateway workers), whose draft generation returned
     nothing, or that raised anywhere in its own handling, is left untouched
-    and does not stop the rest of the pass. Returns the ids of threads
-    drafted this pass. When *audit_repo* is given (an
-    ``AuditEventRepository``), each successful draft also records a
-    ``board.thread.concierge_drafted`` audit event.
+    and does not stop the rest of the pass. Drafts against the thread's
+    latest *client* message, and skips a thread whose latest message is
+    already a ``momo`` draft (an untouched or rejected-and-not-yet-replied-to
+    draft) so a rejected draft is never duplicated and a stale draft is
+    never re-answered instead of the client's actual latest message.
+    Returns the ids of threads drafted this pass.
+
+    *attempt_state*, if given, is a caller-owned dict this function mutates:
+    a thread that fails to draft (empty result or an exception) gets an
+    exponential backoff (capped at an hour) before it is tried again, reset
+    whenever the thread's own ``updated_at`` changes (new activity), and a
+    warning is logged once when a thread crosses ``_GIVE_UP_AFTER_ATTEMPTS``
+    consecutive failures -- without this, a thread that always fails to
+    draft (a content filter, an oversized context) would cost one full model
+    call every single pass forever. Pass ``now`` (a ``time.monotonic()``
+    value) for deterministic tests; defaults to the real clock.
+
+    When *audit_repo* is given (an ``AuditEventRepository``), each
+    successful draft also records a ``board.thread.concierge_drafted`` audit
+    event -- in its own try/except, so a failure recording the event (never
+    expected: ``AuditEventRepository.record`` already swallows its own
+    errors) cannot be mislabeled as a failure to draft the thread, which did
+    already succeed by that point.
     """
     draft_fn = generate_draft or generate_draft_body
+    state = attempt_state if attempt_state is not None else {}
+    clock = now if now is not None else time.monotonic()
     drafted_ids: list[str] = []
     for status in _DRAFT_ELIGIBLE_STATUSES:
         threads = await board_repo.list_threads(status=status)
         for thread in threads:
             thread_id = thread["id"]
+            updated_at = thread.get("updated_at")
+            entry = state.get(thread_id)
+            if entry is not None and entry["updated_at"] != updated_at:
+                # New activity on the thread since the last failure (a
+                # status change, a redraft, an owner action): forget the
+                # old failure history and try again immediately.
+                state.pop(thread_id, None)
+                entry = None
+            if entry is not None and clock < entry["next_retry_at"]:
+                continue  # still backing off from repeated failures
+
             try:
                 messages = await board_repo.list_messages(thread_id) or []
-                content = messages[0]["body"] if messages else thread.get("subject", "")
+                last_client_index = None
+                last_momo_index = None
+                for i, message in enumerate(messages):
+                    if message["author_kind"] == "client":
+                        last_client_index = i
+                    elif message["author_kind"] == "momo":
+                        last_momo_index = i
+                if last_client_index is None:
+                    continue  # nothing from the client yet to draft against
+                if last_momo_index is not None and last_momo_index > last_client_index:
+                    continue
+                content = messages[last_client_index]["body"]
                 draft = await draft_fn(
                     content,
                     subject=thread.get("subject", ""),
@@ -136,14 +200,24 @@ async def run_concierge_pass(
                     model_name=model_name,
                 )
                 if not draft:
+                    fail_count = _record_failure(state, thread_id, updated_at=updated_at, now=clock)
+                    if fail_count == _GIVE_UP_AFTER_ATTEMPTS:
+                        logger.warning("Board concierge giving up on thread %s after %d failed draft attempts (backing off up to %.0fs between tries)", thread_id, fail_count, _MAX_BACKOFF_SECONDS)
                     continue
 
                 updated = await board_repo.try_add_momo_draft(thread_id, from_statuses=_DRAFT_ELIGIBLE_STATUSES, body=draft)
                 if updated is None:
                     continue
 
+                state.pop(thread_id, None)
                 drafted_ids.append(thread_id)
-                if audit_repo is not None:
+            except Exception:
+                _record_failure(state, thread_id, updated_at=updated_at, now=clock)
+                logger.warning("Board concierge failed to draft thread %s; left for the next pass", thread_id, exc_info=True)
+                continue
+
+            if audit_repo is not None:
+                try:
                     await audit_repo.record(
                         action="board.thread.concierge_drafted",
                         outcome="success",
@@ -152,7 +226,7 @@ async def run_concierge_pass(
                         target_type="board_thread",
                         target_id=thread_id,
                     )
-            except Exception:
-                logger.warning("Board concierge failed to draft thread %s; left for the next pass", thread_id, exc_info=True)
+                except Exception:
+                    logger.warning("Board concierge drafted thread %s but failed to record its audit event", thread_id, exc_info=True)
 
     return drafted_ids

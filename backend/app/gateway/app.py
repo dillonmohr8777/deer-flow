@@ -324,16 +324,19 @@ async def _run_board_concierge_loop(app: FastAPI, startup_config) -> None:
     drafts Momo's reply for ``new``/``triaged`` threads through
     ``deerflow.board.concierge.run_concierge_pass`` -- it never approves or
     sends -- and a failed pass is logged and retried on the next interval
-    rather than crashing the loop.
+    rather than crashing the loop. The per-thread backoff state
+    (``run_concierge_pass``'s ``attempt_state``) is kept in this closure so
+    it persists across passes for the life of the loop, not just one pass.
     """
     from deerflow.board.concierge import run_concierge_pass
 
     interval = max(1, startup_config.board.concierge_interval_seconds)
+    attempt_state: dict = {}
     while True:
         try:
             board_repo = getattr(app.state, "board_repo", None)
             if board_repo is not None:
-                drafted = await run_concierge_pass(board_repo, app_config=startup_config, audit_repo=getattr(app.state, "audit_repo", None))
+                drafted = await run_concierge_pass(board_repo, app_config=startup_config, audit_repo=getattr(app.state, "audit_repo", None), attempt_state=attempt_state)
                 if drafted:
                     logger.info("Board concierge drafted %d thread(s)", len(drafted))
         except asyncio.CancelledError:

@@ -176,7 +176,7 @@ async def test_run_concierge_pass_leaves_thread_untouched_when_draft_generation_
 
 
 @pytest.mark.anyio
-async def test_run_concierge_pass_uses_first_message_as_draft_content(board_repo):
+async def test_run_concierge_pass_uses_latest_client_message_as_draft_content(board_repo):
     thread = await board_repo.create_thread(client_id="c1", kind="dm", subject="Hey")
     await board_repo.add_message(thread["id"], author_kind="client", body="First message.")
     await board_repo.add_message(thread["id"], author_kind="client", body="Second message.")
@@ -189,7 +189,68 @@ async def test_run_concierge_pass_uses_first_message_as_draft_content(board_repo
 
     await run_concierge_pass(board_repo, generate_draft=_record_draft)
 
-    assert seen_content == ["First message."]
+    assert seen_content == ["Second message."]
+
+
+@pytest.mark.anyio
+async def test_run_concierge_pass_skips_thread_with_no_client_message(board_repo):
+    """A thread created with only a subject (no message posted yet) has
+    nothing for the concierge to draft against."""
+    await board_repo.create_thread(client_id="c1", kind="post", subject="Just a subject")
+
+    async def _fail_if_called(*args, **kwargs):
+        raise AssertionError("generate_draft must not be called with no client message")
+
+    drafted_ids = await run_concierge_pass(board_repo, generate_draft=_fail_if_called)
+
+    assert drafted_ids == []
+
+
+@pytest.mark.anyio
+async def test_run_concierge_pass_does_not_duplicate_a_rejected_draft(board_repo):
+    """f61: an owner PATCHes a drafted thread back to triaged (rejecting the
+    draft) with no new client message -- the next pass must not add a
+    second momo draft next to the rejected one."""
+    thread = await board_repo.create_thread(client_id="c1", kind="ticket", subject="Broken widget")
+    await board_repo.add_message(thread["id"], author_kind="client", body="It's broken.")
+    await board_repo.add_message(thread["id"], author_kind="momo", body="A rejected draft.")
+    await board_repo.patch_thread(thread["id"], status=BoardThreadStatus.TRIAGED)
+
+    calls: list[str] = []
+
+    async def _record_call(content, **kwargs):
+        calls.append(content)
+        return "A duplicate draft that must never be written."
+
+    drafted_ids = await run_concierge_pass(board_repo, generate_draft=_record_call)
+
+    assert calls == []
+    assert drafted_ids == []
+    messages = await board_repo.list_messages(thread["id"])
+    assert len(messages) == 2
+    assert not any(m["body"] == "A duplicate draft that must never be written." for m in messages)
+
+
+@pytest.mark.anyio
+async def test_run_concierge_pass_drafts_a_reopened_thread_against_its_follow_up(board_repo):
+    """f61: a thread with an old momo draft that's since had a genuine new
+    client follow-up (e.g. reopened after PATCH replied -> triaged) drafts
+    against the new message, not the stale one the old draft already answers."""
+    thread = await board_repo.create_thread(client_id="c1", kind="ticket", subject="Broken widget")
+    await board_repo.add_message(thread["id"], author_kind="client", body="It's broken.")
+    await board_repo.add_message(thread["id"], author_kind="momo", body="An old draft.")
+    await board_repo.add_message(thread["id"], author_kind="client", body="Still broken, any update?")
+
+    seen_content = []
+
+    async def _record_draft(content, **kwargs):
+        seen_content.append(content)
+        return "A fresh reply."
+
+    drafted_ids = await run_concierge_pass(board_repo, generate_draft=_record_draft)
+
+    assert seen_content == ["Still broken, any update?"]
+    assert drafted_ids == [thread["id"]]
 
 
 @pytest.mark.anyio
@@ -260,3 +321,95 @@ async def test_run_concierge_pass_records_an_audit_event_per_draft(board_repo):
     assert recorded[0]["outcome"] == "success"
     assert recorded[0]["target_id"] == thread["id"]
     assert recorded[0]["actor_user_id"] is None
+
+
+@pytest.mark.anyio
+async def test_run_concierge_pass_does_not_mislabel_an_audit_failure_as_a_draft_failure(board_repo, caplog):
+    """f64: a failure recording the audit event (after a successful draft
+    write) must not log as if the draft itself failed."""
+    thread = await board_repo.create_thread(client_id="c1", kind="ticket", subject="Broken widget")
+    await board_repo.add_message(thread["id"], author_kind="client", body="It's broken.")
+
+    class _BrokenAuditRepo:
+        async def record(self, **kwargs):
+            raise RuntimeError("audit db is down")
+
+    with caplog.at_level("WARNING"):
+        drafted_ids = await run_concierge_pass(board_repo, generate_draft=_stub_draft, audit_repo=_BrokenAuditRepo())
+
+    assert drafted_ids == [thread["id"]]
+    row = await board_repo.get_thread(thread["id"])
+    assert row["status"] == BoardThreadStatus.DRAFTED
+    assert not any("failed to draft" in record.message for record in caplog.records)
+    assert any("failed to record its audit event" in record.message for record in caplog.records)
+
+
+# --- run_concierge_pass: f62 per-thread backoff on repeated failure ---
+
+
+@pytest.mark.anyio
+async def test_run_concierge_pass_backs_off_after_a_failed_draft(board_repo):
+    thread = await board_repo.create_thread(client_id="c1", kind="ticket", subject="Broken widget")
+    await board_repo.add_message(thread["id"], author_kind="client", body="It's broken.")
+
+    call_count = 0
+
+    async def _always_none(*args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        return None
+
+    state: dict = {}
+    await run_concierge_pass(board_repo, generate_draft=_always_none, attempt_state=state, now=0.0)
+    assert call_count == 1
+
+    # Immediately retrying (no time elapsed) must not call the model again --
+    # this thread is backing off after its one failure.
+    await run_concierge_pass(board_repo, generate_draft=_always_none, attempt_state=state, now=1.0)
+    assert call_count == 1
+
+    # After the backoff window elapses, it is retried.
+    await run_concierge_pass(board_repo, generate_draft=_always_none, attempt_state=state, now=10_000.0)
+    assert call_count == 2
+
+
+@pytest.mark.anyio
+async def test_run_concierge_pass_resets_backoff_when_thread_activity_changes(board_repo):
+    thread = await board_repo.create_thread(client_id="c1", kind="ticket", subject="Broken widget")
+    await board_repo.add_message(thread["id"], author_kind="client", body="It's broken.")
+
+    call_count = 0
+
+    async def _always_none(*args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        return None
+
+    state: dict = {}
+    await run_concierge_pass(board_repo, generate_draft=_always_none, attempt_state=state, now=0.0)
+    assert call_count == 1
+
+    # New activity on the thread (e.g. a status patch) changes its
+    # updated_at, so the next pass retries immediately despite the backoff.
+    await board_repo.patch_thread(thread["id"], subject="Broken widget (still)")
+    await run_concierge_pass(board_repo, generate_draft=_always_none, attempt_state=state, now=1.0)
+    assert call_count == 2
+
+
+@pytest.mark.anyio
+async def test_run_concierge_pass_logs_once_when_giving_up_on_a_thread(board_repo, caplog):
+    thread = await board_repo.create_thread(client_id="c1", kind="ticket", subject="Broken widget")
+    await board_repo.add_message(thread["id"], author_kind="client", body="It's broken.")
+
+    async def _always_none(*args, **kwargs):
+        return None
+
+    state: dict = {}
+    t = 0.0
+    with caplog.at_level("WARNING"):
+        for _ in range(6):
+            await run_concierge_pass(board_repo, generate_draft=_always_none, attempt_state=state, now=t)
+            t += 10_000.0  # comfortably past any backoff window between attempts
+
+    give_up_logs = [r for r in caplog.records if "giving up" in r.message]
+    assert len(give_up_logs) == 1
