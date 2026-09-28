@@ -333,7 +333,7 @@ async def _run_board_concierge_loop(app: FastAPI, startup_config) -> None:
         try:
             board_repo = getattr(app.state, "board_repo", None)
             if board_repo is not None:
-                drafted = await run_concierge_pass(board_repo, app_config=startup_config)
+                drafted = await run_concierge_pass(board_repo, app_config=startup_config, audit_repo=getattr(app.state, "audit_repo", None))
                 if drafted:
                     logger.info("Board concierge drafted %d thread(s)", len(drafted))
         except asyncio.CancelledError:

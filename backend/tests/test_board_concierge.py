@@ -183,3 +183,73 @@ async def test_run_concierge_pass_uses_first_message_as_draft_content(board_repo
     await run_concierge_pass(board_repo, generate_draft=_record_draft)
 
     assert seen_content == ["First message."]
+
+
+@pytest.mark.anyio
+async def test_run_concierge_pass_never_stomps_a_thread_that_raced_ahead(board_repo):
+    """Reproduces a real race: draft generation for one thread is slow enough
+    that another actor (or another concierge pass) drafts, approves and
+    replies to the same thread before this pass's write lands. The write
+    must be a no-op, not a reset back to ``drafted`` with a stale draft
+    appended -- the exact bug a plain ``add_message`` + unconditional
+    ``patch_thread(status=DRAFTED)`` would have.
+    """
+    thread = await board_repo.create_thread(client_id="c1", kind="ticket", subject="Broken widget")
+    await board_repo.add_message(thread["id"], author_kind="client", body="It's broken.")
+
+    async def _race_then_draft(content, **kwargs):
+        await board_repo.add_message(thread["id"], author_kind="momo", body="A human-triggered draft.")
+        await board_repo.patch_thread(thread["id"], status=BoardThreadStatus.DRAFTED)
+        await board_repo.patch_thread(thread["id"], status=BoardThreadStatus.APPROVED)
+        await board_repo.add_message(thread["id"], author_kind="owner", body="Sent reply.")
+        await board_repo.patch_thread(thread["id"], status=BoardThreadStatus.REPLIED)
+        return "A stale concierge draft that must never land."
+
+    drafted_ids = await run_concierge_pass(board_repo, generate_draft=_race_then_draft)
+
+    assert drafted_ids == []
+    row = await board_repo.get_thread(thread["id"])
+    assert row["status"] == BoardThreadStatus.REPLIED
+    bodies = [m["body"] for m in await board_repo.list_messages(thread["id"])]
+    assert "A stale concierge draft that must never land." not in bodies
+
+
+@pytest.mark.anyio
+async def test_run_concierge_pass_continues_after_one_thread_raises(board_repo):
+    thread_a = await board_repo.create_thread(client_id="c1", kind="post", subject="A")
+    await board_repo.add_message(thread_a["id"], author_kind="client", body="Message A")
+    thread_b = await board_repo.create_thread(client_id="c1", kind="post", subject="B")
+    await board_repo.add_message(thread_b["id"], author_kind="client", body="Message B")
+
+    async def _fail_for_b(content, **kwargs):
+        if content == "Message B":
+            raise RuntimeError("model blew up")
+        return f"Draft for: {content}"
+
+    drafted_ids = await run_concierge_pass(board_repo, generate_draft=_fail_for_b)
+
+    assert drafted_ids == [thread_a["id"]]
+    row_a = await board_repo.get_thread(thread_a["id"])
+    row_b = await board_repo.get_thread(thread_b["id"])
+    assert row_a["status"] == BoardThreadStatus.DRAFTED
+    assert row_b["status"] == BoardThreadStatus.NEW
+
+
+@pytest.mark.anyio
+async def test_run_concierge_pass_records_an_audit_event_per_draft(board_repo):
+    thread = await board_repo.create_thread(client_id="c1", kind="ticket", subject="Broken widget")
+    await board_repo.add_message(thread["id"], author_kind="client", body="It's broken.")
+
+    recorded = []
+
+    class _FakeAuditRepo:
+        async def record(self, **kwargs):
+            recorded.append(kwargs)
+
+    await run_concierge_pass(board_repo, generate_draft=_stub_draft, audit_repo=_FakeAuditRepo())
+
+    assert len(recorded) == 1
+    assert recorded[0]["action"] == "board.thread.concierge_drafted"
+    assert recorded[0]["outcome"] == "success"
+    assert recorded[0]["target_id"] == thread["id"]
+    assert recorded[0]["actor_user_id"] is None

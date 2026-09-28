@@ -2,12 +2,24 @@
 
 Behind ``config.board.concierge_enabled`` (default off), a background loop
 drafts a reply for every ``new``/``triaged`` board thread and moves it to
-``drafted`` through the same ``assert_can_draft`` gate the
-``/threads/{id}/draft`` route uses (``deerflow.board.workflow``,
-``app/gateway/routers/board.py::draft_board_reply``). This module never
-calls ``assert_can_approve``/``assert_can_reply`` and makes no write beyond
-that one draft message plus the ``drafted`` status transition -- an owner
-must still approve and send.
+``drafted``. This module never calls ``assert_can_approve``/``assert_can_reply``
+and makes no write beyond one draft message plus the ``drafted`` status
+transition -- an owner must still approve and send.
+
+Unlike the human-triggered ``/threads/{id}/draft`` route
+(``deerflow.board.workflow.assert_can_draft`` + two separate repository
+calls, serialized by having exactly one human clicking one button), this is
+a background loop with no such serialization: its own draft-generation call
+can be slow enough for the thread to move on (approved, replied, or drafted
+by someone else) before the write lands, and a multi-worker Gateway
+deployment can run more than one pass concurrently. So the write itself is
+``BoardRepository.try_add_momo_draft()``, a single compare-and-set
+transaction (``UPDATE ... WHERE status IN ('new','triaged')`` gating the
+draft-message insert) rather than the router's two-step
+check-then-write -- a race never overwrites a status the thread already
+moved past, and a losing race never leaves an orphaned draft message
+behind. A per-thread failure (draft generation or the write) is logged and
+skipped so it cannot abort the rest of the pass.
 
 Draft generation mirrors ``deerflow.board.triage``'s LLM plumbing
 (``create_chat_model`` + ``ainvoke``, no persistence dependency of its own)
@@ -21,7 +33,6 @@ import logging
 import os
 from collections.abc import Awaitable, Callable
 
-from deerflow.board.workflow import BoardTransitionError, assert_can_draft
 from deerflow.config import get_app_config
 from deerflow.config.app_config import AppConfig
 from deerflow.models import create_chat_model
@@ -94,13 +105,19 @@ async def run_concierge_pass(
     app_config: AppConfig | None = None,
     model_name: str | None = None,
     generate_draft: GenerateDraft | None = None,
+    audit_repo=None,
 ) -> list[str]:
     """Draft a reply once for every ``new``/``triaged`` thread that has one.
 
     Only ever writes a ``momo`` draft message and the ``drafted`` transition
-    -- never approves or replies. A thread whose status changed since the
-    listing (raced with another actor) or whose draft generation returned
-    nothing is left untouched. Returns the ids of threads drafted this pass.
+    -- never approves or replies. A thread whose status changed by the time
+    the write lands (raced with another actor, or another concierge pass
+    under multiple Gateway workers), whose draft generation returned
+    nothing, or that raised anywhere in its own handling, is left untouched
+    and does not stop the rest of the pass. Returns the ids of threads
+    drafted this pass. When *audit_repo* is given (an
+    ``AuditEventRepository``), each successful draft also records a
+    ``board.thread.concierge_drafted`` audit event.
     """
     draft_fn = generate_draft or generate_draft_body
     drafted_ids: list[str] = []
@@ -109,25 +126,33 @@ async def run_concierge_pass(
         for thread in threads:
             thread_id = thread["id"]
             try:
-                assert_can_draft(thread["status"])
-            except BoardTransitionError:
-                continue
+                messages = await board_repo.list_messages(thread_id) or []
+                content = messages[0]["body"] if messages else thread.get("subject", "")
+                draft = await draft_fn(
+                    content,
+                    subject=thread.get("subject", ""),
+                    kind=thread.get("kind", ""),
+                    app_config=app_config,
+                    model_name=model_name,
+                )
+                if not draft:
+                    continue
 
-            messages = await board_repo.list_messages(thread_id) or []
-            content = messages[0]["body"] if messages else thread.get("subject", "")
-            draft = await draft_fn(
-                content,
-                subject=thread.get("subject", ""),
-                kind=thread.get("kind", ""),
-                app_config=app_config,
-                model_name=model_name,
-            )
-            if not draft:
-                continue
+                updated = await board_repo.try_add_momo_draft(thread_id, from_statuses=_DRAFT_ELIGIBLE_STATUSES, body=draft)
+                if updated is None:
+                    continue
 
-            await board_repo.add_message(thread_id, author_kind="momo", author_user_id=None, body=draft)
-            updated = await board_repo.patch_thread(thread_id, status=BoardThreadStatus.DRAFTED)
-            if updated is not None:
                 drafted_ids.append(thread_id)
+                if audit_repo is not None:
+                    await audit_repo.record(
+                        action="board.thread.concierge_drafted",
+                        outcome="success",
+                        actor_user_id=None,
+                        organization_id=thread.get("organization_id"),
+                        target_type="board_thread",
+                        target_id=thread_id,
+                    )
+            except Exception:
+                logger.warning("Board concierge failed to draft thread %s; left for the next pass", thread_id, exc_info=True)
 
     return drafted_ids
