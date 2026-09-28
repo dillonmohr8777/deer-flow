@@ -173,7 +173,16 @@ async def create_client(body: ClientCreateRequest, request: Request) -> ClientRe
 @router.get("", response_model=ClientListResponse)
 @require_permission("clients", "read")
 async def list_clients(request: Request, status: ClientStatus | None = None) -> ClientListResponse:
+    """The full org roster is owner/admin only. A plain member (e.g. a
+    ``client_contact``) gets only the clients they're assigned to, the same
+    set ``/mine`` returns -- never another client's name."""
     repo = get_client_repo(request)
+    user = await get_current_user_from_request(request)
+    if not await _is_active_org_admin(str(user.id)):
+        rows = await repo.list_mine()
+        if status is not None:
+            rows = [row for row in rows if row.get("status") == status]
+        return await _to_list_response(repo, rows)
     return await _to_list_response(repo, await repo.list(status=status))
 
 
