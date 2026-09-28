@@ -1,7 +1,12 @@
 import { fetch as fetchWithAuth } from "@/core/api/fetcher";
 import { getBackendBaseURL } from "@/core/config";
 
-import type { BoardMessage, BoardThread, BoardThreadStatus } from "./types";
+import type {
+  BoardMessage,
+  BoardThread,
+  BoardThreadKind,
+  BoardThreadStatus,
+} from "./types";
 
 export const BOARD_THREADS_QUERY_KEY = ["board", "threads"] as const;
 
@@ -48,6 +53,36 @@ export async function listBoardThreads(params?: {
   }
   const body = (await response.json()) as { threads: BoardThread[] };
   return body.threads;
+}
+
+/**
+ * ``POST /api/board/threads`` -- start a new post, ticket, concern or DM.
+ * Any org member assigned to ``clientId`` (a client contact included) may
+ * call this; the backend 404s a client the caller can't reach.
+ */
+export async function createBoardThread(input: {
+  clientId: string;
+  kind: BoardThreadKind;
+  subject: string;
+}): Promise<BoardThread> {
+  const response = await fetchWithAuth(
+    `${getBackendBaseURL()}/api/board/threads`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        client_id: input.clientId,
+        kind: input.kind,
+        subject: input.subject,
+      }),
+    },
+  );
+  if (!response.ok) {
+    throw new Error(
+      await readBoardAPIError(response, "Failed to start the thread."),
+    );
+  }
+  return (await response.json()) as BoardThread;
 }
 
 /** ``GET /api/board/threads/{id}`` -- one thread. */

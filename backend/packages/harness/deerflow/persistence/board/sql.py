@@ -35,9 +35,10 @@ def _thread_to_dict(row: BoardThreadRow) -> dict[str, Any]:
 
 def _message_to_dict(row: BoardMessageRow) -> dict[str, Any]:
     d = row.to_dict()
-    val = d.get("created_at")
-    if isinstance(val, datetime):
-        d["created_at"] = coerce_iso(val)
+    for key in ("created_at", "approved_at"):
+        val = d.get(key)
+        if isinstance(val, datetime):
+            d[key] = coerce_iso(val)
     return d
 
 
@@ -134,6 +135,30 @@ class BoardRepository:
         async with self._sf() as session:
             result = await session.execute(stmt)
             return [_message_to_dict(r) for r in result.scalars()]
+
+    async def approve_latest_draft(self, thread_id: str) -> dict | None:
+        """Stamp the thread's current ``momo`` draft as approved.
+
+        "Current" means the most recently created ``momo`` message overall,
+        not merely the most recent *unapproved* one: picking the latest
+        unapproved message would, after a reject-then-redraft-then-approve
+        cycle followed by a stray re-approve (e.g. a PATCH-forced status
+        bypass), reach past the already-approved current draft and stamp an
+        older rejected one instead. Returns ``None`` -- treated by the router
+        as "nothing to approve" -- both when there's no momo message at all
+        and when the latest one is already approved.
+        """
+        if await self.get_thread(thread_id) is None:
+            return None
+        stmt = select(BoardMessageRow).where(BoardMessageRow.thread_id == thread_id, BoardMessageRow.author_kind == "momo").order_by(BoardMessageRow.created_at.desc(), BoardMessageRow.id.desc()).limit(1)
+        async with self._sf() as session:
+            row = (await session.execute(stmt)).scalars().first()
+            if row is None or row.approved_at is not None:
+                return None
+            row.approved_at = datetime.now(UTC)
+            await session.commit()
+            await session.refresh(row)
+            return _message_to_dict(row)
 
     async def add_message(self, thread_id: str, *, author_kind: str, body: str, author_user_id: str | None = None) -> dict | None:
         """Append one message; ``None`` for a missing/foreign thread."""

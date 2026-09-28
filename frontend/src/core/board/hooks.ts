@@ -7,13 +7,14 @@ import {
   approveBoardReply,
   boardMessagesQueryKey,
   boardThreadQueryKey,
+  createBoardThread,
   draftBoardReply,
   getBoardThread,
   listBoardMessages,
   listBoardThreads,
   sendBoardReply,
 } from "./api";
-import type { BoardThread, BoardThreadStatus } from "./types";
+import type { BoardThread, BoardThreadKind, BoardThreadStatus } from "./types";
 
 export function useBoardThreads(params?: {
   clientId?: string;
@@ -78,4 +79,19 @@ export function useSendBoardReply() {
   return useBoardThreadMutation((threadId, body) =>
     sendBoardReply(threadId, body ?? ""),
   );
+}
+
+export function useCreateBoardThread() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      clientId: string;
+      kind: BoardThreadKind;
+      subject: string;
+    }) => createBoardThread(input),
+    onSuccess: (thread) => {
+      queryClient.setQueryData(boardThreadQueryKey(thread.id), thread);
+      void queryClient.invalidateQueries({ queryKey: BOARD_THREADS_QUERY_KEY });
+    },
+  });
 }
