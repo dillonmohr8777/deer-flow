@@ -193,17 +193,34 @@ async def test_run_concierge_pass_uses_latest_client_message_as_draft_content(bo
 
 
 @pytest.mark.anyio
-async def test_run_concierge_pass_skips_thread_with_no_client_message(board_repo):
+async def test_run_concierge_pass_skips_thread_with_no_client_message(board_repo, caplog):
     """A thread created with only a subject (no message posted yet) has
-    nothing for the concierge to draft against."""
+    nothing for the concierge to draft against.
+
+    Records rather than raises: f80 found the previous raising stub's
+    AssertionError was swallowed by the pass's own per-thread try/except, so
+    the test stayed green even with the ``last_client_index is None`` guard
+    deleted. Recording alone has the same blind spot -- deleting the guard
+    makes ``messages[last_client_index]`` (``messages[None]``) raise
+    ``TypeError`` *before* ``generate_draft`` is ever called, which the
+    try/except also swallows, so ``calls == []`` stays true either way. The
+    added no-warning-logged assertion is what actually distinguishes "skipped
+    cleanly" from "crashed and was swallowed" -- only the latter logs.
+    """
     await board_repo.create_thread(client_id="c1", kind="post", subject="Just a subject")
 
-    async def _fail_if_called(*args, **kwargs):
-        raise AssertionError("generate_draft must not be called with no client message")
+    calls: list[str] = []
 
-    drafted_ids = await run_concierge_pass(board_repo, generate_draft=_fail_if_called)
+    async def _record_call(content, **kwargs):
+        calls.append(content)
+        return "A draft that must never be written."
 
+    with caplog.at_level("WARNING"):
+        drafted_ids = await run_concierge_pass(board_repo, generate_draft=_record_call)
+
+    assert calls == []
     assert drafted_ids == []
+    assert not any("failed to draft" in record.message for record in caplog.records)
 
 
 @pytest.mark.anyio
@@ -374,7 +391,12 @@ async def test_run_concierge_pass_backs_off_after_a_failed_draft(board_repo):
 
 
 @pytest.mark.anyio
-async def test_run_concierge_pass_resets_backoff_when_thread_activity_changes(board_repo):
+async def test_run_concierge_pass_resets_backoff_on_a_new_client_message(board_repo):
+    """f79: the reset must key on a genuine new client message, not
+    ``BoardThreadRow.updated_at`` -- ``BoardRepository.add_message`` never
+    touches that column, so a thread in backoff would otherwise sit out a
+    real new client message for up to the full backoff window.
+    """
     thread = await board_repo.create_thread(client_id="c1", kind="ticket", subject="Broken widget")
     await board_repo.add_message(thread["id"], author_kind="client", body="It's broken.")
 
@@ -389,11 +411,37 @@ async def test_run_concierge_pass_resets_backoff_when_thread_activity_changes(bo
     await run_concierge_pass(board_repo, generate_draft=_always_none, attempt_state=state, now=0.0)
     assert call_count == 1
 
-    # New activity on the thread (e.g. a status patch) changes its
-    # updated_at, so the next pass retries immediately despite the backoff.
-    await board_repo.patch_thread(thread["id"], subject="Broken widget (still)")
+    # A genuine new client message retries immediately despite the backoff,
+    # even though it alone leaves the thread row's own updated_at untouched.
+    await board_repo.add_message(thread["id"], author_kind="client", body="Any update?")
     await run_concierge_pass(board_repo, generate_draft=_always_none, attempt_state=state, now=1.0)
     assert call_count == 2
+
+
+@pytest.mark.anyio
+async def test_run_concierge_pass_backoff_survives_a_thread_row_only_change(board_repo):
+    """The converse of the above: a `board_threads` row change with no new
+    client message (e.g. a subject edit) must not reset the backoff --
+    otherwise an unrelated patch would defeat it just as easily as the old
+    ``updated_at``-keyed version did in reverse.
+    """
+    thread = await board_repo.create_thread(client_id="c1", kind="ticket", subject="Broken widget")
+    await board_repo.add_message(thread["id"], author_kind="client", body="It's broken.")
+
+    call_count = 0
+
+    async def _always_none(*args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        return None
+
+    state: dict = {}
+    await run_concierge_pass(board_repo, generate_draft=_always_none, attempt_state=state, now=0.0)
+    assert call_count == 1
+
+    await board_repo.patch_thread(thread["id"], subject="Broken widget (edited)")
+    await run_concierge_pass(board_repo, generate_draft=_always_none, attempt_state=state, now=1.0)
+    assert call_count == 1  # still backing off -- no new client message
 
 
 @pytest.mark.anyio

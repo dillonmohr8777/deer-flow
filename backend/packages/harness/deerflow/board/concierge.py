@@ -111,10 +111,10 @@ def _backoff_seconds(fail_count: int) -> float:
     return min(_MAX_BACKOFF_SECONDS, _BASE_BACKOFF_SECONDS * (2 ** (fail_count - 1)))
 
 
-def _record_failure(state: AttemptState, thread_id: str, *, updated_at: str | None, now: float) -> int:
+def _record_failure(state: AttemptState, thread_id: str, *, last_client_message_id: str | None, now: float) -> int:
     """Bump *thread_id*'s failure count and set its next-retry time; returns the new count."""
     fail_count = int(state[thread_id]["fail_count"]) + 1 if thread_id in state else 1
-    state[thread_id] = {"fail_count": fail_count, "next_retry_at": now + _backoff_seconds(fail_count), "updated_at": updated_at}
+    state[thread_id] = {"fail_count": fail_count, "next_retry_at": now + _backoff_seconds(fail_count), "last_client_message_id": last_client_message_id}
     return fail_count
 
 
@@ -145,12 +145,15 @@ async def run_concierge_pass(
     *attempt_state*, if given, is a caller-owned dict this function mutates:
     a thread that fails to draft (empty result or an exception) gets an
     exponential backoff (capped at an hour) before it is tried again, reset
-    whenever the thread's own ``updated_at`` changes (new activity), and a
-    warning is logged once when a thread crosses ``_GIVE_UP_AFTER_ATTEMPTS``
-    consecutive failures -- without this, a thread that always fails to
-    draft (a content filter, an oversized context) would cost one full model
-    call every single pass forever. Pass ``now`` (a ``time.monotonic()``
-    value) for deterministic tests; defaults to the real clock.
+    whenever the thread's latest client message id changes (a genuine new
+    client message -- *not* ``BoardThreadRow.updated_at``, which
+    ``BoardRepository.add_message`` never touches, so it cannot signal "a
+    new message arrived"), and a warning is logged once when a thread
+    crosses ``_GIVE_UP_AFTER_ATTEMPTS`` consecutive failures -- without
+    this, a thread that always fails to draft (a content filter, an
+    oversized context) would cost one full model call every single pass
+    forever. Pass ``now`` (a ``time.monotonic()`` value) for deterministic
+    tests; defaults to the real clock.
 
     When *audit_repo* is given (an ``AuditEventRepository``), each
     successful draft also records a ``board.thread.concierge_drafted`` audit
@@ -167,17 +170,7 @@ async def run_concierge_pass(
         threads = await board_repo.list_threads(status=status)
         for thread in threads:
             thread_id = thread["id"]
-            updated_at = thread.get("updated_at")
-            entry = state.get(thread_id)
-            if entry is not None and entry["updated_at"] != updated_at:
-                # New activity on the thread since the last failure (a
-                # status change, a redraft, an owner action): forget the
-                # old failure history and try again immediately.
-                state.pop(thread_id, None)
-                entry = None
-            if entry is not None and clock < entry["next_retry_at"]:
-                continue  # still backing off from repeated failures
-
+            last_client_message_id: str | None = None
             try:
                 messages = await board_repo.list_messages(thread_id) or []
                 last_client_index = None
@@ -191,6 +184,17 @@ async def run_concierge_pass(
                     continue  # nothing from the client yet to draft against
                 if last_momo_index is not None and last_momo_index > last_client_index:
                     continue
+                last_client_message_id = messages[last_client_index]["id"]
+
+                entry = state.get(thread_id)
+                if entry is not None and entry["last_client_message_id"] != last_client_message_id:
+                    # A genuine new client message since the last failure:
+                    # forget the old failure history and try again now.
+                    state.pop(thread_id, None)
+                    entry = None
+                if entry is not None and clock < entry["next_retry_at"]:
+                    continue  # still backing off from repeated failures
+
                 content = messages[last_client_index]["body"]
                 draft = await draft_fn(
                     content,
@@ -200,7 +204,7 @@ async def run_concierge_pass(
                     model_name=model_name,
                 )
                 if not draft:
-                    fail_count = _record_failure(state, thread_id, updated_at=updated_at, now=clock)
+                    fail_count = _record_failure(state, thread_id, last_client_message_id=last_client_message_id, now=clock)
                     if fail_count == _GIVE_UP_AFTER_ATTEMPTS:
                         logger.warning("Board concierge giving up on thread %s after %d failed draft attempts (backing off up to %.0fs between tries)", thread_id, fail_count, _MAX_BACKOFF_SECONDS)
                     continue
@@ -212,7 +216,7 @@ async def run_concierge_pass(
                 state.pop(thread_id, None)
                 drafted_ids.append(thread_id)
             except Exception:
-                _record_failure(state, thread_id, updated_at=updated_at, now=clock)
+                _record_failure(state, thread_id, last_client_message_id=last_client_message_id, now=clock)
                 logger.warning("Board concierge failed to draft thread %s; left for the next pass", thread_id, exc_info=True)
                 continue
 
