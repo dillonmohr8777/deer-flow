@@ -298,7 +298,13 @@ async def approve_board_reply(thread_id: str, request: Request) -> BoardThreadRe
         raise HTTPException(status_code=403, detail=str(exc)) from exc
     except BoardTransitionError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-    await board_repo.approve_latest_draft(thread_id)
+    if await board_repo.approve_latest_draft(thread_id) is None:
+        # Defense in depth: normally unreachable while assert_can_approve
+        # requires ``drafted`` (drafting always adds a fresh unapproved momo
+        # message first), but a direct PATCH to ``drafted`` with no new draft
+        # would otherwise leave nothing to approve -- refuse rather than
+        # silently marking the thread approved with no reviewed content.
+        raise HTTPException(status_code=409, detail="No pending draft to approve")
     updated = await board_repo.patch_thread(thread_id, status=BoardThreadStatus.APPROVED)
     if updated is None:
         raise _not_found()

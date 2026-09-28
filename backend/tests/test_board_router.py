@@ -345,3 +345,48 @@ async def test_rejected_and_superseded_drafts_stay_hidden_from_non_admin(org_wor
         d_messages_after = (await client.get(f"/api/board/threads/{tid}/messages", headers=headers_d)).json()["messages"]
         momo_bodies = [m["body"] for m in d_messages_after if m["author_kind"] == "momo"]
         assert momo_bodies == ["approved fix"]
+
+
+async def test_approve_never_restamps_a_superseded_rejected_draft(org_world):  # noqa: F811
+    """Review follow-up on f35: a stray re-approve must not reach past the
+    current (already-approved) draft and stamp an older rejected one.
+
+    ``approve_latest_draft`` used to pick "the latest *unapproved* momo
+    message", which after reject -> redraft -> approve -> (PATCH back to
+    drafted with no new draft) -> approve again, skips the already-approved
+    current draft and stamps the older rejected one instead -- exposing it.
+    """
+    session_factory = org_world
+    app = _build_app(session_factory)
+    headers_a = auth_headers(USER_A, ORG_S)  # owner
+
+    await _add_plain_member(session_factory, USER_D, ORG_S)
+    headers_d = auth_headers(USER_D, ORG_S)
+
+    async with _client(app) as client:
+        client1 = await _create_client(client, headers_a, "Client One")
+        assign = await client.post(f"/api/clients/{client1['id']}/assignments", json={"user_id": USER_D, "role": "client_contact"}, headers=headers_a)
+        assert assign.status_code == 201
+
+        thread = (await client.post("/api/board/threads", json={"client_id": client1["id"], "subject": "T1"}, headers=headers_a)).json()
+        tid = thread["id"]
+
+        await client.post(f"/api/board/threads/{tid}/draft", json={"body": "REJECTED1"}, headers=headers_a)
+        await client.patch(f"/api/board/threads/{tid}", json={"status": "triaged"}, headers=headers_a)
+        await client.post(f"/api/board/threads/{tid}/draft", json={"body": "GOOD2"}, headers=headers_a)
+        approved_once = await client.post(f"/api/board/threads/{tid}/approve", headers=headers_a)
+        assert approved_once.status_code == 200, approved_once.text
+
+        # No dedicated route forces a thread back to `drafted` with no new
+        # draft (that's f1, unmerged here) -- PATCH stands in for it, same as
+        # this file's reject probes above.
+        back_to_drafted = await client.patch(f"/api/board/threads/{tid}", json={"status": "drafted"}, headers=headers_a)
+        assert back_to_drafted.status_code == 200, back_to_drafted.text
+
+        stray_approve = await client.post(f"/api/board/threads/{tid}/approve", headers=headers_a)
+        assert stray_approve.status_code == 409, stray_approve.text
+
+        # REJECTED1 must still never surface to the client -- only GOOD2.
+        d_messages = (await client.get(f"/api/board/threads/{tid}/messages", headers=headers_d)).json()["messages"]
+        momo_bodies = [m["body"] for m in d_messages if m["author_kind"] == "momo"]
+        assert momo_bodies == ["GOOD2"]

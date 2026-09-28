@@ -137,19 +137,23 @@ class BoardRepository:
             return [_message_to_dict(r) for r in result.scalars()]
 
     async def approve_latest_draft(self, thread_id: str) -> dict | None:
-        """Stamp the current (most recent, still-unapproved) ``momo`` draft as approved.
+        """Stamp the thread's current ``momo`` draft as approved.
 
-        Only that one message becomes visible to non-admins; any earlier
-        superseded/rejected ``momo`` draft keeps ``approved_at is None`` and
-        stays hidden forever, even if the thread cycles back through
-        ``drafted``/``approved`` again after a later redraft.
+        "Current" means the most recently created ``momo`` message overall,
+        not merely the most recent *unapproved* one: picking the latest
+        unapproved message would, after a reject-then-redraft-then-approve
+        cycle followed by a stray re-approve (e.g. a PATCH-forced status
+        bypass), reach past the already-approved current draft and stamp an
+        older rejected one instead. Returns ``None`` -- treated by the router
+        as "nothing to approve" -- both when there's no momo message at all
+        and when the latest one is already approved.
         """
         if await self.get_thread(thread_id) is None:
             return None
-        stmt = select(BoardMessageRow).where(BoardMessageRow.thread_id == thread_id, BoardMessageRow.author_kind == "momo", BoardMessageRow.approved_at.is_(None)).order_by(BoardMessageRow.created_at.desc(), BoardMessageRow.id.desc())
+        stmt = select(BoardMessageRow).where(BoardMessageRow.thread_id == thread_id, BoardMessageRow.author_kind == "momo").order_by(BoardMessageRow.created_at.desc(), BoardMessageRow.id.desc()).limit(1)
         async with self._sf() as session:
             row = (await session.execute(stmt)).scalars().first()
-            if row is None:
+            if row is None or row.approved_at is not None:
                 return None
             row.approved_at = datetime.now(UTC)
             await session.commit()
