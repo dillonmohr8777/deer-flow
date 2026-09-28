@@ -75,8 +75,45 @@ rs.mock("@/components/workspace/thread-subagent-batches", () => ({
   ThreadSubagentBatches: () => null,
 }));
 
+// The topology renders its own states (command-center-agent-topology tests);
+// here it only shows which names Command Center hands it as running/queued.
 rs.mock("@/components/workspace/command-center/agent-topology", () => ({
-  AgentTopology: () => <div data-testid="agent-topology" />,
+  AgentTopology: ({
+    runningAgentNames,
+    queuedAgentNames,
+  }: {
+    runningAgentNames?: readonly string[] | null;
+    queuedAgentNames?: readonly string[] | null;
+  }) => (
+    <div
+      data-testid="agent-topology"
+      data-running={(runningAgentNames ?? []).join(",")}
+      data-queued={(queuedAgentNames ?? []).join(",")}
+    />
+  ),
+}));
+
+// The flattened fallback PaperLayers draws with motion off, plus the state
+// it was asked for, so a test can see whether the hero brain would pulse.
+rs.mock("@/components/momentum/paper-layers", () => ({
+  PaperLayers: ({
+    flatSrc,
+    size,
+    state,
+  }: {
+    flatSrc: string;
+    size: number;
+    state?: string;
+  }) => (
+    <img
+      data-paper-layers="root"
+      data-state={state ?? "idle"}
+      src={flatSrc}
+      alt=""
+      aria-hidden
+      width={size}
+    />
+  ),
 }));
 
 rs.mock("@/components/workspace/command-center/business-views", () => ({
@@ -343,6 +380,64 @@ describe("CommandCenter", () => {
     expect(slip("Growth slip").textContent).not.toContain("dillon-growth");
     // A missing id says so instead of inventing an agent.
     expect(slip("Nobody slip").textContent).toContain("Agent not recorded");
+  });
+
+  it("hands the team running and queued agents apart, so a queued run never pins or pulses", () => {
+    mocks.runs = [
+      // Pending only: queued, waiting, not working.
+      {
+        ...contributorRun,
+        run_id: "q1",
+        assistant_id: "dillon-growth",
+        status: "pending",
+      },
+      // Pending and running: the running run wins.
+      {
+        ...contributorRun,
+        run_id: "q2",
+        assistant_id: "dillon-builder",
+        status: "pending",
+      },
+      {
+        ...contributorRun,
+        run_id: "r2",
+        assistant_id: "dillon-builder",
+        status: "running",
+      },
+      // The lead's only live run is queued: the hero brain stays still.
+      {
+        ...contributorRun,
+        run_id: "q3",
+        assistant_id: "dillon-brain",
+        status: "pending",
+      },
+    ];
+    const { container, unmount } = render(<CommandCenter />);
+    const topology = screen.getByTestId("agent-topology");
+    expect(topology.getAttribute("data-running")).toBe("dillon-builder");
+    expect(topology.getAttribute("data-queued")).toBe(
+      "dillon-growth,dillon-brain",
+    );
+    const heroBrain = () =>
+      container.querySelector('[data-crew="dillon-brain"] [data-paper-layers]');
+    expect(heroBrain()?.getAttribute("data-state")).toBe("idle");
+    unmount();
+
+    // Once the lead's run is running, the hero brain works.
+    mocks.runs = [
+      {
+        ...contributorRun,
+        run_id: "r3",
+        assistant_id: "dillon-brain",
+        status: "running",
+      },
+    ];
+    const second = render(<CommandCenter />);
+    expect(
+      second.container
+        .querySelector('[data-crew="dillon-brain"] [data-paper-layers]')
+        ?.getAttribute("data-state"),
+    ).toBe("working");
   });
 
   it("dates each assignment and keeps its full title on hover", () => {
