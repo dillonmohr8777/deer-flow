@@ -156,3 +156,70 @@ async def test_triage_requires_summary_to_accept_model_response(monkeypatch):
     assert result.kind == "ticket"
     assert result.urgency == "normal"
     assert result.summary
+
+
+# --- usage-ledger recording (Workspace Phase 4 item e7) ---
+
+
+@pytest.mark.anyio
+async def test_triage_records_usage_on_a_successful_call(monkeypatch):
+    _make_env(monkeypatch, '{"kind":"ticket","urgency":"high","summary":"Needs a fix."}')
+    calls = []
+
+    async def _record(**kwargs):
+        calls.append(kwargs)
+
+    await triage_board_thread(
+        "Something is broken.",
+        organization_id="org-1",
+        client_id="client-1",
+        board_thread_id="thread-1",
+        record_usage=_record,
+    )
+
+    assert len(calls) == 1
+    assert calls[0]["caller"] == "board_triage"
+    assert calls[0]["attempt_status"] == "success"
+    assert calls[0]["organization_id"] == "org-1"
+    assert calls[0]["client_id"] == "client-1"
+    assert calls[0]["board_thread_id"] == "thread-1"
+    assert calls[0]["response"] is not None
+
+
+@pytest.mark.anyio
+async def test_triage_records_usage_as_success_even_when_the_response_is_unparseable(monkeypatch):
+    """An unparseable response is still a successful model call, not a model-call failure."""
+    _make_env(monkeypatch, "not json at all")
+    calls = []
+
+    async def _record(**kwargs):
+        calls.append(kwargs)
+
+    await triage_board_thread("A message the model can't classify.", record_usage=_record)
+
+    assert len(calls) == 1
+    assert calls[0]["attempt_status"] == "success"
+
+
+@pytest.mark.anyio
+async def test_triage_records_usage_as_error_when_the_model_call_fails(monkeypatch):
+    config = SimpleNamespace()
+    monkeypatch.setattr("deerflow.board.triage.get_app_config", lambda: config)
+    monkeypatch.setattr("deerflow.board.triage.create_chat_model", lambda **kwargs: (_ for _ in ()).throw(RuntimeError("boom")))
+    calls = []
+
+    async def _record(**kwargs):
+        calls.append(kwargs)
+
+    await triage_board_thread(
+        "A message sent while the model is unavailable.",
+        organization_id="org-1",
+        client_id="client-1",
+        record_usage=_record,
+    )
+
+    assert len(calls) == 1
+    assert calls[0]["attempt_status"] == "error"
+    assert calls[0]["error_type"] == "RuntimeError"
+    assert calls[0]["organization_id"] == "org-1"
+    assert calls[0]["client_id"] == "client-1"

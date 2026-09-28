@@ -12,7 +12,10 @@ must still approve and send.
 Draft generation mirrors ``deerflow.board.triage``'s LLM plumbing
 (``create_chat_model`` + ``ainvoke``, no persistence dependency of its own)
 and is injectable via ``generate_draft`` the same way tests stub
-``triage_board_thread``'s model call.
+``triage_board_thread``'s model call. Like triage, the model call is recorded
+into the operations-console usage ledger via
+``deerflow.board.usage.record_board_model_usage`` (Workspace Phase 4 item
+e7), tagged with the thread's own ``organization_id``/``client_id``.
 """
 
 from __future__ import annotations
@@ -21,6 +24,7 @@ import logging
 import os
 from collections.abc import Awaitable, Callable
 
+from deerflow.board.usage import RecordBoardUsageFn, record_board_model_usage
 from deerflow.board.workflow import BoardTransitionError, assert_can_draft
 from deerflow.config import get_app_config
 from deerflow.config.app_config import AppConfig
@@ -44,6 +48,10 @@ async def generate_draft_body(
     app_config: AppConfig | None = None,
     model_name: str | None = None,
     attach_tracing: bool = True,
+    organization_id: str | None = None,
+    client_id: str | None = None,
+    board_thread_id: str | None = None,
+    record_usage: RecordBoardUsageFn | None = None,
 ) -> str | None:
     """Draft a reply body for one board thread's opening message.
 
@@ -51,7 +59,12 @@ async def generate_draft_body(
     leaves the thread untouched rather than drafting a broken reply --
     drafting is an aid, not a gate, matching ``triage_board_thread``'s own
     fail-safe stance.
+
+    The model call itself is recorded into the usage ledger regardless of
+    whether it produces a usable draft (blank response still counts as a
+    successful model call).
     """
+    record_fn = record_usage or record_board_model_usage
     rubric = (
         "You are Momo, an assistant drafting a reply on a client's board for a human owner to review, "
         "edit and approve before it is ever sent to the client. Write a short, warm, specific reply to "
@@ -81,11 +94,30 @@ async def generate_draft_body(
             ],
             config=invoke_config,
         )
-        draft = extract_response_text(getattr(response, "content", "")).strip()
-        return draft or None
-    except Exception:
+    except Exception as exc:
         logger.warning("Board concierge draft generation failed; leaving thread undrafted", exc_info=True)
+        await record_fn(
+            caller="board_concierge",
+            attempt_status="error",
+            organization_id=organization_id,
+            client_id=client_id,
+            board_thread_id=board_thread_id,
+            requested_model=model_name,
+            error_type=type(exc).__name__,
+        )
         return None
+
+    await record_fn(
+        caller="board_concierge",
+        attempt_status="success",
+        organization_id=organization_id,
+        client_id=client_id,
+        board_thread_id=board_thread_id,
+        requested_model=model_name,
+        response=response,
+    )
+    draft = extract_response_text(getattr(response, "content", "")).strip()
+    return draft or None
 
 
 async def run_concierge_pass(
@@ -121,6 +153,9 @@ async def run_concierge_pass(
                 kind=thread.get("kind", ""),
                 app_config=app_config,
                 model_name=model_name,
+                organization_id=thread.get("organization_id"),
+                client_id=thread.get("client_id"),
+                board_thread_id=thread_id,
             )
             if not draft:
                 continue

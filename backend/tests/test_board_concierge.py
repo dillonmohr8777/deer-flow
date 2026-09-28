@@ -84,6 +84,72 @@ async def test_generate_draft_body_returns_none_on_model_failure(monkeypatch):
     assert result is None
 
 
+# --- usage-ledger recording (Workspace Phase 4 item e7) ---
+
+
+@pytest.mark.anyio
+async def test_generate_draft_body_records_usage_on_success(monkeypatch):
+    _make_model_env(monkeypatch, "Thanks -- we'll take a look.")
+    calls = []
+
+    async def _record(**kwargs):
+        calls.append(kwargs)
+
+    await generate_draft_body(
+        "The checkout button is broken.",
+        organization_id="org-1",
+        client_id="client-1",
+        board_thread_id="thread-1",
+        record_usage=_record,
+    )
+
+    assert len(calls) == 1
+    assert calls[0]["caller"] == "board_concierge"
+    assert calls[0]["attempt_status"] == "success"
+    assert calls[0]["organization_id"] == "org-1"
+    assert calls[0]["client_id"] == "client-1"
+    assert calls[0]["board_thread_id"] == "thread-1"
+    assert calls[0]["response"] is not None
+
+
+@pytest.mark.anyio
+async def test_generate_draft_body_records_usage_as_success_even_on_a_blank_response(monkeypatch):
+    """A blank draft is still a successful model call, not a model-call failure."""
+    _make_model_env(monkeypatch, "   ")
+    calls = []
+
+    async def _record(**kwargs):
+        calls.append(kwargs)
+
+    result = await generate_draft_body("Hello!", record_usage=_record)
+
+    assert result is None
+    assert len(calls) == 1
+    assert calls[0]["attempt_status"] == "success"
+
+
+@pytest.mark.anyio
+async def test_generate_draft_body_records_usage_as_error_when_the_model_call_fails(monkeypatch):
+    config = SimpleNamespace()
+    monkeypatch.setattr("deerflow.board.concierge.get_app_config", lambda: config)
+    monkeypatch.setattr("deerflow.board.concierge.create_chat_model", lambda **kwargs: (_ for _ in ()).throw(RuntimeError("boom")))
+    calls = []
+
+    async def _record(**kwargs):
+        calls.append(kwargs)
+
+    await generate_draft_body(
+        "A message sent while the model is unavailable.",
+        organization_id="org-1",
+        client_id="client-1",
+        record_usage=_record,
+    )
+
+    assert len(calls) == 1
+    assert calls[0]["attempt_status"] == "error"
+    assert calls[0]["error_type"] == "RuntimeError"
+
+
 # --- run_concierge_pass ---
 
 
@@ -166,6 +232,27 @@ async def test_run_concierge_pass_leaves_thread_untouched_when_draft_generation_
     assert row["status"] == BoardThreadStatus.NEW
     messages = await board_repo.list_messages(thread["id"])
     assert len(messages) == 1
+
+
+@pytest.mark.anyio
+async def test_run_concierge_pass_forwards_thread_org_and_client_to_draft_generation(board_repo):
+    thread = await board_repo.create_thread(client_id="c1", kind="ticket", subject="Broken widget")
+    await board_repo.add_message(thread["id"], author_kind="client", body="It's still broken.")
+
+    seen_kwargs = []
+
+    async def _record_kwargs(content, **kwargs):
+        seen_kwargs.append(kwargs)
+        return "A reply."
+
+    await run_concierge_pass(board_repo, generate_draft=_record_kwargs)
+
+    assert len(seen_kwargs) == 1
+    assert seen_kwargs[0]["client_id"] == "c1"
+    assert seen_kwargs[0]["board_thread_id"] == thread["id"]
+    # This fixture's BoardRepository has no request/org context, so organization_id is None here --
+    # the important thing is that the thread's own value, whatever it is, is what gets forwarded.
+    assert seen_kwargs[0]["organization_id"] == thread.get("organization_id")
 
 
 @pytest.mark.anyio
