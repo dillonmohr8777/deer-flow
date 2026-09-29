@@ -62,6 +62,11 @@ class HiredAgentRow(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now, onupdate=_utc_now)
     retired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # KPI half of EXECUTIVE.md's Probation rule ("missing its KPI 2 weeks
+    # running is retired automatically"), mirroring AgentSeatRow's
+    # missed_scorecards/last_scorecard_at (migration 0042) exactly.
+    missed_kpi_checks: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    last_kpi_check_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (
         Index("ix_hired_agents_org_manager", "organization_id", "manager_agent_name"),

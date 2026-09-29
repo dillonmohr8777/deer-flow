@@ -32,7 +32,7 @@ _ACTIVE = HireStatus.ACTIVE
 
 def _to_dict(row: HiredAgentRow) -> dict[str, Any]:
     d = row.to_dict()
-    for key in ("created_at", "updated_at", "retired_at"):
+    for key in ("created_at", "updated_at", "retired_at", "last_kpi_check_at"):
         val = d.get(key)
         if isinstance(val, datetime):
             d[key] = coerce_iso(val)
@@ -315,6 +315,26 @@ class HiredAgentRepository:
         )
         async with self._sf() as session:
             return int(await session.scalar(stmt) or 0)
+
+    async def record_kpi_check_result(self, hire_id: str, *, met: bool, now: datetime | None = None) -> dict | None:
+        """Record this week's KPI review for *hire_id*; ``None`` for a missing/foreign hire.
+
+        Mirrors ``AgentSeatRepository.record_scorecard_result``: a "met"
+        review resets ``missed_kpi_checks`` to 0, a "missed" one increments
+        it. Either way ``last_kpi_check_at`` advances, so
+        ``deerflow.hiring.kpi_review.evaluate_hire_kpi`` does not re-evaluate
+        this hire again until next week regardless of sweep frequency.
+        """
+        organization_id = resolve_organization_id()
+        async with self._sf() as session:
+            row = await session.get(HiredAgentRow, hire_id)
+            if row is None or (organization_id is not None and row.organization_id != organization_id):
+                return None
+            row.missed_kpi_checks = 0 if met else row.missed_kpi_checks + 1
+            row.last_kpi_check_at = now or datetime.now(UTC)
+            await session.commit()
+            await session.refresh(row)
+            return _to_dict(row)
 
     async def retire(self, hire_id: str, *, retired_by_user_id: str | None = None, now: datetime | None = None) -> dict | None:
         """Persist a retirement; ``None`` for a missing/foreign hire.

@@ -5,8 +5,8 @@ Covers the accept bar directly: an idle hire with no attributable run
 activity for the configured window is retired and the retirement is
 announced to ``#exec``; an active hire, a freshly created hire still inside
 its grace period, an already-retired hire, and a hire with active reports of
-its own are all left untouched. The KPI half of the probation rule is not
-covered here -- see the module docstring in ``deerflow.hiring.retirement``.
+its own are all left untouched. The KPI half of the probation rule is
+covered separately in ``tests/test_hiring_kpi_review.py``.
 """
 
 from __future__ import annotations

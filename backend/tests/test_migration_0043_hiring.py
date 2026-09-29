@@ -46,6 +46,8 @@ _EXPECTED_COLUMNS = {
     "created_at",
     "updated_at",
     "retired_at",
+    "missed_kpi_checks",
+    "last_kpi_check_at",
 }
 
 _EXPECTED_INDEXES = {

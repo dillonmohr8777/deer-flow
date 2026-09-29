@@ -21,3 +21,9 @@ class HiringConfig(BaseModel):
     retirement_check_enabled: bool = Field(default=False)
     retirement_check_interval_seconds: int = Field(default=3600, ge=30, le=86400)
     idle_days_before_retirement: int = Field(default=7, ge=1, description="A hire with no run activity for this many days is retired automatically.")
+
+    # KPI-review sweep, the other half of the same Probation rule ("missing
+    # its KPI 2 weeks running is retired automatically"). Off by default,
+    # same posture as the idle-probation sweep above.
+    kpi_check_enabled: bool = Field(default=False)
+    kpi_check_interval_seconds: int = Field(default=3600, ge=30, le=86400)

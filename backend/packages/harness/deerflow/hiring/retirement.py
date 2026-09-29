@@ -10,9 +10,9 @@ best-effort, announced to ``#exec``, never bypassing
 a hire with active reports of its own is left alone rather than orphaning
 them; it becomes eligible once its reports are retired in a later sweep).
 
-The KPI half ("missing its KPI 2 weeks running") needs a scorecard-like
-review for hires, mirroring ``exec_seats.scorecard``'s weekly-post mechanism
--- not implemented here; a hire has no per-role review cadence to check yet.
+The KPI half ("missing its KPI 2 weeks running") lives separately in
+``deerflow.hiring.kpi_review``, mirroring ``exec_seats.scorecard``'s
+weekly-check mechanism.
 """
 
 from __future__ import annotations
