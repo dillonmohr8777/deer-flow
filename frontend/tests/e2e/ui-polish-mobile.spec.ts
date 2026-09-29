@@ -25,6 +25,51 @@ test.describe("UI polish mobile regressions", () => {
       .toBeLessThanOrEqual(375);
   });
 
+  // f101/f118(e): the icon-only controls (display-mode toggle, new project,
+  // trash) grow to the 44px phone floor, so their SidebarGroupLabel must grow
+  // with them (`max-sm:h-11`) or the buttons spill 6px past the label's
+  // default 32px (`h-8`) row.
+  test("projects section controls fit inside their sidebar label on phones", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    mockLangGraphAPI(page);
+
+    await page.goto("/workspace/chats/new");
+    await expect(async () => {
+      await page.getByRole("button", { name: /toggle sidebar/i }).click();
+      await expect(
+        page.getByTestId("projects-new-project-button"),
+      ).toBeVisible({ timeout: 1_000 });
+    }).toPass();
+
+    const rows = await page.evaluate(() => {
+      const buttons = [
+        ...document.querySelectorAll(
+          "[data-testid='projects-display-mode-toggle'], [data-testid='projects-new-project-button'], [data-testid='projects-trash-link']",
+        ),
+      ] as HTMLElement[];
+      return buttons.map((button) => {
+        const label = button.closest('[data-sidebar="group-label"]');
+        const b = button.getBoundingClientRect();
+        const l = label?.getBoundingClientRect();
+        return {
+          buttonHeight: b.height,
+          labelHeight: l?.height ?? 0,
+          overflowsTop: !l || b.top < l.top,
+          overflowsBottom: !l || b.bottom > l.bottom,
+        };
+      });
+    });
+    expect(rows).toHaveLength(3);
+    for (const row of rows) {
+      expect(row.buttonHeight).toBeGreaterThanOrEqual(44);
+      expect(row.labelHeight).toBeGreaterThanOrEqual(row.buttonHeight);
+      expect(row.overflowsTop).toBe(false);
+      expect(row.overflowsBottom).toBe(false);
+    }
+  });
+
   test("chat controls keep the 44px touch floor on phones", async ({
     page,
   }) => {
