@@ -1946,16 +1946,25 @@ async def start_run(
         scope_assistant_id = raw_scope_agent_name or _DEFAULT_ASSISTANT_ID
         if scope_assistant_id != _DEFAULT_ASSISTANT_ID:
             await _refuse_if_agent_seat_paused(scope_assistant_id)
-        # Server-resolved, like deerflow_trace_id above: an agent seat's weekly
-        # burn (queue item f95) must be counted from the run's real effective
-        # agent, not a caller-forged claim of one. Normalized the same way
-        # AgentSeatRepository.paused_seat_for_agent already matches a seat's
-        # own agent_name (case/underscore-hyphen insensitive, f97 review) --
-        # an un-normalized context.agent_name (e.g. "CMO-Agent") would
-        # otherwise never match a seat claimed as "cmo-agent" in the ledger.
-        from deerflow.persistence.exec_seats import EFFECTIVE_AGENT_NAME_METADATA_KEY
+            # Server-resolved, like deerflow_trace_id above: an agent seat's weekly
+            # burn (queue item f95) must be counted from the run's real effective
+            # agent, not a caller-forged claim of one. Normalized the same way
+            # AgentSeatRepository.paused_seat_for_agent already matches a seat's
+            # own agent_name (case/underscore-hyphen insensitive, f97 review) --
+            # an un-normalized context.agent_name (e.g. "CMO-Agent") would
+            # otherwise never match a seat claimed as "cmo-agent" in the ledger.
+            # Only custom agents can hold a seat, so default-agent runs are not
+            # stamped: burn accounting falls back to the run's assistant_id, and
+            # ordinary run metadata stays exactly what the caller sent.
+            from deerflow.persistence.exec_seats import EFFECTIVE_AGENT_NAME_METADATA_KEY
 
-        run_metadata[EFFECTIVE_AGENT_NAME_METADATA_KEY] = scope_assistant_id.strip().lower().replace("_", "-")
+            run_metadata[EFFECTIVE_AGENT_NAME_METADATA_KEY] = scope_assistant_id.strip().lower().replace("_", "-")
+        else:
+            # Default-agent runs hold no seat: drop any caller-forged value
+            # instead of stamping "lead-agent" into ordinary run metadata.
+            from deerflow.persistence.exec_seats import EFFECTIVE_AGENT_NAME_METADATA_KEY
+
+            run_metadata.pop(EFFECTIVE_AGENT_NAME_METADATA_KEY, None)
         # Bootstrap assembly intentionally does not load an agent config: the
         # new agent may not exist yet and setup_agent creates its definition.
         agent_config = (

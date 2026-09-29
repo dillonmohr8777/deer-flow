@@ -354,7 +354,11 @@ async def test_start_run_stamps_a_normalized_effective_agent_name(org_world, _st
 
 @pytest.mark.asyncio
 async def test_start_run_replaces_a_caller_forged_effective_agent_name(org_world, _stub_app_config):  # noqa: F811
-    """A client cannot claim someone else's seat's burn for its own run."""
+    """A client cannot claim someone else's seat's burn for its own run.
+
+    A default-agent run holds no seat, so the forged key is dropped rather than
+    replaced (stamping ``lead-agent`` polluted ordinary run metadata).
+    """
     from unittest.mock import patch
 
     from app.gateway.run_models import RunCreateRequest
@@ -378,7 +382,7 @@ async def test_start_run_replaces_a_caller_forged_effective_agent_name(org_world
             record = await start_run(body, "thread-effective-name-forged", request)
             await record.task
 
-    assert record.metadata[EFFECTIVE_AGENT_NAME_METADATA_KEY] == "lead-agent"
+    assert EFFECTIVE_AGENT_NAME_METADATA_KEY not in record.metadata
 
 
 # ---------------------------------------------------------------------------
