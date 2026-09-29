@@ -1,5 +1,17 @@
 ### Tool System (`packages/harness/deerflow/tools/`)
 
+Hiring managers' tool ceilings come from stored agent configuration, using the
+ratified seat's persisted identity rather than a caller's case/underscore alias,
+never from the hire's requested tool groups. An explicit `tool_groups: null` (or
+omitted field) is unrestricted within the configured organization tool catalog;
+`[]` allows no tool groups. A `FileNotFoundError` permits that same unrestricted
+fallback only when the authoritative agent store confirms no record exists.
+Existing records with missing/invalid configs, load failures, malformed ceiling
+values, and failed absence checks return an actionable hiring error before
+`create_hire_atomic` or its announcement. Keep raw storage/config errors out of
+tool output. Regressions in `tests/test_hire_tools.py` use disposable SQLite and
+temporary config files; no live agent or ledger is required.
+
 `conversation.py` supplies the optional `read_conversation` tool. Ordinary lead
 assembly opts in only with a host reader; default, bootstrap, embedded and
 subagent assembly withhold it. The tool requires the worker-owned

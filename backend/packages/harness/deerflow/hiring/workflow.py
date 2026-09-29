@@ -98,8 +98,9 @@ def assert_can_hire(
             employee; a hire's own depth is its manager's depth + 1).
         max_org_depth: Owner-set cap on how deep a hire chain may go.
         manager_tool_groups: The manager's own tool groups, or ``None`` when
-            no ceiling could be resolved for the manager (a depth-1 titled
-            employee with no loadable agent config -- "no escalation" then
+            no extra restriction is configured for the manager (a depth-1
+            titled employee with no custom-agent record, or an explicitly
+            unrestricted config -- "no escalation" then
             falls back to :paramref:`known_tool_groups` alone).
         requested_tool_groups: Tool groups requested for the new hire.
         known_tool_groups: Every tool group name actually configured in the
