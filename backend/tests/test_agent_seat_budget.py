@@ -8,6 +8,7 @@ trailing window) resumes -- both announced to ``#exec`` via
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -17,10 +18,24 @@ from deerflow.exec_seats.budget import evaluate_all_seat_budgets, evaluate_seat_
 from deerflow.persistence.exec_seats import EFFECTIVE_AGENT_NAME_METADATA_KEY, AgentSeatRepository, AgentSeatStatus
 from deerflow.persistence.run.model import RunRow
 from deerflow.persistence.team_board import TeamBoardRepository
+from deerflow.runtime.user_context import WorkspaceStorageContext, reset_storage_context, set_storage_context
 from deerflow.tools.exec_seat_tools import announce_to_exec
 
 CMO_SEAT = "CMO"
 _DEFAULT_ASSISTANT_ID = "lead_agent"
+
+
+@contextmanager
+def _acting_with_no_organization(actor: str):
+    """Internal / auth-disabled / IM-channel shape: a real actor, no org at all.
+
+    Mirrors ``test_exec_seat_tools.py``'s helper of the same name (f72).
+    """
+    token = set_storage_context(WorkspaceStorageContext(actor_user_id=actor, organization_id=None, storage_user_id=actor, role=None))
+    try:
+        yield
+    finally:
+        reset_storage_context(token)
 
 
 def test_is_over_budget_pure():
@@ -111,6 +126,35 @@ async def test_seat_over_budget_is_paused_and_announced(org_world):  # noqa: F81
         exec_channel = next(c for c in await team_repo.list_channels() if c["slug"] == "exec")
         messages = await team_repo.list_messages(exec_channel["id"])
     assert any("blocked" in m["body"] and "CMO" in m["body"] for m in messages)
+
+
+@pytest.mark.asyncio
+async def test_null_org_seat_over_budget_is_paused_and_blocks_via_the_sweep(org_world):  # noqa: F811
+    """f123's own accept bar: a seat claimed with no active org (auth-disabled
+    mode, internal callers -- ``organization_for_write``'s quarantine marker)
+    over its weekly budget must still be paused by the ordinary sweep, and
+    ``paused_seat_blocking`` must then see it under the same null-org context.
+    Before the fix, ``token_burn_since`` always read 0 for such a seat (its
+    own burn was zeroed, not just other orgs'), so the sweep never paused it,
+    and even a manually-paused seat never blocked because ``paused_seat_for_agent``
+    also always returned ``None``."""
+    from deerflow.exec_seats.budget import paused_seat_blocking
+
+    repo = AgentSeatRepository(org_world)
+    now = datetime.now(UTC)
+    with _acting_with_no_organization(USER_A):
+        seat = await repo.claim_seat(seat=CMO_SEAT, agent_name="cmo-agent", weekly_token_budget=1000, claimed_by_user_id=USER_A)
+        seat = await repo.patch_seat(seat["id"], status=AgentSeatStatus.RATIFIED, ratified_by_user_id=USER_A)
+        assert seat["organization_id"] is None
+        await _spend(org_world, organization_id=None, agent_name="cmo-agent", total_tokens=5000, created_at=now - timedelta(days=1))
+
+        updated = await evaluate_seat_budget(repo, seat, now=now)
+
+        assert updated["paused_at"] is not None
+        blocking = await paused_seat_blocking("cmo-agent")
+
+    assert blocking is not None
+    assert blocking["id"] == seat["id"]
 
 
 @pytest.mark.asyncio
