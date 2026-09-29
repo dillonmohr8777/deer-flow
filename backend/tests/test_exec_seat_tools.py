@@ -325,6 +325,66 @@ async def test_null_organization_fails_closed_and_creates_no_rows(org_world):  #
     assert unchanged["status"] == AgentSeatStatus.CLAIMED
 
 
+@pytest.mark.asyncio
+async def test_null_organization_ratify_guard_blocks_cross_org_ceo_impersonation(org_world):  # noqa: F811
+    """Review follow-up (medium) on f92: the generic null-org test above uses
+    an agent name ("rogue-agent") that never matches a real seat, so deleting
+    the ratify guard alone left every test green -- the rejection came from
+    the ordinary CEO/owner check, not the guard. This reproduces the actual
+    exploit the guard closes: ``AgentSeatRepository.get_seat``/``ratified_holder``
+    apply no organization filter when ``resolve_organization_id()`` is
+    ``None``, so a no-org run declaring the real ratified CEO's own
+    ``agent_name`` would satisfy ``_actor_is_ceo`` and ratify ORG_S's own seat
+    from entirely outside ORG_S, if this guard were ever removed."""
+    with acting_as(USER_C, ORG_S):
+        ceo_seat = await _exec_claim_seat_impl(CEO_SEAT, "weekly plan", "objectives hit", 0, runtime=_runtime("ceo-agent"))
+    with acting_as(USER_A, ORG_S):
+        await _exec_ratify_seat_impl(ceo_seat["id"], runtime=_runtime("owner-agent"))
+        cmo_seat = await _exec_claim_seat_impl(CMO_SEAT, "content", "leads", 0, runtime=_runtime("cmo-agent"))
+
+    with _acting_with_no_organization(USER_B):
+        rejected = await _exec_ratify_seat_impl(cmo_seat["id"], runtime=_runtime("ceo-agent"))
+    assert set(rejected) == {"error"}
+
+    with acting_as(USER_A, ORG_S):
+        from deerflow.persistence.exec_seats import AgentSeatRepository
+
+        unchanged = await AgentSeatRepository(org_world).get_seat(cmo_seat["id"])
+    assert unchanged["status"] == AgentSeatStatus.CLAIMED
+
+
+@pytest.mark.asyncio
+async def test_null_organization_reopen_guard_holds_even_if_admin_check_were_forced_true(org_world, monkeypatch):  # noqa: F811
+    """Review follow-up (medium) on f92: ``_is_active_org_admin`` already
+    returns ``False`` when there's no organization, so in practice the reopen
+    guard is unreachable and its removal wouldn't fail any test. Forces
+    ``actor_is_owner`` true (as the review asked) to isolate the guard's own
+    contribution: even if the owner check ever changed to allow a null org,
+    reopen must still refuse outside an organization."""
+    with acting_as(USER_C, ORG_S):
+        cmo_seat = await _exec_claim_seat_impl(CMO_SEAT, "content", "leads", 0, runtime=_runtime("cmo-agent"))
+    with acting_as(USER_A, ORG_S):
+        ratified = await _exec_ratify_seat_impl(cmo_seat["id"], runtime=_runtime("owner-agent"))
+        assert ratified["status"] == AgentSeatStatus.RATIFIED
+
+    import deerflow.tools.exec_seat_tools as exec_seat_tools
+
+    async def _always_admin(_user_id: str) -> bool:
+        return True
+
+    monkeypatch.setattr(exec_seat_tools, "_is_active_org_admin", _always_admin)
+
+    with _acting_with_no_organization(USER_B):
+        rejected = await _exec_reopen_seat_impl(cmo_seat["id"], runtime=_runtime("intruder"))
+    assert set(rejected) == {"error"}
+
+    with acting_as(USER_A, ORG_S):
+        from deerflow.persistence.exec_seats import AgentSeatRepository
+
+        unchanged = await AgentSeatRepository(org_world).get_seat(cmo_seat["id"])
+    assert unchanged["status"] == AgentSeatStatus.RATIFIED
+
+
 def _tool_group_config():
     tools = [
         SimpleNamespace(name="read_file", group="file:read", use="deerflow.sandbox.tools:read_file_tool"),
