@@ -395,6 +395,8 @@ async def get_agent(name: str) -> AgentResponse:
     def _get() -> AgentResponse:
         # Worker thread: config read + SOUL read must stay off the event loop.
         agent_cfg = load_agent_config(name, user_id=user_id)
+        if agent_cfg is None:
+            raise FileNotFoundError(f"Agent '{name}' config is unavailable")
         return _agent_config_to_response(agent_cfg, include_soul=True, user_id=user_id)
 
     try:
@@ -467,6 +469,8 @@ async def create_agent_endpoint(request: AgentCreateRequest) -> AgentResponse:
         store.create(normalized_name, config_data, request.soul, user_id=user_id)
         logger.info("Created agent '%s'", normalized_name)
         agent_cfg = load_agent_config(normalized_name, user_id=user_id)
+        if agent_cfg is None:
+            raise ValueError("Created agent config readback is unavailable")
         return _agent_config_to_response(agent_cfg, include_soul=True, user_id=user_id)
 
     try:
@@ -505,6 +509,8 @@ async def update_agent(name: str, request: AgentUpdateRequest) -> AgentResponse:
     try:
         agent_cfg = await asyncio.to_thread(load_agent_config, name, user_id=user_id)
     except FileNotFoundError:
+        raise HTTPException(status_code=404, detail=f"Agent '{name}' not found")
+    if agent_cfg is None:
         raise HTTPException(status_code=404, detail=f"Agent '{name}' not found")
     await _require_visible_client_id(agent_cfg.client_id, name)
 
@@ -624,6 +630,8 @@ async def update_agent(name: str, request: AgentUpdateRequest) -> AgentResponse:
         def _refresh() -> AgentResponse:
             # Worker thread: re-read config + SOUL off the event loop.
             refreshed_cfg = load_agent_config(name, user_id=user_id)
+            if refreshed_cfg is None:
+                raise FileNotFoundError(f"Agent '{name}' config readback is unavailable")
             return _agent_config_to_response(refreshed_cfg, include_soul=True, user_id=user_id)
 
         return await asyncio.to_thread(_refresh)

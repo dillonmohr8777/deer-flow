@@ -189,6 +189,16 @@ async def test_tool_ceiling_round_trip_omission_empty_and_null(_agent_env) -> No
     assert (await update_agent("limited", AgentUpdateRequest(tool_names=None))).tool_names is None
 
 
+async def test_absent_config_cannot_be_treated_as_owner_permission_defaults(_agent_env, monkeypatch) -> None:
+    monkeypatch.setattr("app.gateway.routers.agents.load_agent_config", lambda *args, **kwargs: None)
+    with pytest.raises(HTTPException) as read_error:
+        await get_agent("missing")
+    assert read_error.value.status_code == 404
+    with pytest.raises(HTTPException) as update_error:
+        await update_agent("missing", AgentUpdateRequest(description="must not write"))
+    assert update_error.value.status_code == 404
+
+
 async def test_plugin_selection_persists_empty_omitted_and_null(_agent_env):
     created = await create_agent_endpoint(AgentCreateRequest(name="selected", mcp_plugins=["stable-installation"], skills=["research"]))
     assert created.mcp_plugins == ["stable-installation"]
