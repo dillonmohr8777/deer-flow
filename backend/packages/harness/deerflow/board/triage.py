@@ -12,6 +12,11 @@ column yet, so this module has no persistence dependency of its own. Callers
 decide whether and how to store the result (e.g. patching ``kind`` onto the
 thread via ``BoardRepository.patch_thread``); a follow-up migration would be
 needed before ``urgency``/``summary`` could be persisted.
+
+The model call itself *is* recorded, into the operations-console usage
+ledger via ``deerflow.board.usage.record_board_model_usage`` (Workspace Phase
+4 item e7), tagged with whatever ``organization_id``/``client_id``/
+``board_thread_id`` the caller passes in.
 """
 
 from __future__ import annotations
@@ -23,6 +28,7 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
+from deerflow.board.usage import RecordBoardUsageFn, record_board_model_usage
 from deerflow.config import get_app_config
 from deerflow.config.app_config import AppConfig
 from deerflow.models import create_chat_model
@@ -104,6 +110,11 @@ async def triage_board_thread(
     app_config: AppConfig | None = None,
     model_name: str | None = None,
     attach_tracing: bool = True,
+    organization_id: str | None = None,
+    client_id: str | None = None,
+    board_thread_id: str | None = None,
+    user_id: str | None = None,
+    record_usage: RecordBoardUsageFn | None = None,
 ) -> BoardThreadTriage:
     """Classify a new board thread's kind, urgency and summary.
 
@@ -111,7 +122,19 @@ async def triage_board_thread(
     default (``ticket`` / ``normal`` / a truncated echo of the content) rather
     than raising -- triage is an aid, not a gate, so a thread must never be
     lost because classification failed.
+
+    The model call itself is recorded into the usage ledger
+    (``deerflow.board.usage.record_board_model_usage``) with
+    ``organization_id``/``client_id``/``board_thread_id`` when the caller has
+    them, regardless of whether the response parses into a usable
+    classification. ``user_id`` should be the real owner the recorded run
+    belongs to (e.g. the thread's creator): without an explicit value the
+    recording falls back to ``get_effective_user_id()``, which outside a
+    request context resolves to a synthetic default that no real account's
+    usage-ledger query (``GET /api/console/usage-ledger``, filtered by the
+    querying user's own id) will ever match.
     """
+    record_fn = record_usage or record_board_model_usage
     rubric = (
         "You are Momo, an assistant that triages incoming messages on a client's board. "
         "Classify the message into a kind, an urgency and a one-sentence summary.\n"
@@ -143,6 +166,32 @@ async def triage_board_thread(
             ],
             config=invoke_config,
         )
+    except Exception as exc:
+        logger.warning("Board triage model call failed; falling back to a default classification", exc_info=True)
+        await record_fn(
+            caller="board_triage",
+            attempt_status="error",
+            organization_id=organization_id,
+            client_id=client_id,
+            board_thread_id=board_thread_id,
+            user_id=user_id,
+            requested_model=model_name,
+            error_type=type(exc).__name__,
+        )
+        return BoardThreadTriage(kind=BoardThreadKind.TICKET.value, urgency=_DEFAULT_URGENCY, summary=_fallback_summary(content))
+
+    await record_fn(
+        caller="board_triage",
+        attempt_status="success",
+        organization_id=organization_id,
+        client_id=client_id,
+        board_thread_id=board_thread_id,
+        user_id=user_id,
+        requested_model=model_name,
+        response=response,
+    )
+
+    try:
         raw = extract_response_text(getattr(response, "content", ""))
         parsed = _extract_json_object(raw)
         if parsed:
@@ -153,6 +202,6 @@ async def triage_board_thread(
                 return BoardThreadTriage(kind=kind, urgency=urgency, summary=summary)
         logger.warning("Board triage produced unparseable output: %s", raw[:200])
     except Exception:
-        logger.warning("Board triage model call failed; falling back to a default classification", exc_info=True)
+        logger.warning("Board triage response parsing failed; falling back to a default classification", exc_info=True)
 
     return BoardThreadTriage(kind=BoardThreadKind.TICKET.value, urgency=_DEFAULT_URGENCY, summary=_fallback_summary(content))

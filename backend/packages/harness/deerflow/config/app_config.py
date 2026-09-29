@@ -98,6 +98,19 @@ class MomentumInternalConfig(BaseModel):
     )
 
 
+class BoardConfig(BaseModel):
+    """Momo Board draft-concierge switches (Workspace Phase 4 item e5)."""
+
+    concierge_enabled: bool = Field(
+        default=False,
+        description="Runs a background loop that drafts Momo's reply for new/triaged board threads through the same workflow gate the /draft route uses. Never approves or sends a reply -- an owner must still do that. Off by default.",
+    )
+    concierge_interval_seconds: int = Field(
+        default=300,
+        description="How often the concierge loop scans for new/triaged threads to draft, when concierge_enabled is true.",
+    )
+
+
 class LlmCallConfig(BaseModel):
     """Configuration for LLM call execution (concurrency / rate shaping).
 
@@ -276,6 +289,7 @@ class AppConfig(BaseModel):
     agents_api: AgentsApiConfig = Field(default_factory=AgentsApiConfig, description="Custom-agent management API configuration")
     private_workspace: PrivateWorkspaceConfig = Field(default_factory=PrivateWorkspaceConfig, description="Owner-only private workspace switches (the Desk home)")
     momentum_internal: MomentumInternalConfig = Field(default_factory=MomentumInternalConfig, description="Staff-only Team channels and AI Academy for the agency's own workspace")
+    board: BoardConfig = Field(default_factory=BoardConfig, description="Momo Board draft-concierge switches")
     acp_agents: dict[str, ACPAgentConfig] = Field(default_factory=dict, description="ACP-compatible agent configuration")
     subagents: SubagentsAppConfig = Field(default_factory=SubagentsAppConfig, description="Subagent runtime configuration")
     guardrails: GuardrailsConfig = Field(default_factory=GuardrailsConfig, description="Guardrail middleware configuration")
