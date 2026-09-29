@@ -324,6 +324,14 @@
   line-height: 1;
 }
 
+/* DESIGN.md's 44px touch floor on phones (Scheduled tasks, Board and
+   Capability Center filters share this). */
+@media (max-width: 639px) {
+  .filter {
+    min-height: 44px;
+  }
+}
+
 .filter:hover {
   color: var(--foreground);
   background: var(--accent);

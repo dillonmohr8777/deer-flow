@@ -16,6 +16,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Select,
   SelectContent,
@@ -64,6 +65,11 @@ import type {
   ScheduledTaskRun,
 } from "@/core/scheduled-tasks/types";
 import { cn } from "@/lib/utils";
+
+// DESIGN.md's 44px touch floor for the text buttons on a phone (pause,
+// trigger, run pages, recipes, create). workspace-mobile.css only lifts
+// icon buttons; desktop sizes are unchanged.
+const PHONE_TOUCH_FLOOR = "max-sm:[&_button]:min-h-11";
 
 function ReuseThreadNotice({
   title,
@@ -176,6 +182,8 @@ export default function ScheduledTasksPage() {
   const [createNonce, setCreateNonce] = useState(0);
   const createFormRef = useRef<HTMLDivElement>(null);
   const createTitleRef = useRef<HTMLInputElement>(null);
+  const detailTitleRef = useRef<HTMLHeadingElement>(null);
+  const detailRef = useRef<HTMLElement>(null);
   const agentOptions = useMemo(() => {
     const names = new Set((agentsQuery.data ?? []).map((agent) => agent.name));
     const options = [
@@ -254,6 +262,23 @@ export default function ScheduledTasksPage() {
     });
     createTitleRef.current?.focus({ preventScroll: true });
   };
+  // Below lg the detail sheet stacks under the list, so a tap on a phone
+  // changed a sheet off screen and looked like nothing happened. Bring the
+  // sheet to the tap and hand it focus, as the Board does for a thread.
+  const selectTask = (id: string) => {
+    setSelectedTaskId(id);
+    if (!window.matchMedia("(max-width: 1023px)").matches) return;
+    requestAnimationFrame(() => {
+      const reduce = window.matchMedia(
+        "(prefers-reduced-motion: reduce)",
+      ).matches;
+      detailRef.current?.scrollIntoView({
+        behavior: reduce ? "auto" : "smooth",
+        block: "start",
+      });
+      detailTitleRef.current?.focus({ preventScroll: true });
+    });
+  };
   const duplicateTask = (task: ScheduledTask) => {
     setTitle(`${task.title}${st.actions.duplicateTitleSuffix}`);
     setPrompt(task.prompt);
@@ -326,6 +351,7 @@ export default function ScheduledTasksPage() {
       ref={createFormRef}
       className={cn(
         "grid gap-3 rounded-lg border p-4 sm:p-5",
+        PHONE_TOUCH_FLOOR,
         pageStyles.sheet,
       )}
       data-testid="scheduled-task-create-form"
@@ -469,478 +495,501 @@ export default function ScheduledTasksPage() {
     <WorkspaceContainer>
       <WorkspaceHeader />
       <WorkspaceBody className={pageStyles.page}>
-        <div className="momentum-page mx-auto flex w-full max-w-(--container-width-lg) flex-col gap-6 p-4 pb-28 sm:p-6 sm:pb-28">
-          <header className="flex flex-wrap items-end justify-between gap-3 pt-2">
-            <div>
-              <h1 className="text-2xl">{t.sidebar.scheduledTasks}</h1>
-              <p className={cn(pageStyles.lede, "mt-1")}>{st.lede}</p>
-            </div>
-            {!formFirst && data && (
-              <Button onClick={focusCreateForm}>
-                <Plus />
-                {st.create.newTask}
-              </Button>
-            )}
-          </header>
-          {formFirst && createForm}
-          {threadId && (
-            <div className="text-muted-foreground text-sm">
-              {st.detail.filteredByThread.replace("{id}", threadId)}
-            </div>
-          )}
-          {queryError ? (
-            <div data-testid="scheduled-task-load-error">
-              <ErrorState
-                message={st.detail.loadFailed}
-                detail={queryError.message}
-                action={
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={tasksQuery.isFetching}
-                    onClick={() => void tasksQuery.refetch()}
-                  >
-                    {t.common.tryAgain}
-                  </Button>
-                }
-              />
-            </div>
-          ) : null}
-          <div className="flex flex-col gap-3">
-            <div className="flex gap-2">
-              <Input
-                type="search"
-                aria-label={st.search.placeholder}
-                placeholder={st.search.placeholder}
-                value={taskSearch}
-                onChange={(event) => setTaskSearch(event.target.value)}
-              />
-              {taskSearch && (
-                <Button variant="outline" onClick={() => setTaskSearch("")}>
-                  {st.search.clear}
+        {/* The page scrolls inside the body, like Desk and Projects, so the
+            header and the phone tab bar keep their edges. */}
+        <ScrollArea className="size-full">
+          <div className="momentum-page mx-auto flex w-full max-w-(--container-width-lg) flex-col gap-6 p-4 pb-28 sm:p-6 sm:pb-28">
+            <header className="flex flex-wrap items-end justify-between gap-3 pt-2">
+              <div>
+                <h1 className="text-2xl">{t.sidebar.scheduledTasks}</h1>
+                <p className={cn(pageStyles.lede, "mt-1")}>{st.lede}</p>
+              </div>
+              {!formFirst && data && (
+                <Button onClick={focusCreateForm} className="max-sm:min-h-11">
+                  <Plus />
+                  {st.create.newTask}
                 </Button>
               )}
-            </div>
-            <div className="flex flex-wrap gap-x-8 gap-y-2">
-              <FilterGroup
-                label={st.filters.status}
-                showLabel
-                value={statusFilter}
-                onChange={setStatusFilter}
-                options={[
-                  { value: "all", label: st.filters.allStatuses },
-                  { value: "enabled", label: st.filters.enabled },
-                  { value: "paused", label: st.filters.paused },
-                  { value: "completed", label: st.filters.completed },
-                  { value: "failed", label: st.filters.failed },
-                ]}
-              />
-              <FilterGroup
-                label={st.filters.type}
-                showLabel
-                value={typeFilter}
-                onChange={setTypeFilter}
-                options={[
-                  { value: "all", label: st.filters.allTypes },
-                  { value: "cron", label: st.filters.cron },
-                  { value: "once", label: st.filters.once },
-                  { value: "interval", label: st.filters.interval },
-                ]}
-              />
-            </div>
-          </div>
-          <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)]">
-            <div data-testid="scheduled-task-list" className="flex flex-col">
-              {tasksQuery.isLoading ? (
-                <WorkingState label={t.common.loading} />
-              ) : null}
-              {data && !queryError && data.length === 0 && (
-                <EmptyState momo="reliability">{st.empty}</EmptyState>
-              )}
-              {data &&
-                !queryError &&
-                data.length > 0 &&
-                filteredData.length === 0 && (
-                  <p
-                    role="status"
-                    data-testid="scheduled-task-search-empty"
-                    className="text-muted-foreground py-4 text-sm"
-                  >
-                    {st.search.noResults}
-                  </p>
-                )}
-              {filteredData.length > 0 && (
-                <ul className={cn("divide-y border-y", pageStyles.rows)}>
-                  {filteredData.map((task) => {
-                    const isSelected = selectedTask?.id === task.id;
-                    const nextRun = formatTimestamp(task.next_run_at, locale);
-                    return (
-                      <li
-                        key={task.id}
-                        className={cn(
-                          pageStyles.pin,
-                          task.status === "running" && "pinned",
-                        )}
-                      >
-                        <button
-                          type="button"
-                          onClick={() => setSelectedTaskId(task.id)}
-                          aria-pressed={isSelected}
-                          data-testid={`scheduled-task-item-${task.id}`}
-                          className={cn(
-                            "flex w-full flex-col gap-1 border-l-2 px-3 py-3 text-left transition-colors",
-                            isSelected
-                              ? "border-l-primary bg-accent"
-                              : "hover:bg-accent border-l-transparent",
-                          )}
-                        >
-                          <span className="flex items-start justify-between gap-3">
-                            <span className="min-w-0 font-bold [overflow-wrap:anywhere]">
-                              {task.title}
-                            </span>
-                            <StatusTag
-                              tone={statusTone(task.status)}
-                              className="mt-0.5 shrink-0"
-                            >
-                              {statusLabel(task.status)}
-                            </StatusTag>
-                          </span>
-                          <span className="text-muted-foreground text-xs">
-                            {scheduleTypeLabel(task.schedule_type)}
-                            {" · "}
-                            {st.detail.nextRun}{" "}
-                            {nextRun ?? st.detail.notScheduled}
-                          </span>
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </div>
-            {/* No task, no detail sheet: the list already says why. */}
-            {selectedTask ? (
-              <section
-                className={cn("rounded-lg border p-4 sm:p-5", pageStyles.sheet)}
-                data-testid="scheduled-task-detail"
-              >
-                <div className="flex flex-col gap-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <h2 className="text-lg font-semibold [overflow-wrap:anywhere]">
-                        {selectedTask.title}
-                      </h2>
-                      <StatusTag
-                        tone={statusTone(selectedTask.status)}
-                        className="mt-1"
-                      >
-                        {statusLabel(selectedTask.status)}
-                      </StatusTag>
-                    </div>
+            </header>
+            {formFirst && createForm}
+            {threadId && (
+              <div className="text-muted-foreground text-sm">
+                {st.detail.filteredByThread.replace("{id}", threadId)}
+              </div>
+            )}
+            {queryError ? (
+              <div data-testid="scheduled-task-load-error">
+                <ErrorState
+                  message={st.detail.loadFailed}
+                  detail={queryError.message}
+                  action={
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => setEditing((value) => !value)}
+                      disabled={tasksQuery.isFetching}
+                      onClick={() => void tasksQuery.refetch()}
                     >
-                      {editing ? st.actions.cancelEdit : st.actions.edit}
+                      {t.common.tryAgain}
                     </Button>
-                  </div>
-                  {/* Receipt fields: plain, and every gap named in words. */}
-                  <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1.5 text-sm">
-                    <dt className="text-muted-foreground">
-                      {st.detail.schedule}
-                    </dt>
-                    <dd>{scheduleTypeLabel(selectedTask.schedule_type)}</dd>
-                    <dt className="text-muted-foreground">
-                      {st.detail.nextRun}
-                    </dt>
-                    <dd>
-                      {formatTimestamp(selectedTask.next_run_at, locale) ??
-                        st.detail.notScheduled}
-                    </dd>
-                    <dt className="text-muted-foreground">
-                      {st.detail.lastRun}
-                    </dt>
-                    <dd>
-                      {formatTimestamp(selectedTask.last_run_at, locale) ??
-                        st.detail.never}
-                    </dd>
-                    <dt className="text-muted-foreground">{st.detail.agent}</dt>
-                    <dd className="[overflow-wrap:anywhere]">
-                      {agentDisplayName(
-                        selectedTask.assistant_id,
-                        st.create.leadAgent,
-                      )}
-                    </dd>
-                    <dt className="text-muted-foreground">
-                      {st.detail.contextMode}
-                    </dt>
-                    <dd>{contextModeLabel(selectedTask.context_mode)}</dd>
-                    <dt className="text-muted-foreground">
-                      {selectedTask.context_mode === "reuse_thread"
-                        ? st.detail.thread
-                        : st.detail.lastThread}
-                    </dt>
-                    <dd>
-                      <ReceiptId
-                        value={
-                          selectedTask.context_mode === "reuse_thread"
-                            ? selectedTask.thread_id
-                            : selectedTask.last_thread_id
-                        }
-                        missing={st.detail.none}
-                      />
-                    </dd>
-                    <dt className="text-muted-foreground">
-                      {st.detail.lastRunId}
-                    </dt>
-                    <dd>
-                      <ReceiptId
-                        value={selectedTask.last_run_id}
-                        missing={st.detail.none}
-                      />
-                    </dd>
-                    <dt className="text-muted-foreground">
-                      {st.detail.lastError}
-                    </dt>
-                    <dd
-                      className={cn(
-                        "[overflow-wrap:anywhere]",
-                        selectedTask.last_error
-                          ? "text-destructive"
-                          : "text-muted-foreground",
-                      )}
+                  }
+                />
+              </div>
+            ) : null}
+            <div className="flex flex-col gap-3">
+              <div className="flex gap-2">
+                <Input
+                  type="search"
+                  aria-label={st.search.placeholder}
+                  placeholder={st.search.placeholder}
+                  value={taskSearch}
+                  onChange={(event) => setTaskSearch(event.target.value)}
+                />
+                {taskSearch && (
+                  <Button variant="outline" onClick={() => setTaskSearch("")}>
+                    {st.search.clear}
+                  </Button>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-x-8 gap-y-2">
+                <FilterGroup
+                  label={st.filters.status}
+                  showLabel
+                  value={statusFilter}
+                  onChange={setStatusFilter}
+                  options={[
+                    { value: "all", label: st.filters.allStatuses },
+                    { value: "enabled", label: st.filters.enabled },
+                    { value: "paused", label: st.filters.paused },
+                    { value: "completed", label: st.filters.completed },
+                    { value: "failed", label: st.filters.failed },
+                  ]}
+                />
+                <FilterGroup
+                  label={st.filters.type}
+                  showLabel
+                  value={typeFilter}
+                  onChange={setTypeFilter}
+                  options={[
+                    { value: "all", label: st.filters.allTypes },
+                    { value: "cron", label: st.filters.cron },
+                    { value: "once", label: st.filters.once },
+                    { value: "interval", label: st.filters.interval },
+                  ]}
+                />
+              </div>
+            </div>
+            <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)]">
+              <div data-testid="scheduled-task-list" className="flex flex-col">
+                {tasksQuery.isLoading ? (
+                  <WorkingState label={t.common.loading} />
+                ) : null}
+                {data && !queryError && data.length === 0 && (
+                  <EmptyState momo="reliability">{st.empty}</EmptyState>
+                )}
+                {data &&
+                  !queryError &&
+                  data.length > 0 &&
+                  filteredData.length === 0 && (
+                    <p
+                      role="status"
+                      data-testid="scheduled-task-search-empty"
+                      className="text-muted-foreground py-4 text-sm"
                     >
-                      {selectedTask.last_error ?? st.detail.none}
-                    </dd>
-                  </dl>
-                  {selectedTask.context_mode === "reuse_thread" && (
-                    <ReuseThreadNotice
-                      title={st.context.reuseNoticeTitle}
-                      description={st.context.reuseNoticeDescription}
-                    />
-                  )}
-                  {editing ? (
-                    <div className="flex flex-col gap-2 rounded-lg border p-3">
-                      <Input
-                        value={editTitle}
-                        onChange={(event) => setEditTitle(event.target.value)}
-                        placeholder={st.edit.titlePlaceholder}
-                      />
-                      <Textarea
-                        rows={4}
-                        value={editPrompt}
-                        onChange={(event) => setEditPrompt(event.target.value)}
-                        placeholder={st.edit.promptPlaceholder}
-                      />
-                      <Select
-                        value={editAssistantId}
-                        onValueChange={setEditAssistantId}
-                      >
-                        <SelectTrigger
-                          className="w-full"
-                          data-testid="scheduled-task-edit-agent"
-                          aria-label={st.create.agent}
-                        >
-                          <SelectValue placeholder={st.create.agent} />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {agentOptions.map((option) => (
-                            <SelectItem key={option.value} value={option.value}>
-                              {option.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <ScheduledTaskScheduleInput
-                        key={selectedTask.id}
-                        initial={editSchedule}
-                        onChange={setEditSchedule}
-                        scheduleTypeLocked
-                      />
-                      <Button
-                        size="sm"
-                        onClick={() => {
-                          if (!hasScheduleSpec(editSchedule.schedule_spec))
-                            return;
-                          const pinned =
-                            selectedTask.assistant_id ?? DEFAULT_ASSISTANT_ID;
-                          updateTask.mutate({
-                            title: editTitle,
-                            prompt: editPrompt,
-                            ...(editAssistantId !== pinned
-                              ? { assistant_id: editAssistantId }
-                              : {}),
-                            schedule_spec: editSchedule.schedule_spec,
-                            timezone: editSchedule.timezone || "UTC",
-                          });
-                        }}
-                        disabled={
-                          updateTask.isPending ||
-                          !hasScheduleSpec(editSchedule.schedule_spec)
-                        }
-                      >
-                        {st.edit.submit}
-                      </Button>
-                    </div>
-                  ) : (
-                    <p className="text-sm leading-6 [overflow-wrap:anywhere] whitespace-pre-wrap">
-                      {selectedTask.prompt}
+                      {st.search.noResults}
                     </p>
                   )}
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        selectedTask.status === "paused"
-                          ? resumeTask.mutate(selectedTask.id)
-                          : pauseTask.mutate(selectedTask.id)
-                      }
-                    >
-                      {selectedTask.status === "paused"
-                        ? st.actions.resume
-                        : st.actions.pause}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => triggerTask.mutate(selectedTask.id)}
-                    >
-                      {st.actions.trigger}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => duplicateTask(selectedTask)}
-                    >
-                      <CopyIcon />
-                      {st.actions.duplicate}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="text-destructive hover:text-destructive"
-                      onClick={() => setDeleteOpen(true)}
-                    >
-                      {st.actions.delete}
-                    </Button>
-                  </div>
-                  <nav
-                    aria-label={st.history.navigation}
-                    className="flex flex-wrap items-center gap-2"
-                  >
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={
-                        taskRunsQuery.page === 0 || taskRunsQuery.isFetching
-                      }
-                      onClick={taskRunsQuery.newer}
-                    >
-                      {st.history.newer}
-                    </Button>
-                    <span className="text-muted-foreground text-sm">
-                      {st.history.page.replace(
-                        "{page}",
-                        String(taskRunsQuery.page + 1),
-                      )}
-                    </span>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={
-                        !taskRunsQuery.hasOlder || taskRunsQuery.isFetching
-                      }
-                      onClick={taskRunsQuery.older}
-                    >
-                      {st.history.older}
-                    </Button>
-                    {taskRunsQuery.page > 0 && (
+                {filteredData.length > 0 && (
+                  <ul className={cn("divide-y border-y", pageStyles.rows)}>
+                    {filteredData.map((task) => {
+                      const isSelected = selectedTask?.id === task.id;
+                      const nextRun = formatTimestamp(task.next_run_at, locale);
+                      return (
+                        <li
+                          key={task.id}
+                          className={cn(
+                            pageStyles.pin,
+                            task.status === "running" && "pinned",
+                          )}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => selectTask(task.id)}
+                            aria-pressed={isSelected}
+                            data-testid={`scheduled-task-item-${task.id}`}
+                            className={cn(
+                              "flex w-full flex-col gap-1 border-l-2 px-3 py-3 text-left transition-colors",
+                              isSelected
+                                ? "border-l-primary bg-accent"
+                                : "hover:bg-accent border-l-transparent",
+                            )}
+                          >
+                            <span className="flex items-start justify-between gap-3">
+                              <span className="min-w-0 font-bold [overflow-wrap:anywhere]">
+                                {task.title}
+                              </span>
+                              <StatusTag
+                                tone={statusTone(task.status)}
+                                className="mt-0.5 shrink-0"
+                              >
+                                {statusLabel(task.status)}
+                              </StatusTag>
+                            </span>
+                            <span className="text-muted-foreground text-xs">
+                              {scheduleTypeLabel(task.schedule_type)}
+                              {" · "}
+                              {st.detail.nextRun}{" "}
+                              {nextRun ?? st.detail.notScheduled}
+                            </span>
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+              {/* No task, no detail sheet: the list already says why. */}
+              {selectedTask ? (
+                <section
+                  ref={detailRef}
+                  className={cn(
+                    "scroll-mt-4 rounded-lg border p-4 sm:p-5",
+                    PHONE_TOUCH_FLOOR,
+                    pageStyles.sheet,
+                  )}
+                  data-testid="scheduled-task-detail"
+                >
+                  <div className="flex flex-col gap-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <h2
+                          ref={detailTitleRef}
+                          tabIndex={-1}
+                          className="text-lg font-semibold [overflow-wrap:anywhere]"
+                        >
+                          {selectedTask.title}
+                        </h2>
+                        <StatusTag
+                          tone={statusTone(selectedTask.status)}
+                          className="mt-1"
+                        >
+                          {statusLabel(selectedTask.status)}
+                        </StatusTag>
+                      </div>
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={taskRunsQuery.latest}
+                        onClick={() => setEditing((value) => !value)}
                       >
-                        {st.history.latest}
+                        {editing ? st.actions.cancelEdit : st.actions.edit}
                       </Button>
+                    </div>
+                    {/* Receipt fields: plain, and every gap named in words. */}
+                    <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1.5 text-sm">
+                      <dt className="text-muted-foreground">
+                        {st.detail.schedule}
+                      </dt>
+                      <dd>{scheduleTypeLabel(selectedTask.schedule_type)}</dd>
+                      <dt className="text-muted-foreground">
+                        {st.detail.nextRun}
+                      </dt>
+                      <dd>
+                        {formatTimestamp(selectedTask.next_run_at, locale) ??
+                          st.detail.notScheduled}
+                      </dd>
+                      <dt className="text-muted-foreground">
+                        {st.detail.lastRun}
+                      </dt>
+                      <dd>
+                        {formatTimestamp(selectedTask.last_run_at, locale) ??
+                          st.detail.never}
+                      </dd>
+                      <dt className="text-muted-foreground">
+                        {st.detail.agent}
+                      </dt>
+                      <dd className="[overflow-wrap:anywhere]">
+                        {agentDisplayName(
+                          selectedTask.assistant_id,
+                          st.create.leadAgent,
+                        )}
+                      </dd>
+                      <dt className="text-muted-foreground">
+                        {st.detail.contextMode}
+                      </dt>
+                      <dd>{contextModeLabel(selectedTask.context_mode)}</dd>
+                      <dt className="text-muted-foreground">
+                        {selectedTask.context_mode === "reuse_thread"
+                          ? st.detail.thread
+                          : st.detail.lastThread}
+                      </dt>
+                      <dd>
+                        <ReceiptId
+                          value={
+                            selectedTask.context_mode === "reuse_thread"
+                              ? selectedTask.thread_id
+                              : selectedTask.last_thread_id
+                          }
+                          missing={st.detail.none}
+                        />
+                      </dd>
+                      <dt className="text-muted-foreground">
+                        {st.detail.lastRunId}
+                      </dt>
+                      <dd>
+                        <ReceiptId
+                          value={selectedTask.last_run_id}
+                          missing={st.detail.none}
+                        />
+                      </dd>
+                      <dt className="text-muted-foreground">
+                        {st.detail.lastError}
+                      </dt>
+                      <dd
+                        className={cn(
+                          "[overflow-wrap:anywhere]",
+                          selectedTask.last_error
+                            ? "text-destructive"
+                            : "text-muted-foreground",
+                        )}
+                      >
+                        {selectedTask.last_error ?? st.detail.none}
+                      </dd>
+                    </dl>
+                    {selectedTask.context_mode === "reuse_thread" && (
+                      <ReuseThreadNotice
+                        title={st.context.reuseNoticeTitle}
+                        description={st.context.reuseNoticeDescription}
+                      />
                     )}
-                  </nav>
-                  {taskRunsQuery.page > 0 && (
-                    <p className="text-muted-foreground text-xs">
-                      {st.history.paused}
-                    </p>
-                  )}
-                  {taskRunsQuery.isPending && (
-                    <WorkingState label={st.history.loading} className="py-2" />
-                  )}
-                  {taskRunsQuery.isError && (
-                    <ErrorState
-                      className="py-2"
-                      message={st.history.loadFailed}
-                      action={
+                    {editing ? (
+                      <div className="flex flex-col gap-2 rounded-lg border p-3">
+                        <Input
+                          value={editTitle}
+                          onChange={(event) => setEditTitle(event.target.value)}
+                          placeholder={st.edit.titlePlaceholder}
+                        />
+                        <Textarea
+                          rows={4}
+                          value={editPrompt}
+                          onChange={(event) =>
+                            setEditPrompt(event.target.value)
+                          }
+                          placeholder={st.edit.promptPlaceholder}
+                        />
+                        <Select
+                          value={editAssistantId}
+                          onValueChange={setEditAssistantId}
+                        >
+                          <SelectTrigger
+                            className="w-full"
+                            data-testid="scheduled-task-edit-agent"
+                            aria-label={st.create.agent}
+                          >
+                            <SelectValue placeholder={st.create.agent} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {agentOptions.map((option) => (
+                              <SelectItem
+                                key={option.value}
+                                value={option.value}
+                              >
+                                {option.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <ScheduledTaskScheduleInput
+                          key={selectedTask.id}
+                          initial={editSchedule}
+                          onChange={setEditSchedule}
+                          scheduleTypeLocked
+                        />
+                        <Button
+                          size="sm"
+                          onClick={() => {
+                            if (!hasScheduleSpec(editSchedule.schedule_spec))
+                              return;
+                            const pinned =
+                              selectedTask.assistant_id ?? DEFAULT_ASSISTANT_ID;
+                            updateTask.mutate({
+                              title: editTitle,
+                              prompt: editPrompt,
+                              ...(editAssistantId !== pinned
+                                ? { assistant_id: editAssistantId }
+                                : {}),
+                              schedule_spec: editSchedule.schedule_spec,
+                              timezone: editSchedule.timezone || "UTC",
+                            });
+                          }}
+                          disabled={
+                            updateTask.isPending ||
+                            !hasScheduleSpec(editSchedule.schedule_spec)
+                          }
+                        >
+                          {st.edit.submit}
+                        </Button>
+                      </div>
+                    ) : (
+                      <p className="text-sm leading-6 [overflow-wrap:anywhere] whitespace-pre-wrap">
+                        {selectedTask.prompt}
+                      </p>
+                    )}
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          selectedTask.status === "paused"
+                            ? resumeTask.mutate(selectedTask.id)
+                            : pauseTask.mutate(selectedTask.id)
+                        }
+                      >
+                        {selectedTask.status === "paused"
+                          ? st.actions.resume
+                          : st.actions.pause}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => triggerTask.mutate(selectedTask.id)}
+                      >
+                        {st.actions.trigger}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => duplicateTask(selectedTask)}
+                      >
+                        <CopyIcon />
+                        {st.actions.duplicate}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-destructive hover:text-destructive"
+                        onClick={() => setDeleteOpen(true)}
+                      >
+                        {st.actions.delete}
+                      </Button>
+                    </div>
+                    <nav
+                      aria-label={st.history.navigation}
+                      className="flex flex-wrap items-center gap-2"
+                    >
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={
+                          taskRunsQuery.page === 0 || taskRunsQuery.isFetching
+                        }
+                        onClick={taskRunsQuery.newer}
+                      >
+                        {st.history.newer}
+                      </Button>
+                      <span className="text-muted-foreground text-sm">
+                        {st.history.page.replace(
+                          "{page}",
+                          String(taskRunsQuery.page + 1),
+                        )}
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={
+                          !taskRunsQuery.hasOlder || taskRunsQuery.isFetching
+                        }
+                        onClick={taskRunsQuery.older}
+                      >
+                        {st.history.older}
+                      </Button>
+                      {taskRunsQuery.page > 0 && (
                         <Button
                           variant="outline"
                           size="sm"
-                          disabled={taskRunsQuery.isFetching}
-                          onClick={() => void taskRunsQuery.refetch()}
+                          onClick={taskRunsQuery.latest}
                         >
-                          {st.history.retry}
+                          {st.history.latest}
                         </Button>
-                      }
-                    />
-                  )}
-                  {!taskRunsQuery.isPending && !taskRunsQuery.isError && (
-                    <div
-                      className={pageStyles.eyebrow}
-                      data-testid="scheduled-task-runs"
-                    >
-                      {(taskRunsQuery.data ?? []).length === 1
-                        ? st.detail.runsCountOne.replace(
-                            "{count}",
-                            String((taskRunsQuery.data ?? []).length),
-                          )
-                        : st.detail.runsCount.replace(
-                            "{count}",
-                            String((taskRunsQuery.data ?? []).length),
-                          )}
-                    </div>
-                  )}
-                  {/* Receipts get the least decoration: text on hairlines. */}
-                  <div
-                    className={cn("flex flex-col divide-y", pageStyles.rows)}
-                    data-testid="scheduled-task-run-list"
-                  >
-                    {(taskRunsQuery.data ?? []).length > 0 ? (
-                      (taskRunsQuery.data ?? []).map((run) => (
-                        <div key={run.id} className="py-2 text-sm">
-                          <div className="font-medium">{runSummary(run)}</div>
-                          <div className="text-muted-foreground font-mono text-xs break-all">
-                            {run.run_id ?? st.detail.none}
-                          </div>
-                          <div className="text-muted-foreground text-xs">
-                            {formatTimestamp(run.scheduled_for, locale) ??
-                              st.detail.none}
-                          </div>
-                          {run.error && (
-                            <div className="text-destructive text-xs [overflow-wrap:anywhere]">
-                              {run.error}
-                            </div>
-                          )}
-                        </div>
-                      ))
-                    ) : !taskRunsQuery.isPending && !taskRunsQuery.isError ? (
-                      <div className="text-muted-foreground py-2 text-sm">
-                        {st.detail.noRuns}
+                      )}
+                    </nav>
+                    {taskRunsQuery.page > 0 && (
+                      <p className="text-muted-foreground text-xs">
+                        {st.history.paused}
+                      </p>
+                    )}
+                    {taskRunsQuery.isPending && (
+                      <WorkingState
+                        label={st.history.loading}
+                        className="py-2"
+                      />
+                    )}
+                    {taskRunsQuery.isError && (
+                      <ErrorState
+                        className="py-2"
+                        message={st.history.loadFailed}
+                        action={
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={taskRunsQuery.isFetching}
+                            onClick={() => void taskRunsQuery.refetch()}
+                          >
+                            {st.history.retry}
+                          </Button>
+                        }
+                      />
+                    )}
+                    {!taskRunsQuery.isPending && !taskRunsQuery.isError && (
+                      <div
+                        className={pageStyles.eyebrow}
+                        data-testid="scheduled-task-runs"
+                      >
+                        {(taskRunsQuery.data ?? []).length === 1
+                          ? st.detail.runsCountOne.replace(
+                              "{count}",
+                              String((taskRunsQuery.data ?? []).length),
+                            )
+                          : st.detail.runsCount.replace(
+                              "{count}",
+                              String((taskRunsQuery.data ?? []).length),
+                            )}
                       </div>
-                    ) : null}
+                    )}
+                    {/* Receipts get the least decoration: text on hairlines. */}
+                    <div
+                      className={cn("flex flex-col divide-y", pageStyles.rows)}
+                      data-testid="scheduled-task-run-list"
+                    >
+                      {(taskRunsQuery.data ?? []).length > 0 ? (
+                        (taskRunsQuery.data ?? []).map((run) => (
+                          <div key={run.id} className="py-2 text-sm">
+                            <div className="font-medium">{runSummary(run)}</div>
+                            <div className="text-muted-foreground font-mono text-xs break-all">
+                              {run.run_id ?? st.detail.none}
+                            </div>
+                            <div className="text-muted-foreground text-xs">
+                              {formatTimestamp(run.scheduled_for, locale) ??
+                                st.detail.none}
+                            </div>
+                            {run.error && (
+                              <div className="text-destructive text-xs [overflow-wrap:anywhere]">
+                                {run.error}
+                              </div>
+                            )}
+                          </div>
+                        ))
+                      ) : !taskRunsQuery.isPending && !taskRunsQuery.isError ? (
+                        <div className="text-muted-foreground py-2 text-sm">
+                          {st.detail.noRuns}
+                        </div>
+                      ) : null}
+                    </div>
                   </div>
-                </div>
-              </section>
-            ) : null}
+                </section>
+              ) : null}
+            </div>
+            {!formFirst && createForm}
           </div>
-          {!formFirst && createForm}
-        </div>
+        </ScrollArea>
       </WorkspaceBody>
 
       {/* Delete confirm — follows the agent-card confirm pattern. */}

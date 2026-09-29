@@ -291,3 +291,76 @@ test.describe("assistant turn byline", () => {
     await expect(page.locator("[data-turn-byline]")).toHaveCount(0);
   });
 });
+
+test.describe("scheduled tasks on a phone", () => {
+  const task = (id: string, title: string) => ({
+    id,
+    thread_id: null,
+    title,
+    prompt: "Draft it and cite the source.",
+    schedule_type: "cron" as const,
+    schedule_spec: { cron: "0 9 * * *" },
+    timezone: "UTC",
+    status: "enabled" as const,
+    next_run_at: null,
+    last_run_at: null,
+    last_run_id: null,
+    last_error: null,
+    run_count: 0,
+    context_mode: "fresh_thread_per_run" as const,
+    assistant_id: null,
+    created_at: "2026-09-01T00:00:00Z",
+    updated_at: "2026-09-01T00:00:00Z",
+  });
+
+  test("the page scrolls inside the body and a tapped task comes to hand", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    mockLangGraphAPI(page, {
+      threads: [],
+      scheduledTasks: [
+        task("a", "Weekly SEO report draft"),
+        task("b", "Monday ad spend check"),
+        task("c", "Review replies waiting in the inbox"),
+      ],
+    });
+    await page.goto("/workspace/scheduled-tasks");
+    const second = page.getByTestId("scheduled-task-item-b");
+    await second.waitFor();
+
+    // The document itself never scrolls: before, it ran 1269px past the
+    // viewport, so the tab bar scrolled away and content painted over it.
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => document.documentElement.scrollHeight - window.innerHeight,
+        ),
+      )
+      .toBeLessThanOrEqual(0);
+
+    // A tap brings the sheet into view with focus on its title; before, the
+    // sheet changed below the fold and the tap looked like it did nothing.
+    await expect(async () => {
+      await second.click();
+      await expect(
+        page.getByRole("heading", { level: 2, name: "Monday ad spend check" }),
+      ).toBeFocused({ timeout: 1_000 });
+    }).toPass();
+    await expect(page.getByTestId("scheduled-task-detail")).toBeInViewport();
+
+    const small = await page.evaluate(() =>
+      [
+        ...document.querySelectorAll(
+          "[data-testid='scheduled-task-detail'] button, [data-testid='scheduled-task-create-form'] button, [aria-pressed]",
+        ),
+      ]
+        .filter((el) => (el as HTMLElement).offsetParent)
+        .filter((el) => el.getBoundingClientRect().height < 44)
+        .map(
+          (el) => (el as HTMLElement).innerText || el.outerHTML.slice(0, 160),
+        ),
+    );
+    expect(small).toEqual([]);
+  });
+});
