@@ -469,7 +469,7 @@ export default function ChatPage() {
                 {/* Decorative; below sm its 32px go to the thread title. */}
                 <MomentumGlyph
                   className="hidden size-6 shrink-0 sm:block"
-                  seed={`thread:${threadId}`}
+                  seed={isNewThread ? "thread:new" : `thread:${threadId}`}
                 />
                 <ThreadTitle
                   threadId={threadId}

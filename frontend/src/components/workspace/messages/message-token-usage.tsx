@@ -3,7 +3,11 @@ import { CoinsIcon } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { useI18n } from "@/core/i18n/hooks";
-import { accumulateUsage, formatTokenCount } from "@/core/messages/usage";
+import {
+  accumulateUsage,
+  formatTokenCount,
+  getRecordedTurnModel,
+} from "@/core/messages/usage";
 import type { TokenDebugStep } from "@/core/messages/usage-model";
 import { cn } from "@/lib/utils";
 
@@ -29,7 +33,7 @@ function TokenUsageSummary({
   return (
     <div
       className={cn(
-        "text-muted-foreground border-border/60 mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 border-t pt-2 text-[11px]",
+        "text-foreground border-border/60 mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 border-t pt-2 text-[11px]",
         className,
       )}
       data-receipt=""
@@ -62,16 +66,12 @@ export function MessageTokenUsageList({
   enabled = false,
   isLoading: _isLoading = false,
   messages,
-  modelName,
-  reasoningEffort,
   showModelDetail = false,
 }: {
   className?: string;
   enabled?: boolean;
   isLoading?: boolean;
   messages: Message[];
-  modelName?: string;
-  reasoningEffort?: string;
   showModelDetail?: boolean;
 }) {
   if (!enabled) {
@@ -96,8 +96,7 @@ export function MessageTokenUsageList({
       inputTokens={usage.inputTokens}
       outputTokens={usage.outputTokens}
       totalTokens={usage.totalTokens}
-      modelName={modelName}
-      reasoningEffort={reasoningEffort}
+      modelName={getRecordedTurnModel(aiMessages)}
       showModelDetail={showModelDetail}
     />
   );
@@ -134,7 +133,7 @@ export function MessageTokenUsageDebugList({
           >
             <div className="min-w-0 flex-1 space-y-1">
               <div className="text-foreground flex items-center gap-2 text-xs font-medium">
-                <CoinsIcon className="text-muted-foreground size-3" />
+                <CoinsIcon className="text-foreground size-3" />
                 <span className="truncate">{step.label}</span>
               </div>
               {step.secondaryLabels.length > 0 && (
@@ -151,11 +150,11 @@ export function MessageTokenUsageDebugList({
                 </div>
               )}
               {step.sharedAttribution && (
-                <div className="text-muted-foreground text-[11px]">
+                <div className="text-foreground text-[11px]">
                   {t.tokenUsage.sharedAttribution}
                 </div>
               )}
-              <div className="text-muted-foreground text-[11px]">
+              <div className="text-foreground text-[11px]">
                 {step.usage ? (
                   <>
                     {t.tokenUsage.input}:{" "}

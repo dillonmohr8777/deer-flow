@@ -57,6 +57,30 @@
   --retro-body-font: var(--m-font-text);
 }
 
+/* Generated copy has its own palette, so remap it along with the dark canvas. */
+:is(
+    :root[data-treatment="retro"],
+    :root [data-workspace-shell][data-treatment="retro"]
+  )
+  .momentum-generated-copy {
+  --momentum-copy-body: var(--retro-cream);
+  --momentum-copy-heading: var(--retro-cream);
+  --momentum-copy-heading-from: var(--retro-cream);
+  --momentum-copy-heading-mid: var(--retro-amber);
+  --momentum-copy-heading-to: var(--retro-cream);
+  --momentum-copy-strong: var(--retro-cream);
+  --momentum-copy-link: var(--retro-amber);
+  --momentum-copy-link-line: var(--retro-amber);
+  --momentum-copy-marker: var(--retro-amber);
+  --momentum-copy-quote-line: var(--retro-amber);
+  --momentum-copy-quote-wash: var(--retro-navy-hi);
+  --momentum-copy-quote: var(--retro-cream-muted);
+  --momentum-copy-code: var(--retro-amber);
+  --momentum-copy-code-bg: var(--retro-navy-hi);
+  --momentum-copy-rule-from: var(--retro-amber);
+  --momentum-copy-rule-to: var(--retro-cream-muted);
+}
+
 /*
  * Shell remap: sidebar, headers, page canvas, dialogs, menus. Matches the
  * appearance provider's wrapper ([data-workspace-shell]) and <html>.

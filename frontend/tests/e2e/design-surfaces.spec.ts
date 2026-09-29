@@ -1,6 +1,6 @@
 /**
- * Design-review screenshot harness. Not a regression test: it is skipped
- * unless DESIGN_SHOTS=1, and it asserts nothing beyond "the page rendered".
+ * Design-review screenshot harness with focused chat UI assertions. It is
+ * skipped unless DESIGN_SHOTS=1.
  *
  *   DESIGN_SHOTS=1 DESIGN_SHOTS_DIR=<dir> pnpm exec playwright test design-surfaces
  *
@@ -26,6 +26,7 @@ const wanted = (name: string) => !only || only.includes(name);
 
 const VIEWPORTS = [
   { name: "desktop", width: 1440, height: 900 },
+  { name: "tablet", width: 768, height: 1024 },
   { name: "mobile", width: 390, height: 844 },
 ] as const;
 
@@ -738,6 +739,12 @@ async function capture(
   // Let fonts, lazy panels and query refetches settle before the capture.
   await page.evaluate(() => document.fonts.ready);
   await page.waitForTimeout(600);
+  if (surface.name === "chat-thread") {
+    const horizontalOverflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - window.innerWidth,
+    );
+    expect(horizontalOverflow).toBeLessThanOrEqual(0);
+  }
   mkdirSync(outDir, { recursive: true });
   const file = path.join(outDir, `${surface.name}-${viewport.name}.png`);
   await page.screenshot({ path: file });
@@ -779,7 +786,52 @@ test.describe("design surfaces", () => {
   test.skip(!enabled, "Set DESIGN_SHOTS=1 to capture design screenshots.");
   test.describe.configure({ timeout: 60_000 });
 
+  test("Easy mode starter fills an editable chat draft", async ({ page }) => {
+    test.skip(!wanted("chat-thread"), "Only run with chat-thread review.");
+    await mockDesignAPI(page, {});
+    await page.addInitScript(() => {
+      localStorage.setItem(
+        "deerflow.local-settings",
+        JSON.stringify({ context: { experience_mode: "easy" } }),
+      );
+    });
+    await page.goto(`/workspace/chats/${MOCK_THREAD_ID}`);
+    const starter = page.getByRole("button", {
+      name: "Help me with something, step by step",
+    });
+    await expect(starter).toBeVisible();
+    await starter.click();
+    await expect(page.locator("textarea").first()).toHaveValue(
+      "Help me with something, step by step",
+    );
+  });
+
   for (const viewport of VIEWPORTS) {
+    test(`chat-thread reply contrast ${viewport.name}`, async ({ page }) => {
+      test.skip(!wanted("chat-thread"), "Only run with chat-thread review.");
+      await mockDesignAPI(page, {});
+      await page.setViewportSize({ width: viewport.width, height: viewport.height });
+      await page.goto(`/workspace/chats/${MOCK_THREAD_ID}`);
+      const reply = page.locator(".momentum-generated-copy").first();
+      await expect(reply).toBeVisible();
+      for (const appearance of [
+        { treatment: "paper", dark: false, color: "rgb(16, 30, 63)" },
+        { treatment: "paper", dark: true, color: "rgb(219, 231, 255)" },
+        { treatment: "space", dark: false, color: "rgb(243, 241, 233)" },
+        { treatment: "space", dark: true, color: "rgb(243, 241, 233)" },
+        { treatment: "retro", dark: false, color: "rgb(244, 237, 216)" },
+        { treatment: "retro", dark: true, color: "rgb(244, 237, 216)" },
+      ] as const) {
+        await page.evaluate(({ treatment, dark }) => {
+          document.documentElement.classList.toggle("dark", dark);
+          document.documentElement.dataset.treatment = treatment;
+          document
+            .querySelector("[data-workspace-shell]")
+            ?.setAttribute("data-treatment", treatment);
+        }, appearance);
+        await expect(reply).toHaveCSS("color", appearance.color);
+      }
+    });
     for (const surface of SIGNED_IN.filter((s) => wanted(s.name))) {
       test(`${surface.name} ${viewport.name}`, async ({ page }) => {
         await mockDesignAPI(page, { empty: surface.empty });
