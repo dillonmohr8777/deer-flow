@@ -130,6 +130,43 @@ def test_make_lead_agent_signature_matches_langgraph_server_factory_abi():
     assert list(inspect.signature(lead_agent_module.make_lead_agent).parameters) == ["config"]
 
 
+@pytest.mark.parametrize("enabled", [True, False])
+def test_custom_agent_self_update_opt_out_filters_assembled_tool_schema(monkeypatch, enabled):
+    import deerflow.tools as tools_module
+
+    app_config = _make_app_config([_make_model("safe-model", supports_thinking=False)])
+    monkeypatch.setattr(lead_agent_module, "load_agent_config", lambda name, **kwargs: AgentConfig(name=name, self_update_enabled=enabled, skills=[], mcp_plugins=[]))
+    monkeypatch.setattr(tools_module, "get_available_tools", lambda **kwargs: [])
+    monkeypatch.setattr(lead_agent_module, "_load_enabled_available_skills", lambda *args, **kwargs: [])
+    monkeypatch.setattr(lead_agent_module, "build_middlewares", lambda *args, **kwargs: [])
+    monkeypatch.setattr(lead_agent_module, "apply_prompt_template", lambda **kwargs: "system prompt")
+    monkeypatch.setattr(lead_agent_module, "create_chat_model", lambda **kwargs: object())
+    monkeypatch.setattr(lead_agent_module, "create_agent", lambda **kwargs: kwargs)
+    monkeypatch.setattr(lead_agent_module, "build_tracing_callbacks", lambda: [])
+    result = lead_agent_module._make_lead_agent({"context": {"agent_name": "fixed-agent", "non_interactive": True}}, app_config=app_config)
+    assert ("update_agent" in [t.name for t in result["tools"]]) is enabled
+
+
+@pytest.mark.parametrize("names", [[], ["unknown-tool"]])
+def test_compiled_owner_ceiling_blocks_middleware_registered_tool_and_fabricated_call(names):
+    from deerflow.agents.middlewares.skill_tool_policy_middleware import SkillToolPolicyMiddleware
+
+    class LateToolMiddleware(AgentMiddleware):
+        tools = [policy_integration_dangerous_tool]
+
+    owner_list = list(names)
+    policy = SkillToolPolicyMiddleware(slash_source_owner_token="offline-owner-ceiling", owner_tool_names=owner_list)
+    owner_list.append(policy_integration_dangerous_tool.name)
+    model = _PolicyBypassModel()
+    _POLICY_INTEGRATION_TOOL_CALLS.clear()
+    graph = create_agent(model=model, tools=[], middleware=[policy, LateToolMiddleware()], state_schema=ThreadState)
+    result = graph.invoke({"messages": [HumanMessage(content="synthetic owner policy proof")]}, context={})
+    assert model.bound_tool_names == []
+    assert _POLICY_INTEGRATION_TOOL_CALLS == []
+    blocked = [message for message in result["messages"] if isinstance(message, ToolMessage) and message.tool_call_id == "forbidden-call"]
+    assert len(blocked) == 1 and blocked[0].status == "error"
+
+
 @pytest.mark.parametrize(
     ("reader", "is_subagent", "is_bootstrap", "expected"),
     [

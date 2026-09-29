@@ -489,6 +489,7 @@ def build_middlewares(
     *,
     available_skills: set[str] | None = None,
     memory_enabled: bool = True,
+    tool_names: list[str] | None = None,
     owns_agent_skill_projection: bool = True,
     app_config: AppConfig | None = None,
     deferred_setup=None,
@@ -595,6 +596,7 @@ def build_middlewares(
             app_config=resolved_app_config,
             user_id=user_id,
             slash_source_owner_token=slash_source_owner_token,
+            owner_tool_names=tool_names,
         )
     )
 
@@ -951,6 +953,7 @@ def _assemble_lead_agent(config: RunnableConfig, *, app_config: AppConfig) -> Le
     agent_name = validate_agent_name(cfg.get("agent_name"))
 
     agent_config = load_agent_config(agent_name, user_id=resolved_user_id) if not is_bootstrap else None
+    tool_names = getattr(agent_config, "tool_names", None)
     memory_enabled = getattr(agent_config, "memory_enabled", True) is not False
     # Keep compatibility with lightweight AgentConfig-shaped objects used by
     # integrations that predate caller-level subagent restrictions.
@@ -1178,7 +1181,8 @@ def _assemble_lead_agent(config: RunnableConfig, *, app_config: AppConfig) -> Le
     # leave it unset, so ``update_agent`` remains available there.
     channel_name = cfg.get("channel_name")
     is_webhook_channel = channel_name in _WEBHOOK_CHANNELS
-    extra_tools = [update_agent] if agent_name and not is_webhook_channel else []
+    self_update_enabled = getattr(agent_config, "self_update_enabled", True) is not False
+    extra_tools = [update_agent] if agent_name and self_update_enabled and not is_webhook_channel else []
     # Resolve the model once so tool guidance uses the same effective settings.
     chat_model = create_chat_model(name=model_name, thinking_enabled=thinking_enabled, reasoning_effort=reasoning_effort, app_config=resolved_app_config, attach_tracing=False, model_overrides=agent_model_overrides)
     raw_tools = get_available_tools(
@@ -1199,6 +1203,8 @@ def _assemble_lead_agent(config: RunnableConfig, *, app_config: AppConfig) -> Le
         _append_memory_tools_without_name_conflicts(authorization_candidates)
     _append_project_document_tools_if_pinned(authorization_candidates, cfg)
     append_task_continuity_tools(authorization_candidates, resolved_app_config)
+    if tool_names is not None:
+        authorization_candidates = [tool for tool in authorization_candidates if tool.name in tool_names]
     configured_tool_ids = {id(tool) for tool in configured_tools}
     authorized_tools, _authz_provider = apply_tool_authorization(
         authorization_candidates,
@@ -1221,6 +1227,7 @@ def _assemble_lead_agent(config: RunnableConfig, *, app_config: AppConfig) -> Le
         agent_name=agent_name,
         available_skills=available_skills,
         memory_enabled=memory_enabled,
+        tool_names=tool_names,
         app_config=resolved_app_config,
         deferred_setup=setup,
         mcp_routing_middleware=mcp_routing_middleware,

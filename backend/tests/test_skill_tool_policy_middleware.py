@@ -89,6 +89,40 @@ def _tool_names(request):
     return [tool.name for tool in request.tools]
 
 
+@pytest.mark.parametrize("owner_tools", [[], ["read_file"]])
+def test_owner_ceiling_filters_late_schemas_and_blocks_unexposed_calls_without_skill(owner_tools):
+    from deerflow.agents.middlewares.skill_tool_policy_middleware import SkillToolPolicyMiddleware
+
+    middleware = SkillToolPolicyMiddleware(slash_source_owner_token=_SLASH_SOURCE_OWNER_TOKEN, owner_tool_names=owner_tools)
+    filtered = middleware.wrap_model_call(ModelRequestStub([NamedTool("read_file"), NamedTool("review_skill_package")]), lambda request: request)
+    assert _tool_names(filtered) == owner_tools
+    blocked = middleware.wrap_tool_call(ToolRequestStub("review_skill_package"), lambda request: pytest.fail("denied tool executed"))
+    assert blocked.status == "error"
+    assert middleware.release_policy_parameters()["owner_tool_names"] == owner_tools
+
+
+def test_async_owner_ceiling_applies_without_an_active_skill():
+    from deerflow.agents.middlewares.skill_tool_policy_middleware import SkillToolPolicyMiddleware
+
+    middleware = SkillToolPolicyMiddleware(slash_source_owner_token=_SLASH_SOURCE_OWNER_TOKEN, owner_tool_names=["read_file"])
+
+    async def check():
+        filtered = await middleware.awrap_model_call(ModelRequestStub([NamedTool("read_file"), NamedTool("update_agent")]), lambda request: asyncio.sleep(0, result=request))
+        assert _tool_names(filtered) == ["read_file"]
+        blocked = await middleware.awrap_tool_call(ToolRequestStub("update_agent"), lambda request: pytest.fail("denied tool executed"))
+        assert blocked.status == "error"
+
+    asyncio.run(check())
+
+
+def test_active_skill_cannot_widen_owner_ceiling_even_for_framework_builtins():
+    middleware = _middleware([_skill("reviewer", ["web_search", "read_file"])])
+    middleware._owner_tool_names = {"read_file"}
+    state = {"skill_context": [{"path": "/mnt/skills/public/reviewer/SKILL.md"}]}
+    request = ModelRequestStub([NamedTool("read_file"), NamedTool("web_search"), NamedTool("present_files")], state=state)
+    assert _tool_names(middleware.wrap_model_call(request, lambda request: request)) == ["read_file"]
+
+
 @pytest.mark.parametrize(
     "middleware_class_path",
     [

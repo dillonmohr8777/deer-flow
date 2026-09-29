@@ -59,6 +59,8 @@ _UI_OWNED_CONFIG_FIELDS: tuple[str, ...] = (
     "reasoning_effort",
     "allowed_subagents",
     "memory_enabled",
+    "self_update_enabled",
+    "tool_names",
 )
 
 
@@ -182,6 +184,10 @@ def update_agent(
 
     if existing_cfg is None:
         return _err(f"Agent '{agent_name}' could not be loaded.")
+    if not existing_cfg.self_update_enabled:
+        return _err("update_agent is disabled by this agent's operator-owned configuration.")
+    if existing_cfg.tool_names is not None and "update_agent" not in existing_cfg.tool_names:
+        return _err("update_agent is excluded by this agent's operator-owned tool ceiling.")
 
     updated_fields: list[str] = []
 

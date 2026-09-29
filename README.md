@@ -110,6 +110,12 @@ That prompt is intended for coding agents. It tells the agent to clone the repo 
 
 ## Quick Start
 
+Fixed-purpose custom agents can set `self_update_enabled: false` to withhold
+their self-update tool while keeping owner/API edits available. Existing agents
+retain the default `true` behavior.
+An optional `tool_names` allowlist caps configured, builtin and middleware tools;
+omitting it preserves the existing catalog, while `[]` permits no tools.
+
 ### Configuration
 
 Optional per-model [`request_admission`](backend/docs/CONFIGURATION.md#model-request-admission)
