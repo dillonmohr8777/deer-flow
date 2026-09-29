@@ -457,6 +457,11 @@ export function InputBox({
   const maxFollowupSuggestions =
     suggestionsConfig?.max_suggestions ?? DEFAULT_MAX_SUGGESTIONS;
   const [followupsHidden, setFollowupsHidden] = useState(false);
+  // Distinct from followupsHidden: only the Easy-mode close button sets
+  // this, and nothing that resets followupsHidden for the next turn
+  // (submit, /goal, /compact) touches it, so an explicit dismissal
+  // survives those resets instead of being undone by the next message.
+  const [easyStartersDismissed, setEasyStartersDismissed] = useState(false);
   const [followupsLoading, setFollowupsLoading] = useState(false);
   const [polishingInput, setPolishingInput] = useState(false);
   const [voiceListening, setVoiceListening] = useState(false);
@@ -2140,6 +2145,7 @@ export function InputBox({
     !showSkillSuggestions &&
     !selectedSlashSkill &&
     !followupsHidden &&
+    !easyStartersDismissed &&
     status !== "streaming";
 
   useEffect(() => {
@@ -2291,7 +2297,7 @@ export function InputBox({
                 variant="outline"
                 size="sm"
                 type="button"
-                onClick={() => setFollowupsHidden(true)}
+                onClick={() => setEasyStartersDismissed(true)}
               >
                 <XIcon className="size-4" />
               </Button>
