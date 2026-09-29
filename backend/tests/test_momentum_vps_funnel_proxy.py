@@ -236,7 +236,11 @@ def test_merged_stack_regresses_if_a_chained_files_ports_default_widens():
     """
     merged = _merged_vps_stack(project="f93-merge-check-regression", momentum_tailnet_host="0.0.0.0")
     nginx_hosts = {mapping.get("host_ip") for mapping in merged["services"]["nginx"].get("ports") or []}
-    assert "0.0.0.0" in nginx_hosts, "expected the merge to add a wide-open entry alongside the loopback one, proving concatenation not override"
+    # Both entries, not just the wide-open one: an override merge would leave
+    # only {"0.0.0.0"} here too, so asserting membership alone doesn't
+    # distinguish concatenation from override -- the base file's loopback
+    # entry surviving *alongside* it is the actual proof.
+    assert nginx_hosts == {"127.0.0.1", "0.0.0.0"}, f"expected the merge to keep the base file's loopback entry and add a second, wide-open one, proving concatenation not override; got {nginx_hosts!r}"
 
 
 @pytest.mark.asyncio

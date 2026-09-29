@@ -48,6 +48,24 @@ if [[ "$(stat -f %Lp "$ENV_FILE")" != "600" ]]; then
   echo "$ENV_FILE must be mode 600" >&2
   exit 2
 fi
+# f93(b): nginx-realip.conf trusts XFF from any host-originated connection,
+# which a per-thread agent sandbox could reach via host.docker.internal --
+# closed only as long as the sandbox's own network has no route to the host,
+# which "isolated"/"allowlist" mode guarantees and the code default "open"
+# (local_backend.py:593) does not. Refuse to start rather than silently
+# publish an unauthenticated way to forge the client IP.
+network_mode="$(uv run --no-project --with pyyaml python3 -c '
+import sys
+import yaml
+with open(sys.argv[1], encoding="utf-8") as f:
+    data = yaml.safe_load(f) or {}
+network = ((data.get("sandbox") or {}).get("network")) or {}
+print(network.get("mode", "open"))
+' "$CONFIG")"
+if [[ "$network_mode" != "isolated" && "$network_mode" != "allowlist" ]]; then
+  echo "$CONFIG: sandbox.network.mode is '$network_mode', must be \"isolated\" or \"allowlist\" on this publicly-reachable deployment (see nginx-realip.conf)" >&2
+  exit 2
+fi
 
 export COMPOSE_PROJECT_NAME="$PROJECT"
 export PORT
