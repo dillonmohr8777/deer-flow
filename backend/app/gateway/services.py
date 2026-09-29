@@ -1932,6 +1932,12 @@ async def start_run(
         scope_assistant_id = scope_runtime_config.get("agent_name") or _DEFAULT_ASSISTANT_ID
         if scope_assistant_id != _DEFAULT_ASSISTANT_ID:
             await _refuse_if_agent_seat_paused(scope_assistant_id)
+        # Server-resolved, like deerflow_trace_id above: an agent seat's weekly
+        # burn (queue item f95) must be counted from the run's real effective
+        # agent, not a caller-forged claim of one.
+        from deerflow.persistence.exec_seats import EFFECTIVE_AGENT_NAME_METADATA_KEY
+
+        run_metadata[EFFECTIVE_AGENT_NAME_METADATA_KEY] = scope_assistant_id
         # Bootstrap assembly intentionally does not load an agent config: the
         # new agent may not exist yet and setup_agent creates its definition.
         agent_config = (

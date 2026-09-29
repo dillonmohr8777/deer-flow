@@ -2,8 +2,12 @@
 
 Every ratified or claimed seat carries a ``weekly_token_budget``. This module
 sums the seat's holder's actual token burn over the trailing week from the
-usage ledger (the ``runs`` table, keyed by ``RunRow.assistant_id`` == the
-seat's ``agent_name``) and pauses the seat when it crosses that budget,
+usage ledger (the ``runs`` table, keyed by ``RunRow.assistant_id`` or, for a
+run that only ever named its agent through ``context.agent_name`` while
+``assistant_id`` stayed the default lead agent, the run-metadata identity
+``app.gateway.services.start_run`` stamps -- see
+``AgentSeatRepository.token_burn_since``) and pauses the seat when it crosses
+that budget,
 announcing the block to ``#exec`` the same way a claim/ratify/reopen already
 does (``deerflow.tools.exec_seat_tools``'s ``_announce``). A seat whose burn
 has fallen back under budget (a new week, or work slowing down) is resumed

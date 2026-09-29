@@ -14,7 +14,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -23,6 +23,14 @@ from deerflow.persistence.organizations.resolution import organization_for_write
 from deerflow.persistence.run.model import RunRow
 from deerflow.runtime.user_context import AUTO, resolve_organization_id, resolve_user_id
 from deerflow.utils.time import coerce_iso
+
+# A run's ``assistant_id`` stays the default (``lead_agent``) when the caller
+# names an agent only through ``context.agent_name``/``configurable.agent_name``
+# (queue item f95's own left-open gap). ``app.gateway.services.start_run``
+# stamps this run-metadata key with that resolved effective identity on every
+# run, so ``token_burn_since`` below can count it toward the matching seat's
+# burn even when ``assistant_id`` itself never carries the agent's name.
+EFFECTIVE_AGENT_NAME_METADATA_KEY = "effective_agent_name"
 
 
 def _to_dict(row: AgentSeatRow) -> dict[str, Any]:
@@ -208,9 +216,16 @@ class AgentSeatRepository:
 
         Reads the same ``runs`` table (``RunRow``) the operations console's
         usage ledger reads -- ``assistant_id`` is the run's custom-agent
-        identifier, the same value ``AgentSeatRow.agent_name`` stores.
+        identifier, the same value ``AgentSeatRow.agent_name`` stores. A run
+        that names its agent only through ``context.agent_name`` (the default
+        lead agent's own ``assistant_id`` never changes) is matched instead
+        through ``metadata_json[EFFECTIVE_AGENT_NAME_METADATA_KEY]``, the
+        resolved identity ``start_run`` stamps on every run.
         """
-        stmt = select(func.coalesce(func.sum(RunRow.total_tokens), 0)).where(RunRow.assistant_id == agent_name, RunRow.created_at >= since)
+        stmt = select(func.coalesce(func.sum(RunRow.total_tokens), 0)).where(
+            or_(RunRow.assistant_id == agent_name, RunRow.metadata_json[EFFECTIVE_AGENT_NAME_METADATA_KEY].as_string() == agent_name),
+            RunRow.created_at >= since,
+        )
         if organization_id is not None:
             stmt = stmt.where(RunRow.organization_id == organization_id)
         async with self._sf() as session:

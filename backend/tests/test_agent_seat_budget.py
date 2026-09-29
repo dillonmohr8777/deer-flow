@@ -14,12 +14,13 @@ import pytest
 from org_isolation_fixtures import ORG_A, ORG_B, USER_A, acting_as, org_world  # noqa: F401
 
 from deerflow.exec_seats.budget import evaluate_all_seat_budgets, evaluate_seat_budget, is_over_budget
-from deerflow.persistence.exec_seats import AgentSeatRepository, AgentSeatStatus
+from deerflow.persistence.exec_seats import EFFECTIVE_AGENT_NAME_METADATA_KEY, AgentSeatRepository, AgentSeatStatus
 from deerflow.persistence.run.model import RunRow
 from deerflow.persistence.team_board import TeamBoardRepository
 from deerflow.tools.exec_seat_tools import announce_to_exec
 
 CMO_SEAT = "CMO"
+_DEFAULT_ASSISTANT_ID = "lead_agent"
 
 
 def test_is_over_budget_pure():
@@ -39,6 +40,29 @@ async def _spend(session_factory, *, organization_id: str, agent_name: str, tota
                 organization_id=organization_id,
                 status="success",
                 total_tokens=total_tokens,
+                created_at=created_at,
+                updated_at=created_at,
+            )
+        )
+
+
+async def _spend_via_context_agent_name(session_factory, *, organization_id: str, agent_name: str, total_tokens: int, created_at: datetime) -> None:
+    """A run that only ever named its agent through ``context.agent_name``.
+
+    ``assistant_id`` stays the default lead agent -- the gap queue item f95
+    left open: ``start_run`` stamps the resolved identity onto run metadata
+    instead, which ``token_burn_since`` must also match against.
+    """
+    async with session_factory() as session, session.begin():
+        session.add(
+            RunRow(
+                run_id=f"run-ctx-{agent_name}-{created_at.timestamp()}",
+                thread_id=f"thread-ctx-{agent_name}",
+                assistant_id=_DEFAULT_ASSISTANT_ID,
+                organization_id=organization_id,
+                status="success",
+                total_tokens=total_tokens,
+                metadata_json={EFFECTIVE_AGENT_NAME_METADATA_KEY: agent_name},
                 created_at=created_at,
                 updated_at=created_at,
             )
@@ -156,3 +180,35 @@ async def test_evaluate_all_seat_budgets_covers_every_seat_in_the_org(org_world)
     by_seat = {r["seat"]: r for r in results}
     assert by_seat["CMO"]["paused_at"] is not None
     assert by_seat["CTO"]["paused_at"] is None
+
+
+@pytest.mark.asyncio
+async def test_context_agent_name_run_counts_toward_seat_burn_with_default_assistant_id(org_world):  # noqa: F811
+    """f95's own left-open gap: a run naming its agent only via context.agent_name
+    (assistant_id stays the default lead agent) must still count toward that
+    agent's seat burn, via the metadata start_run now stamps on every run."""
+    repo = AgentSeatRepository(org_world)
+    now = datetime.now(UTC)
+    with acting_as(USER_A, ORG_A):
+        seat = await repo.claim_seat(seat=CMO_SEAT, agent_name="cmo-agent", weekly_token_budget=1000, claimed_by_user_id=USER_A)
+        seat = await repo.patch_seat(seat["id"], status=AgentSeatStatus.RATIFIED, ratified_by_user_id=USER_A)
+        await _spend_via_context_agent_name(org_world, organization_id=ORG_A, agent_name="cmo-agent", total_tokens=1500, created_at=now - timedelta(days=1))
+
+        updated = await evaluate_seat_budget(repo, seat, now=now)
+
+    assert updated["paused_at"] is not None
+
+
+@pytest.mark.asyncio
+async def test_token_burn_since_sums_both_assistant_id_and_context_agent_name_runs(org_world):  # noqa: F811
+    """Both a direct custom-agent run and a context-only run must be counted,
+    without double-counting a run that happens to carry both."""
+    repo = AgentSeatRepository(org_world)
+    now = datetime.now(UTC)
+    with acting_as(USER_A, ORG_A):
+        await _spend(org_world, organization_id=ORG_A, agent_name="cmo-agent", total_tokens=100, created_at=now - timedelta(hours=1))
+        await _spend_via_context_agent_name(org_world, organization_id=ORG_A, agent_name="cmo-agent", total_tokens=50, created_at=now - timedelta(hours=1))
+
+        burn = await repo.token_burn_since(organization_id=ORG_A, agent_name="cmo-agent", since=now - timedelta(days=7))
+
+    assert burn == 150

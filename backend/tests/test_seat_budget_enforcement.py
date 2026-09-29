@@ -10,6 +10,15 @@ covers the three gaps the finding named:
 2. ``start_run`` refuses a run naming a paused seat's agent.
 3. The Gateway lifespan registers a recurring sweep when configured, and
    never does by default (or against an unconfigured test double).
+
+A fourth gap, left open by this file's first pass (PR #85): a run naming its
+agent only through ``context.agent_name`` never moved the needle on that
+agent's seat burn, since ``token_burn_since`` only ever matched
+``RunRow.assistant_id`` (which stays the default lead agent in that case).
+``start_run`` now stamps the resolved effective agent name onto every run's
+metadata; see ``test_start_run_stamps_the_effective_agent_name_on_every_run``
+below and ``test_context_agent_name_run_counts_toward_seat_burn_with_default_assistant_id``
+in ``test_agent_seat_budget.py`` for the burn-accounting half.
 """
 
 from __future__ import annotations
@@ -212,6 +221,70 @@ async def test_start_run_does_not_refuse_the_default_agent_even_with_a_paused_se
             await record.task
 
     assert record is not None
+
+
+# ---------------------------------------------------------------------------
+# Effective-agent-name metadata stamp (burn-accounting gap left open by PR #85)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_start_run_stamps_the_effective_agent_name_on_every_run(org_world, _stub_app_config):  # noqa: F811
+    """``token_burn_since`` needs this even when ``assistant_id`` stays the default."""
+    from unittest.mock import patch
+
+    from app.gateway.run_models import RunCreateRequest
+    from app.gateway.services import start_run
+    from deerflow.persistence.exec_seats import EFFECTIVE_AGENT_NAME_METADATA_KEY
+
+    repo = AgentSeatRepository(org_world)
+    with acting_as(USER_A, ORG_A):
+        await _ratify(repo, seat=CMO_SEAT, agent_name="cmo-agent")
+
+        body = RunCreateRequest(assistant_id="lead_agent", context={"agent_name": "cmo-agent"}, input={"messages": [{"type": "human", "content": "hi"}]})
+        request = _start_run_request()
+
+        async def fake_run_agent(*_args, **_kwargs):
+            return None
+
+        with (
+            patch("app.gateway.services.resolve_agent_factory", return_value=object()),
+            patch("app.gateway.services.run_agent", side_effect=fake_run_agent),
+            patch("app.gateway.services._load_scope_agent_config", return_value=None),
+        ):
+            record = await start_run(body, "thread-effective-name-stamp", request)
+            await record.task
+
+    assert record.metadata[EFFECTIVE_AGENT_NAME_METADATA_KEY] == "cmo-agent"
+
+
+@pytest.mark.asyncio
+async def test_start_run_replaces_a_caller_forged_effective_agent_name(org_world, _stub_app_config):  # noqa: F811
+    """A client cannot claim someone else's seat's burn for its own run."""
+    from unittest.mock import patch
+
+    from app.gateway.run_models import RunCreateRequest
+    from app.gateway.services import start_run
+    from deerflow.persistence.exec_seats import EFFECTIVE_AGENT_NAME_METADATA_KEY
+
+    with acting_as(USER_A, ORG_A):
+        body = RunCreateRequest(
+            input={"messages": [{"type": "human", "content": "hi"}]},
+            metadata={EFFECTIVE_AGENT_NAME_METADATA_KEY: "forged-cmo-agent"},
+        )
+        request = _start_run_request()
+
+        async def fake_run_agent(*_args, **_kwargs):
+            return None
+
+        with (
+            patch("app.gateway.services.resolve_agent_factory", return_value=object()),
+            patch("app.gateway.services.run_agent", side_effect=fake_run_agent),
+        ):
+            record = await start_run(body, "thread-effective-name-forged", request)
+            await record.task
+
+    assert record.metadata[EFFECTIVE_AGENT_NAME_METADATA_KEY] == "lead_agent"
 
 
 # ---------------------------------------------------------------------------
