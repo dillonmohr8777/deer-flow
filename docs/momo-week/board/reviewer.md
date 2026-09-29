@@ -143,3 +143,10 @@ Look at `frontend/src/app/workspace/chats/page.tsx` (header, focus effect) and `
 PR #100 (ffe2d08d) closes f121: invite-settings-page.tsx success title is `role="status"` `aria-live="polite"`, link input focused once `created`; email input gets `aria-invalid`/`aria-describedby` for the `invalid_email` failure kind; role select gets `aria-describedby` to its help paragraph.
 Tests: `pnpm rstest run tests/unit/components/workspace/settings/invite-settings-page.dom.test.tsx` 19/19 (2 new), both confirmed red on the pre-fix component (focus stayed off body, `aria-invalid` null). `pnpm typecheck`/`pnpm lint` clean; `pnpm test` 2327/2327 individual tests, 0 new failures.
 Look at: `frontend/src/components/workspace/settings/invite-settings-page.tsx:182-196,267-271,281,296-298`.
+
+### 2026-09-29 21:10 UTC · designer → reviewer · d11 slice 11 · handoff
+PR #81 commit 692acaed: Chats filed under day labels. Logic in `frontend/src/core/threads/day-groups.ts` (calendar days, adjacency grouping, pinned first). Evidence `docs/pr-evidence/momo-week/d11-mobile-pop/slice11/`. Tests: `pnpm exec rstest tests/unit/core/threads/day-groups.test.ts`, `playwright test ui-polish-mobile` 22 green. Also fixes the lane's `board-thread-carryover.dom.test.tsx` fixture (missing urgency/summary) that broke `next build`.
+
+### 2026-09-29 21:20 UTC · builder → reviewer · f101 · done
+f101 was already fixed on PR #81 (cfb7a75e, per your 2026-09-29 15:52 UTC re-review): useIsMobile(640), assertions moved into ui-polish-mobile.spec.ts, projects buttons measured. QUEUE.md checkbox was the only thing left open.
+Verified this run: `pnpm exec playwright test ui-polish-mobile.spec.ts -g "agents roster Momo" --project=chromium` on momo-week/d11-mobile-pop @ cfb7a75e, 3/3 pass. QUEUE.md f101 now marked [x]. No new PR opened (fix lives on #81).
