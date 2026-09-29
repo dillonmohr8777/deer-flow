@@ -64,10 +64,10 @@ export function AgentCard({ agent }: AgentCardProps) {
     <li className="relative flex flex-wrap items-start gap-x-4 gap-y-3 py-5">
       {/* Same identity as the Command Center roster; the name is the row
           heading, so the mark is decorative here. */}
-      <span aria-hidden="true" className="shrink-0">
+      <span aria-hidden="true" className="shrink-0" data-agent-momo>
         <MomoAvatar agent={agent} size={48} />
       </span>
-      <div className="min-w-0 flex-1 basis-64">
+      <div className="min-w-0 flex-1 basis-64 max-sm:basis-0">
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
           <h2
             className="min-w-0 text-lg leading-6 font-semibold [overflow-wrap:anywhere]"
@@ -99,8 +99,14 @@ export function AgentCard({ agent }: AgentCardProps) {
           </ul>
         )}
       </div>
-      <div className="flex shrink-0 items-center gap-1 pl-16 sm:ml-auto sm:pl-0">
-        <Button size="sm" variant="outline" onClick={handleChat}>
+      {/* Phones: the actions take the slip's foot, Chat across it at 44px. */}
+      <div className="flex shrink-0 items-center gap-1 max-sm:basis-full sm:ml-auto">
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={handleChat}
+          className="max-sm:h-11 max-sm:flex-1"
+        >
           <MessageSquareIcon className="size-3.5" />
           {t.agents.chat}
           <span className="sr-only">{displayName}</span>
