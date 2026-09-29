@@ -27,11 +27,12 @@ from deerflow.models.responses_multi_agent import (
 )
 
 
-def native_response(response_id="resp_1", *, cost="0.04", input_tokens=100, output_tokens=40):
+def native_response(response_id="resp_1", *, cost="0.04", input_tokens=100, output_tokens=40, cycle_id="cycle-1", receipt_id="r1"):
     return {
         "id": response_id,
         "model": "openai/gpt-6.1-sol",
         "status": "completed",
+        "metadata": {"cycle_id": cycle_id, "receipt_id": receipt_id},
         "output": [
             {"type": "message", "id": "progress", "agent": {"agent_name": "/root"}, "phase": "commentary", "content": [{"type": "output_text", "text": "Working"}]},
             {"type": "multi_agent_call", "id": "spawn", "call_id": "c1", "action": "spawn_agent", "agent": {"agent_name": "/root"}, "arguments": "{}"},
@@ -218,20 +219,22 @@ def test_crashed_inflight_receipt_blocks_a_new_dispatch(tmp_path, policy, proof)
         reopened.reserve("r2", request, Decimal("0.2"))
 
 
-def test_continuations_require_verified_parent_and_sum_aggregate_usage(tmp_path, policy, proof):
+def test_stateless_continuation_blocked_and_separate_calls_sum_aggregate_usage(tmp_path, policy, proof):
     journal = make_journal(tmp_path, policy, proof)
     calls = []
 
     async def post(request):
         calls.append(json.loads(request.body))
-        return native_response(f"resp_{len(calls)}", cost="0.06", input_tokens=20, output_tokens=10)
+        return native_response(f"resp_{len(calls)}", cost="0.06", input_tokens=20, output_tokens=10, receipt_id=calls[-1]["metadata"]["receipt_id"])
 
     pilot = Pilot(journal, post)
-    with pytest.raises(ActivationError, match="parent"):
+    with pytest.raises(ActivationError, match="continuation"):
         asyncio.run(pilot.submit("next", instructions="review", receipt_id="bad", reservation_usd=Decimal("0.2"), previous_response_id="foreign"))
     asyncio.run(pilot.submit("first", instructions="review", receipt_id="r1", reservation_usd=Decimal("0.2")))
-    asyncio.run(pilot.submit("second", instructions="review", receipt_id="r2", reservation_usd=Decimal("0.2"), previous_response_id="resp_1"))
-    assert calls[1]["previous_response_id"] == "resp_1"
+    with pytest.raises(ActivationError, match="continuation"):
+        asyncio.run(pilot.submit("second", instructions="review", receipt_id="r2", reservation_usd=Decimal("0.2"), previous_response_id="resp_1"))
+    asyncio.run(pilot.submit("second", instructions="review", receipt_id="r2", reservation_usd=Decimal("0.2")))
+    assert "previous_response_id" not in calls[1]
     assert journal.totals() == {"actual_cost_usd": Decimal("0.12"), "known_cost_usd": Decimal("0.12"), "input_tokens": 40, "output_tokens": 20, "requests": 2}
 
 
@@ -273,7 +276,7 @@ def test_recovery_cannot_reassign_response_id_or_change_settled_payload(tmp_path
     second_request = build_request("packet", instructions="review", receipt_id="r2", cycle_id=policy.cycle_id)
     journal.reserve("r2", second_request, Decimal("0.2"))
     with pytest.raises(ActivationError):
-        journal.recover("r2", native_response())
+        journal.recover("r2", native_response(receipt_id="r2"))
     assert journal.totals()["known_cost_usd"] == Decimal("0.04")
 
 
@@ -396,10 +399,10 @@ def test_unknown_cost_can_be_reconciled_without_changing_result(tmp_path, policy
     journal.reserve("r2", second, Decimal("0.2"))
 
 
-def test_request_count_and_cumulative_dollars_cannot_reset_with_continuation(tmp_path, policy, proof):
+def test_request_count_and_cumulative_dollars_cannot_reset_between_calls(tmp_path, policy, proof):
     journal = make_journal(tmp_path, replace(policy, max_requests=1), proof)
     first = build_request("packet", instructions="review", receipt_id="r1", cycle_id=policy.cycle_id)
-    second = build_request("packet", instructions="review", receipt_id="r2", cycle_id=policy.cycle_id, previous_response_id="resp_1")
+    second = build_request("packet", instructions="review", receipt_id="r2", cycle_id=policy.cycle_id)
     journal.reserve("r1", first, Decimal("0.9"))
     journal.recover("r1", native_response(cost="0.8"))
     with pytest.raises(ActivationError, match="request limit"):
@@ -425,7 +428,7 @@ def test_forged_request_cannot_bypass_empty_tool_policy(tmp_path, policy, proof)
 def test_cumulative_reservation_preserves_external_ceiling(tmp_path, policy, proof):
     journal = make_journal(tmp_path, policy, replace(proof, aggregate_limit_usd=Decimal("0.5")))
     first = build_request("packet", instructions="review", receipt_id="r1", cycle_id=policy.cycle_id)
-    second = build_request("packet", instructions="review", receipt_id="r2", cycle_id=policy.cycle_id, previous_response_id="resp_1")
+    second = build_request("packet", instructions="review", receipt_id="r2", cycle_id=policy.cycle_id)
     journal.reserve("r1", first, Decimal("0.4"))
     journal.recover("r1", native_response(cost="0.4"))
     with pytest.raises(ActivationError, match="budget"):
@@ -471,3 +474,37 @@ def test_private_journal_rejects_symlinks_and_public_modes(tmp_path, policy, pro
     link.symlink_to(private)
     with pytest.raises(ActivationError, match="private"):
         CycleJournal(link, policy=policy, proof=proof)
+
+
+@pytest.mark.parametrize("metadata", [None, {}, {"cycle_id": "other", "receipt_id": "r1"}, {"cycle_id": "cycle-1", "receipt_id": "other"}])
+def test_unrelated_response_cannot_release_unknown_reservation(tmp_path, policy, proof, metadata):
+    journal = make_journal(tmp_path, policy, proof)
+    request = build_request("packet", instructions="review", receipt_id="r1", cycle_id=policy.cycle_id)
+    journal.reserve("r1", request, Decimal("0.2"))
+    journal.mark_unknown("r1")
+    response = native_response(cost="0.001")
+    response["metadata"] = metadata
+    before = journal.history("r1")
+    with pytest.raises(ActivationError, match="bind"):
+        journal.recover("r1", response)
+    assert journal.receipt("r1")["status"] == "unknown"
+    assert journal.totals()["actual_cost_usd"] is None
+    assert journal.history("r1") == before
+    second = build_request("packet", instructions="review", receipt_id="r2", cycle_id=policy.cycle_id)
+    with pytest.raises(ActivationError):
+        journal.reserve("r2", second, Decimal("0.2"))
+
+
+def test_stateless_http_continuation_is_refused_before_dispatch(tmp_path, policy, proof):
+    calls = []
+
+    async def post(request):
+        calls.append(request)
+        payload = json.loads(request.body)
+        return native_response(f"resp_{len(calls)}", receipt_id=payload["metadata"]["receipt_id"])
+
+    pilot = Pilot(make_journal(tmp_path, policy, proof), post)
+    assert asyncio.run(pilot.submit("first", instructions="review", receipt_id="r1", reservation_usd=Decimal("0.2"))).accepted
+    with pytest.raises(ActivationError, match="continuation"):
+        asyncio.run(pilot.submit("packet", instructions="review", receipt_id="r2", reservation_usd=Decimal("0.2"), previous_response_id="resp_1"))
+    assert len(calls) == 1 and pilot.journal.totals()["requests"] == 1
