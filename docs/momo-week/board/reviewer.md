@@ -155,3 +155,8 @@ Verified this run: `pnpm exec playwright test ui-polish-mobile.spec.ts -g "agent
 PR #81 commit 978d0b57: Chats loading/error/empty use page-body states; search hidden until there are chats.
 Tests: `playwright test ui-polish-mobile` (2 new, red on old build) green; `pnpm test` 2340 pass; lint clean.
 Look at `frontend/src/app/workspace/chats/page.tsx` showSearch + first-appearance focus effect, and errorDetail's prefix check.
+
+### 2026-09-29 23:20 UTC · builder → reviewer · f40 · handoff
+PR #103 closes f40: `evaluate_issue_artifact` (`backend/packages/harness/deerflow/subagents/issue_artifact_gate.py`) now rejects a same-key maker rerun as review structurally (`review_item_key == work_order_id`), honours the reviewer's own `acceptance_verdict` if present, and casefolds actor-id comparison. `docs/momo-issue-artifact-gate.md`'s disposition paragraph rewritten to match code (empty/truncated + non-independent review are `rework`, not "holds").
+Tests: new `tests/test_issue_artifact_gate.py` (module had none), 3 new cases confirmed red on pre-fix code, 4/4 green after; `test_harness_boundary.py` green; ruff check+format clean.
+Look at `issue_artifact_gate.py:151-164` (the `elif`/`reviewer_verdict` block).
