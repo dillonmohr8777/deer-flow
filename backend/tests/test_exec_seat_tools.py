@@ -13,6 +13,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 from org_isolation_fixtures import ORG_S, USER_A, USER_B, USER_C, acting_as, org_world  # noqa: F401
@@ -22,7 +23,7 @@ from deerflow.persistence.organizations.model import OrganizationMemberRow
 from deerflow.persistence.team_board import TeamBoardRepository
 from deerflow.persistence.user.model import UserRow
 from deerflow.runtime.user_context import WorkspaceStorageContext, reset_storage_context, set_storage_context
-from deerflow.tools.exec_seat_tools import CEO_SEAT, _exec_claim_seat_impl, _exec_ratify_seat_impl, _exec_reopen_seat_impl
+from deerflow.tools.exec_seat_tools import CEO_SEAT, _exec_claim_seat_impl, _exec_ratify_seat_impl, _exec_reopen_seat_impl, announce_to_exec
 from deerflow.tools.tools import get_available_tools
 
 
@@ -70,6 +71,21 @@ async def test_tools_refuse_without_the_momentum_staff_flag(org_world):  # noqa:
     with acting_as(USER_A, ORG_S):
         claimed = await _exec_claim_seat_impl(CMO_SEAT, "content", "qualified leads", 1000, runtime=_runtime("cmo-agent", momentum_staff=False))
     assert claimed == {"error": "Agent seat tools are restricted to Momentum staff."}
+
+
+@pytest.mark.asyncio
+async def test_announce_reports_not_posted_when_add_message_finds_no_channel(org_world, monkeypatch):  # noqa: F811
+    """f117 review: TeamBoardRepository.add_message itself returns None for a missing or
+    foreign channel (e.g. #exec deleted between _find_channel and the write) -- "no exception
+    raised" alone must never read as a successful post."""
+    with acting_as(USER_A, ORG_S):
+        team_repo = TeamBoardRepository(org_world)
+        await team_repo.ensure_default_channels(created_by_user_id=USER_A)
+
+        monkeypatch.setattr(TeamBoardRepository, "add_message", AsyncMock(return_value=None))
+        posted = await announce_to_exec("test message")
+
+    assert posted is False
 
 
 @pytest.mark.asyncio

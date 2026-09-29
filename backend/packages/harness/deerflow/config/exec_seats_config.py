@@ -13,3 +13,12 @@ class ExecSeatsConfig(BaseModel):
 
     budget_check_enabled: bool = Field(default=False)
     budget_check_interval_seconds: int = Field(default=300, ge=30, le=3600)
+
+    # Weekly scorecard sweep (queue item e11, EXECUTIVE.md rule 3): every
+    # ratified seat gets one scorecard check per trailing week regardless of
+    # how often this loop actually runs (see
+    # ``deerflow.exec_seats.scorecard.evaluate_seat_scorecard``'s
+    # ``last_scorecard_at`` gate), so a short interval just means the sweep
+    # notices a seat's due week sooner, not more than once.
+    scorecard_check_enabled: bool = Field(default=False)
+    scorecard_check_interval_seconds: int = Field(default=3600, ge=30, le=86400)

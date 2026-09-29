@@ -112,24 +112,34 @@ async def _actor_is_ceo(repo: AgentSeatRepository, agent_name: str) -> bool:
     return holder is not None and holder["agent_name"] == agent_name
 
 
-async def _announce(runtime: Runtime | None, text: str) -> None:
+async def _announce(runtime: Runtime | None, text: str) -> bool:
     """Best-effort post of *text* to ``#exec``. Never raises -- a missing channel
-    or storage hiccup must not undo a seat mutation that already persisted."""
+    or storage hiccup must not undo a seat mutation that already persisted.
+
+    Returns whether the message was actually posted, so a caller for whom the
+    post itself is the deliverable (queue item e11's weekly scorecard: a
+    generated draft that never reached ``#exec`` is not "posted") can tell a
+    real post apart from a silent no-op.
+    """
     try:
         from deerflow.tools.team_board_tools import _find_channel
         from deerflow.tools.team_board_tools import _get_repo as _get_team_repo
 
         team_repo = _get_team_repo()
         if team_repo is None:
-            return
+            return False
         channel = await _find_channel(team_repo, _EXEC_CHANNEL)
         if channel is None:
-            return
+            return False
         author_user_id = resolve_runtime_actor_user_id(runtime)
         agent_name = _agent_name(runtime)
-        await team_repo.add_message(channel["id"], author_user_id=author_user_id, body=f"[{agent_name}] {text}")
+        # add_message itself returns None for a missing/foreign channel (f117
+        # review): #exec can disappear between the _find_channel check above
+        # and this write, so "no exception" alone doesn't mean it posted.
+        posted = await team_repo.add_message(channel["id"], author_user_id=author_user_id, body=f"[{agent_name}] {text}")
+        return posted is not None
     except Exception:  # noqa: BLE001 -- an announcement failure must never mask a real result
-        pass
+        return False
 
 
 async def _exec_claim_seat_impl(seat: str, scope: str, kpi: str, weekly_token_budget: int, runtime: Runtime | None = None) -> dict:
@@ -294,12 +304,13 @@ async def exec_reopen_seat(
     return await _exec_reopen_seat_impl(seat_id, runtime=runtime)
 
 
-async def announce_to_exec(text: str) -> None:
+async def announce_to_exec(text: str) -> bool:
     """Post a system-level (no acting agent/tool run) notice to ``#exec``.
 
     Thin adapter around :func:`_announce` for callers with no ``Runtime``,
     e.g. ``deerflow.exec_seats.budget``'s weekly seat-budget check -- it runs
     inside the same organization storage context every other org-scoped
-    background pass uses, but not inside an agent's tool call.
+    background pass uses, but not inside an agent's tool call. Returns
+    whether the message was actually posted.
     """
-    await _announce(None, text)
+    return await _announce(None, text)
