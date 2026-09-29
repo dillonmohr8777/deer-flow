@@ -26,12 +26,19 @@ class BatchSubmitRequest:
     max_live_items: int | None
     max_running_items: int | None
     execution_spec: dict[str, Any]
+    max_attempts: int | None = None
 
 
 class SubagentBatchSubmitter(Protocol):
     async def submit(self, request: BatchSubmitRequest) -> dict[str, Any]: ...
 
     async def get_batch(self, *, batch_id: str, user_id: str) -> dict[str, Any] | None: ...
+
+    async def owns_parent(self, *, thread_id: str, run_id: str, user_id: str) -> bool: ...
+
+    async def get_batch_by_submission_key(self, *, submission_key: str, user_id: str) -> dict[str, Any] | None: ...
+
+    async def list_items(self, *, batch_id: str, user_id: str) -> list[dict[str, Any]] | None: ...
 
     async def cancel_batch(self, *, batch_id: str, user_id: str) -> dict[str, Any] | None: ...
 

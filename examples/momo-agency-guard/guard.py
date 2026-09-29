@@ -42,6 +42,7 @@ class Policy:
             "agent_room_post",
             "task",
             "batch_task",
+            "approved_agency_phase",
             "batch_status",
             "cancel_batch",
             "ls",

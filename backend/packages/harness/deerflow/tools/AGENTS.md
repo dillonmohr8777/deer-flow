@@ -91,3 +91,10 @@ resolution fails before storage. Agent posts remain attributed progress,
 not authorization or independent acceptance. The host owns the existing
 database lifecycle; these tools do not import gateway code or create another
 queue. Tests: `test_agent_room_preservation.py`.
+
+`approved_agency_phase` is config-group opt-in and operator-disabled without a
+digest-pinned fixed manifest. Only fixed cycle/phase identifiers are model
+arguments. It loads complete approved sources server-side, reuses the native
+batch permission boundary and securely persists exact native results before
+reviewer handoff. Tool receipts never accept outputs. Give only the dedicated
+coordinator the group/owner ceiling; children retain an empty tool allowlist.
