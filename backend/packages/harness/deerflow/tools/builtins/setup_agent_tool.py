@@ -63,7 +63,14 @@ def setup_agent(
             try:
                 existing = store.get(agent_name, user_id=user_id)
             except FileNotFoundError:
-                pass  # First bootstrap has no user-authored label to preserve.
+                # A missing config does not prove that the identity is fresh:
+                # file-backed records can retain their directory and SOUL.md.
+                try:
+                    absent = store.exists(agent_name, user_id=user_id) is False
+                except Exception:
+                    absent = False
+                if not absent:
+                    return Command(update={"messages": [ToolMessage(content="Error: Existing agent configuration is unavailable; refusing setup.", tool_call_id=runtime.tool_call_id, status="error")]})
             except Exception:
                 return Command(update={"messages": [ToolMessage(content="Error: Existing agent configuration is unavailable; refusing setup.", tool_call_id=runtime.tool_call_id, status="error")]})
             else:

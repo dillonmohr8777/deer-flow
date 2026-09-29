@@ -85,10 +85,44 @@ def test_unreadable_existing_config_fails_closed_without_upsert(failure):
 def test_fresh_bootstrap_keeps_existing_permission_defaults():
     store = MagicMock()
     store.get.side_effect = FileNotFoundError()
+    store.exists.return_value = False
     with patch("deerflow.tools.builtins.setup_agent_tool.get_agent_store", return_value=store):
         setup_agent.func(soul="new soul", description="fresh", runtime=_make_runtime())
     cfg = AgentConfig(**store.update.call_args.args[1])
     assert cfg.self_update_enabled is True and cfg.tool_names is None
+
+
+@pytest.mark.parametrize("probe", [True, None, 0, ValueError("private existence payload")])
+def test_missing_config_requires_authoritative_identity_absence(probe):
+    store = MagicMock()
+    store.get.side_effect = FileNotFoundError("private missing config payload")
+    if isinstance(probe, Exception):
+        store.exists.side_effect = probe
+    else:
+        store.exists.return_value = probe
+    with patch("deerflow.tools.builtins.setup_agent_tool.get_agent_store", return_value=store):
+        result = setup_agent.func(soul="replacement", description="must not persist", runtime=_make_runtime())
+    store.update.assert_not_called()
+    store.exists.assert_called_once_with("test-agent", user_id="test-user-autouse")
+    assert result.update["messages"][0].status == "error"
+    assert "private" not in result.update["messages"][0].content
+
+
+def test_existing_directory_without_config_is_not_rebootstrapped(tmp_path, monkeypatch):
+    from deerflow.persistence.agents.file import FileAgentStore
+
+    monkeypatch.setenv("DEER_FLOW_HOME", str(tmp_path))
+    agent_dir = tmp_path / "users" / "test-user-autouse" / "agents" / "test-agent"
+    agent_dir.mkdir(parents=True)
+    soul = agent_dir / "SOUL.md"
+    soul.write_text("owner original", encoding="utf-8")
+    store = FileAgentStore()
+    assert store.exists("test-agent") is True
+    with patch("deerflow.tools.builtins.setup_agent_tool.get_agent_store", return_value=store):
+        result = setup_agent.func(soul="replacement", description="must not persist", runtime=_make_runtime())
+    assert result.update["messages"][0].status == "error"
+    assert soul.read_text(encoding="utf-8") == "owner original"
+    assert not (agent_dir / "config.yaml").exists()
 
 
 def test_setup_agent_rejects_invalid_agent_name_before_writing(tmp_path, monkeypatch):

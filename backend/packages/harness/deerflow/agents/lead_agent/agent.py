@@ -956,7 +956,17 @@ def _assemble_lead_agent(config: RunnableConfig, *, app_config: AppConfig) -> Le
         try:
             agent_config = load_agent_config(agent_name, user_id=resolved_user_id)
         except FileNotFoundError:
+            from deerflow.persistence.agents import get_agent_store
+
+            try:
+                absent = get_agent_store().exists(agent_name, user_id=resolved_user_id) is False
+            except Exception:
+                absent = False
+            if not absent:
+                raise ValueError("Existing agent config readback is unavailable") from None
             agent_config = None
+        except Exception:
+            raise ValueError("Existing agent config readback is unavailable") from None
         else:
             if agent_config is None:
                 raise ValueError("Existing agent config readback is unavailable")
@@ -964,6 +974,8 @@ def _assemble_lead_agent(config: RunnableConfig, *, app_config: AppConfig) -> Le
             raise ValueError("Existing agent operator-owned permissions forbid bootstrap")
     else:
         agent_config = load_agent_config(agent_name, user_id=resolved_user_id) if not is_bootstrap else None
+        if agent_name and agent_config is None:
+            raise ValueError("Existing agent config readback is unavailable")
     tool_names = getattr(agent_config, "tool_names", None)
     memory_enabled = getattr(agent_config, "memory_enabled", True) is not False
     # Keep compatibility with lightweight AgentConfig-shaped objects used by
