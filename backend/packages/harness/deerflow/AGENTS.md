@@ -65,6 +65,19 @@ artifact. New automatic capture entry points must reuse the shared progress
 encoding definition in `tools.py` so the byte encoding and `.jpg` suffix cannot
 drift.
 
+`browserbase_qa.py` is a manually invoked public-page QA adapter, not an enabled
+agent tool or a replacement for the process-local browser manager. It uses the
+existing optional browser extra and Browserbase's HTTP/CDP API. Keep exact-host
+admission, public-DNS checks, GET/HEAD-only routing, redirect rejection, retained
+body/request/screenshot caps, default usage gate, no model calls and owned-session
+release. Browserbase `allowedDomains` guards only main-frame navigation (and
+allows subdomains), so it cannot replace the stricter local request guard. No
+authenticated/persistent contexts, CAPTCHA solving, proxies or provider logging.
+Never log response bodies or credential-bearing connect URLs; raw Playwright
+errors may contain them. `test_browserbase_qa.py` must remain offline and test
+budget denial, sanitized errors and release after failed capture. Receipts stay
+outside Git; no scheduler/config activation is part of this adapter.
+
 ### Embedded Client (`packages/harness/deerflow/client.py`)
 
 `DeerFlowClient` provides in-process access without HTTP/FastAPI, sharing Gateway's `deerflow` modules, config, data directories, and response schemas.

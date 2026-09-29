@@ -2320,6 +2320,36 @@ only after the agent store confirms the record is absent. These checks do not
 provision an agent or change the existing private-data, budget, or organization
 authorization rules.
 
+## Manual Browserbase public-page QA
+
+The opt-in `deerflow.community.browser_automation.browserbase_qa` runner creates
+one 60-second Browserbase session for public-page checks at 390/768/1440. It uses
+the headless HTTP/CDP API with Playwright, without model calls, form submission,
+persistent cookies or scheduler changes. It requires an exact host allowlist,
+blocks mutating requests and redirects, records overflow/target-size measurements,
+and requests release only for its own created session. Receipts and screenshots
+belong in a fresh private directory outside Git. Provider errors are sanitized;
+credential-bearing CDP URLs must never be logged.
+
+```sh
+cd backend
+uv sync --frozen --extra browser
+# Existing credential: BROWSERBASE_API_KEY, or macOS Keychain browserbase.api-key.
+# This command consumes included browser time; run only within an approved budget.
+uv run --no-sync python -m deerflow.community.browser_automation.browserbase_qa \
+  --url https://example.com/ --allow-host example.com \
+  --project-id YOUR_EXISTING_PROJECT_UUID --output /private/local/fresh-qa-run
+```
+
+The default reported-usage admission ceiling is 50 browser minutes; missing or
+invalid usage stops before session creation. This ceiling is a conservative
+local gate, not proof of the account's plan, remaining quota or an atomic shared
+budget. Request/body/screenshot admission caps bound retained QA data; HTTP
+responses are fetched before body-size rejection, so this is not a hard network
+transfer cap. API creation failures are never automatically retried; an ambiguous
+timeout must be reconciled before another attempt. This manual runner does not
+enable the general browser tool group or production Browserbase routing.
+
 ## Star History
 
 [![Star History Chart](https://star-history.dera.page/svg?repos=bytedance/deer-flow&type=Date)](https://star-history.dera.page/#bytedance/deer-flow&Date)
