@@ -75,6 +75,65 @@
 }
 
 /*
+ * Phones: each result is its own paper slip, and the whole slip opens the
+ * receipt, so the tap target is the slip rather than a 20px text link.
+ */
+@media (max-width: 39.99rem) {
+  .slips {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    border-bottom: 0;
+  }
+
+  /* Doubled so the full hairline beats the shared lighter row rule. */
+  .slips.slips > li {
+    position: relative;
+    padding: 0.875rem 1rem;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 2px 5px 3px 6px;
+    box-shadow: 0 1px 0 color-mix(in srgb, var(--foreground) 10%, transparent);
+  }
+
+  .slips.slips > li:nth-child(even) {
+    border-radius: 5px 2px 6px 3px;
+  }
+
+  /* The title owns its line and a failure reason wraps in full. */
+  .slips .name {
+    flex-basis: 100%;
+  }
+
+  .slips .sub {
+    white-space: normal;
+  }
+
+  .slips .cell {
+    flex: 0 1 auto;
+  }
+
+  .slips .link {
+    margin-inline-start: auto;
+  }
+
+  .slips .link::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+  }
+
+  .slips .link:focus-visible {
+    outline: none;
+  }
+
+  .slips > li:has(.link:focus-visible) {
+    outline: 3px solid var(--ring);
+    outline-offset: 2px;
+  }
+}
+
+/*
  * One row per record at every width. Cells have fixed bases so they line
  * up as columns on desktop; on phones the name takes the line and the
  * self-describing cells wrap under it.

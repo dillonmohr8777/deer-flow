@@ -186,7 +186,9 @@ function Today({ tasks }: { tasks: ReturnType<typeof useScheduledTasks> }) {
                 : "No scheduled agent has run on this instance yet. Drafts and results land here after the first run."}
             </EmptyState>
           ) : (
-            <ul className={cn("divide-y border-b", pageStyles.rows)}>
+            <ul
+              className={cn("divide-y border-b", pageStyles.rows, styles.slips)}
+            >
               {outputs.map((task) => (
                 <li key={task.id} className={styles.row}>
                   <span className={styles.name}>

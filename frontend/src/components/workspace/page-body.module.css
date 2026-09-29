@@ -460,6 +460,8 @@
 .emptyArt {
   position: relative;
   flex: none;
+  /* Room for the top-left scrap, so it never crosses the gutter. */
+  margin-inline-start: 14px;
 }
 
 /* Positioned so it always wins the stacking order over the scraps behind

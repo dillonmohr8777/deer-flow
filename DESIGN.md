@@ -216,6 +216,8 @@ Use the shared components in `components/workspace/page-body.tsx`. Do not write 
 - Tabs, metric strips and the Settings section list become sideways rails. The active item is scrolled into view, and grid items get `min-width: 0` so a rail scrolls instead of widening its parent.
 - Command Center puts the dispatch board before the agent team at every width, in DOM order, so focus order matches reading order. On phones the board's lanes stack, desk first.
 - **Paper on the desk.** Below 640px the dispatch board and the agent team drop their panel frame and lie straight on the canvas, as the Desk's sections do, so slips run the full gutter width. At a phone-width team (320 to 439px) the specialists stand as a two-column sticker sheet: a 64px Momo on top, name and state under it, the even column set 14px lower.
+- Desk Today results become paper slips below 640px, and the whole slip opens the receipt, so the tap target is the slip rather than a text link. A failure reason wraps in full.
+- `EmptyState` art (Momo and its two scraps) stays inside the content box at every width; no scrap crosses the gutter.
 - The chat composer keeps its disclaimer clear of the bottom edge with safe-area padding. The background-work control never covers the submit button.
 - Dialog headers are left-aligned at every width.
 
