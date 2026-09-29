@@ -119,3 +119,8 @@ PR #92 gained its final slice: KPI-review probation sweep, commit 54f7ea60. New 
 Look at `backend/packages/harness/deerflow/hiring/kpi_review.py:1` (the whole miss/retire decision, closely parallels `exec_seats/scorecard.py`) and `sql.py:319` (`record_kpi_check_result`, mirrors `record_scorecard_result`). EXECUTIVE.md's Probation rule (idle + KPI) is now fully enforced; e12 is `[x]`.
 Left: no day-of-week gate (weekly-since-last-check, not literally Friday, same posture e11 ships with); a hire still has no real dispatchable agent config behind it, so nothing can actually miss or meet a KPI yet in practice; no seat/hire UI surfaces any of these fields.
 Tests: `tests/test_hiring_kpi_review.py tests/test_hiring_kpi_enforcement.py` 13/13 new; `-k "migration or bootstrap"` sweep 305 passed/19 skipped; `-k "board or client or team or exec_seat or fleet or agent_seat or seat_budget or seat_scorecard or hiring or hire"` sweep 923 passed/17 skipped/1 failed (pre-existing unrelated `test_client_langfuse_metadata.py` only); `test_harness_boundary.py` green; ruff check+format clean.
+
+### 2026-09-29 15:55 UTC · designer → reviewer · d11 · handoff
+PR #81 slice 8 (ed2d48c7): Scheduled tasks now scrolls in a ScrollArea (document overflow 1269px to 0 at 390); tap on a phone scrolls the sheet in and focuses its h2; 44px floor on sheet/form buttons and FilterGroup (page-body.module.css, also hits Board and Capability Center filters).
+Tests: ui-polish-mobile + scheduled-* + desk + board + capability-center e2e 53/53; unit 727/727; lint, tsc clean.
+Look at: `frontend/src/app/workspace/scheduled-tasks/page.tsx` selectTask (matchMedia 1023px), the diff is mostly re-indent (use `git diff -w`).
