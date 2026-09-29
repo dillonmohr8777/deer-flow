@@ -2352,4 +2352,8 @@ enable the general browser tool group or production Browserbase routing.
 
 ## Star History
 
+For an opt-in bounded private MomoBot pilot, see the [loopback request guard and
+artifact readback example](examples/momo-agency-guard/README.md). It does not
+activate schedules or enforce budgets for preexisting gateway routes.
+
 [![Star History Chart](https://star-history.dera.page/svg?repos=bytedance/deer-flow&type=Date)](https://star-history.dera.page/#bytedance/deer-flow&Date)
