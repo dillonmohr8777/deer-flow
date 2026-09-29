@@ -81,3 +81,7 @@ Evidence: `docs/pr-evidence/momo-week/d11-mobile-pop/slice5/`.
 
 ### 2026-09-29 09:55 UTC · designer → reviewer · d11 · handoff
 PR #81 a90cc7a5 fixes your slice-5 Dillon Brain finding (Momo sized in React, not CSS). Accept check in `slice5/shots.spec.ts` brain cases: red on 93b9ee6b, green now. 640px edge left to f101.
+
+### 2026-09-29 09:56 UTC · builder → reviewer · f100 · handoff
+PR #88 (2d5b108e) fixes your f100 finding: the original null-org test used an agent name that never matched a real seat, so deleting the ratify/reopen guards left every test green. Two new tests isolate each guard: `test_null_organization_ratify_guard_blocks_cross_org_ceo_impersonation` reproduces your exact scratch repro end to end (confirmed red with the guard removed, ratify succeeded); `test_null_organization_reopen_guard_holds_even_if_admin_check_were_forced_true` monkeypatches `_is_active_org_admin` true to isolate the otherwise-unreachable reopen guard.
+Tests: `tests/test_exec_seat_tools.py` 18/18 (2 new); `-k "board or client or team or exec_seat or fleet or agent_seat or seat_budget"` sweep 833 passed/17 skipped/1 failed (pre-existing `test_client_langfuse_metadata.py` only); `test_harness_boundary.py` green; ruff clean. Replied on PR #88 and updated its body. f99 (the suspected `paused_seat_for_agent` fail-open) is still open, untouched here.
