@@ -20,10 +20,12 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 
-from app.gateway.authz import require_permission
-from app.gateway.deps import get_current_user
+from app.gateway.authz import get_auth_context, require_entitlement, require_permission
+from app.gateway.deps import get_current_user, get_entitlement_repo, get_project_repo
+from deerflow.authz.entitlements import evaluate_entitlement
 from deerflow.config import get_app_config
 from deerflow.config.agents_config import list_custom_agents
+from deerflow.config.entitlement_config import resolve_current_entitlement_config
 from deerflow.persistence.engine import get_session_factory
 from deerflow.persistence.models.run_event import RunEventRow
 from deerflow.persistence.run.model import RunRow
@@ -657,3 +659,69 @@ async def console_ownerless_threads(request: Request) -> OwnerlessThreadsRespons
             if thread_id and thread_id not in known:
                 orphans.add(str(thread_id))
     return OwnerlessThreadsResponse(ownerless=sorted(thread_id for thread_id, owner in rows if owner is None), orphan_checkpoints=sorted(orphans))
+
+
+# ---------------------------------------------------------------------------
+# Entitlement snapshot (M4, task e6) — design §5 of docs/momo-week/m4-entitlement.md
+# ---------------------------------------------------------------------------
+
+# Design §5's minimum key set. ``workflows.max``/``brands.max``/
+# ``repair_minutes.monthly`` have no owning resource in this codebase yet, so
+# they are intentionally left out of the snapshot rather than reported
+# against a fabricated counter; add them once those resources exist.
+_ENTITLEMENT_GATE_KEYS: tuple[str, ...] = ("console.read", "runs.create", "runs.cancel", "agents.manage", "schedules.manage")
+_ENTITLEMENT_LIMIT_KEYS: tuple[str, ...] = ("projects.max",)
+
+
+class EntitlementGateSnapshot(BaseModel):
+    allowed: bool
+
+
+class EntitlementLimitSnapshot(BaseModel):
+    limit: int | None = Field(description="None when entitlements are disabled or not enforced for this key -- distinct from 0, which means enforced-and-exhausted")
+    used: int
+
+
+class EntitlementSnapshotResponse(BaseModel):
+    """Same shape the route-level evaluator derives (design §7.3: display and
+    enforcement must never read different data)."""
+
+    organization_id: str | None
+    entitlements: dict[str, EntitlementGateSnapshot | EntitlementLimitSnapshot]
+    degraded: bool
+
+
+@router.get(
+    "/entitlements",
+    response_model=EntitlementSnapshotResponse,
+    summary="Effective entitlement snapshot",
+    description="The same allow/deny and limit/used values the route-level entitlement evaluator uses, for display.",
+)
+@require_permission("runs", "read")
+@require_entitlement("console.read")
+async def console_entitlements(request: Request) -> EntitlementSnapshotResponse:
+    auth = get_auth_context(request)
+    organization_id = auth.organization_id if auth is not None else None
+    entitlement_config = resolve_current_entitlement_config()
+    repo = get_entitlement_repo(request)
+
+    entitlements: dict[str, EntitlementGateSnapshot | EntitlementLimitSnapshot] = {}
+    degraded = False
+    for key in _ENTITLEMENT_GATE_KEYS:
+        decision = await evaluate_entitlement(repo, organization_id, key, config=entitlement_config)
+        entitlements[key] = EntitlementGateSnapshot(allowed=decision.allowed)
+        degraded = degraded or decision.degraded
+
+    project_repo = get_project_repo(request)
+    for key in _ENTITLEMENT_LIMIT_KEYS:
+        # Live usage is real regardless of enforcement state; the evaluator's
+        # own `limit` already carries the distinction the UI needs: None
+        # (entitlements disabled -- unenforced) vs 0 (enabled, no row --
+        # enforced and exhausted) vs a real number. Coercing None to 0 here
+        # would make a disabled gate look identical to an exhausted one.
+        current_usage = len(await project_repo.list(status="active"))
+        decision = await evaluate_entitlement(repo, organization_id, key, current_usage=current_usage, config=entitlement_config)
+        entitlements[key] = EntitlementLimitSnapshot(limit=decision.limit, used=current_usage)
+        degraded = degraded or decision.degraded
+
+    return EntitlementSnapshotResponse(organization_id=organization_id, entitlements=entitlements, degraded=degraded)
