@@ -183,8 +183,18 @@ class AgentSeatRepository:
         must still block a run identifying itself as ``cmo-agent``, the
         normalized form ``build_run_config`` already enforces for an explicit
         ``assistant_id``.
+
+        A caller with no resolved organization (an internal/channel run with
+        no org context) never blocks: ``_scope`` treats ``None`` as "no
+        filter" everywhere else in this repository (an intentional
+        cross-org admin view), but here that would fail *open* across every
+        organization's paused seats instead -- 429ing an unrelated org's run
+        and leaking that seat's title (queue item f99). ``None`` in, ``None``
+        out.
         """
         organization_id = resolve_organization_id()
+        if organization_id is None:
+            return None
         normalized = agent_name.strip().lower().replace("_", "-")
         normalized_column = func.replace(func.lower(AgentSeatRow.agent_name), "_", "-")
         stmt = self._scope(select(AgentSeatRow), organization_id).where(
@@ -274,15 +284,20 @@ class AgentSeatRepository:
         ``RunRow.assistant_id`` of ``CMO_Agent`` or a stamped identity of
         ``CMO-Agent`` must count toward a seat claimed as ``cmo-agent``
         exactly like the exact-cased form would.
+
+        ``organization_id=None`` is never "every organization's burn" -- a
+        caller with no resolved org (queue item f99) gets ``0``, not a sum
+        across every org's same-named agent.
         """
+        if organization_id is None:
+            return 0
         normalized = agent_name.strip().lower().replace("_", "-")
         effective_identity = func.coalesce(RunRow.metadata_json[EFFECTIVE_AGENT_NAME_METADATA_KEY].as_string(), RunRow.assistant_id)
         normalized_identity = func.replace(func.lower(effective_identity), "_", "-")
         stmt = select(func.coalesce(func.sum(RunRow.total_tokens), 0)).where(
             normalized_identity == normalized,
             RunRow.created_at >= since,
+            RunRow.organization_id == organization_id,
         )
-        if organization_id is not None:
-            stmt = stmt.where(RunRow.organization_id == organization_id)
         async with self._sf() as session:
             return int(await session.scalar(stmt) or 0)

@@ -308,3 +308,21 @@ async def test_token_burn_since_still_matches_a_legacy_row_with_no_stamp(org_wor
         burn = await repo.token_burn_since(organization_id=ORG_A, agent_name="cmo-agent", since=now - timedelta(days=7))
 
     assert burn == 700
+
+
+@pytest.mark.asyncio
+async def test_token_burn_since_with_no_organization_never_sums_across_orgs(org_world):  # noqa: F811
+    """f99: a caller with no resolved organization must never see the union of
+    every organization's spend for a same-named agent. Before the fix,
+    ``organization_id=None`` skipped the org filter entirely and this probe
+    summed ORG_A's 100 plus ORG_B's 200 into 300."""
+    repo = AgentSeatRepository(org_world)
+    now = datetime.now(UTC)
+    with acting_as(USER_A, ORG_A):
+        await _spend(org_world, organization_id=ORG_A, agent_name="cmo-agent", total_tokens=100, created_at=now - timedelta(hours=1))
+    with acting_as(USER_A, ORG_B):
+        await _spend(org_world, organization_id=ORG_B, agent_name="cmo-agent", total_tokens=200, created_at=now - timedelta(hours=2))
+
+    burn = await repo.token_burn_since(organization_id=None, agent_name="cmo-agent", since=now - timedelta(days=7))
+
+    assert burn == 0
