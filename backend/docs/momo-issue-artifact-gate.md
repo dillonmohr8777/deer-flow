@@ -41,16 +41,24 @@ must bind `work_order_id`, `artifact_sha256`, the same source snapshots,
 artifact directly. The separate review execution record must be a completed,
 nonempty, untruncated batch item matching `review_item_key`; its `id` must
 equal the review receipt's `review_batch_item_id`, differ from the maker's
-batch item `id`, and use a distinct actor. Both IDs therefore share the
-durable batch-item namespace. Store and authorize these receipts outside model-authored
-room text; matching JSON strings alone are not an authentication mechanism.
-The export command creates a new output file and refuses to overwrite or alias
-its inputs.
+batch item `id`, and use a distinct actor (actor ids are compared casefolded,
+so the same person under a different capitalization is still the same
+reviewer). A work order whose own `review_item_key` names its own
+`work_order_id` never counts as independent either, even if the rerun's batch
+item `id` and actor happen to differ from the maker's: that key names a rerun
+of the maker's own task, not a second one. If the review execution carries its
+own `acceptance_verdict`, that verdict must also hold (`all_hold: true`); one
+that does not is rework, not a silent pass. Both IDs therefore share the
+durable batch-item namespace. Store and authorize these receipts outside
+model-authored room text; matching JSON strings alone are not an
+authentication mechanism. The export command creates a new output file and
+refuses to overwrite or alias its inputs.
 
 `ready-for-owner` means only that the artifact passed these mechanical
 evidence gates and a separate review was recorded. The human owner still
 decides whether the proposed change is correct or may be published. A missing
-source, unchecked criterion, empty result, truncated result, missing file
-readback, or missing review holds the item. A failed run or conflicting
-identity/hash requires rework. Live issue resolution is recorded separately
+source, unchecked criterion, missing file readback, or missing review holds
+the item as `needs-evidence`. A failed run, an empty or truncated result, a
+non-independent review, an unheld reviewer verdict, or a conflicting
+identity/hash requires `rework`. Live issue resolution is recorded separately
 after authorized application and readback.

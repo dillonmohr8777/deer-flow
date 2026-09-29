@@ -100,10 +100,7 @@ def evaluate_issue_artifact(
         or not verdict["leaves"]
         or not isinstance(criteria, list)
         or len(verdict["leaves"]) != len(criteria)
-        or any(
-            not isinstance(leaf, Mapping) or leaf.get("checked") is not True or leaf.get("holds") is not True
-            for leaf in verdict["leaves"]
-        )
+        or any(not isinstance(leaf, Mapping) or leaf.get("checked") is not True or leaf.get("holds") is not True for leaf in verdict["leaves"])
         or any(leaf.get("criterion") != criterion for leaf, criterion in zip(verdict["leaves"], criteria))
         or verdict.get("unchecked") != []
     ):
@@ -112,13 +109,7 @@ def evaluate_issue_artifact(
     artifact_path = _value(order, "expected_artifact_path")
     artifact_sha = _value(artifact, "sha256")
     readback_sha = _value(artifact, "readback_sha256")
-    if (
-        not artifact_path
-        or not Path(artifact_path).is_absolute()
-        or not _value(artifact, "path")
-        or not artifact_sha
-        or not readback_sha
-    ):
+    if not artifact_path or not Path(artifact_path).is_absolute() or not _value(artifact, "path") or not artifact_sha or not readback_sha:
         missing.append("artifact_readback_missing")
     elif (
         _value(artifact, "path") != artifact_path
@@ -143,11 +134,7 @@ def evaluate_issue_artifact(
     maker_actor = _value(artifact, "maker_actor_id")
     reviewer_batch_item = _value(reviewer_item, "id")
     reviewer_actor = _value(review, "reviewer_actor_id")
-    if (
-        not maker_batch_item.startswith("batch-item-")
-        or not maker_actor
-        or _value(artifact, "maker_batch_item_id") != maker_batch_item
-    ):
+    if not maker_batch_item.startswith("batch-item-") or not maker_actor or _value(artifact, "maker_batch_item_id") != maker_batch_item:
         missing.append("maker_provenance_missing")
     if (
         not reviewer_batch_item.startswith("batch-item-")
@@ -161,8 +148,20 @@ def evaluate_issue_artifact(
         or (review_item_key and _value(reviewer_item, "item_key") != review_item_key)
     ):
         missing.append("independent_review_missing")
-    elif reviewer_batch_item == maker_batch_item or reviewer_actor == maker_actor:
+    elif (
+        reviewer_batch_item == maker_batch_item
+        or reviewer_actor.casefold() == maker_actor.casefold()
+        # A work order whose own `review_item_key` names the maker's own
+        # `work_order_id` lets a plain rerun of the maker satisfy
+        # `item_key == review_item_key` trivially, even under a fresh batch
+        # item id and a fresh actor id. That key is not a second, independent
+        # task; refuse it structurally rather than trusting id/actor alone.
+        or (order_id and review_item_key == order_id)
+    ):
         rework.append("review_not_independent")
+    reviewer_verdict = reviewer_item.get("acceptance_verdict")
+    if isinstance(reviewer_verdict, Mapping) and reviewer_verdict.get("all_hold") is not True:
+        rework.append("reviewer_verdict_not_held")
     if review:
         if _value(review, "decision") != "accepted":
             rework.append("review_not_accepted")
@@ -222,11 +221,7 @@ def main() -> None:
         key = _value(execution, "item_key")
         if not key:
             raise ValueError("Batch item missing item_key")
-        rows.append(
-            evaluate_issue_artifact(
-                orders.get(key), execution, artifacts.get(key), reviews.get(key), reviewer_items.get(key)
-            )
-        )
+        rows.append(evaluate_issue_artifact(orders.get(key), execution, artifacts.get(key), reviews.get(key), reviewer_items.get(key)))
     args.output.parent.mkdir(parents=True, exist_ok=True)
     inputs = (args.batch_export, args.work_orders, args.artifact_receipts, args.review_receipts, args.review_executions)
     if any(path is not None and args.output.resolve() == path.resolve() for path in inputs):
