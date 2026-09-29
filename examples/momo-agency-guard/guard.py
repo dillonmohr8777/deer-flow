@@ -18,7 +18,7 @@ from contextlib import contextmanager
 from decimal import Decimal, InvalidOperation
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.request import Request, urlopen
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 
 class Stop(Exception):
@@ -91,8 +91,14 @@ def validate_payload(payload, policy):
         raise Stop("unsupported_payload_field")
     if payload.get("model") != policy.model:
         raise Stop("private_model_not_allowed")
-    if payload.get("stream", False) not in (True, False):
+    if type(payload.get("stream", False)) is not bool:
         raise Stop("invalid_stream")
+    if "stream_options" in payload and (
+        not isinstance(payload["stream_options"], dict)
+        or set(payload["stream_options"]) - {"include_usage"}
+        or type(payload["stream_options"].get("include_usage", True)) is not bool
+    ):
+        raise Stop("invalid_stream_options")
     messages = payload.get("messages")
     if not isinstance(messages, list) or not messages or len(messages) > 256:
         raise Stop("invalid_messages")
@@ -123,10 +129,13 @@ def validate_payload(payload, policy):
     if not isinstance(tools, list) or len(tools) > 32:
         raise Stop("invalid_tools")
     for tool in tools:
+        function = tool.get("function") if isinstance(tool, dict) else None
         if (
             not isinstance(tool, dict)
             or tool.get("type") != "function"
-            or tool.get("function", {}).get("name") not in policy.tools
+            or not isinstance(function, dict)
+            or function.get("name") not in policy.tools
+            or not isinstance(function.get("parameters", {}), dict)
         ):
             raise Stop("hosted_or_unapproved_tool_refused")
     for key in ("max_tokens", "max_completion_tokens"):
@@ -143,7 +152,12 @@ def validate_payload(payload, policy):
         raise Stop("unsupported_reasoning_budget")
     # UTF-8 bytes plus conservative message framing is an admission estimate,
     # not the billing guarantee. Full-context price reservation is below.
-    encoded = json.dumps(payload, ensure_ascii=False, allow_nan=False).encode("utf-8")
+    try:
+        encoded = json.dumps(payload, ensure_ascii=False, allow_nan=False).encode(
+            "utf-8"
+        )
+    except (ValueError, TypeError, UnicodeError) as exc:
+        raise Stop("payload_encoding_invalid") from exc
     input_bound = len(encoded) + 4096 + 128 * (len(messages) + len(tools))
     if input_bound > policy.max_input_bound:
         raise Stop("text_input_bound_exceeded")
@@ -407,6 +421,15 @@ def hash_artifact(root, cycle_id, work_order_id, filename, source_sha256):
     }
 
 
+class RefuseRedirect(HTTPRedirectHandler):
+    def redirect_request(self, _request, _fp, _code, _msg, _headers, _newurl):
+        raise Stop("upstream_redirect_refused")
+
+
+def no_redirect_opener():
+    return build_opener(RefuseRedirect())
+
+
 def upstream(path, key, payload=None, limit=4000000):
     headers = {"Authorization": "Bearer " + key, "Content-Type": "application/json"}
     data = (
@@ -415,7 +438,7 @@ def upstream(path, key, payload=None, limit=4000000):
         else None
     )
     request = Request("https://openrouter.ai/api/v1" + path, data=data, headers=headers)
-    with urlopen(request, timeout=300 if data else 20) as response:
+    with no_redirect_opener().open(request, timeout=300 if data else 20) as response:
         body = response.read(limit + 1)
         if len(body) > limit:
             raise Stop("upstream_response_size_ceiling")
