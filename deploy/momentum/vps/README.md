@@ -12,7 +12,7 @@ and is never merged into this instance.
 | `Caddyfile` | The public site: HTTPS, HSTS, no response buffering (streaming works). |
 | `restart.sh` | Start or restart: base compose + dood + `compose.momentum.yaml` + Postgres + public overlay. `--what-if` prints the merged config and changes nothing. Never builds. |
 | `health.sh` | Docker, loopback UI, `/health/ready`, the public URL, and a backup receipt under 26 h. One JSON line per run to `/var/log/momobot/health.jsonl`; exit 1 means look. |
-| `backup.sh` | Nightly encrypted backup via `../offsite_backup.py`, with the snapshot image taken from `MOMENTUM_GATEWAY_IMAGE` in `.env` so it always exists on this server. |
+| `backup.sh` | Nightly encrypted backup via `../offsite_backup.py`, with the snapshot image taken from `MOMENTUM_GATEWAY_IMAGE` in `.env` so it always exists on this server; also `pg_dump`s the live Postgres container (detected from `POSTGRES_PASSWORD` in `.env`) into its own encrypted file, since users/threads/checkpoints/run_events live there, not in the gateway volume. |
 | `dotenv-get.sh` | Reads one non-secret value from `.env` without sourcing it. systemd never loads `.env`: its parser differs from compose's and would outrank `--env-file`. |
 | `systemd/` | `momobot.service` (start at boot), `momobot-health.timer` (every 15 min), `momobot-backup.timer` (nightly). |
 
@@ -136,6 +136,41 @@ backups can't be restored if the server dies. Off-machine copy: the Mac pulls
 the encrypted files nightly over Tailscale (launchd job running
 `rsync -a hermes-vps:/srv/momobot/backups/ ~/MomoBot-Backups/`); the files are
 useless without the key, which never leaves the password manager and the server.
+
+This server runs Postgres (`compose.postgres.yaml`), so **users, threads,
+checkpoints and run_events live in the database, not in the
+`deer-flow_gateway-data` volume**. `backup.sh` detects that from
+`POSTGRES_PASSWORD` in `.env` and has `offsite_backup.py` `pg_dump` the live
+container (no password needed: it runs inside the container over its own
+trusted local socket) into a second encrypted file per run,
+`postgres-<stamp>.dump.enc`, sitting next to `gateway-data-<stamp>.tgz.enc`
+with the same restore-check and retention. A receipt whose `"postgres"` field
+is `null` means this host has no Postgres container configured (not this VPS);
+`"state": "FAIL"` there means the dump didn't verify, same as the volume tar.
+
+**Restore a login after losing the server** (rehearse on a throwaway host
+before ever pointing `MOMOBOT_DOMAIN` at it):
+
+```bash
+# 1. Decrypt both files with the key copied into the password manager in step above.
+python3 deploy/momentum/offsite_backup.py --restore /path/to/gateway-data-<stamp>.tgz.enc
+python3 deploy/momentum/offsite_backup.py --restore /path/to/postgres-<stamp>.dump.enc
+# Each prints where it decrypted to and the exact follow-up command:
+#   the gateway-data one -> load its .tgz into a fresh, empty
+#     deer-flow_gateway-data volume (docker run ... tar xzf ...)
+#   the postgres one -> docker cp the .dump into the new postgres container,
+#     then pg_restore --clean --if-exists into it
+# 2. Start the stack against the restored volume and freshly restored database:
+deploy/momentum/vps/restart.sh
+# 3. Verify: sign in with an existing account (no re-invite needed -- the
+#    restored users table already has it) and confirm a recent thread matches.
+```
+
+A restore that skips the `pg_dump` half brings back the gateway volume (skill
+files, sandbox state) with none of the actual accounts, threads or messages —
+`docker exec deer-flow-postgres psql -U deerflow -d deerflow -c '\dt'` on a
+volume-only restore shows no tables at all, since Postgres owns its own data
+directory in `postgres-data`, separate from `deer-flow_gateway-data`.
 
 ## 6. Data cutover from the PC (only on Dillon's go)
 
