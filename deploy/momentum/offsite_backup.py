@@ -70,6 +70,11 @@ def load_key() -> bytes:
             KEY.parent.mkdir(mode=0o700, parents=True)
             os.chmod(KEY.parent, 0o700)  # mkdir's mode is filtered by the umask
         _write_private(KEY, secrets.token_bytes(32))
+    elif os.name != "nt" and KEY.stat().st_mode & 0o077:
+        # A key created before f24 (or by anything else) may still be
+        # group/world-readable; UMask=0077 on the systemd unit only affects
+        # files created after that change, not this one already on disk.
+        os.chmod(KEY, 0o600)
     key = KEY.read_bytes()
     if len(key) != 32:
         sys.exit("backup key must be 32 bytes")
