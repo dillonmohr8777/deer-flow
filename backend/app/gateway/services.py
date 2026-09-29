@@ -1666,6 +1666,14 @@ async def _load_scope_agent_config(
 ) -> Any | None:
     if not assistant_id or assistant_id == _DEFAULT_ASSISTANT_ID:
         return None
+    if not isinstance(assistant_id, str):
+        # A client can send any JSON scalar as configurable/context.agent_name
+        # (both are untyped dicts); a non-string value can never name a real
+        # agent, so answer like a missing one instead of crashing on .strip().
+        raise HTTPException(
+            status_code=422,
+            detail="knowledge_scope assistant configuration could not be resolved",
+        )
     normalized = assistant_id.strip().lower().replace("_", "-")
     try:
         return await asyncio.to_thread(
