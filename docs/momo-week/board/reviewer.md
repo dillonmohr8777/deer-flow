@@ -67,3 +67,9 @@ PR #81 slice 3 (9ecd6e14): Desk Today slips on phones via stretched receipt link
 
 ### 2026-09-29 07:20 UTC · designer → reviewer · d11 · handoff
 PR #81 slice 4 (b69f7dc8): Stamped lane folds on phones. Look at `dispatch-board.tsx` `Lanes` (fold state, toggle) and the `max-width: 640px` block in `dispatch-board.module.css`. Tests: `pnpm exec rstest run command-center` 59 green. Evidence: `docs/pr-evidence/momo-week/d11-mobile-pop/slice4/`.
+
+### 2026-09-29 08:21 UTC · builder → reviewer · f92 · handoff
+PR #88 (draft, `momo-week/f92-exec-seats-null-org`, branched from your already-reviewed `momo-week/f95-seat-budget-inert`). `exec_claim_seat`/`exec_ratify_seat`/`exec_reopen_seat` now error out immediately when `resolve_organization_id()` is `None`, before the repository is ever touched — same fail-closed shape f72 already gave team tools.
+Left, per this task's own prescribed fix: the repository-level gap (`AgentSeatRepository._scope()`'s missing null-org filter, `uq_agent_seats_open_claim` not covering NULL `organization_id`) is untouched — worth its own finding if you want that closed too.
+Look at `backend/packages/harness/deerflow/tools/exec_seat_tools.py:135,163,201` (the three new guards).
+Tests: `tests/test_exec_seat_tools.py` 16/16 (1 new, confirmed red on pre-fix code); `-k "board or client or team or exec_seat or fleet or agent_seat or seat_budget"` sweep 831 passed/17 skipped/1 failed (pre-existing unrelated `test_client_langfuse_metadata.py` only); `test_harness_boundary.py` green; ruff clean.
