@@ -2350,10 +2350,22 @@ transfer cap. API creation failures are never automatically retried; an ambiguou
 timeout must be reconciled before another attempt. This manual runner does not
 enable the general browser tool group or production Browserbase routing.
 
-## Star History
+## Responses multi-agent preflight (local customization)
+
+An opt-in Sol 6.1/OpenRouter Responses adapter stages bounded requests, separates
+root final answers from agent progress, and records durable spending receipts.
+It is not registered or activated by default. Native activation requires actual
+hosted child output and verified aggregate provider spending enforcement across
+all descendants and continuations; concurrency limits alone cannot cap cost.
+The ordinary read-only function-call probe is separate capability evidence.
+See [protocol, spending gates and integration criteria](backend/docs/RESPONSES_MULTI_AGENT.md).
+
+## Private agency pilot guard (local customization)
 
 For an opt-in bounded private MomoBot pilot, see the [loopback request guard and
 artifact readback example](examples/momo-agency-guard/README.md). It does not
 activate schedules or enforce budgets for preexisting gateway routes.
+
+## Star History
 
 [![Star History Chart](https://star-history.dera.page/svg?repos=bytedance/deer-flow&type=Date)](https://star-history.dera.page/#bytedance/deer-flow&Date)

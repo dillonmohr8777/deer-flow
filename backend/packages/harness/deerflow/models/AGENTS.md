@@ -65,3 +65,33 @@ repeat provider selection or persist the probe override.
 Tests: `test_managed_models.py`, `test_managed_deepseek.py` (real SDK serialization
 with an HTTP double), opt-in `test_managed_deepseek_live.py`, and
 `tests/blocking_io/test_managed_models.py`.
+
+### Opt-in Responses multi-agent preflight
+
+`responses_multi_agent.py` is deliberately absent from the model factory,
+Gateway routes, model catalog and scheduler. It pins Sol 6.1/OpenRouter Responses,
+privacy/no-fallback policy and an empty native tool allowlist. Never execute hosted
+`multi_agent_call` items locally. Only `/root` messages in `final_answer` form the
+root answer; preserve child item/call IDs, phases and encrypted-message direction.
+Actual paired spawn output plus child-attributed output is required: an HTTP 200
+or a text claim does not prove native capability.
+
+`build_ordinary_tool_probe`/`parse_ordinary_tool_probe` separately check one forced
+read-only source-packet function call, with no execution or continuation. That
+ordinary capability does not establish hosted collaboration or activate a worker.
+
+Native `CycleJournal` admission requires explicit cycle approval, an independently
+verified capability receipt, and trusted operator evidence of external aggregate
+spend enforcement covering descendants and continuations. Concurrency, prompts
+and `max_output_tokens` cannot substitute for that evidence. Keep policy/proof
+construction out of model arguments and public request bodies. Journal methods
+and constructors are synchronous; construct/offload them with `asyncio.to_thread`
+when called from async code. The async `Pilot` offloads reservation/reconciliation,
+reserves durably before dispatch, never retries/falls back, and stops on unknown
+outcomes. Append-only evidence events retain original responses and later usage
+corrections; mutable receipt rows are the current-state projection. A recovery
+must keep the same result/identity and may fill previously unknown accounting.
+
+Tests: `test_responses_multi_agent.py`, the strict
+`tests/blocking_io/test_responses_multi_agent.py`, and harness/model-admission
+regressions. Details and activation criteria: `backend/docs/RESPONSES_MULTI_AGENT.md`.
