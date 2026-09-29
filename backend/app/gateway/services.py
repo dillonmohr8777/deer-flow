@@ -2265,6 +2265,34 @@ def _delegated_internal_request(app: Any, delegation: ActiveDelegation) -> Simpl
     )
 
 
+async def _require_delegated_run_entitlement(request: Any, organization_id: str | None) -> None:
+    """Enforce ``runs.create`` for a delegated (non-HTTP-decorated) run launch.
+
+    Review finding f59: scheduled-task triggers, cron ticks, and MCP
+    task-notification runs all reach ``start_run`` through
+    ``_start_delegated_run`` rather than a FastAPI route, so none of them
+    ever pass through a ``@require_entitlement``-decorated handler --
+    ``/runs/stream`` returning 403 with ``runs.create`` suspended meant
+    nothing if a scheduled task on the same organization kept spending
+    tokens unchecked. This is the one place all three paths funnel through.
+    """
+    from app.gateway.deps import get_entitlement_repo
+    from deerflow.authz.entitlements import evaluate_entitlement
+    from deerflow.config.entitlement_config import resolve_current_entitlement_config
+
+    entitlement_config = resolve_current_entitlement_config()
+    if not entitlement_config.enabled:
+        return
+
+    if organization_id is None:
+        raise HTTPException(status_code=403, detail={"error": "entitlement_exceeded", "key": "runs.create", "reason": "no_organization"})
+
+    repo = get_entitlement_repo(request)
+    decision = await evaluate_entitlement(repo, organization_id, "runs.create", config=entitlement_config)
+    if not decision.allowed:
+        raise HTTPException(status_code=403, detail={"error": "entitlement_exceeded", "key": "runs.create", "reason": decision.reason})
+
+
 async def _start_delegated_run(body: RunCreateRequest, thread_id: str, request: Any, **kwargs: Any) -> RunRecord:
     """start_run under the storage context AuthMiddleware would have set.
 
@@ -2272,6 +2300,7 @@ async def _start_delegated_run(body: RunCreateRequest, thread_id: str, request: 
     thread are stamped with the delegation's organization.
     """
     state = request.state
+    await _require_delegated_run_entitlement(request, state.organization_id)
     token = set_storage_context(
         WorkspaceStorageContext(
             actor_user_id=state.actor_user_id,

@@ -2974,6 +2974,25 @@ authorization:
   # invitations_frozen: true
 
 # ============================================================================
+# M4 Entitlement Gate (docs/momo-week/m4-entitlement.md)
+# ============================================================================
+# Server-side evaluator for paid mutations (runs.create, runs.cancel,
+# projects.max, ...). Off by default: every active member of an organization
+# can do everything, matching today's behavior. Do not flip to true until
+# every organization has a backfilled organization_entitlements row for
+# each gate key (design §4) -- a missing row denies, it does not mean
+# "unlimited".
+entitlements:
+  enabled: false
+  # fail_closed: true
+  # grace_period_seconds: 300
+  # default_limits:
+  #   projects_max: null
+  #   workflows_max: null
+  #   brands_max: null
+  #   repair_minutes_monthly: null
+
+# ============================================================================
 # Circuit Breaker Configuration
 # ============================================================================
 # Circuit breaker for LLM calls prevents repeated requests to a failing provider.

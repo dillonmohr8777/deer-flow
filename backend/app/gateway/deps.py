@@ -556,6 +556,7 @@ async def langgraph_runtime(app: FastAPI, startup_config: AppConfig) -> AsyncGen
             from deerflow.persistence.academy import AcademyProgressRepository
             from deerflow.persistence.board import BoardRepository
             from deerflow.persistence.clients import ClientRepository
+            from deerflow.persistence.entitlements import EntitlementRepository
             from deerflow.persistence.fleet import FleetBindingRepository
             from deerflow.persistence.mcp_tasks import McpTaskRepository
             from deerflow.persistence.projects import ProjectDocumentRepository, ProjectRepository
@@ -571,6 +572,7 @@ async def langgraph_runtime(app: FastAPI, startup_config: AppConfig) -> AsyncGen
             app.state.client_repo = ClientRepository(sf)
             app.state.board_repo = BoardRepository(sf)
             app.state.team_board_repo = TeamBoardRepository(sf)
+            app.state.entitlement_repo = EntitlementRepository(sf)
             app.state.academy_progress_repo = AcademyProgressRepository(sf)
             app.state.fleet_binding_repo = FleetBindingRepository(sf)
             app.state.scheduled_task_repo = ScheduledTaskRepository(
@@ -590,6 +592,7 @@ async def langgraph_runtime(app: FastAPI, startup_config: AppConfig) -> AsyncGen
             app.state.client_repo = None
             app.state.board_repo = None
             app.state.team_board_repo = None
+            app.state.entitlement_repo = None
             app.state.academy_progress_repo = None
             app.state.subagent_batch_repo = None
             app.state.scheduled_task_repo = None
@@ -705,6 +708,7 @@ get_project_document_repo = _require("project_document_repo", "Projects")
 get_client_repo = _require("client_repo", "Clients")
 get_board_repo = _require("board_repo", "Board")
 get_team_board_repo = _require("team_board_repo", "Team board")
+get_entitlement_repo = _require("entitlement_repo", "Entitlement")
 get_academy_progress_repo = _require("academy_progress_repo", "Academy")
 get_fleet_binding_repo = _require("fleet_binding_repo", "Fleet")
 
