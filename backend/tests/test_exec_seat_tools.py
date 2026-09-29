@@ -10,6 +10,7 @@ the tool layer that resolves actor identity and calls that workflow.
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from types import SimpleNamespace
 
@@ -20,8 +21,23 @@ from deerflow.persistence.exec_seats import AgentSeatStatus
 from deerflow.persistence.organizations.model import OrganizationMemberRow
 from deerflow.persistence.team_board import TeamBoardRepository
 from deerflow.persistence.user.model import UserRow
+from deerflow.runtime.user_context import WorkspaceStorageContext, reset_storage_context, set_storage_context
 from deerflow.tools.exec_seat_tools import CEO_SEAT, _exec_claim_seat_impl, _exec_ratify_seat_impl, _exec_reopen_seat_impl
 from deerflow.tools.tools import get_available_tools
+
+
+@contextmanager
+def _acting_with_no_organization(actor: str):
+    """Internal / auth-disabled / IM-channel shape: a real actor, no org at all.
+
+    Mirrors ``test_team_board_tools.py``'s helper of the same name (f72).
+    """
+    token = set_storage_context(WorkspaceStorageContext(actor_user_id=actor, organization_id=None, storage_user_id=actor, role=None))
+    try:
+        yield
+    finally:
+        reset_storage_context(token)
+
 
 CMO_SEAT = "CMO"
 USER_D = "user-d"
@@ -279,6 +295,34 @@ async def test_org_isolation_a_seat_in_one_org_is_invisible_from_another(org_wor
         foreign_reopen = await _exec_reopen_seat_impl(cmo_seat["id"], runtime=_runtime("intruder"))
     assert "error" in foreign_ratify
     assert "error" in foreign_reopen
+
+
+@pytest.mark.asyncio
+async def test_null_organization_fails_closed_and_creates_no_rows(org_world):  # noqa: F811
+    """f92: ``AgentSeatRepository._scope`` applies no filter when
+    ``resolve_organization_id()`` is ``None`` (internal/auth-disabled/IM-channel
+    runs), so every ``exec_*`` tool must fail closed itself -- team tools
+    already do this for the same shape (f72)."""
+    with acting_as(USER_A, ORG_S):
+        seat = await _exec_claim_seat_impl(CMO_SEAT, "content", "leads", 0, runtime=_runtime("cmo-agent"))
+        assert "error" not in seat
+
+    with _acting_with_no_organization(USER_B):
+        claim_result = await _exec_claim_seat_impl("Rogue Seat", "scope", "kpi", 0, runtime=_runtime("rogue-agent"))
+        ratify_result = await _exec_ratify_seat_impl(seat["id"], runtime=_runtime("rogue-agent"))
+        reopen_result = await _exec_reopen_seat_impl(seat["id"], runtime=_runtime("rogue-agent"))
+    assert set(claim_result) == {"error"}
+    assert set(ratify_result) == {"error"}
+    assert set(reopen_result) == {"error"}
+
+    with acting_as(USER_A, ORG_S):
+        from deerflow.persistence.exec_seats import AgentSeatRepository
+
+        repo = AgentSeatRepository(org_world)
+        seats = await repo.list_seats()
+        unchanged = await repo.get_seat(seat["id"])
+    assert [s["id"] for s in seats] == [seat["id"]]
+    assert unchanged["status"] == AgentSeatStatus.CLAIMED
 
 
 def _tool_group_config():
