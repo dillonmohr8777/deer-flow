@@ -266,6 +266,14 @@
   }
 }
 
+/* On phones the board lies on the desk (command-center.module.css .onDesk),
+   so slips run the full gutter width under their lane's rule. */
+@media (max-width: 640px) {
+  .lane {
+    padding-inline: 0;
+  }
+}
+
 @media (forced-colors: active) {
   .slip {
     clip-path: none;

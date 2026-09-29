@@ -467,7 +467,10 @@ export function CommandCenter() {
   );
 
   const team = (
-    <section className={styles.team} aria-labelledby="team-heading">
+    <section
+      className={`${styles.team} ${styles.onDesk}`}
+      aria-labelledby="team-heading"
+    >
       <div className={styles.sectionHead}>
         <div>
           <h2 id="team-heading">Your agent team</h2>
@@ -736,7 +739,7 @@ export function CommandCenter() {
                 startPath={startPath}
                 onShowAll={() => setView("Jobs")}
                 hasMore={Boolean(activityRuns.data?.has_more)}
-                panelClassName={styles.jobs}
+                panelClassName={`${styles.jobs} ${styles.onDesk}`}
                 headClassName={styles.sectionHead}
               />
             ) : (
