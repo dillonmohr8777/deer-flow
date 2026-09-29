@@ -18,11 +18,8 @@ from deerflow.config.channel_connections_config import ChannelConnectionsConfig
 from deerflow.config.checkpointer_config import CheckpointerConfig, load_checkpointer_config_from_dict
 from deerflow.config.database_config import DatabaseConfig
 from deerflow.config.dedupe_storage_config import DedupeStorageConfig
-<<<<<<< HEAD
 from deerflow.config.exec_seats_config import ExecSeatsConfig
-=======
 from deerflow.config.entitlement_config import EntitlementConfig, load_entitlement_config_from_dict
->>>>>>> origin/claude/alembic-renumber-66-20260929
 from deerflow.config.extensions_config import ExtensionsConfig
 from deerflow.config.file_signature import ConfigSignature as _ConfigSignature
 from deerflow.config.file_signature import get_config_signature as _get_config_signature

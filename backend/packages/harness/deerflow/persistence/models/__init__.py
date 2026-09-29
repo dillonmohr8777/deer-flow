@@ -24,11 +24,8 @@ from deerflow.persistence.channel_connections.model import (
     ChannelOAuthStateRow,
 )
 from deerflow.persistence.clients.model import ClientAssignmentRow, ClientRow
-<<<<<<< HEAD
 from deerflow.persistence.exec_seats.model import AgentSeatRow
-=======
 from deerflow.persistence.entitlements.model import OrganizationEntitlementRow
->>>>>>> origin/claude/alembic-renumber-66-20260929
 from deerflow.persistence.feedback.model import FeedbackRow
 from deerflow.persistence.fleet.model import FleetAgentBindingRow
 from deerflow.persistence.hiring.model import HiredAgentRow
