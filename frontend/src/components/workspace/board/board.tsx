@@ -203,7 +203,11 @@ export function BoardBody() {
         </div>
         <div className={styles.detail}>
           {selectedId ? (
-            <ThreadDetail threadId={selectedId} clientName={clientName} />
+            <ThreadDetail
+              key={selectedId}
+              threadId={selectedId}
+              clientName={clientName}
+            />
           ) : (
             <EmptyState momo="qa" title="Pick a thread">
               Select a thread from the list to read it and, if Momo has a draft
@@ -491,7 +495,8 @@ function ThreadDetail({
           <Textarea
             id="board-reply"
             value={replyText}
-            onChange={(event) => setReplyText(event.target.value)}
+            readOnly
+            aria-readonly="true"
             rows={4}
           />
           {sendMutation.isError ? (

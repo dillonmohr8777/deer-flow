@@ -2284,6 +2284,31 @@ def test_inject_authenticated_user_context_strips_internal_spoofed_attribution()
     assert "oauth_id" not in config["context"]
 
 
+def test_inject_authenticated_user_context_computes_momentum_staff_not_client_supplied():
+    """f70: ``momentum_staff`` is a server-computed flag (``is_momentum_staff``,
+    run once by ``start_run``), mirroring exactly how ``non_interactive`` and
+    every other server-owned key are stripped from client-supplied context —
+    a client-supplied value must never survive."""
+    from types import SimpleNamespace
+
+    from app.gateway.services import build_run_config, inject_authenticated_user_context
+
+    config = build_run_config("thread-1", None, None)
+    config["context"] = {"momentum_staff": True}
+    request = SimpleNamespace(state=SimpleNamespace(user=SimpleNamespace(id="auth-user-42")))
+
+    inject_authenticated_user_context(config, request)  # no momentum_staff kwarg -> the real check's result, here implicitly False
+
+    assert config["context"]["momentum_staff"] is False
+
+    # The real, server-computed value (start_run's own is_momentum_staff call)
+    # is what actually gets stamped.
+    config2 = build_run_config("thread-1", None, None)
+    request2 = SimpleNamespace(state=SimpleNamespace(user=SimpleNamespace(id="auth-user-42")))
+    inject_authenticated_user_context(config2, request2, momentum_staff=True)
+    assert config2["context"]["momentum_staff"] is True
+
+
 async def _capture_start_run_graph_input(body, *, auth_source=None):
     from types import SimpleNamespace
     from unittest.mock import patch
@@ -4006,6 +4031,7 @@ def test_strip_internal_context_keys_scrubs_audit_attribution_and_recorders():
     server_owned = {
         "is_subagent": True,
         "agent_id": "forged-agent",
+        "momentum_staff": True,
         "__run_loop_detection_recorder": "forged",
         "__run_tool_promotion_recorder": "forged",
         "__run_tool_progress_recorder": "forged",

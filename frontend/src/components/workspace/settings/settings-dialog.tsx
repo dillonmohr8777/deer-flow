@@ -12,6 +12,7 @@ import {
   ShieldCheckIcon,
   UsersRoundIcon,
   UserIcon,
+  UserPlusIcon,
 } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -107,6 +108,13 @@ const AuditSettingsPage = dynamic(
     import("./audit-settings-page").then((module) => module.AuditSettingsPage),
   { loading: SettingsPageLoading },
 );
+const InviteSettingsPage = dynamic(
+  () =>
+    import("./invite-settings-page").then(
+      (module) => module.InviteSettingsPage,
+    ),
+  { loading: SettingsPageLoading },
+);
 
 export type SettingsSection =
   | "models"
@@ -119,6 +127,7 @@ export type SettingsSection =
   | "notification"
   | "experience"
   | "audit"
+  | "invite"
   | "about";
 
 type SettingsDialogProps = React.ComponentProps<typeof Dialog> & {
@@ -208,6 +217,11 @@ export function SettingsDialog(props: SettingsDialogProps) {
         label: t.settings.sections.audit,
         icon: ShieldCheckIcon,
       },
+      {
+        id: "invite",
+        label: t.settings.sections.invite,
+        icon: UserPlusIcon,
+      },
       { id: "about", label: t.settings.sections.about, icon: InfoIcon },
     ],
     [
@@ -221,6 +235,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
       t.settings.sections.notification,
       t.settings.sections.experience,
       t.settings.sections.audit,
+      t.settings.sections.invite,
       t.settings.sections.about,
     ],
   );
@@ -303,6 +318,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
               {activeSection === "experience" && <ExperienceSettingsPage />}
               {activeSection === "channels" && <ChannelsSettingsPage />}
               {activeSection === "audit" && <AuditSettingsPage />}
+              {activeSection === "invite" && <InviteSettingsPage />}
               {activeSection === "about" && <AboutSettingsPage />}
             </div>
           </ScrollArea>

@@ -157,6 +157,7 @@ async def _to_list_response(repo, rows: list[dict]) -> ClientListResponse:
 @router.post("", response_model=ClientResponse, status_code=201)
 @require_permission("clients", "write")
 async def create_client(body: ClientCreateRequest, request: Request) -> ClientResponse:
+    await _require_org_admin(request)
     repo = get_client_repo(request)
     row = await repo.create(
         display_name=body.display_name,
@@ -173,7 +174,16 @@ async def create_client(body: ClientCreateRequest, request: Request) -> ClientRe
 @router.get("", response_model=ClientListResponse)
 @require_permission("clients", "read")
 async def list_clients(request: Request, status: ClientStatus | None = None) -> ClientListResponse:
+    """The full org roster is owner/admin only. A plain member (e.g. a
+    ``client_contact``) gets only the clients they're assigned to, the same
+    set ``/mine`` returns -- never another client's name."""
     repo = get_client_repo(request)
+    user = await get_current_user_from_request(request)
+    if not await _is_active_org_admin(str(user.id)):
+        rows = await repo.list_mine()
+        if status is not None:
+            rows = [row for row in rows if row.get("status") == status]
+        return await _to_list_response(repo, rows)
     return await _to_list_response(repo, await repo.list(status=status))
 
 
@@ -223,9 +233,8 @@ async def import_client_registry(body: RegistryImportRequest, request: Request) 
 @require_permission("clients", "read")
 async def get_client(client_id: str, request: Request) -> ClientResponse:
     repo = get_client_repo(request)
-    row = await repo.get(client_id)
-    if row is None:
-        raise _not_found()
+    user = await get_current_user_from_request(request)
+    row = await _require_client_visible(repo, client_id, str(user.id))
     assignments = await repo.list_assignments(client_id) or []
     counts = await repo.project_counts([client_id])
     return _to_response(row, assignments=assignments, project_count=counts.get(client_id, 0))
@@ -234,6 +243,7 @@ async def get_client(client_id: str, request: Request) -> ClientResponse:
 @router.patch("/{client_id}", response_model=ClientResponse)
 @require_permission("clients", "write")
 async def patch_client(client_id: str, body: ClientPatchRequest, request: Request) -> ClientResponse:
+    await _require_org_admin(request)
     repo = get_client_repo(request)
     row = await repo.patch(
         client_id,
@@ -252,6 +262,7 @@ async def patch_client(client_id: str, body: ClientPatchRequest, request: Reques
 @router.post("/{client_id}/archive", response_model=ClientResponse)
 @require_permission("clients", "write")
 async def archive_client(client_id: str, request: Request) -> ClientResponse:
+    await _require_org_admin(request)
     repo = get_client_repo(request)
     row = await repo.set_status(client_id, "inactive")
     if row is None:
@@ -262,6 +273,7 @@ async def archive_client(client_id: str, request: Request) -> ClientResponse:
 @router.post("/{client_id}/assignments", response_model=ClientAssignmentResponse, status_code=201)
 @require_permission("clients", "write")
 async def add_client_assignment(client_id: str, body: ClientAssignmentRequest, request: Request) -> ClientAssignmentResponse:
+    await _require_org_admin(request)
     repo = get_client_repo(request)
     row = await repo.add_assignment(client_id, body.user_id, body.role)
     if row is None:
@@ -272,6 +284,7 @@ async def add_client_assignment(client_id: str, body: ClientAssignmentRequest, r
 @router.delete("/{client_id}/assignments/{user_id}", status_code=204)
 @require_permission("clients", "write")
 async def remove_client_assignment(client_id: str, user_id: str, request: Request) -> None:
+    await _require_org_admin(request)
     repo = get_client_repo(request)
     if await repo.get(client_id) is None:
         raise _not_found()
@@ -336,6 +349,38 @@ async def _is_active_org_admin(user_id: str) -> bool:
         return (await session.execute(stmt)).scalars().first() is not None
 
 
+async def _require_org_admin(request: Request) -> Any:
+    """Only an active organization owner/admin may manage the client roster
+    itself (create/patch/archive a client, or add/remove an assignment).
+
+    Without this, any member holding ``clients:write`` (every member, while
+    fine-grained route authorization is disabled -- the default) could grant
+    or revoke their own client assignments, which both ``GET /api/clients``
+    and the Momo Board scope entirely off ``client_assignments``.
+    """
+    user = await get_current_user_from_request(request)
+    if not await _is_active_org_admin(str(user.id)):
+        raise HTTPException(status_code=403, detail="Only an organization owner or admin can manage the client roster.")
+    return user
+
+
+async def _require_client_visible(client_repo: Any, client_id: str, user_id: str) -> dict:
+    """Return *client_id*'s row, or 404 unless *user_id* is an org admin or assigned to it.
+
+    Mirrors ``board.py``'s ``_require_client_access``: a foreign or
+    unassigned client is indistinguishable from a missing one.
+    """
+    row = await client_repo.get(client_id)
+    if row is None:
+        raise _not_found()
+    if await _is_active_org_admin(user_id):
+        return row
+    mine_ids = {c["id"] for c in await client_repo.list_mine()}
+    if client_id not in mine_ids:
+        raise _not_found()
+    return row
+
+
 async def _require_stamp_authorized(request: Request, client_id: str, client_repo: Any) -> Any:
     """Only an organization admin or someone assigned to *client_id* may stamp an agent."""
     user = await get_current_user_from_request(request)
@@ -395,8 +440,8 @@ async def _create_paused_schedule(request: Request, template: FleetTemplate, cli
 @require_permission("clients", "read")
 async def list_client_agents(client_id: str, request: Request) -> FleetAgentBindingListResponse:
     client_repo = get_client_repo(request)
-    if await client_repo.get(client_id) is None:
-        raise _not_found()
+    user = await get_current_user_from_request(request)
+    await _require_client_visible(client_repo, client_id, str(user.id))
     binding_repo = get_fleet_binding_repo(request)
     bindings = await binding_repo.list_by_client(client_id)
     return FleetAgentBindingListResponse(agents=[await _binding_response(b) for b in bindings])

@@ -150,6 +150,14 @@ def get_available_tools(
     if not getattr(knowledge_base_config, "enabled", False):
         tool_configs = [tool for tool in tool_configs if tool.group != "knowledge"]
 
+    # Team-board tools are opt-in the same way: ``groups=None`` (no agent
+    # config, or an agent config that never sets ``tool_groups``) otherwise
+    # means "every configured group", which would hand the Momentum staff
+    # Team Board to the default agent. An agent that explicitly lists "team"
+    # in its own ``tool_groups`` still gets it.
+    if groups is None:
+        tool_configs = [tool for tool in tool_configs if tool.group != "team"]
+
     # Do not expose host bash by default when LocalSandboxProvider is active.
     if not is_host_bash_allowed(config):
         tool_configs = [tool for tool in tool_configs if not _is_host_bash_tool(tool)]

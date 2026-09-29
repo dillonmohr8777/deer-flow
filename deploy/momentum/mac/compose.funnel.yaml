@@ -1,0 +1,55 @@
+# MomoBot on the Mac mini, public through Tailscale Funnel.
+# Layer on docker/docker-compose.yaml + docker/docker-compose.dood.yaml with
+# deploy/momentum/mac/restart.sh, never by hand.
+#
+# Only nginx publishes a port, and only on 127.0.0.1 (base file default).
+# tailscaled terminates TLS for https://<node>.<tailnet>.ts.net and proxies to
+# it; nothing listens on the LAN or the tailnet directly.
+#
+# f23 (login rate limit keyed on the proxy): the compose network gets a fixed
+# subnet so nginx can trust X-Forwarded-For only from the network gateway
+# (where host traffic, i.e. tailscaled, arrives), and the Gateway trusts
+# X-Real-IP only from nginx's fixed address.
+services:
+  redis:
+    container_name: ${COMPOSE_PROJECT_NAME:?run via deploy/momentum/mac/restart.sh}-redis
+    restart: unless-stopped
+  nginx:
+    container_name: ${COMPOSE_PROJECT_NAME}-nginx
+    restart: unless-stopped
+    volumes:
+      - ${MOMOBOT_REALIP_CONF:?run via deploy/momentum/mac/restart.sh}:/etc/nginx/momentum-realip.conf:ro
+    # Same as the base command plus the realip include, kept on the http {
+    # line: compose turns a \n in this folded string into a real newline,
+    # which broke sed. The grep makes a failed injection stop nginx instead of
+    # silently serving with one shared rate-limit bucket.
+    command: >
+      sh -c "cp /etc/nginx/nginx.conf.template /etc/nginx/nginx.conf
+      && sed -i 's|^http {$$|http { include /etc/nginx/momentum-realip.conf;|' /etc/nginx/nginx.conf
+      && grep -q 'include /etc/nginx/momentum-realip.conf;' /etc/nginx/nginx.conf
+      && nginx -g 'daemon off;'"
+    networks:
+      deer-flow:
+        ipv4_address: 172.30.26.10
+  frontend:
+    container_name: ${COMPOSE_PROJECT_NAME}-frontend
+    image: ${MOMENTUM_FRONTEND_IMAGE:?set MOMENTUM_FRONTEND_IMAGE in the deploy .env}
+    pull_policy: never
+    restart: unless-stopped
+  gateway:
+    container_name: ${COMPOSE_PROJECT_NAME}-gateway
+    image: ${MOMENTUM_GATEWAY_IMAGE:?set MOMENTUM_GATEWAY_IMAGE in the deploy .env}
+    pull_policy: never
+    restart: unless-stopped
+    environment:
+      # Only nginx may vouch for a client address (X-Real-IP).
+      - AUTH_TRUSTED_PROXIES=172.30.26.10/32
+      # DooD sandboxes: the gateway volume's path inside the Docker VM.
+      - DEER_FLOW_HOST_BASE_DIR=/var/lib/docker/volumes/${COMPOSE_PROJECT_NAME}_gateway-data/_data
+
+networks:
+  deer-flow:
+    ipam:
+      config:
+        - subnet: 172.30.26.0/24
+          gateway: 172.30.26.1

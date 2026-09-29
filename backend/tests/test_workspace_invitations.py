@@ -17,7 +17,7 @@ from starlette.responses import Response
 
 from app.gateway import deps
 from app.gateway.auth.config import AuthConfig
-from app.gateway.auth.jwt import create_access_token
+from app.gateway.auth.jwt import create_access_token, create_mfa_challenge_token
 from app.gateway.auth.local_provider import LocalAuthProvider
 from app.gateway.auth.password import hash_password_async
 from app.gateway.auth.repositories.sqlite import SQLiteUserRepository
@@ -540,7 +540,11 @@ async def test_accept_verifies_a_real_access_token_cookie_like_production(invita
     """Production path: AuthMiddleware skips this public route, so nothing
     stamps request.state. The handler has to verify the access_token cookie
     itself (signature, user lookup, token_version), and only the invited
-    account's own verified session may accept."""
+    account's own verified session may accept -- including the case (f18)
+    where the invitee's password is right but MFA is not yet complete: the
+    only artifact that produces is a ``typ=mfa_challenge`` token, and
+    ``decode_token`` (PR #44) refuses it as a session just like it refuses
+    the other forged/stale credentials below."""
     import jwt as pyjwt
 
     organization_id = await _seed_workspace(invitation_db)
@@ -571,6 +575,10 @@ async def test_accept_verifies_a_real_access_token_cookie_like_production(invita
         "someone else's session": create_access_token(other_id),
         "a forged signature naming the invitee": forged,
         "a revoked token version": create_access_token(invitee_id, token_version=1),
+        # f18: password verified, MFA not completed. login/local issues only
+        # this in that case (no cookie at all) -- it must not double as a
+        # session here either.
+        "an MFA challenge token naming the invitee": create_mfa_challenge_token(invitee_id, "test-jti"),
         "junk": "not-a-jwt",
     }
     for label, access_token in refused_cookies.items():
