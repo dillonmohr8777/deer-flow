@@ -52,3 +52,6 @@ An optional `tool_names` list is an owner-controlled ceiling across all tool
 schemas, including late middleware tools. `None` preserves existing behavior;
 `[]` denies all. Assembly filters candidates, and SkillToolPolicyMiddleware
 intersects active skills with the ceiling and denies fabricated calls.
+Bootstrap reads an existing agent's permissions before constructing a model;
+disabled self-update or excluded setup is denied. The setup upsert independently
+enforces and preserves these owner controls; unreadable records fail closed.

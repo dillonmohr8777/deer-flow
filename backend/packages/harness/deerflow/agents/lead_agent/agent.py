@@ -952,7 +952,18 @@ def _assemble_lead_agent(config: RunnableConfig, *, app_config: AppConfig) -> Le
     non_interactive = not interaction_policy.allows_clarification
     agent_name = validate_agent_name(cfg.get("agent_name"))
 
-    agent_config = load_agent_config(agent_name, user_id=resolved_user_id) if not is_bootstrap else None
+    if is_bootstrap and agent_name:
+        try:
+            agent_config = load_agent_config(agent_name, user_id=resolved_user_id)
+        except FileNotFoundError:
+            agent_config = None
+        else:
+            if agent_config is None:
+                raise ValueError("Existing agent config readback is unavailable")
+        if agent_config is not None and (not agent_config.self_update_enabled or (agent_config.tool_names is not None and "setup_agent" not in agent_config.tool_names)):
+            raise ValueError("Existing agent operator-owned permissions forbid bootstrap")
+    else:
+        agent_config = load_agent_config(agent_name, user_id=resolved_user_id) if not is_bootstrap else None
     tool_names = getattr(agent_config, "tool_names", None)
     memory_enabled = getattr(agent_config, "memory_enabled", True) is not False
     # Keep compatibility with lightweight AgentConfig-shaped objects used by
@@ -1071,6 +1082,8 @@ def _assemble_lead_agent(config: RunnableConfig, *, app_config: AppConfig) -> Le
             _append_memory_tools_without_name_conflicts(authorization_candidates)
         _append_project_document_tools_if_pinned(authorization_candidates, cfg)
         append_task_continuity_tools(authorization_candidates, resolved_app_config)
+        if tool_names is not None:
+            authorization_candidates = [tool for tool in authorization_candidates if tool.name in tool_names]
         configured_tool_ids = {id(tool) for tool in configured_tools}
         authorized_tools, _authz_provider = apply_tool_authorization(
             authorization_candidates,
@@ -1092,6 +1105,7 @@ def _assemble_lead_agent(config: RunnableConfig, *, app_config: AppConfig) -> Le
             agent_name=agent_name,
             available_skills=set(_BOOTSTRAP_SKILL_NAMES),
             memory_enabled=memory_enabled,
+            tool_names=tool_names,
             owns_agent_skill_projection=False,
             app_config=resolved_app_config,
             deferred_setup=setup,

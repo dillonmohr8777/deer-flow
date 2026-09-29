@@ -147,6 +147,15 @@ def test_custom_agent_self_update_opt_out_filters_assembled_tool_schema(monkeypa
     assert ("update_agent" in [t.name for t in result["tools"]]) is enabled
 
 
+@pytest.mark.parametrize("cfg", [AgentConfig(name="fixed-agent", self_update_enabled=False), AgentConfig(name="fixed-agent", tool_names=[]), None])
+def test_existing_protected_or_unreadable_agent_cannot_bootstrap_before_model_call(monkeypatch, cfg):
+    app_config = _make_app_config([_make_model("safe-model", supports_thinking=False)])
+    monkeypatch.setattr(lead_agent_module, "load_agent_config", lambda *args, **kwargs: cfg)
+    monkeypatch.setattr(lead_agent_module, "create_chat_model", lambda **kwargs: pytest.fail("bootstrap dispatched model before permission gate"))
+    with pytest.raises(ValueError, match="(permissions forbid|readback is unavailable)"):
+        lead_agent_module._make_lead_agent({"context": {"agent_name": "fixed-agent", "is_bootstrap": True}}, app_config=app_config)
+
+
 @pytest.mark.parametrize("names", [[], ["unknown-tool"]])
 def test_compiled_owner_ceiling_blocks_middleware_registered_tool_and_fabricated_call(names):
     from deerflow.agents.middlewares.skill_tool_policy_middleware import SkillToolPolicyMiddleware
