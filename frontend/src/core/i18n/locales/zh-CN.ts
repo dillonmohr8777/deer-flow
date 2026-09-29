@@ -953,6 +953,10 @@ export const zhCN: Translations = {
       "归档会保留消息和文件，不会停止运行中的任务或暂停定时任务。",
     undoArchive: "撤销",
     noArchivedChats: "暂无已归档会话",
+    noArchivedChatsHint:
+      "从最近会话归档的对话会连同消息和文件保存在这里，随时可以恢复。",
+    backToRecentChats: "返回最近会话",
+    loadingChats: "正在加载会话",
     noMatchingChats: "已加载的会话中没有匹配结果",
     loadChatsFailed: "加载会话失败",
     retryLoadChats: "重试",

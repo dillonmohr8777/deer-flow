@@ -261,7 +261,15 @@ test.describe("UI polish mobile regressions", () => {
     page,
   }) => {
     await page.setViewportSize({ width: 390, height: 844 });
-    mockLangGraphAPI(page);
+    mockLangGraphAPI(page, {
+      threads: [
+        {
+          thread_id: "chat-1",
+          title: "One chat to search",
+          updated_at: new Date().toISOString(),
+        },
+      ],
+    });
 
     await page.goto("/workspace/chats");
 
@@ -270,6 +278,64 @@ test.describe("UI polish mobile regressions", () => {
     const bounds = await search.boundingBox();
     expect(bounds!.x).toBeGreaterThanOrEqual(12);
     expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(390 - 12);
+  });
+
+  test("chats page states use the shared paper states, not a bare page", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    mockLangGraphAPI(page, { threads: [] });
+    const search = /\/api\/(?:langgraph\/)?threads\/search$/;
+    let release: () => void = () => undefined;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    await page.route(search, async (route) => {
+      await held;
+      await route.fallback();
+    });
+
+    await page.goto("/workspace/chats");
+    // Loading says so, and offers no search over chats that are not here yet.
+    await expect(
+      page.getByRole("status").filter({ hasText: "Loading your chats" }),
+    ).toBeVisible();
+    await expect(page.getByPlaceholder("Search chats")).toHaveCount(0);
+
+    release();
+    // An empty Recent has nothing to search: the empty state is the page.
+    await expect(page.getByText("No recent chats")).toBeVisible();
+    await expect(page.getByPlaceholder("Search chats")).toHaveCount(0);
+
+    // An empty Archived explains itself and leads back, one action.
+    await page.getByRole("tab", { name: "Archived" }).click();
+    await expect(
+      page.getByText("No archived chats", { exact: true }),
+    ).toBeVisible();
+    const back = page.getByRole("button", { name: "Back to Recent chats" });
+    expect((await back.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    await back.click();
+    await expect(
+      page.getByRole("tab", { name: "Recent chats" }),
+    ).toHaveAttribute("aria-selected", "true");
+  });
+
+  test("a failed chats read is an ErrorState with Try again", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    mockLangGraphAPI(page, { threads: [] });
+    await page.route(/\/api\/(?:langgraph\/)?threads\/search$/, (route) =>
+      route.fulfill({ status: 500, json: { detail: "Upstream timed out" } }),
+    );
+
+    await page.goto("/workspace/chats");
+
+    const alert = page.locator("[role=alert]:has([data-error-tag])");
+    await expect(alert).toBeVisible({ timeout: 20_000 });
+    await expect(alert).toContainText("Failed to load conversations");
+    await expect(alert).toContainText("Upstream timed out");
+    const retry = alert.getByRole("button", { name: "Try again" });
+    expect((await retry.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    await expect(page.getByPlaceholder("Search chats")).toHaveCount(0);
   });
 
   test("chats page heads itself and files chats as slips on phones", async ({

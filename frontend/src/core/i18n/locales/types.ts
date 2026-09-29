@@ -871,6 +871,9 @@ export interface Translations {
     archiveDescription: string;
     undoArchive: string;
     noArchivedChats: string;
+    noArchivedChatsHint: string;
+    backToRecentChats: string;
+    loadingChats: string;
     noMatchingChats: string;
     loadChatsFailed: string;
     retryLoadChats: string;

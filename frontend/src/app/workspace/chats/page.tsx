@@ -8,7 +8,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { EmptyState, pageStyles } from "@/components/workspace/page-body";
+import {
+  EmptyState,
+  ErrorState,
+  pageStyles,
+  WorkingState,
+} from "@/components/workspace/page-body";
 import {
   ThreadChannelBadge,
   ThreadChannelIcon,
@@ -67,6 +72,7 @@ export default function ChatsPage() {
   const archiveAction = useThreadArchiveAction();
   const {
     data: infiniteThreads,
+    error,
     isLoading,
     isError,
     refetch,
@@ -101,15 +107,6 @@ export default function ChatsPage() {
   );
   const [search, setSearch] = useState("");
   const isSearching = search.trim().length > 0;
-
-  // Search is ready on arrival, except on phones, where focusing it would
-  // open the keyboard over the list.
-  const searchRef = useRef<HTMLInputElement | null>(null);
-  useEffect(() => {
-    if (!window.matchMedia("(max-width: 639px)").matches) {
-      searchRef.current?.focus();
-    }
-  }, []);
 
   useEffect(() => {
     document.title = `${t.pages.chats} (${t.pages.appName})`;
@@ -150,6 +147,26 @@ export default function ChatsPage() {
     filteredThreads.length === 0 &&
     !isSearching &&
     !archived;
+  // Search only earns its place once there are chats to search; while the
+  // read is out, failed or came back empty it would be a field over nothing.
+  const showSearch = threads.length > 0 || isSearching;
+  // Search is ready once it appears, except on phones, where focusing it
+  // would open the keyboard over the list. Only the first appearance takes
+  // focus, so switching tabs later never steals it.
+  const searchRef = useRef<HTMLInputElement | null>(null);
+  const searchFocused = useRef(false);
+  useEffect(() => {
+    if (!showSearch || searchFocused.current) return;
+    searchFocused.current = true;
+    if (!window.matchMedia("(max-width: 639px)").matches) {
+      searchRef.current?.focus();
+    }
+  }, [showSearch]);
+  // The server's own reason, unless it is just the generic fallback again.
+  const errorDetail =
+    error?.message && !error.message.startsWith(t.chats.loadChatsFailed)
+      ? error.message
+      : undefined;
 
   return (
     <WorkspaceContainer>
@@ -184,22 +201,36 @@ export default function ChatsPage() {
                 </TabsTrigger>
               </TabsList>
             )}
-            <Input
-              type="search"
-              className="h-12 w-full text-base sm:text-xl"
-              placeholder={t.chats.searchChats}
-              ref={searchRef}
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
+            {showSearch && (
+              <Input
+                type="search"
+                className="h-12 w-full text-base sm:text-xl"
+                placeholder={t.chats.searchChats}
+                ref={searchRef}
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            )}
             <TabsContent value={view} className="pt-1">
+              {isLoading && (
+                <WorkingState label={t.chats.loadingChats} className="py-6" />
+              )}
               {isError && (
-                <div role="alert" className="p-4 text-center">
-                  <p>{t.chats.loadChatsFailed}</p>
-                  <Button variant="outline" onClick={() => void refetch()}>
-                    {t.chats.retryLoadChats}
-                  </Button>
-                </div>
+                <ErrorState
+                  className="py-6"
+                  message={t.chats.loadChatsFailed}
+                  detail={errorDetail}
+                  action={
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="max-sm:min-h-11"
+                      onClick={() => void refetch()}
+                    >
+                      {t.chats.retryLoadChats}
+                    </Button>
+                  }
+                />
               )}
               {!isLoading &&
                 !isError &&
@@ -221,15 +252,32 @@ export default function ChatsPage() {
                       {t.chats.noActiveChatsHint}
                     </EmptyState>
                   </div>
-                ) : (
+                ) : isSearching ? (
                   <p
                     role="status"
                     className="text-muted-foreground p-8 text-center"
                   >
-                    {isSearching
-                      ? t.chats.noMatchingChats
-                      : t.chats.noArchivedChats}
+                    {t.chats.noMatchingChats}
                   </p>
+                ) : (
+                  <div role="status" className="px-2 py-6">
+                    <EmptyState
+                      momo="reliability"
+                      title={t.chats.noArchivedChats}
+                      action={
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="max-sm:min-h-11"
+                          onClick={() => setView("active")}
+                        >
+                          {t.chats.backToRecentChats}
+                        </Button>
+                      }
+                    >
+                      {t.chats.noArchivedChatsHint}
+                    </EmptyState>
+                  </div>
                 ))}
               <VirtualThreadList
                 estimateSize={76}
