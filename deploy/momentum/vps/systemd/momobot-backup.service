@@ -9,5 +9,8 @@ After=momobot.service
 
 [Service]
 Type=oneshot
+# Owner-only files: the AES key on first run, the encrypted archives and
+# receipts (f24). offsite_backup.py also creates the key 0600 itself.
+UMask=0077
 WorkingDirectory=/srv/momobot/deer-flow
 ExecStart=/srv/momobot/deer-flow/deploy/momentum/vps/backup.sh

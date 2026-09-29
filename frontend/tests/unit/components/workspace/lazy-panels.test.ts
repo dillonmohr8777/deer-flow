@@ -23,8 +23,8 @@ describe("interaction-only bundle boundaries", () => {
     const dialog = read(
       "src/components/workspace/settings/settings-dialog.tsx",
     );
-    // One per section: Security and Audit brought the count to eleven.
-    expect(dialog.match(/dynamic\(/g)).toHaveLength(11);
+    // One per section: Security, Audit and Invite brought the count to twelve.
+    expect(dialog.match(/dynamic\(/g)).toHaveLength(12);
     expect(dialog).not.toMatch(
       /import \{ \w+SettingsPage \} from "@\/components\/workspace\/settings\//,
     );

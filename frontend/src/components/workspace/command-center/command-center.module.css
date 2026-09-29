@@ -32,6 +32,11 @@
   --green: #087d62;
   --danger: #b4233e;
   --focus: #003da5;
+  /* Text and icons that sit ON a --blue or --blue-deep fill (the primary
+     action, the lead agent card, text selection). White works on the dark
+     cobalt/royal/accent fills; space and retro swap --blue for a light
+     accent (pale cyan, amber), so they set this to their own dark canvas. */
+  --on-blue: #ffffff;
   position: relative;
   isolation: isolate;
   min-height: 100%;
@@ -54,7 +59,7 @@
 }
 .root ::selection {
   background: var(--blue);
-  color: white;
+  color: var(--on-blue);
 }
 .root :is(button, a, input, select, [tabindex]):focus-visible {
   outline: 3px solid var(--focus);
@@ -289,6 +294,9 @@
   --green: var(--space-ok);
   --danger: var(--space-danger);
   --focus: var(--space-focus);
+  /* White on pale cyan is 1.48:1; the void canvas on it is 12.86:1,
+     the same pairing space.css already uses for --primary-foreground. */
+  --on-blue: var(--space-void);
   background: var(--space-void) var(--space-stars);
 }
 .root[data-treatment="space"] .heading h1 {
@@ -332,6 +340,9 @@
   --green: var(--retro-ok);
   --danger: var(--retro-danger);
   --focus: var(--retro-amber);
+  /* White on amber is 2.17:1; navy on it is 8.05:1, the same pairing
+     retro.css already uses for --primary-foreground. */
+  --on-blue: var(--retro-navy);
   background: var(--retro-navy);
 }
 .root[data-treatment="retro"] .heading h1 {
@@ -455,10 +466,21 @@
   border-color: var(--strong);
   border-radius: 2px;
 }
-.agent:global(.pinned)::before {
+.agent:global(.pinned)::before,
+.topologyLead:global(.pinned)::before {
   top: -7px;
   left: 50%;
   transform: translateX(-50%);
+}
+/* State words: running is the acting thing, so royal; queued, idle and
+   unknown stay ink-muted. Royal on cream-hi is 7.07:1 or better. */
+.root[data-treatment="paper"] .agentState [data-state="running"],
+.root[data-treatment="paper"]
+  .topologyLead
+  div
+  .leadState[data-state="running"] {
+  color: var(--paper-royal);
+  font-weight: 700;
 }
 /* Pinned-board placement, not a spreadsheet: columns sit at uneven heights,
    as the landing staggers its cards. `translate` composes with paper.css's
@@ -554,7 +576,7 @@
      --blue/--blue-deep to royal, so both treatments inherit the decision. */
   background: var(--blue);
   box-shadow: 0 1px 2px rgba(7, 23, 47, 0.12);
-  color: white;
+  color: var(--on-blue);
   padding: 12px 18px;
   font-weight: 900;
   text-decoration: none;
@@ -727,10 +749,11 @@
   gap: 18px;
   border: 1px solid var(--blue-deep);
   border-radius: 16px;
-  /* Solid deep cobalt: white on #06439d is 9.1:1. No violet, no glow. */
+  /* Solid deep cobalt: white on #06439d is 9.1:1. No violet, no glow.
+     --on-blue keeps the text dark where a treatment's --blue-deep is light. */
   background: var(--blue-deep);
   box-shadow: 0 1px 2px rgba(7, 23, 47, 0.12);
-  color: white;
+  color: var(--on-blue);
   padding: 18px;
 }
 /* The canon lead Momo at 160 (96 on phones). Its own cream cut-paper margin
@@ -760,7 +783,7 @@
   line-height: 1.25;
 }
 .topologyLead div span {
-  color: white;
+  color: var(--on-blue);
   font-size: 13px;
 }
 .topologyLead a {
@@ -769,15 +792,15 @@
   height: 38px;
   flex: 0 0 auto;
   place-items: center;
-  border: 1px solid rgba(255, 255, 255, 0.34);
+  border: 1px solid color-mix(in srgb, var(--on-blue) 34%, transparent);
   border-radius: 10px;
-  color: white;
+  color: var(--on-blue);
 }
 .topologyLead a:hover {
-  background: rgba(255, 255, 255, 0.12);
+  background: color-mix(in srgb, var(--on-blue) 12%, transparent);
 }
 .topologyLead a:focus-visible {
-  outline-color: white;
+  outline-color: var(--on-blue);
   box-shadow: 0 0 0 6px var(--focus);
 }
 .root[data-treatment="paper"] .topologyLead a:focus-visible {
@@ -803,6 +826,63 @@
 @container topology (min-width: 700px) {
   .topologyRoster {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+/* The lead says its own live state, as each specialist does. */
+.leadState {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+.topologyLead div .leadState {
+  display: inline-flex;
+}
+/* The delegation count only earns its line on the tall column sheet. */
+.leadCount {
+  display: none;
+}
+.topologyLead div .leadCount {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  font-weight: 700;
+}
+/* Full-width Mission Control (d9): a 160px lead spanning 1000px was a
+   banner, not a hierarchy. With room, the lead stands as a column sheet
+   left of the specialists it delegates to, its height set by theirs. */
+@container topology (min-width: 900px) {
+  .topologyFrame {
+    display: grid;
+    grid-template-columns: 216px minmax(0, 1fr);
+    align-items: stretch;
+    gap: 24px;
+  }
+  .topologyFrame > .topologyLead {
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: flex-start;
+    gap: 14px;
+    padding: 20px 18px;
+  }
+  .topologyFrame .leadMomo {
+    width: 120px;
+    height: 120px;
+  }
+  .topologyFrame > .topologyLead > div {
+    flex: 0 0 auto;
+  }
+  .topologyFrame > .topologyLead a {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+  }
+  .topologyFrame .leadCount {
+    display: block;
+  }
+  .topologyFrame > .topologyRoster {
+    align-content: start;
+    margin-top: 0;
   }
 }
 .agent {
@@ -1189,8 +1269,11 @@
   color: var(--muted);
   font-size: 11px;
 }
+/* Agent Studio's team sheet runs the frame's full width, as the metric
+   strip above it and Mission Control's team do: a 960px cap left a 160px
+   bare margin at 1440 and kept the lead sheet from standing as a column. */
 .studio {
-  max-width: 960px;
+  width: 100%;
 }
 .studio .team {
   width: 100%;
@@ -1574,4 +1657,9 @@
     animation: none !important;
     transition: none !important;
   }
+}
+
+/* Mission Control: the agent team sits under the full-width dispatch board. */
+.missionTeam {
+  margin-top: 24px;
 }

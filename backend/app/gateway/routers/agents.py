@@ -7,6 +7,7 @@ from typing import Literal
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
+from sqlalchemy import select
 
 from deerflow.agents.memory.manager import get_memory_manager
 from deerflow.config.agents_api_config import get_agents_api_config
@@ -23,10 +24,14 @@ from deerflow.config.app_config import get_app_config
 from deerflow.config.paths import get_paths
 from deerflow.knowledge_scope import KnowledgeScope, canonicalize_knowledge_scope
 from deerflow.persistence.agents import AgentDeleteOutcome, AgentExistsError, get_agent_store
-from deerflow.runtime.user_context import get_effective_user_id
+from deerflow.persistence.clients import ClientRepository
+from deerflow.persistence.organizations.model import OrganizationMemberRow
+from deerflow.runtime.user_context import get_effective_actor_user_id, get_effective_user_id, resolve_organization_id
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["agents"])
+
+_ORG_ADMIN_ROLES = ("owner", "admin")
 
 AGENT_NAME_PATTERN = re.compile(r"^[A-Za-z0-9-]+$")
 
@@ -225,6 +230,70 @@ def _agent_config_to_response(agent_cfg: AgentConfig, include_soul: bool = False
     )
 
 
+async def _is_active_org_admin(user_id: str) -> bool:
+    """Whether *user_id* is an active owner/admin of the caller's active organization.
+
+    Mirrors ``clients.py``/``board.py``'s helper of the same name. This router
+    has no ``Request``-threaded routes today (every route reads ambient
+    context set by ``AuthMiddleware``), so this stays request-free too rather
+    than adding ``Request`` params purely for this check.
+    """
+    organization_id = resolve_organization_id()
+    if organization_id is None:
+        return False
+    # Lazy import: resolved at call time so a test's
+    # ``monkeypatch.setattr("deerflow.persistence.engine.get_session_factory", ...)``
+    # takes effect, mirroring ``clients.py``'s ``_is_active_org_admin``.
+    from deerflow.persistence.engine import get_session_factory
+
+    session_factory = get_session_factory()
+    if session_factory is None:
+        return False
+    stmt = select(OrganizationMemberRow.user_id).where(
+        OrganizationMemberRow.organization_id == organization_id,
+        OrganizationMemberRow.user_id == user_id,
+        OrganizationMemberRow.status == "active",
+        OrganizationMemberRow.role.in_(_ORG_ADMIN_ROLES),
+    )
+    async with session_factory() as session:
+        return (await session.execute(stmt)).scalars().first() is not None
+
+
+async def _visible_client_ids(user_id: str) -> frozenset[str] | None:
+    """Client ids *user_id* may see a fleet-stamped agent for, or ``None`` for "all" (org admin).
+
+    A fleet template stamps an agent with ``client_id`` set (``clients.py``'s
+    ``stamp_client_agent``); this keeps that agent as visible as the client
+    itself -- an org admin sees every client's agents, everyone else only the
+    clients they're assigned to (``client_assignments``), same as
+    ``GET /api/clients`` and the Momo Board.
+    """
+    if await _is_active_org_admin(user_id):
+        return None
+    from deerflow.persistence.engine import get_session_factory
+
+    session_factory = get_session_factory()
+    if session_factory is None:
+        return frozenset()
+    return frozenset(c["id"] for c in await ClientRepository(session_factory).list_mine())
+
+
+async def _require_visible_client_id(client_id: str | None, name: str) -> None:
+    """Raise 404 for *name* unless *client_id* is None or the caller may see it.
+
+    Shared by every route that reads, writes or deletes a single agent by
+    name (``get_agent``, ``update_agent``, ``delete_agent``) so a client
+    contact can't reach a foreign client's stamped agent through any of
+    them, not just the list/get routes -- a foreign agent is indistinguishable
+    from a missing one, same as ``clients.py``/``board.py``'s own 404s.
+    """
+    if client_id is None:
+        return
+    visible_client_ids = await _visible_client_ids(get_effective_actor_user_id())
+    if visible_client_ids is not None and client_id not in visible_client_ids:
+        raise HTTPException(status_code=404, detail=f"Agent '{name}' not found")
+
+
 @router.get(
     "/agents",
     response_model=AgentsListResponse,
@@ -240,12 +309,17 @@ async def list_agents() -> AgentsListResponse:
     _require_agents_api_enabled()
 
     user_id = get_effective_user_id()
+    visible_client_ids = await _visible_client_ids(get_effective_actor_user_id())
 
     def _list() -> AgentsListResponse:
         # Worker thread: the store read plus the per-agent SOUL read inside
         # _agent_config_to_response are filesystem IO (file backend) or DB round
         # trips (db backend) and must stay off the event loop.
         agents = list_custom_agents(user_id=user_id)
+        if visible_client_ids is not None:
+            # An agent with no client_id isn't client-scoped (a personal or
+            # staff agent); only a fleet-stamped agent needs this check.
+            agents = [a for a in agents if a.client_id is None or a.client_id in visible_client_ids]
         return AgentsListResponse(agents=[_agent_config_to_response(a, include_soul=True, user_id=user_id) for a in agents])
 
     try:
@@ -316,12 +390,15 @@ async def get_agent(name: str) -> AgentResponse:
         return _agent_config_to_response(agent_cfg, include_soul=True, user_id=user_id)
 
     try:
-        return await asyncio.to_thread(_get)
+        response = await asyncio.to_thread(_get)
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail=f"Agent '{name}' not found")
     except Exception as e:
         logger.error(f"Failed to get agent '{name}': {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to get agent: {str(e)}")
+
+    await _require_visible_client_id(response.client_id, name)
+    return response
 
 
 @router.post(
@@ -417,6 +494,7 @@ async def update_agent(name: str, request: AgentUpdateRequest) -> AgentResponse:
         agent_cfg = await asyncio.to_thread(load_agent_config, name, user_id=user_id)
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail=f"Agent '{name}' not found")
+    await _require_visible_client_id(agent_cfg.client_id, name)
 
     def _is_legacy_only_layout() -> bool:
         # Require config.yaml, not bare directory existence — a per-user agent
@@ -639,6 +717,18 @@ async def delete_agent(name: str) -> None:
     _validate_agent_name(name)
     name = _normalize_agent_name(name)
     user_id = get_effective_user_id()
+
+    try:
+        agent_cfg = await asyncio.to_thread(load_agent_config, name, user_id=user_id)
+    except FileNotFoundError:
+        # No genuine (config.yaml-backed) agent under this name -- a
+        # client-stamped agent always has one, so there is no client_id to
+        # protect here. Fall through to the store's own delete(), whose
+        # legacy/missing/not-custom-agent outcomes below give the precise
+        # answer (e.g. a memory-only directory is preserved, not 404'd).
+        agent_cfg = None
+    if agent_cfg is not None:
+        await _require_visible_client_id(agent_cfg.client_id, name)
 
     try:
         # Off the event loop: resolve store + cancel → delete → cancel-on-success

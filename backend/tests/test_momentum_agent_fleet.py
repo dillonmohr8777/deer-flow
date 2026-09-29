@@ -36,7 +36,7 @@ def test_momentum_agent_fleet_is_bounded_and_evaluated() -> None:
         configs[name] = config
         souls[name] = (agent_dir / "SOUL.md").read_text(encoding="utf-8").lower()
 
-    assert configs["independent-verifier"].tool_groups == ["file:read", "bash"]
+    assert configs["independent-verifier"].tool_groups == ["file:read", "bash", "team", "exec"]
     assert all("production" in soul and "explicit approval" in soul for soul in souls.values())
 
     manifest = json.loads((FLEET / "manifest.json").read_text(encoding="utf-8"))

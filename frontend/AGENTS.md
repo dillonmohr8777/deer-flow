@@ -301,6 +301,27 @@ hold the pure logic. The channel view is keyed by channel id so a draft never
 follows you into another channel. `tests/e2e/team-academy.spec.ts` covers both
 flag states and checks for horizontal overflow at 390/768/1440.
 
+## Invite teammate (Settings > Invite teammate)
+
+Owners and admins of a shared workspace mint invites from Settings instead of
+calling the API. `components/workspace/settings/invite-settings-page.tsx` posts
+`{organization_id, email, role}` (`member`, `admin` or `client`) to
+`POST /api/v1/auth/invitations` through `core/invitations/api.ts`, using the
+shared `fetch` wrapper so the CSRF header is added. The workspace list comes
+from `GET /api/workspaces`, which returns shared workspaces only; the form
+offers the ones where the caller is `owner`/`admin`, defaulting to the active
+workspace, and shows a plain "only owners and admins" message otherwise. The
+Gateway stays the authority, so a 403 is still handled. The 201 response carries
+the one-time `token`, shown once as `${origin}/invite#token=...` with a copy
+button. The token lives only in component state: it is never put in the URL
+query, `localStorage`, `sessionStorage`, logs or analytics, and it is dropped on
+"Invite another person" or when the dialog closes. Failures map to fixed
+messages (`classifyInviteFailure`): the frozen 403, other 403, 409, 422, 503 and
+network. Listing and revoking invites are not in the UI yet.
+`tests/unit/core/invitations/api.test.ts` and
+`tests/unit/components/workspace/settings/invite-settings-page.dom.test.tsx`
+cover it.
+
 <!-- BEGIN:nextjs-agent-rules -->
 
 # This is NOT the Next.js you know
