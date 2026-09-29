@@ -1,7 +1,7 @@
 """board_threads.urgency, board_threads.summary.
 
-Revision ID: 0040_board_thread_triage
-Revises: 0039_team_board_academy
+Revision ID: 0045_board_thread_triage
+Revises: 0044_hired_agents_kpi_review
 
 Momo Board item e2: persists b3's triage classification (urgency, a
 one-sentence summary) on the thread itself instead of discarding it, so
@@ -21,8 +21,8 @@ from collections.abc import Sequence
 
 import sqlalchemy as sa
 
-revision: str = "0040_board_thread_triage"
-down_revision: str | Sequence[str] | None = "0039_team_board_academy"
+revision: str = "0045_board_thread_triage"
+down_revision: str | Sequence[str] | None = "0044_hired_agents_kpi_review"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
