@@ -217,6 +217,30 @@ class SubagentBatchRepository:
                 return None
             return await self._with_counts(session, batch)
 
+    async def owns_parent(self, *, thread_id: str, run_id: str, user_id: str) -> bool:
+        """Strict owner-scoped admission for fixed operator packet tools."""
+        async with self._sf() as session:
+            thread = await session.get(ThreadMetaRow, thread_id)
+            run = await session.get(RunRow, run_id)
+            if thread is None or run is None or thread.user_id != user_id or run.user_id != user_id or run.thread_id != thread_id or thread.organization_id != run.organization_id:
+                return False
+            organization_id = resolve_organization_id()
+            return organization_id is None or thread.organization_id == organization_id
+
+    async def get_batch_by_submission_key(self, submission_key: str, *, user_id: str) -> dict[str, Any] | None:
+        async with self._sf() as session:
+            batch = (
+                await session.execute(
+                    select(SubagentBatchRow).where(
+                        SubagentBatchRow.user_id == user_id,
+                        SubagentBatchRow.submission_key == submission_key,
+                    )
+                )
+            ).scalar_one_or_none()
+            if batch is None or not _batch_organization_visible(batch):
+                return None
+            return {**await self._with_counts(session, batch), "parent_run_id": batch.run_id}
+
     async def list_by_thread(self, thread_id: str, *, user_id: str, limit: int = 20) -> list[dict[str, Any]]:
         async with self._sf() as session:
             stmt = select(SubagentBatchRow).where(

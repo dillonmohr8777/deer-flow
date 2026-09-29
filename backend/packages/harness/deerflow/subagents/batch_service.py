@@ -147,6 +147,9 @@ class SubagentBatchService:
             raise ValueError(f"max_running_items must be between 1 and {self._config.max_running_items_per_batch}")
         if max_running > max_live:
             raise ValueError("max_running_items must not exceed max_live_items")
+        max_attempts = self._config.max_attempts if request.max_attempts is None else request.max_attempts
+        if type(max_attempts) is not int or not 1 <= max_attempts <= self._config.max_attempts:
+            raise ValueError("max_attempts must be between 1 and the configured attempt ceiling")
         return await self._repository.create_batch(
             batch_id=f"subagent-batch-{uuid.uuid4().hex}",
             user_id=request.user_id,
@@ -159,7 +162,7 @@ class SubagentBatchService:
             items=request.items,
             max_live_items=max_live,
             max_running_items=max_running,
-            max_attempts=self._config.max_attempts,
+            max_attempts=max_attempts,
             execution_spec=request.execution_spec,
         )
 
@@ -170,6 +173,15 @@ class SubagentBatchService:
         user_id: str,
     ) -> dict[str, Any] | None:
         return await self._repository.get_batch(batch_id, user_id=user_id)
+
+    async def owns_parent(self, *, thread_id: str, run_id: str, user_id: str) -> bool:
+        return await self._repository.owns_parent(thread_id=thread_id, run_id=run_id, user_id=user_id)
+
+    async def get_batch_by_submission_key(self, *, submission_key: str, user_id: str) -> dict[str, Any] | None:
+        return await self._repository.get_batch_by_submission_key(submission_key, user_id=user_id)
+
+    async def list_items(self, *, batch_id: str, user_id: str) -> list[dict[str, Any]] | None:
+        return await self._repository.list_items(batch_id, user_id=user_id, limit=3, include_prompt=True, include_result=True)
 
     async def cancel_batch(
         self,

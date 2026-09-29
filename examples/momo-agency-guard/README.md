@@ -95,3 +95,9 @@ artifacts intact. Any uncertain dispatch must remain held for reconciliation.
 Primary API contracts: [usage accounting](https://openrouter.ai/docs/cookbook/administration/usage-accounting),
 [actual account credits](https://openrouter.ai/docs/api/api-reference/credits/get-remaining-credits),
 and [provider price/parameter restrictions](https://openrouter.ai/docs/guides/routing/provider-selection).
+
+The allowlist also recognizes the opt-in `approved_agency_phase` schema. This
+only permits its compact function metadata through the guard; that tool remains
+operator-disabled without its pinned manifest and checks actual native parent
+ownership, private roles and guarded alias. Input/output/budget ceilings and
+routed-call-only limitations remain unchanged.

@@ -66,3 +66,10 @@ from captured child tool messages only when the final/partial report cites those
 opaque source links. This preserves retrieval evidence across the delegation
 boundary without placing provider IDs in model-visible text. Never reconstruct
 source records from the child's prose or replace them with fresh provider reads.
+
+`approved_agency_phase` is config-group opt-in and operator-disabled without a
+digest-pinned fixed manifest. Only fixed cycle/phase identifiers are model
+arguments. It loads complete approved sources server-side, reuses the native
+batch permission boundary and securely persists exact native results before
+reviewer handoff. Tool receipts never accept outputs. Give only the dedicated
+coordinator the group/owner ceiling; children retain an empty tool allowlist.

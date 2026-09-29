@@ -2313,3 +2313,10 @@ artifact readback example](examples/momo-agency-guard/README.md). It does not
 activate schedules or enforce budgets for preexisting gateway routes.
 
 [![Star History Chart](https://star-history.dera.page/svg?repos=bytedance/deer-flow&type=Date)](https://star-history.dera.page/#bytedance/deer-flow&Date)
+
+The optional [fixed agency packet phases](examples/momo-approved-packets/README.md)
+let an operator pin two complete private source packets, submit producers and
+independent reviewers through the existing durable native batch queue, and
+persist exact native result bytes with immutable owner/thread-bound readback.
+The feature stays disabled without an operator digest-pinned manifest. Phase
+receipts expose evidence, not acceptance or proof of whole-gateway spend control.
