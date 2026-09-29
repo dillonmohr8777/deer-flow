@@ -133,8 +133,11 @@ async def _announce(runtime: Runtime | None, text: str) -> bool:
             return False
         author_user_id = resolve_runtime_actor_user_id(runtime)
         agent_name = _agent_name(runtime)
-        await team_repo.add_message(channel["id"], author_user_id=author_user_id, body=f"[{agent_name}] {text}")
-        return True
+        # add_message itself returns None for a missing/foreign channel (f117
+        # review): #exec can disappear between the _find_channel check above
+        # and this write, so "no exception" alone doesn't mean it posted.
+        posted = await team_repo.add_message(channel["id"], author_user_id=author_user_id, body=f"[{agent_name}] {text}")
+        return posted is not None
     except Exception:  # noqa: BLE001 -- an announcement failure must never mask a real result
         return False
 

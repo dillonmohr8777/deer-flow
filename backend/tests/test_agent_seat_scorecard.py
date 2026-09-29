@@ -12,14 +12,32 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from org_isolation_fixtures import ORG_A, USER_A, acting_as, org_world  # noqa: F401
+from org_isolation_fixtures import ORG_A, ORG_B, USER_A, acting_as, org_world  # noqa: F401
 
 from deerflow.exec_seats.scorecard import evaluate_all_seat_scorecards, evaluate_seat_scorecard
 from deerflow.persistence.exec_seats import AgentSeatRepository, AgentSeatStatus
+from deerflow.persistence.run.model import RunRow
 from deerflow.persistence.team_board import TeamBoardRepository
 from deerflow.tools.exec_seat_tools import announce_to_exec
 
 CMO_SEAT = "CMO"
+
+
+async def _spend(session_factory, *, organization_id: str, agent_name: str, total_tokens: int, created_at: datetime) -> None:
+    """Mirrors test_agent_seat_budget.py's own helper of the same name."""
+    async with session_factory() as session, session.begin():
+        session.add(
+            RunRow(
+                run_id=f"run-{agent_name}-{organization_id}-{created_at.timestamp()}",
+                thread_id=f"thread-{agent_name}",
+                assistant_id=agent_name,
+                organization_id=organization_id,
+                status="success",
+                total_tokens=total_tokens,
+                created_at=created_at,
+                updated_at=created_at,
+            )
+        )
 
 
 async def _succeed(_seat: dict) -> str:
@@ -244,3 +262,30 @@ async def test_evaluate_all_seat_scorecards_covers_every_ratified_seat(org_world
     assert by_seat["CTO"]["missed_scorecards"] == 0
     assert by_seat["CMO"]["last_scorecard_at"] is not None
     assert by_seat["CTO"]["last_scorecard_at"] is not None
+
+
+@pytest.mark.asyncio
+async def test_generate_receives_the_seats_real_weekly_token_burn(org_world):  # noqa: F811
+    """Review finding (f118a, test gap): the prompt's grounding data (weekly_token_burn) must
+    actually reach generate's seat argument, and must be scoped to the seat's own organization
+    -- a same-named agent's burn in a different org must never leak in."""
+    repo = AgentSeatRepository(org_world)
+    now = datetime.now(UTC)
+    captured: list[dict] = []
+
+    async def _capture(seat: dict) -> str:
+        captured.append(seat)
+        return "ok"
+
+    with acting_as(USER_A, ORG_A):
+        seat = await repo.claim_seat(seat=CMO_SEAT, agent_name="cmo-agent", weekly_token_budget=1000, claimed_by_user_id=USER_A)
+        seat = await repo.patch_seat(seat["id"], status=AgentSeatStatus.RATIFIED, ratified_by_user_id=USER_A)
+        await _spend(org_world, organization_id=ORG_A, agent_name="cmo-agent", total_tokens=250, created_at=now - timedelta(hours=1))
+
+    await _spend(org_world, organization_id=ORG_B, agent_name="cmo-agent", total_tokens=99_999, created_at=now - timedelta(hours=1))
+
+    with acting_as(USER_A, ORG_A):
+        await evaluate_seat_scorecard(repo, seat, now=now, generate=_capture)
+
+    assert len(captured) == 1
+    assert captured[0]["weekly_token_burn"] == 250

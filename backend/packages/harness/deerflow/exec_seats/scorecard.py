@@ -112,6 +112,12 @@ async def evaluate_seat_scorecard(
     than reading as fine forever. A blank/failed generation likewise counts
     as a miss, and the second consecutive miss reopens the seat (EXECUTIVE.md
     rule 3).
+
+    ``announce=None`` (the default) means every due seat is recorded as a
+    miss -- there is nowhere to confirm a post, so nothing can count as
+    delivered. Every production caller (``_run_seat_scorecard_sweep``)
+    passes a real ``announce``; ``None`` is only for tests that don't care
+    about the miss/success outcome (e.g. proving a seat is skipped entirely).
     """
     if seat["status"] != AgentSeatStatus.RATIFIED:
         return seat
