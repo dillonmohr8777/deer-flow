@@ -6,9 +6,11 @@ from typing import Any, Literal
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field, field_validator
 
-from app.gateway.authz import require_permission
-from app.gateway.deps import get_config, get_project_repo, get_thread_store
+from app.gateway.authz import get_auth_context, require_permission
+from app.gateway.deps import get_config, get_entitlement_repo, get_project_repo, get_thread_store
+from deerflow.authz.entitlements import evaluate_entitlement
 from deerflow.config.app_config import AppConfig, get_app_config
+from deerflow.config.entitlement_config import resolve_current_entitlement_config
 from deerflow.config.projects_config import ProjectsConfig
 from deerflow.runtime.secret_context import redact_metadata_secrets
 from deerflow.utils.time import coerce_iso
@@ -118,7 +120,33 @@ def _validate_instructions_length(instructions: str | None) -> None:
 async def create_project(body: ProjectCreateRequest, request: Request) -> ProjectResponse:
     _validate_instructions_length(body.instructions)
     repo = get_project_repo(request)
+    await _check_projects_max_entitlement(request, repo)
     return _to_response(await repo.create(name=body.name, instructions=body.instructions, presentation=body.presentation))
+
+
+async def _check_projects_max_entitlement(request: Request, repo: Any) -> None:
+    """Inline ``projects.max`` limit check (design §3: a limit key needs the
+    caller's live usage count, so it cannot be a bare decorator).
+    """
+    entitlement_config = resolve_current_entitlement_config()
+    if not entitlement_config.enabled:
+        return
+
+    auth = get_auth_context(request)
+    organization_id = auth.organization_id if auth is not None else None
+    current_usage = len(await repo.list(status="active"))
+    decision = await evaluate_entitlement(
+        get_entitlement_repo(request),
+        organization_id,
+        "projects.max",
+        current_usage=current_usage,
+        config=entitlement_config,
+    )
+    if not decision.allowed:
+        raise HTTPException(
+            status_code=403,
+            detail={"error": "entitlement_exceeded", "key": "projects.max", "reason": decision.reason, "limit": decision.limit, "used": decision.used},
+        )
 
 
 @router.get("", response_model=ProjectListResponse)

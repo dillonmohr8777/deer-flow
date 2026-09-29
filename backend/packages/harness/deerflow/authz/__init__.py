@@ -2,6 +2,7 @@
 
 from deerflow.authz.adapter import GuardrailAuthorizationAdapter
 from deerflow.authz.enforcement import filter_tools_by_authorization
+from deerflow.authz.entitlements import EntitlementDecision, evaluate_entitlement
 from deerflow.authz.principal import build_principal_from_context, normalize_authz_attributes
 from deerflow.authz.provider import AuthorizationProvider, AuthzDecision, AuthzReason, AuthzRequest, Principal
 from deerflow.authz.rbac import RbacAuthorizationProvider
@@ -14,12 +15,14 @@ __all__ = [
     "AuthzReason",
     "AuthzRequest",
     "AuthorizationProvider",
+    "EntitlementDecision",
     "GuardrailAuthorizationAdapter",
     "Principal",
     "RbacAuthorizationProvider",
     "apply_tool_authorization",
     "authorize_sandbox_execution",
     "build_principal_from_context",
+    "evaluate_entitlement",
     "filter_tools_by_authorization",
     "normalize_authz_attributes",
     "resolve_authorization_provider",

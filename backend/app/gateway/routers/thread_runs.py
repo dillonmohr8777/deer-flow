@@ -27,7 +27,7 @@ from pydantic import BaseModel, Field
 from starlette.background import BackgroundTask
 
 from app.gateway.artifact_archive import ArtifactArchiveError, ArtifactArchiveResult, build_artifact_archive
-from app.gateway.authz import require_cancel_permission_if, require_permission
+from app.gateway.authz import get_auth_context, require_cancel_permission_if, require_entitlement, require_permission
 from app.gateway.checkpoint_lineage import (
     CheckpointLineageError,
     CheckpointParentMissingError,
@@ -47,7 +47,7 @@ from app.gateway.conversation_reader import (
 from app.gateway.conversation_reader import (
     scan_visible_thread_messages as _scan_visible_thread_messages,
 )
-from app.gateway.deps import get_current_user, get_feedback_repo, get_run_event_store, get_run_manager, get_run_store, get_stream_bridge, record_audit_event
+from app.gateway.deps import get_current_user, get_entitlement_repo, get_feedback_repo, get_run_event_store, get_run_manager, get_run_store, get_stream_bridge, record_audit_event
 from app.gateway.internal_auth import INTERNAL_SYSTEM_ROLE, get_trusted_internal_owner_user_id
 from app.gateway.pagination import trim_run_message_page
 from app.gateway.run_models import RunCreateRequest
@@ -55,7 +55,9 @@ from app.gateway.services import abuild_checkpoint_state_accessor, build_thread_
 from app.gateway.utils import sanitize_log_param
 from deerflow.agents.human_input import read_human_input_response
 from deerflow.agents.middlewares.dynamic_context_middleware import strip_injected_user_message_id_suffix
+from deerflow.authz.entitlements import evaluate_entitlement
 from deerflow.authz.sandbox_authz import safe_app_config_async
+from deerflow.config.entitlement_config import resolve_current_entitlement_config
 from deerflow.config.paths import get_paths, make_safe_user_id
 from deerflow.runtime import CancelOutcome, ConflictError, RunRecord, RunStatus, ThreadOperationKind, serialize_channel_values_for_api
 from deerflow.runtime.runs.store.base import format_run_cursor_created_at, normalize_run_created_at_iso
@@ -302,6 +304,33 @@ def require_cancel_permission_when_action(request: Request, action: str | None) 
     request dimension that carries cancel capability.
     """
     require_cancel_permission_if(request, action is not None)
+
+
+async def require_cancel_entitlement_when_action(request: Request, action: str | None) -> None:
+    """Conditionally require the ``runs.cancel`` entitlement for cancel-then-stream requests.
+
+    Review finding f65: ``stream_existing_run`` carries no
+    ``@require_entitlement`` decorator at all (an action-less join must keep
+    working under ``runs.create``'s or even a read-only credential's
+    entitlement state), but its ``action`` branch cancels the run --
+    ``runs.cancel``'s job, same as the dedicated ``/cancel`` route.
+    Decorators cannot express query-parameter-conditional entitlements
+    either, so this mirrors ``require_cancel_permission_when_action`` right
+    above it.
+    """
+    if action is None:
+        return
+    entitlement_config = resolve_current_entitlement_config()
+    if not entitlement_config.enabled:
+        return
+    auth = get_auth_context(request)
+    organization_id = auth.organization_id if auth is not None else None
+    if organization_id is None:
+        raise HTTPException(status_code=403, detail={"error": "entitlement_exceeded", "key": "runs.cancel", "reason": "no_organization"})
+    repo = get_entitlement_repo(request)
+    decision = await evaluate_entitlement(repo, organization_id, "runs.cancel", config=entitlement_config)
+    if not decision.allowed:
+        raise HTTPException(status_code=403, detail={"error": "entitlement_exceeded", "key": "runs.cancel", "reason": decision.reason})
 
 
 def _cancel_conflict_detail(run_id: str, record: RunRecord) -> str:
@@ -946,6 +975,7 @@ async def prepare_edit_regenerate_run(
 
 @router.post("/{thread_id}/runs", response_model=RunResponse)
 @require_permission("runs", "create", owner_check=True, require_existing=True)
+@require_entitlement("runs.create")
 async def create_run(
     thread_id: ThreadId,
     body: RunCreateRequest,
@@ -964,6 +994,7 @@ async def create_run(
 
 @router.post("/{thread_id}/runs/stream")
 @require_permission("runs", "create", owner_check=True, require_existing=True)
+@require_entitlement("runs.create")
 async def stream_run(
     thread_id: ThreadId,
     body: RunCreateRequest,
@@ -1019,6 +1050,7 @@ async def stream_run(
 
 @router.post("/{thread_id}/runs/wait", response_model=dict)
 @require_permission("runs", "create", owner_check=True, require_existing=True)
+@require_entitlement("runs.create")
 async def wait_run(
     thread_id: ThreadId,
     body: RunCreateRequest,
@@ -1239,6 +1271,7 @@ async def get_run(thread_id: ThreadId, run_id: str, request: Request) -> RunResp
 
 @router.post("/{thread_id}/runs/{run_id}/cancel")
 @require_permission("runs", "cancel", owner_check=True, require_existing=True)
+@require_entitlement("runs.cancel")
 async def cancel_run(
     thread_id: ThreadId,
     run_id: str,
@@ -1355,6 +1388,7 @@ async def _stream_existing_run(
     so the client observes a clean shutdown.
     """
     require_cancel_permission_when_action(request, action)
+    await require_cancel_entitlement_when_action(request, action)
 
     await _require_run_visible_to_scope(run_id, thread_id, request)
     run_mgr = get_run_manager(request)
