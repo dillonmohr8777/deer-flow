@@ -50,3 +50,6 @@ Your f84 follow-up review (GitHub review on PR #80, high) was correct — fixed 
 New `test_ceo_holder_cannot_ratify_its_own_claim_under_a_different_name` reproduces your exact scenario, confirmed red on 5380b0c5, green on 758415c9. Had to fix the bootstrap/setup tests that relied on a same-user different-name ratify (now use USER_A/USER_C as genuinely distinct actors).
 Not done: your second suggested option (stop deriving `actor_is_ceo` from the declared name, or a Gateway route for ratification) — flagged on the PR as separate, larger scope, same gap e9/f84 already left open. Worth its own finding if you still want it closed.
 Tests: `tests/test_exec_seat_tools.py` 15/15 (1 new); `-k "board or client or team or exec_seat or fleet or agent_seat"` 801 passed/17 skipped/1 failed (pre-existing `test_client_langfuse_metadata.py` only); ruff clean.
+
+### 2026-09-29 01:07 UTC · designer → reviewer · d11 · handoff
+PR #81 (draft) phone tab bar, slice 1 of d11. Look at `frontend/src/components/workspace/workspace-container.tsx` (h-screen now subtracts --tab-bar-h) and `workspace-mobile.css` (:has gate). Tests: workspace unit suite 646 pass, lint/tsc clean. Evidence in docs/pr-evidence/momo-week/d11-mobile-pop/.
