@@ -156,6 +156,73 @@ def test_existing_protected_or_unreadable_agent_cannot_bootstrap_before_model_ca
         lead_agent_module._make_lead_agent({"context": {"agent_name": "fixed-agent", "is_bootstrap": True}}, app_config=app_config)
 
 
+@pytest.mark.parametrize("probe", [True, None, 0, ValueError("private existence payload")])
+def test_missing_bootstrap_config_requires_authoritative_identity_absence(monkeypatch, probe):
+    app_config = _make_app_config([_make_model("safe-model", supports_thinking=False)])
+
+    def missing_config(*args, **kwargs):
+        raise FileNotFoundError("private missing config payload")
+
+    store = MagicMock()
+    if isinstance(probe, Exception):
+        store.exists.side_effect = probe
+    else:
+        store.exists.return_value = probe
+    monkeypatch.setattr(lead_agent_module, "load_agent_config", missing_config)
+    monkeypatch.setattr("deerflow.persistence.agents.get_agent_store", lambda: store)
+    monkeypatch.setattr(lead_agent_module, "create_chat_model", lambda **kwargs: pytest.fail("model constructed before identity gate"))
+    with pytest.raises(ValueError, match="^Existing agent config readback is unavailable$"):
+        lead_agent_module._make_lead_agent({"context": {"agent_name": "fixed-agent", "is_bootstrap": True}}, app_config=app_config)
+    store.exists.assert_called_once_with("fixed-agent", user_id="test-user-autouse")
+
+
+def test_missing_bootstrap_config_permits_authoritatively_absent_identity(monkeypatch):
+    app_config = _make_app_config([_make_model("safe-model", supports_thinking=False)])
+
+    def missing_config(*args, **kwargs):
+        raise FileNotFoundError()
+
+    class ReachedFactory(Exception):
+        pass
+
+    def factory(**kwargs):
+        raise ReachedFactory()
+
+    store = MagicMock()
+    store.exists.return_value = False
+    monkeypatch.setattr(lead_agent_module, "load_agent_config", missing_config)
+    monkeypatch.setattr("deerflow.persistence.agents.get_agent_store", lambda: store)
+    monkeypatch.setattr(lead_agent_module, "create_chat_model", factory)
+    with pytest.raises(ReachedFactory):
+        lead_agent_module._make_lead_agent({"context": {"agent_name": "fresh-agent", "is_bootstrap": True}}, app_config=app_config)
+
+
+def test_existing_bootstrap_directory_without_config_cannot_reach_model(tmp_path, monkeypatch):
+    from deerflow.persistence.agents.file import FileAgentStore
+
+    monkeypatch.setenv("DEER_FLOW_HOME", str(tmp_path))
+    agent_dir = tmp_path / "users" / "test-user-autouse" / "agents" / "fixed-agent"
+    agent_dir.mkdir(parents=True)
+    (agent_dir / "SOUL.md").write_text("owner original", encoding="utf-8")
+    store = FileAgentStore()
+    monkeypatch.setattr(lead_agent_module, "load_agent_config", lambda name, **kwargs: store.get(name, **kwargs))
+    monkeypatch.setattr("deerflow.persistence.agents.get_agent_store", lambda: store)
+    monkeypatch.setattr(lead_agent_module, "create_chat_model", lambda **kwargs: pytest.fail("model constructed for existing unreadable identity"))
+    app_config = _make_app_config([_make_model("safe-model", supports_thinking=False)])
+    with pytest.raises(ValueError, match="^Existing agent config readback is unavailable$"):
+        lead_agent_module._make_lead_agent({"context": {"agent_name": "fixed-agent", "is_bootstrap": True}}, app_config=app_config)
+    assert (agent_dir / "SOUL.md").read_text(encoding="utf-8") == "owner original"
+    assert not (agent_dir / "config.yaml").exists()
+
+
+def test_named_agent_null_readback_cannot_use_unrestricted_default(monkeypatch):
+    app_config = _make_app_config([_make_model("safe-model", supports_thinking=False)])
+    monkeypatch.setattr(lead_agent_module, "load_agent_config", lambda *args, **kwargs: None)
+    monkeypatch.setattr(lead_agent_module, "create_chat_model", lambda **kwargs: pytest.fail("named null config reached model"))
+    with pytest.raises(ValueError, match="^Existing agent config readback is unavailable$"):
+        lead_agent_module._make_lead_agent({"context": {"agent_name": "fixed-agent"}}, app_config=app_config)
+
+
 @pytest.mark.parametrize("names", [[], ["unknown-tool"]])
 def test_compiled_owner_ceiling_blocks_middleware_registered_tool_and_fabricated_call(names):
     from deerflow.agents.middlewares.skill_tool_policy_middleware import SkillToolPolicyMiddleware
