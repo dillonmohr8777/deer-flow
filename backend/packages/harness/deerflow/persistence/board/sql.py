@@ -136,8 +136,12 @@ class BoardRepository:
             result = await session.execute(stmt)
             return [_message_to_dict(r) for r in result.scalars()]
 
-    async def approve_latest_draft(self, thread_id: str) -> dict | None:
+    async def approve_latest_draft(self, thread_id: str, *, thread_status: str | None = None) -> dict | None:
         """Stamp the thread's current ``momo`` draft as approved.
+
+        When ``thread_status`` is given it is applied to the thread in the
+        same session/commit, so a client-visible approved message can never
+        sit on a thread that is still ``drafted``.
 
         "Current" means the most recently created ``momo`` message overall,
         not merely the most recent *unapproved* one: picking the latest
@@ -156,6 +160,9 @@ class BoardRepository:
             if row is None or row.approved_at is not None:
                 return None
             row.approved_at = datetime.now(UTC)
+            if thread_status is not None:
+                thread = await session.get(BoardThreadRow, thread_id)
+                thread.status = thread_status
             await session.commit()
             await session.refresh(row)
             return _message_to_dict(row)
