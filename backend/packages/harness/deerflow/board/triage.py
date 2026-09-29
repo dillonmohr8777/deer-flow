@@ -44,6 +44,11 @@ class BoardThreadTriage:
     kind: str
     urgency: str
     summary: str
+    # True when the model call failed or produced an unparseable response
+    # and this is the safe-default classification, not a real one. Callers
+    # must not persist a fallback result as if Momo actually looked at the
+    # thread (e.g. it must not read as a real "normal" urgency).
+    fallback: bool = False
 
 
 def _extract_json_object(raw: str) -> dict | None:
@@ -155,4 +160,4 @@ async def triage_board_thread(
     except Exception:
         logger.warning("Board triage model call failed; falling back to a default classification", exc_info=True)
 
-    return BoardThreadTriage(kind=BoardThreadKind.TICKET.value, urgency=_DEFAULT_URGENCY, summary=_fallback_summary(content))
+    return BoardThreadTriage(kind=BoardThreadKind.TICKET.value, urgency=_DEFAULT_URGENCY, summary=_fallback_summary(content), fallback=True)

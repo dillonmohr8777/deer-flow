@@ -100,6 +100,7 @@ async def test_triage_falls_back_on_invalid_kind(monkeypatch):
 
     assert result.kind == "ticket"
     assert result.urgency == "normal"
+    assert result.fallback is True
 
 
 @pytest.mark.anyio
@@ -110,6 +111,7 @@ async def test_triage_falls_back_on_invalid_urgency(monkeypatch):
 
     assert result.kind == "ticket"
     assert result.urgency == "normal"
+    assert result.fallback is True
 
 
 @pytest.mark.anyio
@@ -121,6 +123,7 @@ async def test_triage_falls_back_on_unparseable_response(monkeypatch):
     assert result.kind == "ticket"
     assert result.urgency == "normal"
     assert "message the model" in result.summary
+    assert result.fallback is True
 
 
 @pytest.mark.anyio
@@ -134,6 +137,7 @@ async def test_triage_falls_back_when_model_call_fails(monkeypatch):
     assert result.kind == "ticket"
     assert result.urgency == "normal"
     assert result.summary
+    assert result.fallback is True
 
 
 @pytest.mark.anyio
@@ -156,3 +160,4 @@ async def test_triage_requires_summary_to_accept_model_response(monkeypatch):
     assert result.kind == "ticket"
     assert result.urgency == "normal"
     assert result.summary
+    assert result.fallback is True
