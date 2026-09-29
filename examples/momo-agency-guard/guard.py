@@ -308,26 +308,47 @@ class Ledger:
 def response_cost(body, stream, policy):
     try:
         if stream:
-            events = [
-                json.loads(line[6:])
-                for line in body.decode("utf-8").splitlines()
-                if line.startswith("data: ") and line[6:] != "[DONE]"
-            ]
-            if b"data: [DONE]" not in body:
+            frames = []
+            data_lines = []
+            for line in body.decode("utf-8").splitlines():
+                if not line:
+                    if data_lines:
+                        frames.append("\n".join(data_lines))
+                        data_lines = []
+                elif line.startswith("event:") and line[6:].strip() == "error":
+                    raise Stop("stream_error_envelope")
+                elif line.startswith("data:"):
+                    value = line[5:]
+                    data_lines.append(value.removeprefix(" "))
+                elif not line.startswith(":"):
+                    raise Stop("unsupported_sse_field")
+            if (
+                data_lines
+                or not frames
+                or frames[-1] != "[DONE]"
+                or "[DONE]" in frames[:-1]
+            ):
                 raise Stop("stream_incomplete")
+            events = [json.loads(frame) for frame in frames[:-1]]
         else:
             events = [json.loads(body)]
+        if not events or any(not isinstance(x, dict) or "error" in x for x in events):
+            raise Stop("stream_error_envelope")
         models = {x["model"] for x in events if x.get("model")}
         if models != {policy.model}:
             raise Stop("resolved_model_unverified")
-        usage = next(
-            (x["usage"] for x in reversed(events) if isinstance(x.get("usage"), dict)),
-            {},
-        )
-        cost = money(usage.get("cost"))
-        gid = next((x["id"] for x in events if x.get("id")), None)
-        if not isinstance(gid, str) or len(gid) > 200:
+        ids = {x.get("id") for x in events}
+        if len(ids) != 1:
+            raise Stop("generation_id_inconsistent")
+        gid = next(iter(ids))
+        if not isinstance(gid, str) or not gid.strip() or len(gid) > 200:
             raise Stop("generation_id_missing")
+        final = events[-1]
+        if final.get("model") != policy.model or not isinstance(
+            final.get("usage"), dict
+        ):
+            raise Stop("final_usage_model_binding_missing")
+        cost = money(final["usage"].get("cost"))
         return cost, gid
     except (UnicodeError, ValueError, TypeError, KeyError) as exc:
         raise Stop("usage_unparseable") from exc
