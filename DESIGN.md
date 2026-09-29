@@ -210,6 +210,7 @@ Use the shared components in `components/workspace/page-body.tsx`. Do not write 
 ## Phones
 
 - Below 768px the sidebar becomes a sheet and pages take the mobile shell. The server renders the phone layout from a User-Agent hint, so it does not flash the desktop first.
+- **Tab bar.** Below 768px a cream-hi strip at the bottom edge (`workspace-tab-bar.tsx`) carries the daily destinations at thumb reach: Chat, Desk and Board (Desk and Board only where Desk is enabled), Command, then More, which opens the sidebar sheet for everything else. The selected tab is royal with a 3px royal mark on its top edge and `aria-current="page"`; the rest are ink-muted. Tabs are at least 56px tall. Inside a conversation the composer owns the bottom edge, so the bar steps aside. While the bar is on the page `--tab-bar-h` holds its height, and anything sized against the viewport (`WorkspaceContainer`, the chat welcome) subtracts it.
 - Gutters are 16px on every page. No horizontal page scroll (pinned by `ui-polish-mobile.spec.ts`).
 - Icon buttons have a 44px minimum below 640px (`workspace-mobile.css`). Command Center controls are 44 to 48px.
 - Tabs, metric strips and the Settings section list become sideways rails. The active item is scrolled into view, and grid items get `min-width: 0` so a rail scrolls instead of widening its parent.

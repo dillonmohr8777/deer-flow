@@ -31,7 +31,13 @@ export function WorkspaceContainer({
   ...props
 }: React.ComponentProps<"div">) {
   return (
-    <div className={cn("flex h-screen w-full flex-col", className)} {...props}>
+    <div
+      className={cn(
+        "flex h-[calc(100vh-var(--tab-bar-h))] w-full flex-col",
+        className,
+      )}
+      {...props}
+    >
       {children}
     </div>
   );

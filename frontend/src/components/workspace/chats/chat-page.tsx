@@ -594,12 +594,13 @@ export default function ChatPage() {
               >
                 {/* Welcome lifts the composer toward the middle; the min()
                     stops short screens from pushing the Momo and its line
-                    up under the header. */}
+                    up under the header. --tab-bar-h is the phone tab bar
+                    the page sits above (workspace-mobile.css). */}
                 <div
                   className={cn(
                     "relative w-full",
                     isWelcomeMode &&
-                      "-translate-y-[min(calc(50vh_-_100px),calc(100vh_-_560px))] sm:-translate-y-[min(calc(50vh_-_96px),calc(100vh_-_430px))]",
+                      "-translate-y-[min(calc(50vh_-_100px_-_var(--tab-bar-h)/2),calc(100vh_-_560px_-_var(--tab-bar-h)))] sm:-translate-y-[min(calc(50vh_-_96px_-_var(--tab-bar-h)/2),calc(100vh_-_430px_-_var(--tab-bar-h)))]",
                     isWelcomeMode
                       ? "max-w-(--container-width-sm)"
                       : "max-w-(--container-width-md)",

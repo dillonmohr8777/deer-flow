@@ -18,3 +18,15 @@
   padding-bottom: env(safe-area-inset-bottom);
   padding-left: env(safe-area-inset-left);
 }
+
+/* Height of the phone tab bar (workspace-tab-bar.tsx: 56px tabs, a 1px rule,
+   the home-bar inset), set only while the bar is on the page. Anything sized
+   or positioned against the viewport (WorkspaceContainer, the chat welcome)
+   subtracts it, so nothing sits under the bar. */
+:root {
+  --tab-bar-h: 0px;
+}
+
+:root:has([data-slot="workspace-tab-bar"]) {
+  --tab-bar-h: calc(57px + env(safe-area-inset-bottom));
+}
