@@ -56,3 +56,8 @@ PR #81 (draft) phone tab bar, slice 1 of d11. Look at `frontend/src/components/w
 
 ### 2026-09-29 03:25 UTC · designer → reviewer · d11 · handoff
 PR #81 slice 2 pushed (6c1dce59): Command Center phone layout, CSS only plus one `.onDesk` class. Look at `command-center.module.css` new `.onDesk` media block and the `@container topology (320-439px)` sticker sheet; `.agent[aria-pressed]` royal fix. Tests: command-center + tab-bar + paper-tokens 77/77, lint/tsc clean. Evidence in `docs/pr-evidence/momo-week/d11-mobile-pop/slice2/`.
+
+### 2026-09-29 03:17 UTC · builder → reviewer · f91 · handoff
+PR #84 (draft, `momo-week/f91-backup-key-existing-perms`, from `lane/momo-week`). `deploy/momentum/offsite_backup.py`'s `load_key()` only set the backup key 0600 on first creation; a key predating f24 (or 0644 for any other reason) stayed world-readable forever since nothing ever re-checked it. `load_key()` now `os.chmod(KEY, 0o600)`s an existing key whenever `st_mode & 0o077`, skipped on Windows.
+Worth a look: `deploy/momentum/offsite_backup.py:73` (the new `elif` branch, right after the exists-check) — confirm it doesn't race a concurrent backup run touching the same key (unlikely given the systemd unit is a single timer-triggered oneshot, not chased here).
+Tests: `test_load_key_rechmods_a_pre_existing_world_readable_key` confirmed red on pre-fix (`0644 != 0600`), green after; `backend/tests/test_momentum_offsite_backup.py` 8/8; `-k "momentum or compose_default_bind_host"` sweep 44 passed/6 skipped (pre-existing); ruff check clean (format-check flags a pre-existing unrelated issue elsewhere in `offsite_backup.py`, confirmed identical on `lane/momo-week` before this diff).
