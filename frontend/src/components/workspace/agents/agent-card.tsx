@@ -20,6 +20,7 @@ import { pageStyles } from "@/components/workspace/page-body";
 import { useDeleteAgent } from "@/core/agents";
 import type { Agent } from "@/core/agents";
 import { useI18n } from "@/core/i18n/hooks";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 import { AgentSettingsDialog } from "./agent-settings-dialog";
 
@@ -38,6 +39,7 @@ export function AgentCard({ agent }: AgentCardProps) {
     : agent.name;
   const { t } = useI18n();
   const router = useRouter();
+  const isMobile = useIsMobile();
   const deleteAgent = useDeleteAgent();
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -64,8 +66,10 @@ export function AgentCard({ agent }: AgentCardProps) {
     <li className="relative flex flex-wrap items-start gap-x-4 gap-y-3 py-5">
       {/* Same identity as the Command Center roster; the name is the row
           heading, so the mark is decorative here. */}
-      <span aria-hidden="true" className="shrink-0" data-agent-momo>
-        <MomoAvatar agent={agent} size={48} />
+      <span aria-hidden="true" className="shrink-0">
+        {/* Phones draw the Momo at the 64px sticker size. Sized here, not
+            in CSS, so Dillon Brain's layered box grows with its art. */}
+        <MomoAvatar agent={agent} size={isMobile ? 64 : 48} />
       </span>
       <div className="min-w-0 flex-1 basis-64 max-sm:basis-0">
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">

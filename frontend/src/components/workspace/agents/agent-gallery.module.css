@@ -1,7 +1,8 @@
 /*
  * Phones: each agent is its own paper slip on the desk, the way Desk results
- * and dispatch slips are, with its Momo at sticker size and Chat across the
- * slip's foot at thumb reach. Wider screens keep the hairline roster.
+ * and dispatch slips are, with Chat across the slip's foot at thumb reach.
+ * The 64px Momo is sized in agent-card.tsx. Wider screens keep the hairline
+ * roster.
  */
 @media (max-width: 39.99rem) {
   .roster {
@@ -22,13 +23,5 @@
 
   .roster.roster > li:nth-child(even) {
     border-radius: 5px 2px 6px 3px;
-  }
-
-  /* The Momo at the Command Center's phone sticker size. The art is a
-     scalable svg, so only the box changes. */
-  .roster [data-agent-momo] img,
-  .roster [data-agent-momo] svg {
-    width: 64px;
-    height: 64px;
   }
 }
