@@ -1719,10 +1719,23 @@ async def _require_run_agent_visible(
     if not agent_name or agent_name == _DEFAULT_ASSISTANT_ID:
         return
     if agent_config is None and is_bootstrap:
+        normalized = agent_name.strip().lower().replace("_", "-")
         try:
-            agent_config = await _load_scope_agent_config(assistant_id=agent_name, user_id=content_user_id)
-        except HTTPException:
+            agent_config = await asyncio.to_thread(
+                load_agent_config,
+                normalized,
+                user_id=content_user_id,
+            )
+        except FileNotFoundError:
             return  # Nothing exists yet: bootstrap creates a fresh agent.
+        except ValueError as exc:
+            # A foreign agent's config exists but fails to parse: still refuse,
+            # the same as a readable foreign agent would (don't let a corrupt
+            # config masquerade as "missing" and let setup_agent overwrite it).
+            raise HTTPException(
+                status_code=422,
+                detail="knowledge_scope assistant configuration could not be resolved",
+            ) from exc
     client_id = getattr(agent_config, "client_id", None)
     if client_id is None:
         return
