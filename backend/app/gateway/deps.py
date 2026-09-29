@@ -75,6 +75,11 @@ def _enforce_postgres_for_multi_worker(config: AppConfig) -> None:
        every run has a NULL lease, so reconciliation treats all inflight
        runs as orphans and Worker B would kill Worker A's live runs on
        every rolling update or scale-up.
+    6. The Momo Board draft concierge (``config.board.concierge_enabled``)
+       must be disabled. Each worker starts its own copy of the loop, same
+       as the scheduler; unlike the scheduler it has no ``multi_instance``
+       lease-aware mode yet, so ordinary multi-worker mode is refused
+       outright rather than silently running N independent copies.
 
     This gate runs once at startup before any persistence engine is
     initialised so the error message is clear and the process exits
@@ -105,6 +110,9 @@ def _enforce_postgres_for_multi_worker(config: AppConfig) -> None:
 
     if config.scheduler.enabled and not multi_instance_scheduler:
         raise SystemExit(f"GATEWAY_WORKERS={workers} cannot run with scheduler.enabled=true because each worker starts its own scheduler. Set GATEWAY_WORKERS=1, scheduler.multi_instance=true, or scheduler.enabled=false.")
+
+    if bool(getattr(getattr(config, "board", None), "concierge_enabled", False)):
+        raise SystemExit(f"GATEWAY_WORKERS={workers} cannot run with config.board.concierge_enabled=true because each worker starts its own board concierge loop. Set GATEWAY_WORKERS=1 or config.board.concierge_enabled=false.")
 
     if _browser_tools_enabled_in_config(config):
         raise SystemExit(browser_multi_worker_error(workers))

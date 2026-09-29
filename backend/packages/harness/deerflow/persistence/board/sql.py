@@ -12,10 +12,11 @@ not here; this repository only enforces the organization boundary.
 from __future__ import annotations
 
 import uuid
+from collections.abc import Iterable
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from deerflow.persistence.board.model import BoardMessageRow, BoardThreadRow, BoardThreadStatus
@@ -177,3 +178,41 @@ class BoardRepository:
             await session.commit()
             await session.refresh(row)
             return _message_to_dict(row)
+
+    async def try_add_momo_draft(self, thread_id: str, *, from_statuses: Iterable[str], body: str) -> dict | None:
+        """Atomically add Momo's draft message and move *thread_id* to ``drafted``.
+
+        Used by the board draft concierge (a background job with no single
+        human caller serializing its writes against the ``/draft`` route or
+        against itself under multiple Gateway workers). The status change is
+        a single ``UPDATE ... WHERE status IN (...)``: if the thread's status
+        is no longer one of *from_statuses* by the time this statement runs
+        (another actor, or another concierge pass, already moved it), the
+        statement affects zero rows and this call is a no-op that returns
+        ``None`` -- the draft message is added only after that compare-and-set
+        succeeds, so a losing race never leaves an orphaned draft message
+        behind and never overwrites a status the thread already moved past
+        (e.g. resetting ``replied`` back to ``drafted``).
+        """
+        organization_id = resolve_organization_id()
+        stmt = update(BoardThreadRow).where(BoardThreadRow.id == thread_id, BoardThreadRow.status.in_(list(from_statuses)))
+        stmt = self._scope(stmt, organization_id)
+        stmt = stmt.values(status=BoardThreadStatus.DRAFTED)
+        async with self._sf() as session:
+            result = await session.execute(stmt)
+            if result.rowcount != 1:
+                await session.rollback()
+                return None
+            session.add(
+                BoardMessageRow(
+                    id=uuid.uuid4().hex,
+                    thread_id=thread_id,
+                    author_kind="momo",
+                    author_user_id=None,
+                    body=body,
+                    created_at=datetime.now(UTC),
+                )
+            )
+            await session.commit()
+            row = await session.get(BoardThreadRow, thread_id)
+            return _thread_to_dict(row) if row is not None else None

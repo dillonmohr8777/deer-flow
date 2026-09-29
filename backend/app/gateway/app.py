@@ -317,6 +317,45 @@ async def _shutdown_startup_trash_sweep(app: FastAPI) -> None:
         logger.exception("Startup trash sweep failed during shutdown")
 
 
+async def _run_board_concierge_loop(app: FastAPI, startup_config) -> None:
+    """Background loop for the Momo Board draft concierge (Phase 4 item e5).
+
+    Off by default (``config.board.concierge_enabled``). Each pass only
+    drafts Momo's reply for ``new``/``triaged`` threads through
+    ``deerflow.board.concierge.run_concierge_pass`` -- it never approves or
+    sends -- and a failed pass is logged and retried on the next interval
+    rather than crashing the loop. The per-thread backoff state
+    (``run_concierge_pass``'s ``attempt_state``) is kept in this closure so
+    it persists across passes for the life of the loop, not just one pass.
+    """
+    from deerflow.board.concierge import run_concierge_pass
+
+    interval = max(1, startup_config.board.concierge_interval_seconds)
+    attempt_state: dict = {}
+    while True:
+        try:
+            board_repo = getattr(app.state, "board_repo", None)
+            if board_repo is not None:
+                drafted = await run_concierge_pass(board_repo, app_config=startup_config, audit_repo=getattr(app.state, "audit_repo", None), attempt_state=attempt_state)
+                if drafted:
+                    logger.info("Board concierge drafted %d thread(s)", len(drafted))
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.warning("Board concierge pass failed", exc_info=True)
+        await asyncio.sleep(interval)
+
+
+async def _shutdown_board_concierge_loop(app: FastAPI) -> None:
+    """Cancel the concierge loop on shutdown; it has no in-flight I/O to drain."""
+    task = getattr(app.state, "board_concierge_task", None)
+    if task is None or task.done():
+        return
+    task.cancel()
+    with suppress(asyncio.CancelledError, TimeoutError):
+        await asyncio.wait_for(task, timeout=_SHUTDOWN_HOOK_TIMEOUT_SECONDS)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan handler."""
@@ -440,6 +479,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         # in-flight sweep a bounded graceful budget before cancelling it; any
         # already-started file worker drains before the runtime is torn down.
         app.state.startup_trash_sweep_task = asyncio.create_task(_run_startup_trash_sweep(app, startup_config))
+
+        # Momo Board draft concierge (Phase 4 item e5): off by default, and
+        # only started once app.state.board_repo exists (set above by
+        # langgraph_runtime). getattr + ``is True`` (not truthy) so a test
+        # double for startup_config with no (or a mocked) ``board`` attribute
+        # never accidentally starts this loop.
+        if getattr(app.state, "board_repo", None) is not None and getattr(getattr(startup_config, "board", None), "concierge_enabled", None) is True:
+            app.state.board_concierge_task = asyncio.create_task(_run_board_concierge_loop(app, startup_config))
 
         try:
             from app.gateway.services import launch_scheduled_thread_run
@@ -574,6 +621,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         yield
 
         await _shutdown_startup_trash_sweep(app)
+        await _shutdown_board_concierge_loop(app)
 
         try:
             await auth.close_oidc_service()

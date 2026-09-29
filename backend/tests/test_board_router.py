@@ -20,6 +20,7 @@ from org_isolation_fixtures import ORG_S, USER_A, USER_B, USER_C, auth_headers, 
 
 from app.gateway.auth_middleware import AuthMiddleware
 from app.gateway.routers import board, clients
+from deerflow.board.concierge import run_concierge_pass
 from deerflow.persistence.audit_events import AuditEventRepository
 from deerflow.persistence.board import BoardRepository
 from deerflow.persistence.clients import ClientRepository
@@ -390,3 +391,52 @@ async def test_approve_never_restamps_a_superseded_rejected_draft(org_world):  #
         d_messages = (await client.get(f"/api/board/threads/{tid}/messages", headers=headers_d)).json()["messages"]
         momo_bodies = [m["body"] for m in d_messages if m["author_kind"] == "momo"]
         assert momo_bodies == ["GOOD2"]
+
+
+async def test_concierge_draft_hidden_from_client_contact_until_approved(org_world):  # noqa: F811
+    """f52: the concierge (e5) writes through the same ``momo``-authored,
+    unapproved-until-``/approve`` message path ``/draft`` uses, so this
+    branch's ``approved_at`` filter (e3/f20/f35, not yet merged with e5 on
+    ``lane/momo-week``) hides its draft from a client contact exactly the
+    same way it hides a human-triggered one -- no separate filter needed."""
+    session_factory = org_world
+    app = _build_app(session_factory)
+    headers_a = auth_headers(USER_A, ORG_S)  # owner
+
+    await _add_plain_member(session_factory, USER_D, ORG_S)
+    headers_d = auth_headers(USER_D, ORG_S)
+
+    async with _client(app) as client:
+        client1 = await _create_client(client, headers_a, "Client One")
+        assign = await client.post(f"/api/clients/{client1['id']}/assignments", json={"user_id": USER_D, "role": "client_contact"}, headers=headers_a)
+        assert assign.status_code == 201
+
+        thread = (await client.post("/api/board/threads", json={"client_id": client1["id"], "subject": "T1"}, headers=headers_d)).json()
+        tid = thread["id"]
+        posted = await client.post(f"/api/board/threads/{tid}/messages", json={"author_kind": "client", "body": "The checkout button is broken."}, headers=headers_d)
+        assert posted.status_code == 201, posted.text
+
+        async def _fake_generate_draft(content, **kwargs):
+            return "Thanks for flagging that -- we'll take a look and confirm shortly."
+
+        drafted_ids = await run_concierge_pass(app.state.board_repo, generate_draft=_fake_generate_draft)
+        assert drafted_ids == [tid]
+
+        after_draft = await client.get(f"/api/board/threads/{tid}", headers=headers_d)
+        assert after_draft.json()["status"] == "drafted"
+
+        # The client contact sees the status change but never the concierge's
+        # own unapproved draft content.
+        d_messages = (await client.get(f"/api/board/threads/{tid}/messages", headers=headers_d)).json()["messages"]
+        assert all(m["author_kind"] != "momo" for m in d_messages)
+
+        # An owner/admin still sees it while it's unapproved.
+        a_messages = (await client.get(f"/api/board/threads/{tid}/messages", headers=headers_a)).json()["messages"]
+        assert any(m["author_kind"] == "momo" for m in a_messages)
+
+        approved = await client.post(f"/api/board/threads/{tid}/approve", headers=headers_a)
+        assert approved.status_code == 200, approved.text
+
+        # Once approved, the client contact sees the concierge's draft too.
+        d_messages_after = (await client.get(f"/api/board/threads/{tid}/messages", headers=headers_d)).json()["messages"]
+        assert any(m["author_kind"] == "momo" for m in d_messages_after)
