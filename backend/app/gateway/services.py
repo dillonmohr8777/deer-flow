@@ -855,6 +855,24 @@ def inject_authenticated_user_context(
     return
 
 
+async def _refuse_if_agent_seat_paused(agent_name: str) -> None:
+    """Refuse to start a run for an agent whose Momentum seat is paused (queue item f95).
+
+    ``deerflow.exec_seats.budget`` pauses a seat that has exceeded its weekly
+    token budget (queue item e10), but until this check nothing ever stopped
+    that agent's runs -- a pause had no enforcement. Best-effort: persistence
+    unavailable (bare-memory composition, most tests) never blocks a run.
+    """
+    from deerflow.exec_seats.budget import paused_seat_blocking
+
+    seat = await paused_seat_blocking(agent_name)
+    if seat is not None:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Seat {seat['seat']!r} ({agent_name}) is paused: over its weekly token budget.",
+        )
+
+
 def resolve_agent_factory(assistant_id: str | None):
     """Resolve the agent factory callable from config.
 
@@ -1873,6 +1891,8 @@ async def start_run(
         if isinstance(config.get("context"), dict):
             scope_runtime_config.update(config["context"])
         scope_assistant_id = scope_runtime_config.get("agent_name") or _DEFAULT_ASSISTANT_ID
+        if scope_assistant_id != _DEFAULT_ASSISTANT_ID:
+            await _refuse_if_agent_seat_paused(scope_assistant_id)
         # Bootstrap assembly intentionally does not load an agent config: the
         # new agent may not exist yet and setup_agent creates its definition.
         agent_config = (

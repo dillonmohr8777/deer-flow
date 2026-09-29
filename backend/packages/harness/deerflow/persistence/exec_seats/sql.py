@@ -145,6 +145,29 @@ class AgentSeatRepository:
             row = result.scalars().first()
             return _to_dict(row) if row is not None else None
 
+    async def paused_seat_for_agent(self, agent_name: str) -> dict | None:
+        """The currently paused claimed/ratified seat for *agent_name*, if any, in the active organization.
+
+        Matches case- and underscore/hyphen-insensitively against the seat's
+        own ``agent_name`` (queue item f95): a seat claimed under ``CMO_Agent``
+        must still block a run identifying itself as ``cmo-agent``, the
+        normalized form ``build_run_config`` already enforces for an explicit
+        ``assistant_id``.
+        """
+        organization_id = resolve_organization_id()
+        normalized = agent_name.strip().lower().replace("_", "-")
+        normalized_column = func.replace(func.lower(AgentSeatRow.agent_name), "_", "-")
+        stmt = self._scope(select(AgentSeatRow), organization_id).where(
+            normalized_column == normalized,
+            AgentSeatRow.paused_at.is_not(None),
+            AgentSeatRow.status.in_((AgentSeatStatus.CLAIMED, AgentSeatStatus.RATIFIED)),
+        )
+        stmt = stmt.order_by(AgentSeatRow.updated_at.desc()).limit(1)
+        async with self._sf() as session:
+            result = await session.execute(stmt)
+            row = result.scalars().first()
+            return _to_dict(row) if row is not None else None
+
     async def patch_seat(self, seat_id: str, *, status: str | None = None, ratified_by_user_id: str | None = None) -> dict | None:
         """Persist a status transition; ``None`` for a missing/foreign seat.
 
