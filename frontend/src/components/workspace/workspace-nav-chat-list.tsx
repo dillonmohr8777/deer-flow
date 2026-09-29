@@ -18,6 +18,7 @@ import { usePathname } from "next/navigation";
 import {
   SidebarGroup,
   SidebarMenu,
+  SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
@@ -27,6 +28,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useAgentsApiEnabled } from "@/core/agents";
+import { useBoardThreads } from "@/core/board";
 import { useDeskEnabled, useMomentumInternalEnabled } from "@/core/features";
 import { useI18n } from "@/core/i18n/hooks";
 
@@ -36,6 +38,13 @@ export function WorkspaceNavChatList() {
   const { enabled: agentsEnabled } = useAgentsApiEnabled();
   const { enabled: deskEnabled } = useDeskEnabled();
   const { enabled: internalEnabled } = useMomentumInternalEnabled();
+  // Threads with a Momo draft waiting on the owner; same query Desk's
+  // Approvals panel runs, so React Query shares one cache entry.
+  const waitingApproval = useBoardThreads({
+    status: "drafted",
+    enabled: deskEnabled,
+  });
+  const waitingCount = deskEnabled ? (waitingApproval.data?.length ?? 0) : 0;
   return (
     <SidebarGroup className="pt-1">
       <SidebarMenu>
@@ -60,11 +69,27 @@ export function WorkspaceNavChatList() {
               isActive={pathname === "/workspace/board"}
               asChild
             >
-              <Link className="text-muted-foreground" href="/workspace/board">
+              <Link
+                className="text-muted-foreground"
+                href="/workspace/board"
+                aria-label={
+                  waitingCount > 0
+                    ? `Board, ${waitingCount} waiting on you`
+                    : undefined
+                }
+              >
                 <Inbox />
                 <span>Board</span>
               </Link>
             </SidebarMenuButton>
+            {waitingCount > 0 && (
+              // The link's own aria-label already carries the count; hide
+              // this visual badge from assistive tech so it isn't announced
+              // a second time as an unlabeled number.
+              <SidebarMenuBadge aria-hidden="true">
+                {waitingCount}
+              </SidebarMenuBadge>
+            )}
           </SidebarMenuItem>
         )}
         {/* Momentum staff only: the agency's own workspace plus a staff role. */}

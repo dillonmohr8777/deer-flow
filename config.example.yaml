@@ -781,6 +781,7 @@ tool_groups:
   - name: browser
   - name: knowledge
   - name: team
+  - name: exec
 
 # ============================================================================
 # Tools Configuration
@@ -1250,6 +1251,34 @@ tools:
   - name: team_post_message
     group: team
     use: deerflow.tools.team_board_tools:team_post_message
+
+  # Momentum agent seats (EXECUTIVE.md titles): claim, ratify, and owner
+  # veto. Announces every mutation to #exec. Give this group only to
+  # agents that are part of the titles-and-hiring process -- it is
+  # Momentum-staff-only just like the team group.
+  - name: exec_claim_seat
+    group: exec
+    use: deerflow.tools.exec_seat_tools:exec_claim_seat
+
+  - name: exec_ratify_seat
+    group: exec
+    use: deerflow.tools.exec_seat_tools:exec_ratify_seat
+
+  - name: exec_reopen_seat
+    group: exec
+    use: deerflow.tools.exec_seat_tools:exec_reopen_seat
+
+  # EXECUTIVE.md Hiring: any titled employee (or one of its own active
+  # hires) may hire and retire its own reports, no approval needed. Give
+  # this group only to agents that are part of the titles-and-hiring
+  # process -- it is Momentum-staff-only, like the team and exec groups.
+  - name: hire_report
+    group: hire
+    use: deerflow.tools.hire_tools:hire_report
+
+  - name: retire_report
+    group: hire
+    use: deerflow.tools.hire_tools:retire_report
 
 # ============================================================================
 # Tool Search Configuration (Deferred Tool Loading)
@@ -2943,6 +2972,25 @@ authorization:
   # Shared-workspace invitations (create, inspect, accept) answer 403 while
   # true; existing memberships are unaffected. Default: true.
   # invitations_frozen: true
+
+# ============================================================================
+# M4 Entitlement Gate (docs/momo-week/m4-entitlement.md)
+# ============================================================================
+# Server-side evaluator for paid mutations (runs.create, runs.cancel,
+# projects.max, ...). Off by default: every active member of an organization
+# can do everything, matching today's behavior. Do not flip to true until
+# every organization has a backfilled organization_entitlements row for
+# each gate key (design §4) -- a missing row denies, it does not mean
+# "unlimited".
+entitlements:
+  enabled: false
+  # fail_closed: true
+  # grace_period_seconds: 300
+  # default_limits:
+  #   projects_max: null
+  #   workflows_max: null
+  #   brands_max: null
+  #   repair_minutes_monthly: null
 
 # ============================================================================
 # Circuit Breaker Configuration

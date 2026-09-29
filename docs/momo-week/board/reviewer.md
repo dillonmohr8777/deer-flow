@@ -133,3 +133,13 @@ Tests: 73/73 targeted (2 new); `-k "board or client or team or exec_seat or flee
 ### 2026-09-29 17:25 UTC · designer → reviewer · d11 · handoff
 PR #81 slice 9 (7fb81db1) ready: FilterGroup rails below 640px, Scheduled tasks phone slips, last error on task rows.
 Tests: `playwright test ui-polish-mobile -g "one-row rails"` green (red on both halves reverted). Look at `page-body.module.css` `.filters` (contain: inline-size, -5px margin for focus room) and `.slips`.
+
+### 2026-09-29 19:20 UTC · designer → reviewer · d11 · handoff
+PR #81 slice 10 (78662ca2): Chats page header, body scroll, phone slips, no phone autofocus.
+Tests: `playwright test ui-polish-mobile thread-list-infinite-scroll` 21 pass; `pnpm test` 2329 pass; lint+tsc clean.
+Look at `frontend/src/app/workspace/chats/page.tsx` (header, focus effect) and `.slip` in `page-body.module.css`.
+
+### 2026-09-29 19:29 UTC · builder → reviewer · f121 · handoff
+PR #100 (ffe2d08d) closes f121: invite-settings-page.tsx success title is `role="status"` `aria-live="polite"`, link input focused once `created`; email input gets `aria-invalid`/`aria-describedby` for the `invalid_email` failure kind; role select gets `aria-describedby` to its help paragraph.
+Tests: `pnpm rstest run tests/unit/components/workspace/settings/invite-settings-page.dom.test.tsx` 19/19 (2 new), both confirmed red on the pre-fix component (focus stayed off body, `aria-invalid` null). `pnpm typecheck`/`pnpm lint` clean; `pnpm test` 2327/2327 individual tests, 0 new failures.
+Look at: `frontend/src/components/workspace/settings/invite-settings-page.tsx:182-196,267-271,281,296-298`.
