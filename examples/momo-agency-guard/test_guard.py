@@ -5,6 +5,7 @@ import threading
 import unittest
 from concurrent.futures import ThreadPoolExecutor
 from decimal import Decimal
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from unittest.mock import patch
 from urllib.request import Request, urlopen
@@ -271,6 +272,55 @@ class GuardTests(unittest.TestCase):
         for case in cases:
             with self.assertRaises(guard.Stop):
                 guard.response_cost(case.encode(), True, self.policy)
+
+    def test_malformed_containers_raise_sanitized_stop(self):
+        cases = [
+            dict(self.payload, tools=[{"type": "function", "function": []}]),
+            dict(self.payload, stream={}),
+            dict(self.payload, stream_options=[]),
+            dict(self.payload, temperature=float("nan")),
+        ]
+        for case in cases:
+            with self.assertRaises(guard.Stop):
+                guard.validate_payload(case, self.policy)
+        for raw in [b"data: []\n\ndata: [DONE]\n\n", b"data: null\n\ndata: [DONE]\n\n"]:
+            with self.assertRaises(guard.Stop):
+                guard.response_cost(raw, True, self.policy)
+
+    def test_redirect_never_replays_bearer_or_private_body(self):
+        seen = []
+
+        class RedirectFixture(BaseHTTPRequestHandler):
+            def log_message(self, *_args):
+                pass
+
+            def do_POST(self):
+                seen.append(self.path)
+                self.send_response(302)
+                self.send_header("Location", "/should-not-receive-key")
+                self.end_headers()
+
+            def do_GET(self):
+                seen.append(self.path)
+                self.send_response(200)
+                self.end_headers()
+
+        server = HTTPServer(("127.0.0.1", 0), RedirectFixture)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            request = Request(
+                "http://127.0.0.1:" + str(server.server_port) + "/first",
+                data=b"private-fixture-body",
+                headers={"Authorization": "Bearer fixture-not-a-key"},
+            )
+            with self.assertRaises(guard.Stop):
+                guard.no_redirect_opener().open(request, timeout=5)
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
+        self.assertEqual(seen, ["/first"])
 
 
 if __name__ == "__main__":
