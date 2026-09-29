@@ -124,6 +124,19 @@ def test_update_agent_rejects_unknown_agent(tmp_path, patched_paths):
     assert not _user_agent_dir(tmp_path, "ghost").exists()
 
 
+def test_update_agent_operator_opt_out_blocks_even_direct_tool_invocation(tmp_path, patched_paths):
+    agent_dir = _seed_agent(tmp_path)
+    cfg_path = agent_dir / "config.yaml"
+    cfg = yaml.safe_load(cfg_path.read_text())
+    cfg["self_update_enabled"] = False
+    cfg_path.write_text(yaml.safe_dump(cfg))
+    before = {p.name: p.read_bytes() for p in agent_dir.iterdir()}
+    result = update_agent.func(runtime=_runtime(), description="unsafe rewrite", soul="replacement")
+    assert result.update["messages"][0].status == "error"
+    assert "operator-owned" in result.update["messages"][0].content
+    assert before == {p.name: p.read_bytes() for p in agent_dir.iterdir()}
+
+
 def test_update_agent_rejects_legacy_agent_when_user_dir_has_only_memory(tmp_path, patched_paths):
     """Regression for #3390's update_agent guard.
 

@@ -59,6 +59,8 @@ class AgentResponse(BaseModel):
     thinking_enabled: bool | None = Field(default=None, description="Per-agent thinking-mode default (None = runtime default)")
     reasoning_effort: ReasoningEffort | None = Field(default=None, description="Per-agent reasoning-effort default (None = runtime default)")
     memory_enabled: bool = Field(default=True, description="Whether this agent may use memory")
+    self_update_enabled: bool = Field(default=True, description="Whether this agent may mutate its own configuration")
+    tool_names: list[str] | None = Field(default=None, description="Tool-name ceiling (None=existing catalog, []=none)")
     soul: str | None = Field(default=None, description="SOUL.md content")
     client_id: str | None = Field(default=None, description="Client this agent was stamped for, if any (fleet templates)")
     template_id: str | None = Field(default=None, description="Fleet template this agent was stamped from, if any")
@@ -87,6 +89,8 @@ class AgentCreateRequest(BaseModel):
     thinking_enabled: bool | None = Field(default=None, description="Per-agent thinking-mode default (None = runtime default)")
     reasoning_effort: ReasoningEffort | None = Field(default=None, description="Per-agent reasoning-effort default (None = runtime default)")
     memory_enabled: bool = Field(default=True, description="Whether this agent may use memory")
+    self_update_enabled: bool = Field(default=True, description="Whether this agent may mutate its own configuration")
+    tool_names: list[str] | None = Field(default=None, description="Tool-name ceiling (None=existing catalog, []=none)")
     soul: str = Field(default="", description="SOUL.md content — agent personality and behavioral guardrails")
 
 
@@ -105,6 +109,8 @@ class AgentUpdateRequest(BaseModel):
     thinking_enabled: bool | None = Field(default=None, description="Updated per-agent thinking-mode default")
     reasoning_effort: ReasoningEffort | None = Field(default=None, description="Updated per-agent reasoning-effort default")
     memory_enabled: bool = Field(default=True, description="Whether this agent may use memory")
+    self_update_enabled: bool = Field(default=True, description="Whether this agent may mutate its own configuration")
+    tool_names: list[str] | None = Field(default=None, description="Tool-name ceiling (None=existing catalog, []=none)")
     soul: str | None = Field(default=None, description="Updated SOUL.md content")
 
 
@@ -223,6 +229,8 @@ def _agent_config_to_response(agent_cfg: AgentConfig, include_soul: bool = False
         thinking_enabled=agent_cfg.thinking_enabled,
         reasoning_effort=agent_cfg.reasoning_effort,
         memory_enabled=agent_cfg.memory_enabled,
+        self_update_enabled=agent_cfg.self_update_enabled,
+        tool_names=agent_cfg.tool_names,
         soul=soul,
         client_id=agent_cfg.client_id,
         template_id=agent_cfg.template_id,
@@ -445,6 +453,10 @@ async def create_agent_endpoint(request: AgentCreateRequest) -> AgentResponse:
         config_data["allowed_subagents"] = request.allowed_subagents
     if not request.memory_enabled:
         config_data["memory_enabled"] = False
+    if not request.self_update_enabled:
+        config_data["self_update_enabled"] = False
+    if request.tool_names is not None:
+        config_data["tool_names"] = request.tool_names
     # model / model_settings / thinking_enabled / reasoning_effort (issue #4336).
     _apply_model_behavior(config_data, request)
 
@@ -537,6 +549,8 @@ async def update_agent(name: str, request: AgentUpdateRequest) -> AgentResponse:
                     "knowledge_scope",
                     "allowed_subagents",
                     "memory_enabled",
+                    "self_update_enabled",
+                    "tool_names",
                 }
                 | set(_MODEL_BEHAVIOR_FIELDS)
             )
@@ -575,6 +589,10 @@ async def update_agent(name: str, request: AgentUpdateRequest) -> AgentResponse:
                 updated["allowed_subagents"] = new_allowed_subagents
 
             updated["memory_enabled"] = request.memory_enabled if "memory_enabled" in fields_set else agent_cfg.memory_enabled
+            updated["self_update_enabled"] = request.self_update_enabled if "self_update_enabled" in fields_set else agent_cfg.self_update_enabled
+            new_tool_names = request.tool_names if "tool_names" in fields_set else agent_cfg.tool_names
+            if new_tool_names is not None:
+                updated["tool_names"] = new_tool_names
 
             # model / model_settings / thinking_enabled / reasoning_effort:
             # take explicitly-set request fields, else preserve the existing

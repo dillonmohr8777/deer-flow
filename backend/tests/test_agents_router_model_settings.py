@@ -170,6 +170,25 @@ async def test_update_memory_enabled_preserves_or_changes_explicitly(_agent_env)
     assert enabled.memory_enabled is True
 
 
+async def test_self_update_round_trip_preserves_omission_and_allows_owner_edit(_agent_env) -> None:
+    created = await create_agent_endpoint(AgentCreateRequest(name="fixed", self_update_enabled=False))
+    assert created.self_update_enabled is False
+    assert (await get_agent("fixed")).self_update_enabled is False
+    preserved = await update_agent("fixed", AgentUpdateRequest(description="updated"))
+    assert preserved.self_update_enabled is False
+    enabled = await update_agent("fixed", AgentUpdateRequest(self_update_enabled=True))
+    assert enabled.self_update_enabled is True
+    assert (await create_agent_endpoint(AgentCreateRequest(name="legacy-default"))).self_update_enabled is True
+
+
+async def test_tool_ceiling_round_trip_omission_empty_and_null(_agent_env) -> None:
+    assert (await create_agent_endpoint(AgentCreateRequest(name="limited", tool_names=["read_file"]))).tool_names == ["read_file"]
+    assert (await get_agent("limited")).tool_names == ["read_file"]
+    assert (await update_agent("limited", AgentUpdateRequest(description="changed"))).tool_names == ["read_file"]
+    assert (await update_agent("limited", AgentUpdateRequest(tool_names=[]))).tool_names == []
+    assert (await update_agent("limited", AgentUpdateRequest(tool_names=None))).tool_names is None
+
+
 async def test_plugin_selection_persists_empty_omitted_and_null(_agent_env):
     created = await create_agent_endpoint(AgentCreateRequest(name="selected", mcp_plugins=["stable-installation"], skills=["research"]))
     assert created.mcp_plugins == ["stable-installation"]

@@ -44,3 +44,11 @@
   counts the thread's full delegation ledger (fail-restrictive) and emits a warning.
 
 **Direct subagent runtime**: `create_deerflow_agent(..., subagent_runtime=runtime)` is the explicit dependency-injection path for direct graph callers. Reuse one `deerflow.subagents.SubagentRuntime` across every graph that belongs to the same application capacity boundary. With the default subagent feature it binds middleware concurrency/total limits, the ordinary `task` tool, one real execution controller, and any active durable-batch submitter to the same snapshot. A caller-owned batch repository requires `await runtime.start()` (or `async with runtime`) before graph construction and `stop()` at shutdown; the factory fails closed while that worker is stopped, and already-built bound batch tools must fail unavailable after it stops rather than falling through to another process-global submitter. The factory never creates SQL infrastructure, renders the caller-owned `system_prompt`, or mounts Gateway API/UI routes. Full middleware takeover cannot be combined with this runtime; direct callers and custom subagent middleware remain responsible for model-visible call-policy wording.
+Custom agents may set `self_update_enabled: false` to omit `update_agent` during
+assembly. The tool independently checks the persisted flag before mutation;
+owner/API changes remain available and omitted flags default to true. Preserve
+this managed setting across every agent config rewrite.
+An optional `tool_names` list is an owner-controlled ceiling across all tool
+schemas, including late middleware tools. `None` preserves existing behavior;
+`[]` denies all. Assembly filters candidates, and SkillToolPolicyMiddleware
+intersects active skills with the ceiling and denies fabricated calls.
