@@ -30,7 +30,14 @@ if [[ -n "$newest" ]]; then
   # GNU stat (Linux) first, BSD stat (the Mac) second.
   mtime="$(stat -c %Y "$newest" 2>/dev/null || stat -f %m "$newest" 2>/dev/null || echo "")"
   [[ -n "$mtime" ]] && backup_age=$(( ( $(date +%s) - mtime ) / 3600 ))
-  grep -Eq '"state"[[:space:]]*:[[:space:]]*"PASS"' "$newest" && backup_pass=true
+  # Top-level "state" only: a grep for the string anywhere in the file also
+  # matches the nested snapshot/postgres receipts, which can say PASS while
+  # the overall backup (and the top-level state this receipt is named for) FAILed.
+  [[ "$(python3 -c 'import json,sys
+try:
+    print(json.load(open(sys.argv[1])).get("state"))
+except Exception:
+    print("")' "$newest" 2>/dev/null)" == "PASS" ]] && backup_pass=true
 fi
 
 ok=false
