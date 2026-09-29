@@ -387,8 +387,10 @@
     width: calc(100% + 10px);
     overflow-x: auto;
     scrollbar-width: none;
-    /* Room for the 3px focus ring, which the scroll box would clip. */
-    margin: -5px;
+    /* Room for the 3px focus ring, which the scroll box would clip. The
+       negative margin is sideways only: a block one would cancel the gap
+       the parent's space-y puts under the rail (unlayered beats Tailwind). */
+    margin-inline: -5px;
     padding: 5px;
   }
 

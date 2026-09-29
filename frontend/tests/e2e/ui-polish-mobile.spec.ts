@@ -393,6 +393,7 @@ test.describe("assistant turn byline", () => {
         reply.getBoundingClientRect().top - el.getBoundingClientRect().bottom
       );
     });
+    expect(gap).toBeGreaterThanOrEqual(11);
     expect(gap).toBeLessThanOrEqual(13);
   });
 
@@ -526,4 +527,58 @@ test.describe("scheduled tasks on a phone", () => {
     expect(facts.listRight).toBeLessThanOrEqual(390 - 16);
     expect(facts.slipGap).toBeGreaterThanOrEqual(8);
   });
+
+  // The failure names itself in the row at every width, not only on phones.
+  for (const width of [430, 1440]) {
+    test(`a failing task's row names the failure at ${width}px`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 900 });
+      mockLangGraphAPI(page, {
+        threads: [],
+        scheduledTasks: [
+          {
+            ...task("b", "Monday ad spend check"),
+            last_error: "Google Ads token expired, reconnect the account",
+          },
+        ],
+      });
+      await page.goto("/workspace/scheduled-tasks");
+      await expect(page.getByTestId("scheduled-task-item-b")).toContainText(
+        "Google Ads token expired",
+      );
+    });
+  }
+});
+
+// A filter rail's negative margin is sideways only: a block margin would
+// cancel the space-y gap its parent puts under it, and on Tools &
+// integrations the category rail sat flush on the next control (-5px).
+test("a filter rail keeps its parent's gap below it at 390px", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  mockLangGraphAPI(page);
+  await page.goto("/workspace/capabilities");
+  const rail = page.getByRole("group", { name: "All categories" });
+  await rail.waitFor();
+  const gap = () =>
+    rail.evaluate((group) => {
+      const visibleNext = (el: Element) => {
+        let next = el.nextElementSibling;
+        while (next?.getBoundingClientRect().height === 0) {
+          next = next.nextElementSibling;
+        }
+        return next;
+      };
+      // Climb to the block the parent spaces (FilterGroup may wrap the rail).
+      let el: Element | null = group;
+      while (el && !visibleNext(el)) el = el.parentElement;
+      const next = el && visibleNext(el);
+      return el && next
+        ? next.getBoundingClientRect().top - el.getBoundingClientRect().bottom
+        : null;
+    });
+  // Poll: the block under the rail renders once the catalog loads.
+  await expect.poll(gap).toBeGreaterThanOrEqual(16);
 });
