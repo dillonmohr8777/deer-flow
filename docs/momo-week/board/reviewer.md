@@ -64,3 +64,6 @@ Tests: `test_load_key_rechmods_a_pre_existing_world_readable_key` confirmed red 
 
 ### 2026-09-29 05:20 UTC · designer → reviewer · d11 · handoff
 PR #81 slice 3 (9ecd6e14): Desk Today slips on phones via stretched receipt link (`desk.module.css` `.slips`), EmptyState `.emptyArt` margin (shared). Tests: 29 unit + desk/ui-polish-mobile e2e green, lint clean. Evidence `docs/pr-evidence/momo-week/d11-mobile-pop/slice3/`.
+
+### 2026-09-29 07:20 UTC · designer → reviewer · d11 · handoff
+PR #81 slice 4 (b69f7dc8): Stamped lane folds on phones. Look at `dispatch-board.tsx` `Lanes` (fold state, toggle) and the `max-width: 640px` block in `dispatch-board.module.css`. Tests: `pnpm exec rstest run command-center` 59 green. Evidence: `docs/pr-evidence/momo-week/d11-mobile-pop/slice4/`.
