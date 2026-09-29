@@ -28,7 +28,7 @@ never imports from ``app``).
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Literal
 
 from langchain.tools import tool
 from pydantic import Field
@@ -142,7 +142,7 @@ async def _announce(runtime: Runtime | None, text: str) -> bool:
         return False
 
 
-async def _exec_claim_seat_impl(seat: str, scope: str, kpi: str, weekly_token_budget: int, runtime: Runtime | None = None) -> dict:
+async def _exec_claim_seat_impl(seat: str, scope: str, kpi: str, weekly_token_budget: int, runtime: Runtime | None = None, model_family: str = "muse") -> dict:
     if not _is_momentum_staff_run(runtime):
         return _staff_only_error()
     if resolve_organization_id() is None:
@@ -158,12 +158,12 @@ async def _exec_claim_seat_impl(seat: str, scope: str, kpi: str, weekly_token_bu
     agent_name = _agent_name(runtime)
     claimed_by_user_id = resolve_runtime_actor_user_id(runtime)
     try:
-        claimed = await repo.claim_seat(seat=seat, agent_name=agent_name, scope=scope, kpi=kpi, weekly_token_budget=weekly_token_budget, claimed_by_user_id=claimed_by_user_id)
+        claimed = await repo.claim_seat(seat=seat, agent_name=agent_name, scope=scope, kpi=kpi, weekly_token_budget=weekly_token_budget, model_family=model_family, claimed_by_user_id=claimed_by_user_id)
     except SeatTransitionError as exc:
         # Lost a race against another concurrent claim on the same seat;
         # uq_agent_seats_open_claim caught what the check above couldn't.
         return _error(str(exc))
-    await _announce(runtime, f"claimed {seat} (kpi: {kpi}, weekly budget: {weekly_token_budget})")
+    await _announce(runtime, f"claimed {seat} (model: {model_family}, kpi: {kpi}, weekly budget: {weekly_token_budget})")
     return claimed
 
 
@@ -201,7 +201,7 @@ async def _exec_ratify_seat_impl(seat_id: str, runtime: Runtime | None = None) -
     ratified = await repo.patch_seat(seat_id, status=AgentSeatStatus.RATIFIED, ratified_by_user_id=actor_user_id)
     if ratified is None:
         return _error("No such seat claim in this organization.")
-    await _announce(runtime, f"ratified {ratified['seat']} for {ratified['agent_name']}")
+    await _announce(runtime, f"ratified {ratified['seat']} for {ratified['agent_name']} (model: {ratified.get('model_family') or 'muse'})")
     return ratified
 
 
@@ -236,6 +236,7 @@ async def exec_claim_seat(
     kpi: str,
     runtime: Runtime,
     weekly_token_budget: Annotated[int, Field(ge=0)] = 0,
+    model_family: Literal["luna", "muse"] = "muse",
 ) -> dict:
     """Claim a Momentum title from EXECUTIVE.md's slate, or propose a new one.
 
@@ -251,11 +252,13 @@ async def exec_claim_seat(
         kpi: The metric this seat is accountable for.
         runtime: Injected tool runtime; supplies the claiming agent's name and acting user.
         weekly_token_budget: Requested weekly token budget for this seat (default 0).
+        model_family: Whether this seat holder is a Luna or Muse employee (default "muse").
+            Queue item e12: a "luna" seat holder may hire a report into private data.
 
     Returns:
         The created seat claim ({"id", "seat", "status": "claimed", ...}), or {"error": ...}.
     """
-    return await _exec_claim_seat_impl(seat, scope, kpi, weekly_token_budget, runtime=runtime)
+    return await _exec_claim_seat_impl(seat, scope, kpi, weekly_token_budget, runtime=runtime, model_family=model_family)
 
 
 @tool(parse_docstring=True)

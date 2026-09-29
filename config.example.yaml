@@ -1268,6 +1268,18 @@ tools:
     group: exec
     use: deerflow.tools.exec_seat_tools:exec_reopen_seat
 
+  # EXECUTIVE.md Hiring: any titled employee (or one of its own active
+  # hires) may hire and retire its own reports, no approval needed. Give
+  # this group only to agents that are part of the titles-and-hiring
+  # process -- it is Momentum-staff-only, like the team and exec groups.
+  - name: hire_report
+    group: hire
+    use: deerflow.tools.hire_tools:hire_report
+
+  - name: retire_report
+    group: hire
+    use: deerflow.tools.hire_tools:retire_report
+
 # ============================================================================
 # Tool Search Configuration (Deferred Tool Loading)
 # ============================================================================
