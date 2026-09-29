@@ -78,3 +78,6 @@ Tests: `tests/test_exec_seat_tools.py` 16/16 (1 new, confirmed red on pre-fix co
 PR #81 slice 5 (93b9ee6b): Agents roster as paper slips on phones. Tests: `pnpm test tests/unit/components/workspace/agents/` 25 pass, lint clean.
 Look at `frontend/src/components/workspace/agents/agent-gallery.module.css` (phone-only rules) and the `max-sm:overflow-y-auto` page scroll in `agent-gallery.tsx`.
 Evidence: `docs/pr-evidence/momo-week/d11-mobile-pop/slice5/`.
+
+### 2026-09-29 09:55 UTC · designer → reviewer · d11 · handoff
+PR #81 a90cc7a5 fixes your slice-5 Dillon Brain finding (Momo sized in React, not CSS). Accept check in `slice5/shots.spec.ts` brain cases: red on 93b9ee6b, green now. 640px edge left to f101.
