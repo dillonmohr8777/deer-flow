@@ -224,7 +224,9 @@ async def test_start_run_does_not_refuse_the_default_agent_even_with_a_paused_se
 
 
 @pytest.mark.asyncio
-async def test_start_run_refuses_a_scalar_agent_name_with_422_instead_of_crashing(org_world, _stub_app_config):  # noqa: F811
+@pytest.mark.parametrize("scalar_agent_name", [42, 0, False, []], ids=["int", "zero", "false", "list"])
+@pytest.mark.parametrize("container", ["context", "configurable"])
+async def test_start_run_refuses_a_scalar_agent_name_with_422_instead_of_crashing(org_world, _stub_app_config, container, scalar_agent_name):  # noqa: F811
     """Review of f98/PR #85: ``configurable``/``context`` are untyped dicts, so a
     client can send ``agent_name: 42`` (or any non-string JSON scalar). Before
     this fix, ``scope_assistant_id.strip()`` -- both inside
@@ -233,21 +235,54 @@ async def test_start_run_refuses_a_scalar_agent_name_with_422_instead_of_crashin
     with an unhandled ``AttributeError`` (a 500), earlier in ``start_run``
     than #90's own fix in ``_load_scope_agent_config`` ever runs. A non-string
     value can never name a real agent, so it must get the same 422 a
-    missing/foreign agent already gets."""
+    missing/foreign agent already gets.
+
+    f116 review: a *falsy* non-string (``0``, ``False``, ``[]``) must refuse
+    the same way -- the raw value has to be checked before the
+    ``or _DEFAULT_ASSISTANT_ID`` fallback, or it silently becomes the default
+    agent and later crashes the worker with a ``ValueError`` instead."""
     from fastapi import HTTPException
 
     from app.gateway.run_models import RunCreateRequest
     from app.gateway.services import start_run
 
     with acting_as(USER_A, ORG_A):
-        body = RunCreateRequest(assistant_id="lead_agent", context={"agent_name": 42}, input={"messages": [{"type": "human", "content": "hi"}]})
+        kwargs = {"context": {"agent_name": scalar_agent_name}} if container == "context" else {"config": {"configurable": {"agent_name": scalar_agent_name}}}
+        body = RunCreateRequest(assistant_id="lead_agent", input={"messages": [{"type": "human", "content": "hi"}]}, **kwargs)
         request = _start_run_request()
+        thread_id = f"thread-scalar-agent-name-{container}-{type(scalar_agent_name).__name__}"
 
         with pytest.raises(HTTPException) as exc_info:
-            await start_run(body, "thread-scalar-agent-name", request)
+            await start_run(body, thread_id, request)
 
     assert exc_info.value.status_code == 422
     assert exc_info.value.detail == "knowledge_scope assistant configuration could not be resolved"
+
+
+@pytest.mark.asyncio
+async def test_start_run_treats_none_and_empty_string_agent_name_as_the_default(org_world, _stub_app_config):  # noqa: F811
+    """``None``/``""`` are still the "no override" signal, not a refusal --
+    only a genuinely non-string value refuses."""
+    from unittest.mock import patch
+
+    from app.gateway.run_models import RunCreateRequest
+    from app.gateway.services import start_run
+
+    with acting_as(USER_A, ORG_A):
+
+        async def fake_run_agent(*_args, **_kwargs):
+            return None
+
+        with (
+            patch("app.gateway.services.resolve_agent_factory", return_value=object()),
+            patch("app.gateway.services.run_agent", side_effect=fake_run_agent),
+        ):
+            for label, value in (("none", None), ("empty", "")):
+                body = RunCreateRequest(assistant_id="lead_agent", context={"agent_name": value}, input={"messages": [{"type": "human", "content": "hi"}]})
+                request = _start_run_request()
+                record = await start_run(body, f"thread-empty-agent-name-{label}", request)
+                await record.task
+                assert record is not None
 
 
 # ---------------------------------------------------------------------------

@@ -1929,16 +1929,21 @@ async def start_run(
         scope_runtime_config = dict(config.get("configurable") or {})
         if isinstance(config.get("context"), dict):
             scope_runtime_config.update(config["context"])
-        scope_assistant_id = scope_runtime_config.get("agent_name") or _DEFAULT_ASSISTANT_ID
-        if not isinstance(scope_assistant_id, str):
+        raw_scope_agent_name = scope_runtime_config.get("agent_name")
+        if raw_scope_agent_name is not None and not isinstance(raw_scope_agent_name, str):
             # ``configurable``/``context`` are untyped dicts, so a client can send
             # any JSON scalar (e.g. ``42``) as ``agent_name``. It can never name a
             # real agent, so refuse the same way ``_load_scope_agent_config``
             # (f102(d)/#90) treats a missing one -- before the pause gate and the
             # burn-accounting metadata stamp below ever call ``.strip()`` on it
             # and crash with an unhandled 500 (review of f98, #90's fix runs too
-            # late to cover this earlier code path).
+            # late to cover this earlier code path). Checked against the raw
+            # value, before the ``or _DEFAULT_ASSISTANT_ID`` fallback below: a
+            # *falsy* non-string (``0``, ``False``, ``[]``) would otherwise slip
+            # through as the default agent and surface as a worker-side
+            # ``ValueError`` instead of this clean 422 (f116 review).
             raise HTTPException(status_code=422, detail="knowledge_scope assistant configuration could not be resolved")
+        scope_assistant_id = raw_scope_agent_name or _DEFAULT_ASSISTANT_ID
         if scope_assistant_id != _DEFAULT_ASSISTANT_ID:
             await _refuse_if_agent_seat_paused(scope_assistant_id)
         # Server-resolved, like deerflow_trace_id above: an agent seat's weekly
