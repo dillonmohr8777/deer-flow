@@ -855,6 +855,24 @@ def inject_authenticated_user_context(
     return
 
 
+async def _refuse_if_agent_seat_paused(agent_name: str) -> None:
+    """Refuse to start a run for an agent whose Momentum seat is paused (queue item f95).
+
+    ``deerflow.exec_seats.budget`` pauses a seat that has exceeded its weekly
+    token budget (queue item e10), but until this check nothing ever stopped
+    that agent's runs -- a pause had no enforcement. Best-effort: persistence
+    unavailable (bare-memory composition, most tests) never blocks a run.
+    """
+    from deerflow.exec_seats.budget import paused_seat_blocking
+
+    seat = await paused_seat_blocking(agent_name)
+    if seat is not None:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Seat {seat['seat']!r} ({agent_name}) is paused: over its weekly token budget.",
+        )
+
+
 def resolve_agent_factory(assistant_id: str | None):
     """Resolve the agent factory callable from config.
 
@@ -1912,6 +1930,18 @@ async def start_run(
         if isinstance(config.get("context"), dict):
             scope_runtime_config.update(config["context"])
         scope_assistant_id = scope_runtime_config.get("agent_name") or _DEFAULT_ASSISTANT_ID
+        if scope_assistant_id != _DEFAULT_ASSISTANT_ID:
+            await _refuse_if_agent_seat_paused(scope_assistant_id)
+        # Server-resolved, like deerflow_trace_id above: an agent seat's weekly
+        # burn (queue item f95) must be counted from the run's real effective
+        # agent, not a caller-forged claim of one. Normalized the same way
+        # AgentSeatRepository.paused_seat_for_agent already matches a seat's
+        # own agent_name (case/underscore-hyphen insensitive, f97 review) --
+        # an un-normalized context.agent_name (e.g. "CMO-Agent") would
+        # otherwise never match a seat claimed as "cmo-agent" in the ledger.
+        from deerflow.persistence.exec_seats import EFFECTIVE_AGENT_NAME_METADATA_KEY
+
+        run_metadata[EFFECTIVE_AGENT_NAME_METADATA_KEY] = scope_assistant_id.strip().lower().replace("_", "-")
         # Bootstrap assembly intentionally does not load an agent config: the
         # new agent may not exist yet and setup_agent creates its definition.
         agent_config = (

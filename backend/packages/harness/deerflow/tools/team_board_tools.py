@@ -7,11 +7,12 @@ inherit the same organization scoping: a channel belonging to another
 organization is indistinguishable from a missing one (see
 ``resolve_organization_id()`` and ``TeamBoardRepository.get_channel``) — and,
 unlike the repository alone, both fail closed with no organization context at
-all instead of reading unfiltered. Channels are never created here — an owner
-or admin creates ``#fleet`` once from the Team Board UI — so both tools fail
+all instead of reading unfiltered. ``#exec`` is a default channel every
+workspace already has (``DEFAULT_TEAM_CHANNELS``); ``#fleet`` is not, so an
+owner or admin creates it once from the Team Board UI and both tools fail
 closed until it exists. Reachable channels are further restricted to
-``_ALLOWED_CHANNELS`` (default: ``#fleet`` only), regardless of what exists in
-the organization.
+``_ALLOWED_CHANNELS`` (``#fleet`` and ``#exec``), regardless of what else
+exists in the organization.
 
 Both tools also require the run-context ``momentum_staff`` flag the Gateway
 stamps at run start (the same ``is_momentum_staff`` check the human
@@ -19,9 +20,9 @@ stamps at run start (the same ``is_momentum_staff`` check the human
 scoping alone is not staff-only, since a client contact can be a member of
 the Momentum organization itself.
 
-``#fleet`` (and every channel these tools can reach) carries repo and public
-information only, never client data, credentials, or anything else private:
-some fleet agents run on a model lane that must not see private data.
+``#fleet`` and ``#exec`` (and every channel these tools can reach) carry repo
+and public information only, never client data, credentials, or anything else
+private: some fleet agents run on a model lane that must not see private data.
 """
 
 from __future__ import annotations
@@ -44,8 +45,10 @@ _DEFAULT_READ_LIMIT = 50
 # model chooses ``channel`` freely, and #general/#sales/#fulfillment carry
 # staff and client talk the module docstring's "repo and public information
 # only" promise must not expose to a fleet run. A module constant, not new
-# config, until a real need for more than one channel shows up.
-_ALLOWED_CHANNELS: frozenset[str] = frozenset({"fleet"})
+# config. ``#exec`` (queue item e9) carries titles/claims/ratifications only
+# -- still repo-adjacent "public within Momentum staff" text, never client
+# data -- so it is allowed alongside ``#fleet``.
+_ALLOWED_CHANNELS: frozenset[str] = frozenset({"fleet", "exec"})
 
 
 def _error(message: str) -> dict:
@@ -200,12 +203,13 @@ async def team_read_messages(
     staff flag, exactly like the human /api/team routes. Scoped to this run's
     Momentum organization: a channel belonging to another organization (or,
     with no organization at all, any organization) is indistinguishable from
-    a missing one. Restricted to a small fleet-channel allowlist regardless
-    of organization. Channels are not created here — an owner or admin
-    creates #fleet once from the Team Board UI. #fleet (and every channel
-    this tool can reach) carries repo and public information only, never
-    client data, credentials, or anything else private, because some fleet
-    agents run on a model lane that must not see private data.
+    a missing one. Restricted to a small channel allowlist (#fleet, #exec)
+    regardless of organization. #exec exists in every workspace by default;
+    #fleet is not, so an owner or admin creates it once from the Team Board
+    UI first. Every channel this tool can reach carries repo and public
+    information only, never client data, credentials, or anything else
+    private, because some fleet agents run on a model lane that must not see
+    private data.
 
     Args:
         channel: Channel slug, with or without a leading '#' (e.g. "fleet").
@@ -235,13 +239,13 @@ async def team_post_message(
     characters — no attachments. Scoped to this run's Momentum organization:
     a channel belonging to another organization (or, with no organization at
     all, any organization) is indistinguishable from a missing one.
-    Restricted to a small fleet-channel allowlist regardless of
-    organization. Channels are not created here — an owner or admin creates
-    #fleet once from the Team Board UI, and posting fails until then. #fleet
-    (and every channel this tool can reach) carries repo and public
-    information only, never client data, credentials, or anything else
-    private, because some fleet agents run on a model lane that must not see
-    private data.
+    Restricted to a small channel allowlist (#fleet, #exec) regardless of
+    organization. #exec exists in every workspace by default; #fleet is not,
+    so an owner or admin creates it once from the Team Board UI first, and
+    posting fails until then. Every channel this tool can reach carries repo
+    and public information only, never client data, credentials, or anything
+    else private, because some fleet agents run on a model lane that must not
+    see private data.
 
     Args:
         channel: Channel slug, with or without a leading '#' (e.g. "fleet").
