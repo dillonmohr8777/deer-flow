@@ -1002,6 +1002,7 @@ export const enUS: Translations = {
 
   // Chats
   chats: {
+    lede: "Every conversation with the team, newest first.",
     deleteChat: "Delete chat",
     deleteConfirm: (title) =>
       `Delete “${title}”? This will delete the conversation and its files. This action can't be undone.`,

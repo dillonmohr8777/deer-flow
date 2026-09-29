@@ -935,6 +935,7 @@ export const zhCN: Translations = {
 
   // Chats
   chats: {
+    lede: "你与团队的所有会话，最新的在最前。",
     deleteChat: "删除对话",
     deleteConfirm: (title) =>
       `确定删除“${title}”吗？这将删除对话及其文件，此操作不可撤销。`,

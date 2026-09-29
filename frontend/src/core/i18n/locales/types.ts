@@ -855,6 +855,7 @@ export interface Translations {
 
   // Chats
   chats: {
+    lede: string;
     deleteChat: string;
     deleteConfirm: (title: string) => string;
     deleteFailed: string;

@@ -272,6 +272,54 @@ test.describe("UI polish mobile regressions", () => {
     expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(390 - 12);
   });
 
+  test("chats page heads itself and files chats as slips on phones", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    const threads = Array.from({ length: 8 }, (_, i) => ({
+      thread_id: `chat-${i}`,
+      title: `Chat number ${i}`,
+      updated_at: new Date(Date.now() - i * 3_600_000).toISOString(),
+    }));
+    mockLangGraphAPI(page, { threads });
+
+    await page.goto("/workspace/chats");
+
+    await expect(
+      page.getByRole("heading", { level: 1, name: "Chats" }),
+    ).toBeVisible();
+    const newChat = page.getByRole("link", { name: "New chat" }).first();
+    expect((await newChat.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    // A phone would open its keyboard over the list.
+    await expect(page.getByPlaceholder("Search chats")).not.toBeFocused();
+
+    const row = page.getByRole("link", { name: "Chat number 0" }).locator("..");
+    const slip = await row.evaluate((el) => {
+      const s = getComputedStyle(el);
+      return {
+        left: s.borderLeftWidth,
+        bg: s.backgroundColor,
+        mb: s.marginBottom,
+      };
+    });
+    expect(slip).toEqual({
+      left: "1px",
+      bg: "rgb(251, 248, 241)",
+      mb: "12px",
+    });
+
+    // The page scrolls in its body, so the heading leaves and the list follows.
+    await page
+      .getByRole("link", { name: "Chat number 7" })
+      .scrollIntoViewIfNeeded();
+    expect(
+      await page.evaluate(() => document.documentElement.scrollHeight),
+    ).toBeLessThanOrEqual(844);
+    await expect(
+      page.getByRole("heading", { level: 1, name: "Chats" }),
+    ).not.toBeInViewport();
+  });
+
   test("?settings=security opens the Security section", async ({ page }) => {
     mockLangGraphAPI(page);
 
