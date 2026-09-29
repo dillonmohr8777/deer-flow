@@ -66,6 +66,27 @@ async def _run(session_factory, *, organization_id: str, agent_name: str, create
         )
 
 
+async def _run_stamped_only_by_metadata(session_factory, *, organization_id: str, agent_name: str, created_at: datetime) -> None:
+    """A run whose raw assistant_id is the default lead agent, naming *agent_name*
+    only through the effective_agent_name metadata stamp (queue item f95's shape:
+    a run that only ever named its agent through context.agent_name)."""
+    from deerflow.persistence.exec_seats import EFFECTIVE_AGENT_NAME_METADATA_KEY
+
+    async with session_factory() as session, session.begin():
+        session.add(
+            RunRow(
+                run_id=f"run-meta-{agent_name}-{created_at.timestamp()}",
+                thread_id=f"thread-meta-{agent_name}",
+                assistant_id="lead_agent",
+                organization_id=organization_id,
+                status="success",
+                created_at=created_at,
+                updated_at=created_at,
+                metadata_json={EFFECTIVE_AGENT_NAME_METADATA_KEY: agent_name},
+            )
+        )
+
+
 @pytest.mark.asyncio
 async def test_idle_hire_is_retired_and_announced(org_world):  # noqa: F811
     repo = HiredAgentRepository(org_world)
@@ -99,6 +120,23 @@ async def test_hire_with_recent_run_activity_is_not_retired(org_world):  # noqa:
 
 
 @pytest.mark.asyncio
+async def test_a_run_named_only_through_the_metadata_stamp_still_counts_as_activity(org_world):  # noqa: F811
+    """f118(d): last_activity_at must match the effective_agent_name metadata
+    stamp, not only a raw assistant_id -- otherwise a hire whose runs always
+    go through the default lead agent (naming itself only via
+    context.agent_name) reads as permanently idle."""
+    repo = HiredAgentRepository(org_world)
+    now = datetime.now(UTC)
+    with acting_as(USER_A, ORG_A):
+        hire = await _seed_hire(org_world, organization_id=ORG_A, agent_name="cmo-report", created_at=now - timedelta(days=30))
+        await _run_stamped_only_by_metadata(org_world, organization_id=ORG_A, agent_name="cmo-report", created_at=now - timedelta(days=1))
+
+        updated = await evaluate_hire_idle_retirement(repo, hire, now=now)
+
+    assert updated["status"] == HireStatus.ACTIVE
+
+
+@pytest.mark.asyncio
 async def test_freshly_hired_report_with_no_runs_yet_gets_a_grace_period(org_world):  # noqa: F811
     """A hire created 3 days ago with no runs at all must not be retired before its
     own creation date gives it 7 days -- the idle clock starts at created_at,
@@ -107,6 +145,25 @@ async def test_freshly_hired_report_with_no_runs_yet_gets_a_grace_period(org_wor
     now = datetime.now(UTC)
     with acting_as(USER_A, ORG_A):
         hire = await _seed_hire(org_world, organization_id=ORG_A, agent_name="cmo-report", created_at=now - timedelta(days=3))
+
+        updated = await evaluate_hire_idle_retirement(repo, hire, now=now)
+
+    assert updated["status"] == HireStatus.ACTIVE
+
+
+@pytest.mark.asyncio
+async def test_a_name_reused_from_old_run_activity_does_not_backdate_a_fresh_hire(org_world):  # noqa: F811
+    """review finding (high, reproduced): last_activity_at matches by name
+    with no floor at the hire's own creation, so an old run under the same
+    name (a previous, now-retired hire that held it, or the identity's own
+    pre-hire history) could make a brand-new hire look idle on its very
+    first sweep. The idle clock must never start before this hire's own
+    created_at."""
+    repo = HiredAgentRepository(org_world)
+    now = datetime.now(UTC)
+    with acting_as(USER_A, ORG_A):
+        await _run(org_world, organization_id=ORG_A, agent_name="cmo-report", created_at=now - timedelta(days=20))
+        hire = await _seed_hire(org_world, organization_id=ORG_A, agent_name="cmo-report", created_at=now - timedelta(hours=1))
 
         updated = await evaluate_hire_idle_retirement(repo, hire, now=now)
 

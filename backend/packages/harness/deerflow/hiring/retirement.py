@@ -47,19 +47,24 @@ async def evaluate_hire_idle_retirement(
 ) -> dict[str, Any]:
     """Retire *hire* if it has had no attributable run activity for *idle_days* days.
 
-    Only an active hire is evaluated. The idle clock starts from the hire's
-    most recent run (``HiredAgentRepository.last_activity_at``), or its
-    ``created_at`` when it has never run -- a freshly hired agent gets the
-    same grace period before its first idle check as one that has already
-    run and gone quiet. A hire that still has active reports of its own is
-    left untouched (``assert_can_retire`` would refuse it anyway); it becomes
-    eligible on a later sweep once those reports are retired first.
+    Only an active hire is evaluated. The idle clock starts from the later of
+    the hire's most recent run (``HiredAgentRepository.last_activity_at``) and
+    its own ``created_at`` -- never earlier than *this* hire's creation, even
+    when ``last_activity_at``'s name-based match picks up an older run from
+    before this hire existed (a previous, now-retired hire that held the same
+    name, or the identity's own pre-hire history). Without that floor, a
+    freshly hired agent reusing an old or stale name could be retired on its
+    very first sweep (review finding, high). A hire that still has active
+    reports of its own is left untouched (``assert_can_retire`` would refuse
+    it anyway); it becomes eligible on a later sweep once those reports are
+    retired first.
     """
     if hire["status"] != HireStatus.ACTIVE:
         return hire
     now = now or datetime.now(UTC)
     last_active = _coerce_datetime(await repo.last_activity_at(organization_id=hire["organization_id"], agent_name=hire["agent_name"]))
-    baseline = last_active or _coerce_datetime(hire["created_at"])
+    created = _coerce_datetime(hire["created_at"])
+    baseline = max(last_active, created) if (last_active is not None and created is not None) else (last_active or created)
     if baseline is None or now - baseline < timedelta(days=idle_days):
         return hire
 

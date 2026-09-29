@@ -170,6 +170,36 @@ async def test_a_depth_one_manager_cannot_grant_an_unknown_tool_group(org_world)
     assert "error" in result
 
 
+@pytest.mark.asyncio
+async def test_a_depth_one_manager_with_a_real_agent_config_cannot_exceed_its_own_tool_groups(org_world, monkeypatch):  # noqa: F811
+    """review finding (medium 5, follow-up): known_tool_groups alone still let a
+    seat holder whose own agent config really does restrict its tools (e.g. to
+    ["file:read"]) hire a report with any other known group (e.g. "bash").
+    When a real AgentConfig is found for the seat's agent_name, its own
+    tool_groups becomes an additional ceiling."""
+    seat_config = SimpleNamespace(tool_groups=["file:read"])
+    monkeypatch.setattr("deerflow.config.agents_config.load_agent_config", lambda name, **_kwargs: seat_config if name == "ceo-agent" else None)
+    with acting_as(USER_A, ORG_S):
+        await _ratify_ceo(USER_A)
+        escalated = await _hire_report_impl("writer-1", "Writer", "content", "posts/week", ["bash"], 0, "muse", False, runtime=_runtime("ceo-agent"))
+        assert "error" in escalated
+
+        within_ceiling = await _hire_report_impl("writer-2", "Writer", "content", "posts/week", ["file:read"], 0, "muse", False, runtime=_runtime("ceo-agent"))
+    assert within_ceiling["status"] == "active"
+
+
+@pytest.mark.asyncio
+async def test_a_depth_one_manager_with_no_real_agent_config_keeps_no_extra_ceiling(org_world, monkeypatch):  # noqa: F811
+    """The common case: an EXECUTIVE.md seat with no real custom-agent record
+    behind it. A lookup miss must never block hiring -- known_tool_groups
+    alone still applies."""
+    monkeypatch.setattr("deerflow.config.agents_config.load_agent_config", lambda name, **_kwargs: (_ for _ in ()).throw(FileNotFoundError(name)))
+    with acting_as(USER_A, ORG_S):
+        await _ratify_ceo(USER_A)
+        hired = await _hire_report_impl("writer-1", "Writer", "content", "posts/week", ["bash"], 0, "muse", False, runtime=_runtime("ceo-agent"))
+    assert hired["status"] == "active"
+
+
 # --- private-data lane only from a Luna manager ---
 
 
@@ -250,6 +280,44 @@ async def test_a_hire_cannot_take_a_name_already_held_by_a_titled_employee(org_w
 
         result = await _hire_report_impl("CEO_Agent", "Impersonator", "job", "kpi", [], 0, "muse", False, runtime=_runtime("ceo-agent"))
     assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_a_hire_cannot_take_a_case_variant_of_an_existing_active_hires_name(org_world):  # noqa: F811
+    """f118(b): create_hire_atomic's own hire_conflict check (not just the
+    seat_conflict one above) must compare normalized, not raw, names."""
+    with acting_as(USER_A, ORG_S):
+        await _ratify_ceo(USER_A)
+        first = await _hire_report_impl("Writer-1", "Writer", "content", "posts/week", [], 0, "muse", False, runtime=_runtime("ceo-agent"))
+        assert first["status"] == "active"
+
+        collision = await _hire_report_impl("writer_1", "Writer", "content", "posts/week", [], 0, "muse", False, runtime=_runtime("ceo-agent"))
+    assert "error" in collision
+
+
+@pytest.mark.asyncio
+async def test_create_hire_atomic_issues_a_write_lock_before_reading_the_racy_aggregates(org_world, monkeypatch):  # noqa: F811
+    """f118(c): the SQLite BEGIN IMMEDIATE (or, on Postgres, the advisory
+    lock) is what actually closes the concurrent-overspend race (high 3) --
+    assert it is really issued, since a true concurrency test isn't
+    practical against this fixture's single-connection StaticPool (see the
+    PR's own review reply for why)."""
+    import deerflow.persistence.hiring.sql as hiring_sql_module
+
+    issued: list[str] = []
+    original_text = hiring_sql_module.text
+
+    def _spy_text(value):
+        issued.append(value)
+        return original_text(value)
+
+    monkeypatch.setattr(hiring_sql_module, "text", _spy_text)
+
+    with acting_as(USER_A, ORG_S):
+        await _ratify_ceo(USER_A)
+        hired = await _hire_report_impl("writer-1", "Writer", "content", "posts/week", [], 0, "muse", False, runtime=_runtime("ceo-agent"))
+    assert hired["status"] == "active"
+    assert any("BEGIN IMMEDIATE" in stmt for stmt in issued)
 
 
 # --- owner-set headcount cap ---
@@ -391,6 +459,60 @@ async def test_a_plain_member_cannot_retire_someone_elses_report(org_world):  # 
     with acting_as(USER_D, ORG_S):
         result = await _retire_report_impl(hired["id"], runtime=_runtime("some-other-agent"))
     assert "error" in result
+
+
+# --- suspected findings: manager retired mid-flight, double retire ---
+
+
+@pytest.mark.asyncio
+async def test_create_hire_atomic_refuses_stale_manager_facts_from_a_retired_hire(org_world):  # noqa: F811
+    """review finding (suspected): a depth-2+ manager's facts (depth/tools/
+    budget) are resolved before create_hire_atomic's lock is taken; if that
+    manager was retired in the window between the read and the lock, the
+    lock must catch it rather than hire under a manager that no longer
+    exists. Exercised directly against create_hire_atomic with stale facts,
+    since the real TOCTOU window needs true concurrency to hit naturally."""
+    from deerflow.hiring import HireAuthorizationError
+    from deerflow.persistence.hiring import HiredAgentRepository
+
+    with acting_as(USER_A, ORG_S):
+        await _ratify_ceo(USER_A)
+        manager_hire = await _hire_report_impl("cmo-report", "CMO report", "content strategy", "leads", [], 0, "muse", False, runtime=_runtime("ceo-agent"))
+        await _retire_report_impl(manager_hire["id"], runtime=_runtime("ceo-agent"))
+
+        repo = HiredAgentRepository(org_world)
+        with pytest.raises(HireAuthorizationError):
+            await repo.create_hire_atomic(
+                agent_name="sub-report",
+                title="Sub report",
+                manager_agent_name="cmo-report",
+                manager_depth=manager_hire["depth"],  # stale: read before the retirement above
+                max_org_depth=3,
+                manager_tool_groups=None,
+                known_tool_groups=None,
+                manager_cleared_for_private_data=False,
+                manager_weekly_token_budget=0,
+                headcount_cap=20,
+            )
+
+
+@pytest.mark.asyncio
+async def test_retire_is_a_no_op_on_an_already_retired_hire(org_world):  # noqa: F811
+    """review finding (suspected): retire() must not silently overwrite an
+    already-retired row's retired_at/retired_by_user_id on a second call."""
+    from deerflow.persistence.hiring import HiredAgentRepository
+
+    with acting_as(USER_A, ORG_S):
+        await _ratify_ceo(USER_A)
+        hired = await _hire_report_impl("writer-1", "Writer", "content", "posts/week", [], 0, "muse", False, runtime=_runtime("ceo-agent"))
+
+        repo = HiredAgentRepository(org_world)
+        first = await repo.retire(hired["id"], retired_by_user_id=USER_A)
+        assert first is not None
+
+        second = await repo.retire(hired["id"], retired_by_user_id="someone-else")
+    assert second is None
+    assert first["retired_by_user_id"] == USER_A
 
 
 # --- organization isolation ---

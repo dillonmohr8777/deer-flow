@@ -14,9 +14,10 @@ from __future__ import annotations
 import hashlib
 import uuid
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Literal
 
 from sqlalchemy import func, or_, select, text
+from sqlalchemy import update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from deerflow.persistence.exec_seats.model import AgentSeatRow, AgentSeatStatus
@@ -87,8 +88,9 @@ class HiredAgentRepository:
         private_data: bool = False,
         weekly_token_budget: int = 0,
         hired_by_user_id: str | None = None,
+        created_at: datetime | None = None,
     ) -> dict:
-        now = datetime.now(UTC)
+        now = created_at or datetime.now(UTC)
         organization_id = organization_for_write(resolve_organization_id(), None, resolve_user_id(AUTO, method_name="HiredAgentRepository.create_hire"))
         row = HiredAgentRow(
             id=uuid.uuid4().hex,
@@ -152,7 +154,7 @@ class HiredAgentRepository:
         seats, case/underscore-insensitive -- review finding, high 2); either
         way the transaction is never committed, so nothing is persisted.
         """
-        from deerflow.hiring.workflow import HireNameConflictError, assert_can_hire
+        from deerflow.hiring.workflow import HireAuthorizationError, HireNameConflictError, assert_can_hire
 
         organization_id = organization_for_write(resolve_organization_id(), None, resolve_user_id(AUTO, method_name="HiredAgentRepository.create_hire_atomic"))
         normalized_name = _normalize(agent_name)
@@ -170,6 +172,19 @@ class HiredAgentRepository:
                 # the final INSERT, too late to protect the counts read
                 # before it. BEGIN IMMEDIATE takes the writer up front.
                 await session.execute(text("BEGIN IMMEDIATE"))
+
+            # Suspected finding: the manager's facts (depth/tools/budget) were
+            # resolved before this lock was taken, so a concurrent retirement
+            # of a depth-2+ manager (a hire) in that window would otherwise go
+            # unnoticed. Re-verify inside the lock that the manager is still
+            # who it claimed to be: a depth-1 manager still holds a ratified
+            # seat, a depth-2+ manager is still an active hire.
+            if manager_depth <= 1:
+                manager_conflict = (await session.execute(select(AgentSeatRow.id).where(seat_scope, _normalized_column(AgentSeatRow.agent_name) == normalized_manager, AgentSeatRow.status == AgentSeatStatus.RATIFIED).limit(1))).first()
+            else:
+                manager_conflict = (await session.execute(select(HiredAgentRow.id).where(name_scope, _normalized_column(HiredAgentRow.agent_name) == normalized_manager, HiredAgentRow.status == _ACTIVE).limit(1))).first()
+            if manager_conflict is None:
+                raise HireAuthorizationError("The hiring manager is no longer a titled employee or an active report.")
 
             hire_conflict = (await session.execute(select(HiredAgentRow.id).where(name_scope, _normalized_column(HiredAgentRow.agent_name) == normalized_name, HiredAgentRow.status == _ACTIVE).limit(1))).first()
             if hire_conflict is not None:
@@ -316,40 +331,75 @@ class HiredAgentRepository:
         async with self._sf() as session:
             return int(await session.scalar(stmt) or 0)
 
-    async def record_kpi_check_result(self, hire_id: str, *, met: bool, now: datetime | None = None) -> dict | None:
-        """Record this week's KPI review for *hire_id*; ``None`` for a missing/foreign hire.
+    async def record_kpi_check_result(self, hire_id: str, *, met: bool | None, expected_last_check_at: datetime | Literal[False] = False, now: datetime | None = None) -> dict | None:
+        """Record this week's KPI review for *hire_id*, atomically re-confirming it is still due.
+
+        ``None`` for a missing/foreign hire, or for one this call lost the
+        race to check this week (see *expected_last_check_at*).
 
         Mirrors ``AgentSeatRepository.record_scorecard_result``: a "met"
         review resets ``missed_kpi_checks`` to 0, a "missed" one increments
-        it. Either way ``last_kpi_check_at`` advances, so
-        ``deerflow.hiring.kpi_review.evaluate_hire_kpi`` does not re-evaluate
-        this hire again until next week regardless of sweep frequency.
+        it. ``met=None`` (the model call failed or returned an unreadable
+        answer) counts as neither -- the miss streak is left untouched, since
+        an inconclusive review is not evidence the hire actually missed its
+        KPI (review finding, high: treating "we don't know" the same as
+        "missed" could retire a hire over a model hiccup). Every outcome,
+        inconclusive included, advances ``last_kpi_check_at`` so the sweep
+        does not retry this hire again until next week.
+
+        *expected_last_check_at* is the ``last_kpi_check_at`` the caller
+        observed before generating a verdict (a slow model call) -- ``None``
+        for a hire never checked before, or a timestamp. When given (its
+        default, ``False``, means "skip this check"), the update only applies
+        if the row's ``last_kpi_check_at`` still matches that snapshot at
+        write time, inside one transaction with the read: two concurrent
+        sweep workers racing the same hire can otherwise both generate a
+        verdict and both write, double-counting a miss into an undeserved
+        retirement (review finding, medium, reproduced under multiple
+        workers).
         """
         organization_id = resolve_organization_id()
+        now = now or datetime.now(UTC)
         async with self._sf() as session:
-            row = await session.get(HiredAgentRow, hire_id)
-            if row is None or (organization_id is not None and row.organization_id != organization_id):
-                return None
-            row.missed_kpi_checks = 0 if met else row.missed_kpi_checks + 1
-            row.last_kpi_check_at = now or datetime.now(UTC)
+            where = [HiredAgentRow.id == hire_id]
+            if organization_id is not None:
+                where.append(HiredAgentRow.organization_id == organization_id)
+            if expected_last_check_at is not False:
+                where.append(HiredAgentRow.last_kpi_check_at == expected_last_check_at if expected_last_check_at is not None else HiredAgentRow.last_kpi_check_at.is_(None))
+            if met is None:
+                values = {"last_kpi_check_at": now}
+            elif met:
+                values = {"missed_kpi_checks": 0, "last_kpi_check_at": now}
+            else:
+                values = {"missed_kpi_checks": HiredAgentRow.missed_kpi_checks + 1, "last_kpi_check_at": now}
+            result = await session.execute(sa_update(HiredAgentRow).where(*where).values(**values))
             await session.commit()
-            await session.refresh(row)
-            return _to_dict(row)
+            if result.rowcount == 0:
+                return None
+            row = await session.get(HiredAgentRow, hire_id)
+            return _to_dict(row) if row is not None else None
 
     async def retire(self, hire_id: str, *, retired_by_user_id: str | None = None, now: datetime | None = None) -> dict | None:
-        """Persist a retirement; ``None`` for a missing/foreign hire.
+        """Persist a retirement; ``None`` for a missing/foreign hire, or one that is not active.
 
         Callers check ``deerflow.hiring.workflow.assert_can_retire`` before
-        calling this -- it never re-derives authorization itself.
+        calling this -- it never re-derives authorization itself. The
+        ``status == active`` condition rides in the same UPDATE (not a
+        separate read-then-check) so two concurrent retirements of the same
+        hire -- the idle sweep and the KPI sweep both deciding to retire it
+        in the same window, say -- can't have the second one silently
+        overwrite the first's ``retired_at``/``retired_by_user_id`` (review
+        finding, suspected).
         """
         organization_id = resolve_organization_id()
+        now = now or datetime.now(UTC)
         async with self._sf() as session:
-            row = await session.get(HiredAgentRow, hire_id)
-            if row is None or (organization_id is not None and row.organization_id != organization_id):
-                return None
-            row.status = HireStatus.RETIRED
-            row.retired_by_user_id = retired_by_user_id
-            row.retired_at = now or datetime.now(UTC)
+            where = [HiredAgentRow.id == hire_id, HiredAgentRow.status == _ACTIVE]
+            if organization_id is not None:
+                where.append(HiredAgentRow.organization_id == organization_id)
+            result = await session.execute(sa_update(HiredAgentRow).where(*where).values(status=HireStatus.RETIRED, retired_by_user_id=retired_by_user_id, retired_at=now))
             await session.commit()
-            await session.refresh(row)
-            return _to_dict(row)
+            if result.rowcount == 0:
+                return None
+            row = await session.get(HiredAgentRow, hire_id)
+            return _to_dict(row) if row is not None else None

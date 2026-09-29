@@ -76,12 +76,39 @@ def _known_tool_groups() -> frozenset[str]:
     return frozenset(t.group for t in get_app_config().tools)
 
 
+def _seat_holder_tool_ceiling(manager_agent_name: str) -> list[str] | None:
+    """The seat holder's own configured ``tool_groups``, as its hiring ceiling.
+
+    Review finding (medium 5, follow-up): rejecting an unknown group name
+    (``_known_tool_groups``) closed the "made-up group" repro, but a depth-1
+    manager whose own agent config really does restrict its tools (e.g. to
+    ``["web"]``) could still hire a report with a real, known group its own
+    config never grants (e.g. ``"bash"``). Best-effort: most EXECUTIVE.md
+    seats are claimed identities with no real custom-agent record behind
+    them, so a lookup miss (``FileNotFoundError``/``ValueError``, or any
+    other failure) just means no ceiling from this source -- the org-wide
+    ``known_tool_groups`` check still applies regardless. ``None`` here
+    (no config found, or a found config with ``tool_groups=None``) means
+    "no additional restriction", matching ``AgentConfig.tool_groups``'s own
+    "None = every configured group" semantics.
+    """
+    try:
+        from deerflow.config.agents_config import load_agent_config
+
+        config = load_agent_config(manager_agent_name)
+    except Exception:  # noqa: BLE001 -- a config-lookup failure must never block a hire, only skip this extra ceiling
+        return None
+    return config.tool_groups if config is not None else None
+
+
 async def _resolve_manager(seat_repo, hire_repo: HiredAgentRepository, manager_agent_name: str) -> dict | None:
     """The hiring manager's depth/tool-ceiling/budget/private-data-clearance facts, or ``None`` if it may not hire at all.
 
-    A ratified seat holder is depth 1 with no tracked tool ceiling (titled
-    employees are real, already-vetted Momentum staff -- "no escalation" only
-    starts to bite once a hire itself starts hiring); it is cleared for
+    A ratified seat holder is depth 1; its tool ceiling comes from its own
+    agent config when one exists (``_seat_holder_tool_ceiling``), otherwise
+    unrestricted (titled employees are real, already-vetted Momentum staff by
+    default -- "no escalation" only reliably bites once a hire itself starts
+    hiring, or when the seat's own config says otherwise). It is cleared for
     private data exactly when it is itself a Luna employee (there is no
     "who granted a titled employee its own private-data access" -- being
     Luna at the top of the chain is the qualifying fact). An active hire is
@@ -95,7 +122,7 @@ async def _resolve_manager(seat_repo, hire_repo: HiredAgentRepository, manager_a
     if seat is not None:
         return {
             "depth": 1,
-            "tool_groups": None,
+            "tool_groups": _seat_holder_tool_ceiling(manager_agent_name),
             "weekly_token_budget": seat["weekly_token_budget"],
             "cleared_for_private_data": (seat.get("model_family") or "muse") == "luna",
         }
