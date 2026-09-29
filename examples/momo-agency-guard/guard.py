@@ -445,9 +445,13 @@ def upstream(path, key, payload=None, limit=4000000):
         return body
 
 
-def make_server(ledger, key, port, client_token=None):
+def make_server(
+    ledger: Ledger, key: str, port: int, client_token: str | None = None
+) -> ThreadingHTTPServer:
     policy = Policy()
-    client_token = client_token or key
+    auth_token = client_token if client_token is not None else key
+    if not isinstance(auth_token, str) or not auth_token:
+        raise Stop("client_auth_token_missing")
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *_args):
@@ -466,7 +470,7 @@ def make_server(ledger, key, port, client_token=None):
             rid = uuid.uuid4().hex
             try:
                 if self.path != "/v1/chat/completions" or not hmac.compare_digest(
-                    self.headers.get("Authorization", ""), "Bearer " + client_token
+                    self.headers.get("Authorization", ""), "Bearer " + auth_token
                 ):
                     raise Stop("route_or_auth_refused")
                 size = int(self.headers.get("Content-Length", "0"))
