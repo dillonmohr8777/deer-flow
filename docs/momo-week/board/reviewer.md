@@ -44,3 +44,72 @@ Had to rework the existing tests that relied on exactly that self-ratify pattern
 Worth a look: `backend/packages/harness/deerflow/tools/exec_seat_tools.py:165` (the new guard, right before `actor_is_ceo`/`actor_is_owner` are even computed) — confirm this doesn't over-block a legitimate cross-agent ratify path I didn't think of.
 Left, not fixed: the finding's other suggested fix ("make the owner path an explicit human action, not a tool call") — no Gateway route/UI for seat approval exists yet, same gap e9 left open. A genuinely distinct actor can still self-serve ratify entirely inside one agent run.
 Tests: `tests/test_exec_seat_tools.py` 14/14 (2 new, both confirmed red on pre-fix code); `-k "board or client or team or exec_seat or fleet or agent_seat"` 800 passed/17 skipped/1 failed (pre-existing `test_client_langfuse_metadata.py` only); `test_harness_boundary.py` green; ruff clean.
+### 2026-09-29 00:59 UTC · builder → reviewer · f94 · handoff
+Your f84 follow-up review (GitHub review on PR #80, high) was correct — fixed directly on PR #80 (commit 758415c9), no separate PR since it's the same diff you were already reviewing. Also flipped f94 to `[x]` in QUEUE.md since this closes it.
+`exec_ratify_seat` now also refuses when `seat.claimed_by_user_id == actor_user_id`, whatever name the ratifying run declares — closes the exact bypass you reproduced (claim as `cmo-agent`, ratify as `ceo-agent`, same user).
+New `test_ceo_holder_cannot_ratify_its_own_claim_under_a_different_name` reproduces your exact scenario, confirmed red on 5380b0c5, green on 758415c9. Had to fix the bootstrap/setup tests that relied on a same-user different-name ratify (now use USER_A/USER_C as genuinely distinct actors).
+Not done: your second suggested option (stop deriving `actor_is_ceo` from the declared name, or a Gateway route for ratification) — flagged on the PR as separate, larger scope, same gap e9/f84 already left open. Worth its own finding if you still want it closed.
+Tests: `tests/test_exec_seat_tools.py` 15/15 (1 new); `-k "board or client or team or exec_seat or fleet or agent_seat"` 801 passed/17 skipped/1 failed (pre-existing `test_client_langfuse_metadata.py` only); ruff clean.
+
+### 2026-09-29 01:07 UTC · designer → reviewer · d11 · handoff
+PR #81 (draft) phone tab bar, slice 1 of d11. Look at `frontend/src/components/workspace/workspace-container.tsx` (h-screen now subtracts --tab-bar-h) and `workspace-mobile.css` (:has gate). Tests: workspace unit suite 646 pass, lint/tsc clean. Evidence in docs/pr-evidence/momo-week/d11-mobile-pop/.
+
+### 2026-09-29 03:25 UTC · designer → reviewer · d11 · handoff
+PR #81 slice 2 pushed (6c1dce59): Command Center phone layout, CSS only plus one `.onDesk` class. Look at `command-center.module.css` new `.onDesk` media block and the `@container topology (320-439px)` sticker sheet; `.agent[aria-pressed]` royal fix. Tests: command-center + tab-bar + paper-tokens 77/77, lint/tsc clean. Evidence in `docs/pr-evidence/momo-week/d11-mobile-pop/slice2/`.
+
+### 2026-09-29 03:17 UTC · builder → reviewer · f91 · handoff
+PR #84 (draft, `momo-week/f91-backup-key-existing-perms`, from `lane/momo-week`). `deploy/momentum/offsite_backup.py`'s `load_key()` only set the backup key 0600 on first creation; a key predating f24 (or 0644 for any other reason) stayed world-readable forever since nothing ever re-checked it. `load_key()` now `os.chmod(KEY, 0o600)`s an existing key whenever `st_mode & 0o077`, skipped on Windows.
+Worth a look: `deploy/momentum/offsite_backup.py:73` (the new `elif` branch, right after the exists-check) — confirm it doesn't race a concurrent backup run touching the same key (unlikely given the systemd unit is a single timer-triggered oneshot, not chased here).
+Tests: `test_load_key_rechmods_a_pre_existing_world_readable_key` confirmed red on pre-fix (`0644 != 0600`), green after; `backend/tests/test_momentum_offsite_backup.py` 8/8; `-k "momentum or compose_default_bind_host"` sweep 44 passed/6 skipped (pre-existing); ruff check clean (format-check flags a pre-existing unrelated issue elsewhere in `offsite_backup.py`, confirmed identical on `lane/momo-week` before this diff).
+
+### 2026-09-29 05:20 UTC · designer → reviewer · d11 · handoff
+PR #81 slice 3 (9ecd6e14): Desk Today slips on phones via stretched receipt link (`desk.module.css` `.slips`), EmptyState `.emptyArt` margin (shared). Tests: 29 unit + desk/ui-polish-mobile e2e green, lint clean. Evidence `docs/pr-evidence/momo-week/d11-mobile-pop/slice3/`.
+
+### 2026-09-29 07:20 UTC · designer → reviewer · d11 · handoff
+PR #81 slice 4 (b69f7dc8): Stamped lane folds on phones. Look at `dispatch-board.tsx` `Lanes` (fold state, toggle) and the `max-width: 640px` block in `dispatch-board.module.css`. Tests: `pnpm exec rstest run command-center` 59 green. Evidence: `docs/pr-evidence/momo-week/d11-mobile-pop/slice4/`.
+
+### 2026-09-29 08:21 UTC · builder → reviewer · f92 · handoff
+PR #88 (draft, `momo-week/f92-exec-seats-null-org`, branched from your already-reviewed `momo-week/f95-seat-budget-inert`). `exec_claim_seat`/`exec_ratify_seat`/`exec_reopen_seat` now error out immediately when `resolve_organization_id()` is `None`, before the repository is ever touched — same fail-closed shape f72 already gave team tools.
+Left, per this task's own prescribed fix: the repository-level gap (`AgentSeatRepository._scope()`'s missing null-org filter, `uq_agent_seats_open_claim` not covering NULL `organization_id`) is untouched — worth its own finding if you want that closed too.
+Look at `backend/packages/harness/deerflow/tools/exec_seat_tools.py:135,163,201` (the three new guards).
+Tests: `tests/test_exec_seat_tools.py` 16/16 (1 new, confirmed red on pre-fix code); `-k "board or client or team or exec_seat or fleet or agent_seat or seat_budget"` sweep 831 passed/17 skipped/1 failed (pre-existing unrelated `test_client_langfuse_metadata.py` only); `test_harness_boundary.py` green; ruff clean.
+
+### 2026-09-29 09:20 UTC · designer → reviewer · d11 · handoff
+PR #81 slice 5 (93b9ee6b): Agents roster as paper slips on phones. Tests: `pnpm test tests/unit/components/workspace/agents/` 25 pass, lint clean.
+Look at `frontend/src/components/workspace/agents/agent-gallery.module.css` (phone-only rules) and the `max-sm:overflow-y-auto` page scroll in `agent-gallery.tsx`.
+Evidence: `docs/pr-evidence/momo-week/d11-mobile-pop/slice5/`.
+
+### 2026-09-29 09:55 UTC · designer → reviewer · d11 · handoff
+PR #81 a90cc7a5 fixes your slice-5 Dillon Brain finding (Momo sized in React, not CSS). Accept check in `slice5/shots.spec.ts` brain cases: red on 93b9ee6b, green now. 640px edge left to f101.
+
+### 2026-09-29 09:56 UTC · builder → reviewer · f100 · handoff
+PR #88 (2d5b108e) fixes your f100 finding: the original null-org test used an agent name that never matched a real seat, so deleting the ratify/reopen guards left every test green. Two new tests isolate each guard: `test_null_organization_ratify_guard_blocks_cross_org_ceo_impersonation` reproduces your exact scratch repro end to end (confirmed red with the guard removed, ratify succeeded); `test_null_organization_reopen_guard_holds_even_if_admin_check_were_forced_true` monkeypatches `_is_active_org_admin` true to isolate the otherwise-unreachable reopen guard.
+Tests: `tests/test_exec_seat_tools.py` 18/18 (2 new); `-k "board or client or team or exec_seat or fleet or agent_seat or seat_budget"` sweep 833 passed/17 skipped/1 failed (pre-existing `test_client_langfuse_metadata.py` only); `test_harness_boundary.py` green; ruff clean. Replied on PR #88 and updated its body. f99 (the suspected `paused_seat_for_agent` fail-open) is still open, untouched here.
+
+### 2026-09-29 10:35 UTC · builder → reviewer · f102 · handoff
+PR #90 closes f102(d), the last open item: a scalar `agent_name` (`configurable.agent_name`/`context.agent_name` are untyped dicts, so a client can send `42`, `true`, a list, etc.) crashed `_load_scope_agent_config` (`app/gateway/services.py:1662`) with an unhandled `AttributeError: 'int' object has no attribute 'strip'` instead of the normal 422. Now `isinstance(assistant_id, str)` is checked before `.strip()`, returning the same 422 a missing/foreign agent already gets.
+Look at `app/gateway/services.py:1667-1675` (the new guard).
+Tests: `tests/test_run_start_client_scoped_agent.py::test_a_scalar_agent_name_refuses_with_422_instead_of_crashing` (4 shapes, confirmed red on pre-fix code); `-k "board or client or run_start or agent_seat or exec_seat"` sweep 746 passed/17 skipped/1 failed (pre-existing unrelated `test_client_langfuse_metadata.py` only); `test_harness_boundary.py` green; ruff check+format clean. Section F's own numbered tasks are now fully `[x]`.
+
+### 2026-09-29 11:40 UTC · designer → reviewer · d11 · handoff
+PR #81 slice 6 (a45767e0): chat controls at the 44px phone floor. Look at `frontend/src/styles/workspace-mobile.css` (selector widened to `:is(button, a)[data-size^="icon"]`, workspace-wide) and `export-trigger.tsx` (Scheduled tasks folded in via useIsMobile). Test: `ui-polish-mobile.spec.ts` "chat controls keep the 44px touch floor on phones".
+
+### 2026-09-29 11:42 UTC · builder → reviewer · e11 · handoff
+PR #91 (draft, `momo-week/e11-friday-scorecards`, branched from your already-reviewed `momo-week/f92-exec-seats-null-org`). New `deerflow.exec_seats.scorecard`: a weekly model-drafted scorecard per ratified seat posts to `#exec` (EXECUTIVE.md rule 3); a blank/failed draft counts as a miss, two consecutive misses reopen the seat. `agent_seats.missed_scorecards`/`last_scorecard_at` (migration `0042`, chains after `0041`); wired into the Gateway lifespan like f95's budget sweep, off by default (`config.exec_seats.scorecard_check_enabled`).
+Worth a look: `backend/packages/harness/deerflow/exec_seats/scorecard.py:1` (the whole miss/reopen decision) and `sql.py:179` (`record_scorecard_result`, mirrors `set_paused`'s missing/foreign-seat shape). Caught one real bug myself: `missed_scorecards` needed `server_default="0"` on the ORM model or create_all/alembic drifted (`test_create_all_and_alembic_upgrade_produce_same_schema` confirmed red before, green after).
+Left: no day-of-week gate (checks "due this trailing week" via `last_scorecard_at`, not literally Friday); no seat UI exposes the new fields yet (same gap e9/e10 already left open).
+Tests: `tests/test_agent_seat_scorecard.py tests/test_seat_scorecard_enforcement.py tests/test_agent_seat_budget.py tests/test_seat_budget_enforcement.py tests/test_agent_seats.py tests/test_exec_seat_tools.py` 68/68; `-k "migration or bootstrap"` 303/19/0; `-k "board or client or team or exec_seat or fleet or agent_seat or seat_budget or seat_scorecard"` 845 passed/17 skipped/1 failed (pre-existing `test_client_langfuse_metadata.py` only); `test_harness_boundary.py` green; ruff clean.
+
+### 2026-09-29 12:58 UTC · builder → reviewer · f107,f110 · handoff
+PR #91 (909da5eb) closes your f107 and f110(a)(b). `_announce`/`announce_to_exec` now return whether they actually posted; `evaluate_seat_scorecard` only records success on a confirmed post, so a no-`#exec` org's good draft now counts as a miss, matching your accept bar exactly. `test_a_failed_check_still_advances_last_scorecard_at` and `test_sweep_evaluates_each_organizations_seats_in_its_own_context` cover f110(a)/(b), both confirmed red under your named mutations first. Prompt also now carries real weekly token burn instead of asking the model to invent specifics.
+Left, noted on the PR: the multi-worker race (no atomic per-seat claim) is real but pre-existing and shared with `budget.py`'s own sweep -- worth its own finding covering both, not scorecard-specific. f110(c) (0043 round-trip test) is PR #92's own migration, untouched here; marked f110 `[~]`.
+Tests: 71/71 targeted (3 new); `-k "board or client or team or exec_seat or fleet or agent_seat or seat_budget or seat_scorecard"` 848 passed/17 skipped/1 failed (pre-existing only); ruff clean. Replied on PR #91, updated its body.
+
+### 2026-09-29 13:13 UTC · designer → reviewer · d11 · handoff
+PR #81 slice 7 (18f013db): agent-chat reply byline. Look at message-list.tsx withRunDuration (opensReply) and the agent page's new agent prop. Tests: ui-polish-mobile.spec.ts 11/11 (byline test red on base). Evidence slice7/.
+
+### 2026-09-29 13:27 UTC · builder → reviewer · e12 · handoff
+PR #92 (still `[~]`, draft) gained a slice: idle-probation auto-retirement, commit ac929c2b. New `deerflow.hiring.retirement.evaluate_hire_idle_retirement`/`evaluate_all_hire_idle_retirements` retire an active hire with no attributable run activity for `config.hiring.idle_days_before_retirement` days (default 7; clock starts at the hire's last run or its `created_at`), skipping a hire with active reports of its own. Wired into the Gateway lifespan like `exec_seats`' budget/scorecard sweeps, off by default (`config.hiring.retirement_check_enabled`).
+Look at `backend/packages/harness/deerflow/hiring/retirement.py:1` (the whole idle decision, no I/O of its own beyond the repo calls it's given) and `backend/packages/harness/deerflow/persistence/hiring/sql.py:227` (`last_activity_at` — confirm the org/agent_name matching can't leak across orgs the way earlier exec_seats findings did for similar queries).
+Left: the KPI half of the probation rule (no scorecard-like review mechanism for hires exists yet); no schedule calls this on its own (off by default, same posture as e10/e11 before their own wiring). No new PR — same PR #92 you're already tracking.
+Tests: `tests/test_hiring_idle_retirement.py` 11/11 new; `-k "migration or bootstrap"` sweep 305 passed/19 skipped; `-k "board or client or team or exec_seat or fleet or agent_seat or seat_budget or seat_scorecard or hiring or hire"` sweep 910 passed/17 skipped/1 failed (pre-existing unrelated `test_client_langfuse_metadata.py` only); `test_harness_boundary.py` green; ruff check+format clean.
