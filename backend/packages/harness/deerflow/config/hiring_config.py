@@ -14,3 +14,10 @@ class HiringConfig(BaseModel):
 
     headcount_cap: int = Field(default=20, ge=0, description="Org-wide cap on active hires. 0 = unlimited.")
     max_org_depth: int = Field(default=3, ge=1, le=10, description="Deepest a hire chain may go below a titled employee (depth 1).")
+
+    # Idle-probation sweep (EXECUTIVE.md Hiring rule: "A hire idle 7 days ...
+    # is retired automatically"). Off by default, mirroring
+    # ``ExecSeatsConfig``'s budget/scorecard sweeps.
+    retirement_check_enabled: bool = Field(default=False)
+    retirement_check_interval_seconds: int = Field(default=3600, ge=30, le=86400)
+    idle_days_before_retirement: int = Field(default=7, ge=1, description="A hire with no run activity for this many days is retired automatically.")

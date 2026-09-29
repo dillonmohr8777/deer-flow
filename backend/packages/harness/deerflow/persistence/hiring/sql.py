@@ -16,12 +16,14 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import func, select, text
+from sqlalchemy import func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from deerflow.persistence.exec_seats.model import AgentSeatRow, AgentSeatStatus
+from deerflow.persistence.exec_seats.sql import EFFECTIVE_AGENT_NAME_METADATA_KEY
 from deerflow.persistence.hiring.model import HiredAgentRow, HireStatus
 from deerflow.persistence.organizations.resolution import organization_for_write
+from deerflow.persistence.run.model import RunRow
 from deerflow.runtime.user_context import AUTO, resolve_organization_id, resolve_user_id
 from deerflow.utils.time import coerce_iso
 
@@ -224,6 +226,37 @@ class HiredAgentRepository:
             await session.commit()
             await session.refresh(row)
             return _to_dict(row)
+
+    async def list_hires(self, *, status: str | None = _ACTIVE) -> list[dict]:
+        """List hires in the active organization, or every organization's when called
+        outside any storage context (the same "no ambient org -> unscoped" shape
+        ``AgentSeatRepository.list_seats`` uses for its own cross-org sweep)."""
+        organization_id = resolve_organization_id()
+        stmt = self._scope(select(HiredAgentRow), organization_id)
+        if status is not None:
+            stmt = stmt.where(HiredAgentRow.status == status)
+        stmt = stmt.order_by(HiredAgentRow.created_at.asc(), HiredAgentRow.id.asc())
+        async with self._sf() as session:
+            result = await session.execute(stmt)
+            return [_to_dict(r) for r in result.scalars()]
+
+    async def last_activity_at(self, *, organization_id: str | None, agent_name: str) -> datetime | None:
+        """The most recent run timestamp for *agent_name*, or ``None`` if it has never run.
+
+        Mirrors ``AgentSeatRepository.token_burn_since``'s matching (both a raw
+        ``RunRow.assistant_id`` and the ``effective_agent_name`` metadata
+        ``start_run`` stamps for a run that only ever named its agent through
+        ``context.agent_name``), case/underscore-insensitively, so the idle
+        clock reflects every run actually attributable to this hire.
+        """
+        normalized = _normalize(agent_name)
+        normalized_assistant_id = _normalized_column(RunRow.assistant_id)
+        normalized_effective_agent_name = _normalized_column(RunRow.metadata_json[EFFECTIVE_AGENT_NAME_METADATA_KEY].as_string())
+        stmt = select(func.max(RunRow.created_at)).where(or_(normalized_assistant_id == normalized, normalized_effective_agent_name == normalized))
+        if organization_id is not None:
+            stmt = stmt.where(RunRow.organization_id == organization_id)
+        async with self._sf() as session:
+            return await session.scalar(stmt)
 
     async def get_hire(self, hire_id: str) -> dict | None:
         organization_id = resolve_organization_id()
