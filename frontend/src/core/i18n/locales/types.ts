@@ -1180,6 +1180,7 @@ export interface Translations {
       experience: string;
       about: string;
       audit: string;
+      invite: string;
     };
     audit: {
       title: string;
@@ -1201,6 +1202,42 @@ export interface Translations {
       columnTarget: string;
       columnOutcome: string;
       columnIp: string;
+    };
+    invite: {
+      title: string;
+      description: string;
+      notAllowed: string;
+      loading: string;
+      loadFailed: string;
+      retry: string;
+      emailLabel: string;
+      emailPlaceholder: string;
+      roleLabel: string;
+      roleMember: string;
+      roleAdmin: string;
+      roleClient: string;
+      roleHelp: { member: string; admin: string; client: string };
+      workspaceLabel: string;
+      submit: string;
+      submitting: string;
+      successTitle: (email: string) => string;
+      linkLabel: string;
+      copy: string;
+      copied: string;
+      copyFailed: string;
+      shownOnce: string;
+      expires: (when: string) => string;
+      inviteAnother: string;
+      errors: {
+        frozen: string;
+        forbidden: string;
+        conflict: string;
+        invalidEmail: string;
+        invalid: string;
+        unavailable: string;
+        network: string;
+        unknown: string;
+      };
     };
     memory: {
       title: string;

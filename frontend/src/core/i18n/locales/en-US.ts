@@ -1366,6 +1366,7 @@ export const enUS: Translations = {
       notification: "Notification",
       experience: "Experience",
       audit: "Audit",
+      invite: "Invite teammate",
       about: "About",
     },
     audit: {
@@ -1389,6 +1390,55 @@ export const enUS: Translations = {
       columnTarget: "Target",
       columnOutcome: "Outcome",
       columnIp: "IP",
+    },
+    invite: {
+      title: "Invite teammate",
+      description:
+        "Create a one-time sign-up link for a person to join a shared workspace. Owners and admins only.",
+      notAllowed:
+        "Only an owner or admin of a shared workspace can invite teammates.",
+      loading: "Loading workspaces…",
+      loadFailed: "Couldn't load your workspaces.",
+      retry: "Try again",
+      emailLabel: "Email",
+      emailPlaceholder: "name@company.com",
+      roleLabel: "Role",
+      roleMember: "Member",
+      roleAdmin: "Admin",
+      roleClient: "Client",
+      roleHelp: {
+        member: "Member: uses the workspace, cannot manage people or settings.",
+        admin: "Admin: can also manage members and workspace settings.",
+        client:
+          "Client: same access as a member, but never sees staff-only pages.",
+      },
+      workspaceLabel: "Workspace",
+      submit: "Create invite link",
+      submitting: "Creating…",
+      successTitle: (email) => `Invite ready for ${email}`,
+      linkLabel: "Invite link",
+      copy: "Copy link",
+      copied: "Copied",
+      copyFailed: "Couldn't copy. Select the link and copy it by hand.",
+      shownOnce:
+        "Shown once. This link can't be shown again, so copy it now and send it to the invitee yourself.",
+      expires: (when) => `Expires ${when}.`,
+      inviteAnother: "Invite another person",
+      errors: {
+        frozen:
+          "Invitations are paused while workspace isolation is upgraded. Existing members keep their access. Try again later.",
+        forbidden:
+          "You need to be an owner or admin of this workspace to invite people.",
+        conflict:
+          "That person has already been invited or is already a member.",
+        invalidEmail: "Enter a valid email address.",
+        invalid: "Check the email, role and workspace, then try again.",
+        unavailable:
+          "Invitations are unavailable right now. Try again in a minute.",
+        network:
+          "Couldn't reach the server. Check your connection and try again.",
+        unknown: "Something went wrong creating the invite. Try again.",
+      },
     },
     memory: {
       title: "Memory",
