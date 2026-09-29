@@ -47,6 +47,12 @@ class AgentSeatRow(Base):
     # cleared once usage rebalances back under budget. Orthogonal to
     # ``status``: a paused seat is still claimed or ratified.
     paused_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Weekly scorecard tracking (queue item e11, EXECUTIVE.md rule 3): bumped
+    # each time the Friday scorecard sweep finds nothing to post for this
+    # seat, reset to 0 on a successful post. Two consecutive misses reopen
+    # the seat (deerflow.exec_seats.scorecard.evaluate_seat_scorecard).
+    missed_scorecards: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    last_scorecard_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now, onupdate=_utc_now)
 

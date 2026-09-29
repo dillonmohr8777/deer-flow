@@ -35,7 +35,7 @@ EFFECTIVE_AGENT_NAME_METADATA_KEY = "effective_agent_name"
 
 def _to_dict(row: AgentSeatRow) -> dict[str, Any]:
     d = row.to_dict()
-    for key in ("created_at", "updated_at", "paused_at"):
+    for key in ("created_at", "updated_at", "paused_at", "last_scorecard_at"):
         val = d.get(key)
         if isinstance(val, datetime):
             d[key] = coerce_iso(val)
@@ -207,6 +207,26 @@ class AgentSeatRepository:
             if row is None or (organization_id is not None and row.organization_id != organization_id):
                 return None
             row.paused_at = (now or datetime.now(UTC)) if paused else None
+            await session.commit()
+            await session.refresh(row)
+            return _to_dict(row)
+
+    async def record_scorecard_result(self, seat_id: str, *, success: bool, now: datetime | None = None) -> dict | None:
+        """Record this week's scorecard check for *seat_id*; ``None`` for a missing/foreign seat.
+
+        A successful post resets ``missed_scorecards`` to 0; a miss increments
+        it. Either way ``last_scorecard_at`` advances, so the weekly sweep
+        (``deerflow.exec_seats.scorecard.evaluate_seat_scorecard``) does not
+        re-evaluate this seat again until next week regardless of how often
+        the loop itself runs.
+        """
+        organization_id = resolve_organization_id()
+        async with self._sf() as session:
+            row = await session.get(AgentSeatRow, seat_id)
+            if row is None or (organization_id is not None and row.organization_id != organization_id):
+                return None
+            row.missed_scorecards = 0 if success else row.missed_scorecards + 1
+            row.last_scorecard_at = now or datetime.now(UTC)
             await session.commit()
             await session.refresh(row)
             return _to_dict(row)
