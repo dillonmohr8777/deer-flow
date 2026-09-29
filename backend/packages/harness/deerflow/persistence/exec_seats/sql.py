@@ -14,7 +14,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -235,24 +235,29 @@ class AgentSeatRepository:
         """Total tokens every run stamped with *agent_name* has burned since *since*.
 
         Reads the same ``runs`` table (``RunRow``) the operations console's
-        usage ledger reads -- ``assistant_id`` is the run's custom-agent
-        identifier, the same value ``AgentSeatRow.agent_name`` stores. A run
-        that names its agent only through ``context.agent_name`` (the default
-        lead agent's own ``assistant_id`` never changes) is matched instead
-        through ``metadata_json[EFFECTIVE_AGENT_NAME_METADATA_KEY]``, the
-        resolved identity ``start_run`` stamps on every run.
+        usage ledger reads. ``RunRow.assistant_id`` is the raw, client-chosen
+        ``body.assistant_id`` -- not necessarily the agent that actually ran,
+        since an explicit ``configurable``/``context.agent_name`` overrides it
+        (queue item f95's own left-open gap). Each run's real identity is
+        ``metadata_json[EFFECTIVE_AGENT_NAME_METADATA_KEY]`` (the resolved
+        identity ``start_run`` stamps on every run) when present, falling back
+        to ``assistant_id`` only for older rows written before that stamp
+        existed. One identity per row, never both (f98 review of f97): an
+        ``or_`` across both columns let a single run with a diverging
+        ``assistant_id``/``agent_name`` double-count and misattribute burn to
+        two different seats.
 
-        Both columns are matched case- and underscore/hyphen-insensitively
-        (f97 review), the same normalization ``paused_seat_for_agent`` already
-        applies: a raw ``RunRow.assistant_id`` of ``CMO_Agent`` or a
-        ``context.agent_name`` of ``CMO-Agent`` must count toward a seat
-        claimed as ``cmo-agent`` exactly like the exact-cased form would.
+        Matched case- and underscore/hyphen-insensitively (f97 review), the
+        same normalization ``paused_seat_for_agent`` already applies: a raw
+        ``RunRow.assistant_id`` of ``CMO_Agent`` or a stamped identity of
+        ``CMO-Agent`` must count toward a seat claimed as ``cmo-agent``
+        exactly like the exact-cased form would.
         """
         normalized = agent_name.strip().lower().replace("_", "-")
-        normalized_assistant_id = func.replace(func.lower(RunRow.assistant_id), "_", "-")
-        normalized_effective_agent_name = func.replace(func.lower(RunRow.metadata_json[EFFECTIVE_AGENT_NAME_METADATA_KEY].as_string()), "_", "-")
+        effective_identity = func.coalesce(RunRow.metadata_json[EFFECTIVE_AGENT_NAME_METADATA_KEY].as_string(), RunRow.assistant_id)
+        normalized_identity = func.replace(func.lower(effective_identity), "_", "-")
         stmt = select(func.coalesce(func.sum(RunRow.total_tokens), 0)).where(
-            or_(normalized_assistant_id == normalized, normalized_effective_agent_name == normalized),
+            normalized_identity == normalized,
             RunRow.created_at >= since,
         )
         if organization_id is not None:
