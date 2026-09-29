@@ -326,3 +326,21 @@ async def test_token_burn_since_with_no_organization_never_sums_across_orgs(org_
     burn = await repo.token_burn_since(organization_id=None, agent_name="cmo-agent", since=now - timedelta(days=7))
 
     assert burn == 0
+
+
+@pytest.mark.asyncio
+async def test_token_burn_since_counts_a_null_org_seats_own_burn(org_world):  # noqa: F811
+    """f123 (review of the f99 fix): a seat claimed with no active org (auth-disabled
+    or an internal caller -- ``organization_for_write``'s quarantine marker, a real,
+    not hypothetical, state) is itself stored with ``organization_id=None``. Its own
+    burn must still count toward its own budget -- the f99 fix must not zero every
+    null-org seat's burn just to stop it from summing *other* orgs' burn too."""
+    repo = AgentSeatRepository(org_world)
+    now = datetime.now(UTC)
+    await _spend(org_world, organization_id=None, agent_name="cmo-agent", total_tokens=1500, created_at=now - timedelta(hours=1))
+    with acting_as(USER_A, ORG_A):
+        await _spend(org_world, organization_id=ORG_A, agent_name="cmo-agent", total_tokens=999_000, created_at=now - timedelta(hours=2))
+
+    burn = await repo.token_burn_since(organization_id=None, agent_name="cmo-agent", since=now - timedelta(days=7))
+
+    assert burn == 1500

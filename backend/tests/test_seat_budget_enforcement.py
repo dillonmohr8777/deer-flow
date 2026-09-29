@@ -153,6 +153,30 @@ async def test_paused_seat_blocking_is_none_with_no_resolved_organization(org_wo
 
 
 @pytest.mark.asyncio
+async def test_paused_seat_blocking_still_blocks_a_seat_claimed_with_no_organization(org_world):  # noqa: F811
+    """f123 (review of the f99 fix): a seat claimed with no active org (auth-disabled
+    or an internal caller) is itself stored with ``organization_id=None`` --
+    ``organization_for_write``'s quarantine marker, a real state, not one that never
+    occurs. The f99 fix must not make every such seat's pause silently unenforceable
+    just to stop a null-org caller from matching *another* organization's seat."""
+    from deerflow.exec_seats.budget import paused_seat_blocking
+
+    repo = AgentSeatRepository(org_world)
+    with _acting_with_no_organization(USER_A):
+        seat = await _ratify(repo, seat=CMO_SEAT, agent_name="cmo-agent")
+        await repo.set_paused(seat["id"], paused=True)
+
+        found = await repo.paused_seat_for_agent("cmo-agent")
+        blocking = await paused_seat_blocking("cmo-agent")
+
+    assert seat["organization_id"] is None
+    assert found is not None
+    assert found["id"] == seat["id"]
+    assert blocking is not None
+    assert blocking["id"] == seat["id"]
+
+
+@pytest.mark.asyncio
 async def test_paused_seat_for_agent_ignores_a_reopened_seat(org_world):  # noqa: F811
     """A paused-then-reopened seat is no longer claimed/ratified by anyone -- nothing to block."""
     repo = AgentSeatRepository(org_world)
