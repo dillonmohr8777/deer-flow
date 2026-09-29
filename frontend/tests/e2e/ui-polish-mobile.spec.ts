@@ -241,3 +241,53 @@ test.describe("UI polish mobile regressions", () => {
     ).toBeVisible();
   });
 });
+
+// Who is answering: an agent chat opens each reply turn with the agent's Momo
+// and name, so a phone reader scrolled past the header still knows. The
+// default chat's lead has no settled identity, so it draws none.
+test.describe("assistant turn byline", () => {
+  const turns = [
+    { type: "human", id: "h1", content: [{ type: "text", text: "Draft it." }] },
+    { type: "ai", id: "a1", content: "First draft." },
+    { type: "human", id: "h2", content: [{ type: "text", text: "Shorter." }] },
+    { type: "ai", id: "a2", content: "Short draft." },
+  ];
+
+  test("agent chat signs every reply turn at 390px", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    mockLangGraphAPI(page, {
+      agents: [{ name: "dillon-growth", display_name: "Growth" }],
+      threads: [{ thread_id: MOCK_THREAD_ID, title: "Memo", messages: turns }],
+    });
+    await page.goto(`/workspace/agents/dillon-growth/chats/${MOCK_THREAD_ID}`);
+    await page.getByText("Short draft.").waitFor();
+
+    const bylines = page.locator("[data-turn-byline]");
+    await expect(bylines).toHaveCount(2);
+    await expect(bylines.first()).toHaveText("Growth");
+    // The Momo is decorative beside the name, and the byline sits on its
+    // reply: no more than 16px above the reply's first line.
+    await expect(
+      bylines.first().locator("[aria-hidden='true'] [role='img']"),
+    ).toHaveCount(1);
+    const gap = await bylines.first().evaluate((el) => {
+      const reply = el.parentElement!.querySelector(
+        "p:not([data-turn-byline])",
+      )!;
+      return (
+        reply.getBoundingClientRect().top - el.getBoundingClientRect().bottom
+      );
+    });
+    expect(gap).toBeLessThanOrEqual(16);
+  });
+
+  test("the default chat draws no byline", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    mockLangGraphAPI(page, {
+      threads: [{ thread_id: MOCK_THREAD_ID, title: "Memo", messages: turns }],
+    });
+    await page.goto(`/workspace/chats/${MOCK_THREAD_ID}`);
+    await page.getByText("Short draft.").waitFor();
+    await expect(page.locator("[data-turn-byline]")).toHaveCount(0);
+  });
+});

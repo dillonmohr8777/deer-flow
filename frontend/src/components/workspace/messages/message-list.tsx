@@ -26,6 +26,10 @@ import {
 } from "@/components/ai-elements/conversation";
 import { Button } from "@/components/ui/button";
 import { KnowledgeSourcesProvider } from "@/components/workspace/citations/knowledge-source";
+import {
+  MomoAvatar,
+  type MomoAvatarAgent,
+} from "@/components/workspace/command-center/momo-avatar";
 import { extractArtifactsFromThread } from "@/core/artifacts/utils";
 import { useI18n } from "@/core/i18n/hooks";
 import { getArtifactArchiveCandidatesByGroupIndex } from "@/core/messages/artifact-archive";
@@ -289,6 +293,7 @@ function LoadMoreHistoryIndicator({
 
 export function MessageList({
   archiveDownloadsEnabled = true,
+  agent,
   className,
   testId,
   threadId,
@@ -352,6 +357,12 @@ export function MessageList({
    * restyles a run that is already streaming.
    */
   deepReasoning?: boolean;
+  /**
+   * The agent answering in this thread, when it is known for certain (an
+   * agent chat). Each reply turn then opens with its Momo and name, so a
+   * phone reader who has scrolled past the header still sees who is talking.
+   */
+  agent?: MomoAvatarAgent;
 }) {
   const { t } = useI18n();
   const sidecar = useMaybeSidecar();
@@ -1095,11 +1106,33 @@ export function MessageList({
       return null;
     }
 
+    const opensReply =
+      agent !== undefined &&
+      content !== null &&
+      group.type !== "human" &&
+      (groupIndex === 0 || groupedMessages[groupIndex - 1]?.type === "human");
+
     return (
       <div
         key={`duration-group:${group.id ?? groupIndex}`}
         className="flex w-full flex-col gap-2"
       >
+        {opensReply && (
+          <p
+            className="text-foreground -mb-2 flex items-center gap-2 text-sm leading-6 font-semibold"
+            data-turn-byline=""
+          >
+            {/* Signs the reply below it: -mb-2 takes back the group gap so
+                the name sits on its reply, not between turns. The name
+                beside the Momo says who this is. */}
+            <span aria-hidden="true" className="shrink-0">
+              <MomoAvatar agent={agent} size={32} />
+            </span>
+            <span className="min-w-0 truncate">
+              {agent.display_name?.length ? agent.display_name : agent.name}
+            </span>
+          </p>
+        )}
         {content}
         {displays.map((display) => (
           <RunDuration
