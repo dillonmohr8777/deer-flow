@@ -781,6 +781,7 @@ tool_groups:
   - name: browser
   - name: knowledge
   - name: team
+  - name: exec
 
 # ============================================================================
 # Tools Configuration
@@ -1250,6 +1251,22 @@ tools:
   - name: team_post_message
     group: team
     use: deerflow.tools.team_board_tools:team_post_message
+
+  # Momentum agent seats (EXECUTIVE.md titles): claim, ratify, and owner
+  # veto. Announces every mutation to #exec. Give this group only to
+  # agents that are part of the titles-and-hiring process -- it is
+  # Momentum-staff-only just like the team group.
+  - name: exec_claim_seat
+    group: exec
+    use: deerflow.tools.exec_seat_tools:exec_claim_seat
+
+  - name: exec_ratify_seat
+    group: exec
+    use: deerflow.tools.exec_seat_tools:exec_ratify_seat
+
+  - name: exec_reopen_seat
+    group: exec
+    use: deerflow.tools.exec_seat_tools:exec_reopen_seat
 
 # ============================================================================
 # Tool Search Configuration (Deferred Tool Loading)
