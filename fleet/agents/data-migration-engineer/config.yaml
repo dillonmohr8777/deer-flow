@@ -10,6 +10,7 @@ tool_groups:
   - file:write
   - bash
   - team
+  - exec
 skills: []
 allowed_subagents: []
 thinking_enabled: true
