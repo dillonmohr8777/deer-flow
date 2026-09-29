@@ -16,12 +16,14 @@ from typing import Any
 import httpx
 import pytest
 from fastapi import FastAPI
+from sqlalchemy import update
 from org_isolation_fixtures import ORG_S, USER_A, USER_B, USER_C, auth_headers, org_world  # noqa: F401
 
 from app.gateway.auth_middleware import AuthMiddleware
 from app.gateway.routers import board, clients
 from deerflow.persistence.audit_events import AuditEventRepository
 from deerflow.persistence.board import BoardRepository
+from deerflow.persistence.board.model import BoardThreadRow
 from deerflow.persistence.clients import ClientRepository
 from deerflow.persistence.fleet import FleetBindingRepository
 from deerflow.persistence.organizations.model import OrganizationMemberRow
@@ -377,11 +379,11 @@ async def test_approve_never_restamps_a_superseded_rejected_draft(org_world):  #
         approved_once = await client.post(f"/api/board/threads/{tid}/approve", headers=headers_a)
         assert approved_once.status_code == 200, approved_once.text
 
-        # No dedicated route forces a thread back to `drafted` with no new
-        # draft (that's f1, unmerged here) -- PATCH stands in for it, same as
-        # this file's reject probes above.
-        back_to_drafted = await client.patch(f"/api/board/threads/{tid}", json={"status": "drafted"}, headers=headers_a)
-        assert back_to_drafted.status_code == 200, back_to_drafted.text
+        # `drafted` is workflow-only (PATCH -> 409), so force the thread back to
+        # `drafted` with no new draft by seeding it through the ORM.
+        async with session_factory() as session:
+            await session.execute(update(BoardThreadRow).where(BoardThreadRow.id == tid).values(status="drafted"))
+            await session.commit()
 
         stray_approve = await client.post(f"/api/board/threads/{tid}/approve", headers=headers_a)
         assert stray_approve.status_code == 409, stray_approve.text

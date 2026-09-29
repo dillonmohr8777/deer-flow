@@ -1,7 +1,7 @@
 """board_messages.approved_at.
 
-Revision ID: 0040_board_message_approval
-Revises: 0039_team_board_academy
+Revision ID: 0047_board_message_approval
+Revises: 0046_organization_entitlements
 
 Momo Board follow-up (review finding f35 board-e3-filter-regresses-f20,
 porting f20's fix onto this branch since nothing merges into
@@ -19,8 +19,8 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0040_board_message_approval"
-down_revision: str | Sequence[str] | None = "0039_team_board_academy"
+revision: str = "0047_board_message_approval"
+down_revision: str | Sequence[str] | None = "0046_organization_entitlements"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
