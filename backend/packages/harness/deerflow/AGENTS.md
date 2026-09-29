@@ -27,6 +27,21 @@ Accepted divergence: a crash-recovered scheduled launch reuses its run via the i
 
 Tests: the `tests/test_trace_*` and `tests/test_worker_trace_binding.py` suites, `test_gateway_services.py`, `test_run_metadata_secret_safety.py`, plus the Langfuse suites in `tracing/AGENTS.md`.
 
+### Agent-seat weekly scorecards (`exec_seats/scorecard.py`)
+
+`Generate` returns `None` for an inconclusive model/configuration failure and a
+string for a completed evaluation (an empty/whitespace string is an evaluated
+miss). Preserve that distinction; collapsing both to `None` would erase genuine
+misses, while treating both as misses penalizes employees for provider outages.
+Usage-read errors and absent/failed `#exec` delivery are also inconclusive. They
+must leave `missed_scorecards`, status and `last_scorecard_at` unchanged in the
+real repository. A confirmed scorecard post resets the streak; a confirmed blank
+scorecard miss notice advances it and, at two, reopens the seat. The supplemental
+reopen notice is best-effort after that evaluated miss. Production sweeps remain
+default-disabled and org-scoped. Test these boundaries offline in
+`test_agent_seat_scorecard.py` and `test_seat_scorecard_enforcement.py`; never use
+a provider call or production database to validate them.
+
 ### Managed Lark CLI credentials (`integrations/lark_cli.py`)
 
 Installed `lark-shared` guidance points to Capability Center > Plugins > Lark

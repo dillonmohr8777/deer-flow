@@ -2300,6 +2300,14 @@ Runtime execution and artifact controls remain in the existing DeerFlow services
 For an independent local preview, set `NEXT_BUILD_DIR=.next-momentum` and run the
 frontend on a separate loopback port with the existing gateway configured.
 
+Agent-seat weekly scorecard checks require a confirmed `#exec` post before
+resetting an employee's missed-week streak. A completed blank scorecard counts
+as a missed week only after its miss notice is delivered; two evaluated misses
+reopen the title. Model, usage-store and delivery outages are inconclusive and
+preserve the streak, title and last evaluated week, so a later sweep can retry.
+The recurring sweep remains opt-in (`exec_seats.scorecard_check_enabled: false`
+by default); this policy does not turn on scheduled work.
+
 ## Star History
 
 [![Star History Chart](https://star-history.dera.page/svg?repos=bytedance/deer-flow&type=Date)](https://star-history.dera.page/#bytedance/deer-flow&Date)
