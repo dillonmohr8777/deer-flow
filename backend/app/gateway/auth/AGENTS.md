@@ -62,3 +62,5 @@ rule `/inspect` and `/accept` apply). Otherwise it is the same 403 as
 `auto_create_users: false`, so logins cannot probe who is invited. Accounts it
 created keep signing in after their invitation is used, because the gate only
 applies to creating a user.
+
+The PAT scope catalog includes Board, Team and Academy permissions. Scopes still intersect the owner's permissions; unlisted routes remain denied by `_PAT_ROUTE_RULES`, regardless of those scopes. Do not add route admission through a scope-catalog change.

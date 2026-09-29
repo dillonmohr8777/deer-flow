@@ -2389,3 +2389,5 @@ an image-only rollback is insufficient. Do not downgrade or restamp a live DB.
 ## Star History
 
 [![Star History Chart](https://star-history.dera.page/svg?repos=bytedance/deer-flow&type=Date)](https://star-history.dera.page/#bytedance/deer-flow&Date)
+
+Private agency upgrade checks preserve the existing room and enforce canonical safe identifiers on client Board routes, including existing hex IDs. Board, Team and Academy PAT scope names stay aligned with route permissions; the existing default-deny PAT endpoint policy still controls reachability.
