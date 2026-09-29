@@ -97,6 +97,12 @@ async def test_route_permissions_disabled_preserves_all_permissions(monkeypatch)
         Permissions.CLIENTS_READ,
         Permissions.CLIENTS_WRITE,
         Permissions.CLIENTS_DELETE,
+        Permissions.BOARD_READ,
+        Permissions.BOARD_WRITE,
+        Permissions.TEAM_READ,
+        Permissions.TEAM_WRITE,
+        Permissions.ACADEMY_READ,
+        Permissions.ACADEMY_WRITE,
     ]
     cached.assert_not_called()
 
@@ -119,6 +125,12 @@ async def test_route_permissions_use_async_provider_and_trusted_principal(monkey
         Permissions.CLIENTS_READ,
         Permissions.CLIENTS_WRITE,
         Permissions.CLIENTS_DELETE,
+        Permissions.BOARD_READ,
+        Permissions.BOARD_WRITE,
+        Permissions.TEAM_READ,
+        Permissions.TEAM_WRITE,
+        Permissions.ACADEMY_READ,
+        Permissions.ACADEMY_WRITE,
     ]
     assert [(request.resource, request.action, request.target) for request in provider.requests] == [
         ("route", "read", Permissions.THREADS_READ),
@@ -133,6 +145,12 @@ async def test_route_permissions_use_async_provider_and_trusted_principal(monkey
         ("route", "read", Permissions.CLIENTS_READ),
         ("route", "write", Permissions.CLIENTS_WRITE),
         ("route", "delete", Permissions.CLIENTS_DELETE),
+        ("route", "read", Permissions.BOARD_READ),
+        ("route", "write", Permissions.BOARD_WRITE),
+        ("route", "read", Permissions.TEAM_READ),
+        ("route", "write", Permissions.TEAM_WRITE),
+        ("route", "read", Permissions.ACADEMY_READ),
+        ("route", "write", Permissions.ACADEMY_WRITE),
     ]
     principal = provider.requests[0].principal
     assert principal.user_id == "user-123"
@@ -161,6 +179,12 @@ async def test_route_permissions_fail_closed_denies_only_the_failed_permission(m
         Permissions.CLIENTS_READ,
         Permissions.CLIENTS_WRITE,
         Permissions.CLIENTS_DELETE,
+        Permissions.BOARD_READ,
+        Permissions.BOARD_WRITE,
+        Permissions.TEAM_READ,
+        Permissions.TEAM_WRITE,
+        Permissions.ACADEMY_READ,
+        Permissions.ACADEMY_WRITE,
     ]
 
 
@@ -184,6 +208,12 @@ async def test_route_permissions_fail_open_allows_the_failed_permission(monkeypa
         Permissions.CLIENTS_READ,
         Permissions.CLIENTS_WRITE,
         Permissions.CLIENTS_DELETE,
+        Permissions.BOARD_READ,
+        Permissions.BOARD_WRITE,
+        Permissions.TEAM_READ,
+        Permissions.TEAM_WRITE,
+        Permissions.ACADEMY_READ,
+        Permissions.ACADEMY_WRITE,
     ]
 
 
@@ -207,6 +237,12 @@ async def test_route_permissions_fail_open_allows_the_failed_permission(monkeypa
                 Permissions.CLIENTS_READ,
                 Permissions.CLIENTS_WRITE,
                 Permissions.CLIENTS_DELETE,
+                Permissions.BOARD_READ,
+                Permissions.BOARD_WRITE,
+                Permissions.TEAM_READ,
+                Permissions.TEAM_WRITE,
+                Permissions.ACADEMY_READ,
+                Permissions.ACADEMY_WRITE,
             ],
         ),
     ],
