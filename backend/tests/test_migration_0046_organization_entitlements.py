@@ -1,4 +1,4 @@
-"""Migration round-trip tests for 0040_organization_entitlements."""
+"""Migration round-trip tests for 0046_organization_entitlements."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ pytestmark = pytest.mark.asyncio
 async def test_0040_creates_organization_entitlements(tmp_path):
     engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'test.db'}")
     try:
-        await asyncio.to_thread(command.upgrade, _get_alembic_config(engine), "0040_organization_entitlements")
+        await asyncio.to_thread(command.upgrade, _get_alembic_config(engine), "0046_organization_entitlements")
         async with engine.connect() as conn:
 
             def _inspect(sync_conn):
@@ -47,8 +47,8 @@ async def test_0040_downgrade_drops_organization_entitlements(tmp_path):
     engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'test.db'}")
     try:
         cfg = _get_alembic_config(engine)
-        await asyncio.to_thread(command.upgrade, cfg, "0040_organization_entitlements")
-        await asyncio.to_thread(command.downgrade, cfg, "0039_team_board_academy")
+        await asyncio.to_thread(command.upgrade, cfg, "0046_organization_entitlements")
+        await asyncio.to_thread(command.downgrade, cfg, "0045_board_thread_triage")
         async with engine.connect() as conn:
 
             def _inspect(sync_conn):
