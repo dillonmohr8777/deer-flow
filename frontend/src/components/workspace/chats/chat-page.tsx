@@ -33,7 +33,10 @@ import {
 import { ThreadArchiveStatus } from "@/components/workspace/thread-archive-status";
 import { ThreadBackgroundTasks } from "@/components/workspace/thread-background-tasks";
 import { ThreadExtensionActions } from "@/components/workspace/thread-extension-actions";
-import { ThreadScheduledTasksLink } from "@/components/workspace/thread-scheduled-tasks-link";
+import {
+  ThreadScheduledTasksLink,
+  threadScheduledTasksHref,
+} from "@/components/workspace/thread-scheduled-tasks-link";
 import { ThreadSubagentBatches } from "@/components/workspace/thread-subagent-batches";
 import { ThreadTitle } from "@/components/workspace/thread-title";
 import { TodoList } from "@/components/workspace/todo-list";
@@ -488,7 +491,7 @@ export default function ChatPage() {
                   <ProjectAffiliationBadge projectId={affiliatedProjectId} />
                 )}
               </div>
-              <div className="flex shrink-0 items-center gap-1 sm:gap-2">
+              <div className="flex shrink-0 items-center gap-0 sm:gap-2">
                 {!isNewThread &&
                   !isMock &&
                   env.NEXT_PUBLIC_STATIC_WEBSITE_ONLY !== "true" && (
@@ -520,7 +523,14 @@ export default function ChatPage() {
                 )}
                 <SidecarTrigger />
                 {browserEnabled && <BrowserTrigger />}
-                <ExportTrigger threadId={threadId} />
+                <ExportTrigger
+                  threadId={threadId}
+                  scheduledTasksHref={
+                    !isNewThread && !isMock
+                      ? threadScheduledTasksHref(threadId)
+                      : undefined
+                  }
+                />
                 <ThreadExtensionActions threadId={threadId} />
                 <ArtifactTrigger />
               </div>
@@ -594,13 +604,14 @@ export default function ChatPage() {
               >
                 {/* Welcome lifts the composer toward the middle; the min()
                     stops short screens from pushing the Momo and its line
-                    up under the header. --tab-bar-h is the phone tab bar
+                    up under the header (572px: the phone composer with its
+                    44px tool row). --tab-bar-h is the phone tab bar
                     the page sits above (workspace-mobile.css). */}
                 <div
                   className={cn(
                     "relative w-full",
                     isWelcomeMode &&
-                      "-translate-y-[min(calc(50vh_-_100px_-_var(--tab-bar-h)/2),calc(100vh_-_560px_-_var(--tab-bar-h)))] sm:-translate-y-[min(calc(50vh_-_96px_-_var(--tab-bar-h)/2),calc(100vh_-_430px_-_var(--tab-bar-h)))]",
+                      "-translate-y-[min(calc(50vh_-_100px_-_var(--tab-bar-h)/2),calc(100vh_-_572px_-_var(--tab-bar-h)))] sm:-translate-y-[min(calc(50vh_-_96px_-_var(--tab-bar-h)/2),calc(100vh_-_430px_-_var(--tab-bar-h)))]",
                     isWelcomeMode
                       ? "max-w-(--container-width-sm)"
                       : "max-w-(--container-width-md)",

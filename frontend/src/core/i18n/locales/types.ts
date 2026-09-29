@@ -149,6 +149,7 @@ export interface Translations {
     export: string;
     exportAsMarkdown: string;
     exportAsJSON: string;
+    chatActions: string;
     exportSuccess: string;
     exportFailed: string;
     regenerate: string;

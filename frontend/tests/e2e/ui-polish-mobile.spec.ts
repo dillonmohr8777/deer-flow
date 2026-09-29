@@ -25,6 +25,71 @@ test.describe("UI polish mobile regressions", () => {
       .toBeLessThanOrEqual(375);
   });
 
+  test("chat controls keep the 44px touch floor on phones", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    mockLangGraphAPI(page, {
+      threads: [
+        {
+          thread_id: MOCK_THREAD_ID,
+          title: "Touch floor",
+          messages: [
+            {
+              type: "human",
+              id: "h1",
+              content: [{ type: "text", text: "hi" }],
+            },
+            { type: "ai", id: "a1", content: "Ready when you are." },
+          ],
+        },
+      ],
+    });
+    await page.goto(`/workspace/chats/${MOCK_THREAD_ID}`);
+    await page.getByText("Ready when you are.").waitFor();
+
+    // Header, message actions and composer tools: tooltip-wrapped buttons
+    // used to slip past the phone rule at 32px.
+    const small = await page.evaluate(() =>
+      [
+        ...document.querySelectorAll(
+          "[data-chat-header] button, [data-chat-header] a, [data-chat-composer] button, [data-testid='main-message-list'] button",
+        ),
+      ]
+        .filter((el) => (el as HTMLElement).offsetParent)
+        .map((el) => {
+          const b = el.getBoundingClientRect();
+          return {
+            label: el.getAttribute("aria-label"),
+            w: b.width,
+            h: b.height,
+          };
+        })
+        .filter((b) => b.w < 44 || b.h < 44),
+    );
+    expect(small).toEqual([]);
+
+    // The thread's Scheduled tasks link folds into Chat actions.
+    await expect(
+      page
+        .locator("[data-chat-header]")
+        .getByRole("link", { name: "Scheduled tasks" }),
+    ).toBeHidden();
+    await expect(async () => {
+      await page.getByRole("button", { name: "Chat actions" }).click();
+      await expect(
+        page.getByRole("menuitem", { name: "Scheduled tasks" }),
+      ).toHaveAttribute(
+        "href",
+        `/workspace/scheduled-tasks?thread_id=${MOCK_THREAD_ID}`,
+        { timeout: 1_000 },
+      );
+    }).toPass();
+    await expect(
+      page.getByRole("menuitem", { name: "Export as Markdown" }),
+    ).toBeVisible();
+  });
+
   test("mobile artifacts open in a drawer without horizontal overflow", async ({
     page,
   }) => {

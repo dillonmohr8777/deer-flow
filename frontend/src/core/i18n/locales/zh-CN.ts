@@ -157,6 +157,7 @@ export const zhCN: Translations = {
     export: "导出",
     exportAsMarkdown: "导出为 Markdown",
     exportAsJSON: "导出为 JSON",
+    chatActions: "对话操作",
     exportSuccess: "对话已导出",
     exportFailed: "导出对话失败。",
     regenerate: "重新生成",

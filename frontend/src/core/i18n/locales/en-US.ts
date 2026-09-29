@@ -163,6 +163,7 @@ export const enUS: Translations = {
     export: "Export",
     exportAsMarkdown: "Export as Markdown",
     exportAsJSON: "Export as JSON",
+    chatActions: "Chat actions",
     exportSuccess: "Conversation exported",
     exportFailed: "Failed to export conversation.",
     regenerate: "Regenerate",

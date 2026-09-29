@@ -3,9 +3,12 @@
    so none of these need !important. */
 
 /* A 44px touch floor for every shadcn icon button on phones. Only min-* is
-   set, so desktop sizes don't change. */
+   set, so desktop sizes don't change. Matched on the element, not
+   data-slot: a Tooltip or Sheet trigger wrapped around the button
+   (asChild) replaces its data-slot, which let the chat's message actions
+   and header controls slip through at 32px. */
 @media (max-width: 639px) {
-  [data-slot="button"][data-size^="icon"] {
+  :is(button, a)[data-size^="icon"] {
     min-width: 44px;
     min-height: 44px;
   }

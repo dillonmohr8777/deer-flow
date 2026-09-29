@@ -910,7 +910,9 @@ export function MessageList({
 
       return (
         // Revealed on hover, on keyboard focus, and always on touch screens.
-        <div className="mt-2 flex justify-start gap-1 opacity-0 transition-opacity delay-200 duration-300 group-focus-within/assistant-turn:opacity-100 group-hover/assistant-turn:opacity-100 [@media(hover:none)]:opacity-100">
+        // Phones: 44px targets, pulled out by their inset so the first
+        // glyph lines up with the reply's text edge.
+        <div className="mt-2 flex justify-start gap-1 opacity-0 transition-opacity delay-200 duration-300 group-focus-within/assistant-turn:opacity-100 group-hover/assistant-turn:opacity-100 max-sm:-ml-3.5 max-sm:gap-0 [@media(hover:none)]:opacity-100">
           {clipboardData && <CopyButton clipboardData={clipboardData} />}
           {enableBranchForTurn &&
             !isStreaming &&

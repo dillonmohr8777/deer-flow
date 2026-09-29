@@ -2544,11 +2544,13 @@ export function InputBox({
             />
           )}
         </div>
-        <PromptInputFooter className="flex flex-wrap gap-2 sm:flex-nowrap">
+        <PromptInputFooter className="flex flex-wrap gap-2 sm:flex-nowrap max-sm:[&_button]:min-h-11 max-sm:[&_button]:min-w-11">
           {/* Phones: the tools take a full row and the model and Send the
               next, at the right edge by the thumb, so the composer stays
-              two rows tall. */}
-          <PromptInputTools className="min-w-0 flex-1 basis-full flex-wrap sm:basis-auto">
+              two rows tall. Every footer control keeps the 44px phone
+              touch floor (DESIGN.md, Phones); the tools row is pulled out
+              by that inset so its first glyph meets the text edge. */}
+          <PromptInputTools className="min-w-0 flex-1 basis-full flex-wrap max-sm:-ml-3.5 sm:basis-auto">
             <AddAttachmentsButton
               className="px-2!"
               disabled={composerLocked}
