@@ -21,6 +21,7 @@ import {
   WorkspaceContainer,
   WorkspaceHeader,
 } from "@/components/workspace/workspace-container";
+import { useBoardThreads } from "@/core/board";
 import { useClients } from "@/core/clients";
 import { useConsoleUsage } from "@/core/console";
 import { useDeskEnabled } from "@/core/features";
@@ -36,6 +37,7 @@ import { cn } from "@/lib/utils";
 import {
   formatWhen,
   groupByDepartment,
+  hasUrgentAfterHoursApproval,
   receiptPath,
   recentOutputs,
   summarizeTasks,
@@ -209,22 +211,57 @@ function Today({ tasks }: { tasks: ReturnType<typeof useScheduledTasks> }) {
             </ul>
           )}
         </div>
-        <aside
-          aria-labelledby="desk-approvals"
-          className={cn(pageStyles.sheet, styles.notice)}
-        >
-          <div className="flex items-center justify-between gap-3">
-            <h3 id="desk-approvals">Approvals</h3>
-            <StatusTag tone="unknown">Not wired</StatusTag>
-          </div>
-          <p className={styles.muted}>
-            This workspace has no approval queue yet, so nothing can be approved
-            or sent from here. Agents save drafts instead of sending; review
-            each one from its receipt.
-          </p>
-        </aside>
+        <Approvals />
       </div>
     </Section>
+  );
+}
+
+/** Threads with a Momo draft waiting on the owner (board status "drafted"). */
+function Approvals() {
+  const waiting = useBoardThreads({ status: "drafted" });
+  const count = waiting.data?.length ?? 0;
+  const afterHours = hasUrgentAfterHoursApproval(waiting.data ?? []);
+  return (
+    <aside
+      aria-labelledby="desk-approvals"
+      className={cn(pageStyles.sheet, styles.notice)}
+    >
+      <div className="flex items-center justify-between gap-3">
+        <h3 id="desk-approvals">Approvals</h3>
+        {waiting.isError ? (
+          <StatusTag tone="danger">Unavailable</StatusTag>
+        ) : waiting.isLoading ? (
+          <StatusTag tone="unknown">Loading</StatusTag>
+        ) : count > 0 ? (
+          <StatusTag tone="attention">{count} waiting on you</StatusTag>
+        ) : (
+          <StatusTag tone="unknown">Nothing waiting</StatusTag>
+        )}
+      </div>
+      {waiting.isError ? (
+        <ErrorState
+          message="Couldn't load approvals."
+          detail={waiting.error.message}
+          action={<RetryButton onRetry={waiting.refetch} />}
+        />
+      ) : (
+        <>
+          {afterHours ? (
+            <p className={styles.muted}>
+              <StatusTag tone="attention">After hours</StatusTag> An urgent
+              thread is waiting outside 8am to 8pm ET.
+            </p>
+          ) : null}
+          {!waiting.isLoading && count === 0 ? (
+            <p className={styles.muted}>
+              Nothing is waiting on your approval right now. Momo saves drafts
+              here once one is ready to review.
+            </p>
+          ) : null}
+        </>
+      )}
+    </aside>
   );
 }
 

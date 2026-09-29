@@ -1,4 +1,4 @@
-"""Migration round-trip tests for 0040_board_message_approval."""
+"""Migration round-trip tests for 0047_board_message_approval."""
 
 from __future__ import annotations
 
@@ -14,10 +14,10 @@ from deerflow.persistence.bootstrap import _get_alembic_config
 pytestmark = pytest.mark.asyncio
 
 
-async def test_0040_adds_approved_at_column(tmp_path):
+async def test_0047_adds_approved_at_column(tmp_path):
     engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'test.db'}")
     try:
-        await asyncio.to_thread(command.upgrade, _get_alembic_config(engine), "0040_board_message_approval")
+        await asyncio.to_thread(command.upgrade, _get_alembic_config(engine), "0047_board_message_approval")
         async with engine.connect() as conn:
 
             def _inspect(sync_conn):
@@ -38,12 +38,12 @@ async def test_0040_adds_approved_at_column(tmp_path):
         await engine.dispose()
 
 
-async def test_0040_downgrade_removes_column(tmp_path):
+async def test_0047_downgrade_removes_column(tmp_path):
     engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'test.db'}")
     try:
         config = _get_alembic_config(engine)
-        await asyncio.to_thread(command.upgrade, config, "0040_board_message_approval")
-        await asyncio.to_thread(command.downgrade, config, "0039_team_board_academy")
+        await asyncio.to_thread(command.upgrade, config, "0047_board_message_approval")
+        await asyncio.to_thread(command.downgrade, config, "0046_organization_entitlements")
         async with engine.connect() as conn:
 
             def _inspect(sync_conn):

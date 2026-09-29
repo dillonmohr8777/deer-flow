@@ -19,6 +19,8 @@ import type { BoardThread, BoardThreadKind, BoardThreadStatus } from "./types";
 export function useBoardThreads(params?: {
   clientId?: string;
   status?: BoardThreadStatus;
+  /** Skip the request even off static-demo mode, e.g. while a gating feature flag is still loading. */
+  enabled?: boolean;
 }) {
   return useQuery<BoardThread[]>({
     queryKey: [
@@ -28,7 +30,7 @@ export function useBoardThreads(params?: {
     ],
     queryFn: () => listBoardThreads(params),
     // Static-demo mode has no Gateway; never fire this request there.
-    enabled: !isStaticWebsiteOnly(),
+    enabled: (params?.enabled ?? true) && !isStaticWebsiteOnly(),
   });
 }
 
