@@ -2300,6 +2300,16 @@ Runtime execution and artifact controls remain in the existing DeerFlow services
 For an independent local preview, set `NEXT_BUILD_DIR=.next-momentum` and run the
 frontend on a separate loopback port with the existing gateway configured.
 
+## Responses multi-agent preflight (local customization)
+
+An opt-in Sol 6.1/OpenRouter Responses adapter stages bounded requests, separates
+root final answers from agent progress, and records durable spending receipts.
+It is not registered or activated by default. Native activation requires actual
+hosted child output and verified aggregate provider spending enforcement across
+all descendants and continuations; concurrency limits alone cannot cap cost.
+The ordinary read-only function-call probe is separate capability evidence.
+See [protocol, spending gates and integration criteria](backend/docs/RESPONSES_MULTI_AGENT.md).
+
 ## Star History
 
 [![Star History Chart](https://star-history.dera.page/svg?repos=bytedance/deer-flow&type=Date)](https://star-history.dera.page/#bytedance/deer-flow&Date)
