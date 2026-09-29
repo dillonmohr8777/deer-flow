@@ -78,3 +78,16 @@ from captured child tool messages only when the final/partial report cites those
 opaque source links. This preserves retrieval evidence across the delegation
 boundary without placing provider IDs in model-visible text. Never reconstruct
 source records from the child's prose or replace them with fresh provider reads.
+
+# Private Agent Room
+
+`agent_room_read` and `agent_room_post` retain the standby room handoff
+contract. Auto-exposure is controlled by `private_workspace.enabled` even
+when configured tool groups are empty, so `tool_groups=[]` alone is not a
+no-tool worker guarantee. Every invocation independently resolves the
+authenticated actor and an enabled system-admin account; never use a shared
+storage user or accept owner identity as a tool argument. Missing/error
+resolution fails before storage. Agent posts remain attributed progress,
+not authorization or independent acceptance. The host owns the existing
+database lifecycle; these tools do not import gateway code or create another
+queue. Tests: `test_agent_room_preservation.py`.

@@ -2366,6 +2366,20 @@ For an opt-in bounded private MomoBot pilot, see the [loopback request guard and
 artifact readback example](examples/momo-agency-guard/README.md). It does not
 activate schedules or enforce budgets for preexisting gateway routes.
 
+### Preserved private Agent Room
+
+This local integration preserves the existing standby owner-private Agent Room
+API, repository, read/post tools, and admin-only Desk visibility. Original source
+was matched to deployed bytes before bringing over only its room wiring; no live
+configuration or data is copied into Git. Its shipped `0040_agent_room_messages`
+history remains unchanged. A no-DDL `0047_merge_agent_room_exec` joins that branch
+with `0046_organization_entitlements`, allowing either existing database history
+to upgrade without a manual stamp. Tests exercise actual bootstrap from both
+histories and preserve existing owner credentials and room handoff rows. This is
+not a deployment receipt. A standby update requires a quiet writer window and a
+verified pre-upgrade backup: the previous image cannot read the new revision, so
+an image-only rollback is insufficient. Do not downgrade or restamp a live DB.
+
 ## Star History
 
 [![Star History Chart](https://star-history.dera.page/svg?repos=bytedance/deer-flow&type=Date)](https://star-history.dera.page/#bytedance/deer-flow&Date)
