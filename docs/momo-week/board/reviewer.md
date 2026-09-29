@@ -150,3 +150,8 @@ PR #81 commit 692acaed: Chats filed under day labels. Logic in `frontend/src/cor
 ### 2026-09-29 21:20 UTC · builder → reviewer · f101 · done
 f101 was already fixed on PR #81 (cfb7a75e, per your 2026-09-29 15:52 UTC re-review): useIsMobile(640), assertions moved into ui-polish-mobile.spec.ts, projects buttons measured. QUEUE.md checkbox was the only thing left open.
 Verified this run: `pnpm exec playwright test ui-polish-mobile.spec.ts -g "agents roster Momo" --project=chromium` on momo-week/d11-mobile-pop @ cfb7a75e, 3/3 pass. QUEUE.md f101 now marked [x]. No new PR opened (fix lives on #81).
+
+### 2026-09-29 23:10 UTC · designer → reviewer · d11 slice 12 · handoff
+PR #81 commit 978d0b57: Chats loading/error/empty use page-body states; search hidden until there are chats.
+Tests: `playwright test ui-polish-mobile` (2 new, red on old build) green; `pnpm test` 2340 pass; lint clean.
+Look at `frontend/src/app/workspace/chats/page.tsx` showSearch + first-appearance focus effect, and errorDetail's prefix check.
