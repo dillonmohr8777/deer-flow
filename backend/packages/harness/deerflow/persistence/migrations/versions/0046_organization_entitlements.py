@@ -1,7 +1,7 @@
 """organization_entitlements.
 
-Revision ID: 0040_organization_entitlements
-Revises: 0039_team_board_academy
+Revision ID: 0046_organization_entitlements
+Revises: 0045_board_thread_triage
 
 M4 entitlement gate (task e6, design in docs/momo-week/m4-entitlement.md from
 task c2). One row per (organization_id, key): a gate key (console.read,
@@ -20,8 +20,8 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0040_organization_entitlements"
-down_revision: str | Sequence[str] | None = "0039_team_board_academy"
+revision: str = "0046_organization_entitlements"
+down_revision: str | Sequence[str] | None = "0045_board_thread_triage"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
