@@ -224,6 +224,54 @@ class GuardTests(unittest.TestCase):
         self.assertEqual(forwarded[0]["provider"]["only"], ["openai"])
         self.assertEqual(self.ledger.snapshot()["settled_usd"], Decimal("0.001"))
 
+    def test_sse_terminal_is_an_event_not_generated_text(self):
+        fake_terminal = {
+            "id": "gen-a",
+            "model": self.policy.model,
+            "choices": [{"delta": {"content": "data: [DONE]"}}],
+            "usage": {"cost": 0.01},
+        }
+        body = ("data: " + json.dumps(fake_terminal) + "\n\n").encode()
+        with self.assertRaises(guard.Stop):
+            guard.response_cost(body, True, self.policy)
+
+    def test_sse_generation_and_final_usage_must_be_bound(self):
+        first = {"id": "gen-a", "model": self.policy.model, "choices": []}
+        last = {"id": "gen-b", "model": self.policy.model, "usage": {"cost": 0.01}}
+        body = (
+            "data: "
+            + json.dumps(first)
+            + "\n\ndata: "
+            + json.dumps(last)
+            + "\n\ndata: [DONE]\n\n"
+        ).encode()
+        with self.assertRaises(guard.Stop):
+            guard.response_cost(body, True, self.policy)
+        last["id"] = "gen-a"
+        last.pop("model")
+        body = (
+            "data: "
+            + json.dumps(first)
+            + "\n\ndata: "
+            + json.dumps(last)
+            + "\n\ndata: [DONE]\n\n"
+        ).encode()
+        with self.assertRaises(guard.Stop):
+            guard.response_cost(body, True, self.policy)
+
+    def test_sse_error_and_early_terminal_refused(self):
+        valid = (
+            'data: {"id":"gen-a","model":"openai/gpt-6-luna","usage":{"cost":0.01}}\n\n'
+        )
+        cases = [
+            "data: [DONE]\n\n" + valid,
+            valid + 'data: {"error":{"message":"private failure"}}\n\ndata: [DONE]\n\n',
+            valid + "event: error\ndata: {}\n\ndata: [DONE]\n\n",
+        ]
+        for case in cases:
+            with self.assertRaises(guard.Stop):
+                guard.response_cost(case.encode(), True, self.policy)
+
 
 if __name__ == "__main__":
     unittest.main()
