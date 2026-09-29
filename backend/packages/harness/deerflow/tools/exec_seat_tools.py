@@ -267,3 +267,14 @@ async def exec_reopen_seat(
         The updated seat ({"status": "reopened", ...}), or {"error": ...}.
     """
     return await _exec_reopen_seat_impl(seat_id, runtime=runtime)
+
+
+async def announce_to_exec(text: str) -> None:
+    """Post a system-level (no acting agent/tool run) notice to ``#exec``.
+
+    Thin adapter around :func:`_announce` for callers with no ``Runtime``,
+    e.g. ``deerflow.exec_seats.budget``'s weekly seat-budget check -- it runs
+    inside the same organization storage context every other org-scoped
+    background pass uses, but not inside an agent's tool call.
+    """
+    await _announce(None, text)

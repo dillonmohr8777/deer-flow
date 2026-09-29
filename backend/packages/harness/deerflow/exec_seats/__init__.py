@@ -3,6 +3,7 @@
 next to ``deerflow.persistence.board``.
 """
 
+from deerflow.exec_seats.budget import evaluate_all_seat_budgets, evaluate_seat_budget, is_over_budget
 from deerflow.exec_seats.workflow import (
     SeatAuthorizationError,
     SeatTransitionError,
@@ -17,4 +18,7 @@ __all__ = [
     "assert_can_claim",
     "assert_can_ratify",
     "assert_can_reopen",
+    "evaluate_all_seat_budgets",
+    "evaluate_seat_budget",
+    "is_over_budget",
 ]

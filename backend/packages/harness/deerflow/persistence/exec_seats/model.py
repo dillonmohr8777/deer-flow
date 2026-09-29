@@ -43,6 +43,10 @@ class AgentSeatRow(Base):
     status: Mapped[str] = mapped_column(String(16), default=AgentSeatStatus.CLAIMED, index=True)
     claimed_by_user_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     ratified_by_user_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # Set when a weekly token-budget check pauses this seat (queue item e10);
+    # cleared once usage rebalances back under budget. Orthogonal to
+    # ``status``: a paused seat is still claimed or ratified.
+    paused_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now, onupdate=_utc_now)
 
