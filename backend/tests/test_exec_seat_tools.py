@@ -133,9 +133,8 @@ async def test_non_owner_veto_is_rejected(org_world):  # noqa: F811
         ratified = await _exec_ratify_seat_impl(cmo_seat["id"], runtime=_runtime("cmo-agent"))
         assert ratified["status"] == AgentSeatStatus.RATIFIED
 
-    # USER_B has no membership in ORG_S at all -- reopen is owner/admin-only
-    # (EXECUTIVE.md rule 4), mirroring `_is_active_org_admin`'s owner-or-admin
-    # convention in `app/gateway/routers/board.py`.
+    # USER_B has no membership in ORG_S at all -- reopen is owner-only
+    # (EXECUTIVE.md rule 4: "reassigning any title" is Dillon's alone).
     with acting_as(USER_B):
         rejected = await _exec_reopen_seat_impl(cmo_seat["id"], runtime=_runtime("intruder-agent"))
     assert "error" in rejected
@@ -148,17 +147,24 @@ async def test_non_owner_veto_is_rejected(org_world):  # noqa: F811
 
 
 @pytest.mark.asyncio
-async def test_active_org_admin_may_also_veto(org_world):  # noqa: F811
-    """USER_C is an active ORG_S admin, not the owner. `_is_active_org_admin`'s
-    owner-or-admin convention (mirrored from `board.py`/`clients.py`) allows it,
-    same as an org admin can approve/reply on the Momo Board."""
+async def test_active_org_admin_veto_is_rejected(org_world):  # noqa: F811
+    """USER_C is an active ORG_S admin, not the owner. EXECUTIVE.md rule 4 names
+    "reassigning any title" (reopen) owner-only (Dillon) -- a stricter bar than
+    the owner-or-admin convention ratify and the Momo Board's approve/reply
+    share -- so an admin veto is refused, same as a total outsider's."""
     with acting_as(USER_A, ORG_S):
         cmo_seat = await _exec_claim_seat_impl(CMO_SEAT, "content", "leads", 0, runtime=_runtime("cmo-agent"))
         await _exec_ratify_seat_impl(cmo_seat["id"], runtime=_runtime("cmo-agent"))
 
     with acting_as(USER_C, ORG_S):
-        reopened = await _exec_reopen_seat_impl(cmo_seat["id"], runtime=_runtime("admin-agent"))
-    assert reopened["status"] == AgentSeatStatus.REOPENED
+        rejected = await _exec_reopen_seat_impl(cmo_seat["id"], runtime=_runtime("admin-agent"))
+    assert "error" in rejected
+
+    with acting_as(USER_A, ORG_S):
+        from deerflow.persistence.exec_seats import AgentSeatRepository
+
+        unchanged = await AgentSeatRepository(org_world).get_seat(cmo_seat["id"])
+    assert unchanged["status"] == AgentSeatStatus.RATIFIED
 
 
 @pytest.mark.asyncio

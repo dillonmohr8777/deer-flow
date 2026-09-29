@@ -20,10 +20,13 @@ client-facing one.
 ``actor_is_ceo`` trusts the run's self-declared ``agent_name`` context field
 (matched against the ratified CEO seat's own ``agent_name``) -- the same
 trust level ``team_board_tools`` already gives that field when signing a
-post. ``actor_is_owner`` is a real organization-membership check (owner or
-admin, mirroring ``app/gateway/routers/board.py``'s ``_is_active_org_admin``;
-the query is duplicated here rather than imported, because harness code
-never imports from ``app``).
+post. Ratify's ``actor_is_owner`` is a real organization-membership check
+(owner or admin, mirroring ``app/gateway/routers/board.py``'s
+``_is_active_org_admin``; the query is duplicated here rather than imported,
+because harness code never imports from ``app``). Reopen's ``actor_is_owner``
+is stricter -- ``_is_active_org_owner`` (``role == "owner"`` only) -- because
+EXECUTIVE.md rule 4 names "reassigning any title" as owner-only, not an
+admin-shared privilege the way board approve/reply is.
 """
 
 from __future__ import annotations
@@ -84,6 +87,20 @@ async def _is_active_org_admin(user_id: str) -> bool:
 
     Mirrors ``app/gateway/routers/board.py``'s helper of the same name.
     """
+    return await _has_active_org_role(user_id, _ORG_ADMIN_ROLES)
+
+
+async def _is_active_org_owner(user_id: str) -> bool:
+    """Whether *user_id* is the active organization's owner -- not merely an admin.
+
+    EXECUTIVE.md rule 4 names "reassigning any title" (reopen) as owner-only
+    (Dillon), a stricter bar than the owner-or-admin convention ``ratify`` and
+    the Momo Board's approve/reply share.
+    """
+    return await _has_active_org_role(user_id, ("owner",))
+
+
+async def _has_active_org_role(user_id: str, roles: tuple[str, ...]) -> bool:
     organization_id = resolve_organization_id()
     if organization_id is None:
         return False
@@ -96,7 +113,7 @@ async def _is_active_org_admin(user_id: str) -> bool:
         OrganizationMemberRow.organization_id == organization_id,
         OrganizationMemberRow.user_id == user_id,
         OrganizationMemberRow.status == "active",
-        OrganizationMemberRow.role.in_(_ORG_ADMIN_ROLES),
+        OrganizationMemberRow.role.in_(roles),
     )
     async with session_factory() as session:
         result = await session.execute(stmt)
@@ -185,7 +202,7 @@ async def _exec_reopen_seat_impl(seat_id: str, runtime: Runtime | None = None) -
     if seat is None:
         return _error("No such seat claim in this organization.")
     actor_user_id = resolve_runtime_actor_user_id(runtime)
-    actor_is_owner = await _is_active_org_admin(actor_user_id)
+    actor_is_owner = await _is_active_org_owner(actor_user_id)
     try:
         assert_can_reopen(seat["status"], actor_is_owner=actor_is_owner)
     except (SeatAuthorizationError, SeatTransitionError) as exc:
@@ -208,10 +225,11 @@ async def exec_claim_seat(
     """Claim a Momentum title from EXECUTIVE.md's slate, or propose a new one.
 
     Momentum-staff only. A title may be claimed when nobody has ever claimed
-    it, or an owner has since reopened it (a fresh claim on an
-    already-claimed-but-unratified title is a separate row -- EXECUTIVE.md's
-    "Confirm" step resolves the overlap, not this tool). Announces the claim
-    to #exec on success.
+    it, or an owner has since reopened it. A claim on a still-claimed
+    (unratified) or already-ratified title is rejected -- EXECUTIVE.md's
+    "Confirm" step resolves a contested title by ratifying or reopening the
+    existing claim first, not by letting a second claim land alongside it.
+    Announces the claim to #exec on success.
 
     Args:
         seat: Title name, e.g. "CMO" or "CEO (chief of staff)".

@@ -33,10 +33,12 @@ class SeatAuthorizationError(SeatTransitionError):
 def assert_can_claim(current_status: str | None) -> None:
     """A seat may be claimed when it has never been claimed, or has been reopened.
 
-    ``current_status`` is the *seat title's* current ratified/claimed status
-    (a fresh claim on an already-claimed-but-unratified title is a separate
-    row EXECUTIVE.md's "Confirm" step resolves, not blocked here), or ``None``
-    for a title nobody has ever claimed.
+    ``current_status`` is the *seat title's* current ratified/claimed status:
+    ``None`` for a title nobody has ever claimed, or ``reopened`` after an
+    owner veto. A claim on a still-``claimed`` (unratified) or ``ratified``
+    title is rejected -- EXECUTIVE.md's "Confirm" step resolves a contested
+    title by ratifying or reopening the existing claim first, not by letting
+    a second claim land alongside it.
     """
     if current_status not in _CLAIM_FROM:
         raise SeatTransitionError(f"Cannot claim a seat with status {current_status!r}")
