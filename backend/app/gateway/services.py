@@ -1650,7 +1650,7 @@ async def _load_scope_agent_config(
 ) -> Any | None:
     if not assistant_id or assistant_id == _DEFAULT_ASSISTANT_ID:
         return None
-    normalized = assistant_id.strip().lower().replace("_", "-")
+    normalized = assistant_id.strip().lower().replace("-", "_")
     try:
         return await asyncio.to_thread(
             load_agent_config,
@@ -2355,7 +2355,7 @@ async def _stream_viewer_still_admitted(request: Any) -> bool:
     delegations = OrganizationDelegationRepository(session_factory)
     delegation_id = getattr(state, "delegation_id", None)
     if isinstance(delegation_id, str) and delegation_id:
-        return await delegations.resolve_delegation_by_id(delegation_id) is not None
+        return delegations.resolve_delegation_by_id(delegation_id) is not None
     return await delegations.is_membership_active(user_id=getattr(state, "actor_user_id", None), organization_id=organization_id)
 
 

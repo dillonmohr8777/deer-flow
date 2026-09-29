@@ -70,7 +70,7 @@ def _file_entry(rel_path: str, data: bytes) -> dict[str, Any]:
 def _truncate_utf8_bytes(content: str, max_bytes: int) -> tuple[str, bytes]:
     data = content.encode("utf-8")
     truncated = data[:max_bytes]
-    text = truncated.decode("utf-8", errors="ignore")
+    text = truncated.decode("utf-8", errors="replace")
     return text, text.encode("utf-8")
 
 

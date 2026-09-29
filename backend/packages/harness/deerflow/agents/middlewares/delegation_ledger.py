@@ -246,4 +246,4 @@ def render_delegation_ledger(entries: list[DelegationEntry], *, max_chars: int =
     rendered = "\n".join(lines)
     if len(rendered) <= max_chars:
         return rendered
-    return rendered[: max(0, max_chars - 4)] + "\n..."
+    return rendered[: max(0, max_chars - 3)] + "\n..."

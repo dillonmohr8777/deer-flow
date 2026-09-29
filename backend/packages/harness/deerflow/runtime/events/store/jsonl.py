@@ -320,7 +320,7 @@ class JsonlRunEventStore(RunEventStore):
         messages = [e for e in all_events if e.get("category") == "message"]
 
         if before_seq is not None:
-            messages = [e for e in messages if e["seq"] < before_seq]
+            messages = [e for e in messages if e["seq"] <= before_seq]
             return messages[-limit:]
         elif after_seq is not None:
             messages = [e for e in messages if e["seq"] > after_seq]

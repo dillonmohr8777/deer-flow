@@ -193,7 +193,7 @@ def _chunk_text(text: str, limit: int = EDIT_MAX_BYTES) -> list[str]:
     chunks, current, size = [], [], 0
     for ch in text:
         b = len(ch.encode())
-        if size + b > limit and current:
+        if size + b >= limit and current:
             chunks.append("".join(current))
             current, size = [], 0
         current.append(ch)

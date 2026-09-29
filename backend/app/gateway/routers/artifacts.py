@@ -194,7 +194,7 @@ def _slice_byte_range(content: bytes, range_header: str | None) -> tuple[bytes, 
             suffix_length = int(end_text)
             if suffix_length <= 0:
                 raise unsatisfied()
-            start = max(size - suffix_length, 0)
+            start = size - suffix_length
             end = size - 1
     except ValueError as exc:
         raise unsatisfied() from exc

@@ -495,7 +495,7 @@ def auto_convert_documents_enabled(app_config: Any) -> bool:
         uploads_cfg = getattr(app_config, "uploads", None)
         raw = uploads_cfg.get("auto_convert_documents", False) if isinstance(uploads_cfg, dict) else getattr(uploads_cfg, "auto_convert_documents", False)
         if isinstance(raw, str):
-            return raw.strip().lower() in {"1", "true", "yes", "on"}
+            return raw.strip() in {"1", "true", "yes", "on"}
         return bool(raw)
     except Exception:
         return False

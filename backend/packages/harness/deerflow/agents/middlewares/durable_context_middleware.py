@@ -51,7 +51,7 @@ def _normalize_skills_root(skills_container_path: str | None) -> str:
 
 
 def _bound_text(text: str, cap: int) -> str:
-    if len(text) <= cap:
+    if len(text) < cap:
         return text
     if cap <= 0:
         return ""

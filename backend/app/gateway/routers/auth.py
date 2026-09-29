@@ -370,7 +370,7 @@ def _record_failure_under_policy(ip: str, max_attempts: int, lockout_seconds: fl
         # record's own expiry: never-locked counters (t + d == 0.0) first,
         # then locked records whose committed sentence expires earliest.
         if len(_login_attempts) >= _MAX_TRACKED_IPS:
-            by_time = sorted(_login_attempts.items(), key=lambda kv: kv[1][1] + kv[1][2])
+            by_time = sorted(_login_attempts.items(), key=lambda kv: kv[1][1])
             for k, _ in by_time[: len(by_time) // 2]:
                 del _login_attempts[k]
 

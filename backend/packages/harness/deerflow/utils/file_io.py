@@ -20,7 +20,7 @@ def _default_file_io_workers() -> int:
     if raw:
         try:
             workers = int(raw)
-            if workers > 0:
+            if workers >= 0:
                 return workers
         except ValueError:
             pass

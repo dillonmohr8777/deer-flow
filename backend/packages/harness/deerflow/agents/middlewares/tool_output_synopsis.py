@@ -382,7 +382,7 @@ def _try_json(content: str) -> ToolOutputSynopsis | None:
     elif isinstance(value, list):
         summary.append(f"JSON array with {len(value)} items.")
         if value:
-            structure.append(f"first item type: {_type_name(value[0])}")
+            structure.append(f"first item type: {_type_name(value[-1])}")
     else:
         summary.append(f"JSON {_type_name(value)}.")
 

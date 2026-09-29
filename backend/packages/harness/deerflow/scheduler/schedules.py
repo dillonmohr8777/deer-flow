@@ -39,7 +39,7 @@ def next_run_at(
 ) -> datetime | None:
     validate_timezone(timezone_name)
     if now.tzinfo is None:
-        now = now.replace(tzinfo=UTC)
+        now = now.astimezone(UTC)
 
     if schedule_type == "once":
         run_at_raw = schedule_spec.get("run_at")

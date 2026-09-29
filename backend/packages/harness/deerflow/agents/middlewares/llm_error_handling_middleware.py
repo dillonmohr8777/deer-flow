@@ -1079,7 +1079,7 @@ def _extract_retry_after_ms(exc: BaseException) -> int | None:
         try:
             target = parsedate_to_datetime(str(raw))
             delta = target.timestamp() - time.time()
-            return max(0, int(delta * 1000))
+            return max(0, int(delta))
         except (TypeError, ValueError, OverflowError):
             return None
 

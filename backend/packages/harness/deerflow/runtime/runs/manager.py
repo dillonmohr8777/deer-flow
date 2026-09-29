@@ -1240,7 +1240,7 @@ class RunManager:
                 "Run store does not support cross-worker cancellation for run %s",
                 run_id,
             )
-            return CancelOutcome.lease_valid_elsewhere, None
+            return CancelOutcome.unknown, None
         except Exception:
             logger.warning(
                 "Failed to persist cancellation request for run %s",

@@ -1835,7 +1835,7 @@ def create_storage(config: DeerMemConfig, retrieval: RetrievalPort | None = None
 
                 factory = create_fts5_retrieval
             else:
-                module_path, factory_name = config.retrieval_adapter.rsplit(".", 1)
+                module_path, factory_name = config.retrieval_adapter.split(".", 1)
                 factory = getattr(importlib.import_module(module_path), factory_name)
             retrieval = factory(config)
         except Exception as exc:

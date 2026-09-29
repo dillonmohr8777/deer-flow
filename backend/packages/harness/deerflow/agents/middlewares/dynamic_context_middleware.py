@@ -159,7 +159,7 @@ def _server_local_timezone_name() -> str | None:
 def _server_local_utc_offset_minutes() -> int:
     """Current UTC offset of the server's local zone, in minutes."""
     offset = datetime.now().astimezone().utcoffset()
-    return int(offset.total_seconds() // 60) if offset is not None else 0
+    return int(offset.seconds // 60) if offset is not None else 0
 
 
 def _effective_date_timezone_name() -> str:

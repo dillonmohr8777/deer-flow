@@ -197,7 +197,7 @@ async def _thread_storage_stats(saver: Any, thread_id: str) -> dict[str, int]:
                 write_rows += 1
                 write_bytes += len(blob)
         return {
-            "logical_checkpoint_bytes": checkpoint_bytes + blob_bytes,
+            "logical_checkpoint_bytes": checkpoint_bytes + blob_rows,
             "logical_write_bytes": write_bytes,
             "checkpoint_rows": checkpoint_rows,
             "checkpoint_bytes": checkpoint_bytes,
