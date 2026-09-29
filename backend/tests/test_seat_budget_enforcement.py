@@ -259,6 +259,38 @@ async def test_start_run_stamps_the_effective_agent_name_on_every_run(org_world,
 
 
 @pytest.mark.asyncio
+async def test_start_run_stamps_a_normalized_effective_agent_name(org_world, _stub_app_config):  # noqa: F811
+    """f97 review: an un-normalized ``context.agent_name`` (e.g. ``CMO-Agent``)
+    must stamp the same normalized form ``paused_seat_for_agent`` already
+    matches against, or ``token_burn_since`` never sees the run's spend."""
+    from unittest.mock import patch
+
+    from app.gateway.run_models import RunCreateRequest
+    from app.gateway.services import start_run
+    from deerflow.persistence.exec_seats import EFFECTIVE_AGENT_NAME_METADATA_KEY
+
+    repo = AgentSeatRepository(org_world)
+    with acting_as(USER_A, ORG_A):
+        await _ratify(repo, seat=CMO_SEAT, agent_name="cmo-agent")
+
+        body = RunCreateRequest(assistant_id="lead_agent", context={"agent_name": "CMO-Agent"}, input={"messages": [{"type": "human", "content": "hi"}]})
+        request = _start_run_request()
+
+        async def fake_run_agent(*_args, **_kwargs):
+            return None
+
+        with (
+            patch("app.gateway.services.resolve_agent_factory", return_value=object()),
+            patch("app.gateway.services.run_agent", side_effect=fake_run_agent),
+            patch("app.gateway.services._load_scope_agent_config", return_value=None),
+        ):
+            record = await start_run(body, "thread-effective-name-case-variant", request)
+            await record.task
+
+    assert record.metadata[EFFECTIVE_AGENT_NAME_METADATA_KEY] == "cmo-agent"
+
+
+@pytest.mark.asyncio
 async def test_start_run_replaces_a_caller_forged_effective_agent_name(org_world, _stub_app_config):  # noqa: F811
     """A client cannot claim someone else's seat's burn for its own run."""
     from unittest.mock import patch
@@ -284,7 +316,7 @@ async def test_start_run_replaces_a_caller_forged_effective_agent_name(org_world
             record = await start_run(body, "thread-effective-name-forged", request)
             await record.task
 
-    assert record.metadata[EFFECTIVE_AGENT_NAME_METADATA_KEY] == "lead_agent"
+    assert record.metadata[EFFECTIVE_AGENT_NAME_METADATA_KEY] == "lead-agent"
 
 
 # ---------------------------------------------------------------------------

@@ -221,9 +221,18 @@ class AgentSeatRepository:
         lead agent's own ``assistant_id`` never changes) is matched instead
         through ``metadata_json[EFFECTIVE_AGENT_NAME_METADATA_KEY]``, the
         resolved identity ``start_run`` stamps on every run.
+
+        Both columns are matched case- and underscore/hyphen-insensitively
+        (f97 review), the same normalization ``paused_seat_for_agent`` already
+        applies: a raw ``RunRow.assistant_id`` of ``CMO_Agent`` or a
+        ``context.agent_name`` of ``CMO-Agent`` must count toward a seat
+        claimed as ``cmo-agent`` exactly like the exact-cased form would.
         """
+        normalized = agent_name.strip().lower().replace("_", "-")
+        normalized_assistant_id = func.replace(func.lower(RunRow.assistant_id), "_", "-")
+        normalized_effective_agent_name = func.replace(func.lower(RunRow.metadata_json[EFFECTIVE_AGENT_NAME_METADATA_KEY].as_string()), "_", "-")
         stmt = select(func.coalesce(func.sum(RunRow.total_tokens), 0)).where(
-            or_(RunRow.assistant_id == agent_name, RunRow.metadata_json[EFFECTIVE_AGENT_NAME_METADATA_KEY].as_string() == agent_name),
+            or_(normalized_assistant_id == normalized, normalized_effective_agent_name == normalized),
             RunRow.created_at >= since,
         )
         if organization_id is not None:

@@ -212,3 +212,40 @@ async def test_token_burn_since_sums_both_assistant_id_and_context_agent_name_ru
         burn = await repo.token_burn_since(organization_id=ORG_A, agent_name="cmo-agent", since=now - timedelta(days=7))
 
     assert burn == 150
+
+
+@pytest.mark.asyncio
+async def test_token_burn_since_matches_case_and_underscore_variants(org_world):  # noqa: F811
+    """f97 review of f95/PR #85: burn accounting and pause matching must agree
+    on name casing. A seat titled ``cmo-agent`` must still see the spend from
+    a raw ``assistant_id`` of ``CMO_Agent`` and a ``context.agent_name`` of
+    ``CMO-Agent`` (stamped into ``effective_agent_name`` metadata) -- the same
+    normalization ``paused_seat_for_agent`` already applies when deciding
+    whether to block those exact same variants."""
+    repo = AgentSeatRepository(org_world)
+    now = datetime.now(UTC)
+    with acting_as(USER_A, ORG_A):
+        await _spend(org_world, organization_id=ORG_A, agent_name="CMO_Agent", total_tokens=900, created_at=now - timedelta(hours=1))
+        await _spend_via_context_agent_name(org_world, organization_id=ORG_A, agent_name="CMO-Agent", total_tokens=600, created_at=now - timedelta(hours=1))
+
+        burn = await repo.token_burn_since(organization_id=ORG_A, agent_name="cmo-agent", since=now - timedelta(days=7))
+
+    assert burn == 1500
+
+
+@pytest.mark.asyncio
+async def test_case_variant_context_agent_name_run_pauses_the_seat(org_world):  # noqa: F811
+    """The exact repro from the f97 review: a seat for cmo-agent (budget 1000)
+    plus a 1500-token run stamped CMO-Agent must pause -- before the fix,
+    token_burn_since returned 0 for this case even though
+    paused_seat_for_agent("CMO-Agent") already matched the seat."""
+    repo = AgentSeatRepository(org_world)
+    now = datetime.now(UTC)
+    with acting_as(USER_A, ORG_A):
+        seat = await repo.claim_seat(seat=CMO_SEAT, agent_name="cmo-agent", weekly_token_budget=1000, claimed_by_user_id=USER_A)
+        seat = await repo.patch_seat(seat["id"], status=AgentSeatStatus.RATIFIED, ratified_by_user_id=USER_A)
+        await _spend_via_context_agent_name(org_world, organization_id=ORG_A, agent_name="CMO-Agent", total_tokens=1500, created_at=now - timedelta(hours=1))
+
+        updated = await evaluate_seat_budget(repo, seat, now=now)
+
+    assert updated["paused_at"] is not None
