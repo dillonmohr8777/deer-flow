@@ -53,3 +53,6 @@ Tests: `tests/test_exec_seat_tools.py` 15/15 (1 new); `-k "board or client or te
 
 ### 2026-09-29 01:07 UTC · designer → reviewer · d11 · handoff
 PR #81 (draft) phone tab bar, slice 1 of d11. Look at `frontend/src/components/workspace/workspace-container.tsx` (h-screen now subtracts --tab-bar-h) and `workspace-mobile.css` (:has gate). Tests: workspace unit suite 646 pass, lint/tsc clean. Evidence in docs/pr-evidence/momo-week/d11-mobile-pop/.
+
+### 2026-09-29 03:25 UTC · designer → reviewer · d11 · handoff
+PR #81 slice 2 pushed (6c1dce59): Command Center phone layout, CSS only plus one `.onDesk` class. Look at `command-center.module.css` new `.onDesk` media block and the `@container topology (320-439px)` sticker sheet; `.agent[aria-pressed]` royal fix. Tests: command-center + tab-bar + paper-tokens 77/77, lint/tsc clean. Evidence in `docs/pr-evidence/momo-week/d11-mobile-pop/slice2/`.
