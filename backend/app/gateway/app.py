@@ -317,6 +317,95 @@ async def _shutdown_startup_trash_sweep(app: FastAPI) -> None:
         logger.exception("Startup trash sweep failed during shutdown")
 
 
+async def _run_seat_budget_sweep() -> None:
+    """One weekly-budget pause/resume pass over every organization's agent seats (queue item f95).
+
+    ``deerflow.exec_seats.budget.evaluate_seat_budget`` and its ``#exec``
+    announcement are organization-scoped (``AgentSeatRepository``'s ambient
+    ``resolve_organization_id()``, ``TeamBoardRepository``'s the same), so
+    each organization's seats are evaluated inside that organization's own
+    storage context -- otherwise the announcement would resolve no channel
+    (or the wrong one) and ``AgentSeatRepository.set_paused`` would refuse
+    every write as foreign.
+    """
+    from sqlalchemy import select
+
+    from deerflow.exec_seats.budget import evaluate_seat_budget
+    from deerflow.persistence.engine import get_session_factory
+    from deerflow.persistence.exec_seats import AgentSeatRepository
+    from deerflow.persistence.organizations.model import OrganizationMemberRow, OrganizationRow
+    from deerflow.runtime.user_context import WorkspaceStorageContext, reset_storage_context, set_storage_context
+    from deerflow.tools.exec_seat_tools import announce_to_exec
+
+    session_factory = get_session_factory()
+    if session_factory is None:
+        return
+    repo = AgentSeatRepository(session_factory)
+    seats_by_org: dict[str, list[dict]] = {}
+    for seat in await repo.list_seats():
+        seats_by_org.setdefault(seat["organization_id"], []).append(seat)
+
+    for organization_id, org_seats in seats_by_org.items():
+        async with session_factory() as session:
+            storage_user_id = await session.scalar(select(OrganizationRow.storage_user_id).where(OrganizationRow.id == organization_id))
+            owner_user_id = await session.scalar(
+                select(OrganizationMemberRow.user_id).where(
+                    OrganizationMemberRow.organization_id == organization_id,
+                    OrganizationMemberRow.role == "owner",
+                    OrganizationMemberRow.status == "active",
+                )
+            )
+        if owner_user_id is None:
+            # No active owner to attribute the sweep to (org mid-deletion,
+            # data oddity): still safe to skip -- pause/resume is not urgent
+            # enough to guess an identity for.
+            continue
+        token = set_storage_context(WorkspaceStorageContext(actor_user_id=owner_user_id, organization_id=organization_id, storage_user_id=storage_user_id or owner_user_id))
+        try:
+            for seat in org_seats:
+                await evaluate_seat_budget(repo, seat, announce=announce_to_exec)
+        finally:
+            reset_storage_context(token)
+
+
+async def _run_seat_budget_loop(interval_seconds: float) -> None:
+    """Recurring seat-budget sweep, cancelled cleanly on shutdown (queue item f95)."""
+    while True:
+        await asyncio.sleep(interval_seconds)
+        try:
+            await _run_seat_budget_sweep()
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("Seat budget sweep failed")
+
+
+def _start_seat_budget_loop(startup_config) -> asyncio.Task | None:
+    """Schedule the recurring sweep when configured; ``None`` otherwise.
+
+    Defensive against unconfigured ``startup_config`` test doubles (a bare
+    ``SimpleNamespace``/``MagicMock`` with no ``exec_seats`` attribute) the
+    same way the scheduler and trash-sweep gates already are: only a real
+    ``ExecSeatsConfig`` with ``budget_check_enabled=True`` starts the loop.
+    """
+    from deerflow.config.exec_seats_config import ExecSeatsConfig
+
+    exec_seats_config = getattr(startup_config, "exec_seats", None)
+    if not isinstance(exec_seats_config, ExecSeatsConfig) or not exec_seats_config.budget_check_enabled:
+        return None
+    return asyncio.create_task(_run_seat_budget_loop(exec_seats_config.budget_check_interval_seconds))
+
+
+async def _shutdown_seat_budget_loop(app: FastAPI) -> None:
+    """Cancel the recurring sweep task, if one was started."""
+    task = getattr(app.state, "seat_budget_loop_task", None)
+    if task is None or task.done():
+        return
+    task.cancel()
+    with suppress(asyncio.CancelledError):
+        await task
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan handler."""
@@ -440,6 +529,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         # in-flight sweep a bounded graceful budget before cancelling it; any
         # already-started file worker drains before the runtime is torn down.
         app.state.startup_trash_sweep_task = asyncio.create_task(_run_startup_trash_sweep(app, startup_config))
+
+        # Queue item f95: recurring weekly-budget pause/resume sweep for
+        # Momentum agent seats, off by default (config.exec_seats.budget_check_enabled).
+        app.state.seat_budget_loop_task = _start_seat_budget_loop(startup_config)
 
         try:
             from app.gateway.services import launch_scheduled_thread_run
@@ -574,6 +667,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         yield
 
         await _shutdown_startup_trash_sweep(app)
+        await _shutdown_seat_budget_loop(app)
 
         try:
             await auth.close_oidc_service()

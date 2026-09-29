@@ -24,6 +24,14 @@ from deerflow.persistence.run.model import RunRow
 from deerflow.runtime.user_context import AUTO, resolve_organization_id, resolve_user_id
 from deerflow.utils.time import coerce_iso
 
+# A run's ``assistant_id`` stays the default (``lead_agent``) when the caller
+# names an agent only through ``context.agent_name``/``configurable.agent_name``
+# (queue item f95's own left-open gap). ``app.gateway.services.start_run``
+# stamps this run-metadata key with that resolved effective identity on every
+# run, so ``token_burn_since`` below can count it toward the matching seat's
+# burn even when ``assistant_id`` itself never carries the agent's name.
+EFFECTIVE_AGENT_NAME_METADATA_KEY = "effective_agent_name"
+
 
 def _to_dict(row: AgentSeatRow) -> dict[str, Any]:
     d = row.to_dict()
@@ -145,6 +153,29 @@ class AgentSeatRepository:
             row = result.scalars().first()
             return _to_dict(row) if row is not None else None
 
+    async def paused_seat_for_agent(self, agent_name: str) -> dict | None:
+        """The currently paused claimed/ratified seat for *agent_name*, if any, in the active organization.
+
+        Matches case- and underscore/hyphen-insensitively against the seat's
+        own ``agent_name`` (queue item f95): a seat claimed under ``CMO_Agent``
+        must still block a run identifying itself as ``cmo-agent``, the
+        normalized form ``build_run_config`` already enforces for an explicit
+        ``assistant_id``.
+        """
+        organization_id = resolve_organization_id()
+        normalized = agent_name.strip().lower().replace("_", "-")
+        normalized_column = func.replace(func.lower(AgentSeatRow.agent_name), "_", "-")
+        stmt = self._scope(select(AgentSeatRow), organization_id).where(
+            normalized_column == normalized,
+            AgentSeatRow.paused_at.is_not(None),
+            AgentSeatRow.status.in_((AgentSeatStatus.CLAIMED, AgentSeatStatus.RATIFIED)),
+        )
+        stmt = stmt.order_by(AgentSeatRow.updated_at.desc()).limit(1)
+        async with self._sf() as session:
+            result = await session.execute(stmt)
+            row = result.scalars().first()
+            return _to_dict(row) if row is not None else None
+
     async def patch_seat(self, seat_id: str, *, status: str | None = None, ratified_by_user_id: str | None = None) -> dict | None:
         """Persist a status transition; ``None`` for a missing/foreign seat.
 
@@ -184,10 +215,31 @@ class AgentSeatRepository:
         """Total tokens every run stamped with *agent_name* has burned since *since*.
 
         Reads the same ``runs`` table (``RunRow``) the operations console's
-        usage ledger reads -- ``assistant_id`` is the run's custom-agent
-        identifier, the same value ``AgentSeatRow.agent_name`` stores.
+        usage ledger reads. ``RunRow.assistant_id`` is the raw, client-chosen
+        ``body.assistant_id`` -- not necessarily the agent that actually ran,
+        since an explicit ``configurable``/``context.agent_name`` overrides it
+        (queue item f95's own left-open gap). Each run's real identity is
+        ``metadata_json[EFFECTIVE_AGENT_NAME_METADATA_KEY]`` (the resolved
+        identity ``start_run`` stamps on every run) when present, falling back
+        to ``assistant_id`` only for older rows written before that stamp
+        existed. One identity per row, never both (f98 review of f97): an
+        ``or_`` across both columns let a single run with a diverging
+        ``assistant_id``/``agent_name`` double-count and misattribute burn to
+        two different seats.
+
+        Matched case- and underscore/hyphen-insensitively (f97 review), the
+        same normalization ``paused_seat_for_agent`` already applies: a raw
+        ``RunRow.assistant_id`` of ``CMO_Agent`` or a stamped identity of
+        ``CMO-Agent`` must count toward a seat claimed as ``cmo-agent``
+        exactly like the exact-cased form would.
         """
-        stmt = select(func.coalesce(func.sum(RunRow.total_tokens), 0)).where(RunRow.assistant_id == agent_name, RunRow.created_at >= since)
+        normalized = agent_name.strip().lower().replace("_", "-")
+        effective_identity = func.coalesce(RunRow.metadata_json[EFFECTIVE_AGENT_NAME_METADATA_KEY].as_string(), RunRow.assistant_id)
+        normalized_identity = func.replace(func.lower(effective_identity), "_", "-")
+        stmt = select(func.coalesce(func.sum(RunRow.total_tokens), 0)).where(
+            normalized_identity == normalized,
+            RunRow.created_at >= since,
+        )
         if organization_id is not None:
             stmt = stmt.where(RunRow.organization_id == organization_id)
         async with self._sf() as session:

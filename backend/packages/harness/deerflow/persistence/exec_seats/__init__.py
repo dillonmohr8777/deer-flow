@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from deerflow.persistence.exec_seats.model import AgentSeatRow, AgentSeatStatus
-from deerflow.persistence.exec_seats.sql import AgentSeatRepository
+from deerflow.persistence.exec_seats.sql import EFFECTIVE_AGENT_NAME_METADATA_KEY, AgentSeatRepository
 
 __all__ = [
+    "EFFECTIVE_AGENT_NAME_METADATA_KEY",
     "AgentSeatRepository",
     "AgentSeatRow",
     "AgentSeatStatus",

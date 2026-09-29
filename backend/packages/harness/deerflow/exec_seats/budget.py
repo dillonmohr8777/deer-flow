@@ -2,8 +2,12 @@
 
 Every ratified or claimed seat carries a ``weekly_token_budget``. This module
 sums the seat's holder's actual token burn over the trailing week from the
-usage ledger (the ``runs`` table, keyed by ``RunRow.assistant_id`` == the
-seat's ``agent_name``) and pauses the seat when it crosses that budget,
+usage ledger (the ``runs`` table, keyed by ``RunRow.assistant_id`` or, for a
+run that only ever named its agent through ``context.agent_name`` while
+``assistant_id`` stayed the default lead agent, the run-metadata identity
+``app.gateway.services.start_run`` stamps -- see
+``AgentSeatRepository.token_burn_since``) and pauses the seat when it crosses
+that budget,
 announcing the block to ``#exec`` the same way a claim/ratify/reopen already
 does (``deerflow.tools.exec_seat_tools``'s ``_announce``). A seat whose burn
 has fallen back under budget (a new week, or work slowing down) is resumed
@@ -63,3 +67,20 @@ async def evaluate_all_seat_budgets(repo: AgentSeatRepository, *, now: datetime 
     """Run :func:`evaluate_seat_budget` over every seat in the active organization."""
     now = now or datetime.now(UTC)
     return [await evaluate_seat_budget(repo, seat, now=now, announce=announce) for seat in await repo.list_seats()]
+
+
+async def paused_seat_blocking(agent_name: str) -> dict[str, Any] | None:
+    """The active organization's paused seat blocking *agent_name*, if any.
+
+    Session-factory-aware, mirroring ``deerflow.tools.exec_seat_tools._get_repo``:
+    returns ``None`` (never blocks) when persistence isn't configured, so a
+    bare-memory or test composition with no database never refuses a run.
+    Queue item f95 -- this is the enforcement half a budget pause previously
+    had none of.
+    """
+    from deerflow.persistence.engine import get_session_factory
+
+    session_factory = get_session_factory()
+    if session_factory is None:
+        return None
+    return await AgentSeatRepository(session_factory).paused_seat_for_agent(agent_name)

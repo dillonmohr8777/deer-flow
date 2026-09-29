@@ -18,6 +18,7 @@ from deerflow.config.channel_connections_config import ChannelConnectionsConfig
 from deerflow.config.checkpointer_config import CheckpointerConfig, load_checkpointer_config_from_dict
 from deerflow.config.database_config import DatabaseConfig
 from deerflow.config.dedupe_storage_config import DedupeStorageConfig
+from deerflow.config.exec_seats_config import ExecSeatsConfig
 from deerflow.config.extensions_config import ExtensionsConfig
 from deerflow.config.file_signature import ConfigSignature as _ConfigSignature
 from deerflow.config.file_signature import get_config_signature as _get_config_signature
@@ -320,6 +321,10 @@ class AppConfig(BaseModel):
             "agent_storage",
             field_doc="Custom-agent and managed-subagent definition storage backend ('file' for on-disk layouts, 'db' to share definitions across nodes via SQL).",
         ),
+    )
+    exec_seats: ExecSeatsConfig = Field(
+        default_factory=ExecSeatsConfig,
+        description="Background weekly token-budget enforcement for Momentum agent seats (queue item f95)",
     )
     scheduler: SchedulerConfig = Field(
         default_factory=SchedulerConfig,
