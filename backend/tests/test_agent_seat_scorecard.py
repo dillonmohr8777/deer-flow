@@ -114,18 +114,67 @@ async def test_second_consecutive_miss_reopens_the_seat(org_world):  # noqa: F81
 @pytest.mark.asyncio
 async def test_a_success_after_one_miss_resets_the_counter_instead_of_reopening(org_world):  # noqa: F811
     repo = AgentSeatRepository(org_world)
+    team_repo = TeamBoardRepository(org_world)
     now = datetime.now(UTC)
     with acting_as(USER_A, ORG_A):
+        await team_repo.ensure_default_channels(created_by_user_id=USER_A)
         seat = await repo.claim_seat(seat=CMO_SEAT, agent_name="cmo-agent", weekly_token_budget=1000, claimed_by_user_id=USER_A)
         seat = await repo.patch_seat(seat["id"], status=AgentSeatStatus.RATIFIED, ratified_by_user_id=USER_A)
 
         seat = await evaluate_seat_scorecard(repo, seat, now=now - timedelta(days=8), generate=_fail)
         assert seat["missed_scorecards"] == 1
 
-        recovered = await evaluate_seat_scorecard(repo, seat, now=now, generate=_succeed)
+        recovered = await evaluate_seat_scorecard(repo, seat, now=now, announce=announce_to_exec, generate=_succeed)
 
     assert recovered["missed_scorecards"] == 0
     assert recovered["status"] == AgentSeatStatus.RATIFIED
+
+
+@pytest.mark.asyncio
+async def test_a_successful_draft_with_no_exec_channel_to_post_to_counts_as_a_miss(org_world):  # noqa: F811
+    """Review finding (medium): recording success before confirming the post landed let a
+    misconfigured org (no #exec channel) silently reset the miss counter on every sweep even
+    though nothing was ever posted -- such a seat could never be reopened. A good draft that
+    never reaches #exec must count exactly like a failed one."""
+    repo = AgentSeatRepository(org_world)
+    now = datetime.now(UTC)
+    with acting_as(USER_A, ORG_A):
+        # Deliberately no team_repo.ensure_default_channels() -- no #exec exists in this org.
+        seat = await repo.claim_seat(seat=CMO_SEAT, agent_name="cmo-agent", weekly_token_budget=1000, claimed_by_user_id=USER_A)
+        seat = await repo.patch_seat(seat["id"], status=AgentSeatStatus.RATIFIED, ratified_by_user_id=USER_A)
+
+        updated = await evaluate_seat_scorecard(repo, seat, now=now, announce=announce_to_exec, generate=_succeed)
+
+    assert updated["missed_scorecards"] == 1
+    assert updated["status"] == AgentSeatStatus.RATIFIED
+
+
+@pytest.mark.asyncio
+async def test_a_failed_check_still_advances_last_scorecard_at(org_world):  # noqa: F811
+    """Review finding (medium, test gap): a miss must still mark this week as checked, or two
+    sweeps an hour apart (not two separate missed weeks) could reopen a seat. Mutation this
+    guards: record_scorecard_result advancing last_scorecard_at only on success."""
+    repo = AgentSeatRepository(org_world)
+    now = datetime.now(UTC)
+    calls: list[dict] = []
+
+    async def _tracked_fail(seat: dict) -> str | None:
+        calls.append(seat)
+        return None
+
+    with acting_as(USER_A, ORG_A):
+        seat = await repo.claim_seat(seat=CMO_SEAT, agent_name="cmo-agent", weekly_token_budget=1000, claimed_by_user_id=USER_A)
+        seat = await repo.patch_seat(seat["id"], status=AgentSeatStatus.RATIFIED, ratified_by_user_id=USER_A)
+
+        seat = await evaluate_seat_scorecard(repo, seat, now=now, generate=_tracked_fail)
+        assert seat["missed_scorecards"] == 1
+        assert len(calls) == 1
+
+        # One hour later: still the same trailing week, so this must not re-evaluate at all.
+        untouched = await evaluate_seat_scorecard(repo, seat, now=now + timedelta(hours=1), generate=_tracked_fail)
+
+    assert untouched["missed_scorecards"] == 1
+    assert len(calls) == 1
 
 
 @pytest.mark.asyncio
@@ -179,14 +228,16 @@ async def test_only_ratified_seats_are_evaluated(org_world):  # noqa: F811
 @pytest.mark.asyncio
 async def test_evaluate_all_seat_scorecards_covers_every_ratified_seat(org_world):  # noqa: F811
     repo = AgentSeatRepository(org_world)
+    team_repo = TeamBoardRepository(org_world)
     now = datetime.now(UTC)
     with acting_as(USER_A, ORG_A):
+        await team_repo.ensure_default_channels(created_by_user_id=USER_A)
         cmo = await repo.claim_seat(seat=CMO_SEAT, agent_name="cmo-agent", weekly_token_budget=1000, claimed_by_user_id=USER_A)
         cmo = await repo.patch_seat(cmo["id"], status=AgentSeatStatus.RATIFIED, ratified_by_user_id=USER_A)
         cto = await repo.claim_seat(seat="CTO", agent_name="cto-agent", weekly_token_budget=1000, claimed_by_user_id=USER_A)
         cto = await repo.patch_seat(cto["id"], status=AgentSeatStatus.RATIFIED, ratified_by_user_id=USER_A)
 
-        results = await evaluate_all_seat_scorecards(repo, now=now, generate=_succeed)
+        results = await evaluate_all_seat_scorecards(repo, now=now, announce=announce_to_exec, generate=_succeed)
 
     by_seat = {r["seat"]: r for r in results}
     assert by_seat["CMO"]["missed_scorecards"] == 0
