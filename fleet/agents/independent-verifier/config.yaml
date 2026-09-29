@@ -9,6 +9,7 @@ tool_groups:
   - file:read
   - bash
   - team
+  - exec
 skills: []
 allowed_subagents: []
 thinking_enabled: true

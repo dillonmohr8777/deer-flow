@@ -225,6 +225,22 @@ async def test_channel_allowlist_refuses_general_even_though_it_exists(org_world
     assert "error" not in fleet_post
 
 
+@pytest.mark.asyncio
+async def test_exec_channel_is_reachable_and_is_a_default_channel(org_world):  # noqa: F811
+    """Queue item e9: #exec carries titles/claims/ratifications and, unlike
+    #fleet, is provisioned for every workspace by ``ensure_default_channels``
+    rather than created by hand."""
+    repo = TeamBoardRepository(org_world)
+    with acting_as(USER_A, ORG_S):
+        default_channels = await repo.ensure_default_channels(created_by_user_id=USER_A)
+        assert any(c["slug"] == "exec" for c in default_channels)
+
+        exec_post = await _team_post_message_impl("exec", "claiming CMO", runtime=_runtime("cmo-agent"))
+        exec_read = await _team_read_messages_impl("exec", runtime=_runtime(None))
+    assert "error" not in exec_post
+    assert exec_read["messages"][-1]["body"] == "[cmo-agent] claiming CMO"
+
+
 # --- f77: `since` filtering -------------------------------------------------
 
 
