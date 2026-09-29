@@ -19,10 +19,12 @@ from deerflow.config.checkpointer_config import CheckpointerConfig, load_checkpo
 from deerflow.config.database_config import DatabaseConfig
 from deerflow.config.dedupe_storage_config import DedupeStorageConfig
 from deerflow.config.entitlement_config import EntitlementConfig, load_entitlement_config_from_dict
+from deerflow.config.exec_seats_config import ExecSeatsConfig
 from deerflow.config.extensions_config import ExtensionsConfig
 from deerflow.config.file_signature import ConfigSignature as _ConfigSignature
 from deerflow.config.file_signature import get_config_signature as _get_config_signature
 from deerflow.config.guardrails_config import GuardrailsConfig, load_guardrails_config_from_dict
+from deerflow.config.hiring_config import HiringConfig
 from deerflow.config.input_polish_config import InputPolishConfig
 from deerflow.config.knowledge_base_config import KnowledgeBaseConfig
 from deerflow.config.loop_detection_config import LoopDetectionConfig
@@ -322,6 +324,14 @@ class AppConfig(BaseModel):
             "agent_storage",
             field_doc="Custom-agent and managed-subagent definition storage backend ('file' for on-disk layouts, 'db' to share definitions across nodes via SQL).",
         ),
+    )
+    exec_seats: ExecSeatsConfig = Field(
+        default_factory=ExecSeatsConfig,
+        description="Background weekly token-budget enforcement for Momentum agent seats (queue item f95)",
+    )
+    hiring: HiringConfig = Field(
+        default_factory=HiringConfig,
+        description="Owner-set headcount and org-depth caps for EXECUTIVE.md's autonomous hiring (queue item e12)",
     )
     scheduler: SchedulerConfig = Field(
         default_factory=SchedulerConfig,

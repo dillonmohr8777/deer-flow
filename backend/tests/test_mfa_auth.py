@@ -419,3 +419,66 @@ def test_a_replayed_mfa_challenge_is_not_a_session(client, mfa_env):
 
     client.cookies.set("access_token", challenge)
     assert client.get("/api/v1/auth/me").status_code == 401
+
+
+# ── Public-exposure hardening (f75, f19) ───────────────────────────────────
+
+
+def test_sso_account_cannot_enroll_decorative_mfa(client, mfa_env):
+    """f75: the OIDC callback never runs an MFA step, and ``/mfa/disable``
+    refuses OAuth accounts, so an SSO account's TOTP would protect nothing and
+    could never be turned off. Enrollment is refused up front instead."""
+    sso_user = asyncio.run(mfa_env.local_provider.create_oauth_user(email="sso@example.com", oauth_provider="google", oauth_id="google-sub-1"))
+    _session_cookie(client, str(sso_user.id))
+    start = client.post("/api/v1/auth/mfa/enroll/start", headers=_csrf_headers(client))
+    assert start.status_code == 400, start.text
+    assert asyncio.run(mfa_env.mfa_repo.get(str(sso_user.id))) is None
+
+    # A pending secret left over from before this fix cannot be confirmed either.
+    from app.gateway.auth.mfa_crypto import encrypt_totp_secret
+    from app.gateway.auth.totp import generate_totp_secret
+
+    secret = generate_totp_secret()
+    asyncio.run(mfa_env.mfa_repo.start_enrollment(str(sso_user.id), encrypt_totp_secret(secret)))
+    _session_cookie(client, str(sso_user.id))
+    confirm = client.post("/api/v1/auth/mfa/enroll/confirm", json={"code": totp_code(secret)}, headers=_csrf_headers(client))
+    assert confirm.status_code == 400, confirm.text
+    row = asyncio.run(mfa_env.mfa_repo.get(str(sso_user.id)))
+    assert row is None or row["enabled_at"] is None
+
+
+def test_email_change_after_setup_is_refused(client, mfa_env):
+    """f19: without verification, a post-setup email change would let a
+    member squat an invitee's address and block that person's Google
+    sign-in (409). Email is settable only during first-time setup."""
+    _session_cookie(client, str(mfa_env.user.id))
+    response = client.post(
+        "/api/v1/auth/change-password",
+        json={"current_password": TEST_PASSWORD, "new_password": "another horse battery staple", "new_email": "invitee@example.com"},
+        headers=_csrf_headers(client),
+    )
+    assert response.status_code == 400, response.text
+    unchanged = asyncio.run(mfa_env.local_provider.get_user(str(mfa_env.user.id)))
+    assert unchanged.email == "alice@example.com"
+    # A plain password change (no new email) still works.
+    _session_cookie(client, str(mfa_env.user.id))
+    ok = client.post(
+        "/api/v1/auth/change-password",
+        json={"current_password": TEST_PASSWORD, "new_password": "another horse battery staple"},
+        headers=_csrf_headers(client),
+    )
+    assert ok.status_code == 200, ok.text
+
+
+def test_email_change_during_first_time_setup_still_works(client, mfa_env):
+    setup_user = asyncio.run(mfa_env.local_provider.create_user(email="admin@example.com", password=TEST_PASSWORD, system_role="admin", needs_setup=True))
+    _session_cookie(client, str(setup_user.id))
+    response = client.post(
+        "/api/v1/auth/change-password",
+        json={"current_password": TEST_PASSWORD, "new_password": "another horse battery staple", "new_email": "owner@example.com"},
+        headers=_csrf_headers(client),
+    )
+    assert response.status_code == 200, response.text
+    updated = asyncio.run(mfa_env.local_provider.get_user(str(setup_user.id)))
+    assert updated.email == "owner@example.com"
+    assert updated.needs_setup is False

@@ -34,6 +34,7 @@ from app.gateway.internal_auth import (
     get_trusted_internal_owner_user_id,
 )
 from app.gateway.knowledge_scope_admission import admit_message_knowledge_scope
+from app.gateway.momentum_internal import is_momentum_staff
 from app.gateway.run_models import RunCreateRequest
 from app.gateway.utils import sanitize_log_param
 from app.mcp_tasks.errors import PermanentNotificationError
@@ -589,12 +590,17 @@ _CONTEXT_INTERNAL_CALLER_KEYS: frozenset[str] = frozenset({"interaction_mode", "
 #   ``channel_user_id``         — accepted only from trusted internal context.
 #   ``langgraph_auth_user*``    — populated only by LangGraph Server auth.
 #   ``sandbox_*_id``           — created only inside the run/subagent lifecycle.
+#   ``momentum_staff``          — the same ``is_momentum_staff`` router check,
+#                                 run once at run start and stamped here; see
+#                                 ``inject_authenticated_user_context``. Team
+#                                 board tools trust only this flag.
 _SERVER_OWNED_RUNTIME_CONTEXT_KEYS: frozenset[str] = (
     frozenset(
         {
             "is_internal",
             "authz_attributes",
             "channel_user_id",
+            "momentum_staff",
             "is_subagent",
             "agent_id",
             "__run_loop_detection_recorder",
@@ -736,6 +742,7 @@ def inject_authenticated_user_context(
     *,
     internal_owner_user: Any | None = None,
     request_context: Mapping[str, Any] | None = None,
+    momentum_staff: bool = False,
 ) -> None:
     """Stamp the authenticated user into the run context for background tools.
 
@@ -746,6 +753,14 @@ def inject_authenticated_user_context(
     ``request_context.channel_user_id`` is the sole exception: it is honored
     only after ``request.state.auth_source`` proves the caller is internal.
     Values copied through the free-form RunnableConfig are always cleared.
+
+    ``momentum_staff`` is likewise server-owned: the caller (``start_run``)
+    runs the same ``is_momentum_staff`` check the ``/api/team`` router uses
+    and passes the result in here explicitly, rather than this function
+    resolving it itself, so it stays a plain sync stamp like every other
+    field below. It is always written — before any early return, like
+    ``is_internal`` — so a client-supplied value (cleared above with the rest
+    of ``_SERVER_OWNED_RUNTIME_CONTEXT_KEYS``) never survives.
     """
 
     # --- Server-owned authorization and sandbox lifecycle identity fields ---
@@ -775,6 +790,7 @@ def inject_authenticated_user_context(
         if isinstance(configurable, dict):
             configurable.pop("user_id", None)
     runtime_context["is_internal"] = auth_source == AUTH_SOURCE_INTERNAL
+    runtime_context["momentum_staff"] = bool(momentum_staff)
     if auth_source == AUTH_SOURCE_INTERNAL and request_context is not None:
         channel_user_id = request_context.get("channel_user_id")
         if channel_user_id is not None:
@@ -837,6 +853,24 @@ def inject_authenticated_user_context(
     # the in-process run configuration.
     runtime_context[AUTHENTICATED_CONTEXT_MARKER_KEY] = AUTHENTICATED_CONTEXT_MARKER
     return
+
+
+async def _refuse_if_agent_seat_paused(agent_name: str) -> None:
+    """Refuse to start a run for an agent whose Momentum seat is paused (queue item f95).
+
+    ``deerflow.exec_seats.budget`` pauses a seat that has exceeded its weekly
+    token budget (queue item e10), but until this check nothing ever stopped
+    that agent's runs -- a pause had no enforcement. Best-effort: persistence
+    unavailable (bare-memory composition, most tests) never blocks a run.
+    """
+    from deerflow.exec_seats.budget import paused_seat_blocking
+
+    seat = await paused_seat_blocking(agent_name)
+    if seat is not None:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Seat {seat['seat']!r} ({agent_name}) is paused: over its weekly token budget.",
+        )
 
 
 def resolve_agent_factory(assistant_id: str | None):
@@ -1664,6 +1698,45 @@ async def _load_scope_agent_config(
         ) from exc
 
 
+async def _require_run_agent_visible(
+    *,
+    agent_name: str | None,
+    agent_config: Any | None,
+    is_bootstrap: bool,
+    content_user_id: str | None,
+    actor_user_id: str | None,
+) -> None:
+    """Refuse a session/PAT run on a client-stamped agent the actor may not see (f85).
+
+    Same rule as ``get_agent``/``update_agent``/``delete_agent``: an agent
+    with a ``client_id`` is visible to an org owner/admin, or to a member
+    assigned to that client. A foreign agent answers exactly like a missing
+    one (``_load_scope_agent_config``'s 422), so a run can't probe which
+    agent names exist. A bootstrap run skips the normal config load, but
+    ``setup_agent`` would upsert the named agent -- overwriting a foreign
+    agent's SOUL -- so an existing agent is peeked at and checked too.
+    """
+    if not agent_name or agent_name == _DEFAULT_ASSISTANT_ID:
+        return
+    if agent_config is None and is_bootstrap:
+        try:
+            agent_config = await _load_scope_agent_config(assistant_id=agent_name, user_id=content_user_id)
+        except HTTPException:
+            return  # Nothing exists yet: bootstrap creates a fresh agent.
+    client_id = getattr(agent_config, "client_id", None)
+    if client_id is None:
+        return
+    # Lazy import: the agents router imports this module.
+    from app.gateway.routers.agents import _visible_client_ids
+
+    visible_client_ids = await _visible_client_ids(actor_user_id)
+    if visible_client_ids is not None and client_id not in visible_client_ids:
+        raise HTTPException(
+            status_code=422,
+            detail="knowledge_scope assistant configuration could not be resolved",
+        )
+
+
 async def _validate_scope_thread_binding(
     run_ctx: RunContext,
     *,
@@ -1856,7 +1929,42 @@ async def start_run(
         scope_runtime_config = dict(config.get("configurable") or {})
         if isinstance(config.get("context"), dict):
             scope_runtime_config.update(config["context"])
-        scope_assistant_id = scope_runtime_config.get("agent_name") or _DEFAULT_ASSISTANT_ID
+        raw_scope_agent_name = scope_runtime_config.get("agent_name")
+        if raw_scope_agent_name is not None and not isinstance(raw_scope_agent_name, str):
+            # ``configurable``/``context`` are untyped dicts, so a client can send
+            # any JSON scalar (e.g. ``42``) as ``agent_name``. It can never name a
+            # real agent, so refuse the same way ``_load_scope_agent_config``
+            # (f102(d)/#90) treats a missing one -- before the pause gate and the
+            # burn-accounting metadata stamp below ever call ``.strip()`` on it
+            # and crash with an unhandled 500 (review of f98, #90's fix runs too
+            # late to cover this earlier code path). Checked against the raw
+            # value, before the ``or _DEFAULT_ASSISTANT_ID`` fallback below: a
+            # *falsy* non-string (``0``, ``False``, ``[]``) would otherwise slip
+            # through as the default agent and surface as a worker-side
+            # ``ValueError`` instead of this clean 422 (f116 review).
+            raise HTTPException(status_code=422, detail="knowledge_scope assistant configuration could not be resolved")
+        scope_assistant_id = raw_scope_agent_name or _DEFAULT_ASSISTANT_ID
+        if scope_assistant_id != _DEFAULT_ASSISTANT_ID:
+            await _refuse_if_agent_seat_paused(scope_assistant_id)
+            # Server-resolved, like deerflow_trace_id above: an agent seat's weekly
+            # burn (queue item f95) must be counted from the run's real effective
+            # agent, not a caller-forged claim of one. Normalized the same way
+            # AgentSeatRepository.paused_seat_for_agent already matches a seat's
+            # own agent_name (case/underscore-hyphen insensitive, f97 review) --
+            # an un-normalized context.agent_name (e.g. "CMO-Agent") would
+            # otherwise never match a seat claimed as "cmo-agent" in the ledger.
+            # Only custom agents can hold a seat, so default-agent runs are not
+            # stamped: burn accounting falls back to the run's assistant_id, and
+            # ordinary run metadata stays exactly what the caller sent.
+            from deerflow.persistence.exec_seats import EFFECTIVE_AGENT_NAME_METADATA_KEY
+
+            run_metadata[EFFECTIVE_AGENT_NAME_METADATA_KEY] = scope_assistant_id.strip().lower().replace("_", "-")
+        else:
+            # Default-agent runs hold no seat: drop any caller-forged value
+            # instead of stamping "lead-agent" into ordinary run metadata.
+            from deerflow.persistence.exec_seats import EFFECTIVE_AGENT_NAME_METADATA_KEY
+
+            run_metadata.pop(EFFECTIVE_AGENT_NAME_METADATA_KEY, None)
         # Bootstrap assembly intentionally does not load an agent config: the
         # new agent may not exist yet and setup_agent creates its definition.
         agent_config = (
@@ -1867,6 +1975,16 @@ async def start_run(
             if not scope_runtime_config.get("is_bootstrap")
             else None
         )
+        # Internal launchers (scheduler, channels, MCP notifications) act
+        # through an organization delegation, not a person's client scope.
+        if user is not None and not is_internal_caller:
+            await _require_run_agent_visible(
+                agent_name=scope_assistant_id,
+                agent_config=agent_config,
+                is_bootstrap=bool(scope_runtime_config.get("is_bootstrap")),
+                content_user_id=content_user_id,
+                actor_user_id=actor_user_id,
+            )
         # Keep the pre-default identity even when the agent is initially
         # unbound: adding a default must not reject an already-accepted retry.
         # The durable input still exposes the original accepted scope.
@@ -1891,11 +2009,16 @@ async def start_run(
 
         # Attribution names the delegation owner (a person), never the storage principal.
         internal_owner_user = await resolve_trusted_internal_owner_for_attribution(request, actor_user_id if owner_user_id else None)
+        # Same check the ``/api/team`` router runs, computed once here so the
+        # team-board tools never have to (and never get to) decide staff-ness
+        # themselves — see ``momentum_staff`` on ``_SERVER_OWNED_RUNTIME_CONTEXT_KEYS``.
+        momentum_staff = await is_momentum_staff(request, get_app_config())
         inject_authenticated_user_context(
             config,
             request,
             internal_owner_user=internal_owner_user,
             request_context=getattr(body, "context", None),
+            momentum_staff=momentum_staff,
         )
 
         conversation_references = list(getattr(body, "conversation_references", None) or [])

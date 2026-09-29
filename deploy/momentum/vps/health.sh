@@ -22,21 +22,28 @@ if docker info >/dev/null 2>&1; then
 fi
 [[ -n "$DOMAIN" ]] && public="$(probe "https://$DOMAIN/health")"
 
+# The newest receipt must be fresh AND say PASS: offsite_backup.py writes a
+# receipt even when its restore check fails (f25).
 newest="$(ls -1t "$BACKUP_DIR"/*.receipt.json 2>/dev/null | head -1 || true)"
+backup_pass=false
 if [[ -n "$newest" ]]; then
-  backup_age=$(( ( $(date +%s) - $(stat -c %Y "$newest") ) / 3600 ))
+  # GNU stat (Linux) first, BSD stat (the Mac) second.
+  mtime="$(stat -c %Y "$newest" 2>/dev/null || stat -f %m "$newest" 2>/dev/null || echo "")"
+  [[ -n "$mtime" ]] && backup_age=$(( ( $(date +%s) - mtime ) / 3600 ))
+  grep -Eq '"state"[[:space:]]*:[[:space:]]*"PASS"' "$newest" && backup_pass=true
 fi
 
 ok=false
 if $docker_ok && [[ "$main" == 200 && "$ready" == 200 ]] \
   && { [[ -z "$DOMAIN" ]] || [[ "$public" == 200 ]]; } \
-  && [[ "$backup_age" != null ]] && (( backup_age <= MAX_BACKUP_AGE_HOURS )); then
+  && [[ "$backup_age" != null ]] && (( backup_age <= MAX_BACKUP_AGE_HOURS )) && $backup_pass; then
   ok=true
 fi
 
 # HTTP codes are strings: a failed probe is "000", and a bare 000 isn't valid JSON.
-line="$(printf '{"at":"%s","docker":%s,"main":"%s","ready":"%s","public":"%s","backupAgeHours":%s,"ok":%s}' \
-  "$(date -Is)" "$docker_ok" "$main" "$ready" "$public" "$backup_age" "$ok")"
+# UTC ISO-8601 that both GNU and BSD date print (BSD date has no -Is).
+line="$(printf '{"at":"%s","docker":%s,"main":"%s","ready":"%s","public":"%s","backupAgeHours":%s,"backupPass":%s,"ok":%s}' \
+  "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$docker_ok" "$main" "$ready" "$public" "$backup_age" "$backup_pass" "$ok")"
 mkdir -p "$(dirname "$LOG")"
 echo "$line" >> "$LOG"
 echo "$line"

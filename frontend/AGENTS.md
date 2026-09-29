@@ -275,10 +275,15 @@ shared-MCP administrator checks remain authoritative; this adds no personal scop
 sidebar gains a Desk link; with it off, the route replaces itself with Command
 Center before rendering anything Desk-shaped. Desk only reads existing APIs
 (scheduled tasks, clients and their fleet bindings, fleet templates, console
-usage); department grouping and schedule matching live in
-`components/workspace/desk/desk-data.ts`. There is no approval queue API yet, so
-the Approvals panel says "Not wired". `tests/e2e/desk.spec.ts` proves both flag
-states and the fresh-instance empty states.
+usage, and the Momo Board's `GET /api/board/threads?status=drafted`);
+department grouping and schedule matching live in
+`components/workspace/desk/desk-data.ts`. The Approvals panel and the sidebar's
+Board badge both read that same drafted-threads query (e4): a count of threads
+waiting on the owner, plus an "After hours" flag when an `urgent`-triage thread
+is waiting outside 8am-8pm ET (`isAfterHoursET`/`hasUrgentAfterHoursApproval` in
+`desk-data.ts`). No external send is triggered by either alert.
+`tests/e2e/desk.spec.ts` proves both flag states, the fresh-instance empty
+states, and the approvals count/badge wiring.
 
 ## Team and AI Academy (Momentum staff only)
 
@@ -295,6 +300,27 @@ APIs; `components/workspace/team/team-data.ts` and `core/academy/progress.ts`
 hold the pure logic. The channel view is keyed by channel id so a draft never
 follows you into another channel. `tests/e2e/team-academy.spec.ts` covers both
 flag states and checks for horizontal overflow at 390/768/1440.
+
+## Invite teammate (Settings > Invite teammate)
+
+Owners and admins of a shared workspace mint invites from Settings instead of
+calling the API. `components/workspace/settings/invite-settings-page.tsx` posts
+`{organization_id, email, role}` (`member`, `admin` or `client`) to
+`POST /api/v1/auth/invitations` through `core/invitations/api.ts`, using the
+shared `fetch` wrapper so the CSRF header is added. The workspace list comes
+from `GET /api/workspaces`, which returns shared workspaces only; the form
+offers the ones where the caller is `owner`/`admin`, defaulting to the active
+workspace, and shows a plain "only owners and admins" message otherwise. The
+Gateway stays the authority, so a 403 is still handled. The 201 response carries
+the one-time `token`, shown once as `${origin}/invite#token=...` with a copy
+button. The token lives only in component state: it is never put in the URL
+query, `localStorage`, `sessionStorage`, logs or analytics, and it is dropped on
+"Invite another person" or when the dialog closes. Failures map to fixed
+messages (`classifyInviteFailure`): the frozen 403, other 403, 409, 422, 503 and
+network. Listing and revoking invites are not in the UI yet.
+`tests/unit/core/invitations/api.test.ts` and
+`tests/unit/components/workspace/settings/invite-settings-page.dom.test.tsx`
+cover it.
 
 <!-- BEGIN:nextjs-agent-rules -->
 

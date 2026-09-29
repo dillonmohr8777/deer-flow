@@ -27,8 +27,15 @@ class BoardOwnerRequiredError(BoardTransitionError):
     """A transition that requires an org owner/admin actor was attempted by someone else."""
 
 
-def assert_can_draft(current_status: str) -> None:
-    """Momo may draft a reply from ``new`` or ``triaged`` only."""
+def assert_can_draft(current_status: str, *, actor_is_owner: bool) -> None:
+    """Momo drafts from ``new`` or ``triaged`` only, and only for an org owner/admin actor.
+
+    There is no separate internal "Momo" service caller yet -- drafting rides
+    the same HTTP endpoint any org member could otherwise reach, so it is
+    gated the same way ``approve``/``reply`` are until one exists.
+    """
+    if not actor_is_owner:
+        raise BoardOwnerRequiredError("Only an organization owner/admin may draft a reply")
     if current_status not in _DRAFT_FROM:
         raise BoardTransitionError(f"Cannot draft a reply from status {current_status!r}")
 

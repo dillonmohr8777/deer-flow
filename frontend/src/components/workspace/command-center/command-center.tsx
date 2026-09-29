@@ -42,7 +42,6 @@ import { useModels } from "@/core/models/hooks";
 import { useSubagents } from "@/core/subagents";
 import { pathOfThread } from "@/core/threads/utils";
 import { formatCompactStamp } from "@/core/utils/datetime";
-import { useIsMobile } from "@/hooks/use-mobile";
 
 import { AgentTopology } from "./agent-topology";
 import { useWorkspaceAppearance } from "./appearance-provider";
@@ -51,6 +50,7 @@ import {
   ClientSpacesView,
   WorkflowsView,
 } from "./business-views";
+import { DispatchBoard } from "./dispatch-board";
 import { modelDisplayName } from "./model-label";
 import { MomentumGlyph } from "./momentum-glyph";
 import {
@@ -168,7 +168,6 @@ function Status({ status }: { status: string }) {
 export function CommandCenter() {
   const { user } = useAuth();
   const { preferences } = useWorkspaceAppearance();
-  const isMobile = useIsMobile();
   const [appearanceOpen, setAppearanceOpen] = useState(false);
   const appearanceTrigger = useRef<HTMLButtonElement>(null);
   const canReadRuns = Boolean(user) && hasPermission(user, "runs:read");
@@ -255,23 +254,46 @@ export function CommandCenter() {
     (agent) => agent.source === "managed",
   );
   const roster = displayedAgents.length ? displayedAgents : subagents;
-  const activeAgentNames =
+  // Running and queued are different states on the board, so the team
+  // keeps them apart too: only a running run pins its agent. An agent with
+  // a running run and a queued one is running.
+  const agentsWith = (status: string) =>
     activityRuns.data?.runs
-      .filter((run) => active(run.status))
+      .filter((run) => run.status === status)
       .map((run) => run.assistant_id)
       .filter((name): name is string => Boolean(name)) ?? null;
-  // Same guard as AgentTopology's leadActive: an unknown live state must
-  // never read as the lead working.
+  const runningAgentNames = agentsWith("running");
+  const queuedAgentNames =
+    agentsWith("pending")?.filter(
+      (name) => !(runningAgentNames ?? []).includes(name),
+    ) ?? null;
+  // Same guard as AgentTopology's lead state: an unknown live state must
+  // never read as the lead working, and neither must a queued run.
   const heroBrainActive =
     canReadRuns &&
     activityRuns.isSuccess &&
-    (activeAgentNames ?? []).includes("dillon-brain");
+    (runningAgentNames ?? []).includes("dillon-brain");
 
   function openRun(run: ConsoleRunItem) {
     receiptTrigger.current = document.activeElement as HTMLElement | null;
     setSelectedRunId(run.run_id);
     setCancelConfirm(false);
     cancel.reset();
+  }
+
+  /** A person-readable agent name for a run: never a raw id (DESIGN.md, Copy). */
+  function agentLabel(assistantId: string | null) {
+    if (!assistantId) return "Agent not recorded";
+    if (assistantId === "lead" || assistantId === "lead_agent") {
+      return lead?.display_name ?? "Default agent";
+    }
+    const known = subagents.find((agent) => agent.name === assistantId);
+    if (known?.display_name) return known.display_name;
+    return assistantId
+      .split(/[-_]/)
+      .filter(Boolean)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(" ");
   }
 
   function runPath(run: ConsoleRunItem) {
@@ -406,9 +428,7 @@ export function CommandCenter() {
                       {modelName(run.model_name) || "Model not recorded"}
                     </span>{" "}
                     <span aria-hidden="true">·</span>{" "}
-                    <span className={styles.metaTokens}>
-                      {runTokens(run)}
-                    </span>
+                    <span className={styles.metaTokens}>{runTokens(run)}</span>
                   </small>
                 </span>
                 <Status status={run.status} />
@@ -463,7 +483,8 @@ export function CommandCenter() {
         loading={agentsLoading}
         error={Boolean(agentsError)}
         runtimeKnown={canReadRuns && activityRuns.isSuccess}
-        activeAgentNames={activeAgentNames}
+        runningAgentNames={runningAgentNames}
+        queuedAgentNames={queuedAgentNames}
         onSelect={setSelectedAgentName}
       />
       {selectedAgent ? (
@@ -700,13 +721,28 @@ export function CommandCenter() {
         )}
         {view === "Mission Control" ? (
           <>
-            {/* Phones lead with the work (DESIGN.md, Layout). The DOM order
-                changes with it, not CSS `order`, so the keyboard still walks
-                the page in the order it reads. */}
-            <div className={styles.overview}>
-              {isMobile ? jobList : team}
-              {isMobile ? team : jobList}
-            </div>
+            {/* The work leads at every width (DESIGN.md, Layout): the
+                dispatch board comes first in the DOM, then the team, so the
+                keyboard walks the page in the order it reads. */}
+            {canReadRuns ? (
+              <DispatchBoard
+                runs={activityRuns.data?.runs}
+                loading={activityRuns.isLoading}
+                error={activityRuns.isError ? activityRuns.error.message : null}
+                onRetry={() => void activityRuns.refetch()}
+                onOpen={openRun}
+                selectedRunId={selectedRunId}
+                agentLabel={agentLabel}
+                startPath={startPath}
+                onShowAll={() => setView("Jobs")}
+                hasMore={Boolean(activityRuns.data?.has_more)}
+                panelClassName={styles.jobs}
+                headClassName={styles.sectionHead}
+              />
+            ) : (
+              jobList
+            )}
+            <div className={styles.missionTeam}>{team}</div>
             <nav className={styles.destinations} aria-label="Workspace tools">
               <span>Also in your workspace</span>
               <Link href="/workspace/agents">

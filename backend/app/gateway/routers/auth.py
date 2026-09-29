@@ -735,6 +735,11 @@ async def change_password(request: Request, response: Response, body: ChangePass
 
     # Update email if provided
     if body.new_email is not None:
+        # f19: an unverified change after setup would let a member squat an
+        # invitee's address (blocking their SSO sign-in with a 409). The email
+        # is settable only during first-time setup; later changes need an admin.
+        if not user.needs_setup and body.new_email.lower() != (user.email or "").lower():
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=AuthErrorResponse(code=AuthErrorCode.INVALID_CREDENTIALS, message="Email can only be changed during first-time setup").model_dump())
         existing = await provider.get_user_by_email(body.new_email)
         if existing and str(existing.id) != str(user.id):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=AuthErrorResponse(code=AuthErrorCode.EMAIL_ALREADY_EXISTS, message="Email already in use").model_dump())
@@ -955,6 +960,21 @@ class MfaDisableRequest(BaseModel):
         return value.strip() if value else value
 
 
+def _refuse_sso_mfa(user) -> None:
+    """SSO accounts cannot enroll app-level TOTP (f75).
+
+    The OIDC callback issues a session with no MFA step and ``/mfa/disable``
+    requires a password, so a TOTP on an SSO account would protect nothing
+    and could never be removed. Their second factor is the identity
+    provider's own (e.g. Google 2-Step Verification).
+    """
+    if user.password_hash is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=AuthErrorResponse(code=AuthErrorCode.INVALID_CREDENTIALS, message="Single sign-on accounts use their identity provider's two-factor authentication").model_dump(),
+        )
+
+
 @router.post("/mfa/enroll/start", response_model=MfaEnrollStartResponse, dependencies=[Depends(require_session_source)])
 async def mfa_enroll_start(request: Request):
     """Start (or restart) TOTP enrollment: generate and persist a new secret.
@@ -963,6 +983,7 @@ async def mfa_enroll_start(request: Request):
     Already-enabled MFA must be disabled first (409).
     """
     user = await get_current_user_from_request(request)
+    _refuse_sso_mfa(user)
     mfa_repo = get_mfa_repo(request)
 
     existing = await mfa_repo.get(str(user.id))
@@ -979,6 +1000,7 @@ async def mfa_enroll_confirm(request: Request, body: MfaEnrollConfirmRequest):
     """Confirm enrollment with a valid code, enabling MFA and returning
     ten one-time recovery codes exactly once."""
     user = await get_current_user_from_request(request)
+    _refuse_sso_mfa(user)
     await _check_rate_limit(_mfa_bucket(str(user.id)))
     mfa_repo = get_mfa_repo(request)
 

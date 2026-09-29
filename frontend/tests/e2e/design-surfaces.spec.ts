@@ -128,6 +128,38 @@ const SUBAGENTS = SUBAGENT_NAMES.map(([name, display, description]) => ({
 }));
 
 const RUNS = [
+  // Queued, not yet picked up: on the desk without a pin.
+  {
+    run_id: "run-0009",
+    thread_id: "thread-0009",
+    thread_title: "Prepare the Fagan Painting onboarding checklist",
+    assistant_id: "dillon-client-operations",
+    status: "pending",
+    model_name: "claude-sonnet",
+    created_at: minutesAgo(1),
+    updated_at: minutesAgo(1),
+    duration_seconds: null,
+    total_tokens: 0,
+    message_count: 1,
+    cost: null,
+    error: null,
+  },
+  // A specialist at work: pinned on the board and on the team.
+  {
+    run_id: "run-0010",
+    thread_id: "thread-0010",
+    thread_title: "Reconcile September invoices against collected revenue",
+    assistant_id: "dillon-revenue",
+    status: "running",
+    model_name: "claude-sonnet",
+    created_at: minutesAgo(6),
+    updated_at: minutesAgo(1),
+    duration_seconds: null,
+    total_tokens: 7_310,
+    message_count: 5,
+    cost: null,
+    error: null,
+  },
   {
     run_id: "run-0001",
     thread_id: MOCK_THREAD_ID,
@@ -173,6 +205,22 @@ const RUNS = [
     message_count: 6,
     cost: 0.0381,
     error: "Sandbox timed out after 900 seconds while running the build.",
+  },
+  // Stopped by a person, not a failure: returned without the torn corner.
+  {
+    run_id: "run-0008",
+    thread_id: "thread-0008",
+    thread_title: "Review the Pro Fence & Deck landing page copy",
+    assistant_id: "dillon-critic",
+    status: "interrupted",
+    model_name: "claude-sonnet",
+    created_at: minutesAgo(300),
+    updated_at: minutesAgo(296),
+    duration_seconds: 240,
+    total_tokens: 6_120,
+    message_count: 4,
+    cost: 0.0611,
+    error: null,
   },
   {
     run_id: "run-0004",
@@ -408,7 +456,7 @@ async function mockDesignAPI(page: Page, { empty = false } = {}) {
           }
         : {
             total_runs: 128,
-            active_runs: 1,
+            active_runs: 3,
             failed_runs: 3,
             total_threads: 46,
             total_agents: AGENTS.length,
@@ -603,6 +651,15 @@ const SIGNED_IN: Surface[] = [
     path: "/workspace/command-center",
     empty: true,
     scrolls: 1,
+  },
+  {
+    // The team on its own tab: at 1440 the lead stands as a column sheet.
+    name: "agent-studio",
+    path: "/workspace/command-center",
+    scrolls: 1,
+    prepare: async (page) => {
+      await page.getByRole("button", { name: "Agent Studio" }).click();
+    },
   },
   { name: "agents", path: "/workspace/agents" },
   {
