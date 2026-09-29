@@ -268,9 +268,50 @@
 
 /* On phones the board lies on the desk (command-center.module.css .onDesk),
    so slips run the full gutter width under their lane's rule. */
+.fold {
+  display: none;
+}
+
 @media (max-width: 640px) {
   .lane {
     padding-inline: 0;
+  }
+
+  /* A long Stamped lane folds into a pile (slice 4): the latest slips, then
+     two paper edges under the last one, so older finished work reads as
+     stacked, not missing. Hidden slips leave the tab order with display. */
+  .slips[data-fold] > li:nth-child(n + 4) {
+    display: none;
+  }
+  .slips[data-fold] > li:nth-child(3) {
+    margin-bottom: 12px;
+  }
+  .slips[data-fold] > li:nth-child(3) > .slip:not([aria-pressed="true"]) {
+    box-shadow:
+      0 1px 0 color-mix(in srgb, var(--ink) 10%, transparent),
+      2px 6px 0 -2px var(--surface),
+      2px 6px 0 -1px var(--line),
+      -2px 12px 0 -5px var(--surface),
+      -2px 12px 0 -4px var(--line);
+  }
+  .fold {
+    display: inline-flex;
+    min-height: 44px;
+    align-items: center;
+    margin-top: 6px;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--blue);
+    font-size: 14px;
+    font-weight: 800;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    cursor: pointer;
+  }
+  .fold:focus-visible {
+    outline: 3px solid var(--focus);
+    outline-offset: 2px;
   }
 }
 

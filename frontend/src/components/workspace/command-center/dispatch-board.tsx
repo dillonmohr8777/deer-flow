@@ -2,6 +2,7 @@
 
 import { ArrowRight } from "lucide-react";
 import Link from "next/link";
+import { useState } from "react";
 
 import {
   EmptyState,
@@ -31,7 +32,15 @@ import styles from "./dispatch-board.module.css";
  * so a long run of finished work stays short; the tear folds back to show
  * the kraft underside (the same language as the Command Center's failed
  * agent); an interrupted run and a queued one read in neutral ink.
+ *
+ * Phones (momo-week d11, slice 4): lanes stack, so a batch of finished work
+ * would bury the Returned lane under screens of Done. Past STAMPED_SHOWN
+ * the Stamped lane folds into a pile: the latest slips, paper edges under
+ * the last one, and a toggle for the rest. CSS-only above 640px, so wider
+ * boards are unchanged.
  */
+
+const STAMPED_SHOWN = 3;
 
 export type DispatchLane = "desk" | "stamped" | "returned" | "unsorted";
 
@@ -214,6 +223,8 @@ function Lanes({
   runs: ConsoleRunItem[];
 }) {
   const groups = groupRuns(runs);
+  const [stampedOpen, setStampedOpen] = useState(false);
+  const olderStamped = groups.stamped.length - STAMPED_SHOWN;
   return (
     <>
       <div className={styles.lanes}>
@@ -239,7 +250,15 @@ function Lanes({
             {groups[lane.id].length === 0 ? (
               <p className={styles.laneEmpty}>{lane.empty}</p>
             ) : (
-              <ol className={styles.slips}>
+              <ol
+                className={styles.slips}
+                id={`slips-${lane.id}`}
+                data-fold={
+                  lane.id === "stamped" && olderStamped > 0 && !stampedOpen
+                    ? "true"
+                    : undefined
+                }
+              >
                 {groups[lane.id].map((run, index) => (
                   <li key={run.run_id}>
                     <Slip
@@ -254,6 +273,19 @@ function Lanes({
                 ))}
               </ol>
             )}
+            {lane.id === "stamped" && olderStamped > 0 ? (
+              <button
+                type="button"
+                className={styles.fold}
+                aria-expanded={stampedOpen}
+                aria-controls="slips-stamped"
+                onClick={() => setStampedOpen((open) => !open)}
+              >
+                {stampedOpen
+                  ? "Show fewer stamped slips"
+                  : `Show ${olderStamped} older stamped ${olderStamped === 1 ? "slip" : "slips"}`}
+              </button>
+            ) : null}
           </section>
         ))}
       </div>
