@@ -18,6 +18,7 @@ from deerflow.hiring.workflow import (
     HirePrivateDataError,
     HireToolEscalationError,
     RetireAuthorizationError,
+    RetireHasActiveReportsError,
     RetireTransitionError,
     assert_can_hire,
     assert_can_retire,
@@ -32,7 +33,8 @@ def _kwargs(**overrides) -> dict:
         max_org_depth=3,
         manager_tool_groups=None,
         requested_tool_groups=["file:read", "bash"],
-        manager_model_family="muse",
+        known_tool_groups=None,
+        manager_cleared_for_private_data=False,
         requested_model_family="muse",
         requested_private_data=False,
         manager_weekly_token_budget=1000,
@@ -66,25 +68,45 @@ def test_hire_manager_cannot_escalate_beyond_its_own_tools():
         assert_can_hire(**_kwargs(manager_depth=2, manager_tool_groups=["file:read"], requested_tool_groups=["file:read", "bash"]))
 
 
+def test_an_unknown_tool_group_is_rejected_even_with_no_manager_ceiling():
+    """review finding (medium 5): a depth-1 manager with no tracked ceiling
+    could otherwise grant a made-up group name. known_tool_groups closes
+    that off independently of manager_tool_groups."""
+    with pytest.raises(HireToolEscalationError):
+        assert_can_hire(**_kwargs(manager_tool_groups=None, known_tool_groups=frozenset({"file:read", "bash", "team", "exec", "hire"}), requested_tool_groups=["file:read", "made-up-group"]))
+
+
+def test_a_known_tool_group_passes_with_no_manager_ceiling():
+    assert_can_hire(**_kwargs(manager_tool_groups=None, known_tool_groups=frozenset({"file:read", "bash"}), requested_tool_groups=["file:read", "bash"]))
+
+
 # --- private-data lane only from a Luna manager ---
 
 
-def test_private_data_requires_a_luna_manager():
+def test_private_data_requires_a_manager_cleared_for_it():
     with pytest.raises(HirePrivateDataError):
-        assert_can_hire(**_kwargs(manager_model_family="muse", requested_private_data=True, requested_model_family="luna"))
+        assert_can_hire(**_kwargs(manager_cleared_for_private_data=False, requested_private_data=True, requested_model_family="luna"))
 
 
 def test_private_data_also_requires_the_hire_itself_be_luna():
     with pytest.raises(HirePrivateDataError):
-        assert_can_hire(**_kwargs(manager_model_family="luna", requested_private_data=True, requested_model_family="muse"))
+        assert_can_hire(**_kwargs(manager_cleared_for_private_data=True, requested_private_data=True, requested_model_family="muse"))
 
 
-def test_a_luna_manager_may_hire_a_luna_report_into_private_data():
-    assert_can_hire(**_kwargs(manager_model_family="luna", requested_private_data=True, requested_model_family="luna"))
+def test_a_cleared_manager_may_hire_a_luna_report_into_private_data():
+    assert_can_hire(**_kwargs(manager_cleared_for_private_data=True, requested_private_data=True, requested_model_family="luna"))
 
 
-def test_a_muse_hire_with_no_private_data_needs_no_luna_manager():
-    assert_can_hire(**_kwargs(manager_model_family="muse", requested_private_data=False, requested_model_family="muse"))
+def test_a_muse_hire_with_no_private_data_needs_no_cleared_manager():
+    assert_can_hire(**_kwargs(manager_cleared_for_private_data=False, requested_private_data=False, requested_model_family="muse"))
+
+
+def test_a_luna_but_uncleared_manager_still_cannot_hire_into_private_data():
+    """review finding (high 1): being a Luna model is not the same as being
+    cleared for private data -- a Luna hire that was never itself granted
+    private_data=True must not be able to grant it to its own report."""
+    with pytest.raises(HirePrivateDataError):
+        assert_can_hire(**_kwargs(manager_cleared_for_private_data=False, requested_private_data=True, requested_model_family="luna"))
 
 
 # --- budget carved from the manager ---
@@ -161,3 +183,15 @@ def test_the_owner_can_retire_any_report():
 def test_an_already_retired_hire_cannot_be_retired_again():
     with pytest.raises(RetireTransitionError):
         assert_can_retire(hire_status=HireStatus.RETIRED, hire_manager_agent_name="cmo-agent", actor_agent_name="cmo-agent", actor_is_owner=False)
+
+
+def test_a_hire_with_active_reports_cannot_be_retired():
+    """review finding (high 4): retiring a manager must not orphan its
+    reports or silently free the budget it carved out for them."""
+    with pytest.raises(RetireHasActiveReportsError):
+        assert_can_retire(hire_status=HireStatus.ACTIVE, hire_manager_agent_name="cmo-agent", actor_agent_name="cmo-agent", actor_is_owner=False, has_active_reports=True)
+
+
+def test_even_the_owner_cannot_retire_a_hire_with_active_reports():
+    with pytest.raises(RetireHasActiveReportsError):
+        assert_can_retire(hire_status=HireStatus.ACTIVE, hire_manager_agent_name="cmo-agent", actor_agent_name="owner-agent", actor_is_owner=True, has_active_reports=True)

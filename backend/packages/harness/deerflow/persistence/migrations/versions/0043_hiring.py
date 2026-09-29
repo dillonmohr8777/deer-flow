@@ -64,11 +64,23 @@ def upgrade() -> None:
         op.create_index("ix_hired_agents_manager_agent_name", "hired_agents", ["manager_agent_name"])
         op.create_index("ix_hired_agents_status", "hired_agents", ["status"])
         op.create_index("ix_hired_agents_org_manager", "hired_agents", ["organization_id", "manager_agent_name"])
+        # Defense in depth alongside create_hire_atomic's transaction-scoped
+        # lock (review finding, high 3): see AgentSeatRow's matching
+        # uq_agent_seats_open_claim / model.py's own comment on this index.
+        op.create_index(
+            "uq_hired_agents_active_agent_name",
+            "hired_agents",
+            ["organization_id", "agent_name"],
+            unique=True,
+            sqlite_where=sa.text("status = 'active'"),
+            postgresql_where=sa.text("status = 'active'"),
+        )
 
 
 def downgrade() -> None:
     inspector = sa.inspect(op.get_bind())
     if inspector.has_table("hired_agents"):
+        op.drop_index("uq_hired_agents_active_agent_name", table_name="hired_agents")
         op.drop_index("ix_hired_agents_org_manager", table_name="hired_agents")
         op.drop_index("ix_hired_agents_status", table_name="hired_agents")
         op.drop_index("ix_hired_agents_manager_agent_name", table_name="hired_agents")

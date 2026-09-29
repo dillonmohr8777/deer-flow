@@ -14,7 +14,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from enum import StrEnum
 
-from sqlalchemy import JSON, Boolean, DateTime, Index, Integer, String, Text
+from sqlalchemy import JSON, Boolean, DateTime, Index, Integer, String, Text, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from deerflow.persistence.base import Base
@@ -63,4 +63,22 @@ class HiredAgentRow(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now, onupdate=_utc_now)
     retired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    __table_args__ = (Index("ix_hired_agents_org_manager", "organization_id", "manager_agent_name"),)
+    __table_args__ = (
+        Index("ix_hired_agents_org_manager", "organization_id", "manager_agent_name"),
+        # Defense in depth alongside create_hire_atomic's transaction-scoped
+        # lock (review finding, high 3): at most one *active* row per
+        # (organization_id, agent_name), case-sensitive (the atomic path's
+        # own normalized, locked check is what actually closes the
+        # case-variant race -- this index catches a direct create_hire call
+        # that bypasses it). Must live in ORM __table_args__, not just the
+        # migration, for the empty-DB create_all() bootstrap path -- same
+        # reasoning as uq_agent_seats_open_claim.
+        Index(
+            "uq_hired_agents_active_agent_name",
+            "organization_id",
+            "agent_name",
+            unique=True,
+            sqlite_where=text("status = 'active'"),
+            postgresql_where=text("status = 'active'"),
+        ),
+    )

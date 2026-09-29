@@ -153,7 +153,7 @@ async def _exec_claim_seat_impl(seat: str, scope: str, kpi: str, weekly_token_bu
         # Lost a race against another concurrent claim on the same seat;
         # uq_agent_seats_open_claim caught what the check above couldn't.
         return _error(str(exc))
-    await _announce(runtime, f"claimed {seat} (kpi: {kpi}, weekly budget: {weekly_token_budget})")
+    await _announce(runtime, f"claimed {seat} (model: {model_family}, kpi: {kpi}, weekly budget: {weekly_token_budget})")
     return claimed
 
 
@@ -191,7 +191,7 @@ async def _exec_ratify_seat_impl(seat_id: str, runtime: Runtime | None = None) -
     ratified = await repo.patch_seat(seat_id, status=AgentSeatStatus.RATIFIED, ratified_by_user_id=actor_user_id)
     if ratified is None:
         return _error("No such seat claim in this organization.")
-    await _announce(runtime, f"ratified {ratified['seat']} for {ratified['agent_name']}")
+    await _announce(runtime, f"ratified {ratified['seat']} for {ratified['agent_name']} (model: {ratified.get('model_family') or 'muse'})")
     return ratified
 
 

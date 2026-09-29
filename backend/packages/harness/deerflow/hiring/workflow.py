@@ -55,6 +55,10 @@ class HireDepthCapError(HireError):
     """The hire would exceed the organization's owner-set org-depth cap."""
 
 
+class HireNameConflictError(HireError):
+    """The requested agent_name already names an active hire or a titled employee."""
+
+
 class RetireError(Exception):
     """A requested retirement is not allowed."""
 
@@ -67,13 +71,18 @@ class RetireTransitionError(RetireError):
     """The hire is not in a state that can be retired."""
 
 
+class RetireHasActiveReportsError(RetireError):
+    """The hire still has active reports of its own; retire them first."""
+
+
 def assert_can_hire(
     *,
     manager_depth: int,
     max_org_depth: int,
     manager_tool_groups: list[str] | None,
     requested_tool_groups: list[str],
-    manager_model_family: str,
+    known_tool_groups: frozenset[str] | None,
+    manager_cleared_for_private_data: bool,
     requested_model_family: str,
     requested_private_data: bool,
     manager_weekly_token_budget: int,
@@ -89,10 +98,22 @@ def assert_can_hire(
             employee; a hire's own depth is its manager's depth + 1).
         max_org_depth: Owner-set cap on how deep a hire chain may go.
         manager_tool_groups: The manager's own tool groups, or ``None`` when
-            the manager is a depth-1 titled employee (no tracked ceiling --
-            "no escalation" only bites once a hire itself starts hiring).
+            no ceiling could be resolved for the manager (a depth-1 titled
+            employee with no loadable agent config -- "no escalation" then
+            falls back to :paramref:`known_tool_groups` alone).
         requested_tool_groups: Tool groups requested for the new hire.
-        manager_model_family: The manager's own model family ("luna"/"muse").
+        known_tool_groups: Every tool group name actually configured in the
+            organization, or ``None`` to skip this check. Closes off
+            requesting an unknown/made-up group regardless of
+            ``manager_tool_groups``.
+        manager_cleared_for_private_data: Whether the manager itself is
+            actually cleared to work with private client data -- a Luna
+            titled employee (depth 1), or a hire that was itself granted
+            ``private_data=True`` (never merely "is a Luna model": a Luna
+            hire with no private-data grant of its own is not cleared to
+            grant it further, closing the review's reported escalation
+            where a Luna-but-not-cleared hire could still hire into private
+            data).
         requested_model_family: The model family requested for the new hire.
         requested_private_data: Whether the new hire needs private-data access.
         manager_weekly_token_budget: The manager's own weekly token budget
@@ -108,14 +129,19 @@ def assert_can_hire(
     if new_depth > max_org_depth:
         raise HireDepthCapError(f"Org depth cap is {max_org_depth} levels; a hire under this manager would reach depth {new_depth}")
 
+    if known_tool_groups is not None:
+        unknown = sorted(set(requested_tool_groups) - known_tool_groups)
+        if unknown:
+            raise HireToolEscalationError(f"Unknown tool group(s) {unknown}; not configured in this organization")
+
     if manager_tool_groups is not None:
         escalated = sorted(set(requested_tool_groups) - set(manager_tool_groups))
         if escalated:
             raise HireToolEscalationError(f"A hire's tools must be a subset of its manager's; {escalated} would escalate beyond {sorted(manager_tool_groups)}")
 
     if requested_private_data:
-        if manager_model_family != "luna":
-            raise HirePrivateDataError("Only a Luna manager may hire into private data")
+        if not manager_cleared_for_private_data:
+            raise HirePrivateDataError("Only a manager already cleared for private data may hire into it")
         if requested_model_family != "luna":
             raise HirePrivateDataError("A hire with private-data access must itself be a Luna employee")
 
@@ -128,15 +154,22 @@ def assert_can_hire(
         raise HireHeadcountCapError(f"Headcount cap is {headcount_cap}; the organization already has {existing_headcount} active hires")
 
 
-def assert_can_retire(*, hire_status: str, hire_manager_agent_name: str, actor_agent_name: str, actor_is_owner: bool) -> None:
+def assert_can_retire(*, hire_status: str, hire_manager_agent_name: str, actor_agent_name: str, actor_is_owner: bool, has_active_reports: bool = False) -> None:
     """ "Any titled employee can hire and retire its own reports" (EXECUTIVE.md) -- and only its own.
 
     The organization owner may also retire any report directly, the same
     override ``deerflow.exec_seats.workflow.assert_can_reopen`` gives for a
-    title.
+    title. Refused while the hire still has active reports of its own --
+    retiring a manager must never silently orphan its reports (who would
+    keep running with no manager to account for them) or free the budget it
+    carved out for them (a retired manager's budget going back to its own
+    manager, with its reports still spending against it, would let a fresh
+    hire double that budget).
     """
     if hire_status not in _RETIRE_FROM:
         raise RetireTransitionError(f"Cannot retire a hire with status {hire_status!r}")
+    if has_active_reports:
+        raise RetireHasActiveReportsError("This report still has active reports of its own; retire them first")
     if actor_is_owner:
         return
     if actor_agent_name != hire_manager_agent_name:

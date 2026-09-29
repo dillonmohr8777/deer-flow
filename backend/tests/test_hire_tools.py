@@ -51,6 +51,9 @@ def _runtime(agent_name: str | None, *, momentum_staff: bool = True) -> _DummyRu
     return _DummyRuntime(context=context)
 
 
+_KNOWN_TOOL_GROUPS = ("file:read", "bash", "team", "exec", "hire")
+
+
 def _hiring_config(**overrides):
     base = {"headcount_cap": 20, "max_org_depth": 3}
     base.update(overrides)
@@ -58,7 +61,8 @@ def _hiring_config(**overrides):
 
 
 def _patch_hiring_config(monkeypatch, **overrides) -> None:
-    monkeypatch.setattr(hire_tools_module, "get_app_config", lambda: SimpleNamespace(hiring=_hiring_config(**overrides)))
+    tools = [SimpleNamespace(group=g) for g in _KNOWN_TOOL_GROUPS]
+    monkeypatch.setattr(hire_tools_module, "get_app_config", lambda: SimpleNamespace(hiring=_hiring_config(**overrides), tools=tools))
 
 
 @pytest.fixture(autouse=True)
@@ -154,6 +158,18 @@ async def test_a_hire_may_hire_within_its_own_tools(org_world):  # noqa: F811
     assert sub["depth"] == 3
 
 
+@pytest.mark.asyncio
+async def test_a_depth_one_manager_cannot_grant_an_unknown_tool_group(org_world):  # noqa: F811
+    """review finding (medium 5): a depth-1 manager has no tracked tool
+    ceiling, so with no other check a made-up group name would sail
+    through. known_tool_groups (the org's real config.tools catalog)
+    refuses it regardless."""
+    with acting_as(USER_A, ORG_S):
+        await _ratify_ceo(USER_A)
+        result = await _hire_report_impl("writer-1", "Writer", "content", "posts/week", ["file:read", "made-up-group"], 0, "muse", False, runtime=_runtime("ceo-agent"))
+    assert "error" in result
+
+
 # --- private-data lane only from a Luna manager ---
 
 
@@ -175,6 +191,22 @@ async def test_a_luna_manager_hires_a_luna_report_into_private_data(org_world): 
     assert hired["private_data"] is True
 
 
+@pytest.mark.asyncio
+async def test_a_luna_hire_never_itself_granted_private_data_cannot_hire_into_it(org_world):  # noqa: F811
+    """review finding (high 1): a Luna model_family alone is not the same as
+    being cleared for private data. A Luna CEO hires a Luna report with
+    private_data=False; that report must not be able to grant private-data
+    access to its own report just because it happens to be a Luna model."""
+    with acting_as(USER_A, ORG_S):
+        await _ratify_ceo(USER_A, model_family="luna")
+        luna_but_uncleared = await _hire_report_impl("luna-report", "Luna report", "job", "kpi", [], 0, "luna", False, runtime=_runtime("ceo-agent"))
+        assert luna_but_uncleared["status"] == "active"
+        assert luna_but_uncleared["private_data"] is False
+
+        escalated = await _hire_report_impl("sub-analyst", "Sub analyst", "client work", "kpi", [], 0, "luna", True, runtime=_runtime("luna-report"))
+    assert "error" in escalated
+
+
 # --- budget carved from the manager ---
 
 
@@ -191,6 +223,33 @@ async def test_a_hire_budget_cannot_exceed_the_managers_remaining_budget(org_wor
 
         under_remaining = await _hire_report_impl("writer-3", "Writer", "content", "posts/week", [], 300, "muse", False, runtime=_runtime("ceo-agent"))
     assert under_remaining["status"] == "active"
+
+
+@pytest.mark.asyncio
+async def test_a_manager_declaring_a_case_variant_name_cannot_double_the_budget(org_world):  # noqa: F811
+    """review finding (high 2): ratified_seat_for_agent matches case/
+    underscore-insensitively, but the carved-budget query used to compare
+    exactly -- a manager declaring "CEO-Agent" the second time around a
+    "ceo-agent" claim read a carved budget of 0 and doubled it."""
+    with acting_as(USER_A, ORG_S):
+        await _ratify_ceo(USER_A, agent_name="ceo-agent", weekly_token_budget=1000)
+
+        first = await _hire_report_impl("writer-1", "Writer", "content", "posts/week", [], 1000, "muse", False, runtime=_runtime("ceo-agent"))
+        assert first["status"] == "active"
+
+        second = await _hire_report_impl("writer-2", "Writer", "content", "posts/week", [], 1000, "muse", False, runtime=_runtime("CEO-Agent"))
+    assert "error" in second
+
+
+@pytest.mark.asyncio
+async def test_a_hire_cannot_take_a_name_already_held_by_a_titled_employee(org_world):  # noqa: F811
+    """review finding (high 2): a hire may not take an agent_name a ratified
+    seat already holds, case/underscore-insensitively."""
+    with acting_as(USER_A, ORG_S):
+        await _ratify_ceo(USER_A, agent_name="ceo-agent")
+
+        result = await _hire_report_impl("CEO_Agent", "Impersonator", "job", "kpi", [], 0, "muse", False, runtime=_runtime("ceo-agent"))
+    assert "error" in result
 
 
 # --- owner-set headcount cap ---
@@ -241,6 +300,25 @@ async def test_the_hiring_manager_retires_its_own_report_and_announces_it(org_wo
         exec_channel = next(c for c in await team_repo.list_channels() if c["slug"] == "exec")
         messages = await team_repo.list_messages(exec_channel["id"])
     assert any("[ceo-agent] retired writer-1" in m["body"] for m in messages)
+
+
+@pytest.mark.asyncio
+async def test_a_hire_with_active_reports_cannot_be_retired(org_world):  # noqa: F811
+    """review finding (high 4): retiring a manager must not orphan its
+    reports or silently free the budget it carved out for them."""
+    with acting_as(USER_A, ORG_S):
+        await _ratify_ceo(USER_A, weekly_token_budget=1000)
+        manager_hire = await _hire_report_impl("mid", "Mid", "job", "kpi", [], 1000, "muse", False, runtime=_runtime("ceo-agent"))
+        await _hire_report_impl("leaf", "Leaf", "job", "kpi", [], 1000, "muse", False, runtime=_runtime(manager_hire["agent_name"]))
+
+        result = await _retire_report_impl(manager_hire["id"], runtime=_runtime("ceo-agent"))
+        assert "error" in result
+
+        # The blocked retirement must not have freed any budget: the CEO's
+        # 1000-token budget is still fully carved by "mid", so a second
+        # 1000-token hire is refused.
+        still_blocked = await _hire_report_impl("mid2", "Mid2", "job", "kpi", [], 1000, "muse", False, runtime=_runtime("ceo-agent"))
+    assert "error" in still_blocked
 
 
 @pytest.mark.asyncio

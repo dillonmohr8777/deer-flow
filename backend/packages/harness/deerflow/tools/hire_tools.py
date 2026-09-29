@@ -25,7 +25,7 @@ from langchain.tools import tool
 from pydantic import Field
 
 from deerflow.config import get_app_config
-from deerflow.hiring import HireError, RetireError, assert_can_hire, assert_can_retire
+from deerflow.hiring import HireError, RetireError, assert_can_retire
 from deerflow.persistence.hiring import HiredAgentRepository
 from deerflow.runtime.user_context import resolve_organization_id, resolve_runtime_actor_user_id
 from deerflow.tools.exec_seat_tools import _agent_name, _announce, _is_active_org_admin, _is_momentum_staff_run
@@ -64,29 +64,48 @@ def _get_hire_repo() -> HiredAgentRepository | None:
     return HiredAgentRepository(session_factory)
 
 
+def _known_tool_groups() -> frozenset[str]:
+    """Every tool group name actually configured in this organization.
+
+    Review finding (medium 5): a depth-1 manager has no tracked
+    ``tool_groups`` ceiling, so with no other check a requested group could
+    be pure fiction ("anything"). Independent of any manager ceiling, a
+    request naming a group the org's own ``config.tools`` never configured
+    is refused outright.
+    """
+    return frozenset(t.group for t in get_app_config().tools)
+
+
 async def _resolve_manager(seat_repo, hire_repo: HiredAgentRepository, manager_agent_name: str) -> dict | None:
-    """The hiring manager's depth/model/tool-ceiling/budget facts, or ``None`` if it may not hire at all.
+    """The hiring manager's depth/tool-ceiling/budget/private-data-clearance facts, or ``None`` if it may not hire at all.
 
     A ratified seat holder is depth 1 with no tracked tool ceiling (titled
     employees are real, already-vetted Momentum staff -- "no escalation" only
-    starts to bite once a hire itself starts hiring). An active hire is
-    whatever depth/model/tools/budget it was itself hired with.
+    starts to bite once a hire itself starts hiring); it is cleared for
+    private data exactly when it is itself a Luna employee (there is no
+    "who granted a titled employee its own private-data access" -- being
+    Luna at the top of the chain is the qualifying fact). An active hire is
+    whatever depth/tools/budget it was itself hired with, and is cleared for
+    private data only when it was itself granted ``private_data=True`` --
+    review finding (high 1): being hired with ``model_family="luna"`` alone
+    does not mean a hire may grant private-data access downstream; only an
+    explicit grant of its own does.
     """
     seat = await seat_repo.ratified_seat_for_agent(manager_agent_name)
     if seat is not None:
         return {
             "depth": 1,
-            "model_family": seat.get("model_family") or "muse",
             "tool_groups": None,
             "weekly_token_budget": seat["weekly_token_budget"],
+            "cleared_for_private_data": (seat.get("model_family") or "muse") == "luna",
         }
     hire = await hire_repo.get_active_hire_by_agent_name(manager_agent_name)
     if hire is not None:
         return {
             "depth": hire["depth"],
-            "model_family": hire["model_family"],
             "tool_groups": hire["tool_groups"],
             "weekly_token_budget": hire["weekly_token_budget"],
+            "cleared_for_private_data": hire["private_data"] is True,
         }
     return None
 
@@ -116,46 +135,31 @@ async def _hire_report_impl(
     if manager is None:
         return _error("Only a titled employee or one of its own active reports may hire.")
 
-    existing = await hire_repo.get_active_hire_by_agent_name(agent_name)
-    if existing is not None:
-        return _error(f"{agent_name!r} is already an active report in this organization.")
-
     hiring_config = get_app_config().hiring
-    carved_budget_so_far = await hire_repo.total_carved_budget(manager_agent_name)
-    existing_headcount = await hire_repo.count_active()
-
+    hired_by_user_id = resolve_runtime_actor_user_id(runtime)
     try:
-        assert_can_hire(
+        hired = await hire_repo.create_hire_atomic(
+            agent_name=agent_name,
+            title=title,
+            manager_agent_name=manager_agent_name,
             manager_depth=manager["depth"],
             max_org_depth=hiring_config.max_org_depth,
             manager_tool_groups=manager["tool_groups"],
-            requested_tool_groups=tool_groups,
-            manager_model_family=manager["model_family"],
-            requested_model_family=model_family,
-            requested_private_data=private_data,
+            known_tool_groups=_known_tool_groups(),
+            manager_cleared_for_private_data=manager["cleared_for_private_data"],
             manager_weekly_token_budget=manager["weekly_token_budget"],
-            carved_budget_so_far=carved_budget_so_far,
-            requested_weekly_token_budget=weekly_token_budget,
-            existing_headcount=existing_headcount,
             headcount_cap=hiring_config.headcount_cap,
+            job=job,
+            kpi=kpi,
+            model_family=model_family,
+            tool_groups=tool_groups,
+            private_data=private_data,
+            weekly_token_budget=weekly_token_budget,
+            hired_by_user_id=hired_by_user_id,
         )
     except HireError as exc:
         return _error(str(exc))
 
-    hired_by_user_id = resolve_runtime_actor_user_id(runtime)
-    hired = await hire_repo.create_hire(
-        agent_name=agent_name,
-        title=title,
-        manager_agent_name=manager_agent_name,
-        depth=manager["depth"] + 1,
-        job=job,
-        kpi=kpi,
-        model_family=model_family,
-        tool_groups=tool_groups,
-        private_data=private_data,
-        weekly_token_budget=weekly_token_budget,
-        hired_by_user_id=hired_by_user_id,
-    )
     await _announce(
         runtime,
         f"hired {hired['agent_name']} as {title} (manager: {manager_agent_name}, model: {model_family}, kpi: {kpi}, weekly budget: {weekly_token_budget})",
@@ -178,12 +182,16 @@ async def _retire_report_impl(hire_id: str, runtime: Runtime | None = None) -> d
     actor_agent_name = _agent_name(runtime)
     actor_user_id = resolve_runtime_actor_user_id(runtime)
     actor_is_owner = await _is_active_org_admin(actor_user_id)
+    # Review finding (high 4): retiring a manager must not orphan its own
+    # reports or silently free the budget it carved out for them.
+    active_reports = await hire_repo.list_reports_of(hire["agent_name"])
     try:
         assert_can_retire(
             hire_status=hire["status"],
             hire_manager_agent_name=hire["manager_agent_name"],
             actor_agent_name=actor_agent_name,
             actor_is_owner=actor_is_owner,
+            has_active_reports=bool(active_reports),
         )
     except RetireError as exc:
         return _error(str(exc))
