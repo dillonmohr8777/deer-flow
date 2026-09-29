@@ -252,9 +252,9 @@ async def exec_ratify_seat(
     """Confirm (ratify) a claimed Momentum title, closing EXECUTIVE.md's "Confirm" step.
 
     Momentum-staff only. Only the agent holding the ratified CEO seat, or the
-    organization owner, may ratify -- the owner also covers the bootstrap
-    case where no CEO has been ratified yet. Announces the ratification to
-    #exec on success.
+    organization owner or admin, may ratify -- the owner/admin case also
+    covers the bootstrap case where no CEO has been ratified yet. Announces
+    the ratification to #exec on success.
 
     Args:
         seat_id: The id of the claimed seat row to ratify.
@@ -279,7 +279,7 @@ async def exec_reopen_seat(
 
     Args:
         seat_id: The id of the seat row to reopen.
-        runtime: Injected tool runtime; used to check whether the caller is an organization owner/admin.
+        runtime: Injected tool runtime; used to check whether the caller is the organization owner.
 
     Returns:
         The updated seat ({"status": "reopened", ...}), or {"error": ...}.

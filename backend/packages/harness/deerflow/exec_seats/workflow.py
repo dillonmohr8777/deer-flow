@@ -45,9 +45,15 @@ def assert_can_claim(current_status: str | None) -> None:
 
 
 def assert_can_ratify(current_status: str, *, actor_is_ceo: bool, actor_is_owner: bool) -> None:
-    """Only the ratified CEO seat's holder, or the organization owner, may confirm a claim."""
+    """Only the ratified CEO seat's holder, or the organization owner or admin, may confirm a claim.
+
+    ``actor_is_owner`` here is the owner-or-admin check (``_is_active_org_admin``)
+    -- looser than ``assert_can_reopen``'s real-owner-only ``actor_is_owner``,
+    since EXECUTIVE.md's "Confirm" step names only the CEO holder and Dillon
+    for contested titles, not an owner-only bar the way reopen is.
+    """
     if not (actor_is_ceo or actor_is_owner):
-        raise SeatAuthorizationError("Only the CEO seat holder or the organization owner may ratify a claim")
+        raise SeatAuthorizationError("Only the CEO seat holder or the organization owner or admin may ratify a claim")
     if current_status not in _RATIFY_FROM:
         raise SeatTransitionError(f"Cannot ratify from status {current_status!r}")
 
