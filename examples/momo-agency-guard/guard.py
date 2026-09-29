@@ -422,7 +422,7 @@ def hash_artifact(root, cycle_id, work_order_id, filename, source_sha256):
 
 
 class RefuseRedirect(HTTPRedirectHandler):
-    def redirect_request(self, _request, _fp, _code, _msg, _headers, _newurl):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
         raise Stop("upstream_redirect_refused")
 
 
@@ -454,7 +454,7 @@ def make_server(
         raise Stop("client_auth_token_missing")
 
     class Handler(BaseHTTPRequestHandler):
-        def log_message(self, *_args):
+        def log_message(self, format, *args):
             pass  # no URLs, keys, prompts, exception strings or response bodies
 
         def send_json(self, status, value):
