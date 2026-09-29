@@ -2300,6 +2300,18 @@ Runtime execution and artifact controls remain in the existing DeerFlow services
 For an independent local preview, set `NEXT_BUILD_DIR=.next-momentum` and run the
 frontend on a separate loopback port with the existing gateway configured.
 
+### Hiring tool permissions
+
+Momentum staff hiring tools check a titled manager's stored agent configuration
+before creating a hire. Invalid or unreadable tool permissions block hiring with
+an instruction to repair the configuration or restore storage access. An explicit
+unrestricted setting (`tool_groups: null` or omitted) remains supported within
+the organization's configured tool catalog; an empty list grants no tools.
+Claimed titles without any custom-agent record retain that unrestricted default
+only after the agent store confirms the record is absent. These checks do not
+provision an agent or change the existing private-data, budget, or organization
+authorization rules.
+
 ## Star History
 
 [![Star History Chart](https://star-history.dera.page/svg?repos=bytedance/deer-flow&type=Date)](https://star-history.dera.page/#bytedance/deer-flow&Date)

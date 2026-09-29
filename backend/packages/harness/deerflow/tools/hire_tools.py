@@ -83,22 +83,36 @@ def _seat_holder_tool_ceiling(manager_agent_name: str) -> list[str] | None:
     (``_known_tool_groups``) closed the "made-up group" repro, but a depth-1
     manager whose own agent config really does restrict its tools (e.g. to
     ``["web"]``) could still hire a report with a real, known group its own
-    config never grants (e.g. ``"bash"``). Best-effort: most EXECUTIVE.md
-    seats are claimed identities with no real custom-agent record behind
-    them, so a lookup miss (``FileNotFoundError``/``ValueError``, or any
-    other failure) just means no ceiling from this source -- the org-wide
-    ``known_tool_groups`` check still applies regardless. ``None`` here
-    (no config found, or a found config with ``tool_groups=None``) means
-    "no additional restriction", matching ``AgentConfig.tool_groups``'s own
-    "None = every configured group" semantics.
+    config never grants (e.g. ``"bash"``). A confirmed absent custom-agent
+    record or an explicit ``tool_groups=None`` means no extra restriction,
+    matching AgentConfig's "None = every configured group" semantics.
+    An existing record whose config is missing, unreadable or invalid is
+    not an unrestricted manager: refuse hiring until its policy can be read.
+    The org-wide ``known_tool_groups`` check still applies in every case.
     """
     try:
         from deerflow.config.agents_config import load_agent_config
 
-        config = load_agent_config(manager_agent_name)
-    except Exception:  # noqa: BLE001 -- a config-lookup failure must never block a hire, only skip this extra ceiling
-        return None
-    return config.tool_groups if config is not None else None
+        try:
+            config = load_agent_config(manager_agent_name)
+        except FileNotFoundError:
+            from deerflow.persistence.agents import get_agent_store
+
+            # A claimed seat need not have a custom-agent record. Confirm
+            # that distinction instead of treating a damaged record as absent.
+            if get_agent_store().exists(manager_agent_name) is False:
+                return None
+            raise ValueError("The manager's existing agent record has no readable config") from None
+        if config is None:
+            raise ValueError("No configuration was returned for a named manager")
+        groups = config.tool_groups
+        if groups is None:
+            return None
+        if not isinstance(groups, list) or any(not isinstance(group, str) for group in groups):
+            raise ValueError("The manager's tool_groups must be a list of strings or None")
+        return list(groups)
+    except Exception as exc:  # noqa: BLE001 -- any unverifiable policy blocks the write; never disclose raw config errors
+        raise HireError(f"Hiring blocked: cannot verify tool permissions for manager '{manager_agent_name}'. Repair the manager's agent configuration or restore access to its configured agent store, then retry.") from exc
 
 
 async def _resolve_manager(seat_repo, hire_repo: HiredAgentRepository, manager_agent_name: str) -> dict | None:
@@ -106,7 +120,8 @@ async def _resolve_manager(seat_repo, hire_repo: HiredAgentRepository, manager_a
 
     A ratified seat holder is depth 1; its tool ceiling comes from its own
     agent config when one exists (``_seat_holder_tool_ceiling``), otherwise
-    unrestricted (titled employees are real, already-vetted Momentum staff by
+    unrestricted only after confirming that no custom-agent record exists
+    (titled employees are real, already-vetted Momentum staff by
     default -- "no escalation" only reliably bites once a hire itself starts
     hiring, or when the seat's own config says otherwise). It is cleared for
     private data exactly when it is itself a Luna employee (there is no
@@ -122,7 +137,7 @@ async def _resolve_manager(seat_repo, hire_repo: HiredAgentRepository, manager_a
     if seat is not None:
         return {
             "depth": 1,
-            "tool_groups": _seat_holder_tool_ceiling(manager_agent_name),
+            "tool_groups": _seat_holder_tool_ceiling(seat["agent_name"]),
             "weekly_token_budget": seat["weekly_token_budget"],
             "cleared_for_private_data": (seat.get("model_family") or "muse") == "luna",
         }
@@ -158,7 +173,10 @@ async def _hire_report_impl(
         return _error("Agent hiring storage is unavailable.")
 
     manager_agent_name = _agent_name(runtime)
-    manager = await _resolve_manager(seat_repo, hire_repo, manager_agent_name)
+    try:
+        manager = await _resolve_manager(seat_repo, hire_repo, manager_agent_name)
+    except HireError as exc:
+        return _error(str(exc))
     if manager is None:
         return _error("Only a titled employee or one of its own active reports may hire.")
 

@@ -16,8 +16,12 @@ from types import SimpleNamespace
 
 import pytest
 from org_isolation_fixtures import ORG_A, ORG_S, USER_A, USER_C, acting_as, org_world  # noqa: F401
+from sqlalchemy import func, select
 
 import deerflow.tools.hire_tools as hire_tools_module
+from deerflow.config.agents_config import AgentConfig
+from deerflow.persistence.hiring import HiredAgentRepository
+from deerflow.persistence.hiring.model import HiredAgentRow
 from deerflow.persistence.organizations.model import OrganizationMemberRow
 from deerflow.persistence.team_board import TeamBoardRepository
 from deerflow.persistence.user.model import UserRow
@@ -73,6 +77,7 @@ def _default_hiring_config(monkeypatch):
     read ``get_app_config().hiring``.
     """
     _patch_hiring_config(monkeypatch)
+    monkeypatch.setattr("deerflow.config.agents_config.load_agent_config", lambda name, **_kwargs: AgentConfig(name=name))
 
 
 async def _ratify_ceo(owner_user_id: str, agent_name: str = "ceo-agent", *, model_family: str = "muse", weekly_token_budget: int = 0) -> dict:
@@ -89,6 +94,12 @@ async def _ratify_ceo(owner_user_id: str, agent_name: str = "ceo-agent", *, mode
         claimed = await _exec_claim_seat_impl(CEO_SEAT, "run the company", "objectives hit", weekly_token_budget, runtime=_runtime(agent_name), model_family=model_family)
     with acting_as(owner_user_id, ORG_S):
         return await _exec_ratify_seat_impl(claimed["id"], runtime=_runtime("owner-agent"))
+
+
+async def _assert_hiring_ledger_empty(session_factory) -> None:
+    """No row of any status or organization may be inserted on policy failure."""
+    async with session_factory() as session:
+        assert await session.scalar(select(func.count()).select_from(HiredAgentRow)) == 0
 
 
 @pytest.mark.asyncio
@@ -194,10 +205,121 @@ async def test_a_depth_one_manager_with_no_real_agent_config_keeps_no_extra_ceil
     behind it. A lookup miss must never block hiring -- known_tool_groups
     alone still applies."""
     monkeypatch.setattr("deerflow.config.agents_config.load_agent_config", lambda name, **_kwargs: (_ for _ in ()).throw(FileNotFoundError(name)))
+    monkeypatch.setattr("deerflow.persistence.agents.get_agent_store", lambda: SimpleNamespace(exists=lambda name: False))
     with acting_as(USER_A, ORG_S):
         await _ratify_ceo(USER_A)
         hired = await _hire_report_impl("writer-1", "Writer", "content", "posts/week", ["bash"], 0, "muse", False, runtime=_runtime("ceo-agent"))
     assert hired["status"] == "active"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", [PermissionError("sensitive detail"), ValueError("sensitive detail"), RuntimeError("sensitive detail")])
+async def test_manager_config_failure_blocks_hiring_without_a_ledger_insert(org_world, monkeypatch, failure):  # noqa: F811
+    def fail_load(name, **_kwargs):
+        raise failure
+
+    monkeypatch.setattr("deerflow.config.agents_config.load_agent_config", fail_load)
+    with acting_as(USER_A, ORG_S):
+        await _ratify_ceo(USER_A)
+        result = await _hire_report_impl("writer-1", "Writer", "content", "posts/week", ["bash"], 0, "muse", False, runtime=_runtime("ceo-agent"))
+        await _assert_hiring_ledger_empty(org_world)
+    assert "cannot verify tool permissions" in result["error"]
+    assert "Repair" in result["error"]
+    assert "sensitive detail" not in result["error"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("ceiling", ["bash", {"bash": True}, [123]])
+async def test_malformed_manager_ceiling_cannot_create_a_hire(org_world, monkeypatch, ceiling):  # noqa: F811
+    monkeypatch.setattr("deerflow.config.agents_config.load_agent_config", lambda name, **_kwargs: SimpleNamespace(tool_groups=ceiling))
+    with acting_as(USER_A, ORG_S):
+        await _ratify_ceo(USER_A)
+        result = await _hire_report_impl("writer-1", "Writer", "content", "posts/week", ["bash"], 0, "muse", False, runtime=_runtime("ceo-agent"))
+        await _assert_hiring_ledger_empty(org_world)
+    assert "cannot verify tool permissions" in result["error"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("record_exists", [True, None])
+async def test_missing_config_for_an_existing_or_unverifiable_record_blocks_hiring(org_world, monkeypatch, record_exists):  # noqa: F811
+    def exists(name):
+        if record_exists is None:
+            raise PermissionError("store unavailable")
+        return record_exists
+
+    monkeypatch.setattr("deerflow.config.agents_config.load_agent_config", lambda name, **_kwargs: (_ for _ in ()).throw(FileNotFoundError(name)))
+    monkeypatch.setattr("deerflow.persistence.agents.get_agent_store", lambda: SimpleNamespace(exists=exists))
+    with acting_as(USER_A, ORG_S):
+        await _ratify_ceo(USER_A)
+        result = await _hire_report_impl("writer-1", "Writer", "content", "posts/week", ["bash"], 0, "muse", False, runtime=_runtime("ceo-agent"))
+        await _assert_hiring_ledger_empty(org_world)
+    assert "cannot verify tool permissions" in result["error"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("ceiling,requested,allowed", [(None, ["bash"], True), ([], ["bash"], False), ([], [], True), (["file:read"], ["file:read"], True), (["file:read"], ["bash"], False)])
+async def test_configured_manager_ceiling_preserves_none_empty_and_subset_semantics(org_world, monkeypatch, ceiling, requested, allowed):  # noqa: F811
+    monkeypatch.setattr("deerflow.config.agents_config.load_agent_config", lambda name, **_kwargs: AgentConfig(name=name, tool_groups=ceiling))
+    with acting_as(USER_A, ORG_S):
+        await _ratify_ceo(USER_A)
+        result = await _hire_report_impl("writer-1", "Writer", "content", "posts/week", requested, 0, "muse", False, runtime=_runtime("ceo-agent"))
+        persisted = await HiredAgentRepository(org_world).get_active_hire_by_agent_name("writer-1")
+    assert ("error" not in result) is allowed
+    assert (persisted is not None) is allowed
+    if allowed:
+        assert persisted["tool_groups"] == requested
+
+
+@pytest.mark.asyncio
+async def test_invalid_stored_yaml_ceiling_is_blocked_before_hiring(org_world, monkeypatch, tmp_path):  # noqa: F811
+    from deerflow.config.paths import Paths
+    from deerflow.persistence.agents.file import FileAgentStore
+
+    paths = Paths(tmp_path)
+    config_dir = paths.user_agent_dir("storage-s", "ceo-agent")
+    config_dir.mkdir(parents=True)
+    (config_dir / "config.yaml").write_text("name: ceo-agent\ntool_groups: {bash: true}\n", encoding="utf-8")
+    monkeypatch.setattr("deerflow.config.agents_config.get_paths", lambda: paths)
+    monkeypatch.setattr("deerflow.persistence.agents.get_agent_store", lambda: FileAgentStore())
+    # Exercise the actual file loader, overriding the ordinary test's valid
+    # unrestricted config instead of replacing validation with a stub.
+    monkeypatch.setattr("deerflow.config.agents_config.load_agent_config", lambda name, **kwargs: FileAgentStore().get(name, **kwargs))
+    with acting_as(USER_A, ORG_S):
+        await _ratify_ceo(USER_A)
+        result = await _hire_report_impl("writer-1", "Writer", "content", "posts/week", ["bash"], 0, "muse", False, runtime=_runtime("ceo-agent"))
+        await _assert_hiring_ledger_empty(org_world)
+    assert "cannot verify tool permissions" in result["error"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("caller_name", ["CEO-Agent", "ceo_agent"])
+async def test_seat_alias_resolves_the_persisted_managers_config_ceiling(org_world, monkeypatch, caller_name):  # noqa: F811
+    lookups = []
+
+    def load(name, **_kwargs):
+        lookups.append(name)
+        if name != "ceo-agent":
+            raise FileNotFoundError(name)
+        return AgentConfig(name=name, tool_groups=["file:read"])
+
+    monkeypatch.setattr("deerflow.config.agents_config.load_agent_config", load)
+    monkeypatch.setattr("deerflow.persistence.agents.get_agent_store", lambda: SimpleNamespace(exists=lambda name: name == "ceo-agent"))
+    with acting_as(USER_A, ORG_S):
+        await _ratify_ceo(USER_A, agent_name="ceo-agent")
+        result = await _hire_report_impl("writer-1", "Writer", "content", "posts/week", ["bash"], 0, "muse", False, runtime=_runtime(caller_name))
+        await _assert_hiring_ledger_empty(org_world)
+    assert lookups == ["ceo-agent"]
+    assert "subset" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_named_manager_loader_returning_none_is_not_an_unrestricted_policy(org_world, monkeypatch):  # noqa: F811
+    monkeypatch.setattr("deerflow.config.agents_config.load_agent_config", lambda name, **_kwargs: None)
+    with acting_as(USER_A, ORG_S):
+        await _ratify_ceo(USER_A)
+        result = await _hire_report_impl("writer-1", "Writer", "content", "posts/week", ["bash"], 0, "muse", False, runtime=_runtime("ceo-agent"))
+        await _assert_hiring_ledger_empty(org_world)
+    assert "cannot verify tool permissions" in result["error"]
 
 
 # --- private-data lane only from a Luna manager ---
