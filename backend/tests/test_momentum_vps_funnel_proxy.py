@@ -15,8 +15,11 @@ standing in for tailscaled.
 from __future__ import annotations
 
 import ipaddress
+import json
+import os
 import pathlib
 import re
+import subprocess
 
 import httpx
 import pytest
@@ -25,7 +28,9 @@ from fastapi import FastAPI
 
 from app.gateway.routers import auth as auth_router
 
-VPS_DIR = pathlib.Path(__file__).resolve().parents[2] / "deploy" / "momentum" / "vps"
+REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
+VPS_DIR = REPO_ROOT / "deploy" / "momentum" / "vps"
+MOMENTUM_DIR = REPO_ROOT / "deploy" / "momentum"
 
 
 def _overlay() -> dict:
@@ -92,6 +97,146 @@ def test_overlay_publishes_only_caddys_public_ports():
     # the sed on the Mac overlay's first deploy (nginx restart-looped).
     assert "\\n" not in command
     assert re.search(r"grep -q 'include /etc/nginx/momentum-realip\.conf;'", command)
+
+
+def _docker_compose_available() -> bool:
+    try:
+        result = subprocess.run(["docker", "compose", "version"], capture_output=True, timeout=5)
+        return result.returncode == 0
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return False
+
+
+def _ensure_file(path: pathlib.Path) -> bool:
+    """Create an empty file if it's missing; return whether this call created it.
+
+    ``docker compose config`` refuses to render when a service's ``env_file:``
+    doesn't exist on disk (``docker-compose.yaml``'s frontend/gateway entries
+    point at the real, gitignored ``.env``/``frontend/.env``). Content doesn't
+    matter for rendering ``ports``, only existence -- so touch it into being
+    only if absent, and let the caller remove it again afterwards.
+    """
+    if path.exists():
+        return False
+    path.write_text("", encoding="utf-8")
+    return True
+
+
+def _merged_vps_stack(*, project: str, momentum_tailnet_host: str | None) -> dict:
+    """Render the exact stack ``deploy/momentum/vps/restart.sh`` runs.
+
+    ``test_overlay_publishes_only_caddys_public_ports`` above only reads
+    ``compose.public.yaml`` in isolation, so it can't see a port republished
+    by an earlier file in restart.sh's own ``-f`` chain -- e.g.
+    ``deploy/momentum/compose.momentum.yaml``'s own ``nginx.ports`` entry
+    (f93c). That matters because Compose merges a service's ``ports`` list
+    across ``-f`` files by *concatenation*, not override: confirmed by the
+    regression test below, which renders with ``MOMENTUM_TAILNET_HOST=0.0.0.0``
+    and observes the merged list keep the base file's loopback entry *and*
+    gain a second, world-bound one alongside it, rather than the second
+    replacing the first. A regressed default anywhere in that chain widens
+    the published surface instead of merely being shadowed by a later file,
+    so only a merge of the real chain (restart.sh's exact file list and
+    order) can catch it -- reading any one file alone cannot.
+    """
+    created = [p for p in (REPO_ROOT / ".env", REPO_ROOT / "frontend" / ".env") if _ensure_file(p)]
+    try:
+        env = dict(os.environ)
+        env.pop("MOMENTUM_TAILNET_HOST", None)
+        env.update(
+            {
+                "COMPOSE_PROJECT_NAME": project,
+                "PORT": "2026",
+                "DEER_FLOW_CONFIG_PATH": str(MOMENTUM_DIR / "workspace.config.postgres.yaml"),
+                "DEER_FLOW_EXTENSIONS_CONFIG_PATH": str(REPO_ROOT / "extensions_config.example.json"),
+                "DEER_FLOW_HOME": str(REPO_ROOT / "backend" / ".deer-flow"),
+                "MOMOBOT_CADDYFILE": str(VPS_DIR / "Caddyfile"),
+                "MOMOBOT_REALIP_CONF": str(VPS_DIR / "nginx-realip.conf"),
+                "MOMOBOT_DOMAIN": "momo.example.com",
+                "MOMOBOT_ACME_EMAIL": "ops@example.com",
+                "POSTGRES_PASSWORD": "test-password",
+                "BETTER_AUTH_SECRET": "test-secret",
+                "DEER_FLOW_INTERNAL_AUTH_TOKEN": "test-token",
+            }
+        )
+        if momentum_tailnet_host is not None:
+            env["MOMENTUM_TAILNET_HOST"] = momentum_tailnet_host
+        result = subprocess.run(
+            [
+                "docker",
+                "compose",
+                "--env-file",
+                str(REPO_ROOT / ".env"),
+                "-p",
+                project,
+                "-f",
+                str(REPO_ROOT / "docker" / "docker-compose.yaml"),
+                "-f",
+                str(REPO_ROOT / "docker" / "docker-compose.dood.yaml"),
+                "-f",
+                str(MOMENTUM_DIR / "compose.momentum.yaml"),
+                "-f",
+                str(MOMENTUM_DIR / "compose.postgres.yaml"),
+                "-f",
+                str(VPS_DIR / "compose.public.yaml"),
+                "config",
+                "--format",
+                "json",
+            ],
+            capture_output=True,
+            text=True,
+            env=env,
+            timeout=30,
+        )
+        assert result.returncode == 0, f"docker compose config failed: {result.stderr}"
+        return json.loads(result.stdout)
+    finally:
+        for path in created:
+            path.unlink(missing_ok=True)
+
+
+@pytest.mark.skipif(not _docker_compose_available(), reason="Docker Compose not available")
+def test_merged_stack_publishes_only_caddys_public_ports():
+    """f93(c): the real restart.sh chain, not compose.public.yaml alone.
+
+    ``MOMENTUM_TAILNET_HOST`` is deliberately left unset here, so this
+    exercises ``compose.momentum.yaml:14``'s own ``${MOMENTUM_TAILNET_HOST:-127.0.0.1}``
+    fallback directly -- restart.sh also happens to pin the variable itself
+    (belt-and-suspenders, checked separately below), but that pin must never
+    be the only thing standing between the file's own default and the public
+    internet.
+    """
+    merged = _merged_vps_stack(project="f93-merge-check", momentum_tailnet_host=None)
+    for name, service in merged["services"].items():
+        for mapping in service.get("ports") or []:
+            host_ip = mapping.get("host_ip") or "0.0.0.0"
+            is_wide_open = host_ip in ("0.0.0.0", "::", "")
+            assert is_wide_open == (name == "caddy"), f"{name} published {mapping} on the merged VPS stack (host_ip={host_ip!r})"
+
+
+def test_restart_sh_also_pins_the_tailnet_host_to_loopback():
+    """Belt-and-suspenders alongside the file default checked above.
+
+    restart.sh unconditionally exports ``MOMENTUM_TAILNET_HOST=127.0.0.1``
+    before invoking Compose; losing that line would still be safe today
+    (the file's own default covers it), but must not silently start
+    forwarding a caller's own wider value instead.
+    """
+    script = (VPS_DIR / "restart.sh").read_text(encoding="utf-8")
+    assert re.search(r"^export MOMENTUM_TAILNET_HOST=127\.0\.0\.1\s*$", script, re.MULTILINE), "restart.sh must keep pinning MOMENTUM_TAILNET_HOST to loopback"
+
+
+@pytest.mark.skipif(not _docker_compose_available(), reason="Docker Compose not available")
+def test_merged_stack_regresses_if_a_chained_files_ports_default_widens():
+    """Same merge, but proves it actually catches a regression (not just passes).
+
+    Compose concatenates ``ports`` lists across ``-f`` files rather than
+    letting a later file override an earlier one, so a bad default anywhere
+    in the chain *adds* exposure instead of merely being shadowed.
+    """
+    merged = _merged_vps_stack(project="f93-merge-check-regression", momentum_tailnet_host="0.0.0.0")
+    nginx_hosts = {mapping.get("host_ip") for mapping in merged["services"]["nginx"].get("ports") or []}
+    assert "0.0.0.0" in nginx_hosts, "expected the merge to add a wide-open entry alongside the loopback one, proving concatenation not override"
 
 
 @pytest.mark.asyncio

@@ -10,7 +10,7 @@ here.
 | File | Role |
 |---|---|
 | `compose.funnel.yaml` | Overlay on `docker/docker-compose.yaml` + `docker-compose.dood.yaml`: fixed compose subnet, nginx at a fixed address with the realip include, `AUTH_TRUSTED_PROXIES` for the Gateway, image pins, `restart: unless-stopped`. |
-| `nginx-realip.conf` | Trust `X-Forwarded-For` only from the compose network gateway, where tailscaled's connections arrive (f23). |
+| `nginx-realip.conf` | Trust `X-Forwarded-For` only from the compose network gateway, where tailscaled's connections arrive (f23). That address is any host-originated connection, not only tailscaled's -- safe here only as long as `sandbox.network.mode` stays `isolated`/`allowlist` (f93b), which keeps agent sandboxes off `host.docker.internal`. |
 | `restart.sh` | Start or restart; waits for OrbStack; refuses a `.env` that is not mode 600; `--what-if` prints the merged config. Never builds. |
 | `backup.sh` | Nightly encrypted backup via `../offsite_backup.py` into `~/momobot-prod/backups`, key in `~/momobot-prod/secrets` (0600). |
 | `install-launchd.sh`, `launchd/` | Start at login, health every 15 min (`../vps/health.sh`), backup at 03:15. |

@@ -168,3 +168,24 @@ async def test_bootstrap_run_cannot_target_a_foreign_stamped_agent(stamped_agent
     # Bootstrapping a brand-new agent (nothing to protect) is unaffected.
     fresh = await _start(USER_D, _body(config={"context": {"agent_name": "d-new-agent", "is_bootstrap": True}}), "thread-bootstrap-new")
     assert not isinstance(fresh, HTTPException), fresh
+
+
+@pytest.mark.asyncio
+async def test_bootstrap_run_refuses_a_foreign_agent_with_an_unparseable_config(stamped_agents) -> None:
+    """f93(a): a corrupt foreign config isn't "missing" -- must still refuse.
+
+    The bootstrap peek used to swallow *every* ``HTTPException`` from loading
+    the named agent's config as "nothing exists yet, bootstrap creates a
+    fresh agent" -- but ``load_agent_config`` also raises (via 422) when a
+    config exists but fails to parse. That let a bootstrap run reach
+    ``setup_agent`` and overwrite a foreign, merely-corrupt agent's SOUL.
+    """
+    await _seed(stamped_agents)
+    from deerflow.config.paths import get_paths
+
+    config_path = get_paths().user_agent_dir(STORAGE_S, "c2-agent") / "config.yaml"
+    config_path.write_text("not: valid: yaml: [", encoding="utf-8")
+
+    corrupt = await _start(USER_D, _body(config={"context": {"agent_name": "c2-agent", "is_bootstrap": True}}), "thread-bootstrap-corrupt")
+    assert isinstance(corrupt, HTTPException)
+    assert (corrupt.status_code, corrupt.detail) == (422, MISSING_DETAIL)
