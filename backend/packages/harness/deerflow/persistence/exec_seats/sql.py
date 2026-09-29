@@ -60,6 +60,7 @@ class AgentSeatRepository:
         scope: str = "",
         kpi: str = "",
         weekly_token_budget: int = 0,
+        model_family: str = "muse",
         claimed_by_user_id: str | None = None,
     ) -> dict:
         """Create a new claim.
@@ -83,6 +84,7 @@ class AgentSeatRepository:
             scope=scope,
             kpi=kpi,
             weekly_token_budget=weekly_token_budget,
+            model_family=model_family,
             status=AgentSeatStatus.CLAIMED,
             claimed_by_user_id=claimed_by_user_id,
             created_at=now,
@@ -147,6 +149,26 @@ class AgentSeatRepository:
         """The currently ratified claim for *seat* in the active organization, if any."""
         organization_id = resolve_organization_id()
         stmt = self._scope(select(AgentSeatRow), organization_id).where(AgentSeatRow.seat == seat, AgentSeatRow.status == AgentSeatStatus.RATIFIED)
+        stmt = stmt.order_by(AgentSeatRow.updated_at.desc()).limit(1)
+        async with self._sf() as session:
+            result = await session.execute(stmt)
+            row = result.scalars().first()
+            return _to_dict(row) if row is not None else None
+
+    async def ratified_seat_for_agent(self, agent_name: str) -> dict | None:
+        """The ratified seat currently held by *agent_name*, if any, in the active organization.
+
+        Resolves whether an agent is a depth-1 hiring manager (queue item
+        e12): a titled employee. Case/underscore-insensitive, matching
+        ``paused_seat_for_agent``'s normalization.
+        """
+        organization_id = resolve_organization_id()
+        normalized = agent_name.strip().lower().replace("_", "-")
+        normalized_column = func.replace(func.lower(AgentSeatRow.agent_name), "_", "-")
+        stmt = self._scope(select(AgentSeatRow), organization_id).where(
+            normalized_column == normalized,
+            AgentSeatRow.status == AgentSeatStatus.RATIFIED,
+        )
         stmt = stmt.order_by(AgentSeatRow.updated_at.desc()).limit(1)
         async with self._sf() as session:
             result = await session.execute(stmt)

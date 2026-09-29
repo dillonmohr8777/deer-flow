@@ -40,6 +40,12 @@ class AgentSeatRow(Base):
     scope: Mapped[str] = mapped_column(Text, default="")
     kpi: Mapped[str] = mapped_column(Text, default="")
     weekly_token_budget: Mapped[int] = mapped_column(Integer, default=0)
+    # Whether this seat holder is itself a Luna or Muse employee (queue item
+    # e12, hiring): "Only a Luna employee can hire into private data" needs
+    # this fact for a depth-1 (titled-employee) manager. Defaults to the
+    # least-privileged "muse" for every seat claimed before this column
+    # existed, or that never specifies it.
+    model_family: Mapped[str] = mapped_column(String(16), nullable=False, default="muse", server_default="muse")
     status: Mapped[str] = mapped_column(String(16), default=AgentSeatStatus.CLAIMED, index=True)
     claimed_by_user_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     ratified_by_user_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
