@@ -216,6 +216,13 @@ cd frontend && pnpm rstest run <pattern>     # e.g. pnpm rstest run my-component
 
 ## Cross-Cutting Conventions
 
+The opt-in `examples/momo-agency-guard/` prototype is a separate synchronous
+loopback request guard and read-only artifact hash broker. Its tests must remain
+offline, never using provider credentials or activating models/schedules. Its
+receipt journal is not a work queue. Runtime integration must prove all new
+private child routes use the guard; never describe it as whole-gateway budget or
+egress enforcement. Preserve unknown/uncertain cost reservations across restart.
+
 These apply repo-wide; module guides own the module-specific detail.
 
 - **Documentation update policy** — keep docs in sync with code: update `README.md` for
