@@ -39,7 +39,7 @@ export function AgentCard({ agent }: AgentCardProps) {
     : agent.name;
   const { t } = useI18n();
   const router = useRouter();
-  const isMobile = useIsMobile();
+  const isMobile = useIsMobile(640);
   const deleteAgent = useDeleteAgent();
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -67,8 +67,9 @@ export function AgentCard({ agent }: AgentCardProps) {
       {/* Same identity as the Command Center roster; the name is the row
           heading, so the mark is decorative here. */}
       <span aria-hidden="true" className="shrink-0">
-        {/* Phones draw the Momo at the 64px sticker size. Sized here, not
-            in CSS, so Dillon Brain's layered box grows with its art. */}
+        {/* Phone slips (below 640px, as agent-gallery.module.css) draw the
+            Momo at the 64px sticker size. Sized here, not in CSS, so Dillon
+            Brain's layered box grows with its art. */}
         <MomoAvatar agent={agent} size={isMobile ? 64 : 48} />
       </span>
       <div className="min-w-0 flex-1 basis-64 max-sm:basis-0">

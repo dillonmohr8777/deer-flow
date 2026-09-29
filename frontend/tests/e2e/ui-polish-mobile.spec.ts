@@ -90,6 +90,72 @@ test.describe("UI polish mobile regressions", () => {
     ).toBeVisible();
   });
 
+  // Phone slips (below 640px) draw the Momo at 64px; Dillon Brain is a
+  // layered box 64 by round(64 * 422/480) with no layer outside it. The
+  // hairline roster from 640px keeps the 48px row avatar.
+  for (const [width, motion, size] of [
+    [390, "on", 64],
+    [390, "reduced", 64],
+    [700, "reduced", 48],
+  ] as const) {
+    test(`agents roster Momo is ${size}px at ${width} (motion ${motion})`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 844 });
+      if (motion === "on") {
+        // The workspace motion switch is off by default; turn it on.
+        await page.addInitScript(() => {
+          // Called with .call(this) below, so the unbound reference is intended.
+          // eslint-disable-next-line @typescript-eslint/unbound-method
+          const get = Storage.prototype.getItem;
+          Storage.prototype.getItem = function (key: string) {
+            return key.startsWith("momentum:appearance:v1:")
+              ? JSON.stringify({ treatment: "paper", motion: true })
+              : get.call(this, key);
+          };
+        });
+      } else {
+        await page.emulateMedia({ reducedMotion: "reduce" });
+      }
+      mockLangGraphAPI(page, {
+        agents: [
+          {
+            name: "dillon-brain",
+            description: "Leads the team.",
+            tool_groups: [],
+            skills: [],
+          },
+        ],
+      });
+      await page.goto("/workspace/agents");
+      const slip = page.locator('li:has(h2:text-is("dillon-brain"))');
+      const root = slip.locator('[data-paper-layers="root"]');
+      await root.waitFor();
+      await expect
+        .poll(async () => Math.round((await root.boundingBox())!.width))
+        .toBe(size);
+      const box = (await root.boundingBox())!;
+      expect(Math.round(box.height)).toBe(Math.round((size * 422) / 480));
+      const kind = await root.evaluate((el) =>
+        el.tagName === "IMG" ? "flat" : "layers",
+      );
+      expect(kind).toBe(motion === "on" ? "layers" : "flat");
+      // 1px: the top layers' translateZ depth scales them a hair past the
+      // box under perspective.
+      const layers = await slip
+        .locator('[data-paper-layers="root"] img')
+        .evaluateAll((els) =>
+          els.map((e) => e.getBoundingClientRect().toJSON()),
+        );
+      for (const b of layers) {
+        expect(b.left).toBeGreaterThanOrEqual(box.x - 1);
+        expect(b.top).toBeGreaterThanOrEqual(box.y - 1);
+        expect(b.right).toBeLessThanOrEqual(box.x + box.width + 1);
+        expect(b.bottom).toBeLessThanOrEqual(box.y + box.height + 1);
+      }
+    });
+  }
+
   test("mobile artifacts open in a drawer without horizontal overflow", async ({
     page,
   }) => {
