@@ -22,8 +22,25 @@ from org_isolation_fixtures import ORG_A, USER_A, acting_as, org_world  # noqa: 
 from deerflow.hiring.kpi_review import evaluate_all_hire_kpi_reviews, evaluate_hire_kpi, generate_kpi_verdict
 from deerflow.persistence.hiring.model import HireStatus
 from deerflow.persistence.hiring.sql import HiredAgentRepository
+from deerflow.persistence.run.model import RunRow
 from deerflow.persistence.team_board import TeamBoardRepository
 from deerflow.tools.exec_seat_tools import announce_to_exec
+
+
+async def _run(session_factory, *, organization_id: str, agent_name: str, created_at: datetime) -> None:
+    async with session_factory() as session, session.begin():
+        session.add(
+            RunRow(
+                run_id=f"run-{agent_name}-{created_at.timestamp()}",
+                thread_id=f"thread-{agent_name}",
+                assistant_id=agent_name,
+                organization_id=organization_id,
+                status="success",
+                created_at=created_at,
+                updated_at=created_at,
+            )
+        )
+
 
 _OLD = timedelta(days=30)  # well past the grace period, so a seeded hire is immediately checkable
 
@@ -334,3 +351,57 @@ async def test_generate_kpi_verdict_reads_unclear_as_no_verdict(monkeypatch):
     result = await generate_kpi_verdict({"agent_name": "cmo-report", "title": "Report", "job": "", "kpi": ""}, last_activity_at=None, app_config=SimpleNamespace())
 
     assert result is None
+
+
+# --- evaluate_hire_kpi wires the hire's real last_activity_at through to generate ---
+
+
+@pytest.mark.asyncio
+async def test_evaluate_hire_kpi_passes_the_hires_real_last_activity_to_generate(org_world):  # noqa: F811
+    """Confirmed test gap (f122): nothing previously proved evaluate_hire_kpi
+    actually threads a real last_activity_at through to generate -- passing
+    None unconditionally left every other test green. Seed a real run and
+    assert generate receives it."""
+    repo = HiredAgentRepository(org_world)
+    now = datetime.now(UTC)
+    captured: dict = {}
+
+    async def _capture(hire: dict, *, last_activity_at=None) -> bool:
+        captured["last_activity_at"] = last_activity_at
+        return True
+
+    with acting_as(USER_A, ORG_A):
+        hire = await _seed_hire(repo, agent_name="cmo-report")
+        run_time = now - timedelta(days=2)
+        await _run(org_world, organization_id=ORG_A, agent_name="cmo-report", created_at=run_time)
+
+        await evaluate_hire_kpi(repo, hire, now=now, generate=_capture)
+
+    assert captured["last_activity_at"] == run_time
+
+
+@pytest.mark.asyncio
+async def test_evaluate_hire_kpi_floors_last_activity_at_the_hires_own_creation(org_world):  # noqa: F811
+    """Related follow-up: the evidence passed to generate must never predate
+    this hire's own created_at, even when last_activity_at's name-based
+    match picks up an older run from before it existed (mirrors
+    evaluate_hire_idle_retirement's own max(last_active, created_at)
+    floor) -- a hire reusing an older identity's name must not be judged on
+    that identity's history."""
+    repo = HiredAgentRepository(org_world)
+    now = datetime.now(UTC)
+    captured: dict = {}
+
+    async def _capture(hire: dict, *, last_activity_at=None) -> bool:
+        captured["last_activity_at"] = last_activity_at
+        return True
+
+    with acting_as(USER_A, ORG_A):
+        old_run_time = now - timedelta(days=60)
+        await _run(org_world, organization_id=ORG_A, agent_name="cmo-report", created_at=old_run_time)
+        created_at = now - _OLD
+        hire = await _seed_hire(repo, agent_name="cmo-report", created_at=created_at)
+
+        await evaluate_hire_kpi(repo, hire, now=now, generate=_capture)
+
+    assert captured["last_activity_at"] == created_at

@@ -165,7 +165,13 @@ async def evaluate_hire_kpi(
     if not _due(hire, now):
         return hire
     generate = generate or generate_kpi_verdict
-    last_activity_at = _coerce_datetime(await repo.last_activity_at(organization_id=hire["organization_id"], agent_name=hire["agent_name"]))
+    raw_last_activity_at = _coerce_datetime(await repo.last_activity_at(organization_id=hire["organization_id"], agent_name=hire["agent_name"]))
+    created_at = _coerce_datetime(hire.get("created_at"))
+    # Same floor as evaluate_hire_idle_retirement's baseline (review finding,
+    # follow-up): last_activity_at matches by name with no lower bound, so a
+    # hire reusing an older identity's name could otherwise be judged on
+    # runs from before it was even hired.
+    last_activity_at = max(raw_last_activity_at, created_at) if (raw_last_activity_at is not None and created_at is not None) else (raw_last_activity_at or created_at)
     met = await generate(hire, last_activity_at=last_activity_at)
 
     expected_last_check_at = _coerce_datetime(hire.get("last_kpi_check_at"))
