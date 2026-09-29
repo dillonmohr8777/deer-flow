@@ -30,7 +30,12 @@ from deerflow.utils.llm_text import extract_response_text
 
 logger = logging.getLogger(__name__)
 
-Announce = Callable[[str], Awaitable[None]]
+# Unlike deerflow.exec_seats.budget's Announce (fire-and-forget, its
+# pause/resume decision never depends on whether the post landed), this
+# module's Announce reports whether the message actually reached #exec: a
+# scorecard that was drafted but never delivered is not "posted" (see the
+# success-requires-a-confirmed-post fix in evaluate_seat_scorecard below).
+Announce = Callable[[str], Awaitable[bool]]
 Generate = Callable[[dict[str, Any]], Awaitable[str | None]]
 
 _WEEK = timedelta(days=7)
@@ -46,14 +51,24 @@ async def generate_scorecard_body(
 ) -> str | None:
     """Draft this week's scorecard for *seat* via a single best-effort model call.
 
-    Returns ``None`` on any model failure or blank response.
+    Returns ``None`` on any model failure or blank response. *seat* may carry
+    an optional ``weekly_token_burn`` key (this week's real usage, from
+    ``AgentSeatRepository.token_burn_since``) -- the only grounded signal this
+    module has about the seat holder's actual activity, so the prompt hands
+    it over explicitly and tells the model not to invent specifics it has no
+    way to know.
     """
+    burn = seat.get("weekly_token_burn")
+    budget = seat.get("weekly_token_budget") or 0
+    usage_line = f"Usage this week: {burn} of {budget if budget else 'an unlimited'} weekly token budget.\n" if burn is not None else ""
     prompt = (
         f"You are {seat['agent_name']}, Momentum's {seat['seat']}.\n"
         f"Job scope: {seat.get('scope') or '(none recorded)'}\n"
         f"KPI: {seat.get('kpi') or '(none recorded)'}\n"
-        "Post this week's scorecard for the #exec channel: 2-3 plain sentences, no preamble, "
-        "covering what moved on your KPI this week and what's next. If nothing shipped, say so plainly."
+        f"{usage_line}"
+        "Post this week's scorecard for the #exec channel: 2-3 plain sentences, no preamble. "
+        "You have no record of specific tasks completed -- do not invent shipped work, numbers or events. "
+        "Describe your activity level from the usage figure above (e.g. quiet, steady, heavy) and restate your KPI focus for next week."
     )
     try:
         config = app_config or get_app_config()
@@ -90,9 +105,19 @@ async def evaluate_seat_scorecard(
     Only a ratified seat is checked (a still-``claimed``/unratified title has
     no confirmed holder yet, and a ``reopened`` seat has nobody to post one).
     Not yet due this week (``last_scorecard_at`` within the trailing week)
-    leaves the seat untouched. A generated scorecard posts to ``#exec`` and
-    resets the miss counter; a blank/failed generation counts as a miss and,
-    on the second consecutive miss, reopens the seat (EXECUTIVE.md rule 3).
+    leaves the seat untouched. Success requires a *confirmed* post to
+    ``#exec`` -- a drafted-but-undelivered scorecard (no channel, a storage
+    hiccup) counts as a miss, never a silent success, so a misconfigured
+    organization's seats are still noticed and eventually reopened rather
+    than reading as fine forever. A blank/failed generation likewise counts
+    as a miss, and the second consecutive miss reopens the seat (EXECUTIVE.md
+    rule 3).
+
+    ``announce=None`` (the default) means every due seat is recorded as a
+    miss -- there is nowhere to confirm a post, so nothing can count as
+    delivered. Every production caller (``_run_seat_scorecard_sweep``)
+    passes a real ``announce``; ``None`` is only for tests that don't care
+    about the miss/success outcome (e.g. proving a seat is skipped entirely).
     """
     if seat["status"] != AgentSeatStatus.RATIFIED:
         return seat
@@ -100,15 +125,14 @@ async def evaluate_seat_scorecard(
     if not _due(seat, now):
         return seat
     generate = generate or generate_scorecard_body
-    body = await generate(seat)
+    burn = await repo.token_burn_since(organization_id=seat["organization_id"], agent_name=seat["agent_name"], since=now - _WEEK)
+    body = await generate({**seat, "weekly_token_burn": burn})
     body = body.strip() if body else None
-    if body:
+
+    posted = await announce(f"[{seat['seat']}] weekly scorecard: {body}") if (body and announce is not None) else False
+    if posted:
         updated = await repo.record_scorecard_result(seat["id"], success=True, now=now)
-        if updated is None:
-            return seat
-        if announce is not None:
-            await announce(f"[{seat['seat']}] weekly scorecard: {body}")
-        return updated
+        return updated if updated is not None else seat
 
     updated = await repo.record_scorecard_result(seat["id"], success=False, now=now)
     if updated is None:

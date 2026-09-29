@@ -13,6 +13,54 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import pytest
+from org_isolation_fixtures import ORG_A, ORG_B, USER_A, USER_B, acting_as, org_world  # noqa: F401
+
+
+async def _succeed(_seat: dict) -> str:
+    return "Steady week, on KPI."
+
+
+@pytest.mark.asyncio
+async def test_sweep_evaluates_each_organizations_seats_in_its_own_context(org_world):  # noqa: F811
+    """Review finding (low, test gap): _run_seat_scorecard_sweep's per-org storage-context
+    switch (mirroring f95's budget sweep) was untested -- a seat's scorecard must land only
+    in its own organization's #exec, never a sibling org's."""
+    from app.gateway.app import _run_seat_scorecard_sweep
+    from deerflow.persistence.exec_seats import AgentSeatRepository, AgentSeatStatus
+    from deerflow.persistence.team_board import TeamBoardRepository
+
+    repo = AgentSeatRepository(org_world)
+    team_repo = TeamBoardRepository(org_world)
+
+    # Distinct titles (not just agent names) so each org's post is identifiable by body text.
+    with acting_as(USER_A, ORG_A):
+        await team_repo.ensure_default_channels(created_by_user_id=USER_A)
+        seat_a = await repo.claim_seat(seat="CMO", agent_name="cmo-agent-a", weekly_token_budget=0, claimed_by_user_id=USER_A)
+        await repo.patch_seat(seat_a["id"], status=AgentSeatStatus.RATIFIED, ratified_by_user_id=USER_A)
+    with acting_as(USER_B, ORG_B):
+        await team_repo.ensure_default_channels(created_by_user_id=USER_B)
+        seat_b = await repo.claim_seat(seat="CTO", agent_name="cto-agent-b", weekly_token_budget=0, claimed_by_user_id=USER_B)
+        await repo.patch_seat(seat_b["id"], status=AgentSeatStatus.RATIFIED, ratified_by_user_id=USER_B)
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr("deerflow.exec_seats.scorecard.generate_scorecard_body", _succeed)
+        await _run_seat_scorecard_sweep()
+
+    with acting_as(USER_A, ORG_A):
+        exec_a = next(c for c in await team_repo.list_channels() if c["slug"] == "exec")
+        messages_a = await team_repo.list_messages(exec_a["id"])
+        updated_a = await repo.get_seat(seat_a["id"])
+    with acting_as(USER_B, ORG_B):
+        exec_b = next(c for c in await team_repo.list_channels() if c["slug"] == "exec")
+        messages_b = await team_repo.list_messages(exec_b["id"])
+        updated_b = await repo.get_seat(seat_b["id"])
+
+    assert updated_a["missed_scorecards"] == 0
+    assert updated_b["missed_scorecards"] == 0
+    assert any("[CMO]" in m["body"] for m in messages_a)
+    assert not any("[CTO]" in m["body"] for m in messages_a)
+    assert any("[CTO]" in m["body"] for m in messages_b)
+    assert not any("[CMO]" in m["body"] for m in messages_b)
 
 
 @pytest.mark.asyncio

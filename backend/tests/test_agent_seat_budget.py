@@ -69,6 +69,29 @@ async def _spend_via_context_agent_name(session_factory, *, organization_id: str
         )
 
 
+async def _spend_with_divergent_identity(session_factory, *, organization_id: str, assistant_id: str, effective_agent_name: str, total_tokens: int, created_at: datetime) -> None:
+    """A run whose raw ``assistant_id`` and stamped ``effective_agent_name`` disagree.
+
+    ``assistant_id`` is client-chosen; the agent that actually ran is the
+    stamped identity (f98 review of f97). This must count once, toward the
+    stamped identity only -- never toward the raw ``assistant_id`` too.
+    """
+    async with session_factory() as session, session.begin():
+        session.add(
+            RunRow(
+                run_id=f"run-divergent-{assistant_id}-{created_at.timestamp()}",
+                thread_id=f"thread-divergent-{assistant_id}",
+                assistant_id=assistant_id,
+                organization_id=organization_id,
+                status="success",
+                total_tokens=total_tokens,
+                metadata_json={EFFECTIVE_AGENT_NAME_METADATA_KEY: effective_agent_name},
+                created_at=created_at,
+                updated_at=created_at,
+            )
+        )
+
+
 @pytest.mark.asyncio
 async def test_seat_over_budget_is_paused_and_announced(org_world):  # noqa: F811
     repo = AgentSeatRepository(org_world)
@@ -249,3 +272,39 @@ async def test_case_variant_context_agent_name_run_pauses_the_seat(org_world):  
         updated = await evaluate_seat_budget(repo, seat, now=now)
 
     assert updated["paused_at"] is not None
+
+
+@pytest.mark.asyncio
+async def test_token_burn_since_uses_the_stamped_identity_not_the_raw_assistant_id(org_world):  # noqa: F811
+    """f98 review of f97: the exact repro. A run POSTed with
+    ``assistant_id="CMO_Agent"`` but ``configurable.agent_name="other-agent"``
+    is really run by ``other-agent`` -- the stamped identity, not the raw
+    client-chosen ``assistant_id`` -- so its burn must count once, toward
+    ``other-agent`` only. Before the fix, the ``or_`` match counted it toward
+    both names."""
+    repo = AgentSeatRepository(org_world)
+    now = datetime.now(UTC)
+    with acting_as(USER_A, ORG_A):
+        await _spend_with_divergent_identity(org_world, organization_id=ORG_A, assistant_id="CMO_Agent", effective_agent_name="other-agent", total_tokens=5000, created_at=now - timedelta(hours=1))
+
+        cmo_burn = await repo.token_burn_since(organization_id=ORG_A, agent_name="cmo-agent", since=now - timedelta(days=7))
+        other_burn = await repo.token_burn_since(organization_id=ORG_A, agent_name="other-agent", since=now - timedelta(days=7))
+
+    assert cmo_burn == 0
+    assert other_burn == 5000
+
+
+@pytest.mark.asyncio
+async def test_token_burn_since_still_matches_a_legacy_row_with_no_stamp(org_world):  # noqa: F811
+    """A run written before the f95 metadata stamp existed has no
+    ``effective_agent_name`` key at all (``metadata_json`` defaults to
+    ``{}``) -- ``coalesce`` must fall back to ``assistant_id`` for it, not
+    drop it from the ledger."""
+    repo = AgentSeatRepository(org_world)
+    now = datetime.now(UTC)
+    with acting_as(USER_A, ORG_A):
+        await _spend(org_world, organization_id=ORG_A, agent_name="cmo-agent", total_tokens=700, created_at=now - timedelta(hours=1))
+
+        burn = await repo.token_burn_since(organization_id=ORG_A, agent_name="cmo-agent", since=now - timedelta(days=7))
+
+    assert burn == 700
