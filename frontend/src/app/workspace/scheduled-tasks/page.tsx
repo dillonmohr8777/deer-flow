@@ -599,7 +599,13 @@ export default function ScheduledTasksPage() {
                     </p>
                   )}
                 {filteredData.length > 0 && (
-                  <ul className={cn("divide-y border-y", pageStyles.rows)}>
+                  <ul
+                    className={cn(
+                      "divide-y border-y",
+                      pageStyles.rows,
+                      pageStyles.slips,
+                    )}
+                  >
                     {filteredData.map((task) => {
                       const isSelected = selectedTask?.id === task.id;
                       const nextRun = formatTimestamp(task.next_run_at, locale);
@@ -640,6 +646,13 @@ export default function ScheduledTasksPage() {
                               {st.detail.nextRun}{" "}
                               {nextRun ?? st.detail.notScheduled}
                             </span>
+                            {/* The last run's failure belongs on the row, not
+                                only behind a tap: an enabled task can be failing. */}
+                            {task.last_error ? (
+                              <span className="text-destructive line-clamp-2 text-xs [overflow-wrap:anywhere]">
+                                {st.detail.lastError}: {task.last_error}
+                              </span>
+                            ) : null}
                           </button>
                         </li>
                       );

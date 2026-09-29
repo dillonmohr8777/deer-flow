@@ -38,9 +38,9 @@ test.describe("UI polish mobile regressions", () => {
     await page.goto("/workspace/chats/new");
     await expect(async () => {
       await page.getByRole("button", { name: /toggle sidebar/i }).click();
-      await expect(
-        page.getByTestId("projects-new-project-button"),
-      ).toBeVisible({ timeout: 1_000 });
+      await expect(page.getByTestId("projects-new-project-button")).toBeVisible(
+        { timeout: 1_000 },
+      );
     }).toPass();
 
     const rows = await page.evaluate(() => {
@@ -429,5 +429,53 @@ test.describe("scheduled tasks on a phone", () => {
         ),
     );
     expect(small).toEqual([]);
+  });
+
+  test("filters are one-row rails and tasks are slips that name a failure", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    mockLangGraphAPI(page, {
+      threads: [],
+      scheduledTasks: [
+        task("a", "Weekly SEO report draft"),
+        {
+          ...task("b", "Monday ad spend check"),
+          last_error: "Google Ads token expired, reconnect the account",
+        },
+      ],
+    });
+    await page.goto("/workspace/scheduled-tasks");
+    await page.getByTestId("scheduled-task-item-b").waitFor();
+
+    // An enabled task can still be failing: the row says so without a tap.
+    await expect(page.getByTestId("scheduled-task-item-b")).toContainText(
+      "Google Ads token expired",
+    );
+
+    const facts = await page.evaluate(() => {
+      const rails = [
+        ...document.querySelectorAll("[role='group'][aria-label]"),
+      ].filter((g) => g.querySelector("[aria-pressed]"));
+      const list = document.querySelector(
+        "[data-testid='scheduled-task-list']",
+      )!;
+      const slips = [...list.querySelectorAll("li")].map((li) =>
+        li.getBoundingClientRect(),
+      );
+      return {
+        // Before, Status wrapped to two rows and the pair stood 200px tall.
+        railHeights: rails.map((g) =>
+          Math.round(g.getBoundingClientRect().height),
+        ),
+        // The rail sizes to the column, so the page keeps its 16px gutter.
+        listRight: Math.round(list.getBoundingClientRect().right),
+        slipGap: Math.round(slips[1]!.top - slips[0]!.bottom),
+      };
+    });
+    expect(facts.railHeights.length).toBeGreaterThanOrEqual(2);
+    for (const h of facts.railHeights) expect(h).toBeLessThanOrEqual(56);
+    expect(facts.listRight).toBeLessThanOrEqual(390 - 16);
+    expect(facts.slipGap).toBeGreaterThanOrEqual(8);
   });
 });

@@ -51,6 +51,42 @@
   color: var(--paper-ink-muted);
 }
 
+/*
+ * Phones: a record list becomes paper slips on the desk, as Desk results
+ * and the Agents roster do. The selected slip is edged in royal.
+ */
+@media (max-width: 639px) {
+  .slips.slips {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    border: 0;
+  }
+
+  .slips.slips > li {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 2px 5px 3px 6px;
+    box-shadow: 0 1px 0 color-mix(in srgb, var(--foreground) 10%, transparent);
+  }
+
+  .slips.slips > li:nth-child(even) {
+    border-radius: 5px 2px 6px 3px;
+  }
+
+  .slips.slips > li:has([aria-pressed="true"]) {
+    border-color: var(--primary);
+    box-shadow: inset 0 0 0 1px var(--primary);
+  }
+
+  .slips > li > button {
+    padding: 0.875rem 1rem;
+    border-left: 0;
+    border-radius: inherit;
+    background: transparent;
+  }
+}
+
 /* A pin is reserved for something that is doing work right now. */
 .pin {
   position: relative;
@@ -325,8 +361,29 @@
 }
 
 /* DESIGN.md's 44px touch floor on phones (Scheduled tasks, Board and
-   Capability Center filters share this). */
+   Capability Center filters share this). Each group is one sideways rail,
+   so five 44px choices never wrap into three rows of chrome. */
 @media (max-width: 639px) {
+  .filters {
+    flex-wrap: nowrap;
+    /* Size to the column, never to the choices: without containment the
+       rail's full width leaks up through the ScrollArea's table and grid
+       parents and pushes the whole page past the gutter. */
+    contain: inline-size;
+    width: calc(100% + 10px);
+    overflow-x: auto;
+    scrollbar-width: none;
+    /* Room for the 3px focus ring, which the scroll box would clip. */
+    margin: -5px;
+    padding: 5px;
+  }
+
+  .filter,
+  .filterLabel {
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
   .filter {
     min-height: 44px;
   }
