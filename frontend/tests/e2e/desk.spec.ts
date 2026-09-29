@@ -38,9 +38,19 @@ function template(id: string, name: string) {
   };
 }
 
+type BoardThreadFixture = {
+  id: string;
+  status: string;
+  urgency: string | null;
+};
+
 async function mockWorkspace(
   page: Page,
-  { desk, fresh = false }: { desk: boolean; fresh?: boolean },
+  {
+    desk,
+    fresh = false,
+    boardThreads = [],
+  }: { desk: boolean; fresh?: boolean; boardThreads?: BoardThreadFixture[] },
 ) {
   mockLangGraphAPI(page, {
     scheduledTasks: fresh
@@ -153,6 +163,24 @@ async function mockWorkspace(
       }),
     ),
   );
+  await page.route("**/api/board/threads*", (route) =>
+    route.fulfill(
+      json({
+        threads: boardThreads.map((thread) => ({
+          id: thread.id,
+          client_id: "acme",
+          kind: "ticket",
+          status: thread.status,
+          subject: "Site is down",
+          urgency: thread.urgency,
+          summary: null,
+          created_by_user_id: "client-1",
+          created_at: at(-200),
+          updated_at: at(-200),
+        })),
+      }),
+    ),
+  );
 }
 
 test.describe("Desk, the owner-only home", () => {
@@ -171,7 +199,7 @@ test.describe("Desk, the owner-only home", () => {
     }
     // Chief of Staff finished 3 hours ago: a draft waiting on the owner.
     await expect(desk.getByText("Ready for review")).toBeVisible();
-    await expect(desk.getByText("Not wired")).toBeVisible();
+    await expect(desk.getByText("Nothing waiting")).toBeVisible();
     await expect(desk.getByRole("group", { name: "Command" })).toContainText(
       "Chief of Staff",
     );
@@ -214,5 +242,52 @@ test.describe("Desk, the owner-only home", () => {
       desk.getByText("No agents on this instance yet"),
     ).toBeVisible();
     await expect(desk.getByText("No model calls yet")).toBeVisible();
+  });
+
+  test("shows a count of threads waiting on the owner's approval, on the Desk and in the sidebar", async ({
+    page,
+  }) => {
+    await mockWorkspace(page, {
+      desk: true,
+      boardThreads: [
+        { id: "t1", status: "drafted", urgency: "normal" },
+        { id: "t2", status: "drafted", urgency: "low" },
+      ],
+    });
+    await page.goto("/workspace/desk");
+
+    const desk = page.getByTestId("desk");
+    await expect(desk.getByText("2 waiting on you")).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(desk.getByText("After hours")).toHaveCount(0);
+
+    const boardItem = page.locator(
+      "[data-sidebar='sidebar'] [data-sidebar='menu-item']:has(a[href='/workspace/board'])",
+    );
+    await expect(boardItem.locator("a[href='/workspace/board']")).toBeVisible();
+    await expect(boardItem.locator("[data-sidebar='menu-badge']")).toHaveText(
+      "2",
+    );
+  });
+
+  test("flags an urgent waiting thread as after hours outside 8am-8pm ET", async ({
+    page,
+  }) => {
+    // 2am ET: well outside the 8am-8pm window, no DST ambiguity.
+    await page.clock.install({
+      time: new Date("2026-09-24T06:00:00.000Z"), // 02:00 America/New_York
+    });
+    await mockWorkspace(page, {
+      desk: true,
+      boardThreads: [{ id: "t1", status: "drafted", urgency: "urgent" }],
+    });
+    await page.goto("/workspace/desk");
+
+    const desk = page.getByTestId("desk");
+    await expect(desk.getByText("1 waiting on you")).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(desk.getByText("After hours")).toBeVisible();
   });
 });

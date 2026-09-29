@@ -1,3 +1,4 @@
+import type { BoardThread } from "@/core/board/types";
 import type { FleetAgentBinding, FleetTemplate } from "@/core/fleet/types";
 import type { ScheduledTask } from "@/core/scheduled-tasks/types";
 import { pathOfThread } from "@/core/threads/utils";
@@ -158,4 +159,38 @@ export function formatWhen(iso: string, now = new Date()): string {
     return `${at.toLocaleDateString(undefined, { weekday: "short" })} ${clock}`;
   }
   return at.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+/* ---------- Owner alerts (e4): waiting-approval count, after-hours flag ---------- */
+
+const OWNER_ALERT_TIMEZONE = "America/New_York";
+const BUSINESS_HOURS_START = 8; // 8am ET
+const BUSINESS_HOURS_END = 20; // 8pm ET
+
+/** Whether *now* falls outside 8am-8pm Eastern, regardless of the viewer's own timezone. */
+export function isAfterHoursET(now: Date = new Date()): boolean {
+  const formatted = new Intl.DateTimeFormat("en-US", {
+    timeZone: OWNER_ALERT_TIMEZONE,
+    hour: "numeric",
+    hour12: false,
+  }).format(now);
+  // Intl can render midnight as "24" instead of "0"; normalize either way.
+  const hour = Number(formatted) % 24;
+  return hour < BUSINESS_HOURS_START || hour >= BUSINESS_HOURS_END;
+}
+
+/** Threads that are waiting on the owner's approval (Momo has a drafted reply). */
+export function threadsWaitingApproval(threads: BoardThread[]): BoardThread[] {
+  return threads.filter((t) => t.status === "drafted");
+}
+
+/** An urgent thread is waiting on approval outside business hours right now. */
+export function hasUrgentAfterHoursApproval(
+  threads: BoardThread[],
+  now: Date = new Date(),
+): boolean {
+  return (
+    isAfterHoursET(now) &&
+    threadsWaitingApproval(threads).some((t) => t.urgency === "urgent")
+  );
 }
