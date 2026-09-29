@@ -320,6 +320,47 @@ test.describe("UI polish mobile regressions", () => {
     ).not.toBeInViewport();
   });
 
+  test("chats are filed under day labels, in the text voice", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    const day = 86_400_000;
+    const at = (daysAgo: number) => {
+      // Noon on the given calendar day, so the test never straddles midnight.
+      const d = new Date(Date.now() - daysAgo * day);
+      d.setHours(12, 0, 0, 0);
+      return d.toISOString();
+    };
+    mockLangGraphAPI(page, {
+      threads: [
+        { thread_id: "t0", title: "Today chat", updated_at: at(0) },
+        { thread_id: "t0b", title: "Another today chat", updated_at: at(0) },
+        { thread_id: "t1", title: "Yesterday chat", updated_at: at(1) },
+        { thread_id: "t3", title: "This week chat", updated_at: at(3) },
+        { thread_id: "t400", title: "Old chat", updated_at: at(400) },
+      ],
+    });
+
+    await page.goto("/workspace/chats");
+    await expect(page.getByRole("link", { name: "Old chat" })).toBeAttached();
+
+    const labels = page.locator("h2[data-day-group]");
+    await expect(labels).toHaveText([
+      "Today",
+      "Yesterday",
+      "Last 7 days",
+      /^[A-Z][a-z]+ \d{4}$/,
+    ]);
+    // A label, not a heading voice: Nunito Sans at 11px, ink-muted.
+    const style = await labels.first().evaluate((el) => {
+      const s = getComputedStyle(el);
+      return { font: s.fontFamily, size: s.fontSize, color: s.color };
+    });
+    expect(style.font).not.toMatch(/Fraunces/);
+    expect(style.size).toBe("11px");
+    expect(style.color).toBe("rgb(58, 74, 107)");
+  });
+
   test("?settings=security opens the Security section", async ({ page }) => {
     mockLangGraphAPI(page);
 

@@ -2,7 +2,7 @@
 
 import { ArchiveRestore, MessageSquarePlus } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,6 +22,11 @@ import {
 } from "@/components/workspace/workspace-container";
 import { useI18n } from "@/core/i18n/hooks";
 import { useProjects } from "@/core/projects";
+import {
+  dayGroupKey,
+  dayGroupStartingAt,
+  type ThreadDayGroup,
+} from "@/core/threads/day-groups";
 import { useInfiniteThreads } from "@/core/threads/hooks";
 import { buildThreadListModel } from "@/core/threads/thread-list-model";
 import {
@@ -30,12 +35,32 @@ import {
   projectIdOfThread,
   titleOfThread,
 } from "@/core/threads/utils";
-import { formatTimeAgo } from "@/core/utils/datetime";
+import { formatCompactStamp } from "@/core/utils/datetime";
 import { env } from "@/env";
 import { cn } from "@/lib/utils";
 
+function dayGroupLabel(
+  group: ThreadDayGroup,
+  labels: {
+    pinned: string;
+    today: string;
+    yesterday: string;
+    lastWeek: string;
+    earlierIn: (month: string) => string;
+    undated: string;
+  },
+  locale: string,
+): string {
+  if (group.kind !== "month") return labels[group.kind];
+  const month = new Intl.DateTimeFormat(
+    locale === "zh-CN" ? "zh-CN" : "en-US",
+    { month: "long", ...(group.sameYear ? {} : { year: "numeric" as const }) },
+  ).format(new Date(group.year, group.month, 1));
+  return group.sameMonth ? labels.earlierIn(month) : month;
+}
+
 export default function ChatsPage() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const [view, setView] = useState("active");
   const archived = view === "archived";
   const staticWebsite = env.NEXT_PUBLIC_STATIC_WEBSITE_ONLY === "true";
@@ -216,65 +241,81 @@ export default function ChatsPage() {
                   const projectName = projectNames.get(
                     projectIdOfThread(thread) ?? "",
                   );
+                  const stamp = formatCompactStamp(thread.updated_at, locale);
+                  // Chats are filed under the day they were last touched, so
+                  // a phone scroll reads as a ledger instead of one long run.
+                  const group = dayGroupStartingAt(filteredThreads, index);
                   return (
-                    <div
-                      key={thread.thread_id}
-                      className={cn(
-                        "flex items-center gap-2 border-b",
-                        pageStyles.slip,
-                        index % 2 === 1 && pageStyles.slipAlt,
-                      )}
-                    >
-                      <Link
-                        className="group/chat-row min-w-0 flex-1 rounded-[inherit]"
-                        href={pathOfThread(thread)}
-                        title={title}
-                      >
-                        <div className="flex flex-col gap-2 p-4">
-                          <div className="flex min-w-0 items-start gap-2">
-                            <ThreadChannelIcon source={channelSource} />
-                            <div className="line-clamp-2 min-w-0 flex-1 break-words group-focus-visible/chat-row:line-clamp-none">
-                              {title}
-                            </div>
-                            <ThreadChannelBadge
-                              source={channelSource}
-                              className="hidden sm:inline-flex"
-                            />
-                          </div>
-                          {(thread.updated_at ?? projectName) && (
-                            <div className="text-muted-foreground truncate text-sm">
-                              {thread.updated_at && (
-                                <time dateTime={thread.updated_at}>
-                                  {formatTimeAgo(thread.updated_at)}
-                                </time>
-                              )}
-                              {thread.updated_at && projectName && (
-                                <span aria-hidden="true"> · </span>
-                              )}
-                              {projectName && (
-                                <span className="text-foreground font-semibold">
-                                  {projectName}
-                                </span>
-                              )}
-                            </div>
+                    <Fragment key={thread.thread_id}>
+                      {group && (
+                        <h2
+                          className={cn(
+                            pageStyles.dayLabel,
+                            index === 0 && pageStyles.dayLabelFirst,
                           )}
-                        </div>
-                      </Link>
-                      {archived && (
-                        <Button
-                          className="mr-4 shrink-0 max-sm:min-h-11"
-                          variant="outline"
-                          size="sm"
-                          disabled={archiveAction.isPending}
-                          onClick={() =>
-                            archiveAction.setArchived(thread.thread_id, false)
-                          }
+                          data-day-group={dayGroupKey(group)}
                         >
-                          <ArchiveRestore className="size-4" />
-                          {t.chats.restoreChat}
-                        </Button>
+                          {dayGroupLabel(group, t.chats.dayGroups, locale)}
+                        </h2>
                       )}
-                    </div>
+                      <div
+                        className={cn(
+                          "flex items-center gap-2 border-b",
+                          pageStyles.slip,
+                          index % 2 === 1 && pageStyles.slipAlt,
+                        )}
+                      >
+                        <Link
+                          className="group/chat-row min-w-0 flex-1 rounded-[inherit]"
+                          href={pathOfThread(thread)}
+                          title={title}
+                        >
+                          <div className="flex flex-col gap-2 p-4">
+                            <div className="flex min-w-0 items-start gap-2">
+                              <ThreadChannelIcon source={channelSource} />
+                              <div className="line-clamp-2 min-w-0 flex-1 break-words group-focus-visible/chat-row:line-clamp-none">
+                                {title}
+                              </div>
+                              <ThreadChannelBadge
+                                source={channelSource}
+                                className="hidden sm:inline-flex"
+                              />
+                            </div>
+                            {(stamp ?? projectName) && (
+                              <div className="text-muted-foreground truncate text-sm">
+                                {stamp && (
+                                  <time dateTime={thread.updated_at}>
+                                    {stamp}
+                                  </time>
+                                )}
+                                {stamp && projectName && (
+                                  <span aria-hidden="true"> · </span>
+                                )}
+                                {projectName && (
+                                  <span className="text-foreground font-semibold">
+                                    {projectName}
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </Link>
+                        {archived && (
+                          <Button
+                            className="mr-4 shrink-0 max-sm:min-h-11"
+                            variant="outline"
+                            size="sm"
+                            disabled={archiveAction.isPending}
+                            onClick={() =>
+                              archiveAction.setArchived(thread.thread_id, false)
+                            }
+                          >
+                            <ArchiveRestore className="size-4" />
+                            {t.chats.restoreChat}
+                          </Button>
+                        )}
+                      </div>
+                    </Fragment>
                   );
                 }}
               />

@@ -877,6 +877,14 @@ export interface Translations {
     searchChats: string;
     branchLabel: (title: string, parentTitle: string) => string;
     loadMoreToSearch: string;
+    dayGroups: {
+      pinned: string;
+      today: string;
+      yesterday: string;
+      lastWeek: string;
+      earlierIn: (month: string) => string;
+      undated: string;
+    };
     loadingMore: string;
     loadOlderChats: string;
     pinChat: string;
