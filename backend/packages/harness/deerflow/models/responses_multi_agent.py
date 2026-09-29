@@ -88,7 +88,7 @@ def build_request(prompt: str, *, instructions: str, receipt_id: str, cycle_id: 
     _identifier(receipt_id)
     _identifier(cycle_id)
     if previous_response_id is not None:
-        _identifier(previous_response_id)
+        raise ActivationError("HTTP continuation is disabled with store=false until a stateless replay contract is independently verified.")
     if type(limits.max_input_bytes) is not int or not 1 <= limits.max_input_bytes <= 65536:
         raise ActivationError("Invalid input byte limit; maximum is 65536.")
     if type(limits.max_output_tokens) is not int or not 1 <= limits.max_output_tokens <= 2048:
@@ -111,8 +111,6 @@ def build_request(prompt: str, *, instructions: str, receipt_id: str, cycle_id: 
         "provider": {"only": ["OpenAI"], "allow_fallbacks": False, "data_collection": "deny", "require_parameters": True},
         "metadata": {"cycle_id": cycle_id, "receipt_id": receipt_id},
     }
-    if previous_response_id is not None:
-        payload["previous_response_id"] = previous_response_id
     return PreparedRequest(json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8"))
 
 
@@ -472,9 +470,6 @@ class CycleJournal:
             committed = sum((Decimal(row["cost"]) for row in rows), Decimal(0))
             if committed + reservation > self._budget_limit:
                 raise ActivationError("Insufficient cycle budget for this reservation.")
-            parent = payload.get("previous_response_id")
-            if parent and not any(row["response_id"] == parent and parse_response(json.loads(row["response_json"])).accepted for row in rows):
-                raise ActivationError("Continuation parent must be a verified response in this cycle.")
             db.execute("INSERT INTO receipts (id, request_sha256, reservation, status) VALUES (?, ?, ?, 'inflight')", (receipt_id, request.sha256, str(reservation)))
             db.execute("INSERT INTO events (receipt_id, kind, payload) VALUES (?, 'reserved', ?)", (receipt_id, json.dumps({"request_sha256": request.sha256, "reservation_usd": str(reservation)}, sort_keys=True)))
 
@@ -487,6 +482,9 @@ class CycleJournal:
     def recover(self, receipt_id: str, response: Mapping[str, Any]) -> ParsedResponse:
         """Reconcile a retrieved response, without making any provider request."""
         _identifier(receipt_id)
+        metadata = response.get("metadata")
+        if not isinstance(metadata, dict) or metadata.get("cycle_id") != self.policy.cycle_id or metadata.get("receipt_id") != receipt_id:
+            raise ActivationError("Response metadata must bind to the reserved cycle and receipt before accounting can be released.")
         result = parse_response(response)
         serialized = json.dumps(dict(response), sort_keys=True, ensure_ascii=False)
         with self._transaction() as db:
@@ -552,7 +550,7 @@ class CycleJournal:
 
 
 class Pilot:
-    """Single explicit call/continuation; no scheduling, retries or fallback."""
+    """Single explicit stateless call; no continuations, scheduling or retries."""
 
     def __init__(self, journal: CycleJournal, post: Callable[[PreparedRequest], Awaitable[Mapping[str, Any]]]):
         self.journal = journal

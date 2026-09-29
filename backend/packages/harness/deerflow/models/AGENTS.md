@@ -91,6 +91,12 @@ reserves durably before dispatch, never retries/falls back, and stops on unknown
 outcomes. Append-only evidence events retain original responses and later usage
 corrections; mutable receipt rows are the current-state projection. A recovery
 must keep the same result/identity and may fill previously unknown accounting.
+Response metadata must echo the reserved `cycle_id` and `receipt_id` before any
+settlement/recovery can release accounting. Missing/mismatched metadata preserves
+the reservation; an unrelated valid response cannot reconcile it. HTTP
+`previous_response_id` is refused before admission because `store: false` needs a
+separately verified stateless output-item replay contract. Do not enable storage
+or claim continuation support to bypass this gate.
 
 Tests: `test_responses_multi_agent.py`, the strict
 `tests/blocking_io/test_responses_multi_agent.py`, and harness/model-admission

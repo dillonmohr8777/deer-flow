@@ -68,8 +68,12 @@ There is exactly one immutable policy per journal. SQLite `BEGIN IMMEDIATE` and
 full synchronous commits serialize reservation across connections/processes.
 One top-level HTTP request may be inflight at a time; provider child concurrency
 is independent. A positive reservation must fit the remaining cycle/external
-ceiling after prior actual cost. Continuations must name a verified response in
-that same cycle and retain cumulative request/cost/usage accounting. Aggregate
+ceiling after prior actual cost. Separate explicit calls retain cumulative
+request/cost/usage accounting. HTTP `previous_response_id` is refused before
+admission while `store: false`; a stateless output-item replay contract must be
+independently verified before adding continuation support. Storage is not enabled.
+See [conversation state](https://developers.openai.com/api/docs/guides/conversation-state).
+Aggregate
 provider usage is counted once per HTTP response, not again per child event;
 this assumes the attested provider aggregate accounting contract.
 
@@ -93,6 +97,9 @@ inflight/unknown receipt and block further calls. Recover by retrieving the actu
 response through an independently authorized read path and calling
 `journal.recover(receipt_id, response)`; recovery never calls the provider. Do not
 retry, switch models, reset the journal or release unknown reservations by assumption.
+The returned response's metadata must echo the exact reserved `cycle_id` and
+`receipt_id`; missing or mismatched binding preserves the unresolved reservation.
+An unrelated valid/cheaper response cannot replace an uncertain request outcome.
 Previously unknown accounting can be filled without changing the result/identity.
 Settled payloads and response-ID ownership cannot be reassigned. Known reservation
 overruns and protocol failures stop the cycle. Unknown cost/usage stays `None`;
@@ -116,5 +123,6 @@ Before enabling a route, the operator/reviewer must verify:
 
 Offline tests cover protocol negatives, exact function schemas, request tampering,
 atomic admission, crash/cancellation/unknown recovery, immutable accounting,
-cumulative continuations, external ceilings and the async blocking-I/O boundary.
+cumulative separate calls, blocked continuations, receipt binding, external
+ceilings and the async blocking-I/O boundary.
 Live provider calls remain separately authorized and are not part of the suite.

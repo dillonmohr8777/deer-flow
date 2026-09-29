@@ -24,6 +24,7 @@ async def test_receipt_dispatch_and_unknown_recovery_offload_storage(tmp_path, t
             "id": "strict-resp",
             "status": "completed",
             "model": "openai/gpt-6.1-sol",
+            "metadata": {"cycle_id": "strict-cycle", "receipt_id": "strict-r1"},
             "output": [
                 {"id": "spawn", "type": "multi_agent_call", "action": "spawn_agent", "call_id": "c1", "agent": {"agent_name": "/root"}},
                 {"id": "spawn-result", "type": "multi_agent_call_output", "action": "spawn_agent", "call_id": "c1", "agent": {"agent_name": "/root"}, "output": [{"type": "output_text", "text": '{"task_name":"/root/reviewer"}'}]},
