@@ -10,17 +10,32 @@ the tool layer that resolves actor identity and calls that workflow.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from types import SimpleNamespace
 
 import pytest
 from org_isolation_fixtures import ORG_S, USER_A, USER_B, USER_C, acting_as, org_world  # noqa: F401
 
 from deerflow.persistence.exec_seats import AgentSeatStatus
+from deerflow.persistence.organizations.model import OrganizationMemberRow
 from deerflow.persistence.team_board import TeamBoardRepository
+from deerflow.persistence.user.model import UserRow
 from deerflow.tools.exec_seat_tools import CEO_SEAT, _exec_claim_seat_impl, _exec_ratify_seat_impl, _exec_reopen_seat_impl
 from deerflow.tools.tools import get_available_tools
 
 CMO_SEAT = "CMO"
+USER_D = "user-d"
+
+
+async def _add_plain_member(session_factory, user_id: str, organization_id: str) -> None:
+    """Seed a member (neither owner nor admin) of *organization_id* for this test only.
+
+    Mirrors ``test_board_router.py``'s helper of the same name.
+    """
+    now = datetime.now(UTC)
+    async with session_factory() as session, session.begin():
+        session.add(UserRow(id=user_id, email=f"{user_id}@example.com", password_hash=None, system_role="user", needs_setup=False, token_version=0, created_at=now))
+        session.add(OrganizationMemberRow(organization_id=organization_id, user_id=user_id, role="member", status="active", created_at=now, updated_at=now))
 
 
 class _DummyRuntime(SimpleNamespace):
@@ -69,27 +84,112 @@ async def test_claim_on_an_already_claimed_seat_is_rejected(org_world):  # noqa:
 
 @pytest.mark.asyncio
 async def test_owner_ratifies_the_first_ceo_claim(org_world):  # noqa: F811
-    """Bootstrap case: nobody holds the ratified CEO seat yet, so the owner ratifies."""
-    with acting_as(USER_A, ORG_S):
+    """Bootstrap case: nobody holds the ratified CEO seat yet, so the owner ratifies.
+
+    Ratified by a genuinely different human (USER_A, the owner) than whoever
+    claimed it (USER_C, an admin) -- f84 (review follow-up): a same-user
+    ratify is refused regardless of which agent name the run declares, so a
+    real bootstrap needs a distinct *actor*, not just a distinct agent name.
+    """
+    with acting_as(USER_C, ORG_S):
         seat = await _exec_claim_seat_impl(CEO_SEAT, "weekly plan", "objectives hit", 0, runtime=_runtime("ceo-agent"))
 
-        # USER_A is ORG_S's owner (org_isolation_fixtures.MEMBERSHIPS).
-        ratified = await _exec_ratify_seat_impl(seat["id"], runtime=_runtime("ceo-agent"))
+    # USER_A is ORG_S's owner (org_isolation_fixtures.MEMBERSHIPS).
+    with acting_as(USER_A, ORG_S):
+        ratified = await _exec_ratify_seat_impl(seat["id"], runtime=_runtime("owner-agent"))
     assert ratified["status"] == AgentSeatStatus.RATIFIED
     assert ratified["ratified_by_user_id"] == USER_A
 
 
 @pytest.mark.asyncio
 async def test_ceo_holder_ratifies_a_non_ceo_claim(org_world):  # noqa: F811
-    with acting_as(USER_A, ORG_S):
+    with acting_as(USER_C, ORG_S):
         ceo_seat = await _exec_claim_seat_impl(CEO_SEAT, "weekly plan", "objectives hit", 0, runtime=_runtime("ceo-agent"))
-        await _exec_ratify_seat_impl(ceo_seat["id"], runtime=_runtime("ceo-agent"))
+    with acting_as(USER_A, ORG_S):
+        # Bootstrap ratification by a genuinely different actor than the claimant
+        # (f84 review follow-up: same-user ratify is refused, whatever name it declares).
+        await _exec_ratify_seat_impl(ceo_seat["id"], runtime=_runtime("owner-agent"))
 
         cmo_seat = await _exec_claim_seat_impl(CMO_SEAT, "content", "leads", 0, runtime=_runtime("cmo-agent"))
-        # The acting agent is not an org owner/admin, but it is the ratified CEO holder.
+    with acting_as(USER_C, ORG_S):
+        # The acting agent is not an org owner/admin, but it is the ratified CEO
+        # holder -- and a different actor than whoever claimed cmo_seat (USER_A).
         ratified = await _exec_ratify_seat_impl(cmo_seat["id"], runtime=_runtime("ceo-agent"))
     assert ratified["status"] == AgentSeatStatus.RATIFIED
-    assert ratified["ratified_by_user_id"] == USER_A  # storage attribution, not the seat holder's identity
+    assert ratified["ratified_by_user_id"] == USER_C
+
+
+@pytest.mark.asyncio
+async def test_a_claimant_cannot_ratify_its_own_claim(org_world):  # noqa: F811
+    """f84 (a): the same agent that claimed a seat cannot also ratify it,
+    even though the run it's in belongs to the organization's owner -- the
+    owner/admin standing on `actor_is_owner` must never stand in for a real,
+    independent confirmation."""
+    with acting_as(USER_A, ORG_S):
+        seat = await _exec_claim_seat_impl(CEO_SEAT, "weekly plan", "objectives hit", 0, runtime=_runtime("ceo-agent"))
+
+        rejected = await _exec_ratify_seat_impl(seat["id"], runtime=_runtime("ceo-agent"))
+        assert "error" in rejected
+
+        from deerflow.persistence.exec_seats import AgentSeatRepository
+
+        still = await AgentSeatRepository(org_world).get_seat(seat["id"])
+    assert still["status"] == AgentSeatStatus.CLAIMED
+
+
+@pytest.mark.asyncio
+async def test_ceo_holder_cannot_ratify_its_own_second_claim(org_world):  # noqa: F811
+    """f84 (b): once ``ceo-agent`` is the ratified CEO holder, `actor_is_ceo`
+    grants it authority to ratify *other* agents' claims -- but not a second
+    claim it made itself under its own agent name. Runs as a real ORG_S
+    non-admin member (not an outsider), so the rejection is the self-ratify
+    guard, not the plain staff-gate/org-admin check."""
+    with acting_as(USER_C, ORG_S):
+        ceo_seat = await _exec_claim_seat_impl(CEO_SEAT, "weekly plan", "objectives hit", 0, runtime=_runtime("ceo-agent"))
+    with acting_as(USER_A, ORG_S):
+        await _exec_ratify_seat_impl(ceo_seat["id"], runtime=_runtime("owner-agent"))
+
+        await _add_plain_member(org_world, USER_D, ORG_S)
+
+    with acting_as(USER_D, ORG_S):
+        second_claim = await _exec_claim_seat_impl(CMO_SEAT, "content", "leads", 0, runtime=_runtime("ceo-agent"))
+        assert "error" not in second_claim
+
+        rejected = await _exec_ratify_seat_impl(second_claim["id"], runtime=_runtime("ceo-agent"))
+        assert "error" in rejected
+
+        from deerflow.persistence.exec_seats import AgentSeatRepository
+
+        still = await AgentSeatRepository(org_world).get_seat(second_claim["id"])
+    assert still["status"] == AgentSeatStatus.CLAIMED
+
+
+@pytest.mark.asyncio
+async def test_ceo_holder_cannot_ratify_its_own_claim_under_a_different_name(org_world):  # noqa: F811
+    """f84 review follow-up (high): the exact-name guard alone is bypassable --
+    ``agent_name`` is a client-choosable context field, so the same person who
+    claimed a seat as ``cmo-agent`` could rename their ratify run ``ceo-agent``
+    and slip through the CEO-holder authority path unchanged. Reproduces the
+    reviewer's exact repro: a real ORG_S non-admin member (USER_D) claims as
+    ``cmo-agent``, then ratifies the very same claim as ``ceo-agent``."""
+    with acting_as(USER_C, ORG_S):
+        ceo_seat = await _exec_claim_seat_impl(CEO_SEAT, "weekly plan", "objectives hit", 0, runtime=_runtime("ceo-agent"))
+    with acting_as(USER_A, ORG_S):
+        await _exec_ratify_seat_impl(ceo_seat["id"], runtime=_runtime("owner-agent"))
+
+        await _add_plain_member(org_world, USER_D, ORG_S)
+
+    with acting_as(USER_D, ORG_S):
+        claimed = await _exec_claim_seat_impl(CMO_SEAT, "content", "leads", 0, runtime=_runtime("cmo-agent"))
+        assert "error" not in claimed
+
+        rejected = await _exec_ratify_seat_impl(claimed["id"], runtime=_runtime("ceo-agent"))
+        assert "error" in rejected
+
+        from deerflow.persistence.exec_seats import AgentSeatRepository
+
+        still = await AgentSeatRepository(org_world).get_seat(claimed["id"])
+    assert still["status"] == AgentSeatStatus.CLAIMED
 
 
 @pytest.mark.asyncio
@@ -112,9 +212,12 @@ async def test_ratify_by_neither_ceo_nor_owner_is_rejected(org_world):  # noqa: 
 
 @pytest.mark.asyncio
 async def test_owner_veto_reopens_a_ratified_seat_regardless_of_holder(org_world):  # noqa: F811
-    with acting_as(USER_A, ORG_S):
+    with acting_as(USER_C, ORG_S):
         cmo_seat = await _exec_claim_seat_impl(CMO_SEAT, "content", "leads", 0, runtime=_runtime("cmo-agent"))
-        ratified = await _exec_ratify_seat_impl(cmo_seat["id"], runtime=_runtime("cmo-agent"))
+    with acting_as(USER_A, ORG_S):
+        # Ratified by a genuinely different actor than the claimant (f84 review
+        # follow-up: same-user ratify is refused, whatever name it declares).
+        ratified = await _exec_ratify_seat_impl(cmo_seat["id"], runtime=_runtime("owner-agent"))
         assert ratified["status"] == AgentSeatStatus.RATIFIED
 
         reopened = await _exec_reopen_seat_impl(cmo_seat["id"], runtime=_runtime("owner-agent"))
@@ -128,9 +231,12 @@ async def test_owner_veto_reopens_a_ratified_seat_regardless_of_holder(org_world
 
 @pytest.mark.asyncio
 async def test_non_owner_veto_is_rejected(org_world):  # noqa: F811
-    with acting_as(USER_A, ORG_S):
+    with acting_as(USER_C, ORG_S):
         cmo_seat = await _exec_claim_seat_impl(CMO_SEAT, "content", "leads", 0, runtime=_runtime("cmo-agent"))
-        ratified = await _exec_ratify_seat_impl(cmo_seat["id"], runtime=_runtime("cmo-agent"))
+    with acting_as(USER_A, ORG_S):
+        # Ratified by a genuinely different actor than the claimant (f84 review
+        # follow-up: same-user ratify is refused, whatever name it declares).
+        ratified = await _exec_ratify_seat_impl(cmo_seat["id"], runtime=_runtime("owner-agent"))
         assert ratified["status"] == AgentSeatStatus.RATIFIED
 
     # USER_B has no membership in ORG_S at all -- reopen is owner/admin-only
@@ -154,9 +260,11 @@ async def test_active_org_admin_may_also_veto(org_world):  # noqa: F811
     same as an org admin can approve/reply on the Momo Board."""
     with acting_as(USER_A, ORG_S):
         cmo_seat = await _exec_claim_seat_impl(CMO_SEAT, "content", "leads", 0, runtime=_runtime("cmo-agent"))
-        await _exec_ratify_seat_impl(cmo_seat["id"], runtime=_runtime("cmo-agent"))
 
     with acting_as(USER_C, ORG_S):
+        # Ratified by a genuinely different actor than the claimant (f84 review
+        # follow-up: same-user ratify is refused, whatever name it declares).
+        await _exec_ratify_seat_impl(cmo_seat["id"], runtime=_runtime("owner-agent"))
         reopened = await _exec_reopen_seat_impl(cmo_seat["id"], runtime=_runtime("admin-agent"))
     assert reopened["status"] == AgentSeatStatus.REOPENED
 

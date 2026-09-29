@@ -162,6 +162,18 @@ async def _exec_ratify_seat_impl(seat_id: str, runtime: Runtime | None = None) -
         return _error("No such seat claim in this organization.")
     agent_name = _agent_name(runtime)
     actor_user_id = resolve_runtime_actor_user_id(runtime)
+    if seat["agent_name"] == agent_name or (seat["claimed_by_user_id"] is not None and seat["claimed_by_user_id"] == actor_user_id):
+        # f84 (review follow-up): `agent_name` alone is bypassable -- it's a
+        # client-choosable context field (services.py), so the same person
+        # who claimed a seat as "cmo-agent" can just declare their ratify run
+        # "ceo-agent" and pass the exact-name check while keeping every real
+        # fact about the request (the acting human) identical. Comparing the
+        # actor's real user id against who actually claimed the seat can't be
+        # renamed away, and is the only reliable signal that this is really
+        # the same actor confirming their own work, whatever name the run
+        # declares or which authority channel (`actor_is_ceo`/`actor_is_owner`)
+        # would otherwise let it through.
+        return _error("An agent cannot ratify its own claim; ratification requires an independent actor.")
     actor_is_ceo = await _actor_is_ceo(repo, agent_name)
     actor_is_owner = await _is_active_org_admin(actor_user_id)
     try:
@@ -235,8 +247,11 @@ async def exec_ratify_seat(
 
     Momentum-staff only. Only the agent holding the ratified CEO seat, or the
     organization owner, may ratify -- the owner also covers the bootstrap
-    case where no CEO has been ratified yet. Announces the ratification to
-    #exec on success.
+    case where no CEO has been ratified yet. Ratification always needs an
+    independent actor: refused whenever the acting agent's declared name
+    matches the seat's own, or whenever the acting user is the same person
+    who claimed the seat, whatever name the ratifying run declares. Announces
+    the ratification to #exec on success.
 
     Args:
         seat_id: The id of the claimed seat row to ratify.
