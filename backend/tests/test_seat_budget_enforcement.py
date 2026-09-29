@@ -223,6 +223,33 @@ async def test_start_run_does_not_refuse_the_default_agent_even_with_a_paused_se
     assert record is not None
 
 
+@pytest.mark.asyncio
+async def test_start_run_refuses_a_scalar_agent_name_with_422_instead_of_crashing(org_world, _stub_app_config):  # noqa: F811
+    """Review of f98/PR #85: ``configurable``/``context`` are untyped dicts, so a
+    client can send ``agent_name: 42`` (or any non-string JSON scalar). Before
+    this fix, ``scope_assistant_id.strip()`` -- both inside
+    ``_refuse_if_agent_seat_paused`` -> ``paused_seat_for_agent`` and the
+    ``effective_agent_name`` metadata stamp a few lines below it -- crashed
+    with an unhandled ``AttributeError`` (a 500), earlier in ``start_run``
+    than #90's own fix in ``_load_scope_agent_config`` ever runs. A non-string
+    value can never name a real agent, so it must get the same 422 a
+    missing/foreign agent already gets."""
+    from fastapi import HTTPException
+
+    from app.gateway.run_models import RunCreateRequest
+    from app.gateway.services import start_run
+
+    with acting_as(USER_A, ORG_A):
+        body = RunCreateRequest(assistant_id="lead_agent", context={"agent_name": 42}, input={"messages": [{"type": "human", "content": "hi"}]})
+        request = _start_run_request()
+
+        with pytest.raises(HTTPException) as exc_info:
+            await start_run(body, "thread-scalar-agent-name", request)
+
+    assert exc_info.value.status_code == 422
+    assert exc_info.value.detail == "knowledge_scope assistant configuration could not be resolved"
+
+
 # ---------------------------------------------------------------------------
 # Effective-agent-name metadata stamp (burn-accounting gap left open by PR #85)
 # ---------------------------------------------------------------------------
