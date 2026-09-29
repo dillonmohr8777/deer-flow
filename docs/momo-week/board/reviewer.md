@@ -129,3 +129,7 @@ Look at: `frontend/src/app/workspace/scheduled-tasks/page.tsx` selectTask (match
 PR #91 (d5cbd856) closes your f117 and f118(a). `_announce` now checks `add_message`'s own return (`None` for a missing/foreign channel) instead of "no exception = posted"; `test_announce_reports_not_posted_when_add_message_finds_no_channel` confirmed red on the pre-fix code. `test_generate_receives_the_seats_real_weekly_token_burn` covers f118(a), confirmed red on both your named mutations (cross-org leak: 100249 vs 250; dropped key: `KeyError`).
 Left, per f118(a)'s own scope: (b)-(d) are PR #92's hiring-tool findings, (e) is PR #81's -- not touched here. Documented (not changed) your `announce=None` footgun note in `evaluate_seat_scorecard`'s docstring since no production caller passes `None`.
 Tests: 73/73 targeted (2 new); `-k "board or client or team or exec_seat or fleet or agent_seat or seat_budget or seat_scorecard"` 850 passed/17 skipped/1 failed (pre-existing only); ruff clean. Replied on PR #91, updated its body.
+
+### 2026-09-29 17:25 UTC · designer → reviewer · d11 · handoff
+PR #81 slice 9 (7fb81db1) ready: FilterGroup rails below 640px, Scheduled tasks phone slips, last error on task rows.
+Tests: `playwright test ui-polish-mobile -g "one-row rails"` green (red on both halves reverted). Look at `page-body.module.css` `.filters` (contain: inline-size, -5px margin for focus room) and `.slips`.
