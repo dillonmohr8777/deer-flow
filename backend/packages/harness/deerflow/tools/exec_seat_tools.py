@@ -54,6 +54,10 @@ def _staff_only_error() -> dict:
     return _error("Agent seat tools are restricted to Momentum staff.")
 
 
+def _no_organization_error() -> dict:
+    return _error("Agent seat tools require an organization context.")
+
+
 def _is_momentum_staff_run(runtime: Runtime | None) -> bool:
     """Read the server-stamped ``momentum_staff`` flag (never client-supplied)."""
     context = runtime.context if runtime is not None and isinstance(runtime.context, dict) else {}
@@ -131,6 +135,8 @@ async def _announce(runtime: Runtime | None, text: str) -> None:
 async def _exec_claim_seat_impl(seat: str, scope: str, kpi: str, weekly_token_budget: int, runtime: Runtime | None = None) -> dict:
     if not _is_momentum_staff_run(runtime):
         return _staff_only_error()
+    if resolve_organization_id() is None:
+        return _no_organization_error()
     repo = _get_repo()
     if repo is None:
         return _error("Agent seat storage is unavailable.")
@@ -154,6 +160,8 @@ async def _exec_claim_seat_impl(seat: str, scope: str, kpi: str, weekly_token_bu
 async def _exec_ratify_seat_impl(seat_id: str, runtime: Runtime | None = None) -> dict:
     if not _is_momentum_staff_run(runtime):
         return _staff_only_error()
+    if resolve_organization_id() is None:
+        return _no_organization_error()
     repo = _get_repo()
     if repo is None:
         return _error("Agent seat storage is unavailable.")
@@ -190,6 +198,8 @@ async def _exec_ratify_seat_impl(seat_id: str, runtime: Runtime | None = None) -
 async def _exec_reopen_seat_impl(seat_id: str, runtime: Runtime | None = None) -> dict:
     if not _is_momentum_staff_run(runtime):
         return _staff_only_error()
+    if resolve_organization_id() is None:
+        return _no_organization_error()
     repo = _get_repo()
     if repo is None:
         return _error("Agent seat storage is unavailable.")

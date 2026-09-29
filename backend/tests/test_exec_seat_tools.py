@@ -10,6 +10,7 @@ the tool layer that resolves actor identity and calls that workflow.
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from types import SimpleNamespace
 
@@ -20,8 +21,23 @@ from deerflow.persistence.exec_seats import AgentSeatStatus
 from deerflow.persistence.organizations.model import OrganizationMemberRow
 from deerflow.persistence.team_board import TeamBoardRepository
 from deerflow.persistence.user.model import UserRow
+from deerflow.runtime.user_context import WorkspaceStorageContext, reset_storage_context, set_storage_context
 from deerflow.tools.exec_seat_tools import CEO_SEAT, _exec_claim_seat_impl, _exec_ratify_seat_impl, _exec_reopen_seat_impl
 from deerflow.tools.tools import get_available_tools
+
+
+@contextmanager
+def _acting_with_no_organization(actor: str):
+    """Internal / auth-disabled / IM-channel shape: a real actor, no org at all.
+
+    Mirrors ``test_team_board_tools.py``'s helper of the same name (f72).
+    """
+    token = set_storage_context(WorkspaceStorageContext(actor_user_id=actor, organization_id=None, storage_user_id=actor, role=None))
+    try:
+        yield
+    finally:
+        reset_storage_context(token)
+
 
 CMO_SEAT = "CMO"
 USER_D = "user-d"
@@ -279,6 +295,94 @@ async def test_org_isolation_a_seat_in_one_org_is_invisible_from_another(org_wor
         foreign_reopen = await _exec_reopen_seat_impl(cmo_seat["id"], runtime=_runtime("intruder"))
     assert "error" in foreign_ratify
     assert "error" in foreign_reopen
+
+
+@pytest.mark.asyncio
+async def test_null_organization_fails_closed_and_creates_no_rows(org_world):  # noqa: F811
+    """f92: ``AgentSeatRepository._scope`` applies no filter when
+    ``resolve_organization_id()`` is ``None`` (internal/auth-disabled/IM-channel
+    runs), so every ``exec_*`` tool must fail closed itself -- team tools
+    already do this for the same shape (f72)."""
+    with acting_as(USER_A, ORG_S):
+        seat = await _exec_claim_seat_impl(CMO_SEAT, "content", "leads", 0, runtime=_runtime("cmo-agent"))
+        assert "error" not in seat
+
+    with _acting_with_no_organization(USER_B):
+        claim_result = await _exec_claim_seat_impl("Rogue Seat", "scope", "kpi", 0, runtime=_runtime("rogue-agent"))
+        ratify_result = await _exec_ratify_seat_impl(seat["id"], runtime=_runtime("rogue-agent"))
+        reopen_result = await _exec_reopen_seat_impl(seat["id"], runtime=_runtime("rogue-agent"))
+    assert set(claim_result) == {"error"}
+    assert set(ratify_result) == {"error"}
+    assert set(reopen_result) == {"error"}
+
+    with acting_as(USER_A, ORG_S):
+        from deerflow.persistence.exec_seats import AgentSeatRepository
+
+        repo = AgentSeatRepository(org_world)
+        seats = await repo.list_seats()
+        unchanged = await repo.get_seat(seat["id"])
+    assert [s["id"] for s in seats] == [seat["id"]]
+    assert unchanged["status"] == AgentSeatStatus.CLAIMED
+
+
+@pytest.mark.asyncio
+async def test_null_organization_ratify_guard_blocks_cross_org_ceo_impersonation(org_world):  # noqa: F811
+    """Review follow-up (medium) on f92: the generic null-org test above uses
+    an agent name ("rogue-agent") that never matches a real seat, so deleting
+    the ratify guard alone left every test green -- the rejection came from
+    the ordinary CEO/owner check, not the guard. This reproduces the actual
+    exploit the guard closes: ``AgentSeatRepository.get_seat``/``ratified_holder``
+    apply no organization filter when ``resolve_organization_id()`` is
+    ``None``, so a no-org run declaring the real ratified CEO's own
+    ``agent_name`` would satisfy ``_actor_is_ceo`` and ratify ORG_S's own seat
+    from entirely outside ORG_S, if this guard were ever removed."""
+    with acting_as(USER_C, ORG_S):
+        ceo_seat = await _exec_claim_seat_impl(CEO_SEAT, "weekly plan", "objectives hit", 0, runtime=_runtime("ceo-agent"))
+    with acting_as(USER_A, ORG_S):
+        await _exec_ratify_seat_impl(ceo_seat["id"], runtime=_runtime("owner-agent"))
+        cmo_seat = await _exec_claim_seat_impl(CMO_SEAT, "content", "leads", 0, runtime=_runtime("cmo-agent"))
+
+    with _acting_with_no_organization(USER_B):
+        rejected = await _exec_ratify_seat_impl(cmo_seat["id"], runtime=_runtime("ceo-agent"))
+    assert set(rejected) == {"error"}
+
+    with acting_as(USER_A, ORG_S):
+        from deerflow.persistence.exec_seats import AgentSeatRepository
+
+        unchanged = await AgentSeatRepository(org_world).get_seat(cmo_seat["id"])
+    assert unchanged["status"] == AgentSeatStatus.CLAIMED
+
+
+@pytest.mark.asyncio
+async def test_null_organization_reopen_guard_holds_even_if_admin_check_were_forced_true(org_world, monkeypatch):  # noqa: F811
+    """Review follow-up (medium) on f92: ``_is_active_org_admin`` already
+    returns ``False`` when there's no organization, so in practice the reopen
+    guard is unreachable and its removal wouldn't fail any test. Forces
+    ``actor_is_owner`` true (as the review asked) to isolate the guard's own
+    contribution: even if the owner check ever changed to allow a null org,
+    reopen must still refuse outside an organization."""
+    with acting_as(USER_C, ORG_S):
+        cmo_seat = await _exec_claim_seat_impl(CMO_SEAT, "content", "leads", 0, runtime=_runtime("cmo-agent"))
+    with acting_as(USER_A, ORG_S):
+        ratified = await _exec_ratify_seat_impl(cmo_seat["id"], runtime=_runtime("owner-agent"))
+        assert ratified["status"] == AgentSeatStatus.RATIFIED
+
+    import deerflow.tools.exec_seat_tools as exec_seat_tools
+
+    async def _always_admin(_user_id: str) -> bool:
+        return True
+
+    monkeypatch.setattr(exec_seat_tools, "_is_active_org_admin", _always_admin)
+
+    with _acting_with_no_organization(USER_B):
+        rejected = await _exec_reopen_seat_impl(cmo_seat["id"], runtime=_runtime("intruder"))
+    assert set(rejected) == {"error"}
+
+    with acting_as(USER_A, ORG_S):
+        from deerflow.persistence.exec_seats import AgentSeatRepository
+
+        unchanged = await AgentSeatRepository(org_world).get_seat(cmo_seat["id"])
+    assert unchanged["status"] == AgentSeatStatus.RATIFIED
 
 
 def _tool_group_config():
