@@ -250,6 +250,22 @@ test.describe("assistant turn byline", () => {
     { type: "human", id: "h1", content: [{ type: "text", text: "Draft it." }] },
     { type: "ai", id: "a1", content: "First draft." },
     { type: "human", id: "h2", content: [{ type: "text", text: "Shorter." }] },
+    // A multi-group turn: a tool step, then the answer. Still one byline.
+    {
+      type: "ai",
+      id: "a2-tool",
+      content: "",
+      tool_calls: [
+        { id: "call-1", name: "web_search", args: { query: "memo length" } },
+      ],
+    },
+    {
+      type: "tool",
+      id: "t2",
+      tool_call_id: "call-1",
+      name: "web_search",
+      content: "[]",
+    },
     { type: "ai", id: "a2", content: "Short draft." },
   ];
 
@@ -262,14 +278,20 @@ test.describe("assistant turn byline", () => {
     await page.goto(`/workspace/agents/dillon-growth/chats/${MOCK_THREAD_ID}`);
     await page.getByText("Short draft.").waitFor();
 
+    // One byline per turn, however many groups the turn renders.
     const bylines = page.locator("[data-turn-byline]");
     await expect(bylines).toHaveCount(2);
     await expect(bylines.first()).toHaveText("Growth");
-    // The Momo is decorative beside the name, and the byline sits on its
-    // reply: no more than 16px above the reply's first line.
+    // The Momo is decorative beside the name, its box is 32px, and the
+    // byline sits 12px above the reply's first line.
     await expect(
       bylines.first().locator("[aria-hidden='true'] [role='img']"),
     ).toHaveCount(1);
+    const momoBox = await bylines
+      .first()
+      .locator("> [aria-hidden='true']")
+      .evaluate((el) => el.getBoundingClientRect().height);
+    expect(momoBox).toBe(32);
     const gap = await bylines.first().evaluate((el) => {
       const reply = el.parentElement!.querySelector(
         "p:not([data-turn-byline])",
@@ -278,7 +300,7 @@ test.describe("assistant turn byline", () => {
         reply.getBoundingClientRect().top - el.getBoundingClientRect().bottom
       );
     });
-    expect(gap).toBeLessThanOrEqual(16);
+    expect(gap).toBeLessThanOrEqual(13);
   });
 
   test("the default chat draws no byline", async ({ page }) => {

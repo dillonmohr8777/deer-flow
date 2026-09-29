@@ -1125,7 +1125,9 @@ export function MessageList({
             {/* Signs the reply below it: -mb-2 takes back the group gap so
                 the name sits on its reply, not between turns. The name
                 beside the Momo says who this is. */}
-            <span aria-hidden="true" className="shrink-0">
+            {/* flex, not inline: an inline wrapper adds a line-box strut
+                that grew the 32px Momo's box to 40px. */}
+            <span aria-hidden="true" className="flex shrink-0">
               <MomoAvatar agent={agent} size={32} />
             </span>
             <span className="min-w-0 truncate">
