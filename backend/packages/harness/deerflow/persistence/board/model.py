@@ -59,6 +59,8 @@ class BoardThreadRow(Base):
     kind: Mapped[str] = mapped_column(String(16), default=BoardThreadKind.POST)
     status: Mapped[str] = mapped_column(String(16), default=BoardThreadStatus.NEW, index=True)
     subject: Mapped[str] = mapped_column(String(255), default="")
+    urgency: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_by_user_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now, onupdate=_utc_now)
