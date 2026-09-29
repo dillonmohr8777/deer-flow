@@ -100,15 +100,19 @@ def _not_found() -> HTTPException:
     return HTTPException(status_code=404, detail="Board thread not found")
 
 
-def _to_thread_response(row: dict) -> BoardThreadResponse:
+def _to_thread_response(row: dict, *, actor_is_owner: bool) -> BoardThreadResponse:
+    # Momo's triage (urgency/summary) is internal shorthand -- it can read like
+    # "INTERNAL: client is angry, churn risk" -- so only an org owner/admin
+    # ever sees it, the same boundary list_board_messages already draws around
+    # a still-unapproved momo draft.
     return BoardThreadResponse(
         id=row["id"],
         client_id=row.get("client_id"),
         kind=row["kind"],
         status=row["status"],
         subject=row.get("subject", ""),
-        urgency=row.get("urgency"),
-        summary=row.get("summary"),
+        urgency=row.get("urgency") if actor_is_owner else None,
+        summary=row.get("summary") if actor_is_owner else None,
         created_by_user_id=row.get("created_by_user_id"),
         created_at=row.get("created_at", ""),
         updated_at=row.get("updated_at", ""),
@@ -205,7 +209,8 @@ async def create_board_thread(body: BoardThreadCreateRequest, request: Request) 
         # hung provider outrunning the timeout above, or the DB patch itself)
         # turn a created thread into a 500.
         logger.warning("Board triage-on-create failed; thread created without a triage classification", exc_info=True)
-    return _to_thread_response(row)
+    actor_is_owner = await _is_active_org_admin(str(user.id))
+    return _to_thread_response(row, actor_is_owner=actor_is_owner)
 
 
 @router.get("/threads", response_model=BoardThreadListResponse)
@@ -215,15 +220,16 @@ async def list_board_threads(request: Request, client_id: str | None = None, sta
     board_repo = get_board_repo(request)
     user = await get_current_user_from_request(request)
     user_id = str(user.id)
+    actor_is_owner = await _is_active_org_admin(user_id)
     if client_id is not None:
         await _require_client_access(client_repo, client_id, user_id)
         rows = await board_repo.list_threads(client_id=client_id, status=status)
-    elif await _is_active_org_admin(user_id):
+    elif actor_is_owner:
         rows = await board_repo.list_threads(status=status)
     else:
         mine_ids = [c["id"] for c in await client_repo.list_mine()]
         rows = await board_repo.list_threads(client_ids=mine_ids, status=status) if mine_ids else []
-    return BoardThreadListResponse(threads=[_to_thread_response(r) for r in rows])
+    return BoardThreadListResponse(threads=[_to_thread_response(r, actor_is_owner=actor_is_owner) for r in rows])
 
 
 @router.get("/threads/{thread_id}", response_model=BoardThreadResponse)
@@ -236,7 +242,8 @@ async def get_board_thread(thread_id: str, request: Request) -> BoardThreadRespo
         raise _not_found()
     user = await get_current_user_from_request(request)
     await _require_thread_access(client_repo, row, str(user.id))
-    return _to_thread_response(row)
+    actor_is_owner = await _is_active_org_admin(str(user.id))
+    return _to_thread_response(row, actor_is_owner=actor_is_owner)
 
 
 _WORKFLOW_ONLY_STATUSES = frozenset({BoardThreadStatus.DRAFTED, BoardThreadStatus.APPROVED, BoardThreadStatus.REPLIED})
@@ -270,7 +277,8 @@ async def patch_board_thread(thread_id: str, body: BoardThreadPatchRequest, requ
         raise _not_found()
     if body.status is not None:
         await record_audit_event(request, action="board.thread.status_patch", outcome="success", actor_user_id=user_id, organization_id=resolve_organization_id(), target_type="board_thread", target_id=thread_id)
-    return _to_thread_response(updated)
+    actor_is_owner = await _is_active_org_admin(user_id)
+    return _to_thread_response(updated, actor_is_owner=actor_is_owner)
 
 
 @router.get("/threads/{thread_id}/messages", response_model=BoardMessageListResponse)
@@ -359,7 +367,8 @@ async def draft_board_reply(thread_id: str, body: BoardDraftRequest, request: Re
     if updated is None:
         raise _not_found()
     await record_audit_event(request, action="board.thread.drafted", outcome="success", actor_user_id=user_id, organization_id=resolve_organization_id(), target_type="board_thread", target_id=thread_id)
-    return _to_thread_response(updated)
+    actor_is_owner = await _is_active_org_admin(user_id)
+    return _to_thread_response(updated, actor_is_owner=actor_is_owner)
 
 
 @router.post("/threads/{thread_id}/approve", response_model=BoardThreadResponse)
@@ -381,7 +390,7 @@ async def approve_board_reply(thread_id: str, request: Request) -> BoardThreadRe
     if updated is None:
         raise _not_found()
     await record_audit_event(request, action="board.thread.approved", outcome="success", actor_user_id=user_id, organization_id=resolve_organization_id(), target_type="board_thread", target_id=thread_id)
-    return _to_thread_response(updated)
+    return _to_thread_response(updated, actor_is_owner=actor_is_owner)
 
 
 @router.post("/threads/{thread_id}/reply", response_model=BoardThreadResponse)
@@ -417,4 +426,4 @@ async def send_board_reply(thread_id: str, body: BoardReplyRequest, request: Req
     if updated is None:
         raise _not_found()
     await record_audit_event(request, action="board.thread.replied", outcome="success", actor_user_id=user_id, organization_id=resolve_organization_id(), target_type="board_thread", target_id=thread_id)
-    return _to_thread_response(updated)
+    return _to_thread_response(updated, actor_is_owner=actor_is_owner)
