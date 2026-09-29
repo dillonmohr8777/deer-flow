@@ -24,6 +24,7 @@ from deerflow.board.workflow import BoardOwnerRequiredError, BoardTransitionErro
 from deerflow.persistence.board.model import BoardThreadStatus
 from deerflow.persistence.organizations.model import OrganizationMemberRow
 from deerflow.runtime.user_context import resolve_organization_id
+from deerflow.utils.thread_id import ThreadId
 
 router = APIRouter(prefix="/api/board", tags=["board"])
 
@@ -197,7 +198,7 @@ async def list_board_threads(request: Request, client_id: str | None = None, sta
 
 @router.get("/threads/{thread_id}", response_model=BoardThreadResponse)
 @require_permission("board", "read")
-async def get_board_thread(thread_id: str, request: Request) -> BoardThreadResponse:
+async def get_board_thread(thread_id: ThreadId, request: Request) -> BoardThreadResponse:
     board_repo = get_board_repo(request)
     client_repo = get_client_repo(request)
     row = await board_repo.get_thread(thread_id)
@@ -213,7 +214,7 @@ _WORKFLOW_ONLY_STATUSES = frozenset({BoardThreadStatus.DRAFTED, BoardThreadStatu
 
 @router.patch("/threads/{thread_id}", response_model=BoardThreadResponse)
 @require_permission("board", "write")
-async def patch_board_thread(thread_id: str, body: BoardThreadPatchRequest, request: Request) -> BoardThreadResponse:
+async def patch_board_thread(thread_id: ThreadId, body: BoardThreadPatchRequest, request: Request) -> BoardThreadResponse:
     """A direct status write can't reach ``drafted``/``approved``/``replied`` -- those are
     workflow-only (``draft``/``approve``/``reply``), which is what ``send_board_reply``'s
     "latest momo draft" check relies on actually having gone through. Any other status
@@ -244,7 +245,7 @@ async def patch_board_thread(thread_id: str, body: BoardThreadPatchRequest, requ
 
 @router.get("/threads/{thread_id}/messages", response_model=BoardMessageListResponse)
 @require_permission("board", "read")
-async def list_board_messages(thread_id: str, request: Request) -> BoardMessageListResponse:
+async def list_board_messages(thread_id: ThreadId, request: Request) -> BoardMessageListResponse:
     board_repo = get_board_repo(request)
     client_repo = get_client_repo(request)
     row = await board_repo.get_thread(thread_id)
@@ -258,7 +259,7 @@ async def list_board_messages(thread_id: str, request: Request) -> BoardMessageL
 
 @router.post("/threads/{thread_id}/messages", response_model=BoardMessageResponse, status_code=201)
 @require_permission("board", "write")
-async def add_board_message(thread_id: str, body: BoardMessageCreateRequest, request: Request) -> BoardMessageResponse:
+async def add_board_message(thread_id: ThreadId, body: BoardMessageCreateRequest, request: Request) -> BoardMessageResponse:
     """``author_kind`` is derived server-side, never taken from the request body.
 
     A caller cannot label their own message ``momo`` (or someone else's
@@ -290,7 +291,7 @@ async def _latest_momo_draft_body(board_repo, thread_id: str) -> str | None:
     return None
 
 
-async def _load_thread_for_actor(board_repo, client_repo, thread_id: str, request: Request) -> tuple[dict, str]:
+async def _load_thread_for_actor(board_repo, client_repo, thread_id: ThreadId, request: Request) -> tuple[dict, str]:
     """Fetch *thread_id*, enforcing per-client access; returns ``(row, actor_user_id)``."""
     row = await board_repo.get_thread(thread_id)
     if row is None:
@@ -303,7 +304,7 @@ async def _load_thread_for_actor(board_repo, client_repo, thread_id: str, reques
 
 @router.post("/threads/{thread_id}/draft", response_model=BoardThreadResponse)
 @require_permission("board", "write")
-async def draft_board_reply(thread_id: str, body: BoardDraftRequest, request: Request) -> BoardThreadResponse:
+async def draft_board_reply(thread_id: ThreadId, body: BoardDraftRequest, request: Request) -> BoardThreadResponse:
     """Momo drafts a reply: adds a ``momo``-authored message and moves the thread to ``drafted``.
 
     There is no separate internal "Momo" caller yet, so this endpoint is
@@ -333,7 +334,7 @@ async def draft_board_reply(thread_id: str, body: BoardDraftRequest, request: Re
 
 @router.post("/threads/{thread_id}/approve", response_model=BoardThreadResponse)
 @require_permission("board", "write")
-async def approve_board_reply(thread_id: str, request: Request) -> BoardThreadResponse:
+async def approve_board_reply(thread_id: ThreadId, request: Request) -> BoardThreadResponse:
     """Only an org owner/admin may move a drafted reply to ``approved``."""
     board_repo = get_board_repo(request)
     client_repo = get_client_repo(request)
@@ -355,7 +356,7 @@ async def approve_board_reply(thread_id: str, request: Request) -> BoardThreadRe
 
 @router.post("/threads/{thread_id}/reply", response_model=BoardThreadResponse)
 @require_permission("board", "write")
-async def send_board_reply(thread_id: str, body: BoardReplyRequest, request: Request) -> BoardThreadResponse:
+async def send_board_reply(thread_id: ThreadId, body: BoardReplyRequest, request: Request) -> BoardThreadResponse:
     """``replied`` needs its own explicit owner action, separate from ``approve``.
 
     The sent body must match the approved draft verbatim -- an owner's approval
