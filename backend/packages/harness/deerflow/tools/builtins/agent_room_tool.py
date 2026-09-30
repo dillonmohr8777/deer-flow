@@ -10,6 +10,12 @@ from langchain.tools import tool
 from deerflow.runtime.user_context import DEFAULT_USER_ID, resolve_runtime_actor_user_id
 from deerflow.tools.types import Runtime
 
+#: Names of the owner-private Agent Room tools defined in this module. Every
+#: place that assembles a toolset for a channel run (the lead-agent factory,
+#: the ``task`` subagent-dispatch tool) must exclude these -- see
+#: ``_channel_run_refusal`` below for why.
+AGENT_ROOM_TOOL_NAMES: frozenset[str] = frozenset({"agent_room_read", "agent_room_post"})
+
 _ROLE_LABELS = {
     "room-coordinator": "Coordinator",
     "momentum-research": "Momentum Research",

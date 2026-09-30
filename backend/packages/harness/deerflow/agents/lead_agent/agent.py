@@ -87,12 +87,6 @@ _BOOTSTRAP_SKILL_NAMES = {"bootstrap"}
 # ``ChannelManager._resolve_run_params``.
 _WEBHOOK_CHANNELS: frozenset[str] = frozenset({"github"})
 
-# Names of the owner-private Agent Room tools (``deerflow.tools.builtins.agent_room_tool``).
-# Withheld from every channel run, not just webhook ones -- see the gate in
-# :func:`_assemble_lead_agent` for why the channel binding itself, not how the
-# message arrived, is the risk here.
-_AGENT_ROOM_TOOL_NAMES: frozenset[str] = frozenset({"agent_room_read", "agent_room_post"})
-
 
 @dataclass(frozen=True)
 class LeadAgentAssembly:
@@ -1092,6 +1086,13 @@ def _assemble_lead_agent(config: RunnableConfig, *, app_config: AppConfig) -> Le
         chat_model = create_chat_model(name=model_name, thinking_enabled=thinking_enabled, app_config=resolved_app_config, attach_tracing=False)
         raw_tools = get_available_tools(model_name=model_name, subagent_enabled=subagent_enabled, app_config=resolved_app_config, chat_model=chat_model) + [setup_agent]
         configured_tools = raw_tools
+        # See the channel-run gate below (the non-bootstrap branch): the
+        # bootstrap flow must withhold the Agent Room tools too, or a bound
+        # member reaching it via /bootstrap on a channel run would keep them.
+        if cfg.get("channel_name"):
+            from deerflow.tools.builtins.agent_room_tool import AGENT_ROOM_TOOL_NAMES
+
+            configured_tools = [tool for tool in configured_tools if tool.name not in AGENT_ROOM_TOOL_NAMES]
         configured_tools = [tool for tool in configured_tools if tool.name not in interaction_policy.disabled_tool_names]
         authorization_candidates = [*configured_tools]
         if skill_setup.describe_skill_tool:
@@ -1237,7 +1238,9 @@ def _assemble_lead_agent(config: RunnableConfig, *, app_config: AppConfig) -> Le
     # just webhook ones, since the impersonation risk is the channel binding
     # itself, not how the message arrived.
     if channel_name:
-        configured_tools = [tool for tool in configured_tools if tool.name not in _AGENT_ROOM_TOOL_NAMES]
+        from deerflow.tools.builtins.agent_room_tool import AGENT_ROOM_TOOL_NAMES
+
+        configured_tools = [tool for tool in configured_tools if tool.name not in AGENT_ROOM_TOOL_NAMES]
     configured_tools = [tool for tool in configured_tools if tool.name not in interaction_policy.disabled_tool_names]
     authorization_candidates = [*configured_tools]
     if skill_setup.describe_skill_tool:
