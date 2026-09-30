@@ -11,6 +11,7 @@ import os
 import sqlite3
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
@@ -27,10 +28,11 @@ from deerflow.persistence.run.sql import RunRepository
 from deerflow.persistence.thread_meta.sql import ThreadMetaRepository
 from deerflow.runtime.events.store.db import DbRunEventStore
 from deerflow.runtime.runs.manager import RunManager
+from deerflow.runtime.user_context import WorkspaceStorageContext, reset_storage_context, set_storage_context
 from deerflow.workflows.catalog import get_workflow
 
 
-def _value(schema):
+def _value(schema: dict[str, Any]) -> Any:
     if "const" in schema:
         return schema["const"]
     if "enum" in schema:
@@ -53,6 +55,7 @@ class SyntheticProvider:
         self.calls.append(kwargs)
         schema = kwargs["text"]["format"]["schema"]
         output = _value(schema)
+        assert isinstance(output, dict)
         if "checks" in schema["properties"]:
             criteria = schema["properties"]["checks"]["items"]["properties"]["criterion"]["enum"]
             output["checks"] = [{"criterion": criterion, "passed": True, "rationale": "Synthetic review of admitted fixture."} for criterion in criteria]
@@ -80,7 +83,8 @@ async def test_actual_crewai_agency_restart_preserves_receipts_budget_and_privat
     db = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'native.sqlite'}")
     factory = async_sessionmaker(db, expire_on_commit=False)
     async with db.begin() as connection:
-        await connection.run_sync(lambda conn: Base.metadata.create_all(conn, tables=[OrganizationRow.__table__, ProjectRow.__table__, ThreadMetaRow.__table__, RunRow.__table__, RunChangeClockRow.__table__, RunEventRow.__table__]))
+        tables = [Base.metadata.tables[row.__tablename__] for row in (OrganizationRow, ProjectRow, ThreadMetaRow, RunRow, RunChangeClockRow, RunEventRow)]
+        await connection.run_sync(lambda conn: Base.metadata.create_all(conn, tables=tables))
     store, threads, events = RunRepository(factory), ThreadMetaRepository(factory), DbRunEventStore(factory)
     provider = SyntheticProvider()
     arrived = asyncio.Event()
@@ -113,6 +117,7 @@ async def test_actual_crewai_agency_restart_preserves_receipts_budget_and_privat
             finally:
                 await first.aclose()
             prior = first._db("get", admitted["id"], owner)
+            assert isinstance(prior, dict)
             assert prior["status"] == "interrupted"
             assert prior["usage"]["model_calls"] == 2 and prior["usage"]["unknown_model_calls"] == 0
             assert not first_adapter.active_workers
@@ -145,11 +150,20 @@ async def test_actual_crewai_agency_restart_preserves_receipts_budget_and_privat
                 with sqlite3.connect(path) as ledger:
                     attempts = ledger.execute("SELECT state,call_id FROM workflow_attempts WHERE run_id=?", (admitted["id"],)).fetchall()
                 assert set(attempts) == {("complete", call_id) for call_id in ids}
-                native = [await store.get(run_id, user_id=native_owner) for run_id in (prior["native_run_id"], final["native_run_id"])]
+                native_rows = [await store.get(run_id, user_id=native_owner) for run_id in (prior["native_run_id"], final["native_run_id"])]
+                native = [row for row in native_rows if row is not None]
+                assert len(native) == 2
                 assert sum(row["llm_call_count"] for row in native) == 3
                 assert sum(row["total_input_tokens"] for row in native) == 120
                 assert sum(row["total_output_tokens"] for row in native) == 60
                 assert await store.get(final["native_run_id"], user_id="synthetic-actor") is None
+                context = set_storage_context(WorkspaceStorageContext("synthetic-actor", None, native_owner))
+                try:
+                    messages = await events.list_messages(final["thread_id"], user_id=native_owner)
+                finally:
+                    reset_storage_context(context)
+                assert len(messages) == 3
+                assert {message["metadata"]["call_id"] for message in messages} == set(ids)
                 artifact = await resumed.artifact(owner, admitted["id"])
                 assert hashlib.sha256(artifact).hexdigest() == final["artifact"]["sha256"]
                 assert json.loads(artifact)["output"]["workflow_id"] == definition.id
