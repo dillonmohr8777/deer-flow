@@ -100,7 +100,7 @@ test("previews real Worker results, paginates, toggles source, and opens a wide 
   ).toBeVisible();
   await expect(panel.getByText("65 rows", { exact: true })).toBeVisible();
   await panel.getByRole("button", { name: "Next page" }).click();
-  await expect(panel.getByText("51–65", { exact: true })).toBeVisible();
+  await expect(panel.getByText("51 to 65", { exact: true })).toBeVisible();
   await panel.getByRole("checkbox", { name: "First row as header" }).uncheck();
   await panel.getByRole("radio", { name: "View source" }).click();
   await expect(panel.locator(".cm-editor")).toBeVisible();

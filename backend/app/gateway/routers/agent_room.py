@@ -47,6 +47,13 @@ class OwnerMessageRequest(BaseModel):
     message_type: Literal["instruction", "note"] = "instruction"
 
 
+def _check_expected_owner(request: Request, owner: str) -> None:
+    """Fence a stale browser identity before any private repository read/write."""
+    expected = request.headers.get("X-Expected-User-Id")
+    if expected is not None and expected != owner:
+        raise HTTPException(409, "The signed-in account changed; reload this page")
+
+
 @router.get("/messages", response_model=AgentRoomMessageListResponse)
 @require_permission("threads", "read")
 async def list_messages(
@@ -54,6 +61,7 @@ async def list_messages(
     limit: int = Query(default=100, ge=1, le=200),
 ) -> AgentRoomMessageListResponse:
     user = await get_current_user_from_request(request)
+    _check_expected_owner(request, str(user.id))
     rows = await get_agent_room_repo(request).list_messages(user_id=str(user.id), limit=limit)
     return AgentRoomMessageListResponse(messages=[AgentRoomMessageResponse(**row) for row in rows])
 
@@ -62,6 +70,7 @@ async def list_messages(
 @require_permission("threads", "write")
 async def post_owner_message(body: OwnerMessageRequest, request: Request) -> AgentRoomMessageResponse:
     user = await get_current_user_from_request(request)
+    _check_expected_owner(request, str(user.id))
     text = body.body.strip()
     if not text:
         raise HTTPException(status_code=422, detail="Message is empty")
