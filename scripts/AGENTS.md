@@ -17,6 +17,16 @@ success; failures print Compose status and recent Gateway logs.
 
 ## Shell Script Invocation Contract
 
+The dedicated `run_momobot_openai_app.py prepare-config` command runs with that
+private Gateway stopped. It appends only a missing `run_events.backend: db`
+section to an existing SQLite config, keeps a mode-0600 exact raw backup, fences
+the expected/config pre-replacement bytes and atomically replaces/fsyncs the file.
+It must preserve explicit owner settings and raw credential references; never
+resolve secrets, alter auth/database paths/budgets or backfill historical memory
+events. Private Gateway startup rejects a missing section or a db journal with a
+memory database; global/development defaults remain unchanged. Offline contracts
+live in `backend/tests/test_private_app_journal_config.py` and `test_app_launcher.py`.
+
 Root Makefile recipes must invoke repository `.sh` files through
 `RUN_SHELL_SCRIPT`. On POSIX this expands to `$(BASH)`; on Windows it uses the
 Git Bash wrapper. Shell scripts that invoke sibling repository scripts must

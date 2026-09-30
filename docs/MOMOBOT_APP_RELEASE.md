@@ -57,6 +57,26 @@ Private run databases and capture artifacts live under the configured app
 data directory. Gateway services hold exclusive database leases, persist
 admission receipts, and close/reconcile recorded runs during shutdown/restart.
 
+Prepare each dedicated private state with the Gateway stopped:
+
+```sh
+backend/.venv/bin/python scripts/run_momobot_openai_app.py prepare-config \
+  --state-dir /absolute/path/to/private-app \
+  --expected-config-sha256 "$MOMO_REVIEWED_CONFIG_SHA"
+```
+
+Set `MOMO_REVIEWED_CONFIG_SHA` to the reviewed current `config.yaml` SHA256.
+The operator-owned state directory must be mode 0700 and its regular config
+mode 0600, with no symlink components; permission changes do not alter its SHA.
+Preparation appends only a missing `run_events: {backend: db}` setting to an
+existing SQLite configuration. It keeps an exclusive mode-0600 byte-for-byte
+backup and atomically replaces the config; auth, signing secret, database path,
+provider references and budgets are untouched. Explicit owner `run_events`
+settings remain unchanged. Gateway startup rejects a missing section or a
+`db` journal paired with a memory database; development defaults stay unchanged.
+Previously completed pilots with memory run events retain their historical
+receipts; preparation does not backfill or claim durable original event logs.
+
 Required managed OpenAI variables are `OPENAI_API_KEY` and
 `MOMOBOT_OPENAI_AGENTS_ENABLED=true`. Browser research requires
 `BROWSERBASE_API_KEY`, `MOMOBOT_BROWSERBASE_ENABLED=true`, and a verified

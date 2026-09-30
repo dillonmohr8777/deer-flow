@@ -28,7 +28,11 @@ bounded conversation history survive node continuation and restart; isolated
 worker processes are finite and need not stay running between calls.
 
 `workflows.sqlite` is a private admission, attempt and artifact-receipt ledger
-under the configured application data directory. It is not a client registry or
+under the configured application data directory. The dedicated private launcher
+requires an explicit `run_events` section; `prepare-config` appends the missing
+`backend: db` default with a private raw-config backup and existing SQLite path.
+Explicit owner settings are preserved. Historical memory events are not backfilled.
+The ledger is not a client registry or
 replacement for a canonical operational queue. It stores the actor, organization
 and workspace storage principal separately, hashing all three into an opaque
 owner scope. Every lookup/action requires that scope; a different actor in the

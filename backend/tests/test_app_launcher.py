@@ -26,7 +26,7 @@ class LaunchCaptured(Exception):
 def launch_setup(monkeypatch, tmp_path):
     state = tmp_path / "state"
     state.mkdir()
-    (state / "config.yaml").write_text("auth:\n  local:\n    allow_registration: false\n")
+    (state / "config.yaml").write_text("auth:\n  local:\n    allow_registration: false\nrun_events:\n  backend: memory\n")
     source = tmp_path / "private.env"
     source.write_text(
         "OPENAI_API_KEY=fixture-openai-source\n"
@@ -167,3 +167,21 @@ def test_gateway_and_frontend_cannot_claim_the_same_port(launch_setup, service):
         invoke(service, extra=("--gateway-port", "8040", "--frontend-port", "8040"))
     assert rejected.value.code == 2
     assert chdir == []
+
+
+def test_private_gateway_requires_preparation_instead_of_implicit_memory_journal(launch_setup):
+    invoke, state, _source, chdir = launch_setup
+    config = state / "config.yaml"
+    config.write_text("auth:\n  local:\n    allow_registration: false\n")
+    with pytest.raises(SystemExit) as rejected:
+        invoke("gateway")
+    assert rejected.value.code == 2 and chdir == []
+
+
+@pytest.mark.parametrize("database", ["database: null\n", "database: []\n", "database:\n  backend: memory\n"])
+def test_private_db_journal_cannot_silently_use_memory_database(launch_setup, database):
+    invoke, state, _source, chdir = launch_setup
+    (state / "config.yaml").write_text("run_events:\n  backend: db\n" + database)
+    with pytest.raises(SystemExit) as rejected:
+        invoke("gateway")
+    assert rejected.value.code == 2 and chdir == []

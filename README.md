@@ -2341,3 +2341,12 @@ See [workflow operation and limits](backend/docs/WORKFLOWS.md),
 [Mac workbench client](scripts/MOMO_WORKBENCH.md). The separate
 [AgentOS probe](docs/AGNO_AGENTOS_PROBE.md) tests bounded native persistence and
 authorization; it does not activate another production platform.
+
+Before starting a newly prepared dedicated private app state, stop its Gateway
+and run `scripts/run_momobot_openai_app.py prepare-config` with `--state-dir`
+and the reviewed `--expected-config-sha256`. This appends a missing
+`run_events.backend: db` setting using the existing SQLite database and retains
+an exact private backup. Explicit owner settings, authentication, signing secret,
+provider budgets and development defaults are preserved. The private Gateway
+rejects an omitted journal setting; previous memory-only pilot events remain
+historical. See the exact invocation in [private setup](docs/MOMOBOT_APP_RELEASE.md).
