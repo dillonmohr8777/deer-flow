@@ -17,6 +17,16 @@ success; failures print Compose status and recent Gateway logs.
 
 ## Shell Script Invocation Contract
 
+The dedicated `run_momobot_openai_app.py prepare-config` command runs with that
+private Gateway stopped. It appends only a missing `run_events.backend: db`
+section to an existing SQLite config, keeps a mode-0600 exact raw backup, fences
+the expected/config pre-replacement bytes and atomically replaces/fsyncs the file.
+It must preserve explicit owner settings and raw credential references; never
+resolve secrets, alter auth/database paths/budgets or backfill historical memory
+events. Private Gateway startup rejects a missing section or a db journal with a
+memory database; global/development defaults remain unchanged. Offline contracts
+live in `backend/tests/test_private_app_journal_config.py` and `test_app_launcher.py`.
+
 Root Makefile recipes must invoke repository `.sh` files through
 `RUN_SHELL_SCRIPT`. On POSIX this expands to `$(BASH)`; on Windows it uses the
 Git Bash wrapper. Shell scripts that invoke sibling repository scripts must
@@ -267,3 +277,11 @@ bounded, drop-oldest frame queue. WebSocket clients that request
 The legacy no-parameter protocol still base64-encodes frames into JSON at the
 Gateway boundary for backward compatibility. Unknown `frame_format` values
 receive a JSON error and close code 1008.
+
+## Private MomoBot app launcher
+
+`run_momobot_openai_app.py` starts separately configured loopback services.
+It accepts only a regular 0600 secret file for Gateway and explicitly filters
+provider credentials out of the Next.js environment. It forces production
+authentication and never provisions users or changes existing deployments.
+Runtime state/configuration and launchd definitions stay outside Git.

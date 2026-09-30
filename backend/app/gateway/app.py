@@ -24,6 +24,7 @@ from app.gateway.routers import (
     auth,
     board,
     browser,
+    browserbase_research,
     capabilities,
     channel_connections,
     channels,
@@ -41,6 +42,7 @@ from app.gateway.routers import (
     mcp_tasks,
     memory,
     models,
+    openai_agents,
     plugins,
     project_documents,
     project_thread_files,
@@ -57,6 +59,7 @@ from app.gateway.routers import (
     trash,
     uploads,
     user_preferences,
+    workflows,
     workspace_branding,
     workspaces,
 )
@@ -318,6 +321,16 @@ async def _shutdown_startup_trash_sweep(app: FastAPI) -> None:
         logger.exception("Startup trash sweep failed during shutdown")
 
 
+async def _announce_to_exec_without_receipt(text: str) -> None:
+    """Adapt the confirmed-post API for fire-and-forget sweep callbacks.
+
+    Scorecard evaluation retains the original boolean receipt contract.
+    """
+    from deerflow.tools.exec_seat_tools import announce_to_exec
+
+    await announce_to_exec(text)
+
+
 async def _run_seat_budget_sweep() -> None:
     """One weekly-budget pause/resume pass over every organization's agent seats (queue item f95).
 
@@ -336,7 +349,6 @@ async def _run_seat_budget_sweep() -> None:
     from deerflow.persistence.exec_seats import AgentSeatRepository
     from deerflow.persistence.organizations.model import OrganizationMemberRow, OrganizationRow
     from deerflow.runtime.user_context import WorkspaceStorageContext, reset_storage_context, set_storage_context
-    from deerflow.tools.exec_seat_tools import announce_to_exec
 
     session_factory = get_session_factory()
     if session_factory is None:
@@ -364,7 +376,7 @@ async def _run_seat_budget_sweep() -> None:
         token = set_storage_context(WorkspaceStorageContext(actor_user_id=owner_user_id, organization_id=organization_id, storage_user_id=storage_user_id or owner_user_id))
         try:
             for seat in org_seats:
-                await evaluate_seat_budget(repo, seat, announce=announce_to_exec)
+                await evaluate_seat_budget(repo, seat, announce=_announce_to_exec_without_receipt)
         finally:
             reset_storage_context(token)
 
@@ -508,7 +520,6 @@ async def _run_hire_idle_retirement_sweep() -> None:
     from deerflow.persistence.hiring.sql import HiredAgentRepository
     from deerflow.persistence.organizations.model import OrganizationMemberRow, OrganizationRow
     from deerflow.runtime.user_context import WorkspaceStorageContext, reset_storage_context, set_storage_context
-    from deerflow.tools.exec_seat_tools import announce_to_exec
 
     session_factory = get_session_factory()
     if session_factory is None:
@@ -535,7 +546,7 @@ async def _run_hire_idle_retirement_sweep() -> None:
         token = set_storage_context(WorkspaceStorageContext(actor_user_id=owner_user_id, organization_id=organization_id, storage_user_id=storage_user_id or owner_user_id))
         try:
             for hire in org_hires:
-                await evaluate_hire_idle_retirement(repo, hire, idle_days=idle_days, announce=announce_to_exec)
+                await evaluate_hire_idle_retirement(repo, hire, idle_days=idle_days, announce=_announce_to_exec_without_receipt)
         finally:
             reset_storage_context(token)
 
@@ -591,7 +602,6 @@ async def _run_hire_kpi_review_sweep() -> None:
     from deerflow.persistence.hiring.sql import HiredAgentRepository
     from deerflow.persistence.organizations.model import OrganizationMemberRow, OrganizationRow
     from deerflow.runtime.user_context import WorkspaceStorageContext, reset_storage_context, set_storage_context
-    from deerflow.tools.exec_seat_tools import announce_to_exec
 
     session_factory = get_session_factory()
     if session_factory is None:
@@ -616,7 +626,7 @@ async def _run_hire_kpi_review_sweep() -> None:
         token = set_storage_context(WorkspaceStorageContext(actor_user_id=owner_user_id, organization_id=organization_id, storage_user_id=storage_user_id or owner_user_id))
         try:
             for hire in org_hires:
-                await evaluate_hire_kpi(repo, hire, announce=announce_to_exec)
+                await evaluate_hire_kpi(repo, hire, announce=_announce_to_exec_without_receipt)
         finally:
             reset_storage_context(token)
 
@@ -927,6 +937,36 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 set_subagent_batch_submitter(batch_service)
                 app.state.subagent_batches_available = True
 
+        from app.gateway.openai_agent_service import OpenAIAgentService
+        from deerflow.config.paths import get_paths
+
+        app.state.openai_agent_service = OpenAIAgentService(get_paths().base_dir / "openai-agents.sqlite")
+        await app.state.openai_agent_service.start()
+
+        from app.gateway.browserbase_service import BrowserbaseResearchService
+
+        if BrowserbaseResearchService.enabled():
+            app.state.browserbase_service = BrowserbaseResearchService(get_paths().base_dir / "browserbase-research.sqlite")
+            await app.state.browserbase_service.start()
+
+        from app.gateway.workflow_service import WorkflowService
+
+        if WorkflowService.enabled():
+            from app.gateway.workflow_adapters import WorkflowModelAdapter
+            from app.gateway.workflow_authority import workflow_actor_authorized
+
+            app.state.workflow_service = WorkflowService(
+                get_paths().base_dir / "workflows.sqlite",
+                checkpointer=app.state.checkpointer,
+                adapter=WorkflowModelAdapter(),
+                browser_service=getattr(app.state, "browserbase_service", None),
+                run_manager=app.state.run_manager,
+                thread_store=app.state.thread_store,
+                event_store=app.state.run_event_store,
+                authority=workflow_actor_authorized,
+            )
+            await app.state.workflow_service.start()
+
         yield
 
         await _shutdown_startup_trash_sweep(app)
@@ -934,6 +974,21 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         await _shutdown_seat_scorecard_loop(app)
         await _shutdown_hire_idle_retirement_loop(app)
         await _shutdown_hire_kpi_review_loop(app)
+
+        if getattr(app.state, "workflow_service", None) is not None:
+            await app.state.workflow_service.aclose()
+
+        if getattr(app.state, "browserbase_service", None) is not None:
+            try:
+                await app.state.browserbase_service.aclose()
+            except Exception:
+                logger.exception("Failed to close Browserbase research client")
+
+        if getattr(app.state, "openai_agent_service", None) is not None:
+            try:
+                await app.state.openai_agent_service.aclose()
+            except Exception:
+                logger.exception("Failed to close OpenAI agent HTTP client")
 
         try:
             await auth.close_oidc_service()
@@ -1280,6 +1335,9 @@ This gateway provides runtime endpoints for agent runs plus custom endpoints for
 
     app.include_router(managed_models.router)
     app.include_router(models.router)
+    app.include_router(openai_agents.router)
+    app.include_router(browserbase_research.router)
+    app.include_router(workflows.router)
 
     # Features API is mounted at /api/features
     app.include_router(features.router)

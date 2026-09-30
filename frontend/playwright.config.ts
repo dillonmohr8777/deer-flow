@@ -16,6 +16,9 @@ export default defineConfig({
     baseURL,
     locale: "en-US",
     trace: "on-first-retry",
+    // Mock REST routes must not be bypassed by the application's worker.
+    // The dedicated PWA suite opts back in to test real worker behavior.
+    serviceWorkers: "block",
   },
 
   projects: [

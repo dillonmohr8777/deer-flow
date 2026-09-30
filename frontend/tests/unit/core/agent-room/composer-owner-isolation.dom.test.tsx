@@ -229,12 +229,34 @@ describe("actual Room composer account lifecycle", () => {
   });
 
   it("hides the room when a tab-refocus refresh returns a different owner (f134 review)", async () => {
-    rs.mocked(fetchAgentRoomEnabled).mockResolvedValue(true);
-    rs.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(JSON.stringify(OWNER_B), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }),
+    let admitOwnerB!: (enabled: boolean) => void;
+    const pendingOwnerBAccess = new Promise<boolean>((resolve) => {
+      admitOwnerB = resolve;
+    });
+    rs.mocked(fetchAgentRoomEnabled).mockImplementation((ownerId) =>
+      ownerId === OWNER_B.id ? pendingOwnerBAccess : Promise.resolve(true),
+    );
+    rs.mocked(listAgentRoomMessages).mockImplementation(async (ownerId) => [
+      {
+        id: `note-${ownerId}`,
+        user_id: ownerId,
+        author_kind: "owner",
+        agent_id: null,
+        agent_role: "",
+        message_type: "instruction",
+        body: `Private note for ${ownerId}`,
+        run_id: null,
+        created_at: "2026-09-30T00:00:00Z",
+      },
+    ]);
+    const authMe = rs.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({ ...OWNER_B, permissions: ["threads:read"] }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      ),
     );
     const cache = new QueryClient({
       defaultOptions: { queries: { retry: false } },
@@ -248,20 +270,55 @@ describe("actual Room composer account lifecycle", () => {
         </QueryClientProvider>
       </AuthProvider>,
     );
-    await screen.findByLabelText("Leave an instruction or note");
+    const oldInput = await screen.findByLabelText(
+      "Leave an instruction or note",
+    );
+    fireEvent.change(oldInput, {
+      target: { value: "Owner A draft must not follow the account switch" },
+    });
+    await screen.findByText("Private note for owner-A");
 
     await act(async () => {
       document.dispatchEvent(new Event("visibilitychange"));
     });
 
-    // B is a real, different owner: re-earning admission is correct, not a
-    // bug -- unlike the same-owner case above, this one may legitimately
-    // show the loading view while B's own fresh discovery runs.
+    await waitFor(() => expect(authMe).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(fetchAgentRoomEnabled).toHaveBeenCalledWith(
+        OWNER_B.id,
+        expect.any(AbortSignal),
+      ),
+    );
+    // Hold B's fresh discovery pending: with an immediate affirmative
+    // mock, act() can finish after legitimate B admission, making this
+    // transient loading assertion depend on notification timing.
     await waitFor(() =>
       expect(
         screen.queryByLabelText("Leave an instruction or note"),
       ).toBeNull(),
     );
+    expect(screen.queryByText("Private note for owner-A")).toBeNull();
+    expect(listAgentRoomMessages).not.toHaveBeenCalledWith(
+      OWNER_B.id,
+      expect.any(AbortSignal),
+    );
+
+    await act(async () => {
+      admitOwnerB(true);
+      await pendingOwnerBAccess;
+    });
+    const newInput = await screen.findByLabelText<HTMLTextAreaElement>(
+      "Leave an instruction or note",
+    );
+    expect(newInput.value).toBe("");
+    expect(newInput.disabled).toBe(true);
+    expect(
+      screen.getByRole<HTMLButtonElement>("button", { name: "Post to room" })
+        .disabled,
+    ).toBe(true);
+    await screen.findByText("Private note for owner-B");
+    expect(screen.queryByText("Private note for owner-A")).toBeNull();
+    expect(postAgentRoomMessage).not.toHaveBeenCalled();
   });
 
   it("hides the room when a tab-refocus refresh comes back 401 (f134 review)", async () => {
