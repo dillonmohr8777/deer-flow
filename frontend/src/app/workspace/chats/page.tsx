@@ -41,7 +41,7 @@ import {
   projectIdOfThread,
   titleOfThread,
 } from "@/core/threads/utils";
-import { formatCompactStamp } from "@/core/utils/datetime";
+import { formatCompactStamp, toDateTimeAttr } from "@/core/utils/datetime";
 import { env } from "@/env";
 import { cn } from "@/lib/utils";
 
@@ -323,7 +323,9 @@ export default function ChatsPage() {
                             {(stamp ?? projectName) && (
                               <div className="text-muted-foreground truncate text-sm">
                                 {stamp && (
-                                  <time dateTime={thread.updated_at}>
+                                  <time
+                                    dateTime={toDateTimeAttr(thread.updated_at)}
+                                  >
                                     {stamp}
                                   </time>
                                 )}
