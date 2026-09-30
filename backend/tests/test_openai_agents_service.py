@@ -579,6 +579,11 @@ async def test_watchdog_loop_persists_throttle_state_across_iterations(setup, mo
         raise AgentServiceError("unsafe_storage", 503)
 
     monkeypatch.setattr(service, "enforce_deadlines", boom)
+    # Pin the clock: real time.monotonic() counts from boot, so on a runner up
+    # for less than the throttle window this test would pass even if the loop's
+    # initial last_warning started at 0.0 instead of -inf (both would then look
+    # "recent" against a small elapsed monotonic value).
+    monkeypatch.setattr(service, "_clock", lambda: 0.0)
     real_sleep = asyncio.sleep
 
     async def fast_sleep(_seconds):
