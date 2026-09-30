@@ -275,10 +275,15 @@ shared-MCP administrator checks remain authoritative; this adds no personal scop
 sidebar gains a Desk link; with it off, the route replaces itself with Command
 Center before rendering anything Desk-shaped. Desk only reads existing APIs
 (scheduled tasks, clients and their fleet bindings, fleet templates, console
-usage); department grouping and schedule matching live in
-`components/workspace/desk/desk-data.ts`. There is no approval queue API yet, so
-the Approvals panel says "Not wired". `tests/e2e/desk.spec.ts` proves both flag
-states and the fresh-instance empty states.
+usage, and the Momo Board's `GET /api/board/threads?status=drafted`);
+department grouping and schedule matching live in
+`components/workspace/desk/desk-data.ts`. The Approvals panel and the sidebar's
+Board badge both read that same drafted-threads query (e4): a count of threads
+waiting on the owner, plus an "After hours" flag when an `urgent`-triage thread
+is waiting outside 8am-8pm ET (`isAfterHoursET`/`hasUrgentAfterHoursApproval` in
+`desk-data.ts`). No external send is triggered by either alert.
+`tests/e2e/desk.spec.ts` proves both flag states, the fresh-instance empty
+states, and the approvals count/badge wiring.
 
 ## Team and AI Academy (Momentum staff only)
 
@@ -295,6 +300,27 @@ APIs; `components/workspace/team/team-data.ts` and `core/academy/progress.ts`
 hold the pure logic. The channel view is keyed by channel id so a draft never
 follows you into another channel. `tests/e2e/team-academy.spec.ts` covers both
 flag states and checks for horizontal overflow at 390/768/1440.
+
+## Invite teammate (Settings > Invite teammate)
+
+Owners and admins of a shared workspace mint invites from Settings instead of
+calling the API. `components/workspace/settings/invite-settings-page.tsx` posts
+`{organization_id, email, role}` (`member`, `admin` or `client`) to
+`POST /api/v1/auth/invitations` through `core/invitations/api.ts`, using the
+shared `fetch` wrapper so the CSRF header is added. The workspace list comes
+from `GET /api/workspaces`, which returns shared workspaces only; the form
+offers the ones where the caller is `owner`/`admin`, defaulting to the active
+workspace, and shows a plain "only owners and admins" message otherwise. The
+Gateway stays the authority, so a 403 is still handled. The 201 response carries
+the one-time `token`, shown once as `${origin}/invite#token=...` with a copy
+button. The token lives only in component state: it is never put in the URL
+query, `localStorage`, `sessionStorage`, logs or analytics, and it is dropped on
+"Invite another person" or when the dialog closes. Failures map to fixed
+messages (`classifyInviteFailure`): the frozen 403, other 403, 409, 422, 503 and
+network. Listing and revoking invites are not in the UI yet.
+`tests/unit/core/invitations/api.test.ts` and
+`tests/unit/components/workspace/settings/invite-settings-page.dom.test.tsx`
+cover it.
 
 <!-- BEGIN:nextjs-agent-rules -->
 
@@ -336,3 +362,20 @@ Plugin page `openConversation(threadId)` resolves authenticated thread metadata
 with `pathOfThread`; do not let plugins hardcode default-agent routes. The page's
 abort signal fences late navigation after unmount/account changes. Synchronous
 conversation-action callbacks reject Promise returns while consuming rejections.
+
+The private Agent Room lives at `/workspace/desk/agent-room`. Its route and
+navigation use the existing Desk feature gate; message reads and owner posts use
+`core/agent-room` through the shared credential/CSRF fetcher. The Gateway retains
+owner/admin isolation and agents post through its separate principal-bound tool.
+Room access/message/mutation keys include the actual AuthProvider user ID; wait
+for affirmative private discovery before reading or projecting cached messages.
+Fence aborted/late reads, old-owner post settlement and composer drafts across
+auth transitions, without globally clearing unrelated caches. GET/POST send
+`X-Expected-User-Id`; the Gateway must enforce its optional actor mismatch fence
+before repository access. The header never grants permission or chooses storage.
+Keep existing no-header callers, admin/private gates and CSRF behavior unchanged.
+Its roster is a retained descriptive projection, not proof of live workers.
+Phone touch overrides belong to the workspace header, Background work, room
+composer and phone-only sidebar scope; do not modify generated UI primitives or
+desktop density. `tests/e2e/agent-room.spec.ts` covers readback, failed-post draft
+retention, the private gate and 390/768/1440 geometry with mocked APIs.

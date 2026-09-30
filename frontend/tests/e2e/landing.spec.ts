@@ -7,15 +7,22 @@ test.describe("Landing page", () => {
     await page.goto("/");
 
     await expect(
-      page.locator("header").first().getByText("DeerFlow", { exact: true }),
+      page
+        .getByRole("banner")
+        .getByRole("link", { name: "MomoBot", exact: true }),
     ).toBeVisible();
     await expect(page.locator("h1")).toHaveCount(1);
-    await expect(page.locator("h1")).toContainText("DeerFlow");
-
-    // "Get Started" call-to-action button in hero
     await expect(
-      page.getByRole("link", { name: /get started/i }),
+      page.getByRole("heading", { name: "Say hello to MomoBot", exact: true }),
     ).toBeVisible();
+
+    // Current MomoBot call to action in the hero.
+    await expect(
+      page.getByRole("link", { name: "Enter the workspace", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: "Enter the workspace", exact: true }),
+    ).toHaveAttribute("href", "/workspace");
   });
 
   for (const width of [320, 375, 390]) {
@@ -30,16 +37,24 @@ test.describe("Landing page", () => {
     });
   }
 
-  test("Get Started link navigates to workspace", async ({ page }) => {
+  test("Enter the workspace link navigates to workspace", async ({ page }) => {
     mockLangGraphAPI(page);
 
     await page.goto("/");
 
-    const getStarted = page.getByRole("link", { name: /get started/i });
-    await getStarted.click();
+    const enterWorkspace = page.getByRole("link", {
+      name: "Enter the workspace",
+      exact: true,
+    });
+    await expect(enterWorkspace).toHaveAttribute("href", "/workspace");
+    await enterWorkspace.click();
 
-    // Should redirect to /workspace/chats/new
-    await page.waitForURL("**/workspace/chats/new");
-    await expect(page).toHaveURL(/\/workspace\/chats\/new/);
+    // The default workspace home is Command Center when Desk is disabled.
+    await expect(page).toHaveURL(
+      new URL("/workspace/command-center", page.url()).href,
+    );
+    await expect(
+      page.getByRole("heading", { name: "Mission Control", exact: true }),
+    ).toBeVisible();
   });
 });

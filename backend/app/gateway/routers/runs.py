@@ -12,7 +12,7 @@ import logging
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 
-from app.gateway.authz import require_permission
+from app.gateway.authz import require_entitlement, require_permission
 from app.gateway.deps import get_feedback_repo, get_run_event_store, get_run_manager, get_run_store, get_stream_bridge
 from app.gateway.pagination import trim_run_message_page
 from app.gateway.run_models import RunCreateRequest
@@ -32,6 +32,7 @@ def _resolve_thread_id(body: RunCreateRequest) -> str:
 
 @router.post("/stream")
 @require_permission("runs", "create")
+@require_entitlement("runs.create")
 async def stateless_stream(body: RunCreateRequest, request: Request) -> StreamingResponse:
     """Create a run and stream events via SSE.
 
@@ -58,6 +59,7 @@ async def stateless_stream(body: RunCreateRequest, request: Request) -> Streamin
 
 @router.post("/wait", response_model=dict)
 @require_permission("runs", "create")
+@require_entitlement("runs.create")
 async def stateless_wait(body: RunCreateRequest, request: Request) -> dict:
     """Create a run and block until completion.
 

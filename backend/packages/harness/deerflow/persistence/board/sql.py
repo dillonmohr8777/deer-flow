@@ -112,7 +112,15 @@ class BoardRepository:
             result = await session.execute(stmt)
             return [_thread_to_dict(r) for r in result.scalars()]
 
-    async def patch_thread(self, thread_id: str, *, status: str | None = None, subject: str | None = None) -> dict | None:
+    async def patch_thread(
+        self,
+        thread_id: str,
+        *,
+        status: str | None = None,
+        subject: str | None = None,
+        urgency: str | None = None,
+        summary: str | None = None,
+    ) -> dict | None:
         organization_id = resolve_organization_id()
         async with self._sf() as session:
             row = await session.get(BoardThreadRow, thread_id)
@@ -122,6 +130,10 @@ class BoardRepository:
                 row.status = status
             if subject is not None:
                 row.subject = subject
+            if urgency is not None:
+                row.urgency = urgency
+            if summary is not None:
+                row.summary = summary
             await session.commit()
             await session.refresh(row)
             return _thread_to_dict(row)
