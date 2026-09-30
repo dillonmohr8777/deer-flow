@@ -341,7 +341,7 @@ test.describe("Chat workspace", () => {
 
     await expect(page.getByText("/data-analysis")).toBeVisible();
     const skillInput = page.getByRole("textbox", {
-      name: /describe the job|reply, or give the next step/i,
+      name: "Message",
     });
     await skillInput.fill("Analyze the latest results");
     await expect
@@ -355,7 +355,7 @@ test.describe("Chat workspace", () => {
     await expect(page.getByText("/data-analysis")).toBeVisible();
     await expect(
       page.getByRole("textbox", {
-        name: /describe the job|reply, or give the next step/i,
+        name: "Message",
       }),
     ).toHaveText("Analyze the latest results");
   });
@@ -682,7 +682,7 @@ test.describe("Chat workspace", () => {
 
     await expect(page.getByText("/data-analysis")).toBeVisible();
     const skillInput = page.getByRole("textbox", {
-      name: /describe the job|reply, or give the next step/i,
+      name: "Message",
     });
     await expect(skillInput).toBeVisible();
 
@@ -723,7 +723,7 @@ test.describe("Chat workspace", () => {
     await expect(page.getByText("/data-analysis")).toBeVisible();
 
     const skillInput = page.getByRole("textbox", {
-      name: /describe the job|reply, or give the next step/i,
+      name: "Message",
     });
     await expect(skillInput).toBeVisible();
 
@@ -815,7 +815,7 @@ test.describe("Chat workspace", () => {
     await expect(page.getByText("/data-analysis")).toBeVisible();
 
     const skillInput = page.getByRole("textbox", {
-      name: /describe the job|reply, or give the next step/i,
+      name: "Message",
     });
     await skillInput.pressSequentially("/comp");
 
@@ -979,7 +979,7 @@ test.describe("Chat workspace", () => {
     await expect(page.getByText("/frontend-design")).toBeVisible();
     await expect(
       page.getByRole("textbox", {
-        name: /describe the job|reply, or give the next step/i,
+        name: "Message",
       }),
     ).toBeVisible();
   });

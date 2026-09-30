@@ -514,6 +514,78 @@ test.describe("UI polish mobile regressions", () => {
       .toBeLessThan(2);
   });
 
+  // Review of slice 15: the placeholder carries instructions, so it is no
+  // longer the field's name; both composers are named "Message", and the
+  // thread composer's own placeholder is pinned.
+  test("the composer is named Message in a new chat and in a thread", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    mockLangGraphAPI(page);
+
+    await page.goto("/workspace/chats/new");
+    const fresh = page.getByRole("textbox", { name: "Message" });
+    await expect(fresh).toBeVisible({ timeout: 15_000 });
+    await expect(fresh).toHaveAttribute(
+      "placeholder",
+      "Describe the job and what done looks like",
+    );
+
+    await page.goto(`/workspace/chats/${MOCK_THREAD_ID}`);
+    const reply = page.getByRole("textbox", { name: "Message" });
+    await expect(reply).toBeVisible({ timeout: 15_000 });
+    await expect(reply).toHaveAttribute(
+      "placeholder",
+      "Reply, or give the next step",
+    );
+  });
+
+  // Review of slice 15: the footer's row split waited on the models list,
+  // so a phone with models configured grew a row (and moved Send) when
+  // /api/models answered.
+  test("Send holds still while the models list loads", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    mockLangGraphAPI(page, { threads: [] });
+    await page.route("**/api/models", async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          models: [
+            {
+              id: "alpha",
+              name: "alpha",
+              model: "alpha",
+              display_name: "Alpha",
+              supports_thinking: false,
+              supports_reasoning_effort: false,
+            },
+          ],
+          token_usage: { enabled: false },
+        }),
+      });
+    });
+
+    await page.goto("/workspace/chats/new");
+    // The composer is bottom-anchored, so Send sits on the last row either
+    // way; a late extra row shows as the tools row jumping up.
+    const send = page.getByRole("button", { name: "Send" });
+    const attach = page.getByRole("button", { name: "Add attachments" });
+    await expect(send).toBeVisible({ timeout: 15_000 });
+    const before = [
+      (await send.boundingBox())!.y,
+      (await attach.boundingBox())!.y,
+    ];
+    await expect(page.getByRole("button", { name: "Alpha" })).toBeVisible();
+    const after = [
+      (await send.boundingBox())!.y,
+      (await attach.boundingBox())!.y,
+    ];
+    expect(Math.abs(after[0]! - before[0]!)).toBeLessThan(1);
+    expect(Math.abs(after[1]! - before[1]!)).toBeLessThan(1);
+  });
+
   // Review of slice 14: the welcome block is bottom-anchored, so on short
   // phones its Momo and greeting rose under the header (360x640 lost 71px,
   // 320x568 lost the Momo entirely).
@@ -524,6 +596,7 @@ test.describe("UI polish mobile regressions", () => {
     [414, 640],
     [375, 667],
     [360, 661],
+    [568, 320],
   ] as const) {
     test(`a new chat's welcome stays below the header at ${width}x${height}`, async ({
       page,
@@ -536,7 +609,25 @@ test.describe("UI polish mobile regressions", () => {
       const greeting = page.getByRole("heading", {
         name: "What should the team take on?",
       });
-      await expect(greeting).toBeVisible({ timeout: 15_000 });
+      await expect(page.getByRole("textbox", { name: "Message" })).toBeVisible({
+        timeout: 15_000,
+      });
+      // A landscape phone drops the welcome; every portrait phone keeps
+      // the greeting.
+      if (height <= 440) {
+        await expect(greeting).toBeHidden();
+        await expect(page.locator("[data-chat-starters]")).toBeHidden();
+        const field = (await page
+          .getByRole("textbox", { name: "Message" })
+          .boundingBox())!;
+        const top = await page
+          .locator("header")
+          .first()
+          .evaluate((el) => el.getBoundingClientRect().bottom);
+        expect(field.y).toBeGreaterThanOrEqual(top);
+        return;
+      }
+      await expect(greeting).toBeVisible();
       const headerBottom = await page
         .locator("header")
         .first()

@@ -294,6 +294,7 @@ export interface Translations {
   inputBox: {
     placeholder: string;
     replyPlaceholder: string;
+    messageLabel: string;
     disclaimer: string;
     createSkillPrompt: string;
     addAttachments: string;

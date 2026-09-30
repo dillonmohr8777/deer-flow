@@ -377,7 +377,7 @@ export function InputBox({
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();
   const [modelDialogOpen, setModelDialogOpen] = useState(false);
-  const { models } = useModels();
+  const { models, isLoading: modelsLoading } = useModels();
   const { user } = useAuth();
   const { thread, isMock } = useThread();
   const { attachments, textInput } = usePromptInputController();
@@ -1488,6 +1488,10 @@ export function InputBox({
   // empty 44px button has no name to read and costs the phone a row.
   const showModelPicker =
     context.experience_mode !== "easy" && Boolean(selectedModel);
+  // The phone footer's row split is decided while models load too, so the
+  // composer does not grow a row (and move Send) when they arrive.
+  const modelPickerRow =
+    showModelPicker || (context.experience_mode !== "easy" && modelsLoading);
   const composerPlaceholder = isWelcomeMode
     ? t.inputBox.placeholder
     : t.inputBox.replyPlaceholder;
@@ -2503,7 +2507,7 @@ export function InputBox({
                 onRemove={clearSelectedSlashSkill}
               />
               <span
-                aria-label={composerPlaceholder}
+                aria-label={t.inputBox.messageLabel}
                 aria-multiline="true"
                 contentEditable={!composerLocked}
                 data-empty={textInput.value.length === 0}
@@ -2541,6 +2545,7 @@ export function InputBox({
               )}
               disabled={composerLocked}
               placeholder={composerPlaceholder}
+              aria-label={t.inputBox.messageLabel}
               autoFocus={autoFocus}
               defaultValue={initialValue}
               onBlur={() => setTextareaFocused(false)}
@@ -2562,7 +2567,7 @@ export function InputBox({
           <PromptInputTools
             className={cn(
               "min-w-0 flex-1 flex-wrap max-sm:-ml-3.5",
-              showModelPicker && "basis-full sm:basis-auto",
+              modelPickerRow && "basis-full sm:basis-auto",
             )}
           >
             <AddAttachmentsButton
@@ -3106,13 +3111,14 @@ function StarterPrompts({
     <div
       role="group"
       aria-label={t.inputBox.startersLabel}
-      className="flex w-full max-w-full flex-wrap items-center justify-center gap-2 pt-2 max-[374px]:flex-nowrap max-[374px]:justify-start max-[374px]:overflow-x-auto max-[374px]:[contain:inline-size]"
+      className="flex w-full max-w-full flex-wrap items-center justify-center gap-2 pt-2 max-[374px]:flex-nowrap max-[374px]:justify-start max-[374px]:overflow-x-auto max-[374px]:[contain:inline-size] max-sm:[@media(max-height:440px)]:hidden"
       data-chat-starters=""
     >
       {/* Paper tags, not pills: chips cut at 2px (DESIGN.md), and 44px tall
           on phones, where they sit at thumb reach under the composer. Below
           375px they would wrap three rows high and lift the welcome under
-          the header, so they run as one sideways rail instead. */}
+          the header, so they run as one sideways rail instead. A landscape
+          phone (440px tall or less) drops them so the field stays in view. */}
       {(starters ?? t.inputBox.starters).map((starter) => (
         <Suggestion
           key={starter.label}

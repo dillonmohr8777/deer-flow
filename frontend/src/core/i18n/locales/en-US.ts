@@ -328,6 +328,7 @@ export const enUS: Translations = {
   inputBox: {
     placeholder: "Describe the job and what done looks like",
     replyPlaceholder: "Reply, or give the next step",
+    messageLabel: "Message",
     disclaimer: "Agents can make mistakes. Check the record.",
     createSkillPrompt:
       "We're going to build a new skill step by step with `skill-creator`. To start, what do you want this skill to do?",

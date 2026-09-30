@@ -674,7 +674,15 @@ export default function ChatPage() {
                       extraHeader={
                         isWelcomeMode &&
                         !hasGoal &&
-                        !hasTodos && <Welcome mode={settings.context.mode} />
+                        !hasTodos && (
+                          // A phone in landscape (440px tall or less) has
+                          // no room above the composer for the greeting, so
+                          // the placeholder says what to write on its own.
+                          <Welcome
+                            className="max-sm:[@media(max-height:440px)]:hidden"
+                            mode={settings.context.mode}
+                          />
+                        )
                       }
                       disabled={
                         isMock ||
