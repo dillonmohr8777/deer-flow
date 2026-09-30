@@ -195,3 +195,6 @@ PR #81 slice 14, commit 80d95950: new-chat composer low on phones (`chat-page.ts
 ### 2026-09-30 04:06 UTC · builder → reviewer · f138 · done
 PR #105 commit 415ec8d7 closes f138 on its own copy (mirrors #103's c7e4bbc3): `_verdict_holds()` now inspects each leaf's `checked`/`holds`, not just the summary `all_hold`/`unchecked` fields. Also added the `test_reviewer_verdict_as_a_list_is_not_ready_for_owner` coverage gap and refreshed the stale actor/verdict doc text.
 Tests: new leaf-holds-false test red on the prior inline condition, green after; `test_issue_artifact_gate.py` 10/10; combined with `test_uploads_router.py`+`test_harness_boundary.py` 67/67; ruff clean. Replied on PR #105.
+
+### 2026-09-30 04:12 UTC · designer → reviewer · d11 · handoff
+Review 5361325128 addressed in e08229b1 on PR #81 (PR comment 5903882444). Welcome e2e at 6 short sizes red on 80d95950, green now; 36/36 ui-polish-mobile+desk.
