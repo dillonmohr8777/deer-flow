@@ -30,8 +30,12 @@ rs.mock("@/core/auth/AuthProvider", () => ({
 rs.mock("@/core/static-mode", () => ({
   isStaticWebsiteOnly: () => mocks.static,
 }));
-rs.mock("@/components/ui/sidebar", () => ({
-  SidebarTrigger: () => <button aria-label="Toggle sidebar" />,
+rs.mock("@/components/workspace/workspace-container", () => ({
+  WorkspaceContainer: ({ children }: PropsWithChildren) => (
+    <div>{children}</div>
+  ),
+  WorkspaceHeader: () => <div />,
+  WorkspaceBody: ({ children }: PropsWithChildren) => <main>{children}</main>,
 }));
 rs.mock("@/core/browserbase/api", () => ({
   handOffResearchDownload: mocks.handOff,
@@ -267,7 +271,7 @@ describe("Workflow room behavior", () => {
     render(<WorkflowRoom />, { wrapper: Wrapper });
     fireEvent.click(
       await screen.findByRole("button", {
-        name: /^Synthetic saved run interrupted/,
+        name: /^Synthetic saved run Interrupted/,
       }),
     );
     await screen.findByText(/remaining budget/);
@@ -296,7 +300,7 @@ describe("Workflow room behavior", () => {
     render(<WorkflowRoom />, { wrapper: Wrapper });
     fireEvent.click(
       await screen.findByRole("button", {
-        name: /^Synthetic saved run completed/,
+        name: /^Synthetic saved run Not accepted/,
       }),
     );
     await screen.findByText(/output not accepted/);
@@ -323,7 +327,7 @@ describe("Workflow room behavior", () => {
     render(<WorkflowRoom />, { wrapper: Wrapper });
     fireEvent.click(
       await screen.findByRole("button", {
-        name: /^Synthetic saved run completed/,
+        name: /^Synthetic saved run Accepted/,
       }),
     );
     await screen.findByText(/Known minimum: 0 input tokens/);
@@ -346,7 +350,7 @@ describe("Workflow room behavior", () => {
     const { rerender } = render(<WorkflowRoom />, { wrapper: Wrapper });
     fireEvent.click(
       await screen.findByRole("button", {
-        name: /^Synthetic saved run completed/,
+        name: /^Synthetic saved run Accepted/,
       }),
     );
     fireEvent.click(
@@ -401,5 +405,66 @@ describe("Workflow room behavior", () => {
         .disabled,
     ).toBe(true);
     expect(mocks.create).not.toHaveBeenCalled();
+  });
+  it("names a failed read in plain words with one next step, never the raw code", async () => {
+    mocks.status.mockRejectedValueOnce(new Error("workflow_request_failed"));
+    render(<WorkflowRoom />, { wrapper: Wrapper });
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("Workflows could not be loaded.");
+    expect(alert.textContent).toContain("The workflow service did not answer.");
+    expect(document.body.textContent).not.toContain("workflow_request_failed");
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    await screen.findByText("Your runs");
+    expect(mocks.status).toHaveBeenCalledTimes(2);
+  });
+  it("hides an unknown server code behind a sentence and keeps a readable one", async () => {
+    mocks.list.mockRejectedValueOnce(new Error("some_internal_code"));
+    render(<WorkflowRoom />, { wrapper: Wrapper });
+    await screen.findByText("Your runs could not be loaded.");
+    expect(document.body.textContent).not.toContain("some_internal_code");
+    await screen.findByText(
+      "The workflow service could not complete this request.",
+    );
+  });
+  it("files each saved run with its state in words, and pins only a running one", async () => {
+    mocks.list.mockResolvedValue({
+      runs: [
+        { ...WORKFLOW_RUN, id: "a", title: "Audit", status: "running" },
+        { ...WORKFLOW_RUN, id: "b", title: "Recap" },
+        {
+          ...WORKFLOW_RUN,
+          id: "c",
+          title: "Site QA",
+          status: "failed",
+          accepted: false,
+          error: "Model-call budget reached before review",
+        },
+      ],
+    });
+    render(<WorkflowRoom />, { wrapper: Wrapper });
+    const running = await screen.findByRole("button", {
+      name: /^Audit Running/,
+    });
+    expect(running.closest("li")?.classList.contains("pinned")).toBe(true);
+    const accepted = screen.getByRole("button", { name: /^Recap Accepted/ });
+    expect(accepted.closest("li")?.classList.contains("pinned")).toBe(false);
+    const failed = screen.getByRole("button", { name: /^Site QA Failed/ });
+    expect(failed.textContent).toContain(
+      "Model-call budget reached before review",
+    );
+    expect(failed.querySelector("time")?.getAttribute("dateTime")).toBe(
+      WORKFLOW_RUN.created_at,
+    );
+    expect(document.body.textContent).not.toMatch(/\bcompleted ·/);
+  });
+  it("says what will appear when there are no runs and leads to the catalog", async () => {
+    render(<WorkflowRoom />, { wrapper: Wrapper });
+    await screen.findByText("No runs yet");
+    expect(
+      screen
+        .getByRole("link", { name: "Choose a workflow" })
+        .getAttribute("href"),
+    ).toBe("#workflow-catalog");
+    expect(document.getElementById("workflow-catalog")).not.toBeNull();
   });
 });

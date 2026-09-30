@@ -1,11 +1,13 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
+import { pageStyles } from "@/components/workspace/page-body";
 import {
   FRAMEWORK_LABELS,
   isWorkflowActive,
   type WorkflowRun,
 } from "@/core/workflows/types";
+import { cn } from "@/lib/utils";
 
 export function WorkflowRunDetail({
   run,
@@ -27,10 +29,12 @@ export function WorkflowRunDetail({
   return (
     <section
       aria-label="Workflow run"
-      className="min-w-0 space-y-5 rounded-md border p-4"
+      className={cn(pageStyles.sheet, "min-w-0 space-y-5 border p-4")}
     >
       <div className="space-y-2">
-        <h2 className="text-xl break-words">{run.title}</h2>
+        {/* A record's title, under the page's "Your runs" h2: Nunito, not a
+            second Fraunces heading louder than its section. */}
+        <h3 className="text-lg font-bold break-words">{run.title}</h3>
         <p role="status" className="text-sm">
           {run.status} · {FRAMEWORK_LABELS[run.framework] ?? run.framework}
           {run.status === "completed"
