@@ -235,6 +235,7 @@ async def submit_native_batch(
         "oauth_provider": context.get("oauth_provider"),
         "oauth_id": context.get("oauth_id"),
         "channel_user_id": context.get("channel_user_id"),
+        "channel_name": context.get("channel_name"),
         "is_internal": context.get("is_internal") is True,
         "authz_attributes": normalize_authz_attributes(context.get("authz_attributes")),
     }

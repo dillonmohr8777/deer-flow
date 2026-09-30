@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, rs } from "@rstest/core";
 
 import {
+  AgentRoomAccessDeniedError,
   fetchAgentRoomEnabled,
   listAgentRoomMessages,
   postAgentRoomMessage,
@@ -81,4 +82,28 @@ describe("real Room transport owner fence", () => {
     ).rejects.toThrow("signed-in account changed");
     expect(network).toHaveBeenCalledTimes(1);
   });
+
+  for (const status of [403, 404]) {
+    it(`throws AgentRoomAccessDeniedError on a ${status} discovery response (f134 review)`, async () => {
+      network.mockResolvedValueOnce(
+        new Response(JSON.stringify({ detail: "nope" }), { status }),
+      );
+      await expect(fetchAgentRoomEnabled("owner-A")).rejects.toBeInstanceOf(
+        AgentRoomAccessDeniedError,
+      );
+    });
+  }
+
+  for (const status of [401, 500]) {
+    it(`throws a plain Error, not AgentRoomAccessDeniedError, on a ${status} discovery response (f134 review)`, async () => {
+      network.mockResolvedValueOnce(
+        new Response(JSON.stringify({ detail: "nope" }), { status }),
+      );
+      const error = await fetchAgentRoomEnabled("owner-A").catch(
+        (e: unknown) => e,
+      );
+      expect(error).toBeInstanceOf(Error);
+      expect(error).not.toBeInstanceOf(AgentRoomAccessDeniedError);
+    });
+  }
 });

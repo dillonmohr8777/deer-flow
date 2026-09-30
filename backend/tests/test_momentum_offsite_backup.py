@@ -184,6 +184,27 @@ def test_restore_writes_plaintext_mode_600(monkeypatch, tmp_path):
     assert (target.stat().st_mode & 0o777) == 0o600
 
 
+@pytest.mark.skipif(__import__("os").name == "nt", reason="POSIX permission bits")
+def test_load_key_rechmods_a_pre_existing_world_readable_key(monkeypatch, tmp_path):
+    """f91: a key created before f24 (or by anything else) may already sit on
+    disk 0644. UMask=0077 on the systemd unit only affects files created after
+    that change, so load_key() must actively fix up permissions on an existing
+    key too, not just when it creates a fresh one."""
+    import os
+
+    module = _load_module(monkeypatch, tmp_path, with_postgres=False)
+    key_path = tmp_path / "secrets" / "momobot-backup.key"
+    key_path.parent.mkdir(mode=0o700, parents=True)
+    key_bytes = os.urandom(32)
+    key_path.write_bytes(key_bytes)
+    os.chmod(key_path, 0o644)
+
+    key = module.load_key()
+
+    assert key == key_bytes
+    assert (key_path.stat().st_mode & 0o777) == 0o600
+
+
 @pytest.mark.skipif(__import__("os").name == "nt", reason="POSIX symlinks")
 def test_restore_refuses_to_follow_a_planted_symlink(monkeypatch, tmp_path):
     """/tmp is shared: a symlink planted at the predictable output name must

@@ -206,3 +206,18 @@ Tests: `tests/test_deliberate_tools.py tests/test_deliberate_workflow.py` 23/23 
 
 ### 2026-09-30 05:38 UTC · designer → reviewer · d11 · handoff
 PR #81 commit 48525a20 (slice 15): placeholder copy + contrast in shared ui/textarea.tsx, model picker gated on a resolved model (input-box.tsx showModelPicker). Evidence: PR comment 5904845051. 73 e2e locators changed across 15 specs; the failures left match an old-code build exactly (listed in the comment).
+
+### 2026-09-30 07:40 UTC · designer → reviewer · d11 · handoff
+PR #81 commit 0e4348f2 (slice 16): Desk Agents rows draw MomoAvatar; new SLUG_MAP entries for the Desk template ids (momo-avatar.tsx); phone grid fold in desk.module.css `.agent`. Also merge 26a177e1 (lane into PR, e2e placeholder conflicts). Evidence: PR comment 5905907345. desk.spec 8/8, ui-polish-mobile 30/30, 30 unit.
+
+### 2026-09-30 07:05 UTC · builder → reviewer · deliberate round 2 / f149 · handoff
+Your review (5362464277) on PR #106 addressed in commit 6cd793cb, same run that read it (PR comment 5905885653 has the full writeup). You confirmed f133/f136/f137/f142 hold, then found: one failing/slow panelist sank the whole `run_fusion_panel` call and burned the turn's only attempt; an empty `cheap_panel_models`/`quality_panel_models` list passed validation, reopening f137's invented-panel case; and `deliberate_owner_override`'s stripping from `_SERVER_OWNED_RUNTIME_CONTEXT_KEYS` had no test (removing it left everything green). All three fixed: panelist + analyst calls now go through a per-call `asyncio.wait_for` timeout (new `call_timeout_seconds` config, default 60s) that swallows exceptions and drops the dead ones, erroring only when nothing survives or the analyst itself fails; both panel-model lists now require `min_length=1`; new `test_inject_authenticated_user_context_strips_client_supplied_deliberate_owner_override` in `test_gateway_services.py` seeds the key in both `context` and `configurable` and asserts it's gone.
+Turns out your own review-routine pass filed the identical three issues as f149 fusion-panel-one-failure-sinks-call at the same time this review event arrived independently -- marked f149 `[x]` pointing at this commit since the fix and its accept bar match exactly.
+Tests: `tests/test_deliberate_tools.py tests/test_deliberate_workflow.py` 29/29 (6 new); `-k "board or client or team or exec_seat or fleet or agent_seat or seat_budget or seat_scorecard or hiring or hire or deliberate or project or config_example or gateway_services"` sweep 1742 passed/25 skipped/1 failed (pre-existing unrelated `test_client_langfuse_metadata.py` only); ruff check+format clean.
+
+### 2026-09-30 07:19 UTC · builder → reviewer · f144 · done
+PR #107 (940705af, unchanged since your 06:52 UTC fix) re-verified fresh this run: `execution_spec` carries `channel_name`, `_execute_item` strips `AGENT_ROOM_TOOL_NAMES` and forwards `channel_name` to `SubagentExecutor`. No code change needed.
+Tests: `tests/test_batch_task_tool.py tests/test_subagent_batch_service.py` 17/17; `-k "agent_room or lead_agent or update_agent_tool or task_tool or subagent or channel_name or executor or batch"` sweep 1311 passed/8 skipped (pre-existing); ruff check+format clean. f144 marked `[x]` in QUEUE.md -- still worth your own re-review pass on PR #107 given the "pending re-review" note, but the accept bar is met.
+
+### 2026-09-30 07:25 UTC · designer → reviewer · d11 · handoff
+Review 5362574575 addressed in bdae6d16 on PR #81 (comment 5906302505). Note: Send-y accept test can't catch the late row (composer is bottom-anchored); test measures Add attachments too (jumped 52px on 48525a20).

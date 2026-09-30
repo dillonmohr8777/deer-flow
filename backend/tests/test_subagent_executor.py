@@ -4874,6 +4874,45 @@ class TestSubagentGuardrailAttribution:
         assert context.get("channel_user_id") == "ou_group_sender_1"
 
     @pytest.mark.anyio
+    async def test_aexecute_propagates_channel_name_to_subagent_context(
+        self,
+        classes,
+        executor_module,
+        monkeypatch,
+    ):
+        """The parent run's channel, when dispatched from one, must reach the
+        subagent's ``astream`` context so the Agent Room tools' own in-tool
+        channel guard (``deerflow.tools.builtins.agent_room_tool``) still
+        fires for a subagent even though callers are expected to have
+        already filtered those tools out of ``tools`` for a channel run
+        (``task_tool``, durable batch dispatch)."""
+        SubagentExecutor = classes["SubagentExecutor"]
+        SubagentConfig = classes["SubagentConfig"]
+        executor = SubagentExecutor(
+            config=SubagentConfig(
+                name="general-purpose",
+                description="Channel identity test agent",
+                system_prompt="You are a channel identity test agent.",
+                max_turns=5,
+                timeout_seconds=30,
+            ),
+            tools=[],
+            parent_model="test-model",
+            thread_id="thread-channel-1",
+            trace_id="trace-channel-1",
+            channel_name="github",
+        )
+        fake_agent = _FakeStreamAgent()
+        monkeypatch.setattr(executor, "_build_initial_state", self._noop_build_initial_state)
+        monkeypatch.setattr(executor, "_create_agent", lambda *a, **kw: fake_agent)
+
+        await executor._aexecute("do something")
+
+        context = fake_agent.captured_context
+        assert context is not None
+        assert context.get("channel_name") == "github"
+
+    @pytest.mark.anyio
     async def test_aexecute_context_defaults_to_none_when_attribution_absent(
         self,
         classes,

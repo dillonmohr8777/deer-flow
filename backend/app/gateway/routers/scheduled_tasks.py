@@ -72,11 +72,17 @@ def _validate_interval_seconds(schedule_spec: dict[str, Any], min_seconds: int) 
     return every_seconds
 
 
-async def resolve_scheduled_task_assistant_id(raw: str | None, *, user_id: str) -> str:
+async def resolve_scheduled_task_assistant_id(raw: str | None, *, user_id: str, actor_user_id: str) -> str:
     """Return a stored assistant id, defaulting to lead_agent.
 
     Custom names are normalized the same way IM/run creation already does
-    (lowercase, underscore to hyphen) and must exist for this owner.
+    (lowercase, underscore to hyphen) and must exist for this owner. A
+    client-stamped agent (f88) is refused for an *actor_user_id* who can't
+    see that client -- the scheduler later dispatches as an internal caller
+    and skips ``services._require_run_agent_visible``, so this is the only
+    gate a client-scoped assistant_id passes through. A foreign agent
+    answers exactly like a missing one, matching ``agents.py``'s
+    ``_require_visible_client_id``.
     """
     if raw is None:
         return _DEFAULT_ASSISTANT_ID
@@ -99,6 +105,14 @@ async def resolve_scheduled_task_assistant_id(raw: str | None, *, user_id: str) 
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     if config is None:
         raise HTTPException(status_code=422, detail=f"Unknown assistant_id {raw!r}")
+    client_id = getattr(config, "client_id", None)
+    if client_id is not None:
+        # Lazy import: avoids a module-level app.gateway.routers cycle.
+        from app.gateway.routers.agents import _visible_client_ids
+
+        visible_client_ids = await _visible_client_ids(actor_user_id)
+        if visible_client_ids is not None and client_id not in visible_client_ids:
+            raise HTTPException(status_code=422, detail=f"Unknown assistant_id {raw!r}")
     return normalized
 
 
@@ -248,6 +262,7 @@ async def create_scheduled_task(request: Request, body: ScheduledTaskCreateReque
     assistant_id = await resolve_scheduled_task_assistant_id(
         body.assistant_id,
         user_id=owner,
+        actor_user_id=str(user.id),
     )
     try:
         return await repo.create(
@@ -305,6 +320,7 @@ async def update_scheduled_task(task_id: str, request: Request, body: ScheduledT
         updates["assistant_id"] = await resolve_scheduled_task_assistant_id(
             updates["assistant_id"],
             user_id=owner,
+            actor_user_id=str(user.id),
         )
     if "context_mode" in updates:
         if updates["context_mode"] not in {"fresh_thread_per_run", "reuse_thread"}:

@@ -8,6 +8,7 @@ import { isStaticWebsiteOnly } from "../static-mode";
 
 import {
   AGENT_ROOM_MESSAGES_QUERY_KEY,
+  AgentRoomAccessDeniedError,
   fetchAgentRoomEnabled,
   listAgentRoomMessages,
   postAgentRoomMessage,
@@ -58,20 +59,75 @@ export function useAgentRoomAccess() {
     retry: false,
     staleTime: 0,
     refetchOnMount: "always",
+    // A window refocus must not swap the page away from a live draft: a
+    // background revalidation is handled by the sticky-admission logic
+    // below instead of by refetching here at all.
+    refetchOnWindowFocus: false,
   });
-  const enabled =
-    ownerId !== null &&
-    access.isSuccess &&
-    !access.isFetching &&
-    access.data === true &&
-    hasPermission(auth.user, "threads:read");
+
+  // First admission for an owner requires a completed, successful fresh
+  // discovery (the existing `refetchOnMount: "always"` + `staleTime: 0`
+  // behavior below). Once granted, admission is sticky: a later background
+  // refetch (reconnect, a manual refetch, ...) that merely fails -- a
+  // network hiccup, a 5xx -- must not evict the composer or redirect away.
+  // Only an explicit `false` result or a real access-denial error (403/404)
+  // revokes it.
+  //
+  // `ownerId` above also reads null while `auth.isLoading` is true, which
+  // covers more than a sign-out: AuthProvider's tab-visibility handler calls
+  // `refreshUser()` for the *same* signed-in owner on every refocus, and
+  // that flips `isLoading` too. Only touch `admittedOwner` once loading has
+  // actually settled, so a same-owner refresh in flight leaves a prior
+  // admission exactly as it was; a genuinely different owner (or a real
+  // sign-out) is caught the moment the refresh resolves, before `admitted`
+  // is computed below.
+  const admittedOwner = useRef<string | null>(null);
+  // Switching from owner X to a real, different owner Y and back to X can
+  // re-render with X's query key before X's own fresh refetch (forced by
+  // `refetchOnMount: "always"`) has actually started: React Query shows the
+  // OLD cached success optimistically first (`isFetching: false`, stale
+  // `data`), and only flips to fetching on a later tick. `dataUpdatedAt` is
+  // only bumped by a fetch that actually completed, so remembering which
+  // one admission last consumed -- instead of trusting any `isSuccess` --
+  // stops that stale snapshot from re-admitting X before its real refetch
+  // lands.
+  const consumedFetchAt = useRef<number | null>(null);
+  if (!auth.isLoading) {
+    if (ownerId === null) {
+      admittedOwner.current = null;
+    } else if (
+      admittedOwner.current !== null &&
+      admittedOwner.current !== ownerId
+    ) {
+      admittedOwner.current = null;
+    } else if (!access.isFetching) {
+      if (
+        access.isSuccess &&
+        access.data === true &&
+        access.dataUpdatedAt !== consumedFetchAt.current
+      ) {
+        admittedOwner.current = ownerId;
+        consumedFetchAt.current = access.dataUpdatedAt;
+      } else if (
+        access.data === false ||
+        access.error instanceof AgentRoomAccessDeniedError
+      ) {
+        admittedOwner.current = null;
+      }
+    }
+  }
+  const admitted = admittedOwner.current !== null;
+
+  const enabled = admitted && hasPermission(auth.user, "threads:read");
   return {
     ownerId,
     enabled,
-    canWrite: enabled && hasPermission(auth.user, "threads:write"),
+    canWrite:
+      enabled && !auth.isLoading && hasPermission(auth.user, "threads:write"),
     isLoading:
-      auth.isLoading ||
-      (ownerId !== null && (access.isPending || access.isFetching)),
+      !admitted &&
+      (auth.isLoading ||
+        (ownerId !== null && (access.isPending || access.isFetching))),
   };
 }
 
@@ -100,15 +156,24 @@ export function useAgentRoomMessages() {
 }
 
 export function usePostAgentRoomMessage() {
+  const auth = useAuth();
   const access = useAgentRoomAccess();
-  const currentOwner = useOwnerFence(access.canWrite ? access.ownerId : null);
+  // Fenced on the raw signed-in identity, not on `canWrite`/`enabled`: those
+  // are derived through `access`'s own admission state, which the read path
+  // deliberately holds at `null`/`false` while merely uncertain (a
+  // same-owner auth refresh in flight, a background access re-check). That
+  // uncertainty is not an account change, so it must never trip this fence
+  // and falsely fail (and duplicate on retry) an already-sent post.
+  // `canWrite` is still the right gate for whether to send at all -- just
+  // checked once, before sending, not re-derived after the await.
+  const currentOwner = useOwnerFence(auth.user?.id.trim() ?? null);
   const ownerId = access.ownerId;
   const queryClient = useQueryClient();
   return useMutation({
     mutationKey: ["agent-room", "post", ownerId],
     retry: false,
     mutationFn: async (input: Parameters<typeof postAgentRoomMessage>[0]) => {
-      if (!ownerId || currentOwner.current !== ownerId)
+      if (!ownerId || !access.canWrite || currentOwner.current !== ownerId)
         throw new Error("Room posting is unavailable.");
       const message = await postAgentRoomMessage(input, ownerId);
       if (currentOwner.current !== ownerId)
@@ -118,9 +183,14 @@ export function usePostAgentRoomMessage() {
       return message;
     },
     onSuccess: (message) => {
-      if (!ownerId || currentOwner.current !== ownerId) return;
+      // Read from the ref and the server-confirmed message, never from the
+      // `ownerId`/`access` closure: React Query calls onSuccess against
+      // whatever render happened to be current when the mutation settled,
+      // which can be one where `access.ownerId` is transiently `null` (the
+      // same benign same-owner refresh the fence above must also ignore).
+      if (currentOwner.current !== message.user_id) return;
       queryClient.setQueryData<AgentRoomMessage[]>(
-        agentRoomMessagesQueryKey(ownerId),
+        agentRoomMessagesQueryKey(message.user_id),
         (previous) => [...(previous ?? []), message].slice(-100),
       );
     },

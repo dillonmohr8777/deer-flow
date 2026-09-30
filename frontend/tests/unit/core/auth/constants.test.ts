@@ -1,4 +1,11 @@
-import { afterEach, beforeEach, describe, expect, rs, test } from "@rstest/core";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  rs,
+  test,
+} from "@rstest/core";
 
 // Two DeerFlow instances reachable on the same hostname but different ports
 // share one browser cookie jar (cookies are host-scoped, not port-scoped).

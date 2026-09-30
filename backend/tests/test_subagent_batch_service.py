@@ -201,6 +201,99 @@ async def test_execute_item_marks_real_running_then_persists_terminal_result(mon
 
 
 @pytest.mark.asyncio
+async def test_execute_item_strips_agent_room_tools_and_forwards_channel_name_on_channel_run(monkeypatch) -> None:
+    """A durable batch item dispatched from a channel run must not inherit
+    the owner-private Agent Room tools, and the channel name must still
+    reach the executor.
+
+    Mirrors ``task_tool``'s ordinary (non-batch) subagent gate: a channel
+    run resolves the runtime actor to the channel's bound owner regardless
+    of which external person actually triggered it, so an outside commenter
+    delegating to a durable batch subagent could otherwise have it read or
+    post to the owner-private room.
+    """
+    result = SimpleNamespace(
+        status=FakeStatus.RUNNING,
+        result=None,
+        error=None,
+        stop_reason=None,
+        token_usage_records=None,
+    )
+
+    class Repository:
+        def __init__(self) -> None:
+            self.finalized = None
+
+        async def claim_items(self, **_kwargs):
+            spec = dict(_request().execution_spec)
+            spec["channel_name"] = "telegram"
+            return [
+                {
+                    "id": "item-1",
+                    "item_key": "record-1",
+                    "prompt": "Process record 1",
+                    "batch": {
+                        "id": "batch-1",
+                        "thread_id": "thread-1",
+                        "user_id": "user-1",
+                        "run_id": "run-1",
+                        "execution_spec": spec,
+                    },
+                }
+            ]
+
+        async def mark_item_running(self, *_args, **_kwargs):
+            result.status = FakeStatus.COMPLETED
+            result.result = "done"
+            return True
+
+        async def renew_item_lease(self, *_args, **_kwargs):
+            return {"valid": True, "cancel_requested": False}
+
+        async def finalize_item(self, *_args, **kwargs):
+            self.finalized = kwargs
+            return True
+
+    execution_capacity = SubagentExecutionCapacity(SubagentRuntimeConfig(max_running=1))
+    executor_kwargs = {}
+
+    class Executor:
+        def __init__(self, **kwargs) -> None:
+            executor_kwargs.update(kwargs)
+
+        def execute_async(self, _prompt, task_id=None):
+            return "execution-1"
+
+    repository = Repository()
+    monkeypatch.setattr(service_module, "get_app_config", lambda: SimpleNamespace())
+    monkeypatch.setattr(service_module, "resolve_subagent_model_name", lambda *_args, **_kwargs: "model-a")
+    monkeypatch.setattr(service_module, "SubagentExecutor", Executor)
+    monkeypatch.setattr(service_module, "SubagentStatus", FakeStatus)
+    monkeypatch.setattr(service_module, "get_background_task_result", lambda _execution_id: result)
+    monkeypatch.setattr(service_module, "cleanup_background_task", lambda _execution_id: None)
+    monkeypatch.setattr(
+        "deerflow.tools.get_available_tools",
+        lambda **_kwargs: [SimpleNamespace(name="bash"), SimpleNamespace(name="agent_room_read"), SimpleNamespace(name="agent_room_post")],
+    )
+    service = SubagentBatchService(
+        repository=repository,
+        config=SubagentBatchesConfig(),
+        runtime_config=SubagentRuntimeConfig(max_running=1),
+        execution_capacity=execution_capacity,
+    )
+
+    await service.run_once(now=service_module.datetime.now(service_module.UTC))
+    await asyncio.gather(*list(service._executions.values()))
+
+    assert repository.finalized is not None
+    tool_names = {t.name for t in executor_kwargs["tools"]}
+    assert "agent_room_read" not in tool_names
+    assert "agent_room_post" not in tool_names
+    assert "bash" in tool_names
+    assert executor_kwargs["channel_name"] == "telegram"
+
+
+@pytest.mark.asyncio
 async def test_execute_item_polls_completion_without_waiting_for_lease_renewal(monkeypatch) -> None:
     result = SimpleNamespace(
         status=FakeStatus.PENDING,
