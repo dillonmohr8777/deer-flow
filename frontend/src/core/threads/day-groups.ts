@@ -1,4 +1,3 @@
-import type { AgentThread } from "./types";
 import { isThreadPinned } from "./utils";
 
 /**
@@ -19,6 +18,12 @@ export type ThreadDayGroup =
       sameYear: boolean;
     }
   | { kind: "undated" };
+
+/** Anything filed in a chat ledger: the Chats page and a project's Chats tab. */
+export type LedgerThread = {
+  metadata?: Record<string, unknown> | null;
+  updated_at?: string | null;
+};
 
 const DAY_MS = 86_400_000;
 
@@ -53,7 +58,7 @@ export function dayGroupOf(
 }
 
 export function threadDayGroup(
-  thread: AgentThread,
+  thread: LedgerThread,
   now: Date = new Date(),
 ): ThreadDayGroup {
   return isThreadPinned(thread)
@@ -73,7 +78,7 @@ export function dayGroupKey(group: ThreadDayGroup): string {
  * sorted newest first repeats a label instead of hiding a chat.
  */
 export function dayGroupStartingAt(
-  threads: readonly AgentThread[],
+  threads: readonly LedgerThread[],
   index: number,
   now: Date = new Date(),
 ): ThreadDayGroup | null {
@@ -88,4 +93,25 @@ export function dayGroupStartingAt(
     return null;
   }
   return group;
+}
+
+/** The ledger label for a group, in the eyebrow voice the page styles. */
+export function dayGroupLabel(
+  group: ThreadDayGroup,
+  labels: {
+    pinned: string;
+    today: string;
+    yesterday: string;
+    lastWeek: string;
+    earlierIn: (month: string) => string;
+    undated: string;
+  },
+  locale: string,
+): string {
+  if (group.kind !== "month") return labels[group.kind];
+  const month = new Intl.DateTimeFormat(
+    locale === "zh-CN" ? "zh-CN" : "en-US",
+    { month: "long", ...(group.sameYear ? {} : { year: "numeric" as const }) },
+  ).format(new Date(group.year, group.month, 1));
+  return group.sameMonth ? labels.earlierIn(month) : month;
 }

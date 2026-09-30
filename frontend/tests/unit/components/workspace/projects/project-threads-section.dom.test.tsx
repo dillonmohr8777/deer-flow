@@ -12,10 +12,17 @@ rs.mock("next/link", () => {
   const MockLink = ({
     href,
     children,
+    ...rest
   }: {
     href: string;
     children: React.ReactNode;
-  }) => <a href={href}>{children}</a>;
+    className?: string;
+    title?: string;
+  }) => (
+    <a href={href} {...rest}>
+      {children}
+    </a>
+  );
   return { default: MockLink };
 });
 
@@ -49,14 +56,21 @@ afterEach(() => {
 });
 
 describe("ProjectThreadsSection", () => {
-  it("renders a divider on every row except the final one", () => {
+  it("files chats like the Chats page: day labels, two-line titles, a time", () => {
+    const now = new Date();
+    const at = (daysAgo: number) => {
+      const d = new Date(now);
+      d.setDate(d.getDate() - daysAgo);
+      d.setHours(9, 30, 0, 0);
+      return d.toISOString();
+    };
     const { container } = render(
       <Wrapper>
         <ProjectThreadsSection
           query={makeQuery([
-            makeThread("t-1", "First"),
-            makeThread("t-2", "Second"),
-            makeThread("t-3", "Third"),
+            { ...makeThread("t-1", "First"), updated_at: at(0) },
+            { ...makeThread("t-2", "Second"), updated_at: at(0) },
+            { ...makeThread("t-3", "Third"), updated_at: at(1) },
           ])}
         />
       </Wrapper>,
@@ -65,12 +79,22 @@ describe("ProjectThreadsSection", () => {
     const links = container.querySelectorAll<HTMLAnchorElement>("a");
     expect(links).toHaveLength(3);
     expect(links[0]?.href).toContain("/workspace/chats/t-1");
-    const rowDivs = [...links].map((link) => link.firstElementChild);
-    expect(rowDivs[0]?.classList.contains("border-b")).toBe(true);
-    expect(rowDivs[1]?.classList.contains("border-b")).toBe(true);
-    // Only the final data row drops the divider — the check must hold even
-    // when virtualization mounts just a window of rows.
-    expect(rowDivs[2]?.classList.contains("border-b")).toBe(false);
+    // Every row carries its rule (no border-y frame to double the last one).
+    for (const link of links) {
+      expect(link.classList.contains("border-b")).toBe(true);
+    }
+    // A label opens each day, not each chat.
+    const labels = [...container.querySelectorAll("h2")].map(
+      (h) => h.textContent,
+    );
+    expect(labels).toEqual(["Today", "Yesterday"]);
+    // Titles wrap to two lines and name themselves on hover.
+    expect(links[0]?.getAttribute("title")).toBe("First");
+    expect(links[0]?.querySelector(".line-clamp-2")?.textContent).toBe("First");
+    // The time is a real <time>, today as a clock time.
+    const time = links[0]?.querySelector("time");
+    expect(time?.getAttribute("dateTime")).toBe(at(0));
+    expect(time?.textContent).toMatch(/9:30/);
   });
 
   it("shows the untitled fallback and the load-more button for a partial page", () => {

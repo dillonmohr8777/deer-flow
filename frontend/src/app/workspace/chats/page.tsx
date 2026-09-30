@@ -30,8 +30,8 @@ import { useProjects } from "@/core/projects";
 import { THREAD_SEARCH_FAILED_FALLBACK } from "@/core/threads/api";
 import {
   dayGroupKey,
+  dayGroupLabel,
   dayGroupStartingAt,
-  type ThreadDayGroup,
 } from "@/core/threads/day-groups";
 import { useInfiniteThreads } from "@/core/threads/hooks";
 import { buildThreadListModel } from "@/core/threads/thread-list-model";
@@ -44,26 +44,6 @@ import {
 import { formatCompactStamp } from "@/core/utils/datetime";
 import { env } from "@/env";
 import { cn } from "@/lib/utils";
-
-function dayGroupLabel(
-  group: ThreadDayGroup,
-  labels: {
-    pinned: string;
-    today: string;
-    yesterday: string;
-    lastWeek: string;
-    earlierIn: (month: string) => string;
-    undated: string;
-  },
-  locale: string,
-): string {
-  if (group.kind !== "month") return labels[group.kind];
-  const month = new Intl.DateTimeFormat(
-    locale === "zh-CN" ? "zh-CN" : "en-US",
-    { month: "long", ...(group.sameYear ? {} : { year: "numeric" as const }) },
-  ).format(new Date(group.year, group.month, 1));
-  return group.sameMonth ? labels.earlierIn(month) : month;
-}
 
 export default function ChatsPage() {
   const { t, locale } = useI18n();

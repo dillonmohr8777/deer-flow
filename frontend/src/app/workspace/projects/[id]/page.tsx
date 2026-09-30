@@ -166,7 +166,7 @@ function ProjectNotFoundState() {
       message={t.projects.notFound}
       detail={t.projects.notFoundHint}
       action={
-        <Button variant="outline" size="sm" asChild>
+        <Button variant="outline" size="sm" className="max-sm:min-h-11" asChild>
           <Link href="/workspace/chats">{t.projects.backToChats}</Link>
         </Button>
       }
@@ -190,7 +190,7 @@ function ProjectHeader({ project }: { project: Project }) {
         )}
       </div>
       {project.status !== "archived" && (
-        <Button asChild>
+        <Button asChild className="max-sm:min-h-11">
           <Link href={newProjectChatPath(project.id)}>
             <MessageSquarePlus />
             {t.projects.newChat}
