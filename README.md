@@ -2303,3 +2303,21 @@ frontend on a separate loopback port with the existing gateway configured.
 ## Star History
 
 [![Star History Chart](https://star-history.dera.page/svg?repos=bytedance/deer-flow&type=Date)](https://star-history.dera.page/#bytedance/deer-flow&Date)
+
+## MomoBot iPhone and desktop app
+
+The private workspace adds **OpenAI crew** at `/workspace/openai` for durable
+GPT-6.1 Sol hosted tasks with up to three subagents, saved results and file
+downloads. **Browser research** at `/workspace/browser-research` captures up to
+three public HTTPS sources with a bounded Browserbase session and source
+receipts. Captures render sanitized source text; they do not represent live
+origin-page interaction. Existing client records and queues remain authoritative.
+
+On iPhone, open the authenticated HTTPS workspace in Safari and use Share →
+Add to Home Screen; the in-app install help explains iOS and desktop steps.
+Offline mode contains only generic help and icons, never private workspace data.
+The Electron client lives in [desktop](desktop/README.md). A private environment
+file supplies credentials only to the server; the web app and native bundle
+contain no API keys. See [release setup](docs/MOMOBOT_APP_RELEASE.md),
+[OpenAI lifecycle](backend/docs/MOMOBOT_OPENAI_LIFECYCLE.md), and
+[Browserbase configuration](backend/docs/BROWSERBASE_APP.md).

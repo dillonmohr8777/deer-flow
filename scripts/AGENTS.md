@@ -267,3 +267,11 @@ bounded, drop-oldest frame queue. WebSocket clients that request
 The legacy no-parameter protocol still base64-encodes frames into JSON at the
 Gateway boundary for backward compatibility. Unknown `frame_format` values
 receive a JSON error and close code 1008.
+
+## Private MomoBot app launcher
+
+`run_momobot_openai_app.py` starts separately configured loopback services.
+It accepts only a regular 0600 secret file for Gateway and explicitly filters
+provider credentials out of the Next.js environment. It forces production
+authentication and never provisions users or changes existing deployments.
+Runtime state/configuration and launchd definitions stay outside Git.

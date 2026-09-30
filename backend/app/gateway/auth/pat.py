@@ -5,9 +5,10 @@ create response and persisted only as a SHA-256 digest. Validation is a
 digest-indexed lookup plus a constant-time re-comparison, with a single
 generic failure surface so a 401 never reveals which check failed.
 
-v1 scopes are exactly the route-permission strings owned by
-``app.gateway.authz`` — a PAT can only narrow its owning user's
-permissions, never widen them.
+v1 scopes are a fixed subset of the route-permission strings owned by
+``app.gateway.authz`` for the explicit PAT API allowlist. Board, team and
+academy routes remain session-only. A PAT can only narrow its owning
+user's permissions, never widen them.
 """
 
 from __future__ import annotations

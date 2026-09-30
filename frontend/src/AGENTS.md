@@ -220,3 +220,12 @@ are sent on save. Custom-agent chat derives its initial selection from the saved
 binding; explicit page-local overrides survive new-thread route replacement and
 reset on conversation changes. Gateway supplies defaults for clients without a
 selector; frontend visibility must not become a runtime enforcement boundary.
+
+## Hosted crew, Browserbase, and iPhone installation
+
+`core/openai-agents` and `core/browserbase` preserve caller receipts and
+workspace scopes; mutating fetches use the shared CSRF fetcher. Do not retry
+uncertain paid submissions or use a root/child completion as semantic proof.
+`components/pwa` is lazy; `public/sw.js` may cache only the five generic
+installation/offline assets and must never retain authenticated workspace,
+API, RSC, or artifact responses. Validate 390/768/1440 and reduced motion.

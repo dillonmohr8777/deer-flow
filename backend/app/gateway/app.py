@@ -23,6 +23,7 @@ from app.gateway.routers import (
     auth,
     board,
     browser,
+    browserbase_research,
     capabilities,
     channel_connections,
     channels,
@@ -40,6 +41,7 @@ from app.gateway.routers import (
     mcp_tasks,
     memory,
     models,
+    openai_agents,
     plugins,
     project_documents,
     project_thread_files,
@@ -571,9 +573,32 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 set_subagent_batch_submitter(batch_service)
                 app.state.subagent_batches_available = True
 
+        from app.gateway.openai_agent_service import OpenAIAgentService
+        from deerflow.config.paths import get_paths
+
+        app.state.openai_agent_service = OpenAIAgentService(get_paths().base_dir / "openai-agents.sqlite")
+        await app.state.openai_agent_service.start()
+
+        from app.gateway.browserbase_service import BrowserbaseResearchService
+
+        app.state.browserbase_service = BrowserbaseResearchService(get_paths().base_dir / "browserbase-research.sqlite")
+        await app.state.browserbase_service.start()
+
         yield
 
         await _shutdown_startup_trash_sweep(app)
+
+        if getattr(app.state, "browserbase_service", None) is not None:
+            try:
+                await app.state.browserbase_service.aclose()
+            except Exception:
+                logger.exception("Failed to close Browserbase research client")
+
+        if getattr(app.state, "openai_agent_service", None) is not None:
+            try:
+                await app.state.openai_agent_service.aclose()
+            except Exception:
+                logger.exception("Failed to close OpenAI agent HTTP client")
 
         try:
             await auth.close_oidc_service()
@@ -920,6 +945,8 @@ This gateway provides runtime endpoints for agent runs plus custom endpoints for
 
     app.include_router(managed_models.router)
     app.include_router(models.router)
+    app.include_router(openai_agents.router)
+    app.include_router(browserbase_research.router)
 
     # Features API is mounted at /api/features
     app.include_router(features.router)

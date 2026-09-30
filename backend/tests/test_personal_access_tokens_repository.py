@@ -106,11 +106,25 @@ def test_validate_scopes_deduplicates_and_rejects_unknown():
         validate_scopes([])
 
 
-def test_pat_scopes_stay_aligned_with_route_permissions():
-    """PAT scopes are exactly the authz route permissions — fail on drift."""
-    from app.gateway.authz import _ALL_PERMISSIONS
+def test_pat_scopes_stay_aligned_with_supported_route_permissions():
+    """v1 PAT scopes cover the explicit API allowlist, not every session route."""
+    from app.gateway.authz import _ALL_PERMISSIONS, Permissions
 
-    assert PAT_ALLOWED_SCOPES == frozenset(_ALL_PERMISSIONS)
+    session_only_permissions = frozenset(
+        {
+            Permissions.BOARD_READ,
+            Permissions.BOARD_WRITE,
+            Permissions.TEAM_READ,
+            Permissions.TEAM_WRITE,
+            Permissions.ACADEMY_READ,
+            Permissions.ACADEMY_WRITE,
+        }
+    )
+    assert session_only_permissions.issubset(_ALL_PERMISSIONS)
+    assert PAT_ALLOWED_SCOPES == frozenset(_ALL_PERMISSIONS) - session_only_permissions
+    for permission in session_only_permissions:
+        with pytest.raises(ValueError, match="Unknown PAT scopes"):
+            validate_scopes([permission])
 
 
 # ── Repository ────────────────────────────────────────────────────────────
