@@ -38,7 +38,10 @@ def _normalize_actor(value: str) -> str:
 
 
 def _verdict_holds(verdict: Any) -> bool:
-    return isinstance(verdict, Mapping) and verdict.get("all_hold") is True and isinstance(verdict.get("leaves"), list) and bool(verdict["leaves"]) and verdict.get("unchecked") == []
+    if not (isinstance(verdict, Mapping) and verdict.get("all_hold") is True and isinstance(verdict.get("leaves"), list) and verdict.get("unchecked") == []):
+        return False
+    leaves = verdict["leaves"]
+    return bool(leaves) and all(isinstance(leaf, Mapping) and leaf.get("checked") is True and leaf.get("holds") is True for leaf in leaves)
 
 
 def _sources(record: Mapping[str, Any] | None) -> tuple[tuple[str, str, str], ...] | None:

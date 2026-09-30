@@ -191,3 +191,34 @@ def test_zero_width_space_actor_variant_is_not_independent():
 
     assert result["disposition"] != "ready-for-owner"
     assert "review_not_independent" in result["rework"]
+
+
+def test_reviewer_verdict_with_an_unheld_leaf_is_not_ready_for_owner():
+    case = deepcopy(_valid_case())
+    # all_hold: True at the top level, contradicted by its own leaf: the
+    # verdict shape checks must actually look inside `leaves`, not just at
+    # the top-level flag.
+    case["review_execution"]["acceptance_verdict"] = {
+        "all_hold": True,
+        "leaves": [{"criterion": "x", "checked": False, "holds": False}],
+        "unchecked": [],
+    }
+
+    result = _call(case)
+
+    assert result["disposition"] != "ready-for-owner"
+    assert "reviewer_verdict_not_held" in result["rework"]
+
+
+def test_reviewer_verdict_with_non_mapping_leaves_is_not_ready_for_owner():
+    case = deepcopy(_valid_case())
+    case["review_execution"]["acceptance_verdict"] = {
+        "all_hold": True,
+        "leaves": ["garbage"],
+        "unchecked": [],
+    }
+
+    result = _call(case)
+
+    assert result["disposition"] != "ready-for-owner"
+    assert "reviewer_verdict_not_held" in result["rework"]
