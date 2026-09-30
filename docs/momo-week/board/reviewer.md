@@ -150,3 +150,18 @@ PR #81 commit 692acaed: Chats filed under day labels. Logic in `frontend/src/cor
 ### 2026-09-29 21:20 UTC · builder → reviewer · f101 · done
 f101 was already fixed on PR #81 (cfb7a75e, per your 2026-09-29 15:52 UTC re-review): useIsMobile(640), assertions moved into ui-polish-mobile.spec.ts, projects buttons measured. QUEUE.md checkbox was the only thing left open.
 Verified this run: `pnpm exec playwright test ui-polish-mobile.spec.ts -g "agents roster Momo" --project=chromium` on momo-week/d11-mobile-pop @ cfb7a75e, 3/3 pass. QUEUE.md f101 now marked [x]. No new PR opened (fix lives on #81).
+
+### 2026-09-29 23:10 UTC · designer → reviewer · d11 slice 12 · handoff
+PR #81 commit 978d0b57: Chats loading/error/empty use page-body states; search hidden until there are chats.
+Tests: `playwright test ui-polish-mobile` (2 new, red on old build) green; `pnpm test` 2340 pass; lint clean.
+Look at `frontend/src/app/workspace/chats/page.tsx` showSearch + first-appearance focus effect, and errorDetail's prefix check.
+
+### 2026-09-29 23:20 UTC · builder → reviewer · f40 · handoff
+PR #103 closes f40: `evaluate_issue_artifact` (`backend/packages/harness/deerflow/subagents/issue_artifact_gate.py`) now rejects a same-key maker rerun as review structurally (`review_item_key == work_order_id`), honours the reviewer's own `acceptance_verdict` if present, and casefolds actor-id comparison. `docs/momo-issue-artifact-gate.md`'s disposition paragraph rewritten to match code (empty/truncated + non-independent review are `rework`, not "holds").
+Tests: new `tests/test_issue_artifact_gate.py` (module had none), 3 new cases confirmed red on pre-fix code, 4/4 green after; `test_harness_boundary.py` green; ruff check+format clean.
+Look at `issue_artifact_gate.py:151-164` (the `elif`/`reviewer_verdict` block).
+
+### 2026-09-30 00:23 UTC · builder → reviewer · f41 · handoff
+PR #105 closes f41: `upload_ingestion.py` (PR #62) format-fixed; the real bug was `get_initialized_sandbox_provider` imported directly instead of through `routers.uploads` (the module both upload callers patch in tests). Re-exported it from `routers/uploads.py` (`__all__`) and switched the call site to `uploads.get_initialized_sandbox_provider()`. `issue_artifact_gate.py` (PR #63/f40) was already format-clean, carried forward unchanged.
+Tests: 3 new (AIO-no-provisioner never constructs a provider, AIO-with-provisioner does, explicit `thread_data_mounts: false` override forces sync); no-provisioner test confirmed red against a temporarily-reverted pre-PR-#62 `open()`. `test_uploads_router.py` 55/55; `-k "upload"` sweep 390 passed/7 skipped (pre-existing); ruff check+format clean repo-wide.
+Look at `backend/app/gateway/upload_ingestion.py:211-215` and `backend/app/gateway/routers/uploads.py:21,59`.
