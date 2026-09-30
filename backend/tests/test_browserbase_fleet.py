@@ -2,6 +2,7 @@ import asyncio
 import concurrent.futures
 import json
 import time
+import types
 from pathlib import Path
 
 import pytest
@@ -345,3 +346,184 @@ def test_unknown_named_job_is_blocked_not_keyerror(tmp_path):
     path.chmod(0o600)
     with pytest.raises(FleetBlocked, match="operator-approved"):
         asyncio.run(run_named_job(path, "not-a-job", operator_id="owner"))
+
+
+AGENT = "00000000-0000-4000-8000-00000000a9e7"
+RUN = "00000000-0000-4000-8000-0000000000f1"
+
+
+def native_fleet(tmp_path, runs_included=15, **job):
+    cfg = config()
+    cfg["account"]["agent_runs_included"] = runs_included
+    cfg["account"]["ceiling_minutes"] = 60
+    base = dict(client_id="client-a", workflow="native_agent", url="https://example.com/", allowed_hosts=["example.com"], interval_seconds=86400, agent_id=AGENT, task="Measure the homepage.", max_minutes=8)
+    cfg["jobs"] = [{**base, "id": "seo-audit", **job}, {**base, "id": "prospect"}]
+    return Fleet(cfg, {"clients": [{"id": "client-a"}]}, UsageLedger(tmp_path / "ledger.db"), tmp_path / "artifacts")
+
+
+class AgentAPI:
+    project_id = "fake-project"
+
+    def __init__(self, statuses, active=()):
+        self.statuses = list(statuses)
+        self.active = list(active)
+        self.tasks, self.stops = [], 0
+
+    async def usage(self):
+        return {"browserMinutes": 0}
+
+    async def agent_runs(self, status):
+        return {"data": [{"status": status}] if status in self.active else []}
+
+    async def start_agent_run(self, agent_id, task):
+        self.tasks.append(task)
+        return {"runId": RUN, "status": "PENDING"}
+
+    async def agent_run(self, run_id):
+        status = self.statuses.pop(0) if len(self.statuses) > 1 else self.statuses[0]
+        return {"runId": run_id, "status": status, "sessionId": "session-1", "result": {"summary": "ok"}}
+
+    stop_errors = ("HTTP 409",)
+
+    async def stop_agent_run(self, run_id):
+        self.stops += 1
+        error = self.stop_errors[min(self.stops, len(self.stop_errors)) - 1]
+        if error:
+            raise RuntimeError(f"Browserbase API request failed ({error})")
+        return {}
+
+    async def retrieve(self, session):
+        return {"status": "COMPLETED", "projectId": self.project_id}
+
+    async def agent_run_messages(self, run_id):
+        return {"data": [{"content": [{"type": "file", "mediaType": "image/png", "data": "aGk="}, {"type": "text", "text": "done"}]}]}
+
+
+def test_native_agent_run_reserves_cap_saves_artifacts(tmp_path, monkeypatch):
+    from deerflow.community.browser_automation import browserbase_fleet
+
+    monkeypatch.setattr(browserbase_fleet, "_AGENT_POLL_SECONDS", 0)
+    target = native_fleet(tmp_path)
+    api = AgentAPI(["RUNNING", "COMPLETED"])
+    result = asyncio.run(target.run("seo-audit", "today", api))
+    assert result["status"] == "completed" and result["run_id"] == RUN and api.stops == 0
+    assert result["model_calls"] == "provider-side, not metered"
+    assert asyncio.run(target.run("seo-audit", "x", None, dry_run=True))["model_calls"] != 0
+    assert "Never log in" in api.tasks[0] and "https://example.com/" in api.tasks[0]
+    row = target.ledger.status()[0]
+    assert row["minutes"] == 9 and row["state"] == "finished" and row["session"] == "session-1"
+    folder = Path(result["artifact"]).parent
+    assert (folder / "screenshot-01.png").read_bytes() == b"hi"
+    assert json.loads((folder / "messages.json").read_text())[0]["content"][0]["data"] == "screenshot-01"
+    assert (folder / "receipt.json").stat().st_mode & 0o077 == 0
+
+
+def test_native_agent_refuses_when_account_busy_or_runs_used(tmp_path, monkeypatch):
+    from deerflow.community.browser_automation import browserbase_fleet
+
+    monkeypatch.setattr(browserbase_fleet, "_AGENT_POLL_SECONDS", 0)
+    busy = AgentAPI(["COMPLETED"], active=["RUNNING"])
+    with pytest.raises(FleetBlocked, match="active"):
+        asyncio.run(native_fleet(tmp_path / "a").run("seo-audit", "today", busy))
+    assert busy.tasks == []
+    target = native_fleet(tmp_path / "b", runs_included=1)
+    asyncio.run(target.run("seo-audit", "today", AgentAPI(["COMPLETED"])))
+    second = AgentAPI(["COMPLETED"])
+    with pytest.raises(FleetBlocked, match="agent runs"):
+        asyncio.run(target.run("prospect", "tomorrow", second))
+    assert second.tasks == []
+    with pytest.raises(FleetBlocked, match="agent runs"):
+        asyncio.run(native_fleet(tmp_path / "c", runs_included=0).run("seo-audit", "today", AgentAPI(["COMPLETED"])))
+
+
+def test_native_agent_stops_at_cap_and_stays_uncertain_if_stop_never_lands(tmp_path, monkeypatch):
+    from deerflow.community.browser_automation import browserbase_fleet
+
+    clock = iter(range(0, 100_000, 120))
+    monkeypatch.setattr(browserbase_fleet, "_AGENT_POLL_SECONDS", 0)
+    # Swap only the fleet module's clock; asyncio keeps the real one.
+    monkeypatch.setattr(browserbase_fleet, "time", types.SimpleNamespace(time=time.time, monotonic=lambda: next(clock)))
+    target = native_fleet(tmp_path, max_minutes=1)
+    api = AgentAPI(["RUNNING"])
+    result = asyncio.run(target.run("seo-audit", "today", api))
+    assert result["status"] == "uncertain" and api.stops == 1
+    assert target.ledger.status()[0]["state"] == "uncertain"
+    with pytest.raises(FleetBlocked, match="reconciliation"):
+        asyncio.run(target.run("prospect", "tomorrow", AgentAPI(["COMPLETED"])))
+
+
+@pytest.mark.parametrize("bad", [dict(agent_id="not-a-uuid"), dict(task=" "), dict(max_minutes=16), dict(max_minutes=True), dict(url=None)])
+def test_native_agent_config_is_validated(tmp_path, bad):
+    with pytest.raises((FleetBlocked, ValueError)):
+        native_fleet(tmp_path, **bad)
+
+
+def test_native_agent_survives_poll_and_message_failures(tmp_path, monkeypatch):
+    from deerflow.community.browser_automation import browserbase_fleet
+
+    monkeypatch.setattr(browserbase_fleet, "_AGENT_POLL_SECONDS", 0)
+
+    class Flaky(AgentAPI):
+        polls = 0
+
+        async def agent_run(self, run_id):
+            self.polls += 1
+            if self.polls == 1:
+                raise RuntimeError("Browserbase API request failed (HTTP 503)")
+            return await super().agent_run(run_id)
+
+        async def agent_run_messages(self, run_id):
+            raise RuntimeError("Browserbase API response exceeds QA limit")
+
+    target = native_fleet(tmp_path)
+    result = asyncio.run(target.run("seo-audit", "today", Flaky(["COMPLETED"])))
+    assert result["status"] == "completed" and "exceeds" in result["messages_error"]
+    folder = Path(result["artifact"]).parent
+    assert json.loads((folder / "run.json").read_text())["status"] == "COMPLETED"
+    assert json.loads((folder / "started.json").read_text())["run_id"] == RUN
+    assert (folder / "receipt.json").exists() and target.ledger.status()[0]["state"] == "finished"
+
+
+def test_native_agent_retries_failed_stop_and_stops_paused_runs(tmp_path, monkeypatch):
+    from deerflow.community.browser_automation import browserbase_fleet
+
+    monkeypatch.setattr(browserbase_fleet, "_AGENT_POLL_SECONDS", 0)
+    api = AgentAPI(["PAUSED", "PAUSED", "PAUSED", "STOPPED"])
+    api.stop_errors = ("HTTP 500", None)
+    result = asyncio.run(native_fleet(tmp_path).run("seo-audit", "today", api))
+    assert result["status"] == "stopped" and result["stop_requested"] is True and api.stops == 2
+
+
+def test_native_agent_own_failure_stops_run_and_reconcile_repairs(tmp_path, monkeypatch):
+    from deerflow.community.browser_automation import browserbase_fleet
+
+    monkeypatch.setattr(browserbase_fleet, "_AGENT_POLL_SECONDS", 0)
+    target = native_fleet(tmp_path)
+    api = AgentAPI(["RUNNING"])
+    api.stop_errors = (None,)
+
+    def lost(*args):
+        raise FleetBlocked("Reservation ownership lost")
+
+    monkeypatch.setattr(target.ledger, "running", lost)
+    with pytest.raises(FleetBlocked, match="ownership"):
+        asyncio.run(target.run("seo-audit", "today", api))
+    assert api.stops == 1 and target.ledger.status()[0]["state"] == "uncertain"
+    token = target.ledger.status()[0]["id"]
+    with pytest.raises(FleetBlocked, match="not terminal"):
+        asyncio.run(browserbase_fleet.reconcile_native_run(api, target.ledger, token, RUN))
+    api.statuses = ["STOPPED"]
+    asyncio.run(browserbase_fleet.reconcile_native_run(api, target.ledger, token, RUN))
+    row = target.ledger.status()[0]
+    assert row["state"] == "finished" and row["session"] == "session-1" and row["minutes"] == 9
+
+
+def test_native_agent_fails_closed_on_unreadable_run_list(tmp_path):
+    class Odd(AgentAPI):
+        async def agent_runs(self, status):
+            return {"items": []}
+
+    api = Odd(["COMPLETED"])
+    with pytest.raises(FleetBlocked, match="unreadable"):
+        asyncio.run(native_fleet(tmp_path).run("seo-audit", "today", api))
+    assert api.tasks == []

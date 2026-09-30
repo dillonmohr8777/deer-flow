@@ -108,6 +108,22 @@ class BrowserbaseAPI:
     async def retrieve(self, session_id: str) -> dict:
         return await self._request("GET", f"/v1/sessions/{UUID(session_id)}")
 
+    async def agent_runs(self, status: str) -> dict:
+        return await self._request("GET", f"/v1/agents/runs?status={status}&limit=1")
+
+    async def start_agent_run(self, agent_id: str, task: str) -> dict:
+        # No context, proxies or Verified mode: signed-out public browsing only.
+        return await self._request("POST", "/v1/agents/runs", {"agentId": str(UUID(agent_id)), "task": task, "browserSettings": {"proxies": False}})
+
+    async def agent_run(self, run_id: str) -> dict:
+        return await self._request("GET", f"/v1/agents/runs/{UUID(run_id)}")
+
+    async def stop_agent_run(self, run_id: str) -> dict:
+        return await self._request("POST", f"/v1/agents/runs/{UUID(run_id)}/stop")
+
+    async def agent_run_messages(self, run_id: str) -> dict:
+        return await self._request("GET", f"/v1/agents/runs/{UUID(run_id)}/messages?all=true")
+
 
 def _output_preflight(output: Path, *, create: bool = False) -> None:
     if output.is_symlink() or (output.exists() and (not output.is_dir() or any(output.iterdir()))):

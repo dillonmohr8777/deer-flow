@@ -17,6 +17,13 @@ proxy, persistent browser context, client mutation or report login is introduced
   Named-job callers can inject `report_reader`; the default agent/CLI does not have
   an authenticated connector and reports this precise blocker. Private portal
   fallback and persistent contexts remain unimplemented pending account bindings.
+- `native_agent`: runs one provisioned Browserbase Agent configuration (the
+  25 "Momo Browser" roles created 2026-09-30) on an operator-written task for an
+  approved public URL. The job pins `agent_id`, `task`, `url`, `allowed_hosts` and
+  `max_minutes` (1-15). The provider exposes no host allowlist for agent runs, so
+  the fleet appends a fixed boundary (start URL, hosts, signed-out only, no forms,
+  purchases, posts, messages or downloads) and never passes a context, proxy or
+  Verified mode. Model tokens are billed provider-side and are not metered here.
 
 ## Admission and budget
 
@@ -39,6 +46,20 @@ This can double-count provider-reflected usage and stop early, intentionally.
 A SQLite immediate transaction serializes reservation, concurrency <=2 and each
 job's cadence >=1h across callers. Scheduler starts sequentially. Repeated named
 tool dispatch cannot bypass cadence by changing the occurrence UUID.
+
+`native_agent` reserves `max_minutes + 1` browser minutes and counts against a
+separate operator-attested `account.agent_runs_included` (the plan's included
+Agent runs per cycle; unset means zero, so native runs stay refused). It refuses
+while any agent run in the account is PENDING, RUNNING or PAUSED, requests one
+stop at the cap (or immediately on PAUSED, which holds a billed browser), and
+records the run as uncertain if it is still not terminal three minutes later.
+Failed polls are retried inside that bound, a failed stop is retried each poll,
+and any fleet-side error after start requests a stop before re-raising.
+`started.json` records the reservation and run ID first; an operator repairs an
+uncertain row with `reconcile_native_run(api, ledger, token, run_id)` after the
+provider shows the run terminal and its session in this project.
+The run record, messages and any screenshot parts are saved privately. Through
+the tool, a native run blocks until it ends (up to `max_minutes` + 3).
 
 Ambiguous HTTP create/cancellation persists an uncertain reservation and stops
 new cloud dispatch. No automatic retry, timeout refund or credit reset exists.
