@@ -40,12 +40,20 @@ so only a *real frontend against a real backend* catches the desync.
 This scenario does **not** record a conversation. It uses a **test-only seeder**
 (`tests/seed_runs_router.py`, mounted on the replay gateway only when
 `DEERFLOW_ENABLE_TEST_SEED=1`) to stand up a thread with ≥2 runs and per-run
-message events — and deliberately **no checkpoint**, which is the #3352
-precondition: it forces the frontend's per-run reload path to be the sole source
-of truth so the ordering bug becomes observable. The seeder writes through the
-gateway's own run/event stores using the request's auth context, so the real
-`list_by_thread` → `/runs/{id}/messages` → prepend path runs live. Reverting the
-#3354 frontend fix turns this spec red.
+message events, an **owned native thread record**, and deliberately **no
+checkpoint**, which is the #3352 precondition. Current history reads canonical
+thread-global message pages ordered by event sequence, instead of the historical
+per-run reload/prepend path. The seeder writes through the gateway's own
+thread/run/event stores using its server-resolved request identity; auth-disabled
+replay uses the synthetic owner even when the test also registers an account.
+The real ownership gate stays enabled. The browser verifies empty checkpoint
+history, exactly one of each marker, and the first run visibly above the second.
+Seeder regressions verify owner-scoped history and refusal of foreign/unsafe IDs.
+
+The auth-disabled wire contract remains an exact response comparison: it includes
+`mfa_enabled: false` and all18registered route permissions, including Board, Team
+and Academy. Fixture changes must follow the backend response contract without
+loosening authentication, owner checks or the equality assertion.
 
 ## How replay works
 
