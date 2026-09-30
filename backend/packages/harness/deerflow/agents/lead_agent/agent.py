@@ -1286,7 +1286,7 @@ def _assemble_lead_agent(config: RunnableConfig, *, app_config: AppConfig) -> Le
         final_tools,
         available_skills=available_skills,
         deferred_names=setup.deferred_names,
-        has_extension_middlewares=bool(resolved_app_config.extensions.middlewares) or get_agent_build_extensions().has_middleware_contributors,
+        has_extension_middlewares=not isinstance(resolved_app_config, AppConfig) or bool(resolved_app_config.extensions.middlewares) or get_agent_build_extensions().has_middleware_contributors,
     )
     graph = create_agent(
         model=chat_model,
