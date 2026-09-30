@@ -26,6 +26,7 @@ from __future__ import annotations
 from langchain.tools import tool
 
 from deerflow.persistence.board.model import BoardThreadKind, BoardThreadStatus
+from deerflow.runtime.user_context import resolve_organization_id
 from deerflow.tools.exec_seat_tools import _is_momentum_staff_run
 from deerflow.tools.types import Runtime
 
@@ -65,6 +66,8 @@ def _get_client_repo():
 async def _draft_board_thread_impl(client_id: str, subject: str, body: str, *, runtime: Runtime | None = None) -> dict:
     if not _is_momentum_staff_run(runtime):
         return _staff_only_error()
+    if resolve_organization_id() is None:
+        return _error("Board draft tools require an organization context.")
     if not client_id or not client_id.strip():
         return _error("client_id is required.")
     if not body or not body.strip():

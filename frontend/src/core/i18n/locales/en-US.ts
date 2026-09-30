@@ -435,7 +435,7 @@ export const enUS: Translations = {
       {
         label: "Plan a big project",
         prompt:
-          "Plan a big project for [client]: get more than one expert's take, flag the risks and blind spots, then draft a board thread with the plan for me to approve.",
+          "Plan a big project for [client]: think it through from multiple angles, flag the risks and blind spots, and put together a plan for me to review.",
       },
     ],
     pleaseWaitStreaming: "Please wait for the current response to finish.",

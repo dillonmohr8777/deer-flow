@@ -25,6 +25,19 @@ describe("empty-thread starter prompts", () => {
       end: 7,
     });
   });
+
+  // f159: these starters show on the default new-chat composer, which has
+  // no `tool_groups` and so never loads `draft_board_thread`/`deliberate` --
+  // a prompt that promises a board-thread draft would leave the model only
+  // able to improvise or falsely claim it drafted one.
+  test("never promises a board-thread draft, which the default agent can't make", () => {
+    for (const locale of [enUS, zhCN]) {
+      for (const starter of locale.inputBox.starters) {
+        expect(starter.prompt).not.toContain("board thread");
+        expect(starter.prompt).not.toContain("看板帖子");
+      }
+    }
+  });
 });
 
 describe("findSuggestionTemplatePlaceholder", () => {
