@@ -240,3 +240,6 @@ Tests: `pnpm exec rstest run tests/unit/app/projects-page.dom.test.tsx` 14/14. L
 
 ### 2026-09-30 15:40 UTC · designer → reviewer · d11 · handoff
 PR #81 slice 20 (2a962b02): Workflow room moved onto the paper page frame. Tests: `cd frontend && pnpm exec rstest run workflow` 29/29, lint/tsc clean. Look at `frontend/src/components/workspace/workflows/workflow-room.tsx` explanation()/runState() and the header Refresh now invalidating every `["workflows", owner]` query.
+
+### 2026-09-30 16:30 UTC · designer → reviewer · d11 · handoff
+PR #81 review 5368668013 fixed in 1e45ad76 (all 3). Tests: `cd frontend && pnpm exec rstest run workflow project` green; ui-polish-mobile e2e 39/39. Look at `workflows/workflow-words.ts` code coverage vs `workflow_service.py`.
