@@ -25,9 +25,7 @@ def read_frame():
 
 
 def emit(value):
-    encoded = json.dumps(
-        value, ensure_ascii=False, allow_nan=False, separators=(",", ":")
-    )
+    encoded = json.dumps(value, ensure_ascii=False, allow_nan=False, separators=(",", ":"))
     if len(encoded.encode()) > LIMIT:
         raise ValueError("frame_too_large")
     OUT.write(encoded + "\n")
@@ -50,15 +48,11 @@ class Relay:
         normalized = []
         for message in messages:
             if not isinstance(message, dict):
-                role = {"human": "user", "ai": "assistant", "system": "system"}.get(
-                    message.type
-                )
+                role = {"human": "user", "ai": "assistant", "system": "system"}.get(message.type)
                 content = message.content
             else:
                 role, content = message.get("role"), message.get("content")
-            if role not in {"user", "assistant", "system"} or not isinstance(
-                content, str
-            ):
+            if role not in {"user", "assistant", "system"} or not isinstance(content, str):
                 raise ValueError("unsupported_content")
             normalized.append({"role": role, "content": content})
         emit(
@@ -70,10 +64,7 @@ class Relay:
             }
         )
         answer = read_frame()
-        if (
-            answer.get("type") != "model_result"
-            or answer.get("call_id") != self.frame["call_id"]
-        ):
+        if answer.get("type") != "model_result" or answer.get("call_id") != self.frame["call_id"]:
             raise ValueError("identity_mismatch")
         self.output = answer["result"]["output"]
         return json.dumps(self.output, ensure_ascii=False, allow_nan=False)
@@ -184,13 +175,7 @@ def crew(frame, relay):
         max_method_calls=1,
     )
     result = department.kickoff()
-    if (
-        department_calls != 1
-        or len(department.method_outputs) != 1
-        or department.persistence is not None
-        or department.checkpoint not in (None, False)
-        or department.memory is not None
-    ):
+    if department_calls != 1 or len(department.method_outputs) != 1 or department.persistence is not None or department.checkpoint not in (None, False) or department.memory is not None:
         raise RuntimeError("department_lifecycle_mismatch")
     relay.lifecycle = {
         "framework": "crewai",
@@ -229,9 +214,7 @@ def disable_crewai_host_storage(scratch):
     token.get_auth_token = deny_auth
     TokenManager.__init__ = deny_auth
     paths.db_storage_path = lambda: str(scratch)
-    (Path(scratch) / ".crewai_user.json").write_text(
-        '{"first_execution_done":true,"trace_consent":false}', encoding="utf-8"
-    )
+    (Path(scratch) / ".crewai_user.json").write_text('{"first_execution_done":true,"trace_consent":false}', encoding="utf-8")
 
 
 def deep(frame, relay):
@@ -255,9 +238,7 @@ def deep(frame, relay):
 
         def _generate(self, messages, stop=None, run_manager=None, **kwargs):
             text = self._relay.call(messages)
-            return ChatResult(
-                generations=[ChatGeneration(message=AIMessage(content=text))]
-            )
+            return ChatResult(generations=[ChatGeneration(message=AIMessage(content=text))])
 
     model = GatewayChat(profile={"max_input_tokens": 200000, "tool_calling": True})
     model._relay = relay
