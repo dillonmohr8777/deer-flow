@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import {
   EmptyState,
   ErrorState,
@@ -18,7 +19,7 @@ import {
   WorkspaceContainer,
   WorkspaceHeader,
 } from "@/components/workspace/workspace-container";
-import { useApproveBoardReply } from "@/core/board";
+import { useApproveBoardReply, useSendBoardReply } from "@/core/board";
 import {
   CEO_DIGEST_QUERY_KEY,
   CEO_NEEDS_MY_YES_QUERY_KEY,
@@ -79,7 +80,7 @@ export function CeoDesk() {
   );
 }
 
-function CeoDeskBody() {
+export function CeoDeskBody() {
   const digest = useDailyDigest();
   const needsMyYes = useNeedsMyYes();
   const seats = useSeatRoster();
@@ -225,8 +226,20 @@ function NeedsMyYesSection({
 
 function BoardDraftCard({ draft }: { draft: BoardDraftAwaitingApproval }) {
   const approve = useApproveBoardReply();
+  const send = useSendBoardReply();
   const queryClient = useQueryClient();
   const subject = draft.subject || "(no subject)";
+  // Both actions land here rather than in useApproveBoardReply/useSendBoardReply
+  // themselves: those hooks only invalidate board query keys, and the
+  // needs-my-yes queue plus the digest's drafts-waiting count also need to
+  // drop this thread once it moves on (same pattern as f178's approve fix).
+  const onThreadAdvanced = () => {
+    void queryClient.invalidateQueries({
+      queryKey: CEO_NEEDS_MY_YES_QUERY_KEY,
+    });
+    void queryClient.invalidateQueries({ queryKey: CEO_DIGEST_QUERY_KEY });
+  };
+  const error = approve.error ?? send.error;
   return (
     <div className={styles.card}>
       <div className={styles.cardInfo}>
@@ -237,38 +250,52 @@ function BoardDraftCard({ draft }: { draft: BoardDraftAwaitingApproval }) {
             {formatStamp(draft.updated_at)}
           </time>
         </p>
-        {approve.isError ? (
+        {draft.draft_body ? (
+          <Textarea
+            value={draft.draft_body}
+            readOnly
+            aria-readonly="true"
+            aria-label={`Momo's draft reply to ${subject}`}
+            rows={3}
+            className={styles.cardDraftBody}
+          />
+        ) : null}
+        {error ? (
           <p className={styles.errorText} role="alert">
-            {approve.error.message}
+            {error.message}
           </p>
         ) : null}
       </div>
       <div className={styles.cardActions}>
-        <Button
-          size="sm"
-          disabled={approve.isPending}
-          aria-label={`Approve ${subject}`}
-          onClick={() =>
-            approve.mutate(
-              { threadId: draft.thread_id },
-              {
-                // useApproveBoardReply only invalidates board query keys; the
-                // needs-my-yes queue and the digest's own drafts-waiting
-                // count also need to drop this thread (f178).
-                onSuccess: () => {
-                  void queryClient.invalidateQueries({
-                    queryKey: CEO_NEEDS_MY_YES_QUERY_KEY,
-                  });
-                  void queryClient.invalidateQueries({
-                    queryKey: CEO_DIGEST_QUERY_KEY,
-                  });
-                },
-              },
-            )
-          }
-        >
-          {approve.isPending ? "Approving" : "Approve"}
-        </Button>
+        {draft.status === "approved" ? (
+          <Button
+            size="sm"
+            disabled={!draft.draft_body || send.isPending}
+            aria-label={`Send reply to ${subject}`}
+            onClick={() =>
+              send.mutate(
+                { threadId: draft.thread_id, body: draft.draft_body ?? "" },
+                { onSuccess: onThreadAdvanced },
+              )
+            }
+          >
+            {send.isPending ? "Sending" : "Send reply"}
+          </Button>
+        ) : (
+          <Button
+            size="sm"
+            disabled={approve.isPending}
+            aria-label={`Approve ${subject}`}
+            onClick={() =>
+              approve.mutate(
+                { threadId: draft.thread_id },
+                { onSuccess: onThreadAdvanced },
+              )
+            }
+          >
+            {approve.isPending ? "Approving" : "Approve"}
+          </Button>
+        )}
         <Button variant="outline" size="sm" asChild>
           <Link href="/workspace/board">Open in Board</Link>
         </Button>

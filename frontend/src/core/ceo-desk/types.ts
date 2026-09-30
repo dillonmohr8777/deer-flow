@@ -1,5 +1,7 @@
 /** Mirrors ``app.gateway.routers.ceo_desk``'s response models. */
 
+import type { BoardThreadStatus } from "@/core/board";
+
 export type SeatStatus = "claimed" | "ratified" | "reopened";
 
 export interface BoardDraftAwaitingApproval {
@@ -7,6 +9,9 @@ export interface BoardDraftAwaitingApproval {
   client_id: string | null;
   kind: string;
   subject: string;
+  /** Only ``drafted`` (needs Approve) or ``approved`` (needs Send) ever appear here. */
+  status: BoardThreadStatus;
+  draft_body: string | null;
   updated_at: string;
 }
 

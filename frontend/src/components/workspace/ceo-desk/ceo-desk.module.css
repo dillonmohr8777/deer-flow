@@ -113,6 +113,13 @@
   font-size: 0.8125rem;
 }
 
+.cardDraftBody {
+  resize: none;
+  font-size: 0.8125rem;
+  background: var(--muted);
+  color: var(--foreground);
+}
+
 .cardActions {
   display: flex;
   flex-wrap: wrap;

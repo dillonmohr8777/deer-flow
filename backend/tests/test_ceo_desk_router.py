@@ -88,6 +88,8 @@ async def test_needs_my_yes_and_seats_visible_to_owner_and_admin(org_world):  # 
             assert needs_yes.status_code == 200, needs_yes.text
             body = needs_yes.json()
             assert [d["thread_id"] for d in body["board_drafts"]] == [thread_id]
+            assert body["board_drafts"][0]["status"] == "drafted"
+            assert body["board_drafts"][0]["draft_body"] == "Here's a proposed reply."
             assert [s["seat_id"] for s in body["seat_ratifications"]] == [claimed["id"]]
 
             roster = await client.get("/api/ceo/seats", headers=headers)
@@ -97,6 +99,38 @@ async def test_needs_my_yes_and_seats_visible_to_owner_and_admin(org_world):  # 
             assert seats[0]["status"] == "claimed"
             assert seats[0]["burn_this_week"] == 0
             assert seats[0]["paused"] is False
+
+
+async def test_needs_my_yes_keeps_an_approved_thread_until_its_reply_is_sent(org_world):  # noqa: F811
+    """An ``approved`` thread still needs its own explicit Send (``assert_can_reply``),
+    so the queue keeps it -- with Momo's draft body -- past Approve; a reply that
+    matches the draft verbatim clears it.
+    """
+    session_factory = org_world
+    app = _build_app(session_factory)
+    headers_a = auth_headers(USER_A, ORG_S)
+
+    async with _client(app) as client:
+        created = await client.post("/api/clients", json={"display_name": "Acme"}, headers=headers_a)
+        client_id = created.json()["id"]
+        thread = await client.post("/api/board/threads", json={"client_id": client_id, "kind": "ticket", "subject": "Broken widget"}, headers=headers_a)
+        thread_id = thread.json()["id"]
+        await client.post(f"/api/board/threads/{thread_id}/draft", json={"body": "Here's a proposed reply."}, headers=headers_a)
+
+        approved = await client.post(f"/api/board/threads/{thread_id}/approve", headers=headers_a)
+        assert approved.status_code == 200, approved.text
+
+        needs_yes = await client.get("/api/ceo/needs-my-yes", headers=headers_a)
+        board_drafts = needs_yes.json()["board_drafts"]
+        assert [d["thread_id"] for d in board_drafts] == [thread_id]
+        assert board_drafts[0]["status"] == "approved"
+        assert board_drafts[0]["draft_body"] == "Here's a proposed reply."
+
+        replied = await client.post(f"/api/board/threads/{thread_id}/reply", json={"body": "Here's a proposed reply."}, headers=headers_a)
+        assert replied.status_code == 200, replied.text
+
+        needs_yes_after = await client.get("/api/ceo/needs-my-yes", headers=headers_a)
+        assert needs_yes_after.json()["board_drafts"] == []
 
 
 async def test_member_and_client_get_403(org_world):  # noqa: F811

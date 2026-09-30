@@ -18,6 +18,7 @@ from sqlalchemy import select
 
 from app.gateway.authz import require_permission
 from app.gateway.deps import get_agent_seat_repo, get_board_repo, get_ceo_desk_digest_repo, get_current_user_from_request, record_audit_event
+from deerflow.board.workflow import latest_momo_draft_body
 from deerflow.exec_seats import SeatTransitionError, assert_can_ratify, assert_can_reopen
 from deerflow.persistence.board.model import BoardThreadStatus
 from deerflow.persistence.exec_seats.model import AgentSeatStatus
@@ -38,6 +39,8 @@ class BoardDraftAwaitingApproval(BaseModel):
     client_id: str | None
     kind: str
     subject: str
+    status: str
+    draft_body: str | None
     updated_at: str
 
 
@@ -130,22 +133,34 @@ def _seat_not_found() -> HTTPException:
 @router.get("/needs-my-yes", response_model=NeedsMyYesResponse)
 @require_permission("ceo", "read")
 async def get_needs_my_yes(request: Request) -> NeedsMyYesResponse:
+    """A ``drafted`` thread needs an Approve; an ``approved`` one still needs its
+    explicit Send (``assert_can_reply``'s own separate owner action) -- both stay
+    in the queue, with Momo's draft body attached, so a yes doesn't require a trip
+    to the Board.
+    """
     await _require_admin(request)
     board_repo = get_board_repo(request)
     seat_repo = get_agent_seat_repo(request)
     drafts = await board_repo.list_threads(status=BoardThreadStatus.DRAFTED)
+    approved = await board_repo.list_threads(status=BoardThreadStatus.APPROVED)
     claims = await seat_repo.list_seats(status=AgentSeatStatus.CLAIMED)
-    return NeedsMyYesResponse(
-        board_drafts=[
+    threads_awaiting_action = [*drafts, *approved]
+    board_drafts = []
+    for t in threads_awaiting_action:
+        messages = await board_repo.list_messages(t["id"]) or []
+        board_drafts.append(
             BoardDraftAwaitingApproval(
                 thread_id=t["id"],
                 client_id=t.get("client_id"),
                 kind=t["kind"],
                 subject=t.get("subject", ""),
+                status=t["status"],
+                draft_body=latest_momo_draft_body(messages),
                 updated_at=t.get("updated_at", ""),
             )
-            for t in drafts
-        ],
+        )
+    return NeedsMyYesResponse(
+        board_drafts=board_drafts,
         seat_ratifications=[
             SeatAwaitingRatification(
                 seat_id=s["id"],
