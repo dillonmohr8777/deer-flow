@@ -17,7 +17,8 @@ from pydantic import BaseModel
 from sqlalchemy import select
 
 from app.gateway.authz import require_permission
-from app.gateway.deps import get_agent_seat_repo, get_board_repo, get_ceo_desk_digest_repo, get_current_user_from_request
+from app.gateway.deps import get_agent_seat_repo, get_board_repo, get_ceo_desk_digest_repo, get_current_user_from_request, record_audit_event
+from deerflow.exec_seats import SeatTransitionError, assert_can_ratify, assert_can_reopen
 from deerflow.persistence.board.model import BoardThreadStatus
 from deerflow.persistence.exec_seats.model import AgentSeatStatus
 from deerflow.persistence.organizations.model import OrganizationMemberRow
@@ -67,6 +68,13 @@ class SeatRosterResponse(BaseModel):
     seats: list[SeatRosterEntry]
 
 
+class SeatActionResponse(BaseModel):
+    seat_id: str
+    seat: str
+    agent_name: str
+    status: str
+
+
 class DailyDigest(BaseModel):
     digest_text: str
     shipped_count: int
@@ -112,6 +120,10 @@ async def _require_admin(request: Request) -> str:
     if not await _is_active_org_admin(user_id):
         raise HTTPException(status_code=403, detail="The CEO Desk is for an organization owner/admin only")
     return user_id
+
+
+def _seat_not_found() -> HTTPException:
+    return HTTPException(status_code=404, detail="No such seat claim in this organization")
 
 
 @router.get("/needs-my-yes", response_model=NeedsMyYesResponse)
@@ -167,6 +179,66 @@ async def get_seat_roster(request: Request) -> SeatRosterResponse:
         for s in seats
     ]
     return SeatRosterResponse(seats=entries)
+
+
+@router.post("/seats/{seat_id}/ratify", response_model=SeatActionResponse)
+@require_permission("ceo", "write")
+async def ratify_seat(seat_id: str, request: Request) -> SeatActionResponse:
+    """One-tap confirm of a claimed seat from the needs-my-yes queue.
+
+    Mirrors ``deerflow.tools.exec_seat_tools.exec_ratify_seat``'s rules, minus
+    the ``actor_is_ceo`` path: an HTTP caller has no agent identity to check,
+    so ratifying here is always the organization-owner/admin path
+    ``assert_can_ratify`` already grants (``_require_admin`` has confirmed
+    that by the time this runs). The self-ratification refusal still applies:
+    the admin who claimed the seat cannot also be the one who confirms it.
+    """
+    user_id = await _require_admin(request)
+    seat_repo = get_agent_seat_repo(request)
+    seat = await seat_repo.get_seat(seat_id)
+    if seat is None:
+        raise _seat_not_found()
+    if seat.get("claimed_by_user_id") is not None and seat["claimed_by_user_id"] == user_id:
+        await record_audit_event(request, action="ceo.seat.ratify", outcome="denied", actor_user_id=user_id, organization_id=resolve_organization_id(), target_type="agent_seat", target_id=seat_id)
+        raise HTTPException(status_code=403, detail="An admin cannot ratify a seat they claimed themselves; ratification requires an independent actor.")
+    try:
+        # actor_is_owner is always True here: _require_admin has already
+        # confirmed it, and an HTTP caller has no agent identity for the
+        # actor_is_ceo path, so SeatAuthorizationError can never fire.
+        assert_can_ratify(seat["status"], actor_is_ceo=False, actor_is_owner=True)
+    except SeatTransitionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    ratified = await seat_repo.patch_seat(seat_id, status=AgentSeatStatus.RATIFIED, ratified_by_user_id=user_id)
+    if ratified is None:
+        raise _seat_not_found()
+    await record_audit_event(request, action="ceo.seat.ratify", outcome="success", actor_user_id=user_id, organization_id=resolve_organization_id(), target_type="agent_seat", target_id=seat_id)
+    return SeatActionResponse(seat_id=ratified["id"], seat=ratified["seat"], agent_name=ratified["agent_name"], status=ratified["status"])
+
+
+@router.post("/seats/{seat_id}/reopen", response_model=SeatActionResponse)
+@require_permission("ceo", "write")
+async def reopen_seat(seat_id: str, request: Request) -> SeatActionResponse:
+    """One-tap veto of a claimed or ratified seat from the needs-my-yes queue.
+
+    Owner/admin-only override (EXECUTIVE.md rule 4), mirroring
+    ``deerflow.tools.exec_seat_tools.exec_reopen_seat``: ``_require_admin``
+    has already confirmed the caller before this runs, so ``assert_can_reopen``
+    is always called with ``actor_is_owner=True``.
+    """
+    user_id = await _require_admin(request)
+    seat_repo = get_agent_seat_repo(request)
+    seat = await seat_repo.get_seat(seat_id)
+    if seat is None:
+        raise _seat_not_found()
+    try:
+        assert_can_reopen(seat["status"], actor_is_owner=True)
+    except SeatTransitionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    reopened = await seat_repo.patch_seat(seat_id, status=AgentSeatStatus.REOPENED)
+    if reopened is None:
+        raise _seat_not_found()
+    await record_audit_event(request, action="ceo.seat.reopen", outcome="success", actor_user_id=user_id, organization_id=resolve_organization_id(), target_type="agent_seat", target_id=seat_id)
+    return SeatActionResponse(seat_id=reopened["id"], seat=reopened["seat"], agent_name=reopened["agent_name"], status=reopened["status"])
 
 
 @router.get("/digest", response_model=DailyDigestResponse)

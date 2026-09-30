@@ -122,6 +122,78 @@ async def test_member_and_client_get_403(org_world):  # noqa: F811
         assert (await client.get("/api/ceo/digest", headers=headers_member)).status_code == 403
 
 
+async def test_ratify_seat_requires_an_independent_actor(org_world):  # noqa: F811
+    """The needs-my-yes queue's one-tap ratify action (queue item e14, slice 4)."""
+    session_factory = org_world
+    app = _build_app(session_factory)
+    headers_a = auth_headers(USER_A, ORG_S)
+    headers_c = auth_headers(USER_C, ORG_S)
+
+    with acting_as(USER_A, ORG_S):
+        seat_repo = AgentSeatRepository(session_factory)
+        claimed = await seat_repo.claim_seat(seat="cmo", agent_name="cmo-agent", kpi="pipeline", weekly_token_budget=0, claimed_by_user_id=USER_A)
+    seat_id = claimed["id"]
+
+    async with _client(app) as client:
+        # A claimed the seat, so A cannot also be the one who ratifies it.
+        self_ratify = await client.post(f"/api/ceo/seats/{seat_id}/ratify", headers=headers_a)
+        assert self_ratify.status_code == 403, self_ratify.text
+        still_claimed = await client.get("/api/ceo/seats", headers=headers_a)
+        assert still_claimed.json()["seats"][0]["status"] == "claimed"
+
+        # C is an independent admin: ratification succeeds.
+        ratified = await client.post(f"/api/ceo/seats/{seat_id}/ratify", headers=headers_c)
+        assert ratified.status_code == 200, ratified.text
+        body = ratified.json()
+        assert body == {"seat_id": seat_id, "seat": "cmo", "agent_name": "cmo-agent", "status": "ratified"}
+
+        # Already ratified: a second ratify is refused as a bad transition.
+        again = await client.post(f"/api/ceo/seats/{seat_id}/ratify", headers=headers_c)
+        assert again.status_code == 409, again.text
+
+
+async def test_reopen_seat_is_owner_or_admin_only(org_world):  # noqa: F811
+    session_factory = org_world
+    app = _build_app(session_factory)
+    headers_a = auth_headers(USER_A, ORG_S)
+    headers_c = auth_headers(USER_C, ORG_S)
+
+    await _add_plain_member(session_factory, USER_D, ORG_S)
+    headers_member = auth_headers(USER_D, ORG_S)
+
+    with acting_as(USER_A, ORG_S):
+        seat_repo = AgentSeatRepository(session_factory)
+        claimed = await seat_repo.claim_seat(seat="cfo", agent_name="cfo-agent", kpi="runway", weekly_token_budget=0, claimed_by_user_id=USER_A)
+    seat_id = claimed["id"]
+
+    async with _client(app) as client:
+        # A plain member gets a flat 403, same as every other CEO Desk route.
+        denied = await client.post(f"/api/ceo/seats/{seat_id}/reopen", headers=headers_member)
+        assert denied.status_code == 403, denied.text
+
+        # The owner can reopen the claim itself (no self-action restriction
+        # for reopen, unlike ratify -- an owner veto is unconditional).
+        reopened = await client.post(f"/api/ceo/seats/{seat_id}/reopen", headers=headers_a)
+        assert reopened.status_code == 200, reopened.text
+        assert reopened.json()["status"] == "reopened"
+
+        # An admin can also reopen -- this codebase's owner/admin convention.
+        with acting_as(USER_A, ORG_S):
+            reclaimed = await seat_repo.claim_seat(seat="cfo", agent_name="cfo-agent-2", kpi="runway", weekly_token_budget=0, claimed_by_user_id=USER_A)
+        reopened_again = await client.post(f"/api/ceo/seats/{reclaimed['id']}/reopen", headers=headers_c)
+        assert reopened_again.status_code == 200, reopened_again.text
+
+
+async def test_ratify_and_reopen_unknown_seat_404(org_world):  # noqa: F811
+    session_factory = org_world
+    app = _build_app(session_factory)
+    headers_a = auth_headers(USER_A, ORG_S)
+
+    async with _client(app) as client:
+        assert (await client.post("/api/ceo/seats/does-not-exist/ratify", headers=headers_a)).status_code == 404
+        assert (await client.post("/api/ceo/seats/does-not-exist/reopen", headers=headers_a)).status_code == 404
+
+
 async def test_digest_endpoint_reads_the_latest_recorded_digest(org_world):  # noqa: F811
     session_factory = org_world
     app = _build_app(session_factory)
