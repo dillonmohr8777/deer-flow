@@ -549,6 +549,7 @@ def test_empty_response_error_uses_one_retry_budget() -> None:
     assert middleware.release_policy_parameters() == {
         "empty_response_retry_limit": 1,
         "empty_response_retry_scope": "run",
+        "explicit_guard_stop_retries": False,
     }
 
 

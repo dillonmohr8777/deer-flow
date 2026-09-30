@@ -472,6 +472,7 @@ class LLMErrorHandlingMiddleware(AgentMiddleware[AgentState]):
         return {
             "empty_response_retry_limit": 1,
             "empty_response_retry_scope": "run",
+            "explicit_guard_stop_retries": False,
         }
 
     def _max_attempts_for(self, exc: BaseException, reason: str = "transient") -> int:
@@ -591,6 +592,8 @@ class LLMErrorHandlingMiddleware(AgentMiddleware[AgentState]):
     def _classify_error(self, exc: BaseException) -> tuple[bool, str]:
         if isinstance(exc, AdmissionError):
             return False, "admission"
+        if _is_explicit_guard_stop(exc):
+            return False, "guard_stopped"
         detail = _extract_error_detail(exc)
         lowered = detail.lower()
         error_code = _extract_error_code(exc)
@@ -1026,6 +1029,34 @@ class LLMErrorHandlingMiddleware(AgentMiddleware[AgentState]):
 
 def _matches_any(detail: str, patterns: tuple[str, ...]) -> bool:
     return any(pattern in detail for pattern in patterns)
+
+
+def _is_explicit_guard_stop(exc: BaseException) -> bool:
+    """Honor only the guard's exact typed envelope with a boolean retry:false.
+
+    OpenAI SDK status errors unwrap body.error, losing its outer retry field.
+    The already-read response preserves that envelope; ordinary errors never
+    enter this response inspection. No request, logging or retry is performed.
+    """
+    body = getattr(exc, "body", None)
+    if not isinstance(body, dict):
+        return False
+    error = body.get("error", body)
+    if not isinstance(error, dict) or error.get("type") != "momo_guard_stopped":
+        return False
+    if isinstance(body.get("error"), dict) and body.get("retry") is False:
+        return True
+    response = getattr(exc, "response", None)
+    if response is None:
+        return False
+    try:
+        envelope = response.json()
+    except (AttributeError, TypeError, ValueError, RuntimeError):
+        return False
+    if not isinstance(envelope, dict) or envelope.get("retry") is not False:
+        return False
+    error = envelope.get("error")
+    return isinstance(error, dict) and error.get("type") == "momo_guard_stopped"
 
 
 def _extract_error_code(exc: BaseException) -> Any:
