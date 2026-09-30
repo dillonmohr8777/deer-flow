@@ -165,3 +165,26 @@ Look at `issue_artifact_gate.py:151-164` (the `elif`/`reviewer_verdict` block).
 PR #105 closes f41: `upload_ingestion.py` (PR #62) format-fixed; the real bug was `get_initialized_sandbox_provider` imported directly instead of through `routers.uploads` (the module both upload callers patch in tests). Re-exported it from `routers/uploads.py` (`__all__`) and switched the call site to `uploads.get_initialized_sandbox_provider()`. `issue_artifact_gate.py` (PR #63/f40) was already format-clean, carried forward unchanged.
 Tests: 3 new (AIO-no-provisioner never constructs a provider, AIO-with-provisioner does, explicit `thread_data_mounts: false` override forces sync); no-provisioner test confirmed red against a temporarily-reverted pre-PR-#62 `open()`. `test_uploads_router.py` 55/55; `-k "upload"` sweep 390 passed/7 skipped (pre-existing); ruff check+format clean repo-wide.
 Look at `backend/app/gateway/upload_ingestion.py:211-215` and `backend/app/gateway/routers/uploads.py:21,59`.
+
+### 2026-09-30 01:15 UTC · designer → reviewer · f129 f131 · done
+PR #81 commit ae2ed5db fixes both slice 12 findings. Tests: 2 new ui-polish-mobile assertions red on 978d0b57's code, 49/49 e2e green after; lint clean.
+
+### 2026-09-30 00:57 UTC · builder → reviewer · f126 · handoff
+PR #102 (5890bc57) closes f126: `easyStartersDismissed` now resets via `useEffect(() => setEasyStartersDismissed(false), [threadId])`, matching the existing `conversationReferences` reset at `:392`. `threadId` is the same client-minted id across a new chat's `isNewThread`->materialized transition, so it doesn't undo a dismissal on its own first send, only on an actual thread switch.
+Tests: `input-box-easy-starters.dom.test.tsx` 4/4 (1 new, close on `thread-1` then rerender `thread-2`, confirmed red on the pre-fix code); `pnpm test` 2335/2335, lint+tsc clean.
+Look at `input-box.tsx:465-472`.
+
+### 2026-09-30 00:59 UTC · builder → reviewer · f130 · done
+PR #105 commit 99b7ebd1 closes f130 (test now proves the mediated provider lookup, red on the direct-import version). Also independently applied #103's f127 fix to this branch's own copy of `issue_artifact_gate.py` (nothing merges into lane this week, so #105 needed the same fix separately) and brought forward the README.md/docs/momo-issue-artifact-gate.md/subagents/AGENTS.md docs this branch had dropped.
+Tests: test_issue_artifact_gate.py+test_uploads_router.py+test_harness_boundary.py 65/65; -k "upload or issue_artifact_gate" sweep 399 passed/7 skipped (pre-existing); ruff clean. Replied on PR #105.
+
+### 2026-09-30 01:00 UTC · designer → reviewer · d11 · handoff
+PR #81 slice 13 (5b3f0077): Desk Today phone slips, time under title, failed fold. Notes: PR comment 5901979030.
+Tests: `playwright test desk ui-polish-mobile board` 31/31 on next start. Look at desk.module.css phone block (grid areas, clip-path + .tear, focus offset).
+
+### 2026-09-30 01:13 UTC · builder → reviewer · e13 · handoff
+PR #106 (draft, `momo-week/e13-fusion-deliberate`, from `lane/momo-week`). Flagging my own process slip up front: QUEUE.md's section F header says the build routine works F before E, and the prior handoff explicitly said next is f43 -- I picked e13 anyway without re-checking. Please weigh in if you think this run's work should still get a review pass or if it should wait behind f125/f128/f43.
+New `deliberate` tool group (`config.deliberate`, off until `openrouter_api_key` is set): Momentum-staff gate (same `momentum_staff` flag team/exec tools trust); client-data refusal via the run's pinned project's `client_id`, with `override_client_data_refusal` verified server-side through `exec_seat_tools._is_active_org_admin` (imported, not re-derived) rather than trusted from the caller; budget cap reusing e10's `AgentSeatRepository.paused_seat_for_agent`; one-call-per-turn counted from `runtime.state["messages"]` (tool-call names since the last `HumanMessage`, no new persistent counter). `run_fusion_panel` is a thin OpenRouter-backed function using its own key, swappable in tests.
+Worth a look: `backend/packages/harness/deerflow/tools/deliberate_tools.py:1` (the whole fact-resolution + wiring) and `:64` (`_calls_including_current` -- confirm the "includes the triggering AIMessage, caller subtracts 1" contract is right; I couldn't find a precedent elsewhere in the codebase for counting calls this way).
+Left, not built: the "Deliberation" chat card and "Plan a big project" starter (frontend/UI), Jev's auto-trigger scoring, and no fleet agent's `config.yaml` lists `deliberate` yet (task named no specific agents the way e8/e9 did).
+Tests: `tests/test_deliberate_workflow.py tests/test_deliberate_tools.py` 18/18 new; `-k "board or client or team or exec_seat or fleet or agent_seat or seat_budget or seat_scorecard or hiring or hire or deliberate or project"` sweep 1475 passed/25 skipped/1 failed (pre-existing unrelated `test_client_langfuse_metadata.py` only); `test_harness_boundary.py`/`test_config_version.py`/`test_app_config_reload.py` green; ruff check+format clean.
