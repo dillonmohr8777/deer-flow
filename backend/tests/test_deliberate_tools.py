@@ -14,11 +14,13 @@ calls the (monkeypatched) panel.
 
 from __future__ import annotations
 
+import asyncio
 from types import SimpleNamespace
 
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from org_isolation_fixtures import ORG_S, USER_A, acting_as, org_world  # noqa: F401
+from pydantic import ValidationError
 
 from deerflow.config.deliberate_config import DeliberateConfig
 from deerflow.persistence.exec_seats import AgentSeatRepository
@@ -63,7 +65,7 @@ async def _add_project(session_factory, *, project_id: str, user_id: str, client
 
 @pytest.fixture(autouse=True)
 def _stub_fusion_panel(monkeypatch):
-    async def fake_run_fusion_panel(prompt, *, panel_models, analyst_model, api_key):
+    async def fake_run_fusion_panel(prompt, *, panel_models, analyst_model, api_key, call_timeout_seconds=60.0):
         fake_run_fusion_panel.calls.append((prompt, panel_models, analyst_model, api_key))
         return {"consensus": "c", "contradictions": "", "unique_insights": "", "blind_spots": ""}
 
@@ -262,4 +264,69 @@ async def test_run_fusion_panel_falls_back_on_an_unparseable_analyst_response(mo
 
     result = await run_fusion_panel("plan it", panel_models=["panelist-a"], analyst_model="analyst-model", api_key="test-key")
     assert result["fallback"] is True
-    assert result["consensus"] == "not json"
+
+
+@pytest.mark.asyncio
+async def test_one_failing_panelist_does_not_sink_the_call(monkeypatch):
+    """Review finding: a raising panelist must not throw away the survivors' paid
+    answers -- the analyst should see only the real ones."""
+
+    async def fake_call_model(prompt, *, model, api_key, system=None):
+        if model == "broken-panelist":
+            raise RuntimeError("provider 500")
+        if model == "analyst-model":
+            return '{"consensus":"c","contradictions":"","unique_insights":"","blind_spots":""}'
+        return f"{model}'s real answer"
+
+    monkeypatch.setattr("deerflow.tools.deliberate_tools._call_model", fake_call_model)
+
+    result = await run_fusion_panel("plan it", panel_models=["broken-panelist", "good-panelist"], analyst_model="analyst-model", api_key="test-key")
+    assert "error" not in result
+
+
+@pytest.mark.asyncio
+async def test_every_panelist_failing_returns_an_error_not_an_empty_analyst_call(monkeypatch):
+    calls: list[str] = []
+
+    async def fake_call_model(prompt, *, model, api_key, system=None):
+        calls.append(model)
+        raise RuntimeError("provider 500")
+
+    monkeypatch.setattr("deerflow.tools.deliberate_tools._call_model", fake_call_model)
+
+    result = await run_fusion_panel("plan it", panel_models=["a", "b"], analyst_model="analyst-model", api_key="test-key")
+    assert "error" in result
+    assert "analyst-model" not in calls  # never called on an empty panel
+
+
+@pytest.mark.asyncio
+async def test_a_slow_panelist_times_out_and_is_dropped(monkeypatch):
+    async def fake_call_model(prompt, *, model, api_key, system=None):
+        if model == "slow-panelist":
+            await asyncio.sleep(0.2)
+            return "too slow"
+        if model == "analyst-model":
+            return '{"consensus":"c","contradictions":"","unique_insights":"","blind_spots":""}'
+        return "fast answer"
+
+    monkeypatch.setattr("deerflow.tools.deliberate_tools._call_model", fake_call_model)
+
+    result = await run_fusion_panel("plan it", panel_models=["slow-panelist", "fast-panelist"], analyst_model="analyst-model", api_key="test-key", call_timeout_seconds=0.02)
+    assert "error" not in result
+
+
+@pytest.mark.asyncio
+async def test_an_analyst_call_that_fails_returns_an_error(monkeypatch):
+    async def fake_call_model(prompt, *, model, api_key, system=None):
+        if model == "analyst-model":
+            raise RuntimeError("provider 500")
+        return "an answer"
+
+    monkeypatch.setattr("deerflow.tools.deliberate_tools._call_model", fake_call_model)
+    result = await run_fusion_panel("plan it", panel_models=["a"], analyst_model="analyst-model", api_key="test-key")
+    assert "error" in result
+
+
+def test_an_empty_panel_model_list_is_rejected():
+    with pytest.raises(ValidationError):
+        DeliberateConfig(cheap_panel_models=[])

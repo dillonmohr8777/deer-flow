@@ -2353,6 +2353,7 @@ deliberate:
   quality_panel_models: ["openrouter/auto"]
   analyst_model: "openrouter/auto"
   max_calls_per_turn: 1
+  call_timeout_seconds: 60.0
 
 # ============================================================================
 # Skill Self-Evolution Configuration

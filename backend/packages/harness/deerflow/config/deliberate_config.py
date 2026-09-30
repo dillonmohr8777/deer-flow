@@ -15,7 +15,8 @@ class DeliberateConfig(BaseModel):
 
     enabled: bool = Field(default=False)
     openrouter_api_key: str | None = Field(default=None, description="OpenRouter API key used only for deliberation panel calls.")
-    cheap_panel_models: list[str] = Field(default_factory=lambda: ["openrouter/auto"])
-    quality_panel_models: list[str] = Field(default_factory=lambda: ["openrouter/auto"])
+    cheap_panel_models: list[str] = Field(default_factory=lambda: ["openrouter/auto"], min_length=1)
+    quality_panel_models: list[str] = Field(default_factory=lambda: ["openrouter/auto"], min_length=1)
     analyst_model: str = Field(default="openrouter/auto")
     max_calls_per_turn: int = Field(default=1, ge=1, description="Deliberation is expensive; cap calls per conversational turn.")
+    call_timeout_seconds: float = Field(default=60.0, gt=0, description="Per-model timeout for each panelist and analyst call.")

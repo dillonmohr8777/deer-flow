@@ -172,21 +172,40 @@ async def _call_model(prompt: str, *, model: str, api_key: str, system: str | No
     return extract_response_text(getattr(response, "content", ""))
 
 
-async def run_fusion_panel(prompt: str, *, panel_models: list[str], analyst_model: str, api_key: str) -> dict:
+async def _call_panelist(prompt: str, *, model: str, api_key: str, timeout_seconds: float, system: str | None = None) -> str | None:
+    """A single panelist's (or the analyst's) answer, or ``None`` on any failure or timeout.
+
+    Never raises: one bad panelist must not sink the whole deliberation.
+    """
+    try:
+        return await asyncio.wait_for(_call_model(prompt, model=model, api_key=api_key, system=system), timeout=timeout_seconds)
+    except Exception:
+        return None
+
+
+async def run_fusion_panel(prompt: str, *, panel_models: list[str], analyst_model: str, api_key: str, call_timeout_seconds: float = 60.0) -> dict:
     """Fan *prompt* out to every model in *panel_models*, then synthesize their answers.
 
     Uses its own OpenRouter key, never ``create_chat_model``'s Luna/Muse
     model registry. Each panelist answers the same prompt independently (no
-    fusion tool/plugin call exists to reach for instead), then the analyst
-    model is given every panelist's actual answer -- it is never asked to
-    invent opinions it was never shown. On an unparseable analyst response,
+    fusion tool/plugin call exists to reach for instead); a panelist that
+    raises or exceeds *call_timeout_seconds* is dropped rather than sinking
+    the whole call, and the analyst only ever sees the survivors' real
+    answers -- it is never asked to invent opinions it was never shown. If
+    every panelist fails, returns an error instead of calling the analyst on
+    nothing. On an unparseable (or failed/timed-out) analyst response,
     returns its raw text as ``consensus`` with the other fields empty and
     ``fallback: True``.
     """
-    panel_answers = await asyncio.gather(*(_call_model(prompt, model=model, api_key=api_key) for model in panel_models))
-    transcript = "\n\n".join(f"Panelist {index + 1} ({model}):\n{answer}" for index, (model, answer) in enumerate(zip(panel_models, panel_answers, strict=True)))
+    panel_answers = await asyncio.gather(*(_call_panelist(prompt, model=model, api_key=api_key, timeout_seconds=call_timeout_seconds) for model in panel_models))
+    survivors = [(model, answer) for model, answer in zip(panel_models, panel_answers, strict=True) if answer is not None]
+    if not survivors:
+        return _error("Every deliberation panel model failed or timed out.")
+    transcript = "\n\n".join(f"Panelist {index + 1} ({model}):\n{answer}" for index, (model, answer) in enumerate(survivors))
     analyst_prompt = f"Planning question:\n{prompt}\n\nPanelists' answers:\n{transcript}"
-    raw = await _call_model(analyst_prompt, model=analyst_model, api_key=api_key, system=_ANALYST_INSTRUCTIONS)
+    raw = await _call_panelist(analyst_prompt, model=analyst_model, api_key=api_key, timeout_seconds=call_timeout_seconds, system=_ANALYST_INSTRUCTIONS)
+    if raw is None:
+        return _error("The deliberation analyst call failed or timed out.")
     try:
         parsed = json.loads(raw)
     except (json.JSONDecodeError, TypeError):
@@ -226,7 +245,7 @@ async def _deliberate_impl(
         return _error(str(exc))
 
     panel_models = config.quality_panel_models if preset == "quality" else config.cheap_panel_models
-    return await run_fusion_panel(prompt, panel_models=panel_models, analyst_model=config.analyst_model, api_key=config.openrouter_api_key)
+    return await run_fusion_panel(prompt, panel_models=panel_models, analyst_model=config.analyst_model, api_key=config.openrouter_api_key, call_timeout_seconds=config.call_timeout_seconds)
 
 
 @tool(parse_docstring=True)
