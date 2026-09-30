@@ -1280,6 +1280,15 @@ tools:
     group: hire
     use: deerflow.tools.hire_tools:retire_report
 
+  # OpenRouter Fusion deliberation panel for big-project planning (queue
+  # item e13). Momentum-staff-only, like the team/exec/hire groups; also
+  # refused on a client-data thread unless an organization owner overrides
+  # it, and off until config.deliberate.enabled and an OpenRouter key are
+  # both set. Give this group only to agents meant to plan big projects.
+  - name: deliberate
+    group: deliberate
+    use: deerflow.tools.deliberate_tools:deliberate
+
 # ============================================================================
 # Tool Search Configuration (Deferred Tool Loading)
 # ============================================================================
