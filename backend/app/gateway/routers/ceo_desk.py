@@ -23,6 +23,7 @@ from deerflow.persistence.board.model import BoardThreadStatus
 from deerflow.persistence.exec_seats.model import AgentSeatStatus
 from deerflow.persistence.organizations.model import OrganizationMemberRow
 from deerflow.runtime.user_context import resolve_organization_id
+from deerflow.tools.exec_seat_tools import announce_to_exec
 
 router = APIRouter(prefix="/api/ceo", tags=["ceo"])
 
@@ -212,6 +213,10 @@ async def ratify_seat(seat_id: str, request: Request) -> SeatActionResponse:
     if ratified is None:
         raise _seat_not_found()
     await record_audit_event(request, action="ceo.seat.ratify", outcome="success", actor_user_id=user_id, organization_id=resolve_organization_id(), target_type="agent_seat", target_id=seat_id)
+    # Best-effort, matches exec_ratify_seat's own #exec announcement wording;
+    # a missing channel or storage hiccup must never undo the ratification
+    # that already persisted above.
+    await announce_to_exec(f"ratified {ratified['seat']} for {ratified['agent_name']} (model: {ratified.get('model_family') or 'muse'}) via CEO Desk")
     return SeatActionResponse(seat_id=ratified["id"], seat=ratified["seat"], agent_name=ratified["agent_name"], status=ratified["status"])
 
 
@@ -238,6 +243,8 @@ async def reopen_seat(seat_id: str, request: Request) -> SeatActionResponse:
     if reopened is None:
         raise _seat_not_found()
     await record_audit_event(request, action="ceo.seat.reopen", outcome="success", actor_user_id=user_id, organization_id=resolve_organization_id(), target_type="agent_seat", target_id=seat_id)
+    # Best-effort, matches exec_reopen_seat's own #exec announcement wording.
+    await announce_to_exec(f"reopened {reopened['seat']} (was held by {reopened['agent_name']}) via CEO Desk")
     return SeatActionResponse(seat_id=reopened["id"], seat=reopened["seat"], agent_name=reopened["agent_name"], status=reopened["status"])
 
 

@@ -16,6 +16,14 @@ export function draftClientLabel(clientId: string | null): string {
   return clientId ?? "Internal";
 }
 
+/**
+ * A seat's KPI, or "Not recorded" for a blank one. DESIGN.md: missing data
+ * is unavailable, not zero, and never an em dash.
+ */
+export function seatKpiLabel(seat: SeatRosterEntry): string {
+  return seat.kpi.trim() || "Not recorded";
+}
+
 /** "48.2K" for large counts, the plain integer below 1,000. */
 export function formatTokenCount(tokens: number): string {
   if (!Number.isFinite(tokens) || tokens < 0) return "0";

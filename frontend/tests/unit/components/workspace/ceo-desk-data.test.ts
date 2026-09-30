@@ -5,6 +5,7 @@ import {
   formatSeatBurn,
   formatStamp,
   formatTokenCount,
+  seatKpiLabel,
   seatStatusLabel,
   seatStatusTone,
 } from "@/components/workspace/ceo-desk/ceo-desk-data";
@@ -75,6 +76,19 @@ describe("formatSeatBurn", () => {
     expect(formatSeatBurn(seat({ weekly_token_budget: 0 }))).toBe(
       "3.2K tokens (no budget)",
     );
+  });
+});
+
+describe("seatKpiLabel", () => {
+  it("passes a real KPI through", () => {
+    expect(seatKpiLabel(seat({ kpi: "Pipeline created" }))).toBe(
+      "Pipeline created",
+    );
+  });
+
+  it("never renders an em dash for a missing KPI (DESIGN.md)", () => {
+    expect(seatKpiLabel(seat({ kpi: "" }))).toBe("Not recorded");
+    expect(seatKpiLabel(seat({ kpi: "   " }))).toBe("Not recorded");
   });
 });
 

@@ -19,6 +19,7 @@ from org_isolation_fixtures import ORG_S, USER_A, USER_C, acting_as, auth_header
 
 from app.gateway.auth_middleware import AuthMiddleware
 from app.gateway.routers import board, ceo_desk, clients
+from deerflow.persistence.audit_events import AuditEventRepository
 from deerflow.persistence.board import BoardRepository
 from deerflow.persistence.ceo_desk import CeoDeskDigestRepository
 from deerflow.persistence.clients import ClientRepository
@@ -40,6 +41,7 @@ def _build_app(session_factory) -> FastAPI:
     app.state.agent_seat_repo = AgentSeatRepository(session_factory)
     app.state.ceo_desk_digest_repo = CeoDeskDigestRepository(session_factory)
     app.state.fleet_binding_repo = FleetBindingRepository(session_factory)
+    app.state.audit_repo = AuditEventRepository(session_factory)
     app.include_router(clients.router)
     app.include_router(board.router)
     app.include_router(ceo_desk.router)
@@ -126,6 +128,7 @@ async def test_ratify_seat_requires_an_independent_actor(org_world):  # noqa: F8
     """The needs-my-yes queue's one-tap ratify action (queue item e14, slice 4)."""
     session_factory = org_world
     app = _build_app(session_factory)
+    audit_repo = app.state.audit_repo
     headers_a = auth_headers(USER_A, ORG_S)
     headers_c = auth_headers(USER_C, ORG_S)
 
@@ -151,10 +154,38 @@ async def test_ratify_seat_requires_an_independent_actor(org_world):  # noqa: F8
         again = await client.post(f"/api/ceo/seats/{seat_id}/ratify", headers=headers_c)
         assert again.status_code == 409, again.text
 
+        events, _ = await audit_repo.list(organization_id=ORG_S, action_prefix="ceo.seat.ratify")
+        outcomes = [(e["outcome"], e["target_id"]) for e in events]
+        assert ("denied", seat_id) in outcomes  # A's self-ratify attempt
+        assert ("success", seat_id) in outcomes  # C's independent ratify
+
+
+async def test_ratify_seat_is_owner_or_admin_only(org_world):  # noqa: F811
+    """f178 review follow-up: no test covered a plain member's HTTP ratify attempt,
+    so a mutant deleting ``_require_admin`` from ``ratify_seat`` still passed."""
+    session_factory = org_world
+    app = _build_app(session_factory)
+    headers_a = auth_headers(USER_A, ORG_S)
+
+    await _add_plain_member(session_factory, USER_D, ORG_S)
+    headers_member = auth_headers(USER_D, ORG_S)
+
+    with acting_as(USER_A, ORG_S):
+        seat_repo = AgentSeatRepository(session_factory)
+        claimed = await seat_repo.claim_seat(seat="coo", agent_name="coo-agent", kpi="ops", weekly_token_budget=0, claimed_by_user_id=USER_A)
+    seat_id = claimed["id"]
+
+    async with _client(app) as client:
+        denied = await client.post(f"/api/ceo/seats/{seat_id}/ratify", headers=headers_member)
+        assert denied.status_code == 403, denied.text
+        still_claimed = await client.get("/api/ceo/seats", headers=headers_a)
+        assert still_claimed.json()["seats"][0]["status"] == "claimed"
+
 
 async def test_reopen_seat_is_owner_or_admin_only(org_world):  # noqa: F811
     session_factory = org_world
     app = _build_app(session_factory)
+    audit_repo = app.state.audit_repo
     headers_a = auth_headers(USER_A, ORG_S)
     headers_c = auth_headers(USER_C, ORG_S)
 
@@ -177,11 +208,22 @@ async def test_reopen_seat_is_owner_or_admin_only(org_world):  # noqa: F811
         assert reopened.status_code == 200, reopened.text
         assert reopened.json()["status"] == "reopened"
 
+        # Already reopened: a second reopen is refused as a bad transition
+        # (f178 review follow-up -- no prior test exercised this, so a
+        # mutant deleting the assert_can_reopen check still passed).
+        again = await client.post(f"/api/ceo/seats/{seat_id}/reopen", headers=headers_a)
+        assert again.status_code == 409, again.text
+
         # An admin can also reopen -- this codebase's owner/admin convention.
         with acting_as(USER_A, ORG_S):
             reclaimed = await seat_repo.claim_seat(seat="cfo", agent_name="cfo-agent-2", kpi="runway", weekly_token_budget=0, claimed_by_user_id=USER_A)
         reopened_again = await client.post(f"/api/ceo/seats/{reclaimed['id']}/reopen", headers=headers_c)
         assert reopened_again.status_code == 200, reopened_again.text
+
+        events, _ = await audit_repo.list(organization_id=ORG_S, action_prefix="ceo.seat.reopen")
+        assert len(events) == 2  # the owner's reopen and the admin's reopen; the denied 409 records no event
+        assert all(e["outcome"] == "success" for e in events)
+        assert {e["target_id"] for e in events} == {seat_id, reclaimed["id"]}
 
 
 async def test_ratify_and_reopen_unknown_seat_404(org_world):  # noqa: F811

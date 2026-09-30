@@ -1,6 +1,6 @@
 "use client";
 
-import type { useQuery } from "@tanstack/react-query";
+import { useQueryClient, type useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
@@ -20,6 +20,8 @@ import {
 } from "@/components/workspace/workspace-container";
 import { useApproveBoardReply } from "@/core/board";
 import {
+  CEO_DIGEST_QUERY_KEY,
+  CEO_NEEDS_MY_YES_QUERY_KEY,
   useDailyDigest,
   useNeedsMyYes,
   useRatifySeat,
@@ -37,6 +39,7 @@ import {
   draftClientLabel,
   formatSeatBurn,
   formatStamp,
+  seatKpiLabel,
   seatStatusLabel,
   seatStatusTone,
 } from "./ceo-desk-data";
@@ -222,10 +225,12 @@ function NeedsMyYesSection({
 
 function BoardDraftCard({ draft }: { draft: BoardDraftAwaitingApproval }) {
   const approve = useApproveBoardReply();
+  const queryClient = useQueryClient();
+  const subject = draft.subject || "(no subject)";
   return (
     <div className={styles.card}>
       <div className={styles.cardInfo}>
-        <p className={styles.cardSubject}>{draft.subject || "(no subject)"}</p>
+        <p className={styles.cardSubject}>{subject}</p>
         <p className={styles.cardMeta}>
           {draftClientLabel(draft.client_id)} &middot; {draft.kind} &middot;{" "}
           <time dateTime={draft.updated_at}>
@@ -242,7 +247,25 @@ function BoardDraftCard({ draft }: { draft: BoardDraftAwaitingApproval }) {
         <Button
           size="sm"
           disabled={approve.isPending}
-          onClick={() => approve.mutate({ threadId: draft.thread_id })}
+          aria-label={`Approve ${subject}`}
+          onClick={() =>
+            approve.mutate(
+              { threadId: draft.thread_id },
+              {
+                // useApproveBoardReply only invalidates board query keys; the
+                // needs-my-yes queue and the digest's own drafts-waiting
+                // count also need to drop this thread (f178).
+                onSuccess: () => {
+                  void queryClient.invalidateQueries({
+                    queryKey: CEO_NEEDS_MY_YES_QUERY_KEY,
+                  });
+                  void queryClient.invalidateQueries({
+                    queryKey: CEO_DIGEST_QUERY_KEY,
+                  });
+                },
+              },
+            )
+          }
         >
           {approve.isPending ? "Approving" : "Approve"}
         </Button>
@@ -280,6 +303,7 @@ function SeatClaimCard({ claim }: { claim: SeatAwaitingRatification }) {
         <Button
           size="sm"
           disabled={ratify.isPending || reopen.isPending}
+          aria-label={`Ratify ${claim.seat} for ${claim.agent_name}`}
           onClick={() => ratify.mutate(claim.seat_id)}
         >
           {ratify.isPending ? "Ratifying" : "Ratify"}
@@ -288,6 +312,7 @@ function SeatClaimCard({ claim }: { claim: SeatAwaitingRatification }) {
           variant="outline"
           size="sm"
           disabled={ratify.isPending || reopen.isPending}
+          aria-label={`Reopen ${claim.seat} for ${claim.agent_name}`}
           onClick={() => reopen.mutate(claim.seat_id)}
         >
           {reopen.isPending ? "Reopening" : "Reopen"}
@@ -347,7 +372,7 @@ function SeatRosterSection({
                 <tr key={seat.seat_id}>
                   <td>{seat.seat}</td>
                   <td>{seat.agent_name}</td>
-                  <td>{seat.kpi || "—"}</td>
+                  <td>{seatKpiLabel(seat)}</td>
                   <td>
                     <StatusTag tone={seatStatusTone(seat)}>
                       {seatStatusLabel(seat)}
