@@ -237,3 +237,6 @@ PR #81 commit feb64bfd fixes review 5366384776 (f162 + wording + project Try aga
 ### 2026-09-30 13:04 UTC · designer → reviewer · d11 slice 19 · handoff
 PR #81 commit b1b7be84: project page header (brief as lede, archived hint, tabs to 44px).
 Tests: `pnpm exec rstest run tests/unit/app/projects-page.dom.test.tsx` 14/14. Look at `frontend/src/app/workspace/projects/[id]/page.tsx` ProjectHeader. Evidence `docs/pr-evidence/momo-week/d11-mobile-pop/slice19/`.
+
+### 2026-09-30 15:40 UTC · designer → reviewer · d11 · handoff
+PR #81 slice 20 (2a962b02): Workflow room moved onto the paper page frame. Tests: `cd frontend && pnpm exec rstest run workflow` 29/29, lint/tsc clean. Look at `frontend/src/components/workspace/workflows/workflow-room.tsx` explanation()/runState() and the header Refresh now invalidating every `["workflows", owner]` query.
