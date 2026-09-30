@@ -1,4 +1,10 @@
-import { expect, test, type Page, type Route } from "@playwright/test";
+import {
+  expect,
+  test,
+  type Page,
+  type Route,
+  type TestInfo,
+} from "@playwright/test";
 
 import {
   mockLangGraphAPI,
@@ -362,12 +368,98 @@ async function expectSidecarScrollDoesNotAnimateAfterOpen(page: Page) {
   expect(secondScrollTop).toBe(firstScrollTop);
 }
 
-async function openSidecarAndExpectNoAnimatedScroll(page: Page) {
+type SidecarDiagnosticsWindow = Window & {
+  __sidecarScrollDiagnostics?: {
+    samples: Record<string, unknown>[];
+    samplesSeen: number;
+    truncated: boolean;
+  };
+  __sidecarRecordDiagnostics?: (event: string) => void;
+  __sidecarCleanupDiagnostics?: () => void;
+};
+
+async function openSidecarAndExpectNoAnimatedScroll(
+  page: Page,
+  testInfo: TestInfo,
+  opening: "initial" | "reopen",
+) {
   await page.evaluate(() => {
-    const targetWindow = window as Window & {
+    const targetWindow = window as SidecarDiagnosticsWindow & {
       __sidecarScrollTops?: number[];
       __sidecarScrollListener?: (event: Event) => void;
     };
+    targetWindow.__sidecarCleanupDiagnostics?.();
+    targetWindow.__sidecarScrollDiagnostics = {
+      samples: [],
+      samplesSeen: 0,
+      truncated: false,
+    };
+    const rect = (element: Element | null | undefined) => {
+      if (!element) return null;
+      const { x, y, width, height } = element.getBoundingClientRect();
+      return { x, y, width, height };
+    };
+    targetWindow.__sidecarRecordDiagnostics = (event) => {
+      const diagnostics = targetWindow.__sidecarScrollDiagnostics!;
+      diagnostics.samplesSeen += 1;
+      if (diagnostics.samples.length >= 128) {
+        diagnostics.truncated = true;
+        return;
+      }
+      const root = document.querySelector(
+        '[data-testid="sidecar-message-list"]',
+      );
+      const scroll = root?.firstElementChild;
+      const panel = document.querySelector('[data-testid="sidecar-panel"]');
+      diagnostics.samples.push({
+        event,
+        timeMs: performance.now(),
+        scrollTop: scroll?.scrollTop ?? null,
+        scrollHeight: scroll?.scrollHeight ?? null,
+        clientHeight: scroll?.clientHeight ?? null,
+        clientWidth: scroll?.clientWidth ?? null,
+        scrollRect: rect(scroll),
+        contentRect: rect(scroll?.firstElementChild),
+        panelRect: rect(panel),
+        shellRect: rect(panel?.parentElement),
+        shellTransform: panel?.parentElement
+          ? getComputedStyle(panel.parentElement).transform
+          : null,
+        fontStatus: document.fonts.status,
+        viewport: { width: innerWidth, height: innerHeight },
+        devicePixelRatio,
+      });
+    };
+    const resizeObserver = new ResizeObserver(() =>
+      targetWindow.__sidecarRecordDiagnostics?.("resize"),
+    );
+    const observed = new WeakSet<Element>();
+    const observeGeometry = () => {
+      const root = document.querySelector(
+        '[data-testid="sidecar-message-list"]',
+      );
+      const scroll = root?.firstElementChild;
+      const panel = document.querySelector('[data-testid="sidecar-panel"]');
+      for (const element of [
+        scroll,
+        scroll?.firstElementChild,
+        panel,
+        panel?.parentElement,
+      ]) {
+        if (element && !observed.has(element)) {
+          observed.add(element);
+          resizeObserver.observe(element);
+        }
+      }
+    };
+    const mutationObserver = new MutationObserver(observeGeometry);
+    mutationObserver.observe(document.body, { childList: true, subtree: true });
+    observeGeometry();
+    targetWindow.__sidecarCleanupDiagnostics = () => {
+      resizeObserver.disconnect();
+      mutationObserver.disconnect();
+    };
+    targetWindow.__sidecarRecordDiagnostics("before-open");
     if (targetWindow.__sidecarScrollListener) {
       document.removeEventListener(
         "scroll",
@@ -384,6 +476,7 @@ async function openSidecarAndExpectNoAnimatedScroll(page: Page) {
         target.parentElement?.matches('[data-testid="sidecar-message-list"]')
       ) {
         targetWindow.__sidecarScrollTops?.push(Math.round(target.scrollTop));
+        targetWindow.__sidecarRecordDiagnostics?.("scroll");
       }
     };
     document.addEventListener(
@@ -398,7 +491,7 @@ async function openSidecarAndExpectNoAnimatedScroll(page: Page) {
   for (let index = 0; index < 20; index += 1) {
     await page.waitForTimeout(25);
     await page.evaluate(() => {
-      const targetWindow = window as Window & {
+      const targetWindow = window as SidecarDiagnosticsWindow & {
         __sidecarPanelTransforms?: string[];
       };
       const panel = document.querySelector('[data-testid="sidecar-panel"]');
@@ -408,29 +501,49 @@ async function openSidecarAndExpectNoAnimatedScroll(page: Page) {
           window.getComputedStyle(shell).transform,
         );
       }
+      targetWindow.__sidecarRecordDiagnostics?.("panel-sample");
     });
   }
 
-  const { distinctScrollTops, panelTransforms } = await page.evaluate(() => {
-    const targetWindow = window as Window & {
-      __sidecarScrollTops?: number[];
-      __sidecarScrollListener?: (event: Event) => void;
-      __sidecarPanelTransforms?: string[];
-    };
-    if (targetWindow.__sidecarScrollListener) {
-      document.removeEventListener(
-        "scroll",
-        targetWindow.__sidecarScrollListener,
-        true,
-      );
-      targetWindow.__sidecarScrollListener = undefined;
-    }
-    return {
-      distinctScrollTops: Array.from(
-        new Set(targetWindow.__sidecarScrollTops ?? []),
-      ),
-      panelTransforms: targetWindow.__sidecarPanelTransforms ?? [],
-    };
+  const { distinctScrollTops, panelTransforms, scrollDiagnostics } =
+    await page.evaluate(() => {
+      const targetWindow = window as SidecarDiagnosticsWindow & {
+        __sidecarScrollTops?: number[];
+        __sidecarScrollListener?: (event: Event) => void;
+        __sidecarPanelTransforms?: string[];
+      };
+      if (targetWindow.__sidecarScrollListener) {
+        document.removeEventListener(
+          "scroll",
+          targetWindow.__sidecarScrollListener,
+          true,
+        );
+        targetWindow.__sidecarScrollListener = undefined;
+      }
+      targetWindow.__sidecarCleanupDiagnostics?.();
+      targetWindow.__sidecarRecordDiagnostics?.("after-listener-removal");
+      targetWindow.__sidecarCleanupDiagnostics = undefined;
+      targetWindow.__sidecarRecordDiagnostics = undefined;
+      return {
+        distinctScrollTops: Array.from(
+          new Set(targetWindow.__sidecarScrollTops ?? []),
+        ),
+        panelTransforms: targetWindow.__sidecarPanelTransforms ?? [],
+        scrollDiagnostics: targetWindow.__sidecarScrollDiagnostics,
+      };
+    });
+
+  await testInfo.attach(`sidecar-${opening}-scroll-diagnostics`, {
+    body: Buffer.from(
+      JSON.stringify({
+        opening,
+        distinctScrollTopCount: distinctScrollTops.length,
+        distinctScrollTops: distinctScrollTops.slice(0, 128),
+        panelTransforms,
+        ...scrollDiagnostics,
+      }),
+    ),
+    contentType: "application/json",
   });
 
   expect(distinctScrollTops.length).toBeLessThanOrEqual(1);
@@ -1178,7 +1291,7 @@ test.describe("Side chat", () => {
 
   test("opens restored side chat history without animated scroll", async ({
     page,
-  }) => {
+  }, testInfo) => {
     const tallSidecarMessages = Array.from({ length: 12 }).flatMap(
       (_, index) => [
         {
@@ -1244,12 +1357,12 @@ test.describe("Side chat", () => {
       timeout: 10_000,
     });
 
-    await openSidecarAndExpectNoAnimatedScroll(page);
+    await openSidecarAndExpectNoAnimatedScroll(page, testInfo, "initial");
     await expectSidecarScrollDoesNotAnimateAfterOpen(page);
     await page.getByTestId("sidecar-header-trigger").click();
     await expect(page.getByTestId("sidecar-panel")).toBeHidden();
     await page.waitForTimeout(350);
-    await openSidecarAndExpectNoAnimatedScroll(page);
+    await openSidecarAndExpectNoAnimatedScroll(page, testInfo, "reopen");
   });
 
   test("self-heals the trigger when the sidecar thread is deleted elsewhere", async ({
