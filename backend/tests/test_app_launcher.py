@@ -34,6 +34,8 @@ def launch_setup(monkeypatch, tmp_path):
         "BROWSERBASE_API_KEY=fixture-browserbase-source\n"
         "MOMOBOT_BROWSERBASE_ENABLED=true\n"
         "MOMOBOT_BROWSERBASE_MONTHLY_MINUTE_LIMIT=6000\n"
+        "MOMOBOT_WORKFLOWS_ENABLED=true\n"
+        "MOMOBOT_STAGEHAND_EXTENSION_ID=00000000-0000-0000-0000-000000000001\n"
         "DEER_FLOW_AUTH_DISABLED=1\n"
         "DEER_FLOW_ENV=development\n"
         "DEER_FLOW_AUTH_COOKIE_PREFIX=unsafe_\n"
@@ -91,13 +93,27 @@ def test_frontend_never_inherits_provider_or_auth_bypass_environment(launch_setu
     assert chdir[-1].name == "frontend"
 
 
-def test_gateway_loads_only_five_provider_settings_and_forces_auth_production(launch_setup):
+def test_gateway_loads_only_seven_provider_settings_and_forces_auth_production(launch_setup):
     invoke, state, _source, chdir = launch_setup
     with pytest.raises(LaunchCaptured) as captured:
         invoke("gateway")
     child = captured.value
-    provider_keys = {"OPENAI_API_KEY", "MOMOBOT_OPENAI_AGENTS_ENABLED", "BROWSERBASE_API_KEY", "MOMOBOT_BROWSERBASE_ENABLED", "MOMOBOT_BROWSERBASE_MONTHLY_MINUTE_LIMIT"}
-    safe_keys = {"PATH", "HOME", "LANG", "TMPDIR", "DEER_FLOW_ENV", "DEER_FLOW_AUTH_COOKIE_PREFIX", "DEER_FLOW_INTERNAL_GATEWAY_BASE_URL", "DEER_FLOW_HOME", "DEER_FLOW_PROJECT_ROOT", "DEER_FLOW_CONFIG_PATH", "GATEWAY_HOST", "GATEWAY_PORT"}
+    provider_keys = {"OPENAI_API_KEY", "MOMOBOT_OPENAI_AGENTS_ENABLED", "BROWSERBASE_API_KEY", "MOMOBOT_BROWSERBASE_ENABLED", "MOMOBOT_BROWSERBASE_MONTHLY_MINUTE_LIMIT", "MOMOBOT_WORKFLOWS_ENABLED", "MOMOBOT_STAGEHAND_EXTENSION_ID"}
+    safe_keys = {
+        "PATH",
+        "HOME",
+        "LANG",
+        "TMPDIR",
+        "DEER_FLOW_ENV",
+        "DEER_FLOW_AUTH_COOKIE_PREFIX",
+        "DEER_FLOW_INTERNAL_GATEWAY_BASE_URL",
+        "DEER_FLOW_HOME",
+        "DEER_FLOW_PROJECT_ROOT",
+        "DEER_FLOW_CONFIG_PATH",
+        "GATEWAY_HOST",
+        "GATEWAY_PORT",
+        "PYTHONPATH",
+    }
     assert set(child.env) <= provider_keys | safe_keys
     assert provider_keys <= set(child.env)
     assert child.env["OPENAI_API_KEY"] == "fixture-openai-source"
@@ -106,6 +122,7 @@ def test_gateway_loads_only_five_provider_settings_and_forces_auth_production(la
     assert "DEER_FLOW_AUTH_DISABLED" not in child.env
     assert child.env["DEER_FLOW_AUTH_COOKIE_PREFIX"] == "momo_agent_"
     assert child.env["GATEWAY_HOST"] == "127.0.0.1"
+    assert child.env["PYTHONPATH"].split(":") == [str(_SCRIPT.parents[1] / "backend"), str(_SCRIPT.parents[1] / "backend/packages/harness")]
     assert child.env["DEER_FLOW_HOME"] == str(state.resolve())
     assert child.env["DEER_FLOW_CONFIG_PATH"] == str(state.resolve() / "config.yaml")
     assert "--workers" not in child.argv

@@ -12,6 +12,7 @@ import {
   Network,
   Newspaper,
   Globe,
+  ListChecks,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -109,10 +110,25 @@ export function WorkspaceNavChatList() {
         </SidebarMenuItem>
         <SidebarMenuItem>
           <SidebarMenuButton
+            isActive={pathname === "/workspace/workflows"}
+            className="min-h-11"
+            asChild
+          >
+            <Link className="text-muted-foreground" href="/workspace/workflows">
+              <ListChecks />
+              <span>Workflows</span>
+            </Link>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+        <SidebarMenuItem>
+          <SidebarMenuButton
             isActive={pathname === "/workspace/browser-research"}
             asChild
           >
-            <Link className="text-muted-foreground" href="/workspace/browser-research">
+            <Link
+              className="text-muted-foreground"
+              href="/workspace/browser-research"
+            >
               <Globe />
               <span>Browser research</span>
             </Link>

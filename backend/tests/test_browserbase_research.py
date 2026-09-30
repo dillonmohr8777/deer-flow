@@ -66,7 +66,7 @@ def test_html_scripts_forms_and_page_instructions_are_data_only():
     assert "hidden password" not in result["text"]
 
 
-def provider_fixture(monkeypatch, tmp_path: Path, *, browser_error=False, minutes=72, connect_host="connect.browserbase.com"):
+def provider_fixture(monkeypatch, tmp_path: Path, *, browser_error=False, minutes=72, connect_host="connect.browserbase.com", session_id="session-a", connect_url=None):
     monkeypatch.setenv("BROWSERBASE_API_KEY", "fake-provider-key")
     monkeypatch.setenv("MOMOBOT_BROWSERBASE_ENABLED", "true")
     monkeypatch.setenv("MOMOBOT_BROWSERBASE_MONTHLY_MINUTE_LIMIT", "6000")
@@ -80,9 +80,9 @@ def provider_fixture(monkeypatch, tmp_path: Path, *, browser_error=False, minute
         if request.url.path.endswith("/usage"):
             return httpx.Response(200, json={"browserMinutes": minutes, "proxyBytes": 0})
         if request.method == "POST" and request.url.path == "/v1/sessions":
-            return httpx.Response(201, json={"id": "session-a", "connectUrl": f"wss://{connect_host}?apiKey=should-never-persist"})
-        if request.url.path == "/v1/sessions/session-a":
-            return httpx.Response(200, json={"id": "session-a", "status": "COMPLETED"})
+            return httpx.Response(201, json={"id": session_id, "connectUrl": connect_url or f"wss://{connect_host}?apiKey=should-never-persist"})
+        if request.url.path == f"/v1/sessions/{session_id}":
+            return httpx.Response(200, json={"id": session_id, "status": "COMPLETED"})
         return httpx.Response(404)
 
     async def browser(connect_url, pages):
@@ -139,6 +139,7 @@ async def test_idempotency_owner_scope_authenticated_screenshot_and_release(monk
     assert len(create_bodies) == 1
     assert "projectId" not in create_bodies[0]
     assert create_bodies[0]["timeout"] == 180
+    assert create_bodies[0]["keepAlive"] is False
     assert ("POST", "/v1/sessions/session-a", {"status": "REQUEST_RELEASE"}) in calls
     assert (await service.screenshot("owner-a", first["id"], 0)).startswith(b"\x89PNG")
     with pytest.raises(BrowserbaseError, match="not_found"):
@@ -162,6 +163,39 @@ async def test_browser_failure_sanitizes_error_and_releases_session(monkeypatch,
     assert result["session_closed"] is True
     assert ("POST", "/v1/sessions/session-a", {"status": "REQUEST_RELEASE"}) in calls
     assert "should-never-persist" not in json.dumps(result)
+    await service.aclose()
+
+
+@pytest.mark.parametrize(
+    "worker_code",
+    [
+        "browser_worker_protocol_error",
+        "stagehand_initialization_failed",
+        "browser_snapshot_render_failed",
+        "browser_snapshot_capture_failed",
+        "stagehand_observation_failed",
+        "stagehand_extraction_failed",
+        "browser_cleanup_failed",
+        "private_signed_url_api_key_should_never_persist",
+    ],
+)
+@pytest.mark.asyncio
+async def test_fixed_worker_code_is_actionable_without_exception_text(monkeypatch, tmp_path, worker_code):
+    from app.gateway.workflow_adapters import AdapterError
+
+    service, _calls, _ = provider_fixture(monkeypatch, tmp_path)
+
+    async def failed_worker(*_args):
+        raise AdapterError(worker_code)
+
+    service.browser_runner = failed_worker
+    created = await service.create("owner-a", ["https://example.com"], "Research", "known-worker-error")
+    result = await settled(service, "owner-a", created["id"])
+    assert result["status"] == "failed"
+    assert result["last_error"] == ("browser_render_failed" if worker_code.startswith("private_") else worker_code)
+    assert result["session_closed"] is True
+    assert "private_signed_url_api_key" not in json.dumps(result)
+    assert b"private_signed_url_api_key" not in (tmp_path / "browserbase.sqlite").read_bytes()
     await service.aclose()
 
 
@@ -565,4 +599,131 @@ async def test_paid_create_deadline_leaves_unknown_owner_hold_without_retry(monk
     with pytest.raises(BrowserbaseError, match="owner_busy"):
         await service.create("owner-a", ["https://other.example"], "Next", "second")
     assert len([call for call in calls if call[:2] == ("POST", "/v1/sessions")]) == 1
+    await service.aclose()
+
+
+@pytest.mark.asyncio
+async def test_server_stagehand_runner_and_extension_are_per_run_and_idempotent(monkeypatch, tmp_path):
+    service, calls, default_browser = provider_fixture(monkeypatch, tmp_path)
+    extension = "f7a468b4-6591-4b96-a731-c7e1f7b654e6"
+    stagehand_calls = []
+
+    async def stagehand(connect_url, pages, *, session_id):
+        stagehand_calls.append((connect_url, pages, session_id))
+        pages[0]["stagehand_extract"] = {"data": {"summary": "Source-verified fixture"}}
+        return [b"\x89PNG\r\n\x1a\nfixture" for _page in pages]
+
+    run = await service.create("owner-a", ["https://example.com"], "Stagehand", "ai-key", browser_runner=stagehand, extension_id=extension)
+    result = await settled(service, "owner-a", run["id"])
+    assert result["browser_adapter"] == {"mode": "stagehand_v4_public_snapshot", "ai_inference": True, "extension_id": extension, "keep_alive": True}
+    assert result["pages"][0]["stagehand_extract"]["data"]["summary"] == "Source-verified fixture"
+    assert len(stagehand_calls) == 1 and default_browser == []
+    assert stagehand_calls[0][2] == "session-a"
+    bodies = [body for method, path, body in calls if method == "POST" and path == "/v1/sessions"]
+    assert bodies[0]["browserSettings"] == {"recordSession": True}
+    assert bodies[0]["extensionId"] == extension
+    assert bodies[0]["keepAlive"] is True and bodies[0]["timeout"] == 180
+    assert (await service.create("owner-a", ["https://example.com"], "Stagehand", "ai-key", browser_runner=stagehand, extension_id=extension))["id"] == run["id"]
+    with pytest.raises(BrowserbaseError, match="idempotency_conflict"):
+        await service.create("owner-a", ["https://example.com"], "Stagehand", "ai-key", browser_runner=stagehand, extension_id="1276c6f6-c5bb-4773-b98e-2717a9cb4227")
+    room = await service.create("owner-a", ["https://example.com"], "Room", "room-key")
+    assert (await settled(service, "owner-a", room["id"]))["browser_adapter"]["ai_inference"] is False
+    assert len(default_browser) == 1
+    assert "extensionId" not in [body for method, path, body in calls if method == "POST" and path == "/v1/sessions"][1]
+    assert [body for method, path, body in calls if method == "POST" and path == "/v1/sessions"][1]["keepAlive"] is False
+    assert b"function" not in service.path.read_bytes()
+    await service.aclose()
+
+
+@pytest.mark.parametrize("extension,runner", [("arbitrary-id", True), ("f7a468b4-6591-4b96-a731-c7e1f7b654e6", False), (None, True)])
+@pytest.mark.asyncio
+async def test_invalid_server_stagehand_configuration_has_no_provider_or_storage_side_effects(monkeypatch, tmp_path, extension, runner):
+    service, calls, _ = provider_fixture(monkeypatch, tmp_path / "absent")
+    with pytest.raises(BrowserbaseError):
+        await service.create("owner-a", ["https://example.com"], "Invalid", "invalid", browser_runner=(lambda *_: None) if runner else None, extension_id=extension)
+    assert calls == [] and not service.path.parent.exists()
+
+
+@pytest.mark.parametrize("connect_url", ["wss://connect.usw2.browserbase.com?apiKey=synthetic-opaque", "wss://connect.usw2.browserbase.com/opaque-fixture?token=synthetic-opaque"])
+@pytest.mark.asyncio
+async def test_creation_receipt_binds_opaque_transport_to_custom_runner_without_changing_room_arity(monkeypatch, tmp_path, connect_url):
+    # SDK SessionCreateResponse supplies id and opaque connectUrl separately;
+    # SessionRetrieveResponse may omit connectUrl, as the completed live readback did.
+    session_id = "12345678-1234-4234-8234-123456789abc"
+    service, calls, room_calls = provider_fixture(monkeypatch, tmp_path, session_id=session_id, connect_url=connect_url)
+    custom_calls = []
+
+    async def stagehand(endpoint, pages, *, session_id):
+        custom_calls.append((endpoint, session_id))
+        return [b"\x89PNG\r\n\x1a\nfixture" for _page in pages]
+
+    try:
+        room = await service.create("owner-a", ["https://example.com"], "Room", "opaque-room")
+        assert (await settled(service, "owner-a", room["id"]))["status"] == "completed"
+        assert len(room_calls) == 1 and len(room_calls[0]) == 2
+        research = await service.create("owner-a", ["https://example.com"], "AI", "opaque-ai", browser_runner=stagehand, extension_id="f7a468b4-6591-4b96-a731-c7e1f7b654e6")
+        final = await settled(service, "owner-a", research["id"])
+        assert final["status"] == "completed" and final["session_closed"] is True
+        assert custom_calls == [(connect_url, session_id)]
+        # Two final release readbacks only; no extra GET to recover a URL/ID.
+        assert len([call for call in calls if call[:2] == ("GET", f"/v1/sessions/{session_id}")]) == 2
+        assert "synthetic-opaque" not in service.path.read_text(errors="ignore")
+    finally:
+        await service.aclose()
+
+
+@pytest.mark.parametrize("query", ["sessionId=other", "sessionId=", "sessionId=12345678-1234-4234-8234-123456789abc&sessionId=12345678-1234-4234-8234-123456789abc"])
+@pytest.mark.asyncio
+async def test_provider_query_identity_conflict_releases_known_session_before_custom_transport(monkeypatch, tmp_path, query):
+    session_id = "12345678-1234-4234-8234-123456789abc"
+    service, calls, room_calls = provider_fixture(monkeypatch, tmp_path, session_id=session_id, connect_url="wss://connect.usw2.browserbase.com?" + query)
+    custom_calls = []
+
+    async def stagehand(endpoint, pages, *, session_id):
+        custom_calls.append(True)
+        return []
+
+    try:
+        research = await service.create("owner-a", ["https://example.com"], "AI", "conflict-ai", browser_runner=stagehand, extension_id="f7a468b4-6591-4b96-a731-c7e1f7b654e6")
+        final = await settled(service, "owner-a", research["id"])
+        assert final["status"] == "failed" and final["last_error"] == "invalid_provider_connection"
+        assert final["session_closed"] is True and not custom_calls and not room_calls
+        assert len([call for call in calls if call[0] == "POST" and call[1] == f"/v1/sessions/{session_id}"]) == 1
+    finally:
+        await service.aclose()
+
+
+@pytest.mark.asyncio
+async def test_cancellation_during_durable_reserve_drains_thread_and_releases_unstarted_owner(monkeypatch, tmp_path):
+    import threading
+
+    service, calls, _ = provider_fixture(monkeypatch, tmp_path)
+    await service.start()
+    entered = threading.Event()
+    proceed = threading.Event()
+    original = service._db
+
+    def delayed(action, *args):
+        if action == "reserve":
+            entered.set()
+            assert proceed.wait(3)
+        return original(action, *args)
+
+    service._db = delayed
+    admission = asyncio.create_task(service.create("owner-a", ["https://example.com"], "Interrupted", "reserve-key"))
+    assert await asyncio.to_thread(entered.wait, 3)
+    admission.cancel()
+    await asyncio.sleep(0)
+    assert not admission.done()
+    proceed.set()
+    with pytest.raises(asyncio.CancelledError):
+        await admission
+    rows = await service._storage("list", "owner-a")
+    assert len(rows) == 1 and rows[0]["status"] == "cancelled"
+    assert service.tasks == {} and not service.admissions
+    assert not any(call[:2] == ("POST", "/v1/sessions") for call in calls)
+    replay = await service.create("owner-a", ["https://example.com"], "Interrupted", "reserve-key")
+    assert replay["id"] == rows[0]["id"] and replay["status"] == "cancelled"
+    next_run = await service.create("owner-a", ["https://example.com"], "Next", "new-key")
+    assert (await settled(service, "owner-a", next_run["id"]))["status"] == "completed"
     await service.aclose()

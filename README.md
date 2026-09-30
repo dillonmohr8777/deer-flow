@@ -2321,3 +2321,23 @@ file supplies credentials only to the server; the web app and native bundle
 contain no API keys. See [release setup](docs/MOMOBOT_APP_RELEASE.md),
 [OpenAI lifecycle](backend/docs/MOMOBOT_OPENAI_LIFECYCLE.md), and
 [Browserbase configuration](backend/docs/BROWSERBASE_APP.md).
+
+The opt-in **Workflows** room at `/workspace/workflows` adds 120 concrete recipes:
+100 Momentum marketing, operations and development tasks plus 20 personal
+writing, music, research, coding and administration tasks. Each recipe has a
+closed input/output schema, synthetic preview and independent acceptance criteria.
+LangGraph retains the durable controller and the application's native run,
+thread and event stores; CrewAI, Mastra, Deep Agents, Agno and Inngest AgentKit
+are finite adapters under the same owner scope and provider meter.
+
+The default budget is three executing jobs, capacity for 100 waiting jobs,
+six model attempts and 8,192 output / 60,000 input tokens per run, and 240 model
+attempts across the ledger in a rolling 24 hours. Browser work uses one bounded
+Browserbase session per owner scope. Optional Stagehand analyzes inert public
+snapshots through the same admitted model callback. Results stay reviewable
+drafts with immutable, hash-checked downloads; unknown billed cost stays unavailable.
+See [workflow operation and limits](backend/docs/WORKFLOWS.md),
+[isolated adapters](backend/docs/WORKFLOW_ADAPTERS.md), and the
+[Mac workbench client](scripts/MOMO_WORKBENCH.md). The separate
+[AgentOS probe](docs/AGNO_AGENTOS_PROBE.md) tests bounded native persistence and
+authorization; it does not activate another production platform.

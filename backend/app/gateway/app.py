@@ -58,6 +58,7 @@ from app.gateway.routers import (
     trash,
     uploads,
     user_preferences,
+    workflows,
     workspace_branding,
     workspaces,
 )
@@ -585,9 +586,30 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             app.state.browserbase_service = BrowserbaseResearchService(get_paths().base_dir / "browserbase-research.sqlite")
             await app.state.browserbase_service.start()
 
+        from app.gateway.workflow_service import WorkflowService
+
+        if WorkflowService.enabled():
+            from app.gateway.workflow_adapters import WorkflowModelAdapter
+            from app.gateway.workflow_authority import workflow_actor_authorized
+
+            app.state.workflow_service = WorkflowService(
+                get_paths().base_dir / "workflows.sqlite",
+                checkpointer=app.state.checkpointer,
+                adapter=WorkflowModelAdapter(),
+                browser_service=getattr(app.state, "browserbase_service", None),
+                run_manager=app.state.run_manager,
+                thread_store=app.state.thread_store,
+                event_store=app.state.run_event_store,
+                authority=workflow_actor_authorized,
+            )
+            await app.state.workflow_service.start()
+
         yield
 
         await _shutdown_startup_trash_sweep(app)
+
+        if getattr(app.state, "workflow_service", None) is not None:
+            await app.state.workflow_service.aclose()
 
         if getattr(app.state, "browserbase_service", None) is not None:
             try:
@@ -948,6 +970,7 @@ This gateway provides runtime endpoints for agent runs plus custom endpoints for
     app.include_router(models.router)
     app.include_router(openai_agents.router)
     app.include_router(browserbase_research.router)
+    app.include_router(workflows.router)
 
     # Features API is mounted at /api/features
     app.include_router(features.router)

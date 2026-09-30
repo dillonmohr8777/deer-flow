@@ -276,6 +276,7 @@ class BrowserbaseResearchService:
         self.browser_runner = browser_runner or _render_snapshots
         self.fetcher = fetcher or self._fetch
         self.tasks: dict[str, asyncio.Task] = {}
+        self.admissions: set[asyncio.Task] = set()
         self.cleanups: dict[str, asyncio.Task] = {}
         self.cancel_requested: set[str] = set()
         self.lease = None
@@ -344,7 +345,7 @@ class BrowserbaseResearchService:
         await self._storage("save", data)
 
     async def start(self):
-        if not self.enabled():
+        if not self.enabled() or self.started:
             return
         async with self.lock:
             if self.started:
@@ -382,6 +383,8 @@ class BrowserbaseResearchService:
 
     async def aclose(self):
         self.closing = True
+        if self.admissions:
+            await asyncio.gather(*tuple(self.admissions), return_exceptions=True)
         tasks = list(self.tasks.items())
         for run_id, task in tasks:
             if run_id not in self.cancel_requested:
@@ -477,7 +480,19 @@ class BrowserbaseResearchService:
             state["reason"] = error.code
         return state
 
-    async def create(self, owner: str, urls: list[str], title: str, idempotency_key: str):
+    async def create(self, owner: str, urls: list[str], title: str, idempotency_key: str, *, browser_runner: Callable | None = None, extension_id: str | None = None):
+        # These keyword arguments are an internal gateway seam, never public
+        # request fields. Keep the room's existing non-AI renderer unchanged.
+        if extension_id is not None:
+            try:
+                if not isinstance(extension_id, str) or str(uuid.UUID(extension_id)) != extension_id:
+                    raise ValueError
+            except (ValueError, AttributeError):
+                raise BrowserbaseError("invalid_server_extension", 503) from None
+            if browser_runner is None:
+                raise BrowserbaseError("stagehand_runner_required", 503)
+        elif browser_runner is not None:
+            raise BrowserbaseError("stagehand_extension_required", 503)
         if not self.enabled():
             raise BrowserbaseError("not_enabled", 503)
         if not os.environ.get("BROWSERBASE_API_KEY"):
@@ -495,7 +510,10 @@ class BrowserbaseResearchService:
         if not isinstance(title, str) or not 1 <= len(title.strip()) <= 120:
             raise BrowserbaseError("invalid_title")
         title = title.strip()
-        fingerprint = hashlib.sha256(json.dumps([normalized, title], separators=(",", ":")).encode()).hexdigest()
+        identity = [normalized, title]
+        if extension_id is not None:
+            identity.append({"extension_id": extension_id, "mode": "stagehand_v4_public_snapshot"})
+        fingerprint = hashlib.sha256(json.dumps(identity, separators=(",", ":")).encode()).hexdigest()
         async with self.lock:
             previous = await self._storage("idem", owner, idempotency_key)
             if previous:
@@ -519,14 +537,49 @@ class BrowserbaseResearchService:
                 "session_expires_at": None,
                 "replay_url": None,
                 "session_closed": None,
+                "browser_adapter": {"mode": "stagehand_v4_public_snapshot" if extension_id is not None else MODE, "ai_inference": extension_id is not None, "extension_id": extension_id, "keep_alive": extension_id is not None},
                 "usage": {"browser_minutes": None, "elapsed_seconds": 0, "cost_usd": None},
             }
-            data, created = await self._storage("reserve", owner, idempotency_key, fingerprint, data)
-            if created:
-                task = asyncio.create_task(self._run(owner, data), name=f"browserbase-research-{data['id']}")
-                self.tasks[data["id"]] = task
-                task.add_done_callback(lambda _task: self.tasks.pop(data["id"], None))
-            return data
+            cancelled = False
+
+            async def admit():
+                reserved, created = await self._storage("reserve", owner, idempotency_key, fingerprint, data)
+                if created:
+                    if cancelled or self.closing:
+                        reserved["status"] = "cancelled"
+                        await self._save(reserved)
+                    else:
+                        task = asyncio.create_task(self._run(owner, reserved, browser_runner=browser_runner, extension_id=extension_id), name=f"browserbase-research-{reserved['id']}")
+                        self.tasks[reserved["id"]] = task
+                        task.add_done_callback(lambda _task: self.tasks.pop(reserved["id"], None))
+                return reserved, created
+
+            admission = asyncio.create_task(admit(), name=f"browserbase-admission-{data['id']}")
+            self.admissions.add(admission)
+            admission.add_done_callback(self.admissions.discard)
+            try:
+                reserved, _created = await asyncio.shield(admission)
+                return reserved
+            except asyncio.CancelledError:
+                # A worker thread cannot be cancelled after durable reservation.
+                # Drain it before releasing ownership or allowing another key.
+                cancelled = True
+                while not admission.done():
+                    try:
+                        await asyncio.shield(admission)
+                    except asyncio.CancelledError:
+                        continue
+                if not admission.cancelled() and admission.exception() is None:
+                    reserved, created = admission.result()
+                    if created and reserved["status"] not in _TERMINAL:
+                        compensation = asyncio.create_task(self.cancel(owner, reserved["id"]))
+                        while not compensation.done():
+                            try:
+                                await asyncio.shield(compensation)
+                            except asyncio.CancelledError:
+                                continue
+                        compensation.result()
+                raise
 
     async def _release(self, session_id: str) -> bool:
         try:
@@ -544,7 +597,7 @@ class BrowserbaseResearchService:
             pass
         return False
 
-    async def _run(self, owner: str, data: dict):
+    async def _run(self, owner: str, data: dict, *, browser_runner: Callable | None = None, extension_id: str | None = None):
         started = time.monotonic()
         phase = "public_page_fetch_failed"
         try:
@@ -568,9 +621,14 @@ class BrowserbaseResearchService:
                 data["session_expires_at"] = time.time() + CREATE_REQUEST_TIMEOUT + SESSION_TIMEOUT
                 await self._save(data)
                 async with asyncio.timeout(CREATE_REQUEST_TIMEOUT):
-                    session = await self._request(
-                        "POST", "/v1/sessions", {"timeout": SESSION_TIMEOUT, "keepAlive": False, "proxies": False, "browserSettings": {"recordSession": True}, "userMetadata": {"purpose": MODE, "momobot_run": data["id"]}}
-                    )
+                    # Stagehand discovery and SDK attachment are separate CDP
+                    # connections. Paid-plan keepAlive prevents disconnects
+                    # ending this service-owned session during their handoff;
+                    # the same finite TTL and explicit release/readback remain.
+                    session_settings = {"timeout": SESSION_TIMEOUT, "keepAlive": browser_runner is not None, "proxies": False, "browserSettings": {"recordSession": True}, "userMetadata": {"purpose": MODE, "momobot_run": data["id"]}}
+                    if extension_id is not None:
+                        session_settings["extensionId"] = extension_id
+                    session = await self._request("POST", "/v1/sessions", session_settings)
                 session_id = session.get("id") if isinstance(session, dict) else None
                 if not isinstance(session_id, str) or not re.fullmatch(r"[a-zA-Z0-9_-]{1,128}", session_id):
                     raise BrowserbaseError("invalid_provider_response", 502)
@@ -588,11 +646,28 @@ class BrowserbaseResearchService:
                     connect_url = session.get("connectUrl", "")
                     if session.get("status") in ("COMPLETED", "ERROR", "TIMED_OUT"):
                         break
-                parsed = urlsplit(connect_url)
-                if parsed.scheme != "wss" or parsed.hostname not in ALLOWED_CONNECT_HOSTS or parsed.port not in (None, 443) or parsed.username is not None:
+                try:
+                    parsed = urlsplit(connect_url)
+                    port = parsed.port
+                    query_sessions = [value for key, value in parse_qsl(parsed.query, keep_blank_values=True, max_num_fields=64) if key == "sessionId"]
+                except (TypeError, ValueError):
+                    raise BrowserbaseError("invalid_provider_connection", 502) from None
+                if (
+                    parsed.scheme != "wss"
+                    or parsed.hostname not in ALLOWED_CONNECT_HOSTS
+                    or port not in (None, 443)
+                    or parsed.username is not None
+                    or parsed.password is not None
+                    or "#" in connect_url
+                    or query_sessions
+                    and query_sessions != [session_id]
+                ):
                     raise BrowserbaseError("invalid_provider_connection", 502)
                 phase = "browser_render_failed"
-                screenshots = await self.browser_runner(connect_url, pages)
+                # connectUrl is an opaque provider-owned transport credential.
+                # Bind a custom Stagehand runner to the explicit create receipt;
+                # never recover its lease identity from URL syntax.
+                screenshots = await browser_runner(connect_url, pages, session_id=session_id) if browser_runner is not None else await self.browser_runner(connect_url, pages)
                 if len(screenshots) != len(pages):
                     raise BrowserbaseError("browser_render_failed", 502)
                 for index, screenshot in enumerate(screenshots):
@@ -613,9 +688,36 @@ class BrowserbaseResearchService:
         except BrowserbaseError as error:
             data["status"] = "failed"
             data["last_error"] = error.code
-        except Exception:
+        except Exception as error:
             data["status"] = "failed"
-            data["last_error"] = phase
+            # Keep worker failures actionable without persisting provider
+            # exception text, connection URLs, API keys or model prompts.
+            safe_worker_codes = {
+                "invalid_provider_endpoint",
+                "invalid_browser_snapshot",
+                "browser_worker_not_installed",
+                "browser_worker_identity_mismatch",
+                "browser_worker_protocol_error",
+                "stagehand_extension_unavailable",
+                "browser_operation_failed",
+                "browser_model_input_invalid",
+                "browser_model_call_limit",
+                "browser_worker_failed",
+                "browser_session_unavailable",
+                "browser_cleanup_unconfirmed",
+                "browser_transport_failed",
+                "stagehand_extension_inspection_failed",
+                "stagehand_runtime_incompatible",
+                "stagehand_operation_timeout",
+                "stagehand_initialization_failed",
+                "browser_snapshot_render_failed",
+                "browser_snapshot_capture_failed",
+                "stagehand_observation_failed",
+                "stagehand_extraction_failed",
+                "browser_cleanup_failed",
+            }
+            code = getattr(error, "code", None)
+            data["last_error"] = code if isinstance(code, str) and code in safe_worker_codes else phase
         finally:
             cleanup = asyncio.create_task(self._finish_run(data, started))
             self.cleanups[data["id"]] = cleanup
