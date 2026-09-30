@@ -430,3 +430,65 @@ describe("actual Room composer account lifecycle", () => {
     );
   });
 });
+
+it("disables editing and posting while identity confirms, then preserves the same owner's original draft", async () => {
+  let resolveAuth!: (value: Response) => void;
+  const pendingAuth = new Promise<Response>((resolve) => {
+    resolveAuth = resolve;
+  });
+  const network = rs.spyOn(globalThis, "fetch").mockReturnValue(pendingAuth);
+  const cache = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  function RefreshForReview() {
+    const auth = useAuth();
+    return (
+      <button onClick={() => void auth.refreshUser()}>
+        Refresh for review
+      </button>
+    );
+  }
+  render(
+    <AuthProvider initialUser={OWNER_A}>
+      <QueryClientProvider client={cache}>
+        <UserPreferencesBoundary>
+          <RefreshForReview />
+          <AgentRoom />
+        </UserPreferencesBoundary>
+      </QueryClientProvider>
+    </AuthProvider>,
+  );
+  const input = await screen.findByLabelText("Leave an instruction or note");
+  fireEvent.change(input, { target: { value: "Original same-owner draft" } });
+  fireEvent.click(screen.getByRole("button", { name: "Refresh for review" }));
+  await waitFor(() => expect(network).toHaveBeenCalled());
+  const pendingInput = screen.getByLabelText<HTMLTextAreaElement>(
+    "Leave an instruction or note",
+  );
+  expect(pendingInput.disabled).toBe(true);
+  expect(
+    screen.getByRole<HTMLButtonElement>("button", { name: "Post to room" })
+      .disabled,
+  ).toBe(true);
+  await act(async () => {
+    resolveAuth(
+      new Response(JSON.stringify(OWNER_A), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    await pendingAuth;
+  });
+  await waitFor(() => expect(fetchAgentRoomEnabled).toHaveBeenCalledTimes(2));
+  expect(
+    screen.getByLabelText<HTMLTextAreaElement>("Leave an instruction or note")
+      .value,
+  ).toBe("Original same-owner draft");
+  await waitFor(() =>
+    expect(
+      screen.getByLabelText<HTMLTextAreaElement>("Leave an instruction or note")
+        .disabled,
+    ).toBe(false),
+  );
+  expect(postAgentRoomMessage).not.toHaveBeenCalled();
+});

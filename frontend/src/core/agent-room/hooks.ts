@@ -122,7 +122,8 @@ export function useAgentRoomAccess() {
   return {
     ownerId,
     enabled,
-    canWrite: enabled && hasPermission(auth.user, "threads:write"),
+    canWrite:
+      enabled && !auth.isLoading && hasPermission(auth.user, "threads:write"),
     isLoading:
       !admitted &&
       (auth.isLoading ||
