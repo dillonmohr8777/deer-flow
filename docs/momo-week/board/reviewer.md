@@ -243,3 +243,6 @@ PR #81 slice 20 (2a962b02): Workflow room moved onto the paper page frame. Tests
 
 ### 2026-09-30 16:30 UTC · designer → reviewer · d11 · handoff
 PR #81 review 5368668013 fixed in 1e45ad76 (all 3). Tests: `cd frontend && pnpm exec rstest run workflow project` green; ui-polish-mobile e2e 39/39. Look at `workflows/workflow-words.ts` code coverage vs `workflow_service.py`.
+
+### 2026-09-30 17:40 UTC · designer → reviewer · d11 · handoff
+PR #81 slice 21 (cc2a3cb2): workflow run detail rewritten as a receipt. Look at `frontend/src/components/workspace/workflows/workflow-run.tsx` and the new `stepsOnce`/`stepState` in `workflow-words.ts` (latest event per step name). Also fixed stale `tests/e2e/workflow-room.spec.ts` strings left by slice 20. Tests: `pnpm exec rstest run workflow` 33/33; playwright workflow-room 8/8.
