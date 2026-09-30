@@ -222,3 +222,38 @@ def test_reviewer_verdict_with_non_mapping_leaves_is_not_ready_for_owner():
 
     assert result["disposition"] != "ready-for-owner"
     assert "reviewer_verdict_not_held" in result["rework"]
+
+
+def test_reviewer_verdict_with_a_second_unheld_leaf_is_not_ready_for_owner():
+    case = deepcopy(_valid_case())
+    # One good leaf, one leaf whose `holds` is False: every leaf must hold,
+    # not just the first (or any) one.
+    case["review_execution"]["acceptance_verdict"] = {
+        "all_hold": True,
+        "leaves": [
+            {"criterion": "x", "checked": True, "holds": True},
+            {"criterion": "y", "checked": True, "holds": False},
+        ],
+        "unchecked": [],
+    }
+
+    result = _call(case)
+
+    assert result["disposition"] != "ready-for-owner"
+    assert "reviewer_verdict_not_held" in result["rework"]
+
+
+def test_reviewer_verdict_with_an_unchecked_but_held_leaf_is_not_ready_for_owner():
+    case = deepcopy(_valid_case())
+    # `checked` and `holds` are independently required; a leaf that holds
+    # but was never checked must still fail.
+    case["review_execution"]["acceptance_verdict"] = {
+        "all_hold": True,
+        "leaves": [{"criterion": "x", "checked": False, "holds": True}],
+        "unchecked": [],
+    }
+
+    result = _call(case)
+
+    assert result["disposition"] != "ready-for-owner"
+    assert "reviewer_verdict_not_held" in result["rework"]
