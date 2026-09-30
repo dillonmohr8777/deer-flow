@@ -294,7 +294,9 @@ test("invalid or oversized uploads do not replace the existing icon", async ({
     mimeType: "image/png",
     buffer: Buffer.from("not an image"),
   });
-  await expect(dialog.getByRole("alert")).toContainText("Cannot read");
+  await expect(dialog.getByRole("alert")).toHaveText(
+    "Can't read this image. Choose a valid image up to 16 megapixels.",
+  );
   await expect(dialog.locator("img")).toHaveAttribute(
     "src",
     "/images/plugins/github.svg",

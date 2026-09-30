@@ -12,6 +12,8 @@ mirroring ``clients.py``'s ``_require_stamp_authorized`` and its
 
 from __future__ import annotations
 
+import asyncio
+import logging
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Request
@@ -20,12 +22,20 @@ from sqlalchemy import select
 
 from app.gateway.authz import require_permission
 from app.gateway.deps import get_board_repo, get_client_repo, get_current_user_from_request, record_audit_event
+from deerflow.board.triage import triage_board_thread
 from deerflow.board.workflow import BoardOwnerRequiredError, BoardTransitionError, assert_can_approve, assert_can_draft, assert_can_reply
 from deerflow.persistence.board.model import BoardThreadStatus
 from deerflow.persistence.organizations.model import OrganizationMemberRow
 from deerflow.runtime.user_context import resolve_organization_id
+from deerflow.utils.thread_id import ThreadId
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/board", tags=["board"])
+
+# Bounds the triage-on-create model call so a hung provider can't hang thread
+# creation; a timeout is treated the same as any other triage failure.
+_TRIAGE_TIMEOUT_SECONDS = 20
 
 _ORG_ADMIN_ROLES = ("owner", "admin")
 
@@ -39,6 +49,8 @@ class BoardThreadResponse(BaseModel):
     kind: str
     status: str
     subject: str
+    urgency: str | None = None
+    summary: str | None = None
     created_by_user_id: str | None
     created_at: str
     updated_at: str
@@ -89,13 +101,19 @@ def _not_found() -> HTTPException:
     return HTTPException(status_code=404, detail="Board thread not found")
 
 
-def _to_thread_response(row: dict) -> BoardThreadResponse:
+def _to_thread_response(row: dict, *, actor_is_owner: bool) -> BoardThreadResponse:
+    # Momo's triage (urgency/summary) is internal shorthand -- it can read like
+    # "INTERNAL: client is angry, churn risk" -- so only an org owner/admin
+    # ever sees it, the same boundary list_board_messages already draws around
+    # a still-unapproved momo draft.
     return BoardThreadResponse(
         id=row["id"],
         client_id=row.get("client_id"),
         kind=row["kind"],
         status=row["status"],
         subject=row.get("subject", ""),
+        urgency=row.get("urgency") if actor_is_owner else None,
+        summary=row.get("summary") if actor_is_owner else None,
         created_by_user_id=row.get("created_by_user_id"),
         created_at=row.get("created_at", ""),
         updated_at=row.get("updated_at", ""),
@@ -174,7 +192,26 @@ async def create_board_thread(body: BoardThreadCreateRequest, request: Request) 
     user = await get_current_user_from_request(request)
     await _require_client_access(client_repo, body.client_id, str(user.id))
     row = await board_repo.create_thread(client_id=body.client_id, kind=body.kind, subject=body.subject, created_by_user_id=str(user.id))
-    return _to_thread_response(row)
+    try:
+        triage = await asyncio.wait_for(triage_board_thread(body.subject), timeout=_TRIAGE_TIMEOUT_SECONDS)
+        if not triage.fallback:
+            # Only a real classification is worth recording: a fallback
+            # result must never look indistinguishable from Momo actually
+            # having triaged the thread -- e4/e5 read these columns as fact,
+            # and the thread should stay `new` (unclassified) so something
+            # retries it later instead of silently reading as "normal".
+            updated = await board_repo.patch_thread(row["id"], status=BoardThreadStatus.TRIAGED, urgency=triage.urgency, summary=triage.summary)
+            if updated is not None:
+                row = updated
+    except Exception:
+        # Triage is an aid, not a gate: never let a classification failure or
+        # timeout (triage_board_thread's own model-call failures are already
+        # handled inside it -- this catches anything else in the path, e.g. a
+        # hung provider outrunning the timeout above, or the DB patch itself)
+        # turn a created thread into a 500.
+        logger.warning("Board triage-on-create failed; thread created without a triage classification", exc_info=True)
+    actor_is_owner = await _is_active_org_admin(str(user.id))
+    return _to_thread_response(row, actor_is_owner=actor_is_owner)
 
 
 @router.get("/threads", response_model=BoardThreadListResponse)
@@ -184,20 +221,21 @@ async def list_board_threads(request: Request, client_id: str | None = None, sta
     board_repo = get_board_repo(request)
     user = await get_current_user_from_request(request)
     user_id = str(user.id)
+    actor_is_owner = await _is_active_org_admin(user_id)
     if client_id is not None:
         await _require_client_access(client_repo, client_id, user_id)
         rows = await board_repo.list_threads(client_id=client_id, status=status)
-    elif await _is_active_org_admin(user_id):
+    elif actor_is_owner:
         rows = await board_repo.list_threads(status=status)
     else:
         mine_ids = [c["id"] for c in await client_repo.list_mine()]
         rows = await board_repo.list_threads(client_ids=mine_ids, status=status) if mine_ids else []
-    return BoardThreadListResponse(threads=[_to_thread_response(r) for r in rows])
+    return BoardThreadListResponse(threads=[_to_thread_response(r, actor_is_owner=actor_is_owner) for r in rows])
 
 
 @router.get("/threads/{thread_id}", response_model=BoardThreadResponse)
 @require_permission("board", "read")
-async def get_board_thread(thread_id: str, request: Request) -> BoardThreadResponse:
+async def get_board_thread(thread_id: ThreadId, request: Request) -> BoardThreadResponse:
     board_repo = get_board_repo(request)
     client_repo = get_client_repo(request)
     row = await board_repo.get_thread(thread_id)
@@ -205,7 +243,8 @@ async def get_board_thread(thread_id: str, request: Request) -> BoardThreadRespo
         raise _not_found()
     user = await get_current_user_from_request(request)
     await _require_thread_access(client_repo, row, str(user.id))
-    return _to_thread_response(row)
+    actor_is_owner = await _is_active_org_admin(str(user.id))
+    return _to_thread_response(row, actor_is_owner=actor_is_owner)
 
 
 _WORKFLOW_ONLY_STATUSES = frozenset({BoardThreadStatus.DRAFTED, BoardThreadStatus.APPROVED, BoardThreadStatus.REPLIED})
@@ -213,7 +252,7 @@ _WORKFLOW_ONLY_STATUSES = frozenset({BoardThreadStatus.DRAFTED, BoardThreadStatu
 
 @router.patch("/threads/{thread_id}", response_model=BoardThreadResponse)
 @require_permission("board", "write")
-async def patch_board_thread(thread_id: str, body: BoardThreadPatchRequest, request: Request) -> BoardThreadResponse:
+async def patch_board_thread(thread_id: ThreadId, body: BoardThreadPatchRequest, request: Request) -> BoardThreadResponse:
     """A direct status write can't reach ``drafted``/``approved``/``replied`` -- those are
     workflow-only (``draft``/``approve``/``reply``), which is what ``send_board_reply``'s
     "latest momo draft" check relies on actually having gone through. Any other status
@@ -239,12 +278,13 @@ async def patch_board_thread(thread_id: str, body: BoardThreadPatchRequest, requ
         raise _not_found()
     if body.status is not None:
         await record_audit_event(request, action="board.thread.status_patch", outcome="success", actor_user_id=user_id, organization_id=resolve_organization_id(), target_type="board_thread", target_id=thread_id)
-    return _to_thread_response(updated)
+    actor_is_owner = await _is_active_org_admin(user_id)
+    return _to_thread_response(updated, actor_is_owner=actor_is_owner)
 
 
 @router.get("/threads/{thread_id}/messages", response_model=BoardMessageListResponse)
 @require_permission("board", "read")
-async def list_board_messages(thread_id: str, request: Request) -> BoardMessageListResponse:
+async def list_board_messages(thread_id: ThreadId, request: Request) -> BoardMessageListResponse:
     board_repo = get_board_repo(request)
     client_repo = get_client_repo(request)
     row = await board_repo.get_thread(thread_id)
@@ -258,7 +298,7 @@ async def list_board_messages(thread_id: str, request: Request) -> BoardMessageL
 
 @router.post("/threads/{thread_id}/messages", response_model=BoardMessageResponse, status_code=201)
 @require_permission("board", "write")
-async def add_board_message(thread_id: str, body: BoardMessageCreateRequest, request: Request) -> BoardMessageResponse:
+async def add_board_message(thread_id: ThreadId, body: BoardMessageCreateRequest, request: Request) -> BoardMessageResponse:
     """``author_kind`` is derived server-side, never taken from the request body.
 
     A caller cannot label their own message ``momo`` (or someone else's
@@ -303,7 +343,7 @@ async def _load_thread_for_actor(board_repo, client_repo, thread_id: str, reques
 
 @router.post("/threads/{thread_id}/draft", response_model=BoardThreadResponse)
 @require_permission("board", "write")
-async def draft_board_reply(thread_id: str, body: BoardDraftRequest, request: Request) -> BoardThreadResponse:
+async def draft_board_reply(thread_id: ThreadId, body: BoardDraftRequest, request: Request) -> BoardThreadResponse:
     """Momo drafts a reply: adds a ``momo``-authored message and moves the thread to ``drafted``.
 
     There is no separate internal "Momo" caller yet, so this endpoint is
@@ -328,12 +368,13 @@ async def draft_board_reply(thread_id: str, body: BoardDraftRequest, request: Re
     if updated is None:
         raise _not_found()
     await record_audit_event(request, action="board.thread.drafted", outcome="success", actor_user_id=user_id, organization_id=resolve_organization_id(), target_type="board_thread", target_id=thread_id)
-    return _to_thread_response(updated)
+    actor_is_owner = await _is_active_org_admin(user_id)
+    return _to_thread_response(updated, actor_is_owner=actor_is_owner)
 
 
 @router.post("/threads/{thread_id}/approve", response_model=BoardThreadResponse)
 @require_permission("board", "write")
-async def approve_board_reply(thread_id: str, request: Request) -> BoardThreadResponse:
+async def approve_board_reply(thread_id: ThreadId, request: Request) -> BoardThreadResponse:
     """Only an org owner/admin may move a drafted reply to ``approved``."""
     board_repo = get_board_repo(request)
     client_repo = get_client_repo(request)
@@ -350,12 +391,12 @@ async def approve_board_reply(thread_id: str, request: Request) -> BoardThreadRe
     if updated is None:
         raise _not_found()
     await record_audit_event(request, action="board.thread.approved", outcome="success", actor_user_id=user_id, organization_id=resolve_organization_id(), target_type="board_thread", target_id=thread_id)
-    return _to_thread_response(updated)
+    return _to_thread_response(updated, actor_is_owner=actor_is_owner)
 
 
 @router.post("/threads/{thread_id}/reply", response_model=BoardThreadResponse)
 @require_permission("board", "write")
-async def send_board_reply(thread_id: str, body: BoardReplyRequest, request: Request) -> BoardThreadResponse:
+async def send_board_reply(thread_id: ThreadId, body: BoardReplyRequest, request: Request) -> BoardThreadResponse:
     """``replied`` needs its own explicit owner action, separate from ``approve``.
 
     The sent body must match the approved draft verbatim -- an owner's approval
@@ -386,4 +427,4 @@ async def send_board_reply(thread_id: str, body: BoardReplyRequest, request: Req
     if updated is None:
         raise _not_found()
     await record_audit_event(request, action="board.thread.replied", outcome="success", actor_user_id=user_id, organization_id=resolve_organization_id(), target_type="board_thread", target_id=thread_id)
-    return _to_thread_response(updated)
+    return _to_thread_response(updated, actor_is_owner=actor_is_owner)

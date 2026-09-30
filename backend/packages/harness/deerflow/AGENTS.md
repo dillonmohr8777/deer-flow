@@ -27,6 +27,21 @@ Accepted divergence: a crash-recovered scheduled launch reuses its run via the i
 
 Tests: the `tests/test_trace_*` and `tests/test_worker_trace_binding.py` suites, `test_gateway_services.py`, `test_run_metadata_secret_safety.py`, plus the Langfuse suites in `tracing/AGENTS.md`.
 
+### Agent-seat weekly scorecards (`exec_seats/scorecard.py`)
+
+`Generate` returns `None` for an inconclusive model/configuration failure and a
+string for a completed evaluation (an empty/whitespace string is an evaluated
+miss). Preserve that distinction; collapsing both to `None` would erase genuine
+misses, while treating both as misses penalizes employees for provider outages.
+Usage-read errors and absent/failed `#exec` delivery are also inconclusive. They
+must leave `missed_scorecards`, status and `last_scorecard_at` unchanged in the
+real repository. A confirmed scorecard post resets the streak; a confirmed blank
+scorecard miss notice advances it and, at two, reopens the seat. The supplemental
+reopen notice is best-effort after that evaluated miss. Production sweeps remain
+default-disabled and org-scoped. Test these boundaries offline in
+`test_agent_seat_scorecard.py` and `test_seat_scorecard_enforcement.py`; never use
+a provider call or production database to validate them.
+
 ### Managed Lark CLI credentials (`integrations/lark_cli.py`)
 
 Installed `lark-shared` guidance points to Capability Center > Plugins > Lark
@@ -49,6 +64,19 @@ storage and transfer cost bounded relative to lossless PNG. The explicit
 artifact. New automatic capture entry points must reuse the shared progress
 encoding definition in `tools.py` so the byte encoding and `.jpg` suffix cannot
 drift.
+
+`browserbase_qa.py` is a manually invoked public-page QA adapter, not an enabled
+agent tool or a replacement for the process-local browser manager. It uses the
+existing optional browser extra and Browserbase's HTTP/CDP API. Keep exact-host
+admission, public-DNS checks, GET/HEAD-only routing, redirect rejection, retained
+body/request/screenshot caps, default usage gate, no model calls and owned-session
+release. Browserbase `allowedDomains` guards only main-frame navigation (and
+allows subdomains), so it cannot replace the stricter local request guard. No
+authenticated/persistent contexts, CAPTCHA solving, proxies or provider logging.
+Never log response bodies or credential-bearing connect URLs; raw Playwright
+errors may contain them. `test_browserbase_qa.py` must remain offline and test
+budget denial, sanitized errors and release after failed capture. Receipts stay
+outside Git; no scheduler/config activation is part of this adapter.
 
 ### Embedded Client (`packages/harness/deerflow/client.py`)
 

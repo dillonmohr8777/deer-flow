@@ -3,8 +3,8 @@ import { expect, test } from "@playwright/test";
 /**
  * Layer 2 (cross-stack contract): reproduces upstream issue #3352 — after the
  * checkpoint no longer holds the older messages (post context-compression), the
- * frontend rebuilds thread history from the per-run endpoints, and the order it
- * rebuilds them in must stay chronological.
+ * frontend rebuilds thread history from durable events, and their visible order
+ * must stay chronological.
  *
  * The dangerous class this guards: a BACKEND change to run ordering silently
  * breaks a FRONTEND assumption. Backend `list_by_thread` returns runs
@@ -14,9 +14,10 @@ import { expect, test } from "@playwright/test";
  * frontend regression unit test hardcodes "backend returns newest-first" in a
  * mock — so only a real frontend against a real backend catches the desync.
  *
- * This drives the REAL frontend against a REAL gateway with two seeded runs and
- * NO checkpoint (the seeder forces the per-run reload path to be the sole source
- * of truth), then asserts the first run's message renders ABOVE the second's.
+ * The current frontend reads canonical thread-global message pages. This drives
+ * the REAL frontend against a REAL gateway with two seeded runs, an owned thread
+ * record and NO checkpoint, then asserts the first run's message renders ABOVE
+ * the second's. The durable event sequence is the sole message source.
  * No model, no recording, no API key — the runs are seeded via a test-only
  * endpoint mounted only on the replay gateway.
  */
@@ -51,7 +52,8 @@ test.describe("multi-run thread renders chronologically (replay, no API key)", (
 
     // Seed two runs in one thread: run-1 (ALPHA) older, run-2 (OMEGA) newer, so
     // the real backend's list_by_thread returns them newest-first. No checkpoint
-    // is seeded — that is the #3352 precondition.
+    // is seeded — that is the #3352 precondition. The native owned thread
+    // record must still exist so the normal history authorization gate holds.
     const seed = await context.request.post(`${APP}/api/test-only/seed-runs`, {
       headers: { "X-CSRF-Token": csrf! },
       data: {
@@ -78,7 +80,14 @@ test.describe("multi-run thread renders chronologically (replay, no API key)", (
     });
     expect(seed.status(), await seed.text()).toBe(200);
 
-    // Load the thread fresh — triggers useThreadHistory's per-run reload path.
+    const checkpoints = await context.request.post(
+      `${APP}/api/langgraph/threads/${threadId}/history`,
+      { headers: { "X-CSRF-Token": csrf! }, data: { limit: 10 } },
+    );
+    expect(checkpoints.status(), await checkpoints.text()).toBe(200);
+    await expect(checkpoints.json()).resolves.toEqual([]);
+
+    // Load fresh — useThreadHistory rebuilds from canonical event pages.
     await page.goto(`/workspace/chats/${threadId}`);
 
     const alpha = page.getByText(ALPHA, { exact: false });

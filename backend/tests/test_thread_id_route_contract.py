@@ -71,6 +71,7 @@ def _collect_thread_id_routes():
     """Import every gateway router and collect (method, full_path) with {thread_id}."""
     from app.gateway.routers import (
         artifacts,
+        board,
         browser,
         feedback,
         mcp_tasks,
@@ -87,6 +88,7 @@ def _collect_thread_id_routes():
 
     routers = [
         artifacts,
+        board,
         browser,
         feedback,
         mcp_tasks,
