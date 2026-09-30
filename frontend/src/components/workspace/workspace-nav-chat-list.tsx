@@ -11,6 +11,7 @@ import {
   LampDesk,
   Network,
   Newspaper,
+  Radio,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -58,6 +59,22 @@ export function WorkspaceNavChatList() {
               <Link className="text-muted-foreground" href="/workspace/desk">
                 <LampDesk />
                 <span>Desk</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        )}
+        {deskEnabled && (
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              isActive={pathname.startsWith("/workspace/desk/agent-room")}
+              asChild
+            >
+              <Link
+                className="text-muted-foreground"
+                href="/workspace/desk/agent-room"
+              >
+                <Radio />
+                <span>Agent Room</span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>

@@ -2,6 +2,11 @@
 
 Backend tests must preserve the runtime invariants they exercise without changing production execution topology.
 
+Replay-only seeded history requires a native thread record under the actual
+request owner and no checkpoint. Preserve the production history ownership gate,
+canonical event sequence and exact auth-disabled response comparison. The seeder
+must remain absent from ordinary Gateway assembly.
+
 ## Shared sandbox search contracts
 
 `test_sandbox_search_contract.py` runs shared `ls`/`glob`/`grep` scenarios through

@@ -22,6 +22,7 @@ def _app_with_config(
     scope_selection_enabled: bool = False,
     knowledge_search_provider: str | None = None,
     private_workspace_enabled: bool = False,
+    system_role: str | None = None,
 ) -> FastAPI:
     app = FastAPI()
     app.state.mcp_tasks_available = mcp_tasks_available
@@ -48,6 +49,13 @@ def _app_with_config(
     search_tool = SimpleNamespace(use=knowledge_search_provider) if knowledge_search_provider is not None else None
     fake_config.get_tool_config = lambda name: search_tool if name == "knowledge_search" else None
     app.dependency_overrides[get_config] = lambda: fake_config
+    if system_role is not None:
+
+        @app.middleware("http")
+        async def authenticated_actor(request, call_next):
+            request.state.user = SimpleNamespace(id="synthetic-actor", system_role=system_role)
+            return await call_next(request)
+
     return app
 
 
@@ -224,9 +232,11 @@ def test_features_reports_browser_control_disabled_for_unguarded_cdp() -> None:
     assert response.json()["browser_control"] == {"enabled": False}
 
 
-def test_features_reports_desk_only_for_a_private_workspace() -> None:
-    with TestClient(_app_with_config(agents_api_enabled=True, private_workspace_enabled=True)) as client:
+def test_features_reports_desk_only_for_a_private_workspace_admin() -> None:
+    with TestClient(_app_with_config(agents_api_enabled=True, private_workspace_enabled=True, system_role="admin")) as client:
         assert client.get("/api/features").json()["desk"] == {"enabled": True}
+    with TestClient(_app_with_config(agents_api_enabled=True, private_workspace_enabled=True, system_role="user")) as client:
+        assert client.get("/api/features").json()["desk"] == {"enabled": False}
     with TestClient(_app_with_config(agents_api_enabled=True)) as client:
         assert client.get("/api/features").json()["desk"] == {"enabled": False}
 

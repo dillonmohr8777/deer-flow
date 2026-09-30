@@ -1,6 +1,17 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Request } from "@playwright/test";
 
 import { mockLangGraphAPI, MOCK_THREAD_ID } from "./utils/mock-api";
+
+// The first-sign-in chooser and durable preference sync deliberately read the
+// same endpoint. Verify both request identities instead of conflating them.
+function isPreferenceSyncRead(request: Request, userId: string) {
+  expect(request.method()).toBe("GET");
+  expect(request.headers()["x-expected-user-id"]).toBe(userId);
+  const contentType = request.headers()["content-type"];
+  if (contentType === undefined) return false;
+  expect(contentType).toBe("application/json");
+  return true;
+}
 
 for (const agent of [false, true]) {
   for (const field of ["effort", "mode"] as const) {
@@ -57,11 +68,13 @@ for (const agent of [false, true]) {
       );
       const patches: unknown[] = [];
       let reads = 0;
+      let chooserReads = 0;
       let server = {
         model_name: "account-model",
         mode: "pro",
         reasoning_effort: "medium",
         notification_enabled: true,
+        experience_mode: "medium",
       };
       await page.route("**/api/v1/auth/preferences", async (route) => {
         if (route.request().method() === "PATCH") {
@@ -72,7 +85,14 @@ for (const agent of [false, true]) {
           server = { ...server, ...patch };
           await route.fulfill({ status: 204 });
         } else {
-          reads++;
+          if (
+            isPreferenceSyncRead(
+              route.request(),
+              "00000000-0000-0000-0000-000000000028",
+            )
+          )
+            reads++;
+          else chooserReads++;
           await route.fulfill({ json: server });
         }
       });
@@ -88,6 +108,7 @@ for (const agent of [false, true]) {
         document.dispatchEvent(new Event("visibilitychange")),
       );
       await expect.poll(() => reads).toBe(1);
+      await expect.poll(() => chooserReads).toBe(1);
       await expect(
         page.getByRole("button", { name: "Thread Model", exact: true }),
       ).toBeVisible();
@@ -136,6 +157,7 @@ test("custom agent automatic default does not become an account preference", asy
   });
   const patches: unknown[] = [];
   let reads = 0;
+  let chooserReads = 0;
   let allowModels!: () => void;
   const modelsReady = new Promise<void>((resolve) => {
     allowModels = resolve;
@@ -188,13 +210,21 @@ test("custom agent automatic default does not become an account preference", asy
       patches.push(route.request().postDataJSON());
       await route.fulfill({ status: 204 });
     } else {
-      reads++;
+      if (
+        isPreferenceSyncRead(
+          route.request(),
+          "00000000-0000-0000-0000-000000000027",
+        )
+      )
+        reads++;
+      else chooserReads++;
       await route.fulfill({
         json: {
           model_name: null,
           mode: null,
           reasoning_effort: null,
           notification_enabled: true,
+          experience_mode: "medium",
         },
       });
     }
@@ -209,6 +239,7 @@ test("custom agent automatic default does not become an account preference", asy
     document.dispatchEvent(new Event("visibilitychange")),
   );
   await expect.poll(() => reads).toBe(1);
+  await expect.poll(() => chooserReads).toBe(1);
   allowModels();
   await expect(
     page.getByRole("button", { name: "Agent Model", exact: true }),
@@ -217,12 +248,11 @@ test("custom agent automatic default does not become an account preference", asy
   // catches a PATCH that would otherwise arrive just after the UI assertion.
   await page.evaluate(() => window.dispatchEvent(new Event("focus")));
   await expect.poll(() => reads).toBe(2);
+  expect(chooserReads).toBe(1);
   expect(patches).toEqual([]);
   // Explicit model selections on this same page must still be synchronized.
   await page.getByRole("button", { name: "Agent Model", exact: true }).click();
-  await page
-    .getByRole("button", { name: "First Model (first-model)", exact: true })
-    .click();
+  await page.getByRole("button", { name: "First Model", exact: true }).click();
   await expect.poll(() => patches).toEqual([{ model_name: "first-model" }]);
 });
 
@@ -232,6 +262,8 @@ test("automatic model fallback cannot overwrite a slowly loaded account preferen
   mockLangGraphAPI(page);
   const patches: unknown[] = [];
   let requested = false;
+  let syncReads = 0;
+  let chooserReads = 0;
   let release!: () => void;
   const delayed = new Promise<void>((resolve) => {
     release = resolve;
@@ -262,6 +294,14 @@ test("automatic model fallback cannot overwrite a slowly loaded account preferen
       await route.fulfill({ status: 204 });
       return;
     }
+    if (
+      isPreferenceSyncRead(
+        route.request(),
+        "00000000-0000-0000-0000-000000000026",
+      )
+    )
+      syncReads++;
+    else chooserReads++;
     requested = true;
     await delayed;
     await route.fulfill({
@@ -270,6 +310,7 @@ test("automatic model fallback cannot overwrite a slowly loaded account preferen
         mode: "pro",
         reasoning_effort: "high",
         notification_enabled: true,
+        experience_mode: "medium",
       },
     });
   });
@@ -285,6 +326,8 @@ test("automatic model fallback cannot overwrite a slowly loaded account preferen
     document.dispatchEvent(new Event("visibilitychange")),
   );
   await expect.poll(() => requested).toBe(true);
+  await expect.poll(() => syncReads).toBe(1);
+  await expect.poll(() => chooserReads).toBe(1);
   await expect(
     page.getByRole("button", { name: "Model A", exact: true }),
   ).toBeVisible();

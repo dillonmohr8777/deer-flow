@@ -1,5 +1,21 @@
 ### Schema Migrations (`packages/harness/deerflow/persistence/migrations/`)
 
+The private standby shipped `0040_agent_room_messages` directly after
+`0039_team_board_academy`; the lane independently shipped `0040_agent_seats`
+after the same parent and continues through `0046_organization_entitlements`.
+Keep both historical parent edges intact. `0047_merge_agent_room_exec` is the
+single no-DDL merge head joining the two histories; Alembic must execute the
+missing branch on upgrade from either side. Never repair this by stamping,
+resetting, or reparenting the shipped room revision. The original room table
+and its owner-scoped handoffs must survive. Tests live in
+`tests/test_agent_room_migration_bridge.py` and run the actual bootstrap from
+0039, deployed room0040, lane0046, and an empty database. A future PR such as
+the still-unmerged board approval migration must join the resulting graph
+deliberately rather than creating a second head. Rollback to an old image
+requires its verified pre-upgrade database snapshot after all writers are
+quiet; do not mistake this merge revision's no-op downgrade for proof that
+an arbitrary cross-branch downgrade preserves data.
+
 Organization backfill must distinguish a NULL optional run reference from a non-NULL reference whose run is missing. Missing referenced runs remain quarantined for both batches and MCP tasks. The deployed September 20 upgrade was audited to contain zero such rows before applying this correction to future backfills.
 
 DeerFlow's application tables (`runs`, `threads_meta`, `feedback`, `users`, `run_events`, plus the four `channel_*` tables) are owned by alembic via a **hybrid bootstrap** strategy. LangGraph's checkpointer tables (`checkpoints`, `checkpoint_blobs`, `checkpoint_writes`, `checkpoint_migrations`) live in the same database but are owned by LangGraph and excluded from alembic's view via `migrations/_env_filters.py::include_object`.

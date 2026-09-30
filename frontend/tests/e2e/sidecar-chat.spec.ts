@@ -1,4 +1,12 @@
-import { expect, test, type Page, type Route } from "@playwright/test";
+import { writeFile } from "node:fs/promises";
+
+import {
+  expect,
+  test,
+  type Page,
+  type Route,
+  type TestInfo,
+} from "@playwright/test";
 
 import {
   mockLangGraphAPI,
@@ -131,7 +139,7 @@ async function expectSidecarSelectionToolbarActions(page: Page, text: string) {
   throw lastError;
 }
 
-async function expectComposerHeightsEqual(page: Page) {
+async function expectComposerGeometryWithDisclaimerReserve(page: Page) {
   const metrics = await page.evaluate(() => {
     const findFormByPlaceholder = (pattern: RegExp) => {
       const textarea = Array.from(document.querySelectorAll("textarea")).find(
@@ -142,9 +150,30 @@ async function expectComposerHeightsEqual(page: Page) {
         return null;
       }
       const box = form.getBoundingClientRect();
+      // The disclaimer is a sibling of the main form inside InputBox.
+      const composer = form.parentElement;
+      const disclaimer = composer
+        ? Array.from(composer.querySelectorAll("p")).find(
+            (element) =>
+              element.textContent ===
+              "Agents can make mistakes. Check the record.",
+          )
+        : undefined;
+      const disclaimerBox = disclaimer?.getBoundingClientRect();
+      const mainFooter = composer?.parentElement?.parentElement;
       return {
         height: Math.round(box.height),
         bottomGap: Math.round(window.innerHeight - box.bottom),
+        bottom: box.bottom,
+        viewportBottom: window.innerHeight,
+        footerBottom: mainFooter?.getBoundingClientRect().bottom,
+        disclaimer: disclaimerBox
+          ? {
+              top: disclaimerBox.top,
+              bottom: disclaimerBox.bottom,
+              height: disclaimerBox.height,
+            }
+          : null,
       };
     };
 
@@ -159,12 +188,29 @@ async function expectComposerHeightsEqual(page: Page) {
   expect(metrics.main).not.toBeNull();
   expect(metrics.sidecar).not.toBeNull();
   expect(metrics.sidecar?.height).toBe(metrics.main?.height);
-  expect(metrics.sidecar?.bottomGap).toBe(metrics.main?.bottomGap);
+  // The main footer reserves 28px for its disclaimer; the side chat's 16px
+  // footer has no disclaimer. The forms themselves remain equally tall.
+  expect(metrics.main?.bottomGap).toBe(28);
+  expect(metrics.sidecar?.bottomGap).toBe(16);
+  expect(metrics.main?.disclaimer).not.toBeNull();
+  expect(metrics.main?.disclaimer?.top).toBeGreaterThanOrEqual(
+    metrics.main!.bottom,
+  );
+  expect(metrics.main?.disclaimer?.height).toBeGreaterThan(0);
+  expect(metrics.main?.disclaimer?.bottom).toBeLessThanOrEqual(
+    metrics.main!.viewportBottom,
+  );
+  expect(metrics.main?.disclaimer?.bottom).toBeLessThanOrEqual(
+    metrics.main!.footerBottom!,
+  );
 }
 
 async function expectSidecarModelPinnedToSubmit(page: Page) {
   const metrics = await page.evaluate(() => {
-    const getComposerMetrics = (placeholderPattern: RegExp) => {
+    const getComposerMetrics = (
+      placeholderPattern: RegExp,
+      submitLabel: "Send" | "Submit",
+    ) => {
       const textarea = Array.from(document.querySelectorAll("textarea")).find(
         (element) =>
           placeholderPattern.test(element.getAttribute("placeholder") ?? ""),
@@ -188,7 +234,7 @@ async function expectSidecarModelPinnedToSubmit(page: Page) {
       const model = buttons.find(
         (button) => button.label === "DeepSeek V4 Pro",
       );
-      const submit = buttons.find((button) => button.label === "Submit");
+      const submit = buttons.find((button) => button.label === submitLabel);
 
       return {
         formLeft: Math.round(formBox.left),
@@ -208,8 +254,9 @@ async function expectSidecarModelPinnedToSubmit(page: Page) {
     return {
       main: getComposerMetrics(
         /describe the job|reply, or give the next step/i,
+        "Send",
       ),
-      sidecar: getComposerMetrics(/deeper follow-up/i),
+      sidecar: getComposerMetrics(/deeper follow-up/i, "Submit"),
     };
   });
 
@@ -233,6 +280,8 @@ async function expectSidecarModelPinnedToSubmit(page: Page) {
     throw new Error("Unable to measure composer model and submit controls.");
   }
 
+  expect(mainSubmit.label).toBe("Send");
+  expect(sidecarSubmit.label).toBe("Submit");
   expect(sidecarModel.left).toBeGreaterThan(sidecarMode.right);
   expect(sidecar.gap).toBe(main.gap);
   expect(sidecarModel.left).toBeGreaterThanOrEqual(sidecar.formLeft);
@@ -326,12 +375,122 @@ async function expectSidecarScrollDoesNotAnimateAfterOpen(page: Page) {
   expect(secondScrollTop).toBe(firstScrollTop);
 }
 
-async function openSidecarAndExpectNoAnimatedScroll(page: Page) {
+type SidecarDiagnosticsWindow = Window & {
+  __sidecarScrollDiagnostics?: {
+    samples: Record<string, unknown>[];
+    samplesSeen: number;
+    truncated: boolean;
+  };
+  __sidecarRecordDiagnostics?: (event: string) => void;
+  __sidecarCleanupDiagnostics?: () => void;
+};
+
+type SidecarTransitionSample = {
+  event: string;
+  timeMs: number;
+  transitionRunning: boolean;
+  transitionTimeMs: number | null;
+  pinnedWidth: string;
+  contentWidth: number | null;
+  scrollHeight: number | null;
+  clientHeight: number | null;
+  scrollTop: number | null;
+};
+
+type SidecarTransitionWindow = Window & {
+  __sidecarTransitionProbe?: {
+    samples: SidecarTransitionSample[];
+    observedFrames: number;
+    truncated: boolean;
+    transitionEndCount: number;
+    transitionCancelCount: number;
+  };
+  __readSidecarTransition?: () => SidecarTransitionSample;
+  __stopSidecarTransitionProbe?: () => void;
+};
+
+async function openSidecarAndExpectNoAnimatedScroll(
+  page: Page,
+  testInfo: TestInfo,
+  opening: "initial" | "reopen",
+) {
   await page.evaluate(() => {
-    const targetWindow = window as Window & {
+    const targetWindow = window as SidecarDiagnosticsWindow & {
       __sidecarScrollTops?: number[];
       __sidecarScrollListener?: (event: Event) => void;
     };
+    targetWindow.__sidecarCleanupDiagnostics?.();
+    targetWindow.__sidecarScrollDiagnostics = {
+      samples: [],
+      samplesSeen: 0,
+      truncated: false,
+    };
+    const rect = (element: Element | null | undefined) => {
+      if (!element) return null;
+      const { x, y, width, height } = element.getBoundingClientRect();
+      return { x, y, width, height };
+    };
+    targetWindow.__sidecarRecordDiagnostics = (event) => {
+      const diagnostics = targetWindow.__sidecarScrollDiagnostics!;
+      diagnostics.samplesSeen += 1;
+      if (diagnostics.samples.length >= 128) {
+        diagnostics.truncated = true;
+        return;
+      }
+      const root = document.querySelector(
+        '[data-testid="sidecar-message-list"]',
+      );
+      const scroll = root?.firstElementChild;
+      const panel = document.querySelector('[data-testid="sidecar-panel"]');
+      diagnostics.samples.push({
+        event,
+        timeMs: performance.now(),
+        scrollTop: scroll?.scrollTop ?? null,
+        scrollHeight: scroll?.scrollHeight ?? null,
+        clientHeight: scroll?.clientHeight ?? null,
+        clientWidth: scroll?.clientWidth ?? null,
+        scrollRect: rect(scroll),
+        contentRect: rect(scroll?.firstElementChild),
+        panelRect: rect(panel),
+        shellRect: rect(panel?.parentElement),
+        shellTransform: panel?.parentElement
+          ? getComputedStyle(panel.parentElement).transform
+          : null,
+        fontStatus: document.fonts.status,
+        viewport: { width: innerWidth, height: innerHeight },
+        devicePixelRatio,
+      });
+    };
+    const resizeObserver = new ResizeObserver(() =>
+      targetWindow.__sidecarRecordDiagnostics?.("resize"),
+    );
+    const observed = new WeakSet<Element>();
+    const observeGeometry = () => {
+      const root = document.querySelector(
+        '[data-testid="sidecar-message-list"]',
+      );
+      const scroll = root?.firstElementChild;
+      const panel = document.querySelector('[data-testid="sidecar-panel"]');
+      for (const element of [
+        scroll,
+        scroll?.firstElementChild,
+        panel,
+        panel?.parentElement,
+      ]) {
+        if (element && !observed.has(element)) {
+          observed.add(element);
+          resizeObserver.observe(element);
+        }
+      }
+    };
+    const mutationObserver = new MutationObserver(observeGeometry);
+    mutationObserver.observe(document.body, { childList: true, subtree: true });
+    observeGeometry();
+    targetWindow.__sidecarCleanupDiagnostics = () => {
+      resizeObserver.disconnect();
+      mutationObserver.disconnect();
+    };
+    targetWindow.__sidecarRecordDiagnostics("before-open");
     if (targetWindow.__sidecarScrollListener) {
       document.removeEventListener(
         "scroll",
@@ -348,6 +507,7 @@ async function openSidecarAndExpectNoAnimatedScroll(page: Page) {
         target.parentElement?.matches('[data-testid="sidecar-message-list"]')
       ) {
         targetWindow.__sidecarScrollTops?.push(Math.round(target.scrollTop));
+        targetWindow.__sidecarRecordDiagnostics?.("scroll");
       }
     };
     document.addEventListener(
@@ -362,7 +522,7 @@ async function openSidecarAndExpectNoAnimatedScroll(page: Page) {
   for (let index = 0; index < 20; index += 1) {
     await page.waitForTimeout(25);
     await page.evaluate(() => {
-      const targetWindow = window as Window & {
+      const targetWindow = window as SidecarDiagnosticsWindow & {
         __sidecarPanelTransforms?: string[];
       };
       const panel = document.querySelector('[data-testid="sidecar-panel"]');
@@ -372,29 +532,54 @@ async function openSidecarAndExpectNoAnimatedScroll(page: Page) {
           window.getComputedStyle(shell).transform,
         );
       }
+      targetWindow.__sidecarRecordDiagnostics?.("panel-sample");
     });
   }
 
-  const { distinctScrollTops, panelTransforms } = await page.evaluate(() => {
-    const targetWindow = window as Window & {
-      __sidecarScrollTops?: number[];
-      __sidecarScrollListener?: (event: Event) => void;
-      __sidecarPanelTransforms?: string[];
-    };
-    if (targetWindow.__sidecarScrollListener) {
-      document.removeEventListener(
-        "scroll",
-        targetWindow.__sidecarScrollListener,
-        true,
-      );
-      targetWindow.__sidecarScrollListener = undefined;
-    }
-    return {
-      distinctScrollTops: Array.from(
-        new Set(targetWindow.__sidecarScrollTops ?? []),
-      ),
-      panelTransforms: targetWindow.__sidecarPanelTransforms ?? [],
-    };
+  const { distinctScrollTops, panelTransforms, scrollDiagnostics } =
+    await page.evaluate(() => {
+      const targetWindow = window as SidecarDiagnosticsWindow & {
+        __sidecarScrollTops?: number[];
+        __sidecarScrollListener?: (event: Event) => void;
+        __sidecarPanelTransforms?: string[];
+      };
+      if (targetWindow.__sidecarScrollListener) {
+        document.removeEventListener(
+          "scroll",
+          targetWindow.__sidecarScrollListener,
+          true,
+        );
+        targetWindow.__sidecarScrollListener = undefined;
+      }
+      targetWindow.__sidecarCleanupDiagnostics?.();
+      targetWindow.__sidecarRecordDiagnostics?.("after-listener-removal");
+      targetWindow.__sidecarCleanupDiagnostics = undefined;
+      targetWindow.__sidecarRecordDiagnostics = undefined;
+      return {
+        distinctScrollTops: Array.from(
+          new Set(targetWindow.__sidecarScrollTops ?? []),
+        ),
+        panelTransforms: targetWindow.__sidecarPanelTransforms ?? [],
+        scrollDiagnostics: targetWindow.__sidecarScrollDiagnostics,
+      };
+    });
+
+  const diagnosticPath = testInfo.outputPath(
+    `sidecar-${opening}-scroll-diagnostics.json`,
+  );
+  await writeFile(
+    diagnosticPath,
+    JSON.stringify({
+      opening,
+      distinctScrollTopCount: distinctScrollTops.length,
+      distinctScrollTops: distinctScrollTops.slice(0, 128),
+      panelTransforms,
+      ...scrollDiagnostics,
+    }),
+  );
+  await testInfo.attach(`sidecar-${opening}-scroll-diagnostics`, {
+    path: diagnosticPath,
+    contentType: "application/json",
   });
 
   expect(distinctScrollTops.length).toBeLessThanOrEqual(1);
@@ -869,7 +1054,7 @@ test.describe("Side chat", () => {
       "Add to conversation",
     );
     await expect(quoteAttachment).toContainText("1 selected text fragment");
-    await expectComposerHeightsEqual(page);
+    await expectComposerGeometryWithDisclaimerReserve(page);
     await quoteAttachment
       .getByRole("button", { name: /clear selected references/i })
       .click();
@@ -963,7 +1148,7 @@ test.describe("Side chat", () => {
 
     await expect(sidecarInput).toHaveValue("");
     await expect(sidecarReference).toBeHidden();
-    await expectComposerHeightsEqual(page);
+    await expectComposerGeometryWithDisclaimerReserve(page);
     await expect(page.getByTestId("sidecar-header-trigger")).toBeVisible();
 
     // Hiding the side chat is owned by the header trigger; the panel's own
@@ -1146,7 +1331,7 @@ test.describe("Side chat", () => {
 
   test("opens restored side chat history without animated scroll", async ({
     page,
-  }) => {
+  }, testInfo) => {
     const tallSidecarMessages = Array.from({ length: 12 }).flatMap(
       (_, index) => [
         {
@@ -1212,12 +1397,322 @@ test.describe("Side chat", () => {
       timeout: 10_000,
     });
 
-    await openSidecarAndExpectNoAnimatedScroll(page);
+    await openSidecarAndExpectNoAnimatedScroll(page, testInfo, "initial");
     await expectSidecarScrollDoesNotAnimateAfterOpen(page);
     await page.getByTestId("sidecar-header-trigger").click();
     await expect(page.getByTestId("sidecar-panel")).toBeHidden();
     await page.waitForTimeout(350);
-    await openSidecarAndExpectNoAnimatedScroll(page);
+    await openSidecarAndExpectNoAnimatedScroll(page, testInfo, "reopen");
+  });
+
+  test("keeps restored side chat content stable until a delayed desktop transition finishes", async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    const messages = Array.from({ length: 12 }).flatMap((_, index) => [
+      {
+        type: "human",
+        id: `side-human-${index}`,
+        content: [{ type: "text", text: `Follow-up ${index + 1}` }],
+      },
+      {
+        type: "ai",
+        id: `side-ai-${index}`,
+        content: [
+          `Restored side answer ${index + 1}.`,
+          "This paragraph gives the side chat enough height to require scrolling.",
+          "Opening the panel should reveal the existing history without a visible scroll animation.",
+        ].join(" "),
+      },
+    ]);
+    mockLangGraphAPI(page, {
+      threads: [
+        {
+          thread_id: MOCK_THREAD_ID,
+          title: "Main conversation",
+          messages: [
+            {
+              type: "human",
+              id: "parent-human-1",
+              content: [{ type: "text", text: "Plan the feature." }],
+            },
+            {
+              type: "ai",
+              id: "parent-ai-1",
+              content: "Build it as a side conversation.",
+            },
+          ],
+        },
+        {
+          thread_id: MOCK_SIDECAR_THREAD_ID,
+          title: "Restored side chat",
+          updated_at: "2025-01-01T00:00:01Z",
+          metadata: {
+            deerflow_sidecar: true,
+            parent_thread_id: MOCK_THREAD_ID,
+            sidecar_context_type: "referenced_message",
+            sidecar_context_label: "Selected assistant text #2",
+            sidecar_context_count: 1,
+            referenced_message_id: "parent-ai-1",
+            referenced_message_ids: ["parent-ai-1"],
+            referenced_message_role: "assistant",
+            referenced_message_roles: ["assistant"],
+          },
+          messages,
+        },
+      ],
+    });
+    await page.goto(`/workspace/chats/${MOCK_THREAD_ID}`);
+    const trigger = page.getByTestId("sidecar-header-trigger");
+    await expect(trigger).toBeVisible();
+    await trigger.click();
+    await expect(page.getByTestId("sidecar-message-list")).toBeVisible();
+    await page.waitForFunction(() => {
+      const scroll = document.querySelector(
+        '[data-testid="sidecar-message-list"]',
+      )?.firstElementChild;
+      const wrapper = document.querySelector("#artifacts")?.firstElementChild;
+      const panel = document
+        .querySelector("#artifacts")
+        ?.closest("[data-panel]");
+      return (
+        scroll instanceof HTMLElement &&
+        wrapper instanceof HTMLElement &&
+        panel instanceof HTMLElement &&
+        wrapper.style.width === "" &&
+        !panel
+          .getAnimations()
+          .some((animation) => animation.playState === "running") &&
+        scroll.scrollHeight > scroll.clientHeight &&
+        Math.abs(
+          scroll.scrollHeight - scroll.clientHeight - scroll.scrollTop,
+        ) <= 1
+      );
+    });
+    const baseline = await page.evaluate(() => {
+      const scroll = document.querySelector(
+        '[data-testid="sidecar-message-list"]',
+      )!.firstElementChild!;
+      const content = scroll.firstElementChild!;
+      const panel = document
+        .querySelector("#artifacts")!
+        .closest("[data-panel]")!;
+      return {
+        contentWidth: content.getBoundingClientRect().width,
+        scrollHeight: scroll.scrollHeight,
+        scrollTop: scroll.scrollTop,
+        selector: `#${CSS.escape(panel.parentElement!.id)} > [data-panel]`,
+      };
+    });
+    await trigger.click();
+    await expect(page.getByTestId("sidecar-panel")).toBeHidden();
+    await page.waitForFunction(() => {
+      const panel = document
+        .querySelector("#artifacts")
+        ?.closest("[data-panel]");
+      return (
+        panel instanceof HTMLElement &&
+        panel.getBoundingClientRect().width < 1 &&
+        !panel
+          .getAnimations()
+          .some((animation) => animation.playState === "running")
+      );
+    });
+    // Extend only this desktop group's transition; no app timers or scroll code
+    // are changed. The browser's actual transition completion is the boundary.
+    await page.addStyleTag({
+      content: `@media (min-width: 768px) { ${baseline.selector} { transition-duration: 900ms !important; } }`,
+    });
+    expect(
+      await page.evaluate(
+        () =>
+          getComputedStyle(
+            document.querySelector("#artifacts")!.closest("[data-panel]")!,
+          ).transitionDuration,
+      ),
+    ).toBe("0.9s");
+    await page.evaluate(() => {
+      const target = window as SidecarTransitionWindow;
+      const panel = document
+        .querySelector("#artifacts")!
+        .closest("[data-panel]")!;
+      const probe = {
+        samples: [] as SidecarTransitionSample[],
+        observedFrames: 0,
+        truncated: false,
+        transitionEndCount: 0,
+        transitionCancelCount: 0,
+      };
+      target.__sidecarTransitionProbe = probe;
+      target.__readSidecarTransition = () => {
+        const animation = panel
+          .getAnimations()
+          .find(
+            (candidate) =>
+              candidate instanceof CSSTransition &&
+              candidate.transitionProperty === "flex-grow" &&
+              candidate.playState === "running",
+          );
+        const scroll = document.querySelector(
+          '[data-testid="sidecar-message-list"]',
+        )?.firstElementChild;
+        const wrapper = document.querySelector("#artifacts")?.firstElementChild;
+        return {
+          event: "frame",
+          timeMs: performance.now(),
+          transitionRunning: animation !== undefined,
+          transitionTimeMs:
+            typeof animation?.currentTime === "number"
+              ? animation.currentTime
+              : null,
+          pinnedWidth:
+            wrapper instanceof HTMLElement ? wrapper.style.width : "",
+          contentWidth:
+            scroll?.firstElementChild?.getBoundingClientRect().width ?? null,
+          scrollHeight: scroll?.scrollHeight ?? null,
+          clientHeight: scroll?.clientHeight ?? null,
+          scrollTop: scroll?.scrollTop ?? null,
+        };
+      };
+      let collecting = false;
+      let frame = 0;
+      const record = (event: string) => {
+        const sample = target.__readSidecarTransition!();
+        if (
+          sample.transitionRunning &&
+          sample.scrollTop !== null &&
+          sample.scrollHeight !== null &&
+          sample.clientHeight !== null &&
+          sample.scrollHeight > sample.clientHeight &&
+          Math.abs(
+            sample.scrollHeight - sample.clientHeight - sample.scrollTop,
+          ) <= 1
+        )
+          collecting = true;
+        if (!collecting) return;
+        probe.observedFrames += 1;
+        if (probe.samples.length < 120)
+          probe.samples.push({ ...sample, event });
+        else probe.truncated = true;
+      };
+      const sampleFrame = () => {
+        record("frame");
+        frame = requestAnimationFrame(sampleFrame);
+      };
+      const onEnd = (event: Event) => {
+        if (
+          event instanceof TransitionEvent &&
+          event.target === panel &&
+          event.propertyName === "flex-grow"
+        ) {
+          probe.transitionEndCount += 1;
+          record("transitionend");
+        }
+      };
+      const onCancel = (event: Event) => {
+        if (
+          event instanceof TransitionEvent &&
+          event.target === panel &&
+          event.propertyName === "flex-grow"
+        ) {
+          probe.transitionCancelCount += 1;
+          record("transitioncancel");
+        }
+      };
+      panel.addEventListener("transitionend", onEnd);
+      panel.addEventListener("transitioncancel", onCancel);
+      frame = requestAnimationFrame(sampleFrame);
+      target.__stopSidecarTransitionProbe = () => {
+        cancelAnimationFrame(frame);
+        panel.removeEventListener("transitionend", onEnd);
+        panel.removeEventListener("transitioncancel", onCancel);
+      };
+    });
+    let midpoint: SidecarTransitionSample | undefined;
+    try {
+      await trigger.click();
+      await expect(page.getByTestId("sidecar-message-list")).toBeVisible();
+      await page.waitForFunction(() => {
+        const sample = (window as SidecarTransitionWindow)
+          .__readSidecarTransition!();
+        return (
+          sample.transitionRunning &&
+          sample.transitionTimeMs !== null &&
+          sample.transitionTimeMs >= 450
+        );
+      });
+      midpoint = await page.evaluate(() =>
+        (window as SidecarTransitionWindow).__readSidecarTransition!(),
+      );
+      expect(midpoint.transitionRunning).toBe(true);
+      expect(midpoint.pinnedWidth).not.toBe("");
+      expect(
+        Math.abs(midpoint.contentWidth! - baseline.contentWidth),
+      ).toBeLessThanOrEqual(1);
+      expect(midpoint.scrollHeight).toBe(baseline.scrollHeight);
+      expect(
+        Math.abs(midpoint.scrollTop! - baseline.scrollTop),
+      ).toBeLessThanOrEqual(1);
+      await page.waitForFunction(() => {
+        const target = window as SidecarTransitionWindow;
+        const sample = target.__readSidecarTransition!();
+        return (
+          target.__sidecarTransitionProbe!.transitionEndCount > 0 &&
+          !sample.transitionRunning &&
+          sample.pinnedWidth === ""
+        );
+      });
+      const probe = await page.evaluate(
+        () => (window as SidecarTransitionWindow).__sidecarTransitionProbe!,
+      );
+      const duringTransition = probe.samples.filter(
+        (sample) => sample.transitionRunning,
+      );
+      expect(duringTransition.length).toBeGreaterThan(0);
+      expect(probe.truncated).toBe(false);
+      expect(probe.transitionCancelCount).toBe(0);
+      expect(
+        duringTransition.every((sample) => sample.pinnedWidth !== ""),
+      ).toBe(true);
+      expect(
+        duringTransition.every(
+          (sample) =>
+            Math.abs(sample.contentWidth! - baseline.contentWidth) <= 1,
+        ),
+      ).toBe(true);
+      expect(
+        duringTransition.every(
+          (sample) =>
+            sample.scrollHeight === baseline.scrollHeight &&
+            Math.abs(sample.scrollTop! - baseline.scrollTop) <= 1,
+        ),
+      ).toBe(true);
+      const final = await page.evaluate(() =>
+        (window as SidecarTransitionWindow).__readSidecarTransition!(),
+      );
+      expect(final.pinnedWidth).toBe("");
+      expect(final.transitionRunning).toBe(false);
+      expect(
+        Math.abs(final.contentWidth! - baseline.contentWidth),
+      ).toBeLessThanOrEqual(1);
+      expect(final.scrollHeight).toBe(baseline.scrollHeight);
+      expect(
+        Math.abs(final.scrollTop! - baseline.scrollTop),
+      ).toBeLessThanOrEqual(1);
+    } finally {
+      const probe = await page.evaluate(() => {
+        const target = window as SidecarTransitionWindow;
+        target.__stopSidecarTransitionProbe?.();
+        return target.__sidecarTransitionProbe;
+      });
+      const path = testInfo.outputPath("delayed-sidecar-transition.json");
+      await writeFile(path, JSON.stringify({ baseline, midpoint, probe }));
+      await testInfo.attach("delayed-sidecar-transition", {
+        path,
+        contentType: "application/json",
+      });
+    }
   });
 
   test("self-heals the trigger when the sidecar thread is deleted elsewhere", async ({

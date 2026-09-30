@@ -65,7 +65,7 @@ export function WorkspaceHeader({
       {...props}
     >
       <div className="flex min-w-0 items-center gap-2 px-2 sm:px-4">
-        <SidebarTrigger className="md:hidden" />
+        <SidebarTrigger className="size-11 md:hidden" />
         <Breadcrumb>
           <BreadcrumbList>
             {segments?.[0] && (
