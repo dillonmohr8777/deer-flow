@@ -244,3 +244,17 @@ These apply repo-wide; module guides own the module-specific detail.
   `scripts/verify_versions.sh <ver>` to catch drift early. See [RELEASING.md](RELEASING.md).
 - **Don't edit `CLAUDE.md`** — it only contains `@AGENTS.md`. All agent guidance changes
   belong here in `AGENTS.md`; `CLAUDE.md` is a thin import shim.
+
+## MomoBot app surfaces
+
+The opt-in hosted OpenAI and public Browserbase adapters live in Gateway,
+not the harness. Their private SQLite receipts record ownership and admission,
+not another client registry. Keep provider credentials server-side and paid
+operations idempotent. PWA offline caches contain generic public assets only.
+The separate `desktop/` Electron shell has no native renderer bridge. See
+`docs/MOMOBOT_APP_RELEASE.md` for lifecycle and release checks.
+
+The offline backend suite includes actual isolated framework handoffs. Its CI
+shards install the frozen sibling worker environments and Node builds before
+pytest; preserve the real availability, relay and cleanup assertions. Worker
+installation does not enable paid adapters or change native guard admission.

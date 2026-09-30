@@ -1,0 +1,18 @@
+[project]
+name = "momobot-agno-team"
+version = "0.1.0"
+requires-python = ">=3.12,<3.14"
+dependencies = [
+    "agno[os]==3.0.11",
+    "aiosqlite>=0.22.1",
+    "sqlalchemy[asyncio]>=2.1.1",
+]
+
+[tool.uv]
+package = false
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+]

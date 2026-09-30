@@ -1,0 +1,25 @@
+{
+  "name": "momobot-browser-teams",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "node --test dist/test/*.test.js",
+    "check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ai-sdk/provider": "2.0.3",
+    "@browserbasehq/sdk": "2.16.0",
+    "@browserbasehq/stagehand": "4.1.0",
+    "@mastra/core": "1.72.0",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "24.10.9",
+    "typescript": "5.9.3"
+  }
+}
