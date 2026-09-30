@@ -2386,6 +2386,11 @@ not a deployment receipt. A standby update requires a quiet writer window and a
 verified pre-upgrade backup: the previous image cannot read the new revision, so
 an image-only rollback is insufficient. Do not downgrade or restamp a live DB.
 
+Key-free full-stack replay checks keep normal thread ownership active: seeded
+history has an owned native thread record but no checkpoint, and its browser
+messages must render once each in chronological order. The auth-disabled check
+compares the full current response, including MFA state and registered permissions.
+
 ## Star History
 
 [![Star History Chart](https://star-history.dera.page/svg?repos=bytedance/deer-flow&type=Date)](https://star-history.dera.page/#bytedance/deer-flow&Date)
