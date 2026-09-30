@@ -27,6 +27,7 @@ import {
 } from "@/components/workspace/workspace-container";
 import { useI18n } from "@/core/i18n/hooks";
 import { useProjects } from "@/core/projects";
+import { THREAD_SEARCH_FAILED_FALLBACK } from "@/core/threads/api";
 import {
   dayGroupKey,
   dayGroupStartingAt,
@@ -154,6 +155,7 @@ export default function ChatsPage() {
   // would open the keyboard over the list. Only the first appearance takes
   // focus, so switching tabs later never steals it.
   const searchRef = useRef<HTMLInputElement | null>(null);
+  const recentTabRef = useRef<HTMLButtonElement | null>(null);
   const searchFocused = useRef(false);
   useEffect(() => {
     if (!showSearch || searchFocused.current) return;
@@ -164,7 +166,7 @@ export default function ChatsPage() {
   }, [showSearch]);
   // The server's own reason, unless it is just the generic fallback again.
   const errorDetail =
-    error?.message && !error.message.startsWith(t.chats.loadChatsFailed)
+    error?.message && error.message !== THREAD_SEARCH_FAILED_FALLBACK
       ? error.message
       : undefined;
 
@@ -195,7 +197,9 @@ export default function ChatsPage() {
             </header>
             {!staticWebsite && (
               <TabsList aria-label={t.pages.chats}>
-                <TabsTrigger value="active">{t.chats.activeChats}</TabsTrigger>
+                <TabsTrigger value="active" ref={recentTabRef}>
+                  {t.chats.activeChats}
+                </TabsTrigger>
                 <TabsTrigger value="archived">
                   {t.chats.archivedChats}
                 </TabsTrigger>
@@ -269,7 +273,14 @@ export default function ChatsPage() {
                           variant="outline"
                           size="sm"
                           className="max-sm:min-h-11"
-                          onClick={() => setView("active")}
+                          onClick={() => {
+                            setView("active");
+                            // The clicked button unmounts with the view, so
+                            // focus lands on the tab it switched to.
+                            requestAnimationFrame(() =>
+                              recentTabRef.current?.focus(),
+                            );
+                          }}
                         >
                           {t.chats.backToRecentChats}
                         </Button>
