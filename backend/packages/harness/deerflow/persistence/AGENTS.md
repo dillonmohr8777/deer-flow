@@ -36,3 +36,12 @@ Deployment-global, not shareable: some state is Gateway-wide infrastructure rath
 # Audit log
 
 `audit_events` (migration `0033_audit_events`) is append only: `AuditEventRepository.record()` never raises into the request path, so a logging failure cannot fail the action being audited (log and swallow). Callers pass raw `details`; the repository redacts key-name-matched secrets (password, token, secret, cookie, api_key, authorization, credential, private_key, access_key, client_secret) via `redact_audit_details` before insert, so a caller never needs to pre-scrub its own payload. `list()` takes an optional `organization_id` for tenant-scoped callers; the system-admin `GET /api/admin/audit-events` endpoint passes `None` deliberately, for cross-organization visibility. Router call sites use `app.gateway.deps.record_audit_event(request, ...)` (a one-line no-op when the audit repo or `request.app` is unavailable) and `audit_actor_id(request)` for the acting user id, reading `request.state.user` rather than re-resolving it through `get_current_user_from_request`, which also accepts a bare cookie with no `request.state` set up (several router-level tests use a minimal fake `Request`).
+
+`0048_repair_audit_events` follows `0047_merge_agent_room_exec`. It repairs
+managed databases whose old empty bootstrap stamped head without registering
+`audit_events`: create only the missing 0033-shaped table/four indexes, preserve
+existing audit rows and every other table, and refuse incompatible partial
+shapes, including indexes outside the four frozen 0033 names. Do not replay 0033, restamp, or call create_all on a managed database.
+Downgrade retains append-only history because ancestor 0033 owns the schema.
+Tests: `tests/test_migration_0048_repair_audit_events.py`, plus the isolated
+fresh-process `test_persistence_bootstrap_audit_registration.py` regression.
