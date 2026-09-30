@@ -191,9 +191,10 @@ const ChatBox: React.FC<{
   const [animatingRightPanel, setAnimatingRightPanel] = useState(false);
   const animatingRightPanelRef = useRef(false);
   const rightPanelOpenRef = useRef(rightPanelOpen);
-  // Read once: `defaultSize` only applies on mount, the effect below owns every
-  // later open/close.
-  const [initialRightPanelSize] = useState(() =>
+  // Keep the default stable while a desktop group exists; resize() owns its
+  // open/close transitions. Prepare the next group's default while on mobile,
+  // so its initial measurement cannot reset an open panel to a closed default.
+  const [initialRightPanelSize, setInitialRightPanelSize] = useState(() =>
     rightPanelOpen ? RIGHT_PANEL_DEFAULT_SIZE : "0%",
   );
 
@@ -223,14 +224,21 @@ const ChatBox: React.FC<{
 
   const handlePanelGroupLayoutChanged = useCallback(
     (layout: Layout) => {
+      const group = panelGroupElementRef.current;
       if (
+        !group ||
+        group !== animatedGroupRef.current ||
+        animatingRightPanelRef.current ||
         !rightPanelOpenRef.current ||
         layout[`${resizableIdBase}-side`] !== 0
       ) {
         return;
       }
 
-      // Finalize a drag-collapse only after the pointer is released. Closing
+      // A newly mounted desktop group starts collapsed before resize() commits;
+      // that is not a user drag. Only its initialized, settled layout can close
+      // the owning panel. Finalize a drag-collapse after the pointer is released.
+      // Closing
       // from onResize at the first 0% frame would break a continuous gesture
       // that reaches the edge and then reverses before release.
       if (activeRightPanel === "sidecar") {
@@ -252,6 +260,7 @@ const ChatBox: React.FC<{
       animatingRightPanelRef.current = false;
       setAnimatingRightPanel(false);
       setPinnedContentWidth(null);
+      setInitialRightPanelSize(rightPanelOpen ? openSizeRef.current : "0%");
       return;
     }
     if (
