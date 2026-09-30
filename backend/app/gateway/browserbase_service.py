@@ -36,6 +36,8 @@ CREATE_REQUEST_TIMEOUT = 10
 MAX_BODY_BYTES = 2 * 1024 * 1024
 MAX_SCREENSHOT_BYTES = 4 * 1024 * 1024
 MODE = "public_read_only_snapshot"
+RESERVED_MINUTES_PER_SESSION = -(-SESSION_TIMEOUT // 60)  # ceil(seconds / 60)
+MAX_ACTIVE_SESSIONS = 5
 ALLOWED_CONNECT_HOSTS = {
     "connect.browserbase.com",
     # Exact endpoint observed from authenticated api.browserbase.com (us-west-2).
@@ -456,7 +458,7 @@ class BrowserbaseResearchService:
             "monthly_minute_limit": None,
             "remaining_minutes": None,
             "mode": MODE,
-            "limits": {"max_pages": MAX_PAGES, "session_timeout_seconds": SESSION_TIMEOUT, "max_sessions_per_owner": 1},
+            "limits": {"max_pages": MAX_PAGES, "session_timeout_seconds": SESSION_TIMEOUT, "max_sessions_per_owner": 1, "max_active_sessions": MAX_ACTIVE_SESSIONS},
         }
         if not self.enabled():
             state["reason"] = "not_enabled"
@@ -547,6 +549,18 @@ class BrowserbaseResearchService:
                     raise BrowserbaseError("idempotency_conflict", 409)
                 return previous[1]
             state = await self.status()
+            if state["available"]:
+                # The provider's reported browserMinutes lags real usage, so a
+                # session admitted moments ago (this owner or another) is not
+                # yet reflected there. Reserve its worst-case cost, and cap
+                # total concurrency, before trusting the provider's figure.
+                active = await self._storage("active")
+                if len(active) >= MAX_ACTIVE_SESSIONS:
+                    state = {**state, "available": False, "reason": "browser_minutes_exhausted"}
+                elif active and state["remaining_minutes"] is not None:
+                    reserved_minutes = len(active) * RESERVED_MINUTES_PER_SESSION
+                    if state["remaining_minutes"] - reserved_minutes < SESSION_TIMEOUT // 60:
+                        state = {**state, "available": False, "reason": "browser_minutes_exhausted"}
             if not state["available"]:
                 raise BrowserbaseError(state["reason"] or "provider_unavailable", 429 if state["reason"] == "browser_minutes_exhausted" else 503)
             now = datetime.now(UTC).isoformat()

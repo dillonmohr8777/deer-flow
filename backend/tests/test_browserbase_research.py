@@ -125,6 +125,55 @@ async def test_quota_exhaustion_creates_no_paid_session(monkeypatch, tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_in_flight_session_reserves_its_own_minutes_against_another_owner(monkeypatch, tmp_path):
+    # limit is 6000 (provider_fixture); leave exactly one session's worth (3
+    # minutes) of provider-reported headroom, unclaimed by anyone yet.
+    service, calls, _ = provider_fixture(monkeypatch, tmp_path, minutes=5997)
+    entered = asyncio.Event()
+
+    async def browser(_connect_url, _pages):
+        entered.set()
+        await asyncio.Event().wait()
+
+    service.browser_runner = browser
+    created = await service.create("owner-a", ["https://example.com"], "Research", "key-1")
+    await asyncio.wait_for(entered.wait(), 2)
+    # The provider hasn't reported owner-a's session yet, but a second,
+    # unrelated owner must not be admitted into the same 3 minutes of headroom.
+    with pytest.raises(BrowserbaseError, match="browser_minutes_exhausted"):
+        await service.create("owner-b", ["https://other.example"], "Other", "key-2")
+    assert len([c for c in calls if c[0] == "POST" and c[1] == "/v1/sessions"]) == 1
+    await service.cancel("owner-a", created["id"])
+    await service.aclose()
+
+
+@pytest.mark.asyncio
+async def test_global_active_session_cap_blocks_a_third_owner_even_with_minutes_left(monkeypatch, tmp_path):
+    service, calls, _ = provider_fixture(monkeypatch, tmp_path, minutes=0)
+    monkeypatch.setattr(browserbase_service, "MAX_ACTIVE_SESSIONS", 2)
+    entered = asyncio.Event()
+
+    async def browser(_connect_url, _pages):
+        entered.set()
+        await asyncio.Event().wait()
+
+    service.browser_runner = browser
+    first = await service.create("owner-a", ["https://a.example"], "A", "key-a")
+    await asyncio.wait_for(entered.wait(), 2)
+    entered.clear()
+    second = await service.create("owner-b", ["https://b.example"], "B", "key-b")
+    await asyncio.wait_for(entered.wait(), 2)
+    # Ample provider-reported minutes remain, but the global concurrency cap
+    # (2, here) still refuses a third simultaneous owner.
+    with pytest.raises(BrowserbaseError, match="browser_minutes_exhausted"):
+        await service.create("owner-c", ["https://c.example"], "C", "key-c")
+    assert len([c for c in calls if c[0] == "POST" and c[1] == "/v1/sessions"]) == 2
+    await service.cancel("owner-a", first["id"])
+    await service.cancel("owner-b", second["id"])
+    await service.aclose()
+
+
+@pytest.mark.asyncio
 async def test_idempotency_owner_scope_authenticated_screenshot_and_release(monkeypatch, tmp_path):
     service, calls, browser = provider_fixture(monkeypatch, tmp_path)
     first = await service.create("owner-a", ["https://example.com"], "Research", "key-1")
