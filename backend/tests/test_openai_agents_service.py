@@ -4,6 +4,7 @@ import asyncio
 import contextlib
 import logging
 import sqlite3
+import time
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
@@ -525,6 +526,11 @@ async def test_owner_cap_is_atomic_across_two_gateway_instances(setup, monkeypat
     assert client.beta.agents.sessions.create.await_count == 2
 
 
+def test_watchdog_clock_defaults_to_monotonic(setup):
+    service, client = setup
+    assert service._clock is time.monotonic
+
+
 @pytest.mark.asyncio
 async def test_watchdog_logs_one_throttled_warning_with_error_code_only(setup, monkeypatch, caplog):
     service, client = setup
@@ -561,12 +567,16 @@ async def test_watchdog_warning_throttle_window_expires(setup, monkeypatch, capl
         last_warning = await service._watch_deadlines_iteration(last_warning)
         fake_now["t"] = agent_service.WATCHDOG_WARNING_THROTTLE_SECONDS + 1
         last_warning = await service._watch_deadlines_iteration(last_warning)
+        # Elapsed time exactly equal to the throttle window must still log:
+        # the comparison is strictly `<`, not `<=`.
+        fake_now["t"] = last_warning + agent_service.WATCHDOG_WARNING_THROTTLE_SECONDS
+        last_warning = await service._watch_deadlines_iteration(last_warning)
 
     warnings = [record for record in caplog.records if record.levelno == logging.WARNING]
-    # Only the first call (t=0) and the one past the throttle window
-    # (t=THROTTLE+1) should log; the one still inside the window must not.
-    assert len(warnings) == 2
-    assert last_warning == agent_service.WATCHDOG_WARNING_THROTTLE_SECONDS + 1
+    # t=0, t=THROTTLE+1, and the exact-boundary call should log; the one
+    # still inside the window (t=THROTTLE-1) must not.
+    assert len(warnings) == 3
+    assert last_warning == 2 * agent_service.WATCHDOG_WARNING_THROTTLE_SECONDS + 1
 
 
 @pytest.mark.asyncio
