@@ -124,3 +124,54 @@ def test_room_tool_visibility_retains_private_workspace_switch(enabled):
     names = {t.name for t in get_available_tools(app_config=config, include_mcp=False, groups=[])}
     assert ("agent_room_read" in names) is enabled
     assert ("agent_room_post" in names) is enabled
+
+
+@pytest.mark.asyncio
+async def test_stale_browser_owner_header_refuses_before_private_repository_access(org_world, monkeypatch):  # noqa: F811
+    await _promote_and_authenticate(org_world, monkeypatch)
+
+    class ForbiddenRepository:
+        async def list_messages(self, **_kwargs):
+            pytest.fail("Mismatched browser identity reached private read")
+
+        async def add_message(self, **_kwargs):
+            pytest.fail("Mismatched browser identity reached private write")
+
+    app = _app(org_world)
+    app.state.agent_room_repo = ForbiddenRepository()
+    headers = {**auth_headers(USER_C, ORG_S), "X-Expected-User-Id": USER_A}
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        assert (await client.get("/api/agent-room/messages", headers=headers)).status_code == 409
+        assert (await client.post("/api/agent-room/messages", headers=headers, json={"body": "Synthetic A draft"})).status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_matching_expected_owner_and_legacy_owner_calls_keep_existing_permissions(org_world, monkeypatch):  # noqa: F811
+    await _promote_and_authenticate(org_world, monkeypatch)
+    app = _app(org_world)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        matching = {**auth_headers(USER_A, ORG_S), "X-Expected-User-Id": USER_A}
+        posted = await client.post("/api/agent-room/messages", headers=matching, json={"body": "Matching owner draft"})
+        assert posted.status_code == 201
+        assert posted.json()["user_id"] == USER_A
+        assert len((await client.get("/api/agent-room/messages", headers=matching)).json()["messages"]) == 1
+        # Existing callers omit the optional header and retain real cookie ownership.
+        legacy = await client.post("/api/agent-room/messages", headers=auth_headers(USER_C, ORG_S), json={"body": "Legacy owner draft"})
+        assert legacy.status_code == 201
+        assert legacy.json()["user_id"] == USER_C
+        assert len((await client.get("/api/agent-room/messages", headers=auth_headers(USER_C, ORG_S))).json()["messages"]) == 1
+        denied = {**auth_headers(USER_B), "X-Expected-User-Id": USER_A}
+        assert (await client.get("/api/agent-room/messages", headers=denied)).status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_cookie_switch_cannot_save_the_previous_browser_owners_draft(org_world, monkeypatch):  # noqa: F811
+    await _promote_and_authenticate(org_world, monkeypatch)
+    app = _app(org_world)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        for expected in [USER_A, "", " "]:
+            stale = {**auth_headers(USER_C, ORG_S), "X-Expected-User-Id": expected}
+            assert (await client.post("/api/agent-room/messages", headers=stale, json={"body": "Previous owner private draft"})).status_code == 409
+            assert (await client.get("/api/agent-room/messages", headers=stale)).status_code == 409
+    assert await AgentRoomRepository(org_world).list_messages(user_id=USER_C) == []
+    assert await AgentRoomRepository(org_world).list_messages(user_id=USER_A) == []

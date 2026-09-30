@@ -1,6 +1,6 @@
 ### Gateway API (`app/gateway/`)
 
-Agent Room preserves actor/admin isolation; read [its contract](../../docs/AGENT_ROOM.md) before changing room wiring.
+Agent Room preserves actor/admin isolation; read [its contract](../../docs/AGENT_ROOM.md) before changing room wiring. Its optional expected-owner header must match the actual authenticated actor before any Room repository access; never use it to authorize or choose shared storage.
 
 Capability Center's `business` adapter validates only the bundled provider's
 credential fields and creates a normal MCP connection. The MCP API accepts the

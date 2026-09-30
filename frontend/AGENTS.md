@@ -367,6 +367,13 @@ The private Agent Room lives at `/workspace/desk/agent-room`. Its route and
 navigation use the existing Desk feature gate; message reads and owner posts use
 `core/agent-room` through the shared credential/CSRF fetcher. The Gateway retains
 owner/admin isolation and agents post through its separate principal-bound tool.
+Room access/message/mutation keys include the actual AuthProvider user ID; wait
+for affirmative private discovery before reading or projecting cached messages.
+Fence aborted/late reads, old-owner post settlement and composer drafts across
+auth transitions, without globally clearing unrelated caches. GET/POST send
+`X-Expected-User-Id`; the Gateway must enforce its optional actor mismatch fence
+before repository access. The header never grants permission or chooses storage.
+Keep existing no-header callers, admin/private gates and CSRF behavior unchanged.
 Its roster is a retained descriptive projection, not proof of live workers.
 Phone touch overrides belong to the workspace header, Background work, room
 composer and phone-only sidebar scope; do not modify generated UI primitives or
