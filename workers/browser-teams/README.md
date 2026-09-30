@@ -10,6 +10,21 @@ npm test
 uv sync --project python --frozen
 ```
 
+The complete offline backend suite also exercises the sibling Agno and AgentKit
+workers. From the repository root, install their committed locks before testing:
+
+```sh
+uv sync --project workers/agno-team --python 3.13 --frozen
+cd workers/inngest-team
+npm ci --ignore-scripts --no-audit --no-fund
+npm run check
+```
+
+Backend CI installs all isolated workers in every duration-balanced shard using
+Python3.13 and Node24.21.0. Real framework tests still assert availability and
+one admitted native relay; missing workers fail rather than being skipped.
+These tests use synthetic offline responses and never enable paid providers.
+
 Mastra executes its real `Agent.generate` with a standard AI SDK custom provider, one step, no tools/memory/retries. CrewAI executes a real `Flow.kickoff` with one `@start` department step that calls one real `Crew.kickoff`, custom `BaseLLM`, one iteration, no delegation/code/tools/retries and an ephemeral task-output handler. Flow persistence/checkpoint/tracing are disabled; the pinned1.15.23 source hook `_skip_auto_memory` prevents `memory=None` from creating its default LLM-backed Memory. Each final receipt reports actual step/crew/model counts; output must exactly equal the parent response. Python workers deny socket and SQLite connections before framework import, preventing default stores or telemetry transport. Deep Agents uses real `create_deep_agent` with an admitted custom model, bounded recursion and no external memory/store/checkpointer. No model worker receives provider keys. Native LangGraph/gateway owns durable run state, history, continuation, call IDs, schema validation, actual usage and budgets.
 
 The gateway native Responses adapter accepts only server-selected `gpt-6.1-sol` with explicit low/medium/high reasoning, strict JSON schema, finite output ceilings, `store:false`, retries0 and deterministic call IDs. It validates actual framework-expanded input headroom before dispatch, then resolved model, completed status, refusals, original schema and actual input/output tokens. Missing billed cost remainsnull. Failed responses keep known usage via `AdapterError.usage`. Final worker output must equal the native admitted result. Availability does not establish useful output acceptance.

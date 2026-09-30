@@ -253,3 +253,8 @@ not another client registry. Keep provider credentials server-side and paid
 operations idempotent. PWA offline caches contain generic public assets only.
 The separate `desktop/` Electron shell has no native renderer bridge. See
 `docs/MOMOBOT_APP_RELEASE.md` for lifecycle and release checks.
+
+The offline backend suite includes actual isolated framework handoffs. Its CI
+shards install the frozen sibling worker environments and Node builds before
+pytest; preserve the real availability, relay and cleanup assertions. Worker
+installation does not enable paid adapters or change native guard admission.
