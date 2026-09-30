@@ -192,7 +192,14 @@ function Today({ tasks }: { tasks: ReturnType<typeof useScheduledTasks> }) {
               className={cn("divide-y border-b", pageStyles.rows, styles.slips)}
             >
               {outputs.map((task) => (
-                <li key={task.id} className={styles.row}>
+                <li
+                  key={task.id}
+                  className={styles.row}
+                  data-failed={task.last_error ? "true" : undefined}
+                >
+                  {task.last_error ? (
+                    <span className={styles.tear} aria-hidden="true" />
+                  ) : null}
                   <span className={styles.name}>
                     <span>{task.title}</span>
                     {task.last_error ? (
@@ -204,7 +211,9 @@ function Today({ tasks }: { tasks: ReturnType<typeof useScheduledTasks> }) {
                       {task.last_error ? "Failed" : "Ready for review"}
                     </StatusTag>
                   </span>
-                  <span className={cn(styles.cell, pageStyles.figure)}>
+                  <span
+                    className={cn(styles.cell, styles.when, pageStyles.figure)}
+                  >
                     {formatWhen(task.last_run_at!)}
                   </span>
                   <ReceiptLink task={task} label="Open receipt" />

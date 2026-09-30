@@ -100,21 +100,60 @@
     border-radius: 5px 2px 6px 3px;
   }
 
-  /* The title owns its line and a failure reason wraps in full. */
-  .slips .name {
-    flex-basis: 100%;
+  /*
+   * Slip order: title (two lines), when, the failure reason in full, then
+   * the state and the receipt link on one foot line. The name wrapper steps
+   * aside so its title and reason take their own grid rows.
+   */
+  .slips.slips > li {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "title title"
+      "when when"
+      "reason reason"
+      "status link";
+    gap: 0.125rem 1rem;
   }
 
-  .slips .sub {
+  .slips .name {
+    display: contents;
+  }
+
+  .slips .name > :first-child {
+    display: -webkit-box;
+    grid-area: title;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    font-size: 0.9375rem;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
     white-space: normal;
   }
 
-  .slips .cell {
-    flex: 0 1 auto;
+  .slips .when {
+    grid-area: when;
+    color: var(--muted-foreground);
+    font-size: 0.8125rem;
+  }
+
+  .slips .sub {
+    grid-area: reason;
+    margin-top: 0.25rem;
+    color: var(--destructive);
+    white-space: normal;
+  }
+
+  .slips .cell:not(.when) {
+    grid-area: status;
+    align-self: center;
+    margin-top: 0.5rem;
   }
 
   .slips .link {
-    margin-inline-start: auto;
+    grid-area: link;
+    align-self: center;
+    margin-top: 0.5rem;
   }
 
   .slips .link::after {
@@ -125,6 +164,48 @@
 
   .slips .link:focus-visible {
     outline: none;
+  }
+
+  /*
+   * A failed result: the top right corner folds down along a straight
+   * crease and the kraft flap lies over the slip, the same language as a
+   * failed slip on the Command Center dispatch board.
+   */
+  .slips.slips > li[data-failed="true"] {
+    clip-path: polygon(0 0, calc(100% - 48px) 0, 100% 32px, 100% 100%, 0 100%);
+  }
+
+  .slips > li[data-failed="true"] .name > :first-child {
+    padding-inline-end: 2.25rem;
+  }
+
+  .slips .tear {
+    display: block;
+    position: absolute;
+    top: -1px;
+    right: -1px;
+    width: 48px;
+    height: 46px;
+    background: var(--paper-kraft, var(--border));
+    clip-path: polygon(
+      0 0,
+      48px 32px,
+      41px 35px,
+      35px 36px,
+      29px 40px,
+      23px 41px,
+      18px 45px,
+      14px 36px,
+      11px 30px,
+      8px 21px,
+      4px 14px,
+      3px 7px
+    );
+  }
+
+  /* clip-path clips outer rings too, so a torn slip draws focus inside. */
+  .slips > li[data-failed="true"]:has(.link:focus-visible) {
+    outline-offset: -5px;
   }
 
   .slips > li:has(.link:focus-visible) {
@@ -184,6 +265,20 @@
   font-weight: 700;
   text-decoration: underline;
   text-underline-offset: 4px;
+}
+
+.tear {
+  display: none;
+}
+
+@media (forced-colors: active) {
+  .slips .tear {
+    display: none !important;
+  }
+
+  .slips.slips > li[data-failed="true"] {
+    clip-path: none;
+  }
 }
 
 .muted {
