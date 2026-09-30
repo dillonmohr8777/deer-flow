@@ -404,6 +404,11 @@ export const zhCN: Translations = {
         prompt:
           "起草 [客户] 本月的报告：成果、花费和下一步。凡是无法核实的数字都要标出来。",
       },
+      {
+        label: "规划一个大项目",
+        prompt:
+          "为 [客户] 规划一个大项目：听取不止一位专家的意见，找出风险和盲点，然后起草一个看板帖子，把计划交给我审批。",
+      },
     ],
     pleaseWaitStreaming: "请等待当前响应完成。",
     stopStreamingUnavailable: "你的角色无权停止正在运行的回合。",

@@ -432,6 +432,11 @@ export const enUS: Translations = {
         prompt:
           "Draft this month's report for [client]: results, spend, and next steps. Mark every number you couldn't verify.",
       },
+      {
+        label: "Plan a big project",
+        prompt:
+          "Plan a big project for [client]: get more than one expert's take, flag the risks and blind spots, then draft a board thread with the plan for me to approve.",
+      },
     ],
     pleaseWaitStreaming: "Please wait for the current response to finish.",
     stopStreamingUnavailable:

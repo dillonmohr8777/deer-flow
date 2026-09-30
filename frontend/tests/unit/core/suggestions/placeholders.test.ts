@@ -7,7 +7,7 @@ import { findSuggestionTemplatePlaceholder } from "@/core/suggestions/placeholde
 describe("empty-thread starter prompts", () => {
   test("each carries a placeholder the composer selects and guards", () => {
     for (const locale of [enUS, zhCN]) {
-      expect(locale.inputBox.starters).toHaveLength(3);
+      expect(locale.inputBox.starters).toHaveLength(4);
       for (const starter of locale.inputBox.starters) {
         expect(
           findSuggestionTemplatePlaceholder(starter.prompt),
