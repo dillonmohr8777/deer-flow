@@ -22,8 +22,12 @@ const mocks = rs.hoisted(() => ({
 rs.mock("@/core/auth/AuthProvider", () => ({
   useAuth: () => ({ user: mocks.user }),
 }));
-rs.mock("@/components/ui/sidebar", () => ({
-  SidebarTrigger: () => <button aria-label="Toggle sidebar" />,
+rs.mock("@/components/workspace/workspace-container", () => ({
+  WorkspaceContainer: ({ children }: PropsWithChildren) => (
+    <div>{children}</div>
+  ),
+  WorkspaceHeader: () => <div />,
+  WorkspaceBody: ({ children }: PropsWithChildren) => <main>{children}</main>,
 }));
 rs.mock("@/core/browserbase/api", () => ({
   getBrowserbaseStatus: mocks.status,
@@ -144,9 +148,7 @@ describe("Browser research workspace", () => {
         screen.getByRole("button", { name: "Capture pages" }),
       ).toBeDefined(),
     );
-    expect(
-      screen.queryByText("Capture completed · captured evidence retrieved"),
-    ).toBeNull();
+    expect(screen.queryByText(/page saved/)).toBeNull();
     expect(mocks.read).not.toHaveBeenCalled();
     expect(mocks.handOff).not.toHaveBeenCalled();
   });
@@ -181,9 +183,7 @@ describe("Browser research workspace", () => {
         screen.getByRole("button", { name: "Capture pages" }),
       ).toBeDefined(),
     );
-    expect(
-      screen.queryByText("Capture completed · captured evidence retrieved"),
-    ).toBeNull();
+    expect(screen.queryByText(/page saved/)).toBeNull();
     expect(mocks.handOff).not.toHaveBeenCalled();
     expect(mocks.read).not.toHaveBeenCalled();
   });
@@ -196,7 +196,10 @@ describe("Browser research workspace", () => {
     const { unmount } = render(<BrowserResearchWorkspace />, {
       wrapper: Wrapper,
     });
-    await screen.findByText("unverified_quota");
+    await screen.findByText(
+      "Browser minutes could not be checked, so captures are paused until they can be.",
+    );
+    expect(screen.queryByText("unverified_quota")).toBeNull();
     fireEvent.change(screen.getByLabelText("Public HTTPS URLs, one per line"), {
       target: { value: "https://openai.com" },
     });
@@ -223,16 +226,15 @@ describe("Browser research workspace", () => {
     mocks.list.mockResolvedValue({ data: [DETAIL] });
     render(<BrowserResearchWorkspace />, { wrapper: Wrapper });
     fireEvent.click(
-      await screen.findByRole("button", { name: "Official docs completed" }),
+      await screen.findByRole("button", { name: /^Official docs Captured/ }),
     );
-    await screen.findByText("Capture completed · captured evidence retrieved");
+    await screen.findByText(/1 page saved/);
     expect(screen.getByText(DETAIL.pages[0]!.text).textContent).toBe(
       DETAIL.pages[0]!.text,
     );
     expect(document.querySelector("script")).toBeNull();
-    expect(
-      screen.getByText(/Run browser minutes unavailable/).textContent,
-    ).toContain("Cost unavailable");
+    expect(screen.getByText("Not recorded")).toBeDefined();
+    expect(screen.getByText("Not priced")).toBeDefined();
     fireEvent.click(screen.getByRole("button", { name: "Download evidence" }));
     await waitFor(() =>
       expect(mocks.handOff).toHaveBeenCalledWith(
@@ -256,7 +258,7 @@ describe("Browser research workspace", () => {
         .hasAttribute("disabled"),
     ).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: "Retry same request" }));
-    await screen.findByText("Capture completed · captured evidence retrieved");
+    await screen.findByText(/1 page saved/);
     expect(mocks.create).toHaveBeenCalledTimes(2);
     expect(mocks.create.mock.calls[0]).toEqual(mocks.create.mock.calls[1]);
     expect(mocks.create.mock.calls[0]?.[1]).toMatch(/^[0-9a-f-]{36}$/);
@@ -272,15 +274,19 @@ describe("Browser research workspace", () => {
     });
     render(<BrowserResearchWorkspace />, { wrapper: Wrapper });
     fireEvent.click(
-      await screen.findByRole("button", { name: "Official docs running" }),
+      await screen.findByRole("button", { name: /^Official docs Working/ }),
     );
     await screen.findByText("No page evidence has been retrieved.");
-    expect(screen.queryByText(/captured evidence retrieved/)).toBeNull();
+    expect(screen.queryByText(/page saved/)).toBeNull();
+    // Nothing to download is no button, not a disabled one; the stored code
+    // reads as a sentence, never as public_destination_rejected.
     expect(
-      screen
-        .getByRole("button", { name: "Download evidence" })
-        .hasAttribute("disabled"),
-    ).toBe(true);
+      screen.queryByRole("button", { name: "Download evidence" }),
+    ).toBeNull();
+    expect(screen.queryByText("public_destination_rejected")).toBeNull();
+    expect(
+      screen.getByText("The capture could not be completed."),
+    ).toBeDefined();
     expect(
       screen
         .getByRole("button", { name: "Capture pages" })

@@ -2,10 +2,28 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Download, ExternalLink, RefreshCw, Square } from "lucide-react";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type RefObject,
+} from "react";
 
 import { Button } from "@/components/ui/button";
-import { SidebarTrigger } from "@/components/ui/sidebar";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  EmptyState,
+  ErrorState,
+  pageStyles,
+  StatusTag,
+  WorkingState,
+} from "@/components/workspace/page-body";
+import {
+  WorkspaceBody,
+  WorkspaceContainer,
+  WorkspaceHeader,
+} from "@/components/workspace/workspace-container";
 import { useAuth } from "@/core/auth/AuthProvider";
 import { hasPermission, PERMISSIONS } from "@/core/auth/permissions";
 import {
@@ -17,10 +35,18 @@ import {
   isBrowserResearchBusy,
   listBrowserResearch,
   loadBrowserResearchScreenshot,
+  type BrowserResearch,
   type BrowserResearchInput,
 } from "@/core/browserbase/api";
 import { parseResearchUrls, publicResearchUrl } from "@/core/browserbase/urls";
+import { toDateTimeAttr } from "@/core/utils/datetime";
 import { cn } from "@/lib/utils";
+
+import { browserWords, captureState } from "./browser-research-words";
+import { runTime } from "./workflows/workflow-words";
+
+const CONTROL =
+  "border-input bg-background placeholder:text-muted-foreground focus-visible:ring-ring min-h-11 w-full min-w-0 rounded-md border px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 disabled:opacity-60 max-sm:text-base";
 
 interface Submission {
   owner: string;
@@ -78,7 +104,7 @@ function CapturedScreenshot({
           )}
           {screenshot.error && (
             <p role="alert" className="text-destructive text-sm">
-              {screenshot.error.message}
+              {browserWords(screenshot.error)}
             </p>
           )}
           {imageUrl && screenshot.data && (
@@ -123,6 +149,12 @@ export function BrowserResearchWorkspace() {
   const [urls, setUrls] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
   const [submission, setSubmission] = useState<Submission | null>(null);
+  const receiptRef = useRef<HTMLDivElement>(null);
+  const receiptHeading = useRef<HTMLHeadingElement>(null);
+  // A chosen capture opens under the list; once it has loaded, bring it into
+  // view (instantly under reduced motion) and hand it focus, as Scheduled
+  // tasks does for its sheet, so a tap never changes something off screen.
+  const bringReceipt = useRef(false);
 
   const status = useQuery({
     queryKey: ["browserbase", owner, "status"],
@@ -206,7 +238,7 @@ export function BrowserResearchWorkspace() {
       )
         return;
       setNotice(
-        `${error.message} The request is unconfirmed. Retry uses the same receipt; check saved captures before continuing.`,
+        `${browserWords(error)} The request is unconfirmed. Retry uses the same receipt; check saved captures before continuing.`,
       );
       refresh();
     },
@@ -232,7 +264,7 @@ export function BrowserResearchWorkspace() {
         currentOwner.current === request.owner &&
         currentScope.current === request.scope
       )
-        setNotice(error.message);
+        setNotice(browserWords(error));
     },
   });
   const download = useMutation({
@@ -258,11 +290,23 @@ export function BrowserResearchWorkspace() {
         currentOwner.current === request.owner &&
         currentScope.current === request.scope
       )
-        setNotice(error.message);
+        setNotice(browserWords(error));
     },
   });
 
   const data = run.data;
+  useEffect(() => {
+    if (!bringReceipt.current || !data || data.id !== selected) return;
+    bringReceipt.current = false;
+    const reduce = window.matchMedia?.(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    receiptRef.current?.scrollIntoView?.({
+      block: "start",
+      behavior: reduce ? "auto" : "smooth",
+    });
+    receiptHeading.current?.focus({ preventScroll: true });
+  }, [data, selected]);
   const active =
     (runs.data?.data.some((item) => isBrowserResearchBusy(item.status)) ??
       false) ||
@@ -293,304 +337,476 @@ export function BrowserResearchWorkspace() {
       create.mutate(request);
     } catch (error) {
       setNotice(
-        error instanceof Error ? error.message : "Check the page URLs.",
+        error instanceof Error ? browserWords(error) : "Check the page URLs.",
       );
     }
   }
 
+  const saved = runs.data?.data ?? [];
+  const reason =
+    status.data && !ready
+      ? browserWords(status.data.reason ?? "provider_unavailable")
+      : null;
   return (
-    <section className="momentum-page flex h-full min-h-0 min-w-0 flex-col">
-      <header className="shrink-0 border-b px-4 py-5 sm:px-8">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <SidebarTrigger className="-ml-2 min-h-11 min-w-11 md:hidden" />
-              <h1 className="text-2xl">Browser research</h1>
-            </div>
-            <p className="text-muted-foreground mt-1 text-sm">
-              Capture public page evidence with Browserbase.
-            </p>
-          </div>
-          <Button
-            variant="outline"
-            className="min-h-11 min-w-11"
-            aria-label="Refresh saved captures"
-            onClick={refresh}
-          >
-            <RefreshCw className="size-4" />
-          </Button>
-        </div>
-      </header>
-      <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
-        <aside
-          className="max-h-40 shrink-0 overflow-y-auto border-b p-3 lg:max-h-none lg:w-64 lg:border-r lg:border-b-0"
-          aria-label="Saved browser captures"
-        >
-          {runs.isLoading && (
-            <p role="status" className="p-2 text-sm">
-              Loading saved captures…
-            </p>
-          )}
-          {runs.data?.data.length === 0 && (
-            <p className="text-muted-foreground p-2 text-sm">
-              Your saved captures will appear here.
-            </p>
-          )}
-          <ul className="space-y-1">
-            {runs.data?.data.map((item) => (
-              <li key={item.id}>
-                <button
-                  className={cn(
-                    "hover:bg-accent/50 min-h-11 w-full rounded-md px-3 py-2 text-left text-sm",
-                    selected === item.id && "bg-accent",
-                  )}
-                  aria-current={selected === item.id ? "page" : undefined}
-                  onClick={() => {
-                    setSelected(item.id);
-                    setNotice(null);
-                  }}
-                >
-                  <span className="block truncate">{item.title}</span>
-                  <span className="text-muted-foreground text-xs">
-                    {item.status}
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </aside>
-        <main className="min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:px-8">
-          <div className="mx-auto max-w-3xl space-y-6">
-            <form
-              onSubmit={submit}
-              className="space-y-4 rounded-lg border p-4 sm:p-5"
-            >
-              <h2 className="text-lg">Capture public sources</h2>
-              <p className="text-muted-foreground text-sm">
-                Up to {limits?.max_pages ?? 3} HTTPS pages in one{" "}
-                {limits?.session_timeout_seconds ?? 180} second session. Public
-                read-only snapshots preserve extracted text and a Browserbase
-                rendering. Remote page scripts, browsing actions, and sign-in
-                are disabled.
-              </p>
-              <div className="space-y-2">
-                <label htmlFor="research-title" className="text-sm">
-                  Capture title (optional)
-                </label>
-                <input
-                  id="research-title"
-                  maxLength={120}
-                  value={title}
-                  disabled={!!submission || !scope}
-                  onChange={(event) => setTitle(event.target.value)}
-                  className="bg-background min-h-11 w-full rounded-md border px-3 text-sm"
-                  placeholder="Tonight’s official docs"
-                />
-              </div>
-              <div className="space-y-2">
-                <label htmlFor="research-urls" className="text-sm">
-                  Public HTTPS URLs, one per line
-                </label>
-                <textarea
-                  id="research-urls"
-                  rows={3}
-                  maxLength={8192}
-                  value={urls}
-                  disabled={!!submission || !scope}
-                  onChange={(event) => setUrls(event.target.value)}
-                  className="bg-background min-h-24 w-full resize-y rounded-md border p-3 text-sm"
-                  placeholder="https://developers.openai.com/api/docs"
-                  aria-describedby="research-url-note"
-                />
-                <p
-                  id="research-url-note"
-                  className="text-muted-foreground text-xs"
-                >
-                  The server verifies public destinations before capture. Keep
-                  private links and credentials out of this form.
+    <WorkspaceContainer>
+      <WorkspaceHeader />
+      <WorkspaceBody className={pageStyles.page}>
+        {/* The page scrolls inside the body, like Workflows and Desk, so the
+            header and the phone tab bar keep their edges. */}
+        <ScrollArea className="size-full">
+          <div className="momentum-page mx-auto flex w-full max-w-(--container-width-lg) min-w-0 flex-col gap-8 p-4 pb-28 sm:p-6 sm:pb-28 motion-reduce:[&_*]:animate-none motion-reduce:[&_*]:transition-none">
+            <header className="flex items-end justify-between gap-3 pt-2">
+              <div className="min-w-0">
+                <h1 className="text-2xl">Browser research</h1>
+                <p className={cn(pageStyles.lede, "mt-1")}>
+                  Save public pages as evidence: their text and a rendering,
+                  read only.
                 </p>
-              </div>
-              <div className="flex flex-wrap items-center gap-3">
-                <Button
-                  type="submit"
-                  className="min-h-11"
-                  disabled={
-                    !mayCreate ||
-                    !ready ||
-                    create.isPending ||
-                    (!submission &&
-                      (active || !runs.data || !!runs.error || !urls.trim()))
-                  }
-                >
-                  {create.isPending
-                    ? "Checking capture…"
-                    : submission
-                      ? "Retry same request"
-                      : "Capture pages"}
-                </Button>
-                {!mayCreate && owner && (
-                  <p className="text-muted-foreground text-sm">
-                    You have read-only access.
-                  </p>
-                )}
-                {active && (
-                  <p role="status" className="text-muted-foreground text-sm">
-                    A capture is already queued or running.
+                {status.data && (
+                  <p className="text-muted-foreground mt-1 text-sm">
+                    {status.data.remaining_minutes === null
+                      ? "Remaining browser minutes unavailable."
+                      : `${status.data.remaining_minutes} browser minutes remaining.`}
                   </p>
                 )}
               </div>
-            </form>
-            {status.isLoading && (
-              <p role="status">Checking Browserbase availability…</p>
-            )}
-            {status.data && !ready && (
-              <p className="rounded-md border p-4 text-sm" role="status">
-                {status.data.reason ??
-                  "Browserbase is unavailable on this server."}
-              </p>
-            )}
-            {status.data && (
-              <p className="text-muted-foreground text-sm">
-                {status.data.remaining_minutes === null
-                  ? "Remaining browser minutes unavailable."
-                  : `${status.data.remaining_minutes} browser minutes remaining.`}
-              </p>
-            )}
+              <Button
+                variant="outline"
+                size="icon"
+                className="size-11 shrink-0"
+                aria-label="Refresh saved captures"
+                title="Refresh"
+                onClick={refresh}
+              >
+                <RefreshCw className="size-4" />
+              </Button>
+            </header>
+            {status.isLoading && <WorkingState label="Checking Browserbase" />}
             {error && (
-              <p role="alert" className="text-destructive text-sm">
-                {error.message}
+              <ErrorState
+                message="Browser research could not be loaded."
+                detail={browserWords(error)}
+                action={
+                  <Button
+                    variant="outline"
+                    className="min-h-11"
+                    onClick={refresh}
+                  >
+                    Try again
+                  </Button>
+                }
+              />
+            )}
+            {reason && (
+              <p role="status" className={cn(pageStyles.sheet, "p-4 text-sm")}>
+                {reason}
               </p>
             )}
-            {notice && (
-              <p role="alert" className="rounded-md border p-4 text-sm">
-                {notice}
-              </p>
-            )}
-            {run.isLoading && selected && (
-              <p role="status">Retrieving saved capture…</p>
-            )}
-            {data && (
-              <section aria-label="Capture evidence" className="space-y-5">
-                <div className="flex flex-wrap items-start justify-between gap-3 border-b pb-4">
-                  <div className="min-w-0">
-                    <h2 className="text-xl break-words">{data.title}</h2>
-                    <p
-                      role="status"
-                      className="text-muted-foreground mt-2 text-sm"
-                    >
-                      Capture {data.status}
-                      {data.status === "completed" && data.pages.length
-                        ? " · captured evidence retrieved"
-                        : ""}
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {isBrowserResearchBusy(data.status) && (
-                      <Button
-                        variant="outline"
-                        className="min-h-11"
-                        disabled={!mayCancel || cancel.isPending}
-                        onClick={() =>
-                          owner &&
-                          scope &&
-                          cancel.mutate({ id: data.id, owner, scope })
-                        }
-                      >
-                        <Square className="size-3" />
-                        {cancel.isPending ? "Stopping…" : "Stop capture"}
-                      </Button>
+            {!status.error && (
+              <section aria-labelledby="captures-title" className="min-w-0">
+                <h2 id="captures-title" className="text-xl">
+                  Your captures
+                </h2>
+                {notice && (
+                  <p
+                    role="alert"
+                    className={cn(
+                      pageStyles.sheet,
+                      "mt-3 p-3 text-sm break-words",
                     )}
-                    <Button
-                      variant="outline"
-                      className="min-h-11"
-                      disabled={!data.pages.length || download.isPending}
-                      onClick={() =>
+                  >
+                    {notice}
+                  </p>
+                )}
+                <div className="mt-3">
+                  {runs.isLoading && (
+                    <WorkingState label="Loading saved captures" />
+                  )}
+                  {runs.data && !saved.length && (
+                    <EmptyState
+                      momo="research"
+                      title="No captures yet"
+                      action={
+                        <Button asChild variant="outline" className="min-h-11">
+                          <a href="#capture-form">Capture a page</a>
+                        </Button>
+                      }
+                    >
+                      Pages you capture are saved here with their text and a
+                      rendering, newest first.
+                    </EmptyState>
+                  )}
+                  {saved.length > 0 && (
+                    <ul
+                      aria-label="Saved browser captures"
+                      className={cn(
+                        pageStyles.rows,
+                        pageStyles.slips,
+                        "divide-y border-y",
+                      )}
+                    >
+                      {saved.map((item) => {
+                        const state = captureState(item.status);
+                        const chosen = selected === item.id;
+                        return (
+                          <li
+                            key={item.id}
+                            className={cn(
+                              pageStyles.pin,
+                              item.status === "running" && "pinned",
+                            )}
+                          >
+                            <button
+                              type="button"
+                              className={cn(
+                                "focus-visible:ring-ring flex min-h-11 w-full flex-col gap-1 px-3 py-3 text-left text-sm transition-colors focus-visible:ring-2 focus-visible:outline-none focus-visible:ring-inset",
+                                chosen
+                                  ? "bg-card shadow-[inset_0_0_0_1px_var(--primary)] forced-colors:outline-2 forced-colors:-outline-offset-2 forced-colors:outline-[color:Highlight] forced-colors:outline-solid"
+                                  : "hover:bg-accent",
+                              )}
+                              aria-pressed={chosen}
+                              onClick={() => {
+                                bringReceipt.current = true;
+                                setSelected(item.id);
+                                setNotice(null);
+                              }}
+                            >
+                              <span className="flex items-start justify-between gap-3">
+                                <span className="line-clamp-2 min-w-0 font-bold [overflow-wrap:anywhere]">
+                                  {item.title}
+                                </span>
+                                <StatusTag
+                                  tone={state.tone}
+                                  className="mt-0.5 shrink-0"
+                                >
+                                  {state.label}
+                                </StatusTag>
+                              </span>
+                              <span className="text-muted-foreground">
+                                <time
+                                  dateTime={toDateTimeAttr(item.created_at)}
+                                  title={new Date(
+                                    item.created_at,
+                                  ).toLocaleString()}
+                                >
+                                  {runTime(item.created_at)}
+                                </time>
+                              </span>
+                              {item.status === "failed" && (
+                                <span className="text-destructive line-clamp-2 [overflow-wrap:anywhere]">
+                                  {browserWords(item.last_error)}
+                                </span>
+                              )}
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </div>
+                <div ref={receiptRef} className="scroll-mt-4">
+                  {run.isLoading && selected && (
+                    <WorkingState
+                      label="Retrieving saved capture"
+                      className="mt-4"
+                    />
+                  )}
+                  {data && (
+                    <CaptureReceipt
+                      data={data}
+                      owner={owner}
+                      scope={scope}
+                      headingRef={receiptHeading}
+                      mayCancel={mayCancel}
+                      stopping={cancel.isPending}
+                      downloading={download.isPending}
+                      onStop={() =>
+                        owner &&
+                        scope &&
+                        cancel.mutate({ id: data.id, owner, scope })
+                      }
+                      onDownload={() =>
                         owner &&
                         scope &&
                         download.mutate({ id: data.id, owner, scope })
                       }
-                    >
-                      <Download className="size-4" />
-                      Download evidence
-                    </Button>
-                  </div>
+                    />
+                  )}
                 </div>
-                {data.last_error && (
-                  <p role="alert" className="text-destructive text-sm">
-                    {data.last_error}
-                  </p>
-                )}
-                {data.pages.length === 0 && (
-                  <p className="text-muted-foreground text-sm">
-                    No page evidence has been retrieved.
-                  </p>
-                )}
-                {data.pages.map((page) => {
-                  const source = publicResearchUrl(page.final_url || page.url);
-                  return (
-                    <article
-                      key={page.index}
-                      className="space-y-4 rounded-lg border p-4 sm:p-5"
-                    >
-                      <div className="space-y-2">
-                        <h3 className="text-lg break-words">
-                          {page.title || "Untitled captured page"}
-                        </h3>
-                        {source ? (
-                          <a
-                            href={source}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex min-h-11 max-w-full items-center gap-2 text-sm break-all underline"
-                          >
-                            <span className="min-w-0">{source}</span>
-                            <ExternalLink className="size-4 shrink-0" />
-                          </a>
-                        ) : (
-                          <p className="text-sm break-all">
-                            Source URL unavailable.
-                          </p>
-                        )}
-                        <p className="text-muted-foreground text-xs">
-                          Public read-only snapshot
-                        </p>
-                      </div>
-                      <details>
-                        <summary className="min-h-11 cursor-pointer py-3 text-sm">
-                          Read captured text
-                        </summary>
-                        <pre className="bg-muted max-h-96 overflow-y-auto rounded-md p-3 font-sans text-sm break-words whitespace-pre-wrap">
-                          {page.text || "No extracted text was returned."}
-                        </pre>
-                      </details>
-                      {owner && scope && page.screenshot_url && (
-                        <CapturedScreenshot
-                          key={`${owner}:${scope}:${data.id}:${page.index}`}
-                          owner={owner}
-                          scope={scope}
-                          runId={data.id}
-                          index={page.index}
-                          title={page.title || "Untitled captured page"}
-                        />
-                      )}
-                    </article>
-                  );
-                })}
-                <p className="text-muted-foreground text-sm">
-                  {data.usage.browser_minutes === null
-                    ? "Run browser minutes unavailable."
-                    : `Run usage: ${data.usage.browser_minutes} browser minutes.`}{" "}
-                  Cost unavailable.{" "}
-                  {data.session_closed === true
-                    ? "Cloud session closed."
-                    : data.session_closed === false
-                      ? "Cloud session remains open."
-                      : "Cloud session closure unconfirmed."}
-                </p>
               </section>
             )}
+            {!status.error && (
+              <form
+                id="capture-form"
+                onSubmit={submit}
+                aria-labelledby="capture-form-title"
+                className={cn(
+                  pageStyles.sheet,
+                  "max-w-3xl min-w-0 scroll-mt-4 space-y-4 p-4 sm:p-5",
+                )}
+              >
+                <div className="space-y-1.5">
+                  <h2 id="capture-form-title" className="text-xl">
+                    Capture public pages
+                  </h2>
+                  <p className="text-sm leading-relaxed">
+                    Up to {limits?.max_pages ?? 3} https pages in one{" "}
+                    {limits?.session_timeout_seconds ?? 180} second session. The
+                    capture only reads: page scripts, clicks and sign in are
+                    off.
+                  </p>
+                </div>
+                <div className="space-y-1.5">
+                  <label
+                    htmlFor="research-title"
+                    className="block text-sm font-semibold"
+                  >
+                    Capture title{" "}
+                    <span className="text-muted-foreground font-normal">
+                      (optional)
+                    </span>
+                  </label>
+                  <input
+                    id="research-title"
+                    maxLength={120}
+                    value={title}
+                    disabled={!!submission || !scope}
+                    onChange={(event) => setTitle(event.target.value)}
+                    className={CONTROL}
+                    placeholder="For example, Ads health policy"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label
+                    htmlFor="research-urls"
+                    className="block text-sm font-semibold"
+                  >
+                    Public HTTPS URLs, one per line
+                  </label>
+                  <textarea
+                    id="research-urls"
+                    rows={3}
+                    maxLength={8192}
+                    value={urls}
+                    disabled={!!submission || !scope}
+                    onChange={(event) => setUrls(event.target.value)}
+                    className={cn(CONTROL, "min-h-24 resize-y")}
+                    placeholder="For example, https://support.google.com/adspolicy"
+                    aria-describedby="research-url-note"
+                  />
+                  <p
+                    id="research-url-note"
+                    className="text-muted-foreground text-sm leading-relaxed"
+                  >
+                    The server checks each address is public before it opens it.
+                    Keep private links and passwords out of this form.
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-3">
+                  <Button
+                    type="submit"
+                    className="min-h-11 max-sm:w-full"
+                    disabled={
+                      !mayCreate ||
+                      !ready ||
+                      create.isPending ||
+                      (!submission &&
+                        (active || !runs.data || !!runs.error || !urls.trim()))
+                    }
+                  >
+                    {create.isPending
+                      ? "Checking capture…"
+                      : submission
+                        ? "Retry same request"
+                        : "Capture pages"}
+                  </Button>
+                  {!mayCreate && owner && (
+                    <p className="text-muted-foreground text-sm">
+                      You have read-only access.
+                    </p>
+                  )}
+                  {active && (
+                    <p role="status" className="text-muted-foreground text-sm">
+                      A capture is already queued or running.
+                    </p>
+                  )}
+                </div>
+              </form>
+            )}
           </div>
-        </main>
+        </ScrollArea>
+      </WorkspaceBody>
+    </WorkspaceContainer>
+  );
+}
+
+function CaptureReceipt({
+  data,
+  owner,
+  scope,
+  headingRef,
+  mayCancel,
+  stopping,
+  downloading,
+  onStop,
+  onDownload,
+}: {
+  data: BrowserResearch;
+  owner: string | undefined;
+  scope: string | undefined;
+  headingRef: RefObject<HTMLHeadingElement | null>;
+  mayCancel: boolean;
+  stopping: boolean;
+  downloading: boolean;
+  onStop: () => void;
+  onDownload: () => void;
+}) {
+  const state = captureState(data.status);
+  const pages = data.pages.length;
+  return (
+    <section
+      aria-label="Capture evidence"
+      className={cn(
+        pageStyles.sheet,
+        pageStyles.pin,
+        data.status === "running" && "pinned",
+        "mt-4 max-w-3xl min-w-0 space-y-5 p-4 sm:p-5",
+      )}
+    >
+      <div className="space-y-1.5">
+        <h3
+          ref={headingRef}
+          tabIndex={-1}
+          className="text-lg leading-snug font-bold break-words focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+        >
+          {data.title}
+        </h3>
+        <p
+          role="status"
+          className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm"
+        >
+          <StatusTag tone={state.tone}>{state.label}</StatusTag>
+          <span className="text-muted-foreground">
+            Started{" "}
+            <time
+              dateTime={toDateTimeAttr(data.created_at)}
+              title={new Date(data.created_at).toLocaleString()}
+            >
+              {runTime(data.created_at)}
+            </time>
+            {data.status === "completed" && pages
+              ? `, ${pages === 1 ? "1 page" : `${pages} pages`} saved`
+              : ""}
+          </span>
+        </p>
+        {data.last_error && (
+          <p role="alert" className="text-destructive text-sm break-words">
+            {browserWords(data.last_error)}
+          </p>
+        )}
+      </div>
+      {(isBrowserResearchBusy(data.status) || pages > 0) && (
+        <div className="flex flex-wrap gap-2">
+          {isBrowserResearchBusy(data.status) && (
+            <Button
+              variant="outline"
+              className="min-h-11 max-sm:flex-1"
+              disabled={!mayCancel || stopping}
+              onClick={onStop}
+            >
+              <Square className="size-3" />
+              {stopping ? "Stopping…" : "Stop capture"}
+            </Button>
+          )}
+          {pages > 0 && (
+            <Button
+              variant="outline"
+              className="min-h-11 max-sm:flex-1"
+              disabled={downloading}
+              onClick={onDownload}
+            >
+              <Download className="size-4" />
+              Download evidence
+            </Button>
+          )}
+        </div>
+      )}
+      <div>
+        <h4 className={cn(pageStyles.eyebrow, "mb-2")}>Pages</h4>
+        {pages === 0 ? (
+          <p className="text-muted-foreground text-sm">
+            No page evidence has been retrieved.
+          </p>
+        ) : (
+          <ol className="space-y-4">
+            {data.pages.map((page) => {
+              const source = publicResearchUrl(page.final_url || page.url);
+              return (
+                <li
+                  key={page.index}
+                  className="min-w-0 space-y-2 border-t pt-4 first:border-t-0 first:pt-0"
+                >
+                  <p className="text-sm font-semibold break-words">
+                    {page.title || "Untitled captured page"}
+                  </p>
+                  {source ? (
+                    <a
+                      href={source}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary inline-flex min-h-11 max-w-full items-center gap-2 text-sm [overflow-wrap:anywhere] underline decoration-1 underline-offset-4"
+                    >
+                      <span className="min-w-0">{source}</span>
+                      <ExternalLink
+                        className="size-4 shrink-0"
+                        aria-hidden="true"
+                      />
+                    </a>
+                  ) : (
+                    <p className="text-muted-foreground text-sm">
+                      Source URL unavailable.
+                    </p>
+                  )}
+                  <details>
+                    <summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold">
+                      Read captured text
+                    </summary>
+                    <pre className="bg-muted max-h-96 overflow-y-auto rounded-md p-3 font-sans text-sm break-words whitespace-pre-wrap">
+                      {page.text || "No extracted text was returned."}
+                    </pre>
+                  </details>
+                  {owner && scope && page.screenshot_url && (
+                    <CapturedScreenshot
+                      key={`${owner}:${scope}:${data.id}:${page.index}`}
+                      owner={owner}
+                      scope={scope}
+                      runId={data.id}
+                      index={page.index}
+                      title={page.title || "Untitled captured page"}
+                    />
+                  )}
+                </li>
+              );
+            })}
+          </ol>
+        )}
+      </div>
+      <div>
+        <h4 className={cn(pageStyles.eyebrow, "mb-2")}>Record</h4>
+        <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1 text-sm">
+          <dt className="text-muted-foreground">Browser minutes</dt>
+          <dd>{data.usage.browser_minutes ?? "Not recorded"}</dd>
+          <dt className="text-muted-foreground">Cost</dt>
+          <dd>Not priced</dd>
+          <dt className="text-muted-foreground">Cloud session</dt>
+          <dd>
+            {data.session_closed === true
+              ? "Closed"
+              : data.session_closed === false
+                ? "Still open"
+                : "Closure unconfirmed"}
+          </dd>
+        </dl>
       </div>
     </section>
   );
