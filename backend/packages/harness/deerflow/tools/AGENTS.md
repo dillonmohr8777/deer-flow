@@ -46,6 +46,10 @@ Only standalone tool discovery without a model falls back to the base profile.
 
 The ordinary `task` boundary carries one narrow parent-loop middleware recorder into the isolated subagent runtime under separate loop-detection, tool-promotion, and tool-progress keys. It schedules only `record_middleware` calls back onto the loop that owns `RunJournal`, keeps an execution-local atomic promotion claim so parallel searches do not double-report one new schema, is fenced and drained once before `task` returns, and never exposes the journal or event store to the child loop. Durable batch tasks have no parent run journal and do not use this bridge.
 
+`mcp_plugins=[]` skips global MCP config reads and cached/lazy discovery before
+initialization; `None` and nonempty selections retain discovery and source-ID
+filtering. Keep the no-discovery regression in `test_capability_registry.py`.
+
 Scheduled-task runtime note:
 - Scheduled background runs resolve to the `scheduled` interaction policy through trusted `context.non_interactive=true` and therefore exclude `ask_clarification` from the lead-agent tool list. The legacy `context.non_interactive=true` key remains accepted only for internally authenticated scheduler calls during migration; arbitrary HTTP/IM clients cannot set it.
 
