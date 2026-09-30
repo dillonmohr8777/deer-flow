@@ -82,13 +82,13 @@ jobs:
 
       - name: Run E2E tests
         working-directory: frontend
-        run: pnpm exec playwright test
+        run: pnpm exec playwright test --output=test-results/default
         env:
           SKIP_ENV_VALIDATION: '1'
 
       - name: Run auth recovery E2E tests
         working-directory: frontend
-        run: pnpm exec playwright test -c playwright.auth.config.ts
+        run: pnpm exec playwright test -c playwright.auth.config.ts --output=test-results/auth
         env:
           SKIP_ENV_VALIDATION: '1'
 
