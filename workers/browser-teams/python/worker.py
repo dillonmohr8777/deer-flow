@@ -6,6 +6,8 @@ import os
 import socket
 import sqlite3
 import sys
+import tempfile
+from pathlib import Path
 from typing import ClassVar
 
 LIMIT = 262144
@@ -200,8 +202,36 @@ def crew(frame, relay):
         "memory": False,
         "tracing": department.tracing is True,
         "sqlite_connections_allowed": False,
+        "auth_token_access": False,
+        "storage_scope": "private_temporary",
     }
     return json.loads(result.raw)
+
+
+def disable_crewai_host_storage(scratch):
+    """Pinned import hooks keep optional Crew cloud auth out of this worker.
+
+    CrewAI1.15.23 initializes trace helpers even when tracing=False. Its token
+    manager otherwise reads/creates credential files in the real user's home.
+    These hooks run before importing CrewAI and only in this disposable child.
+    """
+    from importlib.metadata import version
+
+    if version("crewai") != "1.15.23":
+        raise RuntimeError("unreviewed_crewai_import_hooks")
+    from crewai_core import paths
+    from crewai_core.auth import token
+    from crewai_core.token_manager import TokenManager
+
+    def deny_auth(*_args, **_kwargs):
+        raise token.AuthError("worker_auth_disabled")
+
+    token.get_auth_token = deny_auth
+    TokenManager.__init__ = deny_auth
+    paths.db_storage_path = lambda: str(scratch)
+    (Path(scratch) / ".crewai_user.json").write_text(
+        '{"first_execution_done":true,"trace_consent":false}', encoding="utf-8"
+    )
 
 
 def deep(frame, relay):
@@ -276,7 +306,12 @@ def main():
     relay = Relay(frame)
     # Framework libraries may print status/payloads. Only protocol frames reach stdout.
     with contextlib.redirect_stdout(sys.stderr):
-        output = {"crewai": crew, "deepagents": deep}[sys.argv[1]](frame, relay)
+        if sys.argv[1] == "crewai":
+            with tempfile.TemporaryDirectory(prefix="momobot-crewai-") as scratch:
+                disable_crewai_host_storage(scratch)
+                output = crew(frame, relay)
+        else:
+            output = deep(frame, relay)
     if relay.calls != 1 or output != relay.output:
         raise ValueError("worker_output_mismatch")
     emit(
@@ -293,6 +328,6 @@ def main():
 if __name__ == "__main__":
     try:
         main()
-    except BaseException:
+    except BaseException:  # noqa: BLE001 - fixed CLI frame hides worker exceptions.
         emit({"type": "error", "version": 1, "code": "isolated_worker_failed"})
         sys.exit(1)

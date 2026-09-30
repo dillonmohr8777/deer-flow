@@ -2464,6 +2464,12 @@ See [workflow operation and limits](backend/docs/WORKFLOWS.md),
 [AgentOS probe](docs/AGNO_AGENTOS_PROBE.md) tests bounded native persistence and
 authorization; it does not activate another production platform.
 
+The default Gateway image excludes optional framework worker dependencies.
+The separate [private worker image](workers/browser-teams/README.md#optional-private-container-image)
+adds locked Python3.13/Node24 adapters to an explicitly reviewed Gateway image;
+the default backend build and publication pipeline retain their current behavior.
+Its disposable offline smoke uses synthetic model responses with network disabled.
+
 Before starting a newly prepared dedicated private app state, stop its Gateway
 and run `scripts/run_momobot_openai_app.py prepare-config` with `--state-dir`
 and the reviewed `--expected-config-sha256`. This appends a missing
