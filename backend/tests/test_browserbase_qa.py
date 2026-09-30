@@ -120,3 +120,22 @@ async def test_api_errors_do_not_echo_provider_payloads_or_credentials():
         with pytest.raises(RuntimeError, match="HTTP 401") as exc:
             await BrowserbaseAPI("secret", PROJECT, http).usage()
     assert "secret" not in str(exc.value)
+
+
+@pytest.mark.asyncio
+async def test_missing_playwright_never_creates_a_session(tmp_path: Path, monkeypatch):
+    from deerflow.community.browser_automation import browserbase_qa
+
+    monkeypatch.setattr(browserbase_qa, "playwright_available", lambda: False)
+
+    class API:
+        project_id = "fake-project"
+
+        async def usage(self):
+            return {"browserMinutes": 0}
+
+        async def create(self, policy, **kwargs):
+            raise AssertionError("no session may be created")
+
+    with pytest.raises(ValueError, match="Playwright"):
+        await browserbase_qa.run_qa(API(), "https://example.com/", browserbase_qa.QaPolicy(("example.com",)), tmp_path / "out")
