@@ -131,7 +131,7 @@ async function expectSidecarSelectionToolbarActions(page: Page, text: string) {
   throw lastError;
 }
 
-async function expectComposerHeightsEqual(page: Page) {
+async function expectComposerGeometryWithDisclaimerReserve(page: Page) {
   const metrics = await page.evaluate(() => {
     const findFormByPlaceholder = (pattern: RegExp) => {
       const textarea = Array.from(document.querySelectorAll("textarea")).find(
@@ -142,9 +142,30 @@ async function expectComposerHeightsEqual(page: Page) {
         return null;
       }
       const box = form.getBoundingClientRect();
+      // The disclaimer is a sibling of the main form inside InputBox.
+      const composer = form.parentElement;
+      const disclaimer = composer
+        ? Array.from(composer.querySelectorAll("p")).find(
+            (element) =>
+              element.textContent ===
+              "Agents can make mistakes. Check the record.",
+          )
+        : undefined;
+      const disclaimerBox = disclaimer?.getBoundingClientRect();
+      const mainFooter = composer?.parentElement?.parentElement;
       return {
         height: Math.round(box.height),
         bottomGap: Math.round(window.innerHeight - box.bottom),
+        bottom: box.bottom,
+        viewportBottom: window.innerHeight,
+        footerBottom: mainFooter?.getBoundingClientRect().bottom,
+        disclaimer: disclaimerBox
+          ? {
+              top: disclaimerBox.top,
+              bottom: disclaimerBox.bottom,
+              height: disclaimerBox.height,
+            }
+          : null,
       };
     };
 
@@ -157,12 +178,29 @@ async function expectComposerHeightsEqual(page: Page) {
   expect(metrics.main).not.toBeNull();
   expect(metrics.sidecar).not.toBeNull();
   expect(metrics.sidecar?.height).toBe(metrics.main?.height);
-  expect(metrics.sidecar?.bottomGap).toBe(metrics.main?.bottomGap);
+  // The main footer reserves 28px for its disclaimer; the side chat's 16px
+  // footer has no disclaimer. The forms themselves remain equally tall.
+  expect(metrics.main?.bottomGap).toBe(28);
+  expect(metrics.sidecar?.bottomGap).toBe(16);
+  expect(metrics.main?.disclaimer).not.toBeNull();
+  expect(metrics.main?.disclaimer?.top).toBeGreaterThanOrEqual(
+    metrics.main!.bottom,
+  );
+  expect(metrics.main?.disclaimer?.height).toBeGreaterThan(0);
+  expect(metrics.main?.disclaimer?.bottom).toBeLessThanOrEqual(
+    metrics.main!.viewportBottom,
+  );
+  expect(metrics.main?.disclaimer?.bottom).toBeLessThanOrEqual(
+    metrics.main!.footerBottom!,
+  );
 }
 
 async function expectSidecarModelPinnedToSubmit(page: Page) {
   const metrics = await page.evaluate(() => {
-    const getComposerMetrics = (placeholderPattern: RegExp) => {
+    const getComposerMetrics = (
+      placeholderPattern: RegExp,
+      submitLabel: "Send" | "Submit",
+    ) => {
       const textarea = Array.from(document.querySelectorAll("textarea")).find(
         (element) =>
           placeholderPattern.test(element.getAttribute("placeholder") ?? ""),
@@ -186,7 +224,7 @@ async function expectSidecarModelPinnedToSubmit(page: Page) {
       const model = buttons.find(
         (button) => button.label === "DeepSeek V4 Pro",
       );
-      const submit = buttons.find((button) => button.label === "Submit");
+      const submit = buttons.find((button) => button.label === submitLabel);
 
       return {
         formLeft: Math.round(formBox.left),
@@ -204,8 +242,8 @@ async function expectSidecarModelPinnedToSubmit(page: Page) {
     };
 
     return {
-      main: getComposerMetrics(/how can i assist you/i),
-      sidecar: getComposerMetrics(/deeper follow-up/i),
+      main: getComposerMetrics(/how can i assist you/i, "Send"),
+      sidecar: getComposerMetrics(/deeper follow-up/i, "Submit"),
     };
   });
 
@@ -229,6 +267,8 @@ async function expectSidecarModelPinnedToSubmit(page: Page) {
     throw new Error("Unable to measure composer model and submit controls.");
   }
 
+  expect(mainSubmit.label).toBe("Send");
+  expect(sidecarSubmit.label).toBe("Submit");
   expect(sidecarModel.left).toBeGreaterThan(sidecarMode.right);
   expect(sidecar.gap).toBe(main.gap);
   expect(sidecarModel.left).toBeGreaterThanOrEqual(sidecar.formLeft);
@@ -861,7 +901,7 @@ test.describe("Side chat", () => {
       "Add to conversation",
     );
     await expect(quoteAttachment).toContainText("1 selected text fragment");
-    await expectComposerHeightsEqual(page);
+    await expectComposerGeometryWithDisclaimerReserve(page);
     await quoteAttachment
       .getByRole("button", { name: /clear selected references/i })
       .click();
@@ -955,7 +995,7 @@ test.describe("Side chat", () => {
 
     await expect(sidecarInput).toHaveValue("");
     await expect(sidecarReference).toBeHidden();
-    await expectComposerHeightsEqual(page);
+    await expectComposerGeometryWithDisclaimerReserve(page);
     await expect(page.getByTestId("sidecar-header-trigger")).toBeVisible();
 
     // Hiding the side chat is owned by the header trigger; the panel's own

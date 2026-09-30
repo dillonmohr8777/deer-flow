@@ -10,7 +10,12 @@ async function recentChatTitles(page: Page) {
     .locator('a[data-sidebar="menu-button"][href^="/workspace/chats/"]')
     .evaluateAll((links) =>
       links
-        .map((link) => link.textContent?.replace(/\s+/g, " ").trim() ?? "")
+        .map(
+          (link) =>
+            link
+              .querySelector('[data-testid="thread-row-title"]')
+              ?.textContent?.trim() ?? "",
+        )
         .filter((text) => text && text !== "New chat"),
     );
 }
@@ -34,6 +39,17 @@ test("sidebar recent chats can be pinned and unpinned", async ({ page }) => {
   await page.goto("/workspace/chats/new");
 
   await expect(page.getByText("Newest chat")).toBeVisible({ timeout: 15_000 });
+  for (const [threadId, title] of [
+    [NEWEST_THREAD_ID, "Newest chat"],
+    [OLDER_THREAD_ID, "Older chat"],
+  ]) {
+    await expect(
+      page
+        .getByTestId("thread-row-title")
+        .filter({ hasText: new RegExp(`^${title}$`) })
+        .locator("xpath=ancestor::a[1]"),
+    ).toHaveAttribute("href", `/workspace/chats/${threadId}`);
+  }
   await expect
     .poll(() => recentChatTitles(page))
     .toEqual(["Newest chat", "Older chat"]);
