@@ -38,15 +38,6 @@ _TRIAGE_TIMEOUT_SECONDS = 20
 
 _ORG_ADMIN_ROLES = ("owner", "admin")
 
-# A thread reaching any of these statuses has had its current momo draft (if
-# any) explicitly approved by an owner -- the workflow in
-# ``deerflow.board.workflow`` is strictly linear (draft only from
-# new/triaged, approve only from drafted, reply only from approved, with no
-# path back to drafted once approved), so status alone tells us whether the
-# thread's momo content has cleared approval, with no per-message
-# ``approved_at`` column needed.
-_CONTENT_APPROVED_STATUSES = frozenset({BoardThreadStatus.APPROVED, BoardThreadStatus.REPLIED, BoardThreadStatus.CLOSED})
-
 BoardKind = Literal["post", "ticket", "concern", "dm"]
 BoardStatus = Literal["new", "triaged", "drafted", "approved", "replied", "closed"]
 
@@ -165,7 +156,25 @@ async def _is_active_org_admin(user_id: str) -> bool:
         return (await session.execute(stmt)).scalars().first() is not None
 
 
-def _visible_to_non_admin(row: dict) -> bool:
+async def _thread_delivered(board_repo, thread_id: str) -> bool:
+    """Whether *thread_id* has ever carried an ``owner``-authored message.
+
+    f157 round 2: a thread's *current* status is not a safe proxy for "its
+    momo content was approved" -- ``patch_board_thread`` lets an org admin
+    set ``new``/``triaged``/``closed`` from any status at any time (only
+    ``drafted``/``approved``/``replied`` are workflow-only), so a rejected or
+    superseded draft can land back on a status that looks "approved" by a
+    purely status-based rule, and a thread can cycle through a second
+    unapproved draft while still reading as delivered from an earlier one.
+    Only ``send_board_reply`` ever writes an ``owner``-authored message
+    (see ``BoardRepository.thread_ids_with_owner_message``), so its mere
+    existence -- not the thread's current status -- is what actually proves
+    something on this thread shipped to the client.
+    """
+    return thread_id in await board_repo.thread_ids_with_owner_message([thread_id])
+
+
+def _visible_to_non_admin(row: dict, *, delivered: bool) -> bool:
     """Whether a non-admin with client access may see thread/row *row* at all.
 
     A thread a real person started (``created_by_user_id`` is set, e.g. a
@@ -174,44 +183,44 @@ def _visible_to_non_admin(row: dict) -> bool:
     created on Momo's behalf (``created_by_user_id`` is ``None`` --
     ``draft_board_thread`` is the only such caller today) starts life
     holding nothing but an unapproved internal draft, and must stay
-    invisible -- thread and messages both -- until an owner approves it
-    (f157): otherwise a client contact can read a plan that was never meant
-    to reach them yet, or even learn one exists.
+    invisible -- thread and messages both -- until it has actually been
+    delivered (f157): otherwise a client contact can read a plan that was
+    never meant to reach them yet, or even learn one exists.
     """
-    return row.get("created_by_user_id") is not None or row.get("status") in _CONTENT_APPROVED_STATUSES
+    return row.get("created_by_user_id") is not None or delivered
 
 
-async def _require_client_access(client_repo, client_id: str, user_id: str, *, thread: dict | None = None) -> None:
-    """Raise 404 unless *user_id* is an org admin or assigned to *client_id*.
-
-    *thread*, when given, additionally hides a not-yet-approved momo-only
-    draft thread from a non-admin (f157) -- see ``_visible_to_non_admin``.
-    """
+async def _require_client_access(client_repo, client_id: str, user_id: str) -> None:
+    """Raise 404 unless *user_id* is an org admin or assigned to *client_id*."""
     if await client_repo.get(client_id) is None:
         raise _not_found()
     if await _is_active_org_admin(user_id):
         return
-    if thread is not None and not _visible_to_non_admin(thread):
-        raise _not_found()
     mine_ids = {c["id"] for c in await client_repo.list_mine()}
     if client_id not in mine_ids:
         raise _not_found()
 
 
-async def _require_thread_access(client_repo, row: dict, user_id: str) -> None:
+async def _require_thread_access(board_repo, client_repo, row: dict, user_id: str) -> None:
     """Raise 404 unless *user_id* may act on the loaded thread *row*.
 
-    A client-stamped thread follows ``_require_client_access``. A thread with
-    no client (f66) is owner/admin-only: no client assignment can grant it,
-    so without this every org member, including a client-role account, could
-    read and write it.
+    A client-stamped thread follows ``_require_client_access``, plus the
+    tool-created-and-not-yet-delivered check (f157) -- see
+    ``_visible_to_non_admin``. A thread with no client (f66) is
+    owner/admin-only: no client assignment can grant it, so without this
+    every org member, including a client-role account, could read and write it.
     """
     client_id = row.get("client_id")
     if client_id is None:
         if not await _is_active_org_admin(user_id):
             raise _not_found()
         return
-    await _require_client_access(client_repo, client_id, user_id, thread=row)
+    if await _is_active_org_admin(user_id):
+        await _require_client_access(client_repo, client_id, user_id)
+        return
+    if row.get("created_by_user_id") is None and not await _thread_delivered(board_repo, row["id"]):
+        raise _not_found()
+    await _require_client_access(client_repo, client_id, user_id)
 
 
 @router.post("/threads", response_model=BoardThreadResponse, status_code=201)
@@ -261,7 +270,9 @@ async def list_board_threads(request: Request, client_id: str | None = None, sta
         mine_ids = [c["id"] for c in await client_repo.list_mine()]
         rows = await board_repo.list_threads(client_ids=mine_ids, status=status) if mine_ids else []
     if not actor_is_owner:
-        rows = [r for r in rows if _visible_to_non_admin(r)]
+        pending_ids = [r["id"] for r in rows if r.get("created_by_user_id") is None]
+        delivered_ids = await board_repo.thread_ids_with_owner_message(pending_ids)
+        rows = [r for r in rows if _visible_to_non_admin(r, delivered=r["id"] in delivered_ids)]
     return BoardThreadListResponse(threads=[_to_thread_response(r, actor_is_owner=actor_is_owner) for r in rows])
 
 
@@ -274,7 +285,7 @@ async def get_board_thread(thread_id: str, request: Request) -> BoardThreadRespo
     if row is None:
         raise _not_found()
     user = await get_current_user_from_request(request)
-    await _require_thread_access(client_repo, row, str(user.id))
+    await _require_thread_access(board_repo, client_repo, row, str(user.id))
     actor_is_owner = await _is_active_org_admin(str(user.id))
     return _to_thread_response(row, actor_is_owner=actor_is_owner)
 
@@ -298,7 +309,7 @@ async def patch_board_thread(thread_id: str, body: BoardThreadPatchRequest, requ
         raise _not_found()
     user = await get_current_user_from_request(request)
     user_id = str(user.id)
-    await _require_thread_access(client_repo, row, user_id)
+    await _require_thread_access(board_repo, client_repo, row, user_id)
     if body.status is not None:
         if not await _is_active_org_admin(user_id):
             await record_audit_event(request, action="board.thread.status_patch", outcome="denied", actor_user_id=user_id, organization_id=resolve_organization_id(), target_type="board_thread", target_id=thread_id)
@@ -324,13 +335,16 @@ async def list_board_messages(thread_id: str, request: Request) -> BoardMessageL
         raise _not_found()
     user = await get_current_user_from_request(request)
     user_id = str(user.id)
-    await _require_thread_access(client_repo, row, user_id)
+    await _require_thread_access(board_repo, client_repo, row, user_id)
     messages = await board_repo.list_messages(thread_id) or []
-    if not await _is_active_org_admin(user_id) and row.get("status") not in _CONTENT_APPROVED_STATUSES:
-        # The thread itself already passed `_require_thread_access` (a
-        # client-authored thread is visible even before approval), but an
-        # unapproved momo draft on it must still stay hidden until an owner
-        # approves the thread (f157) -- see `_visible_to_non_admin`.
+    if not await _is_active_org_admin(user_id):
+        # A non-admin never sees momo's own raw message, approved or not:
+        # whatever actually ships to the client is always separately written
+        # as an `owner`-authored message by `send_board_reply` (`:464`), so
+        # the momo draft itself has nothing a client needs to read. This is
+        # deliberately unconditional (not keyed on thread status, f157 round
+        # 2) -- status can be walked back to new/triaged/closed by a PATCH at
+        # any time, so it can never safely stand in for "was this approved".
         messages = [m for m in messages if m["author_kind"] != "momo"]
     return BoardMessageListResponse(messages=[_to_message_response(m) for m in messages])
 
@@ -352,7 +366,7 @@ async def add_board_message(thread_id: str, body: BoardMessageCreateRequest, req
         raise _not_found()
     user = await get_current_user_from_request(request)
     user_id = str(user.id)
-    await _require_thread_access(client_repo, row, user_id)
+    await _require_thread_access(board_repo, client_repo, row, user_id)
     author_kind = "owner" if await _is_active_org_admin(user_id) else "client"
     message = await board_repo.add_message(thread_id, author_kind=author_kind, author_user_id=user_id, body=body.body)
     if message is None:
@@ -376,7 +390,7 @@ async def _load_thread_for_actor(board_repo, client_repo, thread_id: str, reques
         raise _not_found()
     user = await get_current_user_from_request(request)
     user_id = str(user.id)
-    await _require_thread_access(client_repo, row, user_id)
+    await _require_thread_access(board_repo, client_repo, row, user_id)
     return row, user_id
 
 

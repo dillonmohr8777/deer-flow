@@ -147,6 +147,27 @@ class BoardRepository:
             result = await session.execute(stmt)
             return [_message_to_dict(r) for r in result.scalars()]
 
+    async def thread_ids_with_owner_message(self, thread_ids: list[str]) -> set[str]:
+        """Which of *thread_ids* have ever carried an ``owner``-authored message.
+
+        Used to gate a tool-created thread's visibility to a non-admin
+        (queue item f157, round 2): the thread's *current* status is not a
+        safe signal -- an org admin can ``PATCH`` it to ``new``/``triaged``/
+        ``closed`` at any time (``board.py``'s workflow-only guard blocks only
+        ``drafted``/``approved``/``replied``), which can make a still-unapproved
+        or a since-superseded draft look "approved" by status alone. Only
+        ``send_board_reply`` ever writes an ``owner``-authored message, so its
+        mere existence -- not the thread's current status -- is the
+        tamper-proof signal that something on this thread actually shipped
+        to the client.
+        """
+        if not thread_ids:
+            return set()
+        stmt = select(BoardMessageRow.thread_id).where(BoardMessageRow.thread_id.in_(thread_ids), BoardMessageRow.author_kind == "owner").distinct()
+        async with self._sf() as session:
+            result = await session.execute(stmt)
+            return set(result.scalars())
+
     async def add_message(self, thread_id: str, *, author_kind: str, body: str, author_user_id: str | None = None) -> dict | None:
         """Append one message; ``None`` for a missing/foreign thread."""
         if await self.get_thread(thread_id) is None:
