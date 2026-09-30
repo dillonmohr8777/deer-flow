@@ -9,12 +9,13 @@ changes for Google: enabling a `google` OIDC provider in `config.yaml` is
 enough, the button appears on its own.
 
 `components/workspace/settings/security-settings-page.tsx` is the Settings
+
 > Security tab (registered in `settings-dialog.tsx`'s section list): enroll
-(QR via the already-installed `qrcode.react`, plus the raw `otpauth://` URI
-and secret for manual entry), confirm, show the ten recovery codes once
-with a copy button (`core/clipboard.ts`'s `writeTextToClipboard`), and
-disable. Mirrors `account-settings-page.tsx`'s form conventions
-(placeholder-driven `Input`, no separate `<label>`).
+> (QR via the already-installed `qrcode.react`, plus the raw `otpauth://` URI
+> and secret for manual entry), confirm, show the ten recovery codes once
+> with a copy button (`core/clipboard.ts`'s `writeTextToClipboard`), and
+> disable. Mirrors `account-settings-page.tsx`'s form conventions
+> (placeholder-driven `Input`, no separate `<label>`).
 
 `User.mfa_enabled` (`types.ts`) is optional in the exported TS type even
 though the zod schema defaults it at parse time, unlike `needs_setup` which

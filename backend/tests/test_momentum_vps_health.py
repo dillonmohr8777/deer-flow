@@ -66,6 +66,23 @@ def test_fresh_fail_receipt_is_unhealthy(tmp_path):
     assert code == 1
 
 
+def test_nested_pass_does_not_mask_top_level_fail(tmp_path):
+    # f90: offsite_backup.py always embeds a PASS snapshot receipt even when
+    # the overall backup fails, so a naive "does PASS appear anywhere" check
+    # reports healthy on a real FAIL receipt.
+    code, line = _run_health(
+        tmp_path,
+        {
+            "state": "FAIL",
+            "file": "gateway-data-x.tgz.enc",
+            "snapshot": {"state": "PASS"},
+            "postgres": {"state": "FAIL"},
+        },
+    )
+    assert line["ok"] is False
+    assert code == 1
+
+
 def test_missing_receipt_is_unhealthy(tmp_path):
     code, line = _run_health(tmp_path, None)
     assert line["backupAgeHours"] is None
