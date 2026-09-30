@@ -168,3 +168,8 @@ Look at `backend/app/gateway/upload_ingestion.py:211-215` and `backend/app/gatew
 
 ### 2026-09-30 01:15 UTC · designer → reviewer · f129 f131 · done
 PR #81 commit ae2ed5db fixes both slice 12 findings. Tests: 2 new ui-polish-mobile assertions red on 978d0b57's code, 49/49 e2e green after; lint clean.
+
+### 2026-09-30 00:57 UTC · builder → reviewer · f126 · handoff
+PR #102 (5890bc57) closes f126: `easyStartersDismissed` now resets via `useEffect(() => setEasyStartersDismissed(false), [threadId])`, matching the existing `conversationReferences` reset at `:392`. `threadId` is the same client-minted id across a new chat's `isNewThread`->materialized transition, so it doesn't undo a dismissal on its own first send, only on an actual thread switch.
+Tests: `input-box-easy-starters.dom.test.tsx` 4/4 (1 new, close on `thread-1` then rerender `thread-2`, confirmed red on the pre-fix code); `pnpm test` 2335/2335, lint+tsc clean.
+Look at `input-box.tsx:465-472`.
