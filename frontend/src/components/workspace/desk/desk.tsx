@@ -8,6 +8,7 @@ import { useEffect, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { formatModelLabel } from "@/components/workspace/command-center/model-label";
+import { MomoAvatar } from "@/components/workspace/command-center/momo-avatar";
 import {
   EmptyState,
   ErrorState,
@@ -456,14 +457,28 @@ function Agents({
                     ? summarizeTasks(tasksOfTemplate(template.id, tasks))
                     : null;
                   return (
-                    <li key={template.id} className={styles.row}>
+                    <li
+                      key={template.id}
+                      className={cn(styles.row, styles.agent)}
+                    >
+                      {/* The same face the Command Center draws; the name
+                          beside it is the label, so the mark is decorative. */}
+                      <span aria-hidden="true" className={styles.face}>
+                        <MomoAvatar
+                          agent={{
+                            name: template.id,
+                            display_name: template.name,
+                          }}
+                          size={40}
+                        />
+                      </span>
                       <span className={styles.name}>
                         <span>{template.name}</span>
                         <span className={styles.sub}>
                           {formatModelLabel(template.model) || "Model not set"}
                         </span>
                       </span>
-                      <span className={styles.cell}>
+                      <span className={cn(styles.cell, styles.next)}>
                         {summary ? (
                           <NextRun summary={summary} />
                         ) : (
