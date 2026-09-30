@@ -3092,15 +3092,17 @@ function StarterPrompts({
     <div
       role="group"
       aria-label={t.inputBox.startersLabel}
-      className="flex w-full max-w-full flex-wrap items-center justify-center gap-2 pt-2"
+      className="flex w-full max-w-full flex-wrap items-center justify-center gap-2 pt-2 max-[374px]:flex-nowrap max-[374px]:justify-start max-[374px]:overflow-x-auto max-[374px]:[contain:inline-size]"
       data-chat-starters=""
     >
       {/* Paper tags, not pills: chips cut at 2px (DESIGN.md), and 44px tall
-          on phones, where they sit at thumb reach under the composer. */}
+          on phones, where they sit at thumb reach under the composer. Below
+          375px they would wrap three rows high and lift the welcome under
+          the header, so they run as one sideways rail instead. */}
       {(starters ?? t.inputBox.starters).map((starter) => (
         <Suggestion
           key={starter.label}
-          className="paper-card text-foreground min-h-11 rounded-[2px] text-sm sm:min-h-0"
+          className="paper-card text-foreground min-h-11 shrink-0 rounded-[2px] text-sm sm:min-h-0"
           suggestion={starter.label}
           onClick={() => {
             textInput.setInput(starter.prompt);

@@ -273,7 +273,7 @@ test.describe("Desk, the owner-only home", () => {
       await expect(today).toHaveCount(1, { timeout: 15_000 });
       const slip = today.first();
       const title = slip.getByText("Chief of Staff", { exact: true });
-      const when = slip.getByText(/^Today /);
+      const when = slip.getByText(/\d:\d\d [AP]M$/);
       const reason = slip.getByText("Google Ads token expired", {
         exact: false,
       });

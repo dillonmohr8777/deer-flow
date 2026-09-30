@@ -47,8 +47,10 @@ export function Welcome({
       )}
     >
       {/* Phones keep the composer low (chat-page.tsx), so the Momo grows
-          into the desk above it: 112px on a short phone, up to 176px. */}
-      <span className="size-[clamp(7rem,calc(100dvh_-_680px),11rem)] shrink-0 -rotate-2 sm:size-28 overflow-hidden border-4 border-[#fbf8f1] shadow-[0_10px_24px_-10px_rgb(16_30_63/0.5)]">
+          into the desk above it: 112px on a short phone, up to 176px. The
+          block is bottom-anchored, so a phone 660px tall or less drops the
+          Momo rather than push the greeting under the header. */}
+      <span className="size-[clamp(7rem,calc(100dvh_-_680px),11rem)] shrink-0 -rotate-2 overflow-hidden border-4 border-[#fbf8f1] shadow-[0_10px_24px_-10px_rgb(16_30_63/0.5)] sm:size-28 max-sm:[@media(max-height:660px)]:hidden">
         <MomoFilm
           name="momo-pencil"
           live={motionOn}

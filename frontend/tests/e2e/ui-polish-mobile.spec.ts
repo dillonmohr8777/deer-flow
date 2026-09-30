@@ -482,6 +482,52 @@ test.describe("UI polish mobile regressions", () => {
       .toBeLessThanOrEqual(390);
   });
 
+  // Review of slice 14: the welcome block is bottom-anchored, so on short
+  // phones its Momo and greeting rose under the header (360x640 lost 71px,
+  // 320x568 lost the Momo entirely).
+  for (const [width, height] of [
+    [360, 640],
+    [320, 568],
+    [375, 625],
+    [414, 640],
+    [375, 667],
+    [360, 661],
+  ] as const) {
+    test(`a new chat's welcome stays below the header at ${width}x${height}`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height });
+      mockLangGraphAPI(page, { threads: [] });
+
+      await page.goto("/workspace/chats/new");
+
+      const greeting = page.getByRole("heading", {
+        name: "What should the team take on?",
+      });
+      await expect(greeting).toBeVisible({ timeout: 15_000 });
+      const headerBottom = await page
+        .locator("header")
+        .first()
+        .evaluate((el) => el.getBoundingClientRect().bottom);
+      await expect
+        .poll(() =>
+          greeting.evaluate((el) => {
+            const tops = [...el.parentElement!.children]
+              .filter((child) => child.getClientRects().length > 0)
+              .map((child) => child.getBoundingClientRect().top);
+            return Math.min(...tops);
+          }),
+        )
+        .toBeGreaterThanOrEqual(headerBottom);
+      const starters = page.locator("[data-chat-starters]");
+      const box = (await starters.boundingBox())!;
+      expect(box.y + box.height).toBeLessThanOrEqual(height);
+      await expect
+        .poll(() => page.evaluate(() => document.documentElement.scrollWidth))
+        .toBeLessThanOrEqual(width);
+    });
+  }
+
   test("?settings=security opens the Security section", async ({ page }) => {
     mockLangGraphAPI(page);
 
