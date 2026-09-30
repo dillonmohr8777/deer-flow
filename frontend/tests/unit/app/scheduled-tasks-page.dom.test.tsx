@@ -158,3 +158,18 @@ it("says loading, empty and failed plainly", () => {
   fireEvent.click(within(alert).getByRole("button", { name: "Try again" }));
   expect(mocks.tasks.refetch).toHaveBeenCalledTimes(1);
 });
+
+it("says when a task runs in words, with the full date on the element", () => {
+  const next = new Date();
+  next.setDate(next.getDate() + 1);
+  next.setHours(8, 50, 0, 0);
+  mocks.tasks.data = [task({ id: "a", next_run_at: next.toISOString() })];
+  render(<ScheduledTasksPage />, { wrapper: Wrapper });
+  const row = screen.getByTestId("scheduled-task-item-a");
+  const when = within(row).getByText("Tomorrow, 8:50 AM");
+  expect(when.tagName).toBe("TIME");
+  expect(when.getAttribute("dateTime")).toBe(next.toISOString());
+  expect(when.getAttribute("title")).toContain(String(next.getFullYear()));
+  // Selected is edged in royal, never a coloured left stripe.
+  expect(row.className).not.toContain("border-l");
+});

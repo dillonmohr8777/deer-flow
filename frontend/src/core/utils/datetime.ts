@@ -75,3 +75,50 @@ export function formatCompactStamp(
       : { year: "numeric" as const }),
   }).format(parsed);
 }
+
+/**
+ * When a scheduled run happens, in words a person plans by: "Today, 11:30 PM",
+ * "Tomorrow, 8:50 AM", a weekday within the week ("Sat, 2:00 PM"), otherwise
+ * the day ("Nov 9, 10:00 AM") with the year only when it differs. Days are
+ * calendar days, not 24-hour windows. Returns null for a missing or invalid
+ * timestamp so callers can name the gap.
+ */
+export function formatScheduleTime(
+  date: Date | string | number | null | undefined,
+  locale: string,
+  now: Date = new Date(),
+): string | null {
+  if (date === null || date === undefined || date === "") return null;
+  const parsed = date instanceof Date ? date : new Date(date);
+  if (Number.isNaN(parsed.getTime())) return null;
+  const intlLocale = locale === "zh-CN" ? "zh-CN" : "en-US";
+  const time = new Intl.DateTimeFormat(intlLocale, {
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(parsed);
+  const midnight = (d: Date) =>
+    new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  // Round, so a DST day (23 or 25 hours) still counts as one day.
+  const days = Math.round((midnight(parsed) - midnight(now)) / 86_400_000);
+  let day: string;
+  if (Math.abs(days) <= 1) {
+    day = new Intl.RelativeTimeFormat(intlLocale, { numeric: "auto" }).format(
+      days,
+      "day",
+    );
+    day = day.charAt(0).toLocaleUpperCase(intlLocale) + day.slice(1);
+  } else if (Math.abs(days) < 7) {
+    day = new Intl.DateTimeFormat(intlLocale, { weekday: "short" }).format(
+      parsed,
+    );
+  } else {
+    day = new Intl.DateTimeFormat(intlLocale, {
+      month: "short",
+      day: "numeric",
+      ...(parsed.getFullYear() === now.getFullYear()
+        ? {}
+        : { year: "numeric" as const }),
+    }).format(parsed);
+  }
+  return intlLocale === "zh-CN" ? `${day} ${time}` : `${day}, ${time}`;
+}

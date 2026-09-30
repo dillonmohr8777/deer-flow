@@ -64,6 +64,7 @@ import type {
   ScheduledTask,
   ScheduledTaskRun,
 } from "@/core/scheduled-tasks/types";
+import { formatScheduleTime } from "@/core/utils/datetime";
 import { cn } from "@/lib/utils";
 
 // DESIGN.md's 44px touch floor for the text buttons on a phone (pause,
@@ -87,25 +88,22 @@ function ReuseThreadNotice({
   );
 }
 
-/** Absolute local time, or null when there is none; callers name the gap. */
-function formatTimestamp(value: string | null, locale: string): string | null {
-  if (!value) {
-    return null;
-  }
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-  // Use a locale-aware short format like "2026-07-03 09:00". Future timestamps
-  // (next_run_at) render as an absolute time, not a relative "ago" string.
-  const intlLocale = locale === "zh-CN" ? "zh-CN" : "en-US";
-  return new Intl.DateTimeFormat(intlLocale, {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(date);
+/**
+ * A run time in words ("Tomorrow, 8:50 AM"), with the full local date on hover
+ * and in `dateTime`. Null when there is none; callers name the gap.
+ */
+function runTime(value: string | null, locale: string) {
+  const words = formatScheduleTime(value, locale);
+  if (!value || !words) return null;
+  const full = new Intl.DateTimeFormat(locale === "zh-CN" ? "zh-CN" : "en-US", {
+    dateStyle: "full",
+    timeStyle: "short",
+  }).format(new Date(value));
+  return (
+    <time dateTime={value} title={full}>
+      {words}
+    </time>
+  );
 }
 
 const DEFAULT_ASSISTANT_ID = "lead_agent";
@@ -608,7 +606,6 @@ export default function ScheduledTasksPage() {
                   >
                     {filteredData.map((task) => {
                       const isSelected = selectedTask?.id === task.id;
-                      const nextRun = formatTimestamp(task.next_run_at, locale);
                       return (
                         <li
                           key={task.id}
@@ -623,10 +620,12 @@ export default function ScheduledTasksPage() {
                             aria-pressed={isSelected}
                             data-testid={`scheduled-task-item-${task.id}`}
                             className={cn(
-                              "flex w-full flex-col gap-1 border-l-2 px-3 py-3 text-left transition-colors",
+                              "flex w-full flex-col gap-1 px-3 py-3 text-left transition-colors",
+                              // Selected is edged in royal, as on phones: no
+                              // coloured left stripe (DESIGN.md Don't).
                               isSelected
-                                ? "border-l-primary bg-accent"
-                                : "hover:bg-accent border-l-transparent",
+                                ? "bg-card shadow-[inset_0_0_0_1px_var(--primary)]"
+                                : "hover:bg-accent",
                             )}
                           >
                             <span className="flex items-start justify-between gap-3">
@@ -644,7 +643,8 @@ export default function ScheduledTasksPage() {
                               {scheduleTypeLabel(task.schedule_type)}
                               {" · "}
                               {st.detail.nextRun}{" "}
-                              {nextRun ?? st.detail.notScheduled}
+                              {runTime(task.next_run_at, locale) ??
+                                st.detail.notScheduled}
                             </span>
                             {/* The last run's failure belongs on the row, not
                                 only behind a tap: an enabled task can be failing. */}
@@ -706,14 +706,14 @@ export default function ScheduledTasksPage() {
                         {st.detail.nextRun}
                       </dt>
                       <dd>
-                        {formatTimestamp(selectedTask.next_run_at, locale) ??
+                        {runTime(selectedTask.next_run_at, locale) ??
                           st.detail.notScheduled}
                       </dd>
                       <dt className="text-muted-foreground">
                         {st.detail.lastRun}
                       </dt>
                       <dd>
-                        {formatTimestamp(selectedTask.last_run_at, locale) ??
+                        {runTime(selectedTask.last_run_at, locale) ??
                           st.detail.never}
                       </dd>
                       <dt className="text-muted-foreground">
@@ -980,7 +980,7 @@ export default function ScheduledTasksPage() {
                               {run.run_id ?? st.detail.none}
                             </div>
                             <div className="text-muted-foreground text-xs">
-                              {formatTimestamp(run.scheduled_for, locale) ??
+                              {runTime(run.scheduled_for, locale) ??
                                 st.detail.none}
                             </div>
                             {run.error && (

@@ -81,7 +81,8 @@
 
   .slips > li > button {
     padding: 0.875rem 1rem;
-    border-left: 0;
+    /* The slip carries the royal edge; the row's own edge would double it. */
+    box-shadow: none;
     border-radius: inherit;
     background: transparent;
   }

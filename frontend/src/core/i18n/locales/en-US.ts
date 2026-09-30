@@ -849,7 +849,7 @@ export const enUS: Translations = {
       loadFailed: "Couldn't load run history.",
       retry: "Retry history",
     },
-    runTrigger: { scheduled: "scheduled", manual: "manual" },
+    runTrigger: { scheduled: "Scheduled", manual: "Manual" },
     runStatus: {
       queued: "Queued",
       launching: "Launching",
