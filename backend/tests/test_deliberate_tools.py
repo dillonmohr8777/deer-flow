@@ -305,6 +305,36 @@ async def test_one_failing_panelist_does_not_sink_the_call(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_dropped_panelists_are_logged_at_warning_level(monkeypatch, caplog):
+    """f153: a thinning panel must show up in logs, not just as a smaller
+    panelists_answered count -- otherwise 2 of 3 panelists silently failing
+    looks identical to a healthy call unless someone reads the response body."""
+
+    async def fake_call_model(prompt, *, model, api_key, system=None):
+        if model == "analyst-model":
+            return '{"consensus":"c","contradictions":"","unique_insights":"","blind_spots":""}'
+        if model == "good-panelist":
+            return "good-panelist's real answer"
+        raise RuntimeError("provider 500")
+
+    monkeypatch.setattr("deerflow.tools.deliberate_tools._call_model", fake_call_model)
+
+    with caplog.at_level("WARNING", logger="deerflow.tools.deliberate_tools"):
+        result = await run_fusion_panel(
+            "plan it",
+            panel_models=["broken-panelist-a", "broken-panelist-b", "good-panelist"],
+            analyst_model="analyst-model",
+            api_key="test-key",
+        )
+
+    assert result["panelists_answered"] == 1
+    assert sorted(result["dropped_models"]) == ["broken-panelist-a", "broken-panelist-b"]
+    warnings = [record.getMessage() for record in caplog.records if record.levelname == "WARNING"]
+    assert any("broken-panelist-a" in message for message in warnings)
+    assert any("broken-panelist-b" in message for message in warnings)
+
+
+@pytest.mark.asyncio
 async def test_every_panelist_failing_returns_an_error_not_an_empty_analyst_call(monkeypatch):
     calls: list[str] = []
 
