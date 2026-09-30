@@ -93,7 +93,7 @@ async function chooseAndRun() {
   fireEvent.click(
     await screen.findByRole("button", { name: /^Synthetic workflow 001/ }),
   );
-  fireEvent.change(screen.getByLabelText("Task brief (required)"), {
+  fireEvent.change(screen.getByLabelText("Task brief"), {
     target: { value: "Actual edited task" },
   });
   fireEvent.click(screen.getByRole("button", { name: "Run workflow" }));
@@ -134,16 +134,16 @@ describe("Workflow room behavior", () => {
       screen.getByRole("button", { name: /^Synthetic workflow 100/ }),
     );
     fireEvent.click(
-      screen.getByRole("button", { name: "Load synthetic example" }),
+      screen.getByRole("button", { name: "Fill in sample inputs" }),
     );
-    await screen.findByText(/Synthetic example loaded/);
+    await screen.findByText(/Sample inputs filled in/);
     expect(
-      screen.getByLabelText<HTMLTextAreaElement>("Task brief (required)").value,
+      screen.getByLabelText<HTMLTextAreaElement>("Task brief").value,
     ).toContain("Synthetic");
     expect(mocks.create).not.toHaveBeenCalled();
     expect(
       screen.getByRole<HTMLOptionElement>("option", {
-        name: "CrewAI (unavailable)",
+        name: "CrewAI (not set up)",
       }).disabled,
     ).toBe(true);
   });
@@ -169,8 +169,7 @@ describe("Workflow room behavior", () => {
     await chooseAndRun();
     await screen.findByText(/The request is unconfirmed/);
     expect(
-      screen.getByLabelText<HTMLTextAreaElement>("Task brief (required)")
-        .disabled,
+      screen.getByLabelText<HTMLTextAreaElement>("Task brief").disabled,
     ).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: "Retry same request" }));
     await detailSays("Accepted · LangGraph");
@@ -410,8 +409,10 @@ describe("Workflow room behavior", () => {
     fireEvent.click(
       await screen.findByRole("button", { name: /^Synthetic workflow 010/ }),
     );
-    await screen.findByText(/Public browser evidence is unavailable/);
-    await screen.findByText("You have read-only access.");
+    await screen.findByText(/page capture is not set up/);
+    await screen.findByText(
+      "You can read workflows here, but running them needs more access.",
+    );
     expect(
       screen.getByRole<HTMLButtonElement>("button", { name: "Run workflow" })
         .disabled,

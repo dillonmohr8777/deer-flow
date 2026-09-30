@@ -5,7 +5,9 @@ import { describe, expect, it } from "@rstest/core";
 
 import {
   UNKNOWN_CODE_SENTENCE,
+  categoryName,
   explanation,
+  fieldHint,
 } from "@/components/workspace/workflows/workflow-words";
 
 const repoRoot = join(import.meta.dirname, "../../../../..");
@@ -64,6 +66,40 @@ describe("workflow error words", () => {
     );
     expect(explanation(new Error("some_internal_code"))).toBe(
       UNKNOWN_CODE_SENTENCE,
+    );
+  });
+});
+
+describe("workflow form words", () => {
+  it("names catalog categories as a person says them", () => {
+    expect(categoryName("paid_media")).toBe("Paid media");
+    expect(categoryName("seo")).toBe("SEO");
+    expect(categoryName("Operations")).toBe("Operations");
+  });
+
+  it("rewrites every field description template the catalog writes", () => {
+    const catalog = readFileSync(
+      join(repoRoot, "backend/packages/harness/deerflow/workflows/catalog.py"),
+      "utf8",
+    );
+    // The input field descriptions: _text(f"...") and the source_urls one.
+    const templates = [
+      ...catalog.matchAll(/properties\[?[^\n]*_text\(f?"([^"]+)"\)/g),
+      ...catalog.matchAll(/"description": "(Public HTTPS[^"]+)"/g),
+    ].map((match) => match[1]!.replace(/\{[^}]+\}/g, "Sample thing"));
+    expect(templates.length).toBe(3);
+    for (const template of templates)
+      expect(fieldHint(template, 3)).not.toBe(template);
+    expect(fieldHint(templates[1], 3)).toBeNull();
+  });
+
+  it("keeps a description it does not know and states source limits", () => {
+    expect(fieldHint("Only the last 30 days.")).toBe("Only the last 30 days.");
+    expect(fieldHint(undefined)).toBeNull();
+    expect(
+      fieldHint("Public HTTPS source URLs; browser actions are read-only.", 3),
+    ).toBe(
+      "Up to 3 public https pages, one per line. They are read, never changed.",
     );
   });
 });

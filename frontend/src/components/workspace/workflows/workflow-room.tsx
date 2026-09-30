@@ -46,7 +46,7 @@ import { cn } from "@/lib/utils";
 
 import { WorkflowForm } from "./workflow-form";
 import { WorkflowRunDetail } from "./workflow-run";
-import { explanation, runState, runTime } from "./workflow-words";
+import { categoryName, explanation, runState, runTime } from "./workflow-words";
 
 function ScopedWorkflowRoom({
   owner,
@@ -459,7 +459,7 @@ function ScopedWorkflowRoom({
                 <option value="">All categories</option>
                 {categories.map((value) => (
                   <option key={value} value={value}>
-                    {value}
+                    {categoryName(value)}
                   </option>
                 ))}
               </select>
@@ -515,7 +515,7 @@ function ScopedWorkflowRoom({
                       {entry.title}
                     </span>
                     <span className="text-muted-foreground mt-1 block text-sm break-words">
-                      {entry.category} · {entry.summary}
+                      {categoryName(entry.category)} · {entry.summary}
                     </span>
                   </button>
                 </li>

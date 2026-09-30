@@ -283,3 +283,30 @@ export function byteSize(bytes: number): string {
   const kb = bytes / 1024;
   return kb < 1024 ? `${kb.toFixed(1)} KB` : `${(kb / 1024).toFixed(1)} MB`;
 }
+
+/** A catalog category code ("paid_media", "seo") as a person says it. */
+export function categoryName(code: string): string {
+  return code === "seo" ? "SEO" : humanize(code);
+}
+
+// The catalog writes every field description from one of three templates
+// (deerflow/workflows/catalog.py). The "Verified ..." one says the same thing
+// on every field, so the form states it once above them instead.
+const VERIFIED_FIELD =
+  /^Verified .+ relevant to .+; explicitly describe missing facts\.$/;
+const BRIEF_FIELD =
+  /^Business context and purpose for .+; use only authorized source material\.$/;
+const SOURCE_FIELD = "Public HTTPS source URLs; browser actions are read-only.";
+
+/** The hint under a workflow field, in plain words; null when none is needed. */
+export function fieldHint(
+  description: string | undefined,
+  maxItems?: number,
+): string | null {
+  if (!description || VERIFIED_FIELD.test(description)) return null;
+  if (BRIEF_FIELD.test(description))
+    return "Who the work is for and what it should achieve. Use only material you are allowed to share.";
+  if (description === SOURCE_FIELD)
+    return `${maxItems ? `Up to ${maxItems} public` : "Public"} https pages, one per line. They are read, never changed.`;
+  return description;
+}
