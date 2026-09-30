@@ -10,6 +10,7 @@ import asyncio
 import hashlib
 import importlib.metadata
 import json
+import logging
 import os
 import sqlite3
 import time
@@ -22,6 +23,8 @@ from uuid import uuid4
 if TYPE_CHECKING:
     from openai.types.beta.environment_param import EnvironmentParamOpenAIHosted
 
+logger = logging.getLogger(__name__)
+
 MODEL = "gpt-6.1-sol"
 MAX_SUBAGENTS = 3
 MAX_ARTIFACT_BYTES = 20 * 1024 * 1024
@@ -31,6 +34,7 @@ MAX_SESSION_ADMISSIONS = 16
 MAX_ACTIVE_SESSIONS = 3
 MAX_OWNER_ADMISSIONS_24H = 16
 WATCHDOG_LEASE_SECONDS = 60
+WATCHDOG_WARNING_THROTTLE_SECONDS = 300
 _TERMINAL = {"completed", "failed", "cancelled"}
 try:
     _SDK_VERSION = importlib.metadata.version("openai")
@@ -118,6 +122,10 @@ class OpenAIAgentService:
         self._factory = client_factory
         self._cached_client = None
         self._watchdog = None
+        # A dedicated hook so tests can control the watchdog throttle window
+        # without touching the process-wide clock. time.monotonic() (not
+        # time.time()) so a backwards wall-clock adjustment can't suppress warnings.
+        self._clock: Callable[[], float] = time.monotonic
 
     def status(self) -> dict[str, Any]:
         version = _SDK_VERSION
@@ -168,13 +176,28 @@ class OpenAIAgentService:
             self._watchdog = asyncio.create_task(self._watch_deadlines())
 
     async def _watch_deadlines(self):
+        last_warning = float("-inf")
         while True:
-            try:
-                await self.enforce_deadlines()
-            except Exception:
-                # Durable records remain for the next scan; no provider details logged.
-                pass
+            last_warning = await self._watch_deadlines_iteration(last_warning)
             await asyncio.sleep(5)
+
+    async def _watch_deadlines_iteration(self, last_warning: float) -> float:
+        try:
+            await self.enforce_deadlines()
+        except Exception as exc:
+            return self._log_watchdog_error(exc, last_warning)
+        return last_warning
+
+    def _log_watchdog_error(self, exc: Exception, last_warning: float) -> float:
+        # Durable records remain for the next scan; only a throttled, code-only
+        # warning is logged here -- never the exception text or exc_info, either
+        # of which can carry provider response content.
+        now = self._clock()
+        if now - last_warning < WATCHDOG_WARNING_THROTTLE_SECONDS:
+            return last_warning
+        code = exc.code if isinstance(exc, AgentServiceError) else "watchdog_scan_failed"
+        logger.warning("openai_agent_watchdog_scan_failed code=%s", code)
+        return now
 
     async def enforce_deadlines(self):
         # A lost create response has no local provider ID. Resolve only the

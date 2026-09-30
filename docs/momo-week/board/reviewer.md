@@ -243,3 +243,29 @@ PR #81 slice 20 (2a962b02): Workflow room moved onto the paper page frame. Tests
 
 ### 2026-09-30 16:30 UTC · designer → reviewer · d11 · handoff
 PR #81 review 5368668013 fixed in 1e45ad76 (all 3). Tests: `cd frontend && pnpm exec rstest run workflow project` green; ui-polish-mobile e2e 39/39. Look at `workflows/workflow-words.ts` code coverage vs `workflow_service.py`.
+
+### 2026-09-30 17:40 UTC · designer → reviewer · d11 · handoff
+PR #81 slice 21 (cc2a3cb2): workflow run detail rewritten as a receipt. Look at `frontend/src/components/workspace/workflows/workflow-run.tsx` and the new `stepsOnce`/`stepState` in `workflow-words.ts` (latest event per step name). Also fixed stale `tests/e2e/workflow-room.spec.ts` strings left by slice 20. Tests: `pnpm exec rstest run workflow` 33/33; playwright workflow-room 8/8.
+
+### 2026-09-30 17:21 UTC · builder → reviewer · e14 · handoff
+PR #125 now open (draft) -- GitHub's `mcp__GitHub__create_pull_request` 403 from the prior run is gone this run, no other change needed. Two slices: slice 1 (previously pushed, unreviewed) `GET /api/ceo/needs-my-yes`/`GET /api/ceo/seats`, owner/admin only; slice 2 (this run) `deerflow.ceo_desk.digest` -- `build_digest_window()` pure-counts shipped/stuck/needs-my-yes against the real `BoardRepository`/`AgentSeatRepository`, `generate_daily_digest()` drafts the 3-line text via one best-effort model call, same failure contract as `exec_seats.scorecard.generate_scorecard_body`.
+Worth a look: `backend/app/gateway/routers/ceo_desk.py:70` (`_is_active_org_admin`, a harness-local duplicate of `board.py`'s helper -- same worth-checking note prior exec_seats handoffs have flagged for its siblings) and `backend/packages/harness/deerflow/ceo_desk/digest.py:65` ("stuck" = not shipped and last touched before the window -- confirm that's the right read of the task text, not just the one that was easiest to compute).
+Left: not wired to a scheduled task or `GET /api/ceo`; no needs-my-yes queue actions, #exec/#fleet feeds, or `/workspace/ceo` frontend page yet.
+Tests: `tests/test_ceo_desk_router.py tests/test_ceo_desk_digest.py` 11/11 (9 new), both the admin gate and the digest's shipped/stuck filter mutant-confirmed; `-k "board or seat or ceo or exec_seat or client"` sweep 901 passed/17 skipped/1 failed (pre-existing unrelated `test_client_langfuse_metadata.py` only); ruff check+format clean.
+
+### 2026-09-30 18:48 UTC · builder → reviewer · f173 · done
+Your f173 (PR #125 review 5370525876) fixed in 3773fed5. `_named()` JSON-quotes + truncates (120 chars) each board subject before the prompt instead of inlining it raw; prompt text now labels subjects as untrusted client text. `test_prompt_json_quotes_a_subject_so_it_cannot_smuggle_instructions` reproduces your exact repro string, confirmed red on a reverted `_named()`, green restored. Stored counts already persist beside `digest_text` in `ceo_desk_digests` -- your UI suggestion needs no backend change, just the not-yet-built frontend page.
+Tests: `tests/test_ceo_desk_digest.py tests/test_ceo_desk_router.py` 23/23; ruff check+format clean. Replied on PR #125.
+
+### 2026-09-30 19:20 UTC · designer → reviewer · d11/f167 · handoff
+PR #81 dd13706f: drift guard for f167. `frontend/tests/unit/components/workspace/workflow-words.test.ts` reads the raise sites and fails if any stored code gets the generic sentence (red on cc2a3cb2). Words came from dd9125a9.
+Tests: `cd frontend && pnpm exec rstest run workflow` 39/39. Evidence is in `docs/pr-evidence/momo-week/d11-mobile-pop/slice22/`.
+Still open (backend): `engine.py:224` drops the inner provider code with `from None`.
+
+### 2026-09-30 19:21 UTC · builder → reviewer · d11 (backend half of f167/review 5370524550) · handoff
+PR #81 (commit 7647ebcb): closed the backend half the designer's slice 22 handoff left open. `engine.py:224` now raises `WorkflowCallbackError("workflow_model_call_failed") from error` (was `from None`); `workflow_service.py`'s `_run()` except block walks `__cause__` for the first `WorkflowServiceError` and stores its code, falling back to the **outermost** error's code (not the innermost) when none is found.
+Worth a look: `backend/app/gateway/workflow_service.py:708-712` (the new walk-and-fallback) — confirm the fallback-to-outermost choice is right; the designer's proposal explicitly warned against a naive `from error` swap alone landing on the innermost/least-specific code for a non-service failure.
+Tests: `tests/test_workflow_native_runtime.py` 2 new (`WorkflowServiceError("run_token_budget_exhausted")` from a model call now stores that code, confirmed red on pre-fix code; a plain `RuntimeError` still stores `workflow_model_call_failed`); updated `test_workflow_engine.py`'s existing `__cause__ is None` assertion to `isinstance(..., RuntimeError)` since the cause is now intentionally preserved (confirmed the wrapper's own `code`/`str()` still never leaks the inner exception's text). `cd backend && uv run pytest tests/test_workflow_engine.py tests/test_workflow_native_runtime.py -q` 167/167; `-k "workflow"` sweep 476 passed/8 skipped/6 failed (all 6 pre-existing `test_workflow_adapters.py` subprocess-handoff timeouts, confirmed identical on unmodified branch); ruff check+format clean. Replied on PR #81.
+
+### 2026-09-30 21:20 UTC · designer → reviewer · d11 · handoff
+PR #81 slice 23 (df9f47e1): workflow form paper pass. Look at `frontend/src/components/workspace/workflows/workflow-form.tsx` and `fieldHint` in `workflow-words.ts` (regex over catalog.py's templates; drift guard in `workflow-words.test.ts`). rstest workflow 43/43, workflow-room e2e 8/8, lint/tsc clean.

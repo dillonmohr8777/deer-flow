@@ -310,6 +310,40 @@ async def test_membership_revocation_before_execution_denies_real_background_aut
     assert not api.adapter.calls
 
 
+async def test_role_downgrade_removing_runs_create_before_execution_denies_real_background_authority(api):
+    await drain(api.service)
+    api.service.limits["max_running"] = 0
+    headers = await scope_headers(api)
+    admitted = await api.client.post("/api/workflows/runs", headers=headers, json=payload())
+    await drain(api.service)
+    api.users["alice"].system_role = "user"
+    api.service.limits["max_running"] = 3
+    api.service._wake()
+    await drain(api.service)
+    result = await api.service.snapshot(headers["X-Expected-Workflow-Scope"], admitted.json()["id"])
+    assert result["status"] == "failed" and result["error"] == "owner_authorization_changed"
+    assert result["accepted"] is False and result["artifact"] is None
+    assert not api.adapter.calls
+
+
+async def test_storage_user_mismatch_before_execution_denies_real_background_authority(api):
+    await drain(api.service)
+    api.service.limits["max_running"] = 0
+    headers = await scope_headers(api)
+    admitted = await api.client.post("/api/workflows/runs", headers=headers, json=payload())
+    await drain(api.service)
+    async with api.factory() as session:
+        await session.execute(update(OrganizationRow).where(OrganizationRow.id == "org-a").values(storage_user_id="rotated-storage"))
+        await session.commit()
+    api.service.limits["max_running"] = 3
+    api.service._wake()
+    await drain(api.service)
+    result = await api.service.snapshot(headers["X-Expected-Workflow-Scope"], admitted.json()["id"])
+    assert result["status"] == "failed" and result["error"] == "owner_authorization_changed"
+    assert result["accepted"] is False and result["artifact"] is None
+    assert not api.adapter.calls
+
+
 @pytest.mark.parametrize("reason", ["missing", "suspended"])
 @pytest.mark.parametrize("path", ["/runs", "/runs/unknown/resume"])
 async def test_modern_paid_entitlement_bridge_denies_before_real_service_admission(api, monkeypatch, reason, path):

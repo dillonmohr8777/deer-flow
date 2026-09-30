@@ -1,7 +1,10 @@
 """Offline lifecycle/security tests: no credentials or provider networking."""
 
 import asyncio
+import contextlib
+import logging
 import sqlite3
+import time
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
@@ -521,3 +524,108 @@ async def test_owner_cap_is_atomic_across_two_gateway_instances(setup, monkeypat
     errors = [result for result in results if isinstance(result, AgentServiceError)]
     assert len(errors) == 1 and errors[0].code == "owner_admission_limit"
     assert client.beta.agents.sessions.create.await_count == 2
+
+
+def test_watchdog_clock_defaults_to_monotonic(setup):
+    service, client = setup
+    assert service._clock is time.monotonic
+
+
+@pytest.mark.asyncio
+async def test_watchdog_logs_one_throttled_warning_with_error_code_only(setup, monkeypatch, caplog):
+    service, client = setup
+
+    async def boom():
+        raise AgentServiceError("unsafe_storage", 503)
+
+    monkeypatch.setattr(service, "enforce_deadlines", boom)
+    monkeypatch.setattr(service, "_clock", lambda: 0.0)
+    with caplog.at_level(logging.WARNING, logger=agent_service.__name__):
+        last_warning = await service._watch_deadlines_iteration(float("-inf"))
+        # A second failure inside the throttle window logs nothing further.
+        last_warning = await service._watch_deadlines_iteration(last_warning)
+
+    warnings = [record for record in caplog.records if record.levelno == logging.WARNING]
+    assert len(warnings) == 1
+    assert "unsafe_storage" in warnings[0].getMessage()
+    assert last_warning == 0.0
+
+
+@pytest.mark.asyncio
+async def test_watchdog_warning_throttle_window_expires(setup, monkeypatch, caplog):
+    service, client = setup
+    fake_now = {"t": 0.0}
+
+    async def boom():
+        raise AgentServiceError("unsafe_storage", 503)
+
+    monkeypatch.setattr(service, "enforce_deadlines", boom)
+    monkeypatch.setattr(service, "_clock", lambda: fake_now["t"])
+    with caplog.at_level(logging.WARNING, logger=agent_service.__name__):
+        last_warning = await service._watch_deadlines_iteration(float("-inf"))
+        fake_now["t"] = agent_service.WATCHDOG_WARNING_THROTTLE_SECONDS - 1
+        last_warning = await service._watch_deadlines_iteration(last_warning)
+        fake_now["t"] = agent_service.WATCHDOG_WARNING_THROTTLE_SECONDS + 1
+        last_warning = await service._watch_deadlines_iteration(last_warning)
+        # Elapsed time exactly equal to the throttle window must still log:
+        # the comparison is strictly `<`, not `<=`.
+        fake_now["t"] = last_warning + agent_service.WATCHDOG_WARNING_THROTTLE_SECONDS
+        last_warning = await service._watch_deadlines_iteration(last_warning)
+
+    warnings = [record for record in caplog.records if record.levelno == logging.WARNING]
+    # t=0, t=THROTTLE+1, and the exact-boundary call should log; the one
+    # still inside the window (t=THROTTLE-1) must not.
+    assert len(warnings) == 3
+    assert last_warning == 2 * agent_service.WATCHDOG_WARNING_THROTTLE_SECONDS + 1
+
+
+@pytest.mark.asyncio
+async def test_watchdog_loop_persists_throttle_state_across_iterations(setup, monkeypatch, caplog):
+    """A regression against discarding _watch_deadlines_iteration's return value,
+    which would reset the throttle every 5s and log on every scan forever."""
+    service, client = setup
+
+    async def boom():
+        raise AgentServiceError("unsafe_storage", 503)
+
+    monkeypatch.setattr(service, "enforce_deadlines", boom)
+    # Pin the clock: real time.monotonic() counts from boot, so on a runner up
+    # for less than the throttle window this test would pass even if the loop's
+    # initial last_warning started at 0.0 instead of -inf (both would then look
+    # "recent" against a small elapsed monotonic value).
+    monkeypatch.setattr(service, "_clock", lambda: 0.0)
+    real_sleep = asyncio.sleep
+
+    async def fast_sleep(_seconds):
+        await real_sleep(0)
+
+    monkeypatch.setattr(agent_service.asyncio, "sleep", fast_sleep)
+
+    with caplog.at_level(logging.WARNING, logger=agent_service.__name__):
+        task = asyncio.create_task(service._watch_deadlines())
+        await real_sleep(0.05)
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
+
+    warnings = [record for record in caplog.records if record.levelno == logging.WARNING]
+    assert len(warnings) == 1
+
+
+@pytest.mark.asyncio
+async def test_watchdog_warning_never_carries_provider_exception_text(setup, monkeypatch, caplog):
+    service, client = setup
+
+    async def boom():
+        raise RuntimeError("sk-secret upstream provider response body")
+
+    monkeypatch.setattr(service, "enforce_deadlines", boom)
+    with caplog.at_level(logging.WARNING, logger=agent_service.__name__):
+        await service._watch_deadlines_iteration(float("-inf"))
+
+    warnings = [record for record in caplog.records if record.levelno == logging.WARNING]
+    assert len(warnings) == 1
+    assert warnings[0].exc_info is None
+    assert "sk-secret" not in warnings[0].getMessage()
+    assert "sk-secret" not in caplog.text
+    assert "watchdog_scan_failed" in warnings[0].getMessage()
