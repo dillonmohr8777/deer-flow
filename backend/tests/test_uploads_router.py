@@ -39,6 +39,14 @@ def _mounted_provider() -> MagicMock:
     return provider
 
 
+def _aio_sandbox_config(*, provisioner_url: str | None = None, thread_data_mounts: bool | None = None) -> SimpleNamespace:
+    return SimpleNamespace(
+        use="deerflow.community.aio_sandbox:AioSandboxProvider",
+        provisioner_url=provisioner_url,
+        thread_data_mounts=thread_data_mounts,
+    )
+
+
 def _symlink_to_or_skip(link_path: Path, target_path: Path) -> None:
     try:
         link_path.symlink_to(target_path)
@@ -1588,3 +1596,81 @@ def test_upload_files_failed_conversion_does_not_push_the_next_companion_to_suff
     assert result.files[1].markdown_file == "notes.md"
     assert (thread_uploads_dir / "notes.md").read_text(encoding="utf-8") == "FROM:notes.pdf"
     assert not (thread_uploads_dir / "notes_1.md").exists()
+
+
+def test_open_skips_provider_construction_for_aio_without_a_provisioner(tmp_path):
+    """AIO with no provisioner defaults to the local, thread-data-mounted
+    backend; open() must prove that from config alone and never construct a
+    real provider (its constructor may run startup-only Docker checks this
+    request has no business paying for)."""
+    thread_uploads_dir = tmp_path / "uploads"
+    thread_uploads_dir.mkdir(parents=True)
+    config = SimpleNamespace(sandbox=_aio_sandbox_config())
+
+    def _fail_if_called(*args, **kwargs):
+        raise AssertionError("get_sandbox_provider must not be called when config alone proves mounted")
+
+    with (
+        patch.object(uploads, "ensure_uploads_dir", return_value=thread_uploads_dir),
+        patch.object(uploads, "get_initialized_sandbox_provider", return_value=None),
+        patch.object(uploads, "get_sandbox_provider", side_effect=_fail_if_called),
+    ):
+        service = upload_ingestion.ThreadUploadIngestionService(request=None, thread_id="thread-aio", user_id="u1", app_config=config)
+        asyncio.run(service.open())
+
+    assert service._sync_to_sandbox is False
+    assert service._sandbox_lease is None
+
+
+def test_open_constructs_provider_for_aio_with_a_provisioner(tmp_path):
+    """A configured provisioner means the AIO backend is remote, not the
+    locally bind-mounted container: open() must still resolve a real
+    provider and sync files to it."""
+    from app.gateway.authz import SandboxRequestLease
+
+    thread_uploads_dir = tmp_path / "uploads"
+    thread_uploads_dir.mkdir(parents=True)
+    config = SimpleNamespace(sandbox=_aio_sandbox_config(provisioner_url="https://provisioner.example"))
+
+    provider = MagicMock()
+    provider.uses_thread_data_mounts = False
+    lease = SandboxRequestLease(sandbox=MagicMock(), sandbox_id="aio-1", denied=False, owner_id="gateway:upload:x", provider=provider)
+
+    with (
+        patch.object(uploads, "ensure_uploads_dir", return_value=thread_uploads_dir),
+        patch.object(uploads, "get_initialized_sandbox_provider", return_value=None),
+        patch.object(uploads, "get_sandbox_provider", return_value=provider) as get_provider,
+        patch.object(uploads, "try_acquire_sandbox_for_request", AsyncMock(return_value=lease)),
+    ):
+        service = upload_ingestion.ThreadUploadIngestionService(request=None, thread_id="thread-aio", user_id="u1", app_config=config)
+        asyncio.run(service.open())
+
+    get_provider.assert_called_once()
+    assert service._sync_to_sandbox is True
+
+
+def test_open_respects_an_explicit_thread_data_mounts_false_override(tmp_path):
+    """``sandbox.thread_data_mounts: false`` must force the sync path even
+    with no provisioner configured, where the unconfigured default is
+    mounted."""
+    from app.gateway.authz import SandboxRequestLease
+
+    thread_uploads_dir = tmp_path / "uploads"
+    thread_uploads_dir.mkdir(parents=True)
+    config = SimpleNamespace(sandbox=_aio_sandbox_config(thread_data_mounts=False))
+
+    provider = MagicMock()
+    provider.uses_thread_data_mounts = False
+    lease = SandboxRequestLease(sandbox=MagicMock(), sandbox_id="aio-1", denied=False, owner_id="gateway:upload:x", provider=provider)
+
+    with (
+        patch.object(uploads, "ensure_uploads_dir", return_value=thread_uploads_dir),
+        patch.object(uploads, "get_initialized_sandbox_provider", return_value=None),
+        patch.object(uploads, "get_sandbox_provider", return_value=provider) as get_provider,
+        patch.object(uploads, "try_acquire_sandbox_for_request", AsyncMock(return_value=lease)),
+    ):
+        service = upload_ingestion.ThreadUploadIngestionService(request=None, thread_id="thread-aio", user_id="u1", app_config=config)
+        asyncio.run(service.open())
+
+    get_provider.assert_called_once()
+    assert service._sync_to_sandbox is True
