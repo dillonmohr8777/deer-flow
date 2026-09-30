@@ -656,6 +656,44 @@ async def test_tool_draft_rejected_by_closing_never_becomes_visible(org_world): 
         assert (await client.get(f"/api/board/threads/{tid}/messages", headers=headers_d)).status_code == 404
 
 
+async def test_an_admin_internal_note_never_counts_as_delivered(org_world):  # noqa: F811
+    """f172: ``add_board_message`` writes ``author_kind="owner"`` for any org
+    admin's own message -- e.g. an internal note like "tweak para 2 before
+    approving" left on a still-unapproved tool draft. That must never be
+    confused with ``send_board_reply`` actually delivering content: a
+    client_contact must still see neither the thread nor the momo body.
+    """
+    session_factory = org_world
+    app = _build_app(session_factory)
+    board_repo = app.state.board_repo
+    headers_a = auth_headers(USER_A, ORG_S)  # owner
+
+    await _add_plain_member(session_factory, USER_D, ORG_S)
+    headers_d = auth_headers(USER_D, ORG_S)
+
+    async with _client(app) as client:
+        acme = await _create_client(client, headers_a, "Acme")
+        cid = acme["id"]
+        assign = await client.post(f"/api/clients/{cid}/assignments", json={"user_id": USER_D, "role": "client_contact"}, headers=headers_a)
+        assert assign.status_code == 201
+
+        with acting_as(USER_A, ORG_S):
+            tool_thread = await board_repo.create_thread(client_id=cid, kind="post", subject="SECRET PLAN: raise prices 40%", created_by_user_id=None)
+            tid = tool_thread["id"]
+            await board_repo.add_message(tid, author_kind="momo", author_user_id=None, body="INTERNAL DRAFT BODY")
+            await board_repo.patch_thread(tid, status=BoardThreadStatus.DRAFTED)
+
+        # The owner leaves an internal note on the still-unapproved draft --
+        # never approves or replies.
+        note = await client.post(f"/api/board/threads/{tid}/messages", json={"body": "tweak para 2 before approving"}, headers=headers_a)
+        assert note.status_code == 201, note.text
+        assert note.json()["author_kind"] == "owner"
+
+        assert tid not in [t["id"] for t in (await client.get("/api/board/threads", headers=headers_d)).json()["threads"]]
+        assert (await client.get(f"/api/board/threads/{tid}", headers=headers_d)).status_code == 404
+        assert (await client.get(f"/api/board/threads/{tid}/messages", headers=headers_d)).status_code == 404
+
+
 async def test_a_superseded_draft_never_leaks_even_after_the_next_one_ships(org_world):  # noqa: F811
     """f157 round 2: draft A -> triaged -> draft B -> approve -> reply must
     show the client only B's sent content, never A's earlier, superseded

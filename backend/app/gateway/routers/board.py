@@ -157,21 +157,22 @@ async def _is_active_org_admin(user_id: str) -> bool:
 
 
 async def _thread_delivered(board_repo, thread_id: str) -> bool:
-    """Whether *thread_id* has ever carried an ``owner``-authored message.
+    """Whether *thread_id* has ever carried a message stamped ``delivered_at``.
 
-    f157 round 2: a thread's *current* status is not a safe proxy for "its
-    momo content was approved" -- ``patch_board_thread`` lets an org admin
-    set ``new``/``triaged``/``closed`` from any status at any time (only
-    ``drafted``/``approved``/``replied`` are workflow-only), so a rejected or
-    superseded draft can land back on a status that looks "approved" by a
-    purely status-based rule, and a thread can cycle through a second
-    unapproved draft while still reading as delivered from an earlier one.
-    Only ``send_board_reply`` ever writes an ``owner``-authored message
-    (see ``BoardRepository.thread_ids_with_owner_message``), so its mere
-    existence -- not the thread's current status -- is what actually proves
-    something on this thread shipped to the client.
+    f157 rounds 2-3: neither a thread's *current* status nor a message's
+    ``author_kind`` safely proves "this shipped to the client". Status fails
+    because ``patch_board_thread`` lets an org admin set ``new``/``triaged``/
+    ``closed`` from any status at any time (only ``drafted``/``approved``/
+    ``replied`` are workflow-only), so a rejected or superseded draft can
+    land back on a status that looks "approved" by a purely status-based
+    rule. ``author_kind == "owner"`` fails because ``add_board_message``
+    lets any org admin post an internal note with that same author kind
+    (e.g. review feedback on a still-unapproved draft) -- that is not a
+    delivery. Only ``send_board_reply`` ever stamps ``delivered_at`` (see
+    ``BoardRepository.thread_ids_with_delivered_message``), so its mere
+    existence is what actually proves something on this thread shipped.
     """
-    return thread_id in await board_repo.thread_ids_with_owner_message([thread_id])
+    return thread_id in await board_repo.thread_ids_with_delivered_message([thread_id])
 
 
 def _visible_to_non_admin(row: dict, *, delivered: bool) -> bool:
@@ -271,7 +272,7 @@ async def list_board_threads(request: Request, client_id: str | None = None, sta
         rows = await board_repo.list_threads(client_ids=mine_ids, status=status) if mine_ids else []
     if not actor_is_owner:
         pending_ids = [r["id"] for r in rows if r.get("created_by_user_id") is None]
-        delivered_ids = await board_repo.thread_ids_with_owner_message(pending_ids)
+        delivered_ids = await board_repo.thread_ids_with_delivered_message(pending_ids)
         rows = [r for r in rows if _visible_to_non_admin(r, delivered=r["id"] in delivered_ids)]
     return BoardThreadListResponse(threads=[_to_thread_response(r, actor_is_owner=actor_is_owner) for r in rows])
 
@@ -475,7 +476,7 @@ async def send_board_reply(thread_id: str, body: BoardReplyRequest, request: Req
     if draft_body is None or body.body.strip() != draft_body.strip():
         await record_audit_event(request, action="board.thread.reply", outcome="denied", actor_user_id=user_id, organization_id=resolve_organization_id(), target_type="board_thread", target_id=thread_id)
         raise HTTPException(status_code=409, detail="Reply body must match the approved draft verbatim; edit the draft and re-approve instead")
-    await board_repo.add_message(thread_id, author_kind="owner", author_user_id=user_id, body=draft_body)
+    await board_repo.add_message(thread_id, author_kind="owner", author_user_id=user_id, body=draft_body, delivered=True)
     updated = await board_repo.patch_thread(thread_id, status=BoardThreadStatus.REPLIED)
     if updated is None:
         raise _not_found()
