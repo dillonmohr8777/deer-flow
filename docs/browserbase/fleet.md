@@ -24,6 +24,10 @@ proxy, persistent browser context, client mutation or report login is introduced
   the fleet appends a fixed boundary (start URL, hosts, signed-out only, no forms,
   purchases, posts, messages or downloads) and never passes a context, proxy or
   Verified mode. Model tokens are billed provider-side and are not metered here.
+  This instruction trailer is not a technical host/write restriction. Native
+  agent jobs remain unactivated pending a reviewed provider capability boundary
+  and current account evidence; deterministic QA retains its enforced request
+  guard and is the preferred initial public-page executor.
 
 ## Admission and budget
 
@@ -47,17 +51,27 @@ A SQLite immediate transaction serializes reservation, concurrency <=2 and each
 job's cadence >=1h across callers. Scheduler starts sequentially. Repeated named
 tool dispatch cannot bypass cadence by changing the occurrence UUID.
 
-`native_agent` reserves `max_minutes + 1` browser minutes and counts against a
-separate operator-attested `account.agent_runs_included` (the plan's included
-Agent runs per cycle; unset means zero, so native runs stay refused). It refuses
+`native_agent` reserves `max_minutes + 4` browser minutes (the three-minute stop
+grace plus rounding margin) and counts against separate operator-attested
+`account.agent_runs_included` and `account.agent_runs_used` values. The latter
+must cover account-wide use, including runs outside this fleet. Unknown usage
+refuses admission. Its cycle baseline and local charges are durable and remain
+charged after termination and manifest job renames. Refreshed provider usage may
+double-count local charges conservatively. It refuses
 while any agent run in the account is PENDING, RUNNING or PAUSED, requests one
 stop at the cap (or immediately on PAUSED, which holds a billed browser), and
 records the run as uncertain if it is still not terminal three minutes later.
 Failed polls are retried inside that bound, a failed stop is retried each poll,
 and any fleet-side error after start requests a stop before re-raising.
-`started.json` records the reservation and run ID first; an operator repairs an
+The ledger binds the reservation to the exact provider run ID, agent and project
+before polling or artifact writes. Polls cannot replace that run/session identity.
+`started.json` mirrors this ownership; an operator repairs an
 uncertain row with `reconcile_native_run(api, ledger, token, run_id)` after the
-provider shows the run terminal and its session in this project.
+provider shows the owned run terminal and its exact session terminal in this
+project. An unrelated run from the same project cannot settle the reservation.
+Older uncertain runs without a durable run binding remain blocked; elapsed time
+or a supplied run ID does not establish ownership. Normal completion also needs
+this exact terminal session readback before the reservation can finish.
 The run record, messages and any screenshot parts are saved privately. Through
 the tool, a native run blocks until it ends (up to `max_minutes` + 3).
 

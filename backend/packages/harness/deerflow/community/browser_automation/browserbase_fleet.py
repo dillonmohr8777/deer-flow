@@ -89,6 +89,11 @@ class UsageLedger:
                     id TEXT PRIMARY KEY, cycle TEXT NOT NULL, job TEXT NOT NULL,
                     minutes REAL NOT NULL, state TEXT NOT NULL, session TEXT,
                     occurrence TEXT NOT NULL UNIQUE, created REAL NOT NULL);
+                CREATE TABLE IF NOT EXISTS native_run (
+                    reservation_id TEXT PRIMARY KEY, run_id TEXT NOT NULL UNIQUE,
+                    agent_id TEXT NOT NULL, project_id TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS native_cycle (id TEXT PRIMARY KEY, baseline INTEGER NOT NULL);
+                CREATE TABLE IF NOT EXISTS native_charge (reservation_id TEXT PRIMARY KEY, cycle TEXT NOT NULL);
             """)
 
     @contextmanager
@@ -104,7 +109,7 @@ class UsageLedger:
         finally:
             db.close()
 
-    def reserve(self, job: str, occurrence: str, account: dict, observed: float, *, now: float | None = None, cadence: int = 0, minutes: float = 2, agent_runs: tuple[frozenset[str], int] | None = None) -> str:
+    def reserve(self, job: str, occurrence: str, account: dict, observed: float, *, now: float | None = None, cadence: int = 0, minutes: float = 2, agent_runs: int | None = None) -> str:
         now = time.time() if now is None else now
         # The attestation comes from an operator-owned private config, not an agent.
         if account.get("verified_included_only") is not True:
@@ -120,6 +125,9 @@ class UsageLedger:
         expiry, verified, baseline, ceiling, included = (float(cast(float, value)) for value in (expiry, verified, baseline, ceiling, included))
         if now >= expiry or verified > now or now - verified > 86400 or ceiling <= 0 or ceiling > included:
             raise FleetBlocked("Expired account proof or unsafe ceiling; dispatch refused")
+        agent_used = account.get("agent_runs_used")
+        if agent_runs is not None and (not isinstance(agent_runs, int) or isinstance(agent_runs, bool) or agent_runs < 0 or not isinstance(agent_used, int) or isinstance(agent_used, bool) or agent_used < 0):
+            raise FleetBlocked("Account-wide used and included agent runs must be known integers")
         with self.transaction() as db:
             if db.execute("SELECT 1 FROM reservation WHERE state IN ('reserved','uncertain')").fetchone():
                 raise FleetBlocked("Pending or ambiguous dispatch needs reconciliation")
@@ -130,11 +138,12 @@ class UsageLedger:
             if db.execute("SELECT 1 FROM reservation WHERE occurrence=?", (occurrence,)).fetchone():
                 raise FleetBlocked("Occurrence already reserved; no automatic retry")
             if agent_runs is not None:
-                # Included Agent runs are a separate monthly allowance; unattested means zero.
-                agent_jobs, included_runs = agent_runs
-                marks = ",".join("?" * len(agent_jobs))
-                used = db.execute(f"SELECT COUNT(*) FROM reservation WHERE cycle=? AND job IN ({marks})", (cycle, *sorted(agent_jobs))).fetchone()[0]
-                if used >= included_runs:
+                # Account usage includes runs outside this fleet. Keep charges
+                # cycle-scoped and independent of mutable manifest job names.
+                db.execute("INSERT OR IGNORE INTO native_cycle VALUES (?,?)", (cycle, agent_used))
+                original_runs = db.execute("SELECT baseline FROM native_cycle WHERE id=?", (cycle,)).fetchone()[0]
+                charged_runs = db.execute("SELECT COUNT(*) FROM native_charge WHERE cycle=?", (cycle,)).fetchone()[0]
+                if max(original_runs, cast(int, agent_used)) + charged_runs >= agent_runs:
                     raise FleetBlocked("Included agent runs for this cycle are used up")
             db.execute("INSERT OR IGNORE INTO cycle VALUES (?,?)", (cycle, baseline))
             original = db.execute("SELECT baseline FROM cycle WHERE id=?", (cycle,)).fetchone()[0]
@@ -144,6 +153,8 @@ class UsageLedger:
                 raise FleetBlocked("Included-usage protective ceiling reached")
             token = str(uuid4())
             db.execute("INSERT INTO reservation VALUES (?,?,?,?,?,?,?,?)", (token, cycle, job, minutes, "reserved", None, occurrence, now))
+            if agent_runs is not None:
+                db.execute("INSERT INTO native_charge VALUES (?,?)", (token, cycle))
             return token
 
     def running(self, token: str, session: str) -> None:
@@ -151,6 +162,22 @@ class UsageLedger:
             changed = db.execute("UPDATE reservation SET state='running',session=? WHERE id=? AND state='reserved'", (session, token)).rowcount
             if changed != 1:
                 raise FleetBlocked("Reservation ownership lost")
+
+    def bind_native_run(self, token: str, run_id: str, agent_id: str, project_id: str) -> None:
+        """Persist the exact start response before polling or artifact writes."""
+        with self.transaction() as db:
+            if not db.execute("SELECT 1 FROM reservation WHERE id=? AND state='reserved' AND session IS NULL", (token,)).fetchone():
+                raise FleetBlocked("Native run reservation ownership lost")
+            try:
+                db.execute("INSERT INTO native_run VALUES (?,?,?,?)", (token, run_id, agent_id, project_id))
+            except sqlite3.IntegrityError:
+                raise FleetBlocked("Native run ownership already bound") from None
+
+    def native_ownership(self, token: str) -> dict | None:
+        with self.transaction() as db:
+            db.row_factory = sqlite3.Row
+            row = db.execute("SELECT * FROM native_run WHERE reservation_id=?", (token,)).fetchone()
+            return dict(row) if row else None
 
     def finish(self, token: str, terminal: bool) -> None:
         with self.transaction() as db:
@@ -321,16 +348,18 @@ class Fleet:
         destination = self.output / job.client_id / str(uuid4())
         await asyncio.to_thread(_reject_symlinks, destination)
         account = self.config.get("account", {})
-        agent_jobs = frozenset(j.id for j in self.jobs.values() if j.workflow == "native_agent")
         included_runs = account.get("agent_runs_included", 0)
         if not isinstance(included_runs, int) or isinstance(included_runs, bool):
             raise FleetBlocked("Included agent runs must be an operator-attested integer")
-        # Reserve the whole wall-clock cap plus a minute for the stop to land.
-        token = await asyncio.to_thread(self.ledger.reserve, job.id, occurrence, account, observed, cadence=job.interval_seconds, minutes=job.max_minutes + 1, agent_runs=(agent_jobs, included_runs))
+        # The browser can remain billed throughout the stop grace. Reserve all of
+        # that interval plus rounding margin, rather than only the task deadline.
+        minutes = job.max_minutes + math.ceil(_AGENT_STOP_GRACE_SECONDS / 60) + 1
+        token = await asyncio.to_thread(self.ledger.reserve, job.id, occurrence, account, observed, cadence=job.interval_seconds, minutes=minutes, agent_runs=included_runs)
         terminal, run_id = False, None
         try:
             run = await api.start_agent_run(cast(str, job.agent_id), _native_task(job))
             run_id = str(UUID(run["runId"]))
+            await asyncio.to_thread(self.ledger.bind_native_run, token, run_id, cast(str, job.agent_id), api.project_id)
             # Ownership record for reconcile_native_run, written before anything else can fail.
             await asyncio.to_thread(_artifact, destination, "started.json", {"reservation_id": token, "run_id": run_id, "job": job.id, "agent_id": job.agent_id})
             deadline = time.monotonic() + job.max_minutes * 60
@@ -347,10 +376,16 @@ class Fleet:
                     run = await api.agent_run(run_id)
                 except RuntimeError:
                     continue  # transient; the loop stays bounded by deadline + grace
-            terminal = run.get("status") in _AGENT_DONE
+                _verify_native_identity(run, run_id, session)
             if session is None and run.get("sessionId"):
                 session = str(run["sessionId"])
                 await asyncio.to_thread(self.ledger.running, token, session)
+            _verify_native_identity(run, run_id, session)
+            if run.get("status") in _AGENT_DONE:
+                if session is None:
+                    raise FleetBlocked("Native terminal session ownership is unconfirmed")
+                _verify_terminal_session(await api.retrieve(session), api.project_id, session)
+                terminal = True
             await asyncio.to_thread(_private_json, destination / "run.json", run)
             messages_error = None
             if terminal:
@@ -407,20 +442,33 @@ async def _request_stop(api: BrowserbaseAPI, run_id: str) -> bool:
 
 async def reconcile_native_run(api: BrowserbaseAPI, ledger: UsageLedger, token: str, run_id: str) -> None:
     """Operator-only repair of an uncertain native_agent reservation (token and run_id from started.json)."""
+    ownership = await asyncio.to_thread(ledger.native_ownership, token)
+    if ownership is None or ownership["run_id"] != run_id or ownership["project_id"] != api.project_id:
+        raise FleetBlocked("Native run ownership readback does not match reservation")
+    rows = await asyncio.to_thread(ledger.status)
+    row = next((row for row in rows if row["id"] == token), None)
+    if row is None or row["state"] not in {"uncertain", "running"}:
+        raise FleetBlocked("Native run reservation ownership is unavailable")
     run = await api.agent_run(run_id)
+    _verify_native_identity(run, run_id, row["session"])
     session = run.get("sessionId")
     if run.get("status") not in _AGENT_DONE or not session:
         raise FleetBlocked("Agent run is not terminal; reservation retained")
     final = await api.retrieve(str(session))
-    if final.get("projectId") != api.project_id:
-        raise FleetBlocked("Agent run session is not in this provider project")
-    rows = await asyncio.to_thread(ledger.status)
-    row = next((row for row in rows if row["id"] == token), None)
-    if row is None:
-        raise FleetBlocked("Unknown reservation")
+    _verify_terminal_session(final, api.project_id, str(session))
     if row["session"] is None:
         await asyncio.to_thread(ledger.bind_owned_readback, token, str(session))
     await asyncio.to_thread(ledger.reconcile, token, str(session), str(final.get("status")))
+
+
+def _verify_native_identity(run: dict, run_id: str, session: str | None) -> None:
+    if run.get("runId") != run_id or (session is not None and run.get("sessionId") != session):
+        raise FleetBlocked("Native run/session ownership readback changed")
+
+
+def _verify_terminal_session(session: dict, project_id: str, session_id: str) -> None:
+    if session.get("id") != session_id or session.get("projectId") != project_id or session.get("status") not in {"COMPLETED", "ERROR", "TIMED_OUT"}:
+        raise FleetBlocked("Native terminal session ownership is unconfirmed")
 
 
 def _native_task(job: FleetJob) -> str:
