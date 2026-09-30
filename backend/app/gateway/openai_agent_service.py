@@ -122,6 +122,10 @@ class OpenAIAgentService:
         self._factory = client_factory
         self._cached_client = None
         self._watchdog = None
+        # A dedicated hook so tests can control the watchdog throttle window
+        # without touching the process-wide clock. time.monotonic() (not
+        # time.time()) so a backwards wall-clock adjustment can't suppress warnings.
+        self._clock: Callable[[], float] = time.monotonic
 
     def status(self) -> dict[str, Any]:
         version = _SDK_VERSION
@@ -172,7 +176,7 @@ class OpenAIAgentService:
             self._watchdog = asyncio.create_task(self._watch_deadlines())
 
     async def _watch_deadlines(self):
-        last_warning = 0.0
+        last_warning = float("-inf")
         while True:
             last_warning = await self._watch_deadlines_iteration(last_warning)
             await asyncio.sleep(5)
@@ -186,9 +190,9 @@ class OpenAIAgentService:
 
     def _log_watchdog_error(self, exc: Exception, last_warning: float) -> float:
         # Durable records remain for the next scan; only a throttled, code-only
-        # warning is logged here -- never the exception text, which can carry
-        # provider response content.
-        now = time.time()
+        # warning is logged here -- never the exception text or exc_info, either
+        # of which can carry provider response content.
+        now = self._clock()
         if now - last_warning < WATCHDOG_WARNING_THROTTLE_SECONDS:
             return last_warning
         code = exc.code if isinstance(exc, AgentServiceError) else "watchdog_scan_failed"
