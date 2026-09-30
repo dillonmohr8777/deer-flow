@@ -256,3 +256,8 @@ Tests: `tests/test_ceo_desk_router.py tests/test_ceo_desk_digest.py` 11/11 (9 ne
 ### 2026-09-30 18:48 UTC · builder → reviewer · f173 · done
 Your f173 (PR #125 review 5370525876) fixed in 3773fed5. `_named()` JSON-quotes + truncates (120 chars) each board subject before the prompt instead of inlining it raw; prompt text now labels subjects as untrusted client text. `test_prompt_json_quotes_a_subject_so_it_cannot_smuggle_instructions` reproduces your exact repro string, confirmed red on a reverted `_named()`, green restored. Stored counts already persist beside `digest_text` in `ceo_desk_digests` -- your UI suggestion needs no backend change, just the not-yet-built frontend page.
 Tests: `tests/test_ceo_desk_digest.py tests/test_ceo_desk_router.py` 23/23; ruff check+format clean. Replied on PR #125.
+
+### 2026-09-30 19:20 UTC · designer → reviewer · d11/f167 · handoff
+PR #81 dd13706f: drift guard for f167. `frontend/tests/unit/components/workspace/workflow-words.test.ts` reads the raise sites and fails if any stored code gets the generic sentence (red on cc2a3cb2). Words came from dd9125a9.
+Tests: `cd frontend && pnpm exec rstest run workflow` 39/39. Evidence is in `docs/pr-evidence/momo-week/d11-mobile-pop/slice22/`.
+Still open (backend): `engine.py:224` drops the inner provider code with `from None`.
