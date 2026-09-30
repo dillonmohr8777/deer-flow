@@ -23,6 +23,7 @@ in ``test_agent_seat_budget.py`` for the burn-accounting half.
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from types import SimpleNamespace
 
 import pytest
@@ -30,8 +31,24 @@ from org_isolation_fixtures import ORG_A, ORG_B, USER_A, acting_as, org_world  #
 
 from deerflow.config.app_config import AppConfig, reset_app_config, set_app_config
 from deerflow.persistence.exec_seats import AgentSeatRepository, AgentSeatStatus
+from deerflow.runtime.user_context import WorkspaceStorageContext, reset_storage_context, set_storage_context
 
 CMO_SEAT = "CMO"
+
+
+@contextmanager
+def _acting_with_no_organization(actor: str):
+    """Internal / auth-disabled / IM-channel shape: a real actor, no org at all.
+
+    Mirrors ``test_exec_seat_tools.py``'s helper of the same name (f72);
+    ``acting_as(actor, None)`` cannot express this since it falls back to
+    the actor's own private organization when given ``None``.
+    """
+    token = set_storage_context(WorkspaceStorageContext(actor_user_id=actor, organization_id=None, storage_user_id=actor, role=None))
+    try:
+        yield
+    finally:
+        reset_storage_context(token)
 
 
 @pytest.fixture
@@ -97,6 +114,66 @@ async def test_paused_seat_for_agent_is_scoped_to_the_seats_own_organization(org
         found = await repo.paused_seat_for_agent("cmo-agent")
 
     assert found is None
+
+
+@pytest.mark.asyncio
+async def test_paused_seat_for_agent_is_none_with_no_resolved_organization(org_world):  # noqa: F811
+    """f99: an internal/channel run with no org context must never fail open
+    across every organization's paused seats. Before the fix, ``_scope``
+    treated ``organization_id=None`` as "no filter" here too, so this would
+    429 an unrelated org's run and leak the blocking seat's title."""
+    repo = AgentSeatRepository(org_world)
+    with acting_as(USER_A, ORG_A):
+        seat = await _ratify(repo, seat=CMO_SEAT, agent_name="cmo-agent")
+        await repo.set_paused(seat["id"], paused=True)
+
+    with _acting_with_no_organization(USER_A):
+        found = await repo.paused_seat_for_agent("cmo-agent")
+
+    assert found is None
+
+
+@pytest.mark.asyncio
+async def test_paused_seat_blocking_is_none_with_no_resolved_organization(org_world):  # noqa: F811
+    """The accept bar's own wording: a paused seat exists in ORG_A, and
+    ``paused_seat_blocking`` (the public entry point ``_refuse_if_agent_seat_paused``
+    actually calls) must return ``None`` -- never block, never leak the
+    seat's title -- for a caller with no org at all."""
+    from deerflow.exec_seats.budget import paused_seat_blocking
+
+    repo = AgentSeatRepository(org_world)
+    with acting_as(USER_A, ORG_A):
+        seat = await _ratify(repo, seat=CMO_SEAT, agent_name="cmo-agent")
+        await repo.set_paused(seat["id"], paused=True)
+
+    with _acting_with_no_organization(USER_A):
+        found = await paused_seat_blocking("cmo-agent")
+
+    assert found is None
+
+
+@pytest.mark.asyncio
+async def test_paused_seat_blocking_still_blocks_a_seat_claimed_with_no_organization(org_world):  # noqa: F811
+    """f123 (review of the f99 fix): a seat claimed with no active org (auth-disabled
+    or an internal caller) is itself stored with ``organization_id=None`` --
+    ``organization_for_write``'s quarantine marker, a real state, not one that never
+    occurs. The f99 fix must not make every such seat's pause silently unenforceable
+    just to stop a null-org caller from matching *another* organization's seat."""
+    from deerflow.exec_seats.budget import paused_seat_blocking
+
+    repo = AgentSeatRepository(org_world)
+    with _acting_with_no_organization(USER_A):
+        seat = await _ratify(repo, seat=CMO_SEAT, agent_name="cmo-agent")
+        await repo.set_paused(seat["id"], paused=True)
+
+        found = await repo.paused_seat_for_agent("cmo-agent")
+        blocking = await paused_seat_blocking("cmo-agent")
+
+    assert seat["organization_id"] is None
+    assert found is not None
+    assert found["id"] == seat["id"]
+    assert blocking is not None
+    assert blocking["id"] == seat["id"]
 
 
 @pytest.mark.asyncio
