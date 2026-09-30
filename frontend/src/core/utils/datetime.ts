@@ -107,7 +107,8 @@ export function formatScheduleTime(
       "day",
     );
     day = day.charAt(0).toLocaleUpperCase(intlLocale) + day.slice(1);
-  } else if (Math.abs(days) < 7) {
+  } else if (days > 1 && days < 7) {
+    // Weekday only ahead: an overdue "Fri" would read as the coming Friday.
     day = new Intl.DateTimeFormat(intlLocale, { weekday: "short" }).format(
       parsed,
     );

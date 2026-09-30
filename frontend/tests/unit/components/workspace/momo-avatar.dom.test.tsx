@@ -278,21 +278,46 @@ describe("MomoAvatar", () => {
     }
   });
   it("gives the Desk's fleet templates their canon Momo, a monogram only where none fits", () => {
-    const monogram = new Set([
-      "chief-of-staff",
-      "content-studio",
-      "video-director",
-      "video-editor",
-      "brain-curator",
-    ]);
-    for (const id of DEPARTMENTS.flatMap(([, ids]) => ids)) {
+    const expected: Record<string, string | null> = {
+      "chief-of-staff": null,
+      "delivery-auditor": "verifier",
+      "research-swarm": "research",
+      "muse-scout": "research",
+      "job-radar": "research",
+      "marketing-lead": "growth",
+      "seo-geo-strategist": "growth",
+      "content-studio": null,
+      "paid-media-analyst": "analytics",
+      "outreach-drafter": "growth",
+      "eng-lead": "engineer",
+      "reliability-scout": "reliability",
+      "qa-critic": "qa",
+      "web-designer": "builder",
+      "web-builder": "builder",
+      "video-director": null,
+      "video-editor": null,
+      "momo-concierge": "client-success",
+      "client-reporter": "client-success",
+      "revenue-ops": "revenue",
+      "brain-curator": null,
+    };
+    // Every Desk department id is covered here, so a new one must be decided.
+    expect(Object.keys(expected).sort()).toEqual(
+      DEPARTMENTS.flatMap(([, ids]) => ids).sort(),
+    );
+    for (const [id, slug] of Object.entries(expected)) {
       const { container, unmount } = render(
         <MomoAvatar agent={{ name: id, display_name: id }} size={40} />,
       );
       expect({
         id,
+        src: container.querySelector("img")?.getAttribute("src") ?? null,
         glyph: Boolean(container.querySelector("svg[data-momentum-glyph]")),
-      }).toEqual({ id, glyph: monogram.has(id) });
+      }).toEqual({
+        id,
+        src: slug ? `/momentum/momos/${slug}.svg` : null,
+        glyph: slug === null,
+      });
       unmount();
     }
   });

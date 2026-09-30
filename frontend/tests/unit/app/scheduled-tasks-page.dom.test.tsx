@@ -171,5 +171,20 @@ it("says when a task runs in words, with the full date on the element", () => {
   expect(when.getAttribute("dateTime")).toBe(next.toISOString());
   expect(when.getAttribute("title")).toContain(String(next.getFullYear()));
   // Selected is edged in royal, never a coloured left stripe.
+  fireEvent.click(row);
+  expect(row.getAttribute("aria-pressed")).toBe("true");
+  expect(row.className).toContain("shadow-[inset_0_0_0_1px_var(--primary)]");
+  expect(row.className).toContain("forced-colors:outline-[color:Highlight]");
   expect(row.className).not.toContain("border-l");
+});
+
+it("gives <time> a valid dateTime from a microsecond isoformat", () => {
+  mocks.tasks.data = [
+    task({ id: "a", next_run_at: "2026-09-30T08:50:00.123456+00:00" }),
+  ];
+  render(<ScheduledTasksPage />, { wrapper: Wrapper });
+  const time = within(screen.getByTestId("scheduled-task-item-a")).getByText(
+    (_, el) => el?.tagName === "TIME",
+  );
+  expect(time.getAttribute("dateTime")).toBe("2026-09-30T08:50:00.123Z");
 });

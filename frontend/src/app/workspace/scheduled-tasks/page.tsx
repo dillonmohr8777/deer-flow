@@ -100,7 +100,7 @@ function runTime(value: string | null, locale: string) {
     timeStyle: "short",
   }).format(new Date(value));
   return (
-    <time dateTime={value} title={full}>
+    <time dateTime={new Date(value).toISOString()} title={full}>
       {words}
     </time>
   );
@@ -624,7 +624,9 @@ export default function ScheduledTasksPage() {
                               // Selected is edged in royal, as on phones: no
                               // coloured left stripe (DESIGN.md Don't).
                               isSelected
-                                ? "bg-card shadow-[inset_0_0_0_1px_var(--primary)]"
+                                ? // High Contrast drops shadows and fills,
+                                  // so selection keeps an outline there.
+                                  "bg-card shadow-[inset_0_0_0_1px_var(--primary)] forced-colors:outline-2 forced-colors:-outline-offset-2 forced-colors:outline-[color:Highlight] forced-colors:outline-solid"
                                 : "hover:bg-accent",
                             )}
                           >

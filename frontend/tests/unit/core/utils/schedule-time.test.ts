@@ -15,9 +15,11 @@ describe("formatScheduleTime", () => {
     expect(en(new Date(2026, 8, 23, 9, 0))).toBe("Yesterday, 9:00 AM");
   });
 
-  it("uses the weekday inside the week, the day beyond it", () => {
+  it("uses the weekday inside the coming week, the day beyond it", () => {
     expect(en(new Date(2026, 8, 27, 14, 0))).toBe("Sun, 2:00 PM");
-    expect(en(new Date(2026, 8, 18, 8, 50))).toBe("Fri, 8:50 AM");
+    // Six days back is the date, so an overdue run never reads as upcoming.
+    expect(en(new Date(2026, 8, 18, 8, 50))).toBe("Sep 18, 8:50 AM");
+    expect(en(new Date(2026, 8, 22, 8, 50))).toBe("Sep 22, 8:50 AM");
     expect(en(new Date(2026, 9, 1, 8, 50))).toBe("Oct 1, 8:50 AM");
     expect(en(new Date(2026, 10, 9, 10, 0))).toBe("Nov 9, 10:00 AM");
   });
