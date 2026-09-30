@@ -243,6 +243,108 @@ def test_compiled_owner_ceiling_blocks_middleware_registered_tool_and_fabricated
     assert len(blocked) == 1 and blocked[0].status == "error"
 
 
+def test_owner_tool_names_ceiling_enforced_through_real_lead_agent_assembly(monkeypatch):
+    """f128: a fixed-purpose coordinator's ``AgentConfig.tool_names`` ceiling
+    must survive both places it is threaded through ``_assemble_lead_agent``:
+    the static ``authorization_candidates`` filter (what actually gets
+    registered on the compiled graph) and the ``tool_names`` argument handed
+    to ``build_middlewares`` (what ``SkillToolPolicyMiddleware`` enforces at
+    call time). Replacing either one alone (the filter with ``pass``, or the
+    ``build_middlewares`` argument with ``None``) left every existing test —
+    including the hand-built ceiling test above — green, because nothing
+    exercised the real assembly end to end for a restricted agent.
+    """
+    from deerflow.agents.middlewares.skill_tool_policy_middleware import SkillToolPolicyMiddleware
+
+    def _stub_tool(name: str):
+        @tool(name)
+        def _fn() -> str:
+            """Stub tool for the f128 owner-ceiling assembly test."""
+            return name
+
+        return _fn
+
+    app_config = _make_app_config(
+        [_make_model("safe-model", supports_thinking=False)],
+        loop_detection=LoopDetectionConfig(enabled=False),
+    )
+    agent_config = AgentConfig(name="fixed-agent", tool_names=["present_files"])
+    monkeypatch.setattr(lead_agent_module, "load_agent_config", lambda *args, **kwargs: agent_config)
+    monkeypatch.setattr("deerflow.tools.get_available_tools", lambda **kwargs: [_stub_tool("present_files"), _stub_tool("bash")])
+    monkeypatch.setattr(lead_agent_module, "_load_enabled_available_skills", lambda *args, **kwargs: [])
+    monkeypatch.setattr(lead_agent_module, "build_lead_runtime_middlewares", lambda *, app_config, lazy_init=True: [])
+    monkeypatch.setattr(lead_agent_module, "_create_summarization_middleware", lambda **_kwargs: None)
+    monkeypatch.setattr(lead_agent_module, "_create_todo_list_middleware", lambda is_plan_mode: None)
+    monkeypatch.setattr(lead_agent_module, "create_chat_model", lambda **kwargs: object())
+
+    captured: dict[str, object] = {}
+    real_create_agent = lead_agent_module.create_agent
+
+    def _capture_create_agent(**kwargs):
+        captured.update(kwargs)
+        return real_create_agent(**kwargs)
+
+    monkeypatch.setattr(lead_agent_module, "create_agent", _capture_create_agent)
+
+    lead_agent_module._make_lead_agent({"context": {"agent_name": "fixed-agent"}}, app_config=app_config)
+
+    # Mutation target 1: agent.py's authorization_candidates ceiling filter.
+    # A fixed-purpose coordinator's compiled graph must never register a tool
+    # (here "bash", also picking up the always-added "update_agent") outside
+    # its own AgentConfig.tool_names.
+    assert sorted(t.name for t in captured["tools"]) == ["present_files"]
+
+    # Mutation target 2: the tool_names argument build_middlewares forwards
+    # into SkillToolPolicyMiddleware as owner_tool_names. Checked
+    # independently of the static filter above, so a tool that slips back
+    # onto the graph by any other path is still fenced off.
+    policy = next(middleware for middleware in captured["middleware"] if isinstance(middleware, SkillToolPolicyMiddleware))
+    assert policy._owner_tool_names == frozenset({"present_files"})
+
+    # Prove the real, production-wired policy object actually blocks a
+    # model-emitted call to a tool outside the ceiling, the same way the
+    # hand-built unit test above does for an unrelated tool name.
+    bash_calls: list[str] = []
+
+    @tool("bash")
+    def _bash_stand_in() -> str:
+        """Stand in for a real builtin like bash that must stay unreachable."""
+        bash_calls.append("executed")
+        return "executed"
+
+    class LateBashMiddleware(AgentMiddleware):
+        tools = [_bash_stand_in]
+
+    class _BashBypassModel(BaseChatModel):
+        call_count: int = 0
+        bound_tool_names: list[list[str]] = []
+
+        @property
+        def _llm_type(self) -> str:
+            return "bash-bypass-test"
+
+        def bind_tools(self, tools: Any, **kwargs: Any):
+            self.bound_tool_names.append([tool.name for tool in tools])
+            return self
+
+        def _generate(self, messages, stop=None, run_manager=None, **kwargs):
+            self.call_count += 1
+            if self.call_count == 1:
+                message = AIMessage(content="", tool_calls=[{"id": "forbidden-bash-call", "name": "bash", "args": {}}])
+            else:
+                message = AIMessage(content="done")
+            return ChatResult(generations=[ChatGeneration(message=message)])
+
+    model = _BashBypassModel()
+    graph = create_agent(model=model, tools=[], middleware=[policy, LateBashMiddleware()], state_schema=ThreadState)
+    result = graph.invoke({"messages": [HumanMessage(content="synthetic owner ceiling proof")]}, context={})
+
+    assert model.bound_tool_names == []
+    assert bash_calls == []
+    blocked = [message for message in result["messages"] if isinstance(message, ToolMessage) and message.tool_call_id == "forbidden-bash-call"]
+    assert len(blocked) == 1 and blocked[0].status == "error"
+
+
 @pytest.mark.parametrize(
     ("reader", "is_subagent", "is_bootstrap", "expected"),
     [
