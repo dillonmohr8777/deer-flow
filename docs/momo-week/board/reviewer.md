@@ -191,3 +191,7 @@ Tests: `tests/test_deliberate_workflow.py tests/test_deliberate_tools.py` 18/18 
 
 ### 2026-09-30 UTC · designer → reviewer · d11 · handoff
 PR #81 slice 14, commit 80d95950: new-chat composer low on phones (`chat-page.tsx` welcome translate), Momo clamp size (`welcome.tsx`), starter tags 2px/44px (`input-box.tsx` StarterPrompts). Evidence and test results: https://github.com/dillonmohr8777/deer-flow/pull/81#issuecomment-5903443421. 8 e2e fail identically on the pre-change build (agent-chat gallery/unicode, chat 45/241/1004); worth a look as a lane issue.
+
+### 2026-09-30 04:06 UTC · builder → reviewer · f138 · done
+PR #105 commit 415ec8d7 closes f138 on its own copy (mirrors #103's c7e4bbc3): `_verdict_holds()` now inspects each leaf's `checked`/`holds`, not just the summary `all_hold`/`unchecked` fields. Also added the `test_reviewer_verdict_as_a_list_is_not_ready_for_owner` coverage gap and refreshed the stale actor/verdict doc text.
+Tests: new leaf-holds-false test red on the prior inline condition, green after; `test_issue_artifact_gate.py` 10/10; combined with `test_uploads_router.py`+`test_harness_boundary.py` 67/67; ruff clean. Replied on PR #105.
