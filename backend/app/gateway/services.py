@@ -855,6 +855,24 @@ def inject_authenticated_user_context(
     return
 
 
+async def _refuse_if_agent_seat_paused(agent_name: str) -> None:
+    """Refuse to start a run for an agent whose Momentum seat is paused (queue item f95).
+
+    ``deerflow.exec_seats.budget`` pauses a seat that has exceeded its weekly
+    token budget (queue item e10), but until this check nothing ever stopped
+    that agent's runs -- a pause had no enforcement. Best-effort: persistence
+    unavailable (bare-memory composition, most tests) never blocks a run.
+    """
+    from deerflow.exec_seats.budget import paused_seat_blocking
+
+    seat = await paused_seat_blocking(agent_name)
+    if seat is not None:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Seat {seat['seat']!r} ({agent_name}) is paused: over its weekly token budget.",
+        )
+
+
 def resolve_agent_factory(assistant_id: str | None):
     """Resolve the agent factory callable from config.
 
@@ -1919,7 +1937,42 @@ async def start_run(
         scope_runtime_config = dict(config.get("configurable") or {})
         if isinstance(config.get("context"), dict):
             scope_runtime_config.update(config["context"])
-        scope_assistant_id = scope_runtime_config.get("agent_name") or _DEFAULT_ASSISTANT_ID
+        raw_scope_agent_name = scope_runtime_config.get("agent_name")
+        if raw_scope_agent_name is not None and not isinstance(raw_scope_agent_name, str):
+            # ``configurable``/``context`` are untyped dicts, so a client can send
+            # any JSON scalar (e.g. ``42``) as ``agent_name``. It can never name a
+            # real agent, so refuse the same way ``_load_scope_agent_config``
+            # (f102(d)/#90) treats a missing one -- before the pause gate and the
+            # burn-accounting metadata stamp below ever call ``.strip()`` on it
+            # and crash with an unhandled 500 (review of f98, #90's fix runs too
+            # late to cover this earlier code path). Checked against the raw
+            # value, before the ``or _DEFAULT_ASSISTANT_ID`` fallback below: a
+            # *falsy* non-string (``0``, ``False``, ``[]``) would otherwise slip
+            # through as the default agent and surface as a worker-side
+            # ``ValueError`` instead of this clean 422 (f116 review).
+            raise HTTPException(status_code=422, detail="knowledge_scope assistant configuration could not be resolved")
+        scope_assistant_id = raw_scope_agent_name or _DEFAULT_ASSISTANT_ID
+        if scope_assistant_id != _DEFAULT_ASSISTANT_ID:
+            await _refuse_if_agent_seat_paused(scope_assistant_id)
+            # Server-resolved, like deerflow_trace_id above: an agent seat's weekly
+            # burn (queue item f95) must be counted from the run's real effective
+            # agent, not a caller-forged claim of one. Normalized the same way
+            # AgentSeatRepository.paused_seat_for_agent already matches a seat's
+            # own agent_name (case/underscore-hyphen insensitive, f97 review) --
+            # an un-normalized context.agent_name (e.g. "CMO-Agent") would
+            # otherwise never match a seat claimed as "cmo-agent" in the ledger.
+            # Only custom agents can hold a seat, so default-agent runs are not
+            # stamped: burn accounting falls back to the run's assistant_id, and
+            # ordinary run metadata stays exactly what the caller sent.
+            from deerflow.persistence.exec_seats import EFFECTIVE_AGENT_NAME_METADATA_KEY
+
+            run_metadata[EFFECTIVE_AGENT_NAME_METADATA_KEY] = scope_assistant_id.strip().lower().replace("_", "-")
+        else:
+            # Default-agent runs hold no seat: drop any caller-forged value
+            # instead of stamping "lead-agent" into ordinary run metadata.
+            from deerflow.persistence.exec_seats import EFFECTIVE_AGENT_NAME_METADATA_KEY
+
+            run_metadata.pop(EFFECTIVE_AGENT_NAME_METADATA_KEY, None)
         # Bootstrap assembly intentionally does not load an agent config: the
         # new agent may not exist yet and setup_agent creates its definition.
         agent_config = (
@@ -2220,6 +2273,34 @@ def _delegated_internal_request(app: Any, delegation: ActiveDelegation) -> Simpl
     )
 
 
+async def _require_delegated_run_entitlement(request: Any, organization_id: str | None) -> None:
+    """Enforce ``runs.create`` for a delegated (non-HTTP-decorated) run launch.
+
+    Review finding f59: scheduled-task triggers, cron ticks, and MCP
+    task-notification runs all reach ``start_run`` through
+    ``_start_delegated_run`` rather than a FastAPI route, so none of them
+    ever pass through a ``@require_entitlement``-decorated handler --
+    ``/runs/stream`` returning 403 with ``runs.create`` suspended meant
+    nothing if a scheduled task on the same organization kept spending
+    tokens unchecked. This is the one place all three paths funnel through.
+    """
+    from app.gateway.deps import get_entitlement_repo
+    from deerflow.authz.entitlements import evaluate_entitlement
+    from deerflow.config.entitlement_config import resolve_current_entitlement_config
+
+    entitlement_config = resolve_current_entitlement_config()
+    if not entitlement_config.enabled:
+        return
+
+    if organization_id is None:
+        raise HTTPException(status_code=403, detail={"error": "entitlement_exceeded", "key": "runs.create", "reason": "no_organization"})
+
+    repo = get_entitlement_repo(request)
+    decision = await evaluate_entitlement(repo, organization_id, "runs.create", config=entitlement_config)
+    if not decision.allowed:
+        raise HTTPException(status_code=403, detail={"error": "entitlement_exceeded", "key": "runs.create", "reason": decision.reason})
+
+
 async def _start_delegated_run(body: RunCreateRequest, thread_id: str, request: Any, **kwargs: Any) -> RunRecord:
     """start_run under the storage context AuthMiddleware would have set.
 
@@ -2227,6 +2308,7 @@ async def _start_delegated_run(body: RunCreateRequest, thread_id: str, request: 
     thread are stamped with the delegation's organization.
     """
     state = request.state
+    await _require_delegated_run_entitlement(request, state.organization_id)
     token = set_storage_context(
         WorkspaceStorageContext(
             actor_user_id=state.actor_user_id,

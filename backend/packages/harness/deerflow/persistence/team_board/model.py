@@ -30,6 +30,7 @@ DEFAULT_TEAM_CHANNELS: tuple[tuple[str, str, str], ...] = (
     ("fulfillment", "Fulfillment", "Client delivery, handoffs and deadlines."),
     ("ai-tech-news", "AI tech news", "New tools, what we tried, what worked."),
     ("wins", "Wins", "Client results and good news worth repeating."),
+    ("exec", "Exec", "Titles: claims, ratifications and hires (EXECUTIVE.md)."),
 )
 
 

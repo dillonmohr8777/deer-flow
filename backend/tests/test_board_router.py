@@ -11,6 +11,7 @@ sees only threads for clients they hold a ``client_assignments`` row for.
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from types import SimpleNamespace
 from typing import Any
 
 import httpx
@@ -62,6 +63,19 @@ async def _add_plain_member(session_factory, user_id: str, organization_id: str)
         session.add(OrganizationMemberRow(organization_id=organization_id, user_id=user_id, role="member", status="active", created_at=now, updated_at=now))
 
 
+def _mock_triage_model(monkeypatch, response_content: str) -> None:
+    """Mirrors ``test_board_thread_triage_on_create.py``'s fake-model monkeypatch."""
+    config = SimpleNamespace()
+    fake_response = SimpleNamespace(content=response_content)
+
+    class FakeModel:
+        async def ainvoke(self, *args, **kwargs):
+            return fake_response
+
+    monkeypatch.setattr("deerflow.board.triage.get_app_config", lambda: config)
+    monkeypatch.setattr("deerflow.board.triage.create_chat_model", lambda **kwargs: FakeModel())
+
+
 async def _create_client(client: httpx.AsyncClient, headers: dict[str, str], name: str) -> dict[str, Any]:
     response = await client.post("/api/clients", json={"display_name": name}, headers=headers)
     assert response.status_code == 201, response.text
@@ -80,6 +94,10 @@ async def test_board_thread_crud_and_messages(org_world):  # noqa: F811
         created = await client.post("/api/board/threads", json={"client_id": cid, "kind": "ticket", "subject": "Broken widget"}, headers=headers_a)
         assert created.status_code == 201, created.text
         thread = created.json()
+        # e2: creation runs triage, but no model is configured in this suite,
+        # so it falls back and the thread is left `new`/unclassified rather
+        # than persisting a fake "normal" -- see
+        # test_board_thread_triage_on_create.py for the mocked-model cases.
         assert thread["status"] == "new"
         assert thread["kind"] == "ticket"
         tid = thread["id"]
@@ -178,7 +196,7 @@ async def test_draft_approve_reply_lifecycle(org_world):  # noqa: F811
         acme = await _create_client(client, headers_a, "Acme")
         thread = (await client.post("/api/board/threads", json={"client_id": acme["id"], "subject": "T"}, headers=headers_a)).json()
         tid = thread["id"]
-        assert thread["status"] == "new"
+        assert thread["status"] == "new"  # e2: creation runs triage, but falls back (no model configured) and leaves the thread new
 
         # Reply and approve are both unreachable before a draft exists.
         assert (await client.post(f"/api/board/threads/{tid}/approve", headers=headers_a)).status_code == 409
@@ -452,3 +470,52 @@ async def test_null_client_thread_is_owner_admin_only(org_world):  # noqa: F811
         assert (await client.post(f"/api/board/threads/{tid}/messages", json={"body": "ok"}, headers=headers_c)).status_code == 201
         a_list = await client.get("/api/board/threads", headers=headers_a)
         assert tid in [t["id"] for t in a_list.json()["threads"]]
+
+
+async def test_urgency_and_summary_hidden_from_non_admin(org_world, monkeypatch):  # noqa: F811
+    """Momo's internal triage (urgency/summary) can read like "client is angry,
+    churn risk" -- a client_contact must never see it, only an org owner/admin.
+    """
+    _mock_triage_model(monkeypatch, '{"kind":"concern","urgency":"urgent","summary":"INTERNAL: client is angry, churn risk."}')
+    session_factory = org_world
+    app = _build_app(session_factory)
+    headers_a = auth_headers(USER_A, ORG_S)  # owner
+
+    await _add_plain_member(session_factory, USER_D, ORG_S)
+    headers_d = auth_headers(USER_D, ORG_S)
+
+    async with _client(app) as client:
+        acme = await _create_client(client, headers_a, "Acme")
+        assign = await client.post(f"/api/clients/{acme['id']}/assignments", json={"user_id": USER_D, "role": "client_contact"}, headers=headers_a)
+        assert assign.status_code == 201
+
+        created = await client.post("/api/board/threads", json={"client_id": acme["id"], "subject": "Angry email"}, headers=headers_a)
+        assert created.status_code == 201, created.text
+        tid = created.json()["id"]
+        # Sanity: the owner who created it sees the real classification straight away.
+        assert created.json()["urgency"] == "urgent"
+        assert created.json()["summary"] == "INTERNAL: client is angry, churn risk."
+
+        # The client_contact assigned to this thread's client never sees either field,
+        # on any read path: list, get, or a status patch's echoed response.
+        d_list = await client.get("/api/board/threads", headers=headers_d)
+        assert d_list.status_code == 200
+        [d_thread] = d_list.json()["threads"]
+        assert d_thread["id"] == tid
+        assert d_thread["urgency"] is None
+        assert d_thread["summary"] is None
+
+        d_get = await client.get(f"/api/board/threads/{tid}", headers=headers_d)
+        assert d_get.status_code == 200
+        assert d_get.json()["urgency"] is None
+        assert d_get.json()["summary"] is None
+
+        d_patch = await client.patch(f"/api/board/threads/{tid}", json={"subject": "still angry"}, headers=headers_d)
+        assert d_patch.status_code == 200
+        assert d_patch.json()["urgency"] is None
+        assert d_patch.json()["summary"] is None
+
+        # The owner keeps seeing the real values throughout.
+        a_get = await client.get(f"/api/board/threads/{tid}", headers=headers_a)
+        assert a_get.json()["urgency"] == "urgent"
+        assert a_get.json()["summary"] == "INTERNAL: client is angry, churn risk."

@@ -768,3 +768,92 @@ def require_permission(
         return wrapper
 
     return decorator
+
+
+def require_entitlement(
+    key: str,
+    *,
+    requested_amount: int = 1,
+) -> Callable[[Callable[P, T]], Callable[P, T]]:
+    """Decorator enforcing the M4 entitlement gate for a paid mutation.
+
+    Design: ``docs/momo-week/m4-entitlement.md`` §3, §7.3 (task ``c2``/``e6``).
+    Must be composed AFTER ``@require_permission`` (i.e. placed BELOW it in
+    the decorator stack, so it executes second) — it reads
+    ``request.state.auth.organization_id``, which only ``AuthMiddleware`` or
+    ``require_permission``'s own ``_authenticate()`` populate. No router in
+    this codebase uses ``@require_auth`` today, and stacking it back in above
+    this decorator would wipe that org context right before it's needed.
+
+    Only suitable for a gate key (no attempted-count needed). A limit key
+    (``projects.max`` etc.) needs the caller's live usage count from the
+    request body, so those routes call ``evaluate_entitlement(...)`` inline
+    in the handler instead — the same "decorator for the common case, inline
+    call for the parametrized case" split ``board.py`` already uses for
+    ``_require_client_access``.
+
+    Raises:
+        HTTPException 401: If unauthenticated.
+        HTTPException 403: If entitlements are enabled and the key is denied
+            (no resolved organization, no row, or a suspended row). The body
+            is ``{"error": "entitlement_exceeded", "key": ..., "reason": ...}``
+            so the frontend can show upgrade copy instead of a bare
+            permission error.
+    """
+
+    def decorator(func: Callable[P, T]) -> Callable[P, T]:
+        @functools.wraps(func)
+        async def wrapper(*args: Any, **kwargs: Any) -> Any:
+            request = kwargs.get("request")
+            if request is None:
+                try:
+                    bound = inspect.signature(func).bind_partial(*args, **kwargs)
+                except TypeError:
+                    bound = None
+                if bound is not None and "request" in bound.arguments:
+                    request = bound.arguments["request"]
+                elif "request" in inspect.signature(func).parameters:
+                    kwargs["request"] = _make_test_request_stub()
+                    request = kwargs["request"]
+                else:
+                    return await func(*args, **kwargs)
+
+            if getattr(request, "_deerflow_test_bypass_auth", False):
+                return await func(*args, **kwargs)
+
+            from deerflow.config.entitlement_config import resolve_current_entitlement_config
+
+            entitlement_config = resolve_current_entitlement_config()
+            if not entitlement_config.enabled:
+                return await func(*args, **kwargs)
+
+            auth: AuthContext | None = getattr(request.state, "auth", None)
+            if auth is None:
+                auth = await _authenticate(request)
+                request.state.auth = auth
+
+            if not auth.is_authenticated:
+                raise HTTPException(status_code=401, detail="Authentication required")
+
+            from app.gateway.deps import get_entitlement_repo
+            from deerflow.authz.entitlements import evaluate_entitlement
+
+            repo = get_entitlement_repo(request)
+            decision = await evaluate_entitlement(
+                repo,
+                auth.organization_id,
+                key,
+                requested_amount=requested_amount,
+                config=entitlement_config,
+            )
+            if not decision.allowed:
+                raise HTTPException(
+                    status_code=403,
+                    detail={"error": "entitlement_exceeded", "key": key, "reason": decision.reason},
+                )
+
+            return await func(*args, **kwargs)
+
+        return wrapper
+
+    return decorator
