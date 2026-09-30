@@ -245,7 +245,9 @@ def get_available_tools(
     # made through the Gateway API (which runs in a separate process) are immediately
     # reflected when loading MCP tools.
     mcp_tools = []
-    if include_mcp:
+    # An explicit empty selection must prevent discovery, not merely filter its
+    # results: lazy discovery can start globally enabled HTTP/stdio servers.
+    if include_mcp and mcp_plugins != []:
         try:
             from deerflow.config.extensions_config import ExtensionsConfig
             from deerflow.mcp.cache import get_cached_mcp_tools
