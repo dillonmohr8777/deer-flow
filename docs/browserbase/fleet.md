@@ -63,6 +63,10 @@ stop at the cap (or immediately on PAUSED, which holds a billed browser), and
 records the run as uncertain if it is still not terminal three minutes later.
 Failed polls are retried inside that bound, a failed stop is retried each poll,
 and any fleet-side error after start requests a stop before re-raising.
+The shared SQLite reservation transaction also permits only one active native
+reservation across workers and billing cycles; a lagging provider list cannot
+admit a second native run after the first moves to `running`. Deterministic QA
+can still use the other generic concurrency slot when its admission passes.
 The ledger binds the reservation to the exact provider run ID, agent and project
 before polling or artifact writes. Polls cannot replace that run/session identity.
 `started.json` mirrors this ownership; an operator repairs an

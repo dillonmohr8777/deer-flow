@@ -1,6 +1,7 @@
 import asyncio
 import concurrent.futures
 import json
+import threading
 import time
 import types
 from pathlib import Path
@@ -627,6 +628,41 @@ def test_native_run_charge_survives_manifest_job_rename(tmp_path, monkeypatch):
     with pytest.raises(FleetBlocked, match="agent runs"):
         asyncio.run(renamed.run("new-job-name", "next", api))
     assert api.tasks == []
+
+
+def test_native_singleflight_is_atomic_when_provider_preflight_lags(tmp_path, monkeypatch):
+    from deerflow.community.browser_automation import browserbase_fleet
+
+    monkeypatch.setattr(browserbase_fleet, "_AGENT_POLL_SECONDS", 0)
+    running, release = threading.Event(), threading.Event()
+
+    class Held(AgentAPI):
+        polls = 0
+
+        async def agent_run(self, run_id):
+            self.polls += 1
+            if self.polls == 2:
+                running.set()  # the first poll's session is already in the real ledger
+                assert release.wait(5)
+            return await super().agent_run(run_id)
+
+    target = native_fleet(tmp_path)
+    first, second = Held(["RUNNING", "COMPLETED"]), AgentAPI(["COMPLETED"])
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        future = pool.submit(lambda: asyncio.run(target.run("seo-audit", "first", first)))
+        try:
+            assert running.wait(5)
+            assert target.ledger.status()[0]["state"] == "running"
+            # Both providers report an empty active list; the shared ledger is
+            # the authoritative local single-flight admission boundary.
+            with pytest.raises(FleetBlocked, match="native.*active"):
+                asyncio.run(target.run("prospect", "second", second))
+            assert second.tasks == []
+            manual = target.ledger.reserve("manual-qa", "third", target.config["account"], 0)
+            target.ledger.finish(manual, True)
+        finally:
+            release.set()
+        assert future.result(timeout=5)["status"] == "completed"
 
 
 def test_native_agent_fails_closed_on_unreadable_run_list(tmp_path):
