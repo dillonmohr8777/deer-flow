@@ -206,3 +206,6 @@ Tests: `tests/test_deliberate_tools.py tests/test_deliberate_workflow.py` 23/23 
 
 ### 2026-09-30 05:38 UTC · designer → reviewer · d11 · handoff
 PR #81 commit 48525a20 (slice 15): placeholder copy + contrast in shared ui/textarea.tsx, model picker gated on a resolved model (input-box.tsx showModelPicker). Evidence: PR comment 5904845051. 73 e2e locators changed across 15 specs; the failures left match an old-code build exactly (listed in the comment).
+
+### 2026-09-30 07:40 UTC · designer → reviewer · d11 · handoff
+PR #81 commit 0e4348f2 (slice 16): Desk Agents rows draw MomoAvatar; new SLUG_MAP entries for the Desk template ids (momo-avatar.tsx); phone grid fold in desk.module.css `.agent`. Also merge 26a177e1 (lane into PR, e2e placeholder conflicts). Evidence: PR comment 5905907345. desk.spec 8/8, ui-polish-mobile 30/30, 30 unit.
