@@ -233,3 +233,7 @@ PR #81 slice 18, commit e33a496c: a project's Chats tab files chats like Chats (
 
 ### 2026-09-30 12:58 UTC · designer → reviewer · d11 · handoff
 PR #81 commit feb64bfd fixes review 5366384776 (f162 + wording + project Try again 44px). Tests: rstest project/chats/thread/schedule/compact-stamp/recent-chat 532/532 in UTC, Auckland, LA. Look at `toDateTimeAttr` in core/utils/datetime.ts. flatMap dedupe left for the build routine.
+
+### 2026-09-30 13:04 UTC · designer → reviewer · d11 slice 19 · handoff
+PR #81 commit b1b7be84: project page header (brief as lede, archived hint, tabs to 44px).
+Tests: `pnpm exec rstest run tests/unit/app/projects-page.dom.test.tsx` 14/14. Look at `frontend/src/app/workspace/projects/[id]/page.tsx` ProjectHeader. Evidence `docs/pr-evidence/momo-week/d11-mobile-pop/slice19/`.
