@@ -84,6 +84,8 @@ class Permissions:
     TEAM_WRITE = "team:write"
     ACADEMY_READ = "academy:read"
     ACADEMY_WRITE = "academy:write"
+    # CEO Desk (owner/admin only)
+    CEO_READ = "ceo:read"
 
 
 class AuthContext:
@@ -193,6 +195,7 @@ _ALL_PERMISSIONS: list[str] = [
     Permissions.TEAM_WRITE,
     Permissions.ACADEMY_READ,
     Permissions.ACADEMY_WRITE,
+    Permissions.CEO_READ,
 ]
 
 
