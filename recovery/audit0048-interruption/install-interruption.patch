@@ -1,0 +1,11 @@
+--- a/install.py
++++ b/install.py
+@@ -1103,7 +1103,7 @@
+     driver = Driver(args.receipt_dir)
+     try:
+         driver.execute(approval)
+-    except Exception as error:
++    except BaseException as error:
+         stopped = driver.failstop()
+         atomic_new(
+             driver.root / "stopped-receipt.json",
