@@ -14,6 +14,7 @@ from deerflow.config.agent_storage_config import AgentStorageConfig
 from deerflow.config.agents_api_config import AgentsApiConfig, load_agents_api_config_from_dict
 from deerflow.config.auth_config import AuthAppConfig
 from deerflow.config.authorization_config import AuthorizationConfig, load_authorization_config_from_dict
+from deerflow.config.ceo_desk_config import CeoDeskConfig
 from deerflow.config.channel_connections_config import ChannelConnectionsConfig
 from deerflow.config.checkpointer_config import CheckpointerConfig, load_checkpointer_config_from_dict
 from deerflow.config.database_config import DatabaseConfig
@@ -328,6 +329,10 @@ class AppConfig(BaseModel):
     exec_seats: ExecSeatsConfig = Field(
         default_factory=ExecSeatsConfig,
         description="Background weekly token-budget enforcement for Momentum agent seats (queue item f95)",
+    )
+    ceo_desk: CeoDeskConfig = Field(
+        default_factory=CeoDeskConfig,
+        description="Background daily-digest generation for the CEO Desk (queue item e14)",
     )
     hiring: HiringConfig = Field(
         default_factory=HiringConfig,

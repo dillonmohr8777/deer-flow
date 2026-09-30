@@ -668,6 +668,100 @@ async def _shutdown_hire_kpi_review_loop(app: FastAPI) -> None:
         await task
 
 
+async def _run_ceo_desk_digest_sweep(*, now=None) -> None:
+    """One digest pass over every active organization (queue item e14).
+
+    Unlike the seat/hire sweeps above (which key off existing rows in
+    another table), the CEO Desk digest has nothing to iterate but
+    organizations themselves, so this walks ``organizations`` directly.
+    Same per-organization storage-context shape as ``_run_seat_budget_sweep``
+    (``deerflow.ceo_desk.digest.run_ceo_desk_digest``'s repository calls
+    resolve the organization ambiently), and the same "skip an org with no
+    active owner to attribute the sweep to" posture. Whether a digest
+    actually generates for a given organization on a given tick is
+    ``run_ceo_desk_digest``'s own ``is_digest_due`` gate (at most one per
+    organization per Eastern-time calendar day, never before
+    ``ceo_desk.digest_hour_et``), so a short sweep interval only means a due
+    organization is noticed sooner. *now* overrides wall-clock time for tests.
+    """
+    from sqlalchemy import select
+
+    from deerflow.ceo_desk.digest import run_ceo_desk_digest
+    from deerflow.config.ceo_desk_config import CeoDeskConfig
+    from deerflow.persistence.board.sql import BoardRepository
+    from deerflow.persistence.ceo_desk.sql import CeoDeskDigestRepository
+    from deerflow.persistence.engine import get_session_factory
+    from deerflow.persistence.exec_seats import AgentSeatRepository
+    from deerflow.persistence.organizations.model import OrganizationMemberRow, OrganizationRow
+    from deerflow.runtime.user_context import WorkspaceStorageContext, reset_storage_context, set_storage_context
+
+    session_factory = get_session_factory()
+    if session_factory is None:
+        return
+    ceo_desk_config = getattr(get_app_config(), "ceo_desk", None)
+    hour_et = ceo_desk_config.digest_hour_et if isinstance(ceo_desk_config, CeoDeskConfig) else CeoDeskConfig().digest_hour_et
+    board_repo = BoardRepository(session_factory)
+    seat_repo = AgentSeatRepository(session_factory)
+    digest_repo = CeoDeskDigestRepository(session_factory)
+
+    async with session_factory() as session:
+        organization_ids = (await session.execute(select(OrganizationRow.id).where(OrganizationRow.status == "active"))).scalars().all()
+
+    for organization_id in organization_ids:
+        async with session_factory() as session:
+            storage_user_id = await session.scalar(select(OrganizationRow.storage_user_id).where(OrganizationRow.id == organization_id))
+            owner_user_id = await session.scalar(
+                select(OrganizationMemberRow.user_id).where(
+                    OrganizationMemberRow.organization_id == organization_id,
+                    OrganizationMemberRow.role == "owner",
+                    OrganizationMemberRow.status == "active",
+                )
+            )
+        if owner_user_id is None:
+            continue
+        token = set_storage_context(WorkspaceStorageContext(actor_user_id=owner_user_id, organization_id=organization_id, storage_user_id=storage_user_id or owner_user_id))
+        try:
+            await run_ceo_desk_digest(board_repo, seat_repo, digest_repo, hour_et=hour_et, now=now)
+        finally:
+            reset_storage_context(token)
+
+
+async def _run_ceo_desk_digest_loop(interval_seconds: float) -> None:
+    """Recurring CEO Desk digest sweep, cancelled cleanly on shutdown (queue item e14)."""
+    while True:
+        await asyncio.sleep(interval_seconds)
+        try:
+            await _run_ceo_desk_digest_sweep()
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("CEO Desk digest sweep failed")
+
+
+def _start_ceo_desk_digest_loop(startup_config) -> asyncio.Task | None:
+    """Schedule the recurring digest sweep when configured; ``None`` otherwise.
+
+    Defensive against unconfigured ``startup_config`` test doubles, same as
+    ``_start_seat_budget_loop``.
+    """
+    from deerflow.config.ceo_desk_config import CeoDeskConfig
+
+    ceo_desk_config = getattr(startup_config, "ceo_desk", None)
+    if not isinstance(ceo_desk_config, CeoDeskConfig) or not ceo_desk_config.digest_enabled:
+        return None
+    return asyncio.create_task(_run_ceo_desk_digest_loop(ceo_desk_config.digest_check_interval_seconds))
+
+
+async def _shutdown_ceo_desk_digest_loop(app: FastAPI) -> None:
+    """Cancel the recurring sweep task, if one was started."""
+    task = getattr(app.state, "ceo_desk_digest_loop_task", None)
+    if task is None or task.done():
+        return
+    task.cancel()
+    with suppress(asyncio.CancelledError):
+        await task
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan handler."""
@@ -807,6 +901,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         # Queue item e12: recurring KPI-review sweep for Momentum agent
         # hires, off by default (config.hiring.kpi_check_enabled).
         app.state.hire_kpi_review_loop_task = _start_hire_kpi_review_loop(startup_config)
+
+        # Queue item e14: recurring daily-digest sweep for the CEO Desk, off
+        # by default (config.ceo_desk.digest_enabled).
+        app.state.ceo_desk_digest_loop_task = _start_ceo_desk_digest_loop(startup_config)
 
         try:
             from app.gateway.services import launch_scheduled_thread_run
@@ -975,6 +1073,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         await _shutdown_seat_scorecard_loop(app)
         await _shutdown_hire_idle_retirement_loop(app)
         await _shutdown_hire_kpi_review_loop(app)
+        await _shutdown_ceo_desk_digest_loop(app)
 
         if getattr(app.state, "workflow_service", None) is not None:
             await app.state.workflow_service.aclose()

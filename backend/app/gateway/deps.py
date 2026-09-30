@@ -556,6 +556,7 @@ async def langgraph_runtime(app: FastAPI, startup_config: AppConfig) -> AsyncGen
             from deerflow.persistence.academy import AcademyProgressRepository
             from deerflow.persistence.agent_room import AgentRoomRepository
             from deerflow.persistence.board import BoardRepository
+            from deerflow.persistence.ceo_desk import CeoDeskDigestRepository
             from deerflow.persistence.clients import ClientRepository
             from deerflow.persistence.entitlements import EntitlementRepository
             from deerflow.persistence.exec_seats import AgentSeatRepository
@@ -575,6 +576,7 @@ async def langgraph_runtime(app: FastAPI, startup_config: AppConfig) -> AsyncGen
             app.state.board_repo = BoardRepository(sf)
             app.state.team_board_repo = TeamBoardRepository(sf)
             app.state.agent_seat_repo = AgentSeatRepository(sf)
+            app.state.ceo_desk_digest_repo = CeoDeskDigestRepository(sf)
             app.state.agent_room_repo = AgentRoomRepository(sf)
             app.state.entitlement_repo = EntitlementRepository(sf)
             app.state.academy_progress_repo = AcademyProgressRepository(sf)
@@ -597,6 +599,7 @@ async def langgraph_runtime(app: FastAPI, startup_config: AppConfig) -> AsyncGen
             app.state.board_repo = None
             app.state.team_board_repo = None
             app.state.agent_seat_repo = None
+            app.state.ceo_desk_digest_repo = None
             app.state.agent_room_repo = None
             app.state.entitlement_repo = None
             app.state.academy_progress_repo = None
@@ -715,6 +718,7 @@ get_client_repo = _require("client_repo", "Clients")
 get_board_repo = _require("board_repo", "Board")
 get_team_board_repo = _require("team_board_repo", "Team board")
 get_agent_seat_repo = _require("agent_seat_repo", "Agent seats")
+get_ceo_desk_digest_repo = _require("ceo_desk_digest_repo", "CEO Desk digest")
 get_entitlement_repo = _require("entitlement_repo", "Entitlement")
 get_academy_progress_repo = _require("academy_progress_repo", "Academy")
 get_fleet_binding_repo = _require("fleet_binding_repo", "Fleet")

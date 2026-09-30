@@ -18,12 +18,14 @@ import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from deerflow.config import get_app_config
 from deerflow.config.app_config import AppConfig
 from deerflow.models import create_chat_model
 from deerflow.persistence.board.model import BoardThreadStatus
 from deerflow.persistence.board.sql import BoardRepository
+from deerflow.persistence.ceo_desk.sql import CeoDeskDigestRepository
 from deerflow.persistence.exec_seats.model import AgentSeatStatus
 from deerflow.persistence.exec_seats.sql import AgentSeatRepository
 from deerflow.utils.llm_text import extract_response_text
@@ -33,6 +35,8 @@ logger = logging.getLogger(__name__)
 _WINDOW = timedelta(hours=24)
 _SHIPPED_STATUSES = frozenset({BoardThreadStatus.REPLIED, BoardThreadStatus.CLOSED})
 _MAX_NAMED_SUBJECTS = 5
+# Matches the frontend's isAfterHoursET (desk-data.ts): Eastern time, DST-aware.
+_ET = ZoneInfo("America/New_York")
 
 
 @dataclass(frozen=True)
@@ -137,3 +141,60 @@ async def generate_daily_digest(
     except Exception:
         logger.warning("Digest generation failed", exc_info=True)
         return None
+
+
+def is_digest_due(last_generated_at: datetime | None, *, now: datetime | None = None, hour_et: int = 8) -> bool:
+    """Whether a new digest should generate right now.
+
+    At most one digest per organization per Eastern-time calendar day, never
+    before *hour_et*:00 ET (Dillon's "08:00 ET" daily digest). A naive
+    *last_generated_at* is treated as UTC, matching :func:`_parse_dt`
+    elsewhere in this module.
+    """
+    now = now or datetime.now(UTC)
+    now_et = now.astimezone(_ET)
+    if now_et.hour < hour_et:
+        return False
+    if last_generated_at is None:
+        return True
+    last = last_generated_at if last_generated_at.tzinfo is not None else last_generated_at.replace(tzinfo=UTC)
+    return last.astimezone(_ET).date() < now_et.date()
+
+
+async def run_ceo_desk_digest(
+    board_repo: BoardRepository,
+    seat_repo: AgentSeatRepository,
+    digest_repo: CeoDeskDigestRepository,
+    *,
+    hour_et: int = 8,
+    now: datetime | None = None,
+    app_config: AppConfig | None = None,
+    model_name: str | None = None,
+    attach_tracing: bool = True,
+) -> dict[str, Any] | None:
+    """Generate and persist today's digest for the ambient organization, if due.
+
+    Callers (the Gateway lifespan sweep) set the organization's storage
+    context before calling this, the same per-organization shape
+    ``deerflow.exec_seats.scorecard``'s sweep uses -- every repository call
+    here resolves the organization ambiently. Returns the persisted digest
+    record, or ``None`` when not yet due or when generation failed (an
+    inconclusive attempt leaves nothing behind, so a later sweep tick can
+    retry rather than silently recording an empty digest).
+    """
+    now = now or datetime.now(UTC)
+    latest = await digest_repo.latest_digest()
+    last_generated_at = _parse_dt(latest.get("created_at")) if latest else None
+    if not is_digest_due(last_generated_at, now=now, hour_et=hour_et):
+        return None
+    window = await build_digest_window(board_repo, seat_repo, now=now)
+    text = await generate_daily_digest(window, app_config=app_config, model_name=model_name, attach_tracing=attach_tracing)
+    if text is None:
+        return None
+    return await digest_repo.record_digest(
+        digest_text=text,
+        shipped_count=window.shipped_count,
+        stuck_count=window.stuck_count,
+        needs_my_yes_drafts=window.needs_my_yes_drafts,
+        needs_my_yes_ratifications=window.needs_my_yes_ratifications,
+    )

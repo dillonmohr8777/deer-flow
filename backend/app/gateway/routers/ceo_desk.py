@@ -17,7 +17,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 
 from app.gateway.authz import require_permission
-from app.gateway.deps import get_agent_seat_repo, get_board_repo, get_current_user_from_request
+from app.gateway.deps import get_agent_seat_repo, get_board_repo, get_ceo_desk_digest_repo, get_current_user_from_request
 from deerflow.persistence.board.model import BoardThreadStatus
 from deerflow.persistence.exec_seats.model import AgentSeatStatus
 from deerflow.persistence.organizations.model import OrganizationMemberRow
@@ -65,6 +65,19 @@ class SeatRosterEntry(BaseModel):
 
 class SeatRosterResponse(BaseModel):
     seats: list[SeatRosterEntry]
+
+
+class DailyDigest(BaseModel):
+    digest_text: str
+    shipped_count: int
+    stuck_count: int
+    needs_my_yes_drafts: int
+    needs_my_yes_ratifications: int
+    created_at: str
+
+
+class DailyDigestResponse(BaseModel):
+    digest: DailyDigest | None
 
 
 async def _is_active_org_admin(user_id: str) -> bool:
@@ -154,3 +167,29 @@ async def get_seat_roster(request: Request) -> SeatRosterResponse:
         for s in seats
     ]
     return SeatRosterResponse(seats=entries)
+
+
+@router.get("/digest", response_model=DailyDigestResponse)
+@require_permission("ceo", "read")
+async def get_digest(request: Request) -> DailyDigestResponse:
+    """The most recent generated daily digest, or ``None`` before the first one runs.
+
+    Read-only: this endpoint never generates a digest itself, only reads
+    what the background sweep (``deerflow.ceo_desk.digest.run_ceo_desk_digest``,
+    gated by ``config.ceo_desk.digest_enabled``) has already recorded.
+    """
+    await _require_admin(request)
+    digest_repo = get_ceo_desk_digest_repo(request)
+    latest = await digest_repo.latest_digest()
+    if latest is None:
+        return DailyDigestResponse(digest=None)
+    return DailyDigestResponse(
+        digest=DailyDigest(
+            digest_text=latest.get("digest_text", ""),
+            shipped_count=latest.get("shipped_count", 0),
+            stuck_count=latest.get("stuck_count", 0),
+            needs_my_yes_drafts=latest.get("needs_my_yes_drafts", 0),
+            needs_my_yes_ratifications=latest.get("needs_my_yes_ratifications", 0),
+            created_at=latest.get("created_at", ""),
+        )
+    )

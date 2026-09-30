@@ -19,6 +19,7 @@ from deerflow.persistence.agent_room.model import AgentRoomMessageRow
 from deerflow.persistence.agents.model import AgentRow
 from deerflow.persistence.audit_events.model import AuditEventRow
 from deerflow.persistence.board.model import BoardMessageRow, BoardThreadRow
+from deerflow.persistence.ceo_desk.model import CeoDeskDigestRow
 from deerflow.persistence.channel_connections.model import (
     ChannelConnectionRow,
     ChannelConversationRow,
@@ -57,6 +58,7 @@ __all__ = [
     "AuditEventRow",
     "BoardMessageRow",
     "BoardThreadRow",
+    "CeoDeskDigestRow",
     "ChannelConnectionRow",
     "ChannelConversationRow",
     "ChannelCredentialRow",

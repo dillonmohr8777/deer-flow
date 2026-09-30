@@ -20,6 +20,7 @@ from org_isolation_fixtures import ORG_S, USER_A, USER_C, acting_as, auth_header
 from app.gateway.auth_middleware import AuthMiddleware
 from app.gateway.routers import board, ceo_desk, clients
 from deerflow.persistence.board import BoardRepository
+from deerflow.persistence.ceo_desk import CeoDeskDigestRepository
 from deerflow.persistence.clients import ClientRepository
 from deerflow.persistence.exec_seats import AgentSeatRepository
 from deerflow.persistence.fleet import FleetBindingRepository
@@ -37,6 +38,7 @@ def _build_app(session_factory) -> FastAPI:
     app.state.client_repo = ClientRepository(session_factory)
     app.state.board_repo = BoardRepository(session_factory)
     app.state.agent_seat_repo = AgentSeatRepository(session_factory)
+    app.state.ceo_desk_digest_repo = CeoDeskDigestRepository(session_factory)
     app.state.fleet_binding_repo = FleetBindingRepository(session_factory)
     app.include_router(clients.router)
     app.include_router(board.router)
@@ -117,3 +119,25 @@ async def test_member_and_client_get_403(org_world):  # noqa: F811
         assert assign.status_code == 201
         assert (await client.get("/api/ceo/needs-my-yes", headers=headers_member)).status_code == 403
         assert (await client.get("/api/ceo/seats", headers=headers_member)).status_code == 403
+        assert (await client.get("/api/ceo/digest", headers=headers_member)).status_code == 403
+
+
+async def test_digest_endpoint_reads_the_latest_recorded_digest(org_world):  # noqa: F811
+    session_factory = org_world
+    app = _build_app(session_factory)
+    headers_a = auth_headers(USER_A, ORG_S)
+
+    async with _client(app) as client:
+        before = await client.get("/api/ceo/digest", headers=headers_a)
+        assert before.status_code == 200, before.text
+        assert before.json()["digest"] is None
+
+        with acting_as(USER_A, ORG_S):
+            digest_repo = CeoDeskDigestRepository(session_factory)
+            await digest_repo.record_digest(digest_text="Shipped 1. Stuck on 0. Nothing needs your yes.", shipped_count=1, stuck_count=0, needs_my_yes_drafts=0, needs_my_yes_ratifications=0)
+
+        after = await client.get("/api/ceo/digest", headers=headers_a)
+        assert after.status_code == 200, after.text
+        body = after.json()["digest"]
+        assert body["digest_text"] == "Shipped 1. Stuck on 0. Nothing needs your yes."
+        assert body["shipped_count"] == 1
