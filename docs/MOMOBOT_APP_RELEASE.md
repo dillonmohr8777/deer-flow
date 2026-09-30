@@ -1,25 +1,26 @@
 # MomoBot app release and operator handoff
 
-Source is prepared in `/Users/dillonmohr/code/_worktrees/momobot-openai-app-20260929`
+The private application is installed from `/Users/dillonmohr/code/_worktrees/momobot-openai-app-20260929`
 on `codex/momobot-openai-app-20260929`. This document separates source validation,
 bounded provider evidence, and the final installed runtime. A successful build or
 HTTP response alone does not establish useful autonomous work or publication.
 
 ## Release record
 
-The parent operator must fill these after read-back; they are not completed claims:
+The following records have independent read-back:
 
-- Final source commit and clean reviewed diff: **pending**.
+- Executable source commits: `584048ce` and `d000c549`; clean reviewed source, no provider keys/runtime state tracked.
 - Final local production frontend build and 12 focused browser scenarios:
   **passed** (Webpack build plus OpenAI 3 / Browser research 3 / PWA 6).
   Chromium QA at `127.0.0.1:3040`, log `/tmp/momobot-final-e2e.log`;
-  authenticated runtime/device delivery remains a separate gate.
+  six additional real authenticated responsive captures and saved artifact read-back passed.
 - Private gateway/frontend launchd jobs running with production authentication: **verified**.
 - Authenticated tailnet8445 access: **verified**; anonymous workspace redirects to login and API returns401.
 - Final macOS package: **built and installed**; installed hidden HTTPS login smoke passed. See `desktop/VERIFICATION.md`.
 - iPhone Safari installation and authenticated useful output on the actual device: **manual device check pending**.
+- Draft integration PR: [#109](https://github.com/dillonmohr8777/deer-flow/pull/109), targeting `lane/momo-week`; publication is not a merge or merged-tree deployment.
 - Public hosting, GitHub publication/merge, Developer ID signing, notarization,
-  and App Store submission: **not established by this release record**.
+  and App Store submission: **not part of the private installed release**; draft source publication is recorded separately below.
 
 ## What is delivered
 
@@ -35,9 +36,9 @@ The macOS Apple Silicon app is an Electron shell for the same authenticated
 workspace. Its isolated app session does not import browser cookies. It is not
 a bundled backend or an embedded API key. The current shell has an ad-hoc
 integrity signature, without Developer ID signing or notarization. Native
-downloads support bounded same-origin artifacts, PNG and JSON with explicit user intent; generated files are also available through
-the authenticated web app until an explicitly reviewed desktop download policy
-is shipped. Password/MFA login works within the workspace origin; browser SSO
+downloads support bounded same-origin artifacts, PNG and JSON with explicit user intent;
+the authenticated web app also verified an actual saved artifact byte-for-byte.
+Password/MFA login is presented within the workspace origin; browser SSO
 does not transfer a completed session into the native app.
 
 ## Private setup
@@ -138,7 +139,8 @@ workload, not an independently sourced accessibility audit. Actual billed
 OpenAI cost is unavailable. Evidence:
 `/Users/dillonmohr/Documents/Codex/momobot-openai-app-release/live-openai-evidence.json`
 and `live-release-check.txt`. This validates that provider workload; it does
-not establish the final launchd/native/phone delivery gates.
+not by itself establish launchd/native/phone delivery gates; installed runtime
+evidence below verifies the first two separately.
 
 The Browserbase/Stagehand official catalog study preserved 814 distinct fetched
 URLs and normalized 410 canonical full texts. All full texts were supplied to
@@ -148,16 +150,15 @@ read-back verifies source snapshots, not every model conclusion. Evidence is
 in `/Users/dillonmohr/Documents/Codex/browserbase-learning-20260929/`:
 `SUMMARY.md`, `MUSE-STUDY.md`, `muse-usage.json`, `source-integrity.json`, and
 `backend-verification.json`. The corrected live Browserbase screenshot/closure
-receipt belongs in the final release record; early origin-validation failures
+receipt is in `momobot-openai-app-release/browserbase-live-20260929/verified-20260929/`; early origin-validation failures
 were released and must not be reported as successful captures.
 
-Thirty focused frontend unit/DOM tests passed, including owner/workspace changes,
+Forty-eight consolidated frontend unit/DOM tests passed, including owner/workspace changes,
 idempotent retries, unknown output, read-only permissions, URL rejection,
 authenticated screenshot bounds, and artifact content-type rejection. OpenAI
 router authorization/validation tests passed. Full frontend TypeScript and
-focused ESLint passed at the prepared-source stage. Parent-reviewed backend
-and desktop suites have separate receipts. The complete backend suite remains
-a separate gate until its result is filled. The final Webpack production build
+full ESLint passed on the release source. Backend and desktop suites have
+separate receipts. The final Webpack production build
 passed, followed by all 12 focused Chromium scenarios: scoped fixture requests,
 resumed evidence, a decoded PNG, downloaded JSON file read-back, failure/unknown
 states, 390/768/1440 layouts, installation help, reduced motion, and public-only
@@ -209,11 +210,11 @@ now include those six registered permissions. PAT scopes and its default-deny
 route allowlist remain unchanged; the scope test verifies that Board, Team and
 Academy scopes are rejected. Board's seven path handlers now validate the
 existing canonical identifier format and join the runtime rejection sweep.
-The new gateway guidance fits its unchanged 49,152-byte budget at 49,123 bytes.
+The final gateway guidance fits its unchanged 49,152-byte budget at 49,149 bytes.
 The focused auth/me, route authorization, PAT repository/auth, thread-ID,
 guidance and Board router suite passes **180 tests**, and scoped Ruff passes.
-Other full-suite failures remain owned by the release coordinator until its
-separate rerun and evidence update.
+The subsequent complete backend run passed19,274 tests after the SDK transport
+fixture and baseline contract repairs. Final safety revision results are recorded below.
 
 ## Final installed runtime evidence
 
@@ -222,3 +223,17 @@ separate rerun and evidence update.
 The first two mocked OpenAI browser checks unexpectedly reached the live API through the service worker. Both resulting turns completed (44 and12 output tokens), with exact receipts in `http-qa-sessions.json`; no provider cost was returned. Global fixture contexts now block service workers, while only the dedicated PWA cache tests opt in. Real test-provider transport boundaries additionally have offline DNS/socket guards.
 
 The exhaustive public source catalog and Muse digest are saved in `BROWSERBASE_SOURCE_INDEX.json` and `BROWSERBASE_MUSE_STUDY.md`. The latter is model analysis of source snapshots, with per-partition limits, rather than verified operational claims.
+
+## Authenticated useful output and final safety review
+
+Only the deliberately verified OpenAI release task and Browserbase introduction capture were imported into the actual owner workspace; original QA databases remained byte-identical and import_event provenance was appended. `useful-output-readback.json` verifies actual signed-in HTTPS routes, two real delegate-creation items, the1431-byte artifact and96,443-byte screenshot. Six real authenticated screenshots at390/768/1440 are recorded in `authenticated-browser-qa.json`; no API mocks or new paid turns were used. The browser actually saved the artifact and byte-compared it with the verified provider file; thread-list API returned200 after the normal CSRF cookie was included. Setup selected the private workspace's balanced experience mode; the original deployment's preferences were untouched.
+
+A restarted gateway loaded `d000c549`; `final-runtime-restart-readback.json` confirms authenticated Browserbase admission replay returned the existing run without a new cloud session, and actual OpenAI artifact bytes passed the new exact metadata-length check. Both launchd jobs remain running;8445 remains tailnet-only. The tailnet reported an online iOS peer, but physical Safari install/login/download is still a user-device check.
+
+Final review fixed uncertain Browserbase session reservations (hold through possible180sTTL plus10s dispatch margin), disabled provider startup/storage/lease effects, and artifact metadata-length mismatch. The three paid admission routes bridge to the real `runs.create` entitlement policy on the newer integration lane and fail startup for a partial/malformed subsystem. The legacy installed base has no such subsystem; its existing auth/permission/scope gates remain required. Exact newer-lane policy tests rejected six missing/suspended grant cases before any provider call.
+
+The final safety revision's complete offline backend suite passed **19,306 tests**, with194 skipped,20 deselected and57 warnings in581.55s. Strict blocking-I/O passed **156 tests**, with2 warnings in7.25s. Full frontend TypeScript/ESLint and production Webpack build passed;48 focused frontend unit/DOM checks,12 browser/PWA scenarios and17 desktop security/download tests passed. Focused final fixes also passed98 entitlement/router,40 Browserbase/startup,16 lifecycle, and52 OpenAI/SDK/storage/guidance tests (overlapping suites; do not sum).
+
+Validation logs and SHA256 receipts are retained in `/Users/dillonmohr/Documents/Codex/momobot-openai-app-release/validation-logs/` and `validation-log-integrity.json`. Both provider credential values were checked against release logs and the complete feature diff without printing them; none were present. `final-runtime-health.json` confirms final executable source `d000c549`, both running launchd jobs, loopback-only ports, anonymous401/login gates, tailnet-only8445 and installed bundle integrity.
+
+Draft [PR#109](https://github.com/dillonmohr8777/deer-flow/pull/109) targets `lane/momo-week`. Final mechanical merge checks were conflict-free against both live lane snapshot `d0b17c54` and GitHub's cached snapshot `982450d2`; the actual entitlement policy was unchanged from verified `9e97559c`. `final-integration-review.json` records both snapshots. Mechanical mergeability is not execution QA of the advancing integration tree. The installed workspace remains based on the reviewed isolated feature source; no integration merge or public distribution is claimed.
