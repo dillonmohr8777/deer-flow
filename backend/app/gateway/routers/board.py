@@ -291,8 +291,16 @@ async def list_board_messages(thread_id: ThreadId, request: Request) -> BoardMes
     if row is None:
         raise _not_found()
     user = await get_current_user_from_request(request)
-    await _require_thread_access(client_repo, row, str(user.id))
+    user_id = str(user.id)
+    await _require_thread_access(client_repo, row, user_id)
     messages = await board_repo.list_messages(thread_id) or []
+    if not await _is_active_org_admin(user_id):
+        # An unapproved (or rejected/superseded) momo draft stays hidden from
+        # non-admins regardless of the thread's current status -- approval is
+        # tracked per-message, not derived from thread status, so a thread
+        # cycling back through `drafted`/`approved` after a redraft never
+        # re-exposes an earlier draft that was never actually approved.
+        messages = [m for m in messages if m["author_kind"] != "momo" or m.get("approved_at") is not None]
     return BoardMessageListResponse(messages=[_to_message_response(m) for m in messages])
 
 
@@ -387,6 +395,13 @@ async def approve_board_reply(thread_id: ThreadId, request: Request) -> BoardThr
         raise HTTPException(status_code=403, detail=str(exc)) from exc
     except BoardTransitionError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if await board_repo.approve_latest_draft(thread_id) is None:
+        # Defense in depth: normally unreachable while assert_can_approve
+        # requires ``drafted`` (drafting always adds a fresh unapproved momo
+        # message first), but a direct PATCH to ``drafted`` with no new draft
+        # would otherwise leave nothing to approve -- refuse rather than
+        # silently marking the thread approved with no reviewed content.
+        raise HTTPException(status_code=409, detail="No pending draft to approve")
     updated = await board_repo.patch_thread(thread_id, status=BoardThreadStatus.APPROVED)
     if updated is None:
         raise _not_found()

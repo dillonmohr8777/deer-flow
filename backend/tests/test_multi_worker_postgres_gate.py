@@ -32,6 +32,7 @@ def _config_with_backend(
     run_events_backend: str = "db",
     scheduler_enabled: bool = False,
     scheduler_multi_instance: bool = False,
+    concierge_enabled: bool = False,
 ) -> SimpleNamespace:
     run_ownership = RunOwnershipConfig(heartbeat_enabled=heartbeat_enabled) if heartbeat_enabled is not None else None
     tools = [SimpleNamespace(name="browser_navigate")] if browser_enabled else []
@@ -40,6 +41,7 @@ def _config_with_backend(
         run_ownership=run_ownership,
         run_events=SimpleNamespace(backend=run_events_backend),
         scheduler=SimpleNamespace(enabled=scheduler_enabled, multi_instance=scheduler_multi_instance),
+        board=SimpleNamespace(concierge_enabled=concierge_enabled),
         tools=tools,
     )
 
@@ -88,6 +90,33 @@ def test_gate_allows_single_worker_with_scheduler_enabled(monkeypatch):
     monkeypatch.setenv("GATEWAY_WORKERS", "1")
     _enforce_postgres_for_multi_worker(
         _config_with_backend("sqlite", scheduler_enabled=True),
+    )
+
+
+def test_gate_rejects_multi_worker_with_board_concierge_enabled(monkeypatch):
+    """f49/f52: the board concierge has no multi_instance lease-aware mode yet
+    (unlike the scheduler), so it is refused outright under >1 worker."""
+    monkeypatch.setenv("GATEWAY_WORKERS", "2")
+    with pytest.raises(SystemExit) as exc_info:
+        _enforce_postgres_for_multi_worker(
+            _config_with_backend("postgres", heartbeat_enabled=True, concierge_enabled=True),
+        )
+    msg = str(exc_info.value)
+    assert "config.board.concierge_enabled=true" in msg
+    assert "GATEWAY_WORKERS=1" in msg
+
+
+def test_gate_allows_single_worker_with_board_concierge_enabled(monkeypatch):
+    monkeypatch.setenv("GATEWAY_WORKERS", "1")
+    _enforce_postgres_for_multi_worker(
+        _config_with_backend("sqlite", concierge_enabled=True),
+    )
+
+
+def test_gate_allows_multi_worker_with_board_concierge_disabled(monkeypatch):
+    monkeypatch.setenv("GATEWAY_WORKERS", "2")
+    _enforce_postgres_for_multi_worker(
+        _config_with_backend("postgres", heartbeat_enabled=True, concierge_enabled=False),
     )
 
 
