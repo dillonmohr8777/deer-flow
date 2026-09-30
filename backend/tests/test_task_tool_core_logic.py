@@ -601,6 +601,108 @@ def test_task_tool_forwards_channel_user_id_to_executor(monkeypatch):
     assert captured["executor_kwargs"]["channel_user_id"] == "ou_group_sender_1"
 
 
+def test_task_tool_strips_agent_room_tools_and_forwards_channel_name_on_channel_run(monkeypatch):
+    """A subagent dispatched from a channel run must not inherit the private
+    Agent Room tools, and the channel name must still reach the executor.
+
+    A channel run (GitHub webhook fan-out, a Telegram bot, etc.) resolves the
+    runtime actor to the channel's bound owner regardless of which external
+    person actually triggered it. The lead-agent factory withholds
+    ``agent_room_read``/``agent_room_post`` for exactly this reason, but
+    ``task_tool`` builds the subagent's own toolset via a separate
+    ``get_available_tools`` call that has no channel awareness -- so an
+    outside commenter delegating to a subagent could otherwise have it read
+    or post to the owner-private room. ``channel_name`` must also be
+    forwarded to ``SubagentExecutor`` so the tools' own in-tool channel guard
+    still fires as a second layer, matching ``channel_user_id``'s propagation.
+    """
+    runtime = _make_runtime()
+    runtime.context["channel_name"] = "github"
+    captured = {}
+
+    class DummyExecutor:
+        def __init__(self, **kwargs):
+            captured["executor_kwargs"] = kwargs
+
+        def execute_async(self, prompt, task_id=None):
+            return task_id or "generated-task-id"
+
+    monkeypatch.setattr(task_tool_module, "SubagentStatus", FakeSubagentStatus)
+    monkeypatch.setattr(task_tool_module, "SubagentExecutor", DummyExecutor)
+    monkeypatch.setattr(task_tool_module, "get_subagent_config", lambda _: _make_subagent_config())
+    monkeypatch.setattr(
+        task_tool_module,
+        "get_background_task_result",
+        lambda _: _make_result(FakeSubagentStatus.COMPLETED, result="done"),
+    )
+    monkeypatch.setattr(task_tool_module, "get_stream_writer", lambda: lambda _event: None)
+    monkeypatch.setattr(task_tool_module.asyncio, "sleep", _no_sleep)
+    monkeypatch.setattr(
+        "deerflow.tools.get_available_tools",
+        lambda **kwargs: [SimpleNamespace(name="bash"), SimpleNamespace(name="agent_room_read"), SimpleNamespace(name="agent_room_post")],
+    )
+
+    output = _run_task_tool(
+        runtime=runtime,
+        description="delegate",
+        prompt="collect diagnostics",
+        subagent_type="general-purpose",
+        tool_call_id="tc-channel-name",
+    )
+
+    message = _task_tool_message(output)
+    assert message.content == "Task Succeeded. Result: done"
+    tool_names = {t.name for t in captured["executor_kwargs"]["tools"]}
+    assert "agent_room_read" not in tool_names
+    assert "agent_room_post" not in tool_names
+    assert "bash" in tool_names
+    assert captured["executor_kwargs"]["channel_name"] == "github"
+
+
+def test_task_tool_keeps_agent_room_tools_without_a_channel(monkeypatch):
+    """Sanity check for the inverse: a direct (non-channel) dispatch keeps
+    the Agent Room tools available to the subagent."""
+    runtime = _make_runtime()
+    captured = {}
+
+    class DummyExecutor:
+        def __init__(self, **kwargs):
+            captured["executor_kwargs"] = kwargs
+
+        def execute_async(self, prompt, task_id=None):
+            return task_id or "generated-task-id"
+
+    monkeypatch.setattr(task_tool_module, "SubagentStatus", FakeSubagentStatus)
+    monkeypatch.setattr(task_tool_module, "SubagentExecutor", DummyExecutor)
+    monkeypatch.setattr(task_tool_module, "get_subagent_config", lambda _: _make_subagent_config())
+    monkeypatch.setattr(
+        task_tool_module,
+        "get_background_task_result",
+        lambda _: _make_result(FakeSubagentStatus.COMPLETED, result="done"),
+    )
+    monkeypatch.setattr(task_tool_module, "get_stream_writer", lambda: lambda _event: None)
+    monkeypatch.setattr(task_tool_module.asyncio, "sleep", _no_sleep)
+    monkeypatch.setattr(
+        "deerflow.tools.get_available_tools",
+        lambda **kwargs: [SimpleNamespace(name="bash"), SimpleNamespace(name="agent_room_read"), SimpleNamespace(name="agent_room_post")],
+    )
+
+    output = _run_task_tool(
+        runtime=runtime,
+        description="delegate",
+        prompt="collect diagnostics",
+        subagent_type="general-purpose",
+        tool_call_id="tc-no-channel",
+    )
+
+    message = _task_tool_message(output)
+    assert message.content == "Task Succeeded. Result: done"
+    tool_names = {t.name for t in captured["executor_kwargs"]["tools"]}
+    assert "agent_room_read" in tool_names
+    assert "agent_room_post" in tool_names
+    assert captured["executor_kwargs"]["channel_name"] is None
+
+
 def test_task_tool_forwards_is_internal_true_to_executor(monkeypatch):
     """is_internal=True must propagate to SubagentExecutor."""
     runtime = _make_runtime()

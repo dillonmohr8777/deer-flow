@@ -1086,6 +1086,13 @@ def _assemble_lead_agent(config: RunnableConfig, *, app_config: AppConfig) -> Le
         chat_model = create_chat_model(name=model_name, thinking_enabled=thinking_enabled, app_config=resolved_app_config, attach_tracing=False)
         raw_tools = get_available_tools(model_name=model_name, subagent_enabled=subagent_enabled, app_config=resolved_app_config, chat_model=chat_model) + [setup_agent]
         configured_tools = raw_tools
+        # See the channel-run gate below (the non-bootstrap branch): the
+        # bootstrap flow must withhold the Agent Room tools too, or a bound
+        # member reaching it via /bootstrap on a channel run would keep them.
+        if cfg.get("channel_name"):
+            from deerflow.tools.builtins.agent_room_tool import AGENT_ROOM_TOOL_NAMES
+
+            configured_tools = [tool for tool in configured_tools if tool.name not in AGENT_ROOM_TOOL_NAMES]
         configured_tools = [tool for tool in configured_tools if tool.name not in interaction_policy.disabled_tool_names]
         authorization_candidates = [*configured_tools]
         if skill_setup.describe_skill_tool:
@@ -1221,6 +1228,19 @@ def _assemble_lead_agent(config: RunnableConfig, *, app_config: AppConfig) -> Le
         chat_model=chat_model,
     )
     configured_tools = raw_tools + extra_tools
+    # Withhold the private Agent Room tools from any channel run. A channel
+    # run (GitHub webhook fan-out, a Telegram bot, etc.) resolves the runtime
+    # actor to the channel's bound owner regardless of which external person
+    # actually triggered it, so an outside commenter or a non-owner chat
+    # member could otherwise have the agent quote the owner-private room into
+    # a public reply, or post into it. Unlike ``update_agent``'s
+    # ``_WEBHOOK_CHANNELS``-only gate, this excludes every channel run, not
+    # just webhook ones, since the impersonation risk is the channel binding
+    # itself, not how the message arrived.
+    if channel_name:
+        from deerflow.tools.builtins.agent_room_tool import AGENT_ROOM_TOOL_NAMES
+
+        configured_tools = [tool for tool in configured_tools if tool.name not in AGENT_ROOM_TOOL_NAMES]
     configured_tools = [tool for tool in configured_tools if tool.name not in interaction_policy.disabled_tool_names]
     authorization_candidates = [*configured_tools]
     if skill_setup.describe_skill_tool:

@@ -228,6 +228,16 @@ class SubagentBatchService:
                 app_config=app_config,
                 extensions=self._extensions,
             )
+            # Withhold the owner-private Agent Room tools from a durable
+            # batch item dispatched on a channel run, mirroring task_tool's
+            # ordinary (non-batch) subagent gate: a channel run resolves the
+            # runtime actor to the channel's bound owner regardless of which
+            # external person actually triggered it.
+            channel_name = spec.get("channel_name")
+            if channel_name:
+                from deerflow.tools.builtins.agent_room_tool import AGENT_ROOM_TOOL_NAMES
+
+                tools = [t for t in tools if t.name not in AGENT_ROOM_TOOL_NAMES]
             # Revalidate durable state before launching: cancel_batch may have
             # terminalized this item (or its lease may have been lost) while
             # assembly blocked in the worker thread — the poll loop's checks
@@ -257,6 +267,7 @@ class SubagentBatchService:
                 oauth_id=spec.get("oauth_id"),
                 run_id=batch.get("run_id"),
                 channel_user_id=spec.get("channel_user_id"),
+                channel_name=channel_name,
                 is_internal=spec.get("is_internal") is True,
                 authz_attributes=spec.get("authz_attributes"),
                 knowledge_scope=spec.get("knowledge_scope"),

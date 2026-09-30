@@ -914,6 +914,20 @@ async def task_tool(
         available_tools_kwargs["extensions"] = run_extensions
     tools = await run_assembly(get_available_tools, **available_tools_kwargs)
 
+    # Withhold the owner-private Agent Room tools from a subagent dispatched
+    # on a channel run. ``get_available_tools`` above has no channel
+    # awareness, so a delegated subagent would otherwise inherit
+    # ``agent_room_read``/``agent_room_post`` even though the lead-agent
+    # factory withholds them from the parent itself for exactly this run
+    # (see ``_assemble_lead_agent`` in ``deerflow.agents.lead_agent.agent``):
+    # a channel run resolves the runtime actor to the channel's bound owner
+    # regardless of which external person actually triggered it.
+    channel_name = parent_context.get("channel_name")
+    if channel_name:
+        from deerflow.tools.builtins.agent_room_tool import AGENT_ROOM_TOOL_NAMES
+
+        tools = [t for t in tools if t.name not in AGENT_ROOM_TOOL_NAMES]
+
     # Create executor
     executor_kwargs = {
         "config": config,
@@ -930,6 +944,7 @@ async def task_tool(
         "oauth_id": oauth_id,
         "run_id": run_id,
         "channel_user_id": channel_user_id,
+        "channel_name": channel_name,
         "is_internal": is_internal,
         "authz_attributes": authz_attributes,
         "deerflow_trace_id": deerflow_trace_id,

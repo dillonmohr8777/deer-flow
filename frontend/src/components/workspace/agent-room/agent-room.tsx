@@ -100,7 +100,9 @@ export function AgentRoom() {
     try {
       await postMessage.mutateAsync({ body, message_type: "instruction" });
       setDraft((previous) =>
-        previous.ownerId === ownerId ? { ownerId, body: "" } : previous,
+        previous.ownerId === ownerId && previous.body === draft
+          ? { ownerId, body: "" }
+          : previous,
       );
     } catch {
       // The mutation error stays visible below the composer.
