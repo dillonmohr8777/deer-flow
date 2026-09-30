@@ -29,7 +29,7 @@ def fleet(tmp_path):
     return Fleet(config(), {"clients": [{"id": "client-a"}]}, UsageLedger(tmp_path / "ledger.db"), tmp_path / "artifacts")
 
 
-@pytest.mark.parametrize("mutation", [dict(verified_included_only=False), dict(account_used_minutes=None), dict(verified_at_epoch=0), dict(ceiling_minutes=51), dict(cycle_end_epoch=0), dict(included_minutes=1)])
+@pytest.mark.parametrize("mutation", [dict(verified_included_only=False), dict(account_used_minutes=None), dict(verified_at_epoch=0), dict(ceiling_minutes=6001), dict(cycle_end_epoch=0), dict(included_minutes=1)])
 def test_unknown_account_never_reserves(tmp_path, mutation):
     ledger = UsageLedger(tmp_path / "ledger.db")
     with pytest.raises(FleetBlocked):
@@ -120,7 +120,11 @@ def test_cloud_receipt_and_release(tmp_path):
     assert api.creates == 1
 
 
-def test_uncertain_create_no_retry(tmp_path):
+def test_uncertain_create_no_retry(tmp_path, monkeypatch):
+    from deerflow.community.browser_automation import browserbase_fleet, browserbase_qa
+
+    monkeypatch.setattr(browserbase_fleet, "playwright_available", lambda: True)
+    monkeypatch.setattr(browserbase_qa, "playwright_available", lambda: True)
     target = fleet(tmp_path)
 
     class API:
@@ -295,3 +299,49 @@ def test_report_admission_precedes_connector_and_artifact(tmp_path):
         asyncio.run(target.run("report", "second", None, report_reader=reader))
     assert calls == ["report"]
     assert len(list((tmp_path / "out").glob("*/*/report.json"))) == 1
+
+
+def test_operator_ceiling_above_old_fixed_cap_admits(tmp_path):
+    # Project usage already past 50 minutes must not dead-lock the fleet when the operator attests a higher ceiling.
+    ledger = UsageLedger(tmp_path / "ledger.db")
+    ledger.reserve("job", "occurrence", {**account(), "account_used_minutes": 87, "ceiling_minutes": 200}, 87)
+    assert ledger.status()[0]["state"] == "reserved"
+    with pytest.raises(FleetBlocked):
+        UsageLedger(tmp_path / "other.db").reserve("job", "occurrence", {**account(), "account_used_minutes": 87, "ceiling_minutes": 88}, 87)
+
+
+def test_missing_playwright_blocks_before_reservation(tmp_path, monkeypatch):
+    from deerflow.community.browser_automation import browserbase_fleet
+
+    monkeypatch.setattr(browserbase_fleet, "playwright_available", lambda: False)
+    target = fleet(tmp_path)
+
+    class API:
+        project_id = "fake-project"
+        creates = 0
+
+        async def usage(self):
+            return {"browserMinutes": 0}
+
+        async def create(self, policy, **kwargs):
+            self.creates += 1
+            raise AssertionError("no session may be created")
+
+    api = API()
+    with pytest.raises(FleetBlocked, match="Playwright"):
+        asyncio.run(target.run("site-qa", "today", api))
+    assert api.creates == 0 and target.ledger.status() == []
+
+
+def test_unknown_named_job_is_blocked_not_keyerror(tmp_path):
+    from deerflow.community.browser_automation.browserbase_fleet import run_named_job
+
+    cfg = config()
+    registry = tmp_path / "registry.json"
+    registry.write_text(json.dumps({"clients": [{"id": "client-a"}]}))
+    cfg.update(registry_path=str(registry), ledger_path=str(tmp_path / "ledger.db"), output_path=str(tmp_path / "out"), project_id="00000000-0000-4000-8000-000000000000")
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps(cfg))
+    path.chmod(0o600)
+    with pytest.raises(FleetBlocked, match="operator-approved"):
+        asyncio.run(run_named_job(path, "not-a-job", operator_id="owner"))

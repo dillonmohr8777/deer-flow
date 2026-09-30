@@ -21,7 +21,7 @@ from uuid import uuid4
 
 import httpx
 
-from .browserbase_qa import BrowserbaseAPI, QaPolicy, capture_page, existing_api_key, run_qa
+from .browserbase_qa import BrowserbaseAPI, QaPolicy, capture_page, existing_api_key, playwright_available, run_qa
 
 
 class FleetBlocked(ValueError):
@@ -110,7 +110,7 @@ class UsageLedger:
         if not isinstance(cycle, str) or not cycle or not all(_number(v) for v in (expiry, verified, baseline, ceiling, included, observed)):
             raise FleetBlocked("Unknown account usage or cycle; dispatch refused")
         expiry, verified, baseline, ceiling, included = (float(cast(float, value)) for value in (expiry, verified, baseline, ceiling, included))
-        if now >= expiry or verified > now or now - verified > 86400 or ceiling <= 0 or ceiling > min(included, 50):
+        if now >= expiry or verified > now or now - verified > 86400 or ceiling <= 0 or ceiling > included:
             raise FleetBlocked("Expired account proof or unsafe ceiling; dispatch refused")
         with self.transaction() as db:
             if db.execute("SELECT 1 FROM reservation WHERE state IN ('reserved','uncertain')").fetchone():
@@ -247,6 +247,8 @@ class Fleet:
         if not isinstance(job.url, str):
             raise FleetBlocked("Public workflow needs an approved URL")
         observed = float(observed)
+        if capture is None and not playwright_available():
+            raise FleetBlocked("Playwright is not installed; no session created")
         destination = self.output / job.client_id / str(uuid4())
         # Validate filesystem before any spending-dependent admission.
         await asyncio.to_thread(_reject_symlinks, destination)
@@ -272,7 +274,8 @@ class Fleet:
 
         terminal = False
         try:
-            result = await run_qa(ReservedAPI(), job.url, QaPolicy(job.allowed_hosts), destination, capture=capture or (research_capture if job.workflow == "public_research" else capture_page))
+            policy = QaPolicy(job.allowed_hosts, max_reported_browser_minutes=float(self.config["account"].get("ceiling_minutes", 50)))
+            result = await run_qa(ReservedAPI(), job.url, policy, destination, capture=capture or (research_capture if job.workflow == "public_research" else capture_page))
             terminal = result.get("release_status") in {"COMPLETED", "ERROR", "TIMED_OUT"}
             result.update(summary)
             result["reservation_id"] = token
@@ -314,6 +317,8 @@ async def _run_named_job_worker(config_path: Path, job_id: str, *, operator_id: 
     registry = await asyncio.to_thread(lambda: json.loads(Path(config["registry_path"]).read_text()))
     ledger = await asyncio.to_thread(UsageLedger, Path(config["ledger_path"]))
     fleet = await asyncio.to_thread(Fleet, config, registry, ledger, Path(config["output_path"]))
+    if job_id not in fleet.jobs:
+        raise FleetBlocked("Only operator-approved named jobs may run")
     if dry_run or fleet.jobs[job_id].workflow in {"local_draft", "report_retrieval"}:
         return await asyncio.to_thread(lambda: asyncio.run(fleet.run(job_id, str(uuid4()), None, dry_run=dry_run, report_reader=report_reader)))
     key = await asyncio.to_thread(existing_api_key)

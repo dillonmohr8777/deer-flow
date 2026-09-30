@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import importlib.util
 import ipaddress
 import json
 import math
@@ -230,6 +231,10 @@ class QaAPI(Protocol):
     async def retrieve(self, session_id: str) -> dict: ...
 
 
+def playwright_available() -> bool:
+    return importlib.util.find_spec("playwright") is not None
+
+
 async def run_qa(api: QaAPI, target: str, policy: QaPolicy, output: Path, *, capture: Capture = capture_page) -> dict[str, Any]:
     policy.validate_url(target, target=True)
     await asyncio.to_thread(_output_preflight, output)
@@ -237,6 +242,8 @@ async def run_qa(api: QaAPI, target: str, policy: QaPolicy, output: Path, *, cap
     minutes = usage.get("browserMinutes")
     if isinstance(minutes, bool) or not isinstance(minutes, (int, float)) or not math.isfinite(minutes) or minutes < 0 or minutes >= policy.max_reported_browser_minutes:
         raise ValueError("Missing, invalid or exhausted browser-usage allowance; no session created")
+    if capture is capture_page and not playwright_available():
+        raise ValueError("Playwright is not installed; no session created")
     await asyncio.to_thread(_output_preflight, output, create=True)
     created = await api.create(policy)  # Exactly one attempt; ambiguous failures are not retried.
     session_id = str(UUID(created["id"]))
@@ -270,7 +277,7 @@ def existing_api_key() -> str:
 
 
 async def _main(args) -> int:
-    policy = QaPolicy(tuple(args.allow_host))
+    policy = QaPolicy(tuple(args.allow_host), max_reported_browser_minutes=args.max_browser_minutes)
     async with httpx.AsyncClient(timeout=10, follow_redirects=False, trust_env=False) as http:
         result = await run_qa(BrowserbaseAPI(existing_api_key(), args.project_id, http), args.url, policy, Path(args.output))
     receipt = Path(args.output) / "receipt.json"
@@ -286,6 +293,7 @@ if __name__ == "__main__":
     parser.add_argument("--url", required=True)
     parser.add_argument("--allow-host", action="append", required=True)
     parser.add_argument("--project-id", required=True)
+    parser.add_argument("--max-browser-minutes", type=float, default=50, help="Refuse when project usage is at or above this (set from the verified plan allowance)")
     parser.add_argument("--output", required=True, help="A fresh private local output directory; keep receipts outside Git")
     try:
         raise SystemExit(asyncio.run(_main(parser.parse_args())))
