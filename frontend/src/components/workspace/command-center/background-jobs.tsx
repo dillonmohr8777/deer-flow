@@ -66,7 +66,12 @@ export function BackgroundJobs({
     return (
       <PopoverPrimitive.Root>
         <PopoverPrimitive.Trigger asChild>
-          <Button variant="ghost" size="sm" aria-label={name}>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="min-h-11 min-w-11"
+            aria-label={name}
+          >
             <Activity />
             <Count count={count} />
           </Button>

@@ -32,3 +32,30 @@
 .signature [data-size="compact"] {
   width: 104px;
 }
+
+/* The phone drawer keeps its existing typography and desktop density, while
+   its own navigation, close controls and selectors have a 44px touch target. */
+@media (max-width: 767px) {
+  .phoneTargets :is(button, a[href], select) {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* Menu actions share a row with a link. Reserve their own target instead of
+     letting the primitive's extra hit area overlap the navigation target. */
+  .phoneTargets [data-slot="sidebar-menu-action"] {
+    top: 0;
+    right: 0;
+    width: 44px;
+  }
+
+  .phoneTargets [data-slot="sidebar-menu-action"]::after {
+    inset: 0;
+  }
+
+  .phoneTargets
+    [data-slot="sidebar-menu-item"]:has([data-slot="sidebar-menu-action"])
+    > [data-slot="sidebar-menu-button"] {
+    padding-right: 52px;
+  }
+}

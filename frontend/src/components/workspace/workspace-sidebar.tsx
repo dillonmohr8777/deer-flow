@@ -10,6 +10,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { useWorkspaceAppearance } from "@/components/workspace/command-center/appearance-provider";
+import { cn } from "@/lib/utils";
 
 import { WorkspaceChannelsList } from "./channels/workspace-channels-list";
 import { BackgroundJobs } from "./command-center/background-jobs";
@@ -33,11 +34,11 @@ export function WorkspaceSidebar({
   return (
     <ThreadDeleteDialogProvider>
       <Sidebar variant="sidebar" collapsible="icon" {...props}>
-        <SidebarHeader className="py-0">
+        <SidebarHeader className={cn("py-0", styles.phoneTargets)}>
           <WorkspaceHeader />
           {isSidebarOpen && <WorkspaceSelector />}
         </SidebarHeader>
-        <SidebarContent>
+        <SidebarContent className={styles.phoneTargets}>
           <WorkspaceNavChatList />
           <PluginNavigation />
           <WorkspaceChannelsList />
@@ -48,7 +49,7 @@ export function WorkspaceSidebar({
             </>
           )}
         </SidebarContent>
-        <SidebarFooter>
+        <SidebarFooter className={styles.phoneTargets}>
           {/* Docked, not floating: it used to cover the composer and lists. */}
           {isSidebarOpen && (
             <Scraps
