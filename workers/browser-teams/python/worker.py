@@ -8,7 +8,7 @@ import sqlite3
 import sys
 import tempfile
 from pathlib import Path
-from typing import ClassVar
+from typing import Any, ClassVar
 
 LIMIT = 262144
 OUT = sys.stdout
@@ -73,23 +73,42 @@ class Relay:
 def crew(frame, relay):
     from crewai import Agent, BaseLLM, Crew, Task
     from crewai.flow.flow import Flow, start
+    from crewai.utilities.task_output_storage_handler import TaskOutputStorageHandler
     from pydantic import PrivateAttr
 
-    class MemoryTaskOutputs:
-        def reset(self):
+    class MemoryTaskOutputs(TaskOutputStorageHandler):
+        """Implement the pinned handler interface without its SQLite initializer."""
+
+        def __init__(self) -> None:
+            # Gateway receipts own task history; never create child storage.
             pass
 
-        def update(self, *_args, **_kwargs):
+        def reset(self) -> None:
             pass
 
-        def load(self):
+        def update(self, task_index: int, log: dict[str, Any]) -> None:
+            pass
+
+        def add(
+            self,
+            task: Task,
+            output: dict[str, Any],
+            task_index: int,
+            inputs: dict[str, Any] | None = None,
+            was_replayed: bool = False,
+        ) -> None:
+            pass
+
+        def load(self) -> list[dict[str, Any]]:
             return []
 
     class EphemeralCrew(Crew):
-        _task_output_handler = PrivateAttr(default_factory=MemoryTaskOutputs)
+        _task_output_handler: TaskOutputStorageHandler = PrivateAttr(
+            default_factory=MemoryTaskOutputs
+        )
 
     class GatewayLLM(BaseLLM):
-        _relay = PrivateAttr()
+        _relay: Relay = PrivateAttr()
 
         def call(
             self,
@@ -225,7 +244,7 @@ def deep(frame, relay):
     from pydantic import PrivateAttr
 
     class GatewayChat(BaseChatModel):
-        _relay = PrivateAttr()
+        _relay: Relay = PrivateAttr()
 
         @property
         def _llm_type(self):
