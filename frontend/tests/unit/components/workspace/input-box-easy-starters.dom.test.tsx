@@ -80,10 +80,12 @@ function Composer({
   status,
   onStop,
   onSubmit,
+  threadId = "thread-1",
 }: {
   status: "ready" | "streaming";
   onStop?: () => void;
   onSubmit: () => void | Promise<void>;
+  threadId?: string;
 }): ReactNode {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -105,7 +107,7 @@ function Composer({
           >
             <PromptInputProvider>
               <InputBox
-                threadId="thread-1"
+                threadId={threadId}
                 status={status}
                 context={{ mode: "flash", experience_mode: "easy" } as never}
                 onStop={onStop}
@@ -193,6 +195,23 @@ describe("InputBox Easy mode starters", () => {
       expect(container.querySelector("textarea")?.value).toBe(""),
     );
     expect(queryStarters()).toBeNull();
+  });
+
+  it("scopes a dismissal to its own thread: a different thread shows starters again", () => {
+    const onSubmit = rs.fn(() => Promise.resolve());
+    const { rerender } = render(
+      <Composer status="ready" onSubmit={onSubmit} threadId="thread-1" />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: enUS.common.close }));
+    expect(queryStarters()).toBeNull();
+
+    // Switching to a different, unrelated conversation is not "the next
+    // turn" of the dismissed one -- it should not inherit the dismissal.
+    rerender(
+      <Composer status="ready" onSubmit={onSubmit} threadId="thread-2" />,
+    );
+    expect(queryStarters()).not.toBeNull();
   });
 
   it("tapping a starter with a draft present asks for confirmation instead of sending", () => {

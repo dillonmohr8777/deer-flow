@@ -462,6 +462,14 @@ export function InputBox({
   // (submit, /goal, /compact) touches it, so an explicit dismissal
   // survives those resets instead of being undone by the next message.
   const [easyStartersDismissed, setEasyStartersDismissed] = useState(false);
+  // A dismissal is scoped to one conversation. threadId is the same
+  // client-minted id across a brand-new chat's isNewThread->materialized
+  // transition (chat-page.tsx's onStart reuses it), so this does not fire
+  // on a dismissal's own first send; it only fires on an actual thread
+  // switch, like the conversationReferences reset above.
+  useEffect(() => {
+    setEasyStartersDismissed(false);
+  }, [threadId]);
   const [followupsLoading, setFollowupsLoading] = useState(false);
   const [polishingInput, setPolishingInput] = useState(false);
   const [voiceListening, setVoiceListening] = useState(false);
