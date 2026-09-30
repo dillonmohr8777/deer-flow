@@ -135,3 +135,51 @@ def test_case_variant_actor_is_not_independent():
 
     assert result["disposition"] != "ready-for-owner"
     assert "review_not_independent" in result["rework"]
+
+
+def test_reviewer_verdict_as_non_mapping_string_is_not_ready_for_owner():
+    case = deepcopy(_valid_case())
+    # A string masquerading as a verdict (e.g. a model narrating instead of
+    # emitting the checklist shape) must not silently pass as "no verdict".
+    case["review_execution"]["acceptance_verdict"] = "all_hold=false"
+
+    result = _call(case)
+
+    assert result["disposition"] != "ready-for-owner"
+    assert "reviewer_verdict_not_held" in result["rework"]
+
+
+def test_reviewer_verdict_partial_mapping_with_empty_leaves_is_not_ready_for_owner():
+    case = deepcopy(_valid_case())
+    # A Mapping that claims all_hold=True but checked nothing (empty leaves).
+    case["review_execution"]["acceptance_verdict"] = {"all_hold": True, "leaves": []}
+
+    result = _call(case)
+
+    assert result["disposition"] != "ready-for-owner"
+    assert "reviewer_verdict_not_held" in result["rework"]
+
+
+def test_fullwidth_actor_variant_is_not_independent():
+    case = deepcopy(_valid_case())
+    # Same human, fullwidth compatibility variant: NFKC must collapse it.
+    case["artifact_receipt"]["maker_actor_id"] = "alice"
+    case["review_receipt"]["reviewer_actor_id"] = "ａｌｉｃｅ"  # fullwidth "alice"
+
+    result = _call(case)
+
+    assert result["disposition"] != "ready-for-owner"
+    assert "review_not_independent" in result["rework"]
+
+
+def test_zero_width_spliced_actor_variant_is_not_independent():
+    case = deepcopy(_valid_case())
+    # Same human, a zero-width joiner spliced into the id: category Cf must
+    # be stripped before casefold, not just relied on casefold alone.
+    case["artifact_receipt"]["maker_actor_id"] = "alice"
+    case["review_receipt"]["reviewer_actor_id"] = "ali​ce"
+
+    result = _call(case)
+
+    assert result["disposition"] != "ready-for-owner"
+    assert "review_not_independent" in result["rework"]

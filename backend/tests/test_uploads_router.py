@@ -16,6 +16,7 @@ from app.gateway import upload_ingestion
 from app.gateway.deps import get_config
 from app.gateway.routers import uploads
 from deerflow.sandbox.lease import get_sandbox_lease_manager
+from deerflow.sandbox.sandbox_provider import reset_sandbox_provider, set_sandbox_provider
 
 
 class ChunkedUpload:
@@ -1671,6 +1672,41 @@ def test_open_respects_an_explicit_thread_data_mounts_false_override(tmp_path):
     ):
         service = upload_ingestion.ThreadUploadIngestionService(request=None, thread_id="thread-aio", user_id="u1", app_config=config)
         asyncio.run(service.open())
+
+    get_provider.assert_called_once()
+    assert service._sync_to_sandbox is True
+
+
+def test_open_routes_the_initialized_provider_lookup_through_uploads(tmp_path):
+    """f130: the lazy path must read `uploads.get_initialized_sandbox_provider`
+    (the module the ordinary endpoint and the shelf-attach route both patch
+    for tests), not a direct top-level import of the same-named function --
+    a global process-wide provider set by unrelated code must never leak in
+    through the back door and silently mask a test's patch of `uploads`."""
+    thread_uploads_dir = tmp_path / "uploads"
+    thread_uploads_dir.mkdir(parents=True)
+    config = SimpleNamespace(sandbox=_aio_sandbox_config(provisioner_url="https://provisioner.example"))
+
+    mounted_provider = MagicMock()
+    mounted_provider.uses_thread_data_mounts = True
+    set_sandbox_provider(mounted_provider)
+    try:
+        provider = MagicMock()
+        provider.uses_thread_data_mounts = False
+        from app.gateway.authz import SandboxRequestLease
+
+        lease = SandboxRequestLease(sandbox=MagicMock(), sandbox_id="aio-1", denied=False, owner_id="gateway:upload:x", provider=provider)
+
+        with (
+            patch.object(uploads, "ensure_uploads_dir", return_value=thread_uploads_dir),
+            patch.object(uploads, "get_initialized_sandbox_provider", return_value=None),
+            patch.object(uploads, "get_sandbox_provider", return_value=provider) as get_provider,
+            patch.object(uploads, "try_acquire_sandbox_for_request", AsyncMock(return_value=lease)),
+        ):
+            service = upload_ingestion.ThreadUploadIngestionService(request=None, thread_id="thread-aio", user_id="u1", app_config=config)
+            asyncio.run(service.open())
+    finally:
+        reset_sandbox_provider()
 
     get_provider.assert_called_once()
     assert service._sync_to_sandbox is True
