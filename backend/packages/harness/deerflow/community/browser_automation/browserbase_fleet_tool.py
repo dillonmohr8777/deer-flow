@@ -33,6 +33,6 @@ async def browserbase_fleet_job(runtime: Runtime, job_id: str, dry_run: bool = T
         return json.dumps({"status": "blocked", "reason": "Reviewed fleet config is not mounted"})
     try:
         result = await asyncio.to_thread(lambda: asyncio.run(run_named_job(Path(path), job_id, operator_id=actor_id, dry_run=dry_run)))
-        return json.dumps({key: value for key, value in result.items() if key in {"status", "job", "client_id", "workflow", "model_calls", "reason", "artifact", "cloud_dispatch", "reservation_id", "release_status"}})
+        return json.dumps({key: value for key, value in result.items() if key in {"status", "job", "client_id", "workflow", "model_calls", "reason", "artifact", "cloud_dispatch", "reservation_id", "release_status", "run_id"}})
     except Exception as exc:
         return json.dumps({"status": "blocked", "error_type": type(exc).__name__})
