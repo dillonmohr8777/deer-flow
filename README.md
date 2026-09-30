@@ -2330,6 +2330,18 @@ authorization rules.
 
 ## Manual Browserbase public-page QA
 
+For reusable operator-approved jobs, the optional [Browserbase fleet adapter](docs/browserbase/fleet.md)
+adds public research, mobile QA and local draft workflows. It remains inactive
+until the private operator manifest and current account allowance are verified.
+Native Agent recovery requires the recorded run and terminal session to match
+the original reservation; changing a job name cannot reset account-wide charges.
+Native Agent task instructions do not enforce website or write permissions.
+
+The existing CrewAI department workflow also has an offline recovery test that
+runs the real isolated worker, resumes its verifier after shutdown and preserves
+the original token limits and receipts. This verifies recovery with synthetic
+provider responses, without claiming a new paid run or a production deployment.
+
 The opt-in `deerflow.community.browser_automation.browserbase_qa` runner creates
 one 60-second Browserbase session for public-page checks at 390/768/1440. It uses
 the headless HTTP/CDP API with Playwright, without model calls, form submission,
