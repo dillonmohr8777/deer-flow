@@ -1289,6 +1289,15 @@ tools:
     group: deliberate
     use: deerflow.tools.deliberate_tools:deliberate
 
+  # Draft a Momo Board post proposing a big-project plan to a client, for
+  # owner approval (queue item e13, the "Plan a big project" starter). Same
+  # tool group and gating as deliberate, so the same engineer roles get
+  # both; unlike deliberate it has no client-data restriction of its own --
+  # it only creates a draft awaiting an owner's explicit approve/send.
+  - name: draft_board_thread
+    group: deliberate
+    use: deerflow.tools.board_draft_tools:draft_board_thread
+
 # ============================================================================
 # Tool Search Configuration (Deferred Tool Loading)
 # ============================================================================
