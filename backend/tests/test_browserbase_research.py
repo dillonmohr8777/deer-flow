@@ -164,12 +164,48 @@ async def test_global_active_session_cap_blocks_a_third_owner_even_with_minutes_
     second = await service.create("owner-b", ["https://b.example"], "B", "key-b")
     await asyncio.wait_for(entered.wait(), 2)
     # Ample provider-reported minutes remain, but the global concurrency cap
-    # (2, here) still refuses a third simultaneous owner.
-    with pytest.raises(BrowserbaseError, match="browser_minutes_exhausted"):
+    # (2, here) still refuses a third simultaneous owner -- with its own
+    # reason code, not the minutes-exhausted one (nothing is actually low on
+    # minutes here).
+    with pytest.raises(BrowserbaseError, match="concurrent_session_limit"):
         await service.create("owner-c", ["https://c.example"], "C", "key-c")
     assert len([c for c in calls if c[0] == "POST" and c[1] == "/v1/sessions"]) == 2
     await service.cancel("owner-a", first["id"])
     await service.cancel("owner-b", second["id"])
+    await service.aclose()
+
+
+@pytest.mark.asyncio
+async def test_unconfirmed_session_close_still_reserves_its_minutes(monkeypatch, tmp_path):
+    # Review follow-up on the fix above: a run can go terminal (e.g. failed)
+    # while its provider session is still live and possibly billing under
+    # keepAlive, if _release couldn't confirm the close. That must still
+    # count against a second owner's admission -- "held" (which _owner_reserved
+    # already uses for exactly this), not merely "active" (non-terminal).
+    service, _unused_calls, _ = provider_fixture(monkeypatch, tmp_path, minutes=5997, browser_error=True)
+    calls = []
+
+    def handler(request):
+        calls.append((request.method, request.url.path, json.loads(request.content) if request.content else None))
+        if request.url.path == "/v1/projects":
+            return httpx.Response(200, json=[{"id": "project-a"}])
+        if request.url.path.endswith("/usage"):
+            return httpx.Response(200, json={"browserMinutes": 5997, "proxyBytes": 0})
+        if request.method == "POST" and request.url.path == "/v1/sessions":
+            return httpx.Response(201, json={"id": "session-a", "connectUrl": "wss://connect.browserbase.com?apiKey=should-never-persist"})
+        if request.url.path == "/v1/sessions/session-a":
+            # Never reports a terminal provider state -- the close can't be confirmed.
+            return httpx.Response(200, json={"id": "session-a", "status": "RUNNING"})
+        return httpx.Response(404)
+
+    service.client_factory = lambda: httpx.AsyncClient(transport=httpx.MockTransport(handler), base_url="https://api.browserbase.com")
+    created = await service.create("owner-a", ["https://example.com"], "Research", "key-1")
+    result = await settled(service, "owner-a", created["id"])
+    assert result["status"] == "failed"
+    assert result["session_closed"] is False
+    with pytest.raises(BrowserbaseError, match="browser_minutes_exhausted"):
+        await service.create("owner-b", ["https://other.example"], "Other", "key-2")
+    assert len([c for c in calls if c[0] == "POST" and c[1] == "/v1/sessions"]) == 1
     await service.aclose()
 
 
