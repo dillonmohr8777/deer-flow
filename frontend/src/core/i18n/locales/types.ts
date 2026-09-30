@@ -1020,6 +1020,11 @@ export interface Translations {
     writeFile: string;
     clickToViewContent: string;
     writeTodos: string;
+    deliberation: string;
+    deliberationConsensus: string;
+    deliberationContradictions: string;
+    deliberationUniqueInsights: string;
+    deliberationBlindSpots: string;
     skillInstallTooltip: string;
     browserNavigate: (url: string) => string;
     browserNavigateGeneric: string;

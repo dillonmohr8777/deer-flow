@@ -66,6 +66,8 @@ function thread(id: string, subject: string, updatedAt: string): BoardThread {
     kind: "ticket",
     status: "new",
     subject,
+    urgency: null,
+    summary: null,
     created_by_user_id: null,
     created_at: updatedAt,
     updated_at: updatedAt,

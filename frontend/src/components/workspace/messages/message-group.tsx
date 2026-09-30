@@ -13,6 +13,7 @@ import {
   NotebookPenIcon,
   SearchIcon,
   SquareTerminalIcon,
+  UsersIcon,
   WrenchIcon,
 } from "lucide-react";
 import { memo, useContext, useEffect, useMemo, useState } from "react";
@@ -646,6 +647,7 @@ function getToolCallKind(name: string) {
     case "bash":
     case "ask_clarification":
     case "write_todos":
+    case "deliberate":
       return name;
     default:
       return "generic";
@@ -1017,6 +1019,46 @@ function ToolCall({
         icon={ListTodoIcon}
       ></ChainOfThoughtStep>
     );
+  } else if (kind === "deliberate") {
+    const panel = result as
+      | {
+          consensus?: string;
+          contradictions?: string;
+          unique_insights?: string;
+          blind_spots?: string;
+          error?: string;
+        }
+      | undefined;
+    return (
+      <ChainOfThoughtStep
+        key={id}
+        label={resolveLabel(t.toolCalls.deliberation)}
+        icon={UsersIcon}
+      >
+        {panel?.error ? (
+          <ChainOfThoughtSearchResult>{panel.error}</ChainOfThoughtSearchResult>
+        ) : panel?.consensus !== undefined ? (
+          <div className="space-y-2 text-sm">
+            <DeliberationField
+              label={t.toolCalls.deliberationConsensus}
+              value={panel.consensus}
+            />
+            <DeliberationField
+              label={t.toolCalls.deliberationContradictions}
+              value={panel.contradictions}
+            />
+            <DeliberationField
+              label={t.toolCalls.deliberationUniqueInsights}
+              value={panel.unique_insights}
+            />
+            <DeliberationField
+              label={t.toolCalls.deliberationBlindSpots}
+              value={panel.blind_spots}
+            />
+          </div>
+        ) : null}
+      </ChainOfThoughtStep>
+    );
   } else {
     const description: string | undefined = (args as { description: string })
       ?.description;
@@ -1037,6 +1079,24 @@ function ToolCall({
       </ChainOfThoughtStep>
     );
   }
+}
+
+function DeliberationField({
+  label,
+  value,
+}: {
+  label: string;
+  value: string | undefined;
+}) {
+  if (!value) {
+    return null;
+  }
+  return (
+    <div>
+      <div className="text-muted-foreground text-xs font-medium">{label}</div>
+      <div className="whitespace-pre-wrap">{value}</div>
+    </div>
+  );
 }
 
 interface GenericCoTStep<T extends string = string> {

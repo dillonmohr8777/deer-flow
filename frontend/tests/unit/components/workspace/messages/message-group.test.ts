@@ -625,6 +625,7 @@ describe("MessageGroup tool links", () => {
     "bash",
     "ask_clarification",
     "write_todos",
+    "deliberate",
     "browser_navigate",
     "mcp_lookup",
   ])("renders a %s step whose tool call has no args", (name) => {
@@ -641,6 +642,81 @@ describe("MessageGroup tool links", () => {
 
       expect(render).not.toThrow();
     }
+  });
+});
+
+// A recorded shape from `run_fusion_panel` (backend/packages/harness/deerflow/
+// tools/deliberate_tools.py): the panel's consensus/contradictions/
+// unique_insights/blind_spots dict, and its `{"error": ...}` refusal/failure
+// shape.
+describe("MessageGroup deliberation panel", () => {
+  const recordedPanelFixture = {
+    consensus:
+      "All three panelists agree the migration should ship behind a feature flag, rolled out org by org.",
+    contradictions:
+      "One panelist wants the old path removed immediately after cutover; the other two want it kept for one release as a rollback path.",
+    unique_insights:
+      "One panelist flagged that the nightly backfill job holds a table lock that would collide with a live migration window.",
+    blind_spots:
+      "No panelist addressed how in-flight scheduled tasks created under the old schema get migrated.",
+  };
+
+  it("renders a recorded panel fixture's four sections under the deliberation label", () => {
+    const html = renderToolCall(
+      "deliberate",
+      { prompt: "Plan the Q4 billing schema migration." },
+      JSON.stringify(recordedPanelFixture),
+    );
+
+    expect(html).toContain("Run deliberation panel");
+    expectRenderedInOrder(html, [
+      "Consensus",
+      recordedPanelFixture.consensus,
+      "Contradictions",
+      recordedPanelFixture.contradictions,
+      "Unique insights",
+      recordedPanelFixture.unique_insights,
+      "Blind spots",
+      recordedPanelFixture.blind_spots,
+    ]);
+  });
+
+  it("renders the refusal/failure error message instead of empty sections", () => {
+    const html = renderToolCall(
+      "deliberate",
+      { prompt: "Plan a client-data migration." },
+      JSON.stringify({
+        error: "Deliberation is refused on a thread with client data.",
+      }),
+    );
+
+    expect(html).toContain(
+      "Deliberation is refused on a thread with client data.",
+    );
+    expect(html).not.toContain("Consensus");
+  });
+
+  it("omits a blank field instead of rendering an empty section", () => {
+    // run_fusion_panel's unparseable-analyst-response fallback: only
+    // `consensus` (the raw text) and `fallback: true` are set, the other
+    // three fields are empty strings.
+    const html = renderToolCall(
+      "deliberate",
+      { prompt: "Plan the migration." },
+      JSON.stringify({
+        consensus: "Raw analyst text that was not valid JSON.",
+        contradictions: "",
+        unique_insights: "",
+        blind_spots: "",
+        fallback: true,
+      }),
+    );
+
+    expect(html).toContain("Consensus");
+    expect(html).toContain("Raw analyst text that was not valid JSON.");
+    expect(html).not.toContain("Contradictions");
+    expect(html).not.toContain("Unique insights");
+    expect(html).not.toContain("Blind spots");
   });
 });
 
