@@ -137,13 +137,17 @@ const MESSAGES: Record<string, string> = {
     "Workflow storage needs an upgrade before runs can start.",
 };
 
+/** The one sentence for a bare code nobody has put into words yet. */
+export const UNKNOWN_CODE_SENTENCE =
+  "The workflow service could not complete this request.";
+
 export function explanation(error: Error): string {
   const known = MESSAGES[error.message];
   if (known) return known;
   // A bare snake_case code is an internal identifier, not a reason a person
   // can act on (DESIGN.md Copy); a sentence from the server passes through.
   return /^[a-z0-9_]+$/.test(error.message)
-    ? "The workflow service could not complete this request."
+    ? UNKNOWN_CODE_SENTENCE
     : error.message;
 }
 
