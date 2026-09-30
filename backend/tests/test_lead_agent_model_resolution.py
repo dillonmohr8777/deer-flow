@@ -243,16 +243,27 @@ def test_compiled_owner_ceiling_blocks_middleware_registered_tool_and_fabricated
     assert len(blocked) == 1 and blocked[0].status == "error"
 
 
-def test_owner_tool_names_ceiling_enforced_through_real_lead_agent_assembly(monkeypatch):
+@pytest.mark.parametrize(
+    ("is_bootstrap", "configured_tool_names"),
+    [
+        pytest.param(False, ["present_files"], id="non-bootstrap"),
+        # Bootstrap requires "setup_agent" in the ceiling or the permission
+        # gate at agent.py:979 refuses to bootstrap at all (see
+        # test_existing_protected_or_unreadable_agent_cannot_bootstrap_before_model_call).
+        pytest.param(True, ["present_files", "setup_agent"], id="bootstrap"),
+    ],
+)
+def test_owner_tool_names_ceiling_enforced_through_real_lead_agent_assembly(monkeypatch, is_bootstrap, configured_tool_names):
     """f128: a fixed-purpose coordinator's ``AgentConfig.tool_names`` ceiling
-    must survive both places it is threaded through ``_assemble_lead_agent``:
-    the static ``authorization_candidates`` filter (what actually gets
-    registered on the compiled graph) and the ``tool_names`` argument handed
-    to ``build_middlewares`` (what ``SkillToolPolicyMiddleware`` enforces at
-    call time). Replacing either one alone (the filter with ``pass``, or the
-    ``build_middlewares`` argument with ``None``) left every existing test —
-    including the hand-built ceiling test above — green, because nothing
-    exercised the real assembly end to end for a restricted agent.
+    must survive both places it is threaded through ``_assemble_lead_agent``,
+    in both the ordinary and the bootstrap branch: the static
+    ``authorization_candidates`` filter (what actually gets registered on the
+    compiled graph) and the ``tool_names`` argument handed to
+    ``build_middlewares`` (what ``SkillToolPolicyMiddleware`` enforces at call
+    time). Replacing either one alone (either branch's filter with ``pass``,
+    or its ``build_middlewares`` argument with ``None``) left every existing
+    test — including the hand-built ceiling test above — green, because
+    nothing exercised the real assembly end to end for a restricted agent.
     """
     from deerflow.agents.middlewares.skill_tool_policy_middleware import SkillToolPolicyMiddleware
 
@@ -268,11 +279,13 @@ def test_owner_tool_names_ceiling_enforced_through_real_lead_agent_assembly(monk
         [_make_model("safe-model", supports_thinking=False)],
         loop_detection=LoopDetectionConfig(enabled=False),
     )
-    agent_config = AgentConfig(name="fixed-agent", tool_names=["present_files"])
+    agent_config = AgentConfig(name="fixed-agent", tool_names=configured_tool_names)
     monkeypatch.setattr(lead_agent_module, "load_agent_config", lambda *args, **kwargs: agent_config)
     monkeypatch.setattr("deerflow.tools.get_available_tools", lambda **kwargs: [_stub_tool("present_files"), _stub_tool("bash")])
     monkeypatch.setattr(lead_agent_module, "_load_enabled_available_skills", lambda *args, **kwargs: [])
-    monkeypatch.setattr(lead_agent_module, "build_lead_runtime_middlewares", lambda *, app_config, lazy_init=True: [])
+    # The bootstrap branch passes an extra `available_skills` kwarg (a
+    # non-None set) that the non-bootstrap branch normally omits.
+    monkeypatch.setattr(lead_agent_module, "build_lead_runtime_middlewares", lambda *, app_config, lazy_init=True, **_kwargs: [])
     monkeypatch.setattr(lead_agent_module, "_create_summarization_middleware", lambda **_kwargs: None)
     monkeypatch.setattr(lead_agent_module, "_create_todo_list_middleware", lambda is_plan_mode: None)
     monkeypatch.setattr(lead_agent_module, "create_chat_model", lambda **kwargs: object())
@@ -286,20 +299,26 @@ def test_owner_tool_names_ceiling_enforced_through_real_lead_agent_assembly(monk
 
     monkeypatch.setattr(lead_agent_module, "create_agent", _capture_create_agent)
 
-    lead_agent_module._make_lead_agent({"context": {"agent_name": "fixed-agent"}}, app_config=app_config)
+    context: dict[str, object] = {"agent_name": "fixed-agent"}
+    if is_bootstrap:
+        context["is_bootstrap"] = True
+    lead_agent_module._make_lead_agent({"context": context}, app_config=app_config)
 
-    # Mutation target 1: agent.py's authorization_candidates ceiling filter.
-    # A fixed-purpose coordinator's compiled graph must never register a tool
-    # (here "bash", also picking up the always-added "update_agent") outside
-    # its own AgentConfig.tool_names.
-    assert sorted(t.name for t in captured["tools"]) == ["present_files"]
+    # Mutation target 1: agent.py's authorization_candidates ceiling filter
+    # (the bootstrap branch has its own copy of this filter, separate from
+    # the ordinary one). A fixed-purpose coordinator's compiled graph must
+    # never register a tool (here "bash", also picking up the always-added
+    # "update_agent" on the non-bootstrap branch) outside its own
+    # AgentConfig.tool_names.
+    assert sorted(t.name for t in captured["tools"]) == sorted(configured_tool_names)
 
     # Mutation target 2: the tool_names argument build_middlewares forwards
-    # into SkillToolPolicyMiddleware as owner_tool_names. Checked
-    # independently of the static filter above, so a tool that slips back
-    # onto the graph by any other path is still fenced off.
+    # into SkillToolPolicyMiddleware as owner_tool_names (also threaded
+    # separately from each branch). Checked independently of the static
+    # filter above, so a tool that slips back onto the graph by any other
+    # path is still fenced off.
     policy = next(middleware for middleware in captured["middleware"] if isinstance(middleware, SkillToolPolicyMiddleware))
-    assert policy._owner_tool_names == frozenset({"present_files"})
+    assert policy._owner_tool_names == frozenset(configured_tool_names)
 
     # Prove the real, production-wired policy object actually blocks a
     # model-emitted call to a tool outside the ceiling, the same way the
