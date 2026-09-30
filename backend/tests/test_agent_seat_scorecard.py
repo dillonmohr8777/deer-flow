@@ -3,17 +3,20 @@
 EXECUTIVE.md rule 3: "Every Friday, each employee posts a scorecard. Two
 missed weeks and the title reopens." Covers the accept bar with a stubbed
 model (``generate``): a successful scorecard posts to ``#exec`` and resets
-the miss counter, a failed/blank one counts as a miss, and the second
-consecutive miss reopens the seat.
+the miss counter, a completed blank one counts as an evaluated miss, and
+the second consecutive evaluated miss reopens the seat. Infrastructure,
+model and delivery failures preserve the employee's record.
 """
 
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 
 import pytest
 from org_isolation_fixtures import ORG_A, ORG_B, USER_A, acting_as, org_world  # noqa: F401
 
+from deerflow.exec_seats import scorecard
 from deerflow.exec_seats.scorecard import evaluate_all_seat_scorecards, evaluate_seat_scorecard
 from deerflow.persistence.exec_seats import AgentSeatRepository, AgentSeatStatus
 from deerflow.persistence.run.model import RunRow
@@ -44,12 +47,96 @@ async def _succeed(_seat: dict) -> str:
     return "Shipped the Q4 landing page refresh; three qualified leads booked this week."
 
 
-async def _fail(_seat: dict) -> str | None:
-    return None
-
-
 async def _blank(_seat: dict) -> str | None:
     return "   "
+
+
+async def _confirmed(_text: str) -> bool:
+    return True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", [None, "model_creation", "model_call", "missing_content", "null_content", "invalid_content"])
+async def test_generation_distinguishes_a_completed_blank_from_a_model_outage(monkeypatch, failure):
+    class Model:
+        async def ainvoke(self, _messages, *, config):
+            if failure == "model_call":
+                raise RuntimeError("provider unavailable")
+            if failure == "missing_content":
+                return SimpleNamespace()
+            if failure == "null_content":
+                return SimpleNamespace(content=None)
+            if failure == "invalid_content":
+                return SimpleNamespace(content=123)
+            return SimpleNamespace(content="   ")
+
+    def _create(**_kwargs):
+        if failure == "model_creation":
+            raise RuntimeError("model configuration unavailable")
+        return Model()
+
+    monkeypatch.setattr(scorecard, "create_chat_model", _create)
+    body = await scorecard.generate_scorecard_body({"agent_name": "cmo-agent", "seat": CMO_SEAT}, app_config=SimpleNamespace())
+    assert body == ("" if failure is None else None)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", ["generation_none", "generation_exception", "usage_exception", "delivery_false", "delivery_exception"])
+@pytest.mark.parametrize("body", ["posted scorecard", "   "])
+async def test_infrastructure_failure_preserves_a_prior_miss_and_leaves_the_seat_due(org_world, monkeypatch, failure, body):  # noqa: F811
+    """An outage after one genuine miss must not masquerade as the second missed week."""
+    repo = AgentSeatRepository(org_world)
+    now = datetime.now(UTC)
+    announcements: list[str] = []
+
+    async def _generate(_seat: dict) -> str | None:
+        if failure == "generation_exception":
+            raise RuntimeError("provider unavailable")
+        return None if failure == "generation_none" else body
+
+    async def _announce(text: str) -> bool:
+        announcements.append(text)
+        if failure == "delivery_exception":
+            raise RuntimeError("storage unavailable")
+        return failure != "delivery_false"
+
+    async def _usage_unavailable(**_kwargs) -> int:
+        raise RuntimeError("usage storage unavailable")
+
+    with acting_as(USER_A, ORG_A):
+        seat = await repo.claim_seat(seat=CMO_SEAT, agent_name="cmo-agent", weekly_token_budget=1000, claimed_by_user_id=USER_A)
+        seat = await repo.patch_seat(seat["id"], status=AgentSeatStatus.RATIFIED, ratified_by_user_id=USER_A)
+        seat = await repo.record_scorecard_result(seat["id"], success=False, now=now - timedelta(days=8))
+        if failure == "usage_exception":
+            monkeypatch.setattr(repo, "token_burn_since", _usage_unavailable)
+
+        updated = await evaluate_seat_scorecard(repo, seat, now=now, announce=_announce, generate=_generate)
+        persisted = await repo.get_seat(seat["id"])
+
+    assert updated == seat
+    assert persisted == seat
+    assert updated["missed_scorecards"] == 1
+    assert updated["status"] == AgentSeatStatus.RATIFIED
+    assert not any("reopened" in text for text in announcements)
+
+
+@pytest.mark.asyncio
+async def test_no_announcement_route_is_inconclusive_without_calling_the_model(org_world):  # noqa: F811
+    repo = AgentSeatRepository(org_world)
+    calls: list[dict] = []
+
+    async def _tracked(seat: dict) -> str:
+        calls.append(seat)
+        return "scorecard"
+
+    with acting_as(USER_A, ORG_A):
+        seat = await repo.claim_seat(seat=CMO_SEAT, agent_name="cmo-agent", weekly_token_budget=1000, claimed_by_user_id=USER_A)
+        seat = await repo.patch_seat(seat["id"], status=AgentSeatStatus.RATIFIED, ratified_by_user_id=USER_A)
+        updated = await evaluate_seat_scorecard(repo, seat, generate=_tracked)
+        persisted = await repo.get_seat(seat["id"])
+
+    assert calls == []
+    assert updated == persisted == seat
 
 
 @pytest.mark.asyncio
@@ -64,10 +151,12 @@ async def test_successful_scorecard_posts_to_exec_and_resets_misses(org_world): 
         seat = await repo.record_scorecard_result(seat["id"], success=False, now=now - timedelta(days=8))  # one prior miss, now stale
 
         updated = await evaluate_seat_scorecard(repo, seat, now=now, announce=announce_to_exec, generate=_succeed)
+        persisted = await repo.get_seat(seat["id"])
 
         exec_channel = next(c for c in await team_repo.list_channels() if c["slug"] == "exec")
         messages = await team_repo.list_messages(exec_channel["id"])
     assert updated["missed_scorecards"] == 0
+    assert persisted == updated
     assert updated["status"] == AgentSeatStatus.RATIFIED
     assert updated["last_scorecard_at"] is not None
     assert any("weekly scorecard" in m["body"] and "Q4 landing page" in m["body"] for m in messages)
@@ -83,7 +172,7 @@ async def test_first_miss_is_recorded_and_does_not_reopen(org_world):  # noqa: F
         seat = await repo.claim_seat(seat=CMO_SEAT, agent_name="cmo-agent", weekly_token_budget=1000, claimed_by_user_id=USER_A)
         seat = await repo.patch_seat(seat["id"], status=AgentSeatStatus.RATIFIED, ratified_by_user_id=USER_A)
 
-        updated = await evaluate_seat_scorecard(repo, seat, now=now, announce=announce_to_exec, generate=_fail)
+        updated = await evaluate_seat_scorecard(repo, seat, now=now, announce=announce_to_exec, generate=_blank)
 
         exec_channel = next(c for c in await team_repo.list_channels() if c["slug"] == "exec")
         messages = await team_repo.list_messages(exec_channel["id"])
@@ -100,7 +189,7 @@ async def test_a_blank_scorecard_counts_as_a_miss(org_world):  # noqa: F811
         seat = await repo.claim_seat(seat=CMO_SEAT, agent_name="cmo-agent", weekly_token_budget=1000, claimed_by_user_id=USER_A)
         seat = await repo.patch_seat(seat["id"], status=AgentSeatStatus.RATIFIED, ratified_by_user_id=USER_A)
 
-        updated = await evaluate_seat_scorecard(repo, seat, now=now, generate=_blank)
+        updated = await evaluate_seat_scorecard(repo, seat, now=now, announce=_confirmed, generate=_blank)
 
     assert updated["missed_scorecards"] == 1
 
@@ -117,15 +206,18 @@ async def test_second_consecutive_miss_reopens_the_seat(org_world):  # noqa: F81
 
         first_miss = now - timedelta(days=8)
         second_miss = now
-        seat = await evaluate_seat_scorecard(repo, seat, now=first_miss, generate=_fail)
+        seat = await evaluate_seat_scorecard(repo, seat, now=first_miss, announce=announce_to_exec, generate=_blank)
         assert seat["missed_scorecards"] == 1
         assert seat["status"] == AgentSeatStatus.RATIFIED
 
-        reopened = await evaluate_seat_scorecard(repo, seat, now=second_miss, announce=announce_to_exec, generate=_fail)
+        reopened = await evaluate_seat_scorecard(repo, seat, now=second_miss, announce=announce_to_exec, generate=_blank)
+        persisted = await repo.get_seat(seat["id"])
 
         exec_channel = next(c for c in await team_repo.list_channels() if c["slug"] == "exec")
         messages = await team_repo.list_messages(exec_channel["id"])
     assert reopened["status"] == AgentSeatStatus.REOPENED
+    assert reopened["missed_scorecards"] == 2
+    assert persisted == reopened
     assert any("reopened" in m["body"] and "missed two weekly scorecards" in m["body"] for m in messages)
 
 
@@ -139,7 +231,7 @@ async def test_a_success_after_one_miss_resets_the_counter_instead_of_reopening(
         seat = await repo.claim_seat(seat=CMO_SEAT, agent_name="cmo-agent", weekly_token_budget=1000, claimed_by_user_id=USER_A)
         seat = await repo.patch_seat(seat["id"], status=AgentSeatStatus.RATIFIED, ratified_by_user_id=USER_A)
 
-        seat = await evaluate_seat_scorecard(repo, seat, now=now - timedelta(days=8), generate=_fail)
+        seat = await evaluate_seat_scorecard(repo, seat, now=now - timedelta(days=8), announce=announce_to_exec, generate=_blank)
         assert seat["missed_scorecards"] == 1
 
         recovered = await evaluate_seat_scorecard(repo, seat, now=now, announce=announce_to_exec, generate=_succeed)
@@ -149,26 +241,30 @@ async def test_a_success_after_one_miss_resets_the_counter_instead_of_reopening(
 
 
 @pytest.mark.asyncio
-async def test_a_successful_draft_with_no_exec_channel_to_post_to_counts_as_a_miss(org_world):  # noqa: F811
-    """Review finding (medium): recording success before confirming the post landed let a
-    misconfigured org (no #exec channel) silently reset the miss counter on every sweep even
-    though nothing was ever posted -- such a seat could never be reopened. A good draft that
-    never reaches #exec must count exactly like a failed one."""
+async def test_a_successful_draft_with_no_exec_channel_is_inconclusive(org_world):  # noqa: F811
+    """Preserve confirmed-post success semantics without penalizing a missing route.
+
+    This intentionally changes f107's earlier undelivered-draft-as-miss policy.
+    An unposted draft can neither reset a genuine prior miss nor reopen the seat.
+    """
     repo = AgentSeatRepository(org_world)
     now = datetime.now(UTC)
     with acting_as(USER_A, ORG_A):
         # Deliberately no team_repo.ensure_default_channels() -- no #exec exists in this org.
         seat = await repo.claim_seat(seat=CMO_SEAT, agent_name="cmo-agent", weekly_token_budget=1000, claimed_by_user_id=USER_A)
         seat = await repo.patch_seat(seat["id"], status=AgentSeatStatus.RATIFIED, ratified_by_user_id=USER_A)
+        seat = await repo.record_scorecard_result(seat["id"], success=False, now=now - timedelta(days=8))
 
         updated = await evaluate_seat_scorecard(repo, seat, now=now, announce=announce_to_exec, generate=_succeed)
+        persisted = await repo.get_seat(seat["id"])
 
+    assert updated == persisted == seat
     assert updated["missed_scorecards"] == 1
     assert updated["status"] == AgentSeatStatus.RATIFIED
 
 
 @pytest.mark.asyncio
-async def test_a_failed_check_still_advances_last_scorecard_at(org_world):  # noqa: F811
+async def test_an_evaluated_miss_still_advances_last_scorecard_at(org_world):  # noqa: F811
     """Review finding (medium, test gap): a miss must still mark this week as checked, or two
     sweeps an hour apart (not two separate missed weeks) could reopen a seat. Mutation this
     guards: record_scorecard_result advancing last_scorecard_at only on success."""
@@ -176,20 +272,20 @@ async def test_a_failed_check_still_advances_last_scorecard_at(org_world):  # no
     now = datetime.now(UTC)
     calls: list[dict] = []
 
-    async def _tracked_fail(seat: dict) -> str | None:
+    async def _tracked_miss(seat: dict) -> str:
         calls.append(seat)
-        return None
+        return ""
 
     with acting_as(USER_A, ORG_A):
         seat = await repo.claim_seat(seat=CMO_SEAT, agent_name="cmo-agent", weekly_token_budget=1000, claimed_by_user_id=USER_A)
         seat = await repo.patch_seat(seat["id"], status=AgentSeatStatus.RATIFIED, ratified_by_user_id=USER_A)
 
-        seat = await evaluate_seat_scorecard(repo, seat, now=now, generate=_tracked_fail)
+        seat = await evaluate_seat_scorecard(repo, seat, now=now, announce=_confirmed, generate=_tracked_miss)
         assert seat["missed_scorecards"] == 1
         assert len(calls) == 1
 
         # One hour later: still the same trailing week, so this must not re-evaluate at all.
-        untouched = await evaluate_seat_scorecard(repo, seat, now=now + timedelta(hours=1), generate=_tracked_fail)
+        untouched = await evaluate_seat_scorecard(repo, seat, now=now + timedelta(hours=1), announce=_confirmed, generate=_tracked_miss)
 
     assert untouched["missed_scorecards"] == 1
     assert len(calls) == 1
@@ -285,7 +381,7 @@ async def test_generate_receives_the_seats_real_weekly_token_burn(org_world):  #
     await _spend(org_world, organization_id=ORG_B, agent_name="cmo-agent", total_tokens=99_999, created_at=now - timedelta(hours=1))
 
     with acting_as(USER_A, ORG_A):
-        await evaluate_seat_scorecard(repo, seat, now=now, generate=_capture)
+        await evaluate_seat_scorecard(repo, seat, now=now, announce=_confirmed, generate=_capture)
 
     assert len(captured) == 1
     assert captured[0]["weekly_token_burn"] == 250

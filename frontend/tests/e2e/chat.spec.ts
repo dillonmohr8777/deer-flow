@@ -51,10 +51,10 @@ test.describe("Project-scoped submit staleness", () => {
     // must drop the continuation — no goal save, composer clear, or
     // abandoned run may touch the newly opened conversation.
     const textarea = page.getByPlaceholder(/how can i assist you/i);
-    const settledChat = page.getByRole("link", {
-      name: "Settled chat",
-      exact: true,
-    });
+    const settledChat = page
+      .locator("[data-sidebar='sidebar']")
+      .getByRole("link")
+      .filter({ has: page.getByText("Settled chat", { exact: true }) });
 
     const goalPuts: string[] = [];
     const runStreams: string[] = [];
@@ -82,6 +82,10 @@ test.describe("Project-scoped submit staleness", () => {
     await intercepted;
 
     // Switch conversations while the project pre-create is held.
+    await expect(settledChat).toHaveAttribute(
+      "href",
+      `/workspace/chats/${MOCK_THREAD_ID}`,
+    );
     await settledChat.click();
     await expect(page).toHaveURL(new RegExp(`/chats/${MOCK_THREAD_ID}$`));
     releaseCreate();
@@ -246,7 +250,7 @@ test.describe("Chat workspace", () => {
     await page.reload();
 
     await expect(
-      page.getByText("内容由AI生成，重要信息请务必核查", { exact: true }),
+      page.getByText("智能体可能会出错，请核查记录。", { exact: true }),
     ).toBeVisible({ timeout: 15_000 });
   });
 
@@ -1036,7 +1040,7 @@ test.describe("Chat workspace", () => {
 
     await page.getByRole("button", { name: /research/i }).click();
     await expect(textarea).toHaveValue(
-      "Conduct a deep dive research on [topic], and summarize the findings.",
+      "Research [topic] and bring back sources I can check. Keep what's confirmed apart from what's still open.",
     );
 
     await textarea.press("Enter");
@@ -1044,7 +1048,7 @@ test.describe("Chat workspace", () => {
 
     expect(streamCalled).toBe(false);
     await expect(textarea).toHaveValue(
-      "Conduct a deep dive research on [topic], and summarize the findings.",
+      "Research [topic] and bring back sources I can check. Keep what's confirmed apart from what's still open.",
     );
     await expect
       .poll(
@@ -1059,7 +1063,7 @@ test.describe("Chat workspace", () => {
 
     await textarea.pressSequentially("AI agents");
     await expect(textarea).toHaveValue(
-      "Conduct a deep dive research on AI agents, and summarize the findings.",
+      "Research AI agents and bring back sources I can check. Keep what's confirmed apart from what's still open.",
     );
 
     await textarea.press("Enter");
@@ -1068,7 +1072,7 @@ test.describe("Chat workspace", () => {
     await expect
       .poll(() => submittedText, { timeout: 10_000 })
       .toBe(
-        "Conduct a deep dive research on AI agents, and summarize the findings.",
+        "Research AI agents and bring back sources I can check. Keep what's confirmed apart from what's still open.",
       );
   });
 

@@ -110,6 +110,12 @@ That prompt is intended for coding agents. It tells the agent to clone the repo 
 
 ## Quick Start
 
+Fixed-purpose custom agents can set `self_update_enabled: false` to withhold
+their self-update tool while keeping owner/API edits available. Existing agents
+retain the default `true` behavior.
+An optional `tool_names` allowlist caps configured, builtin and middleware tools;
+omitting it preserves the existing catalog, while `[]` permits no tools.
+
 ### Configuration
 
 Optional per-model [`request_admission`](backend/docs/CONFIGURATION.md#model-request-admission)
@@ -2300,6 +2306,100 @@ Runtime execution and artifact controls remain in the existing DeerFlow services
 For an independent local preview, set `NEXT_BUILD_DIR=.next-momentum` and run the
 frontend on a separate loopback port with the existing gateway configured.
 
+Agent-seat weekly scorecard checks require a confirmed `#exec` post before
+resetting an employee's missed-week streak. A completed blank scorecard counts
+as a missed week only after its miss notice is delivered; two evaluated misses
+reopen the title. Model, usage-store and delivery outages are inconclusive and
+preserve the streak, title and last evaluated week, so a later sweep can retry.
+The recurring sweep remains opt-in (`exec_seats.scorecard_check_enabled: false`
+by default); this policy does not turn on scheduled work.
+
+### Hiring tool permissions
+
+Momentum staff hiring tools check a titled manager's stored agent configuration
+before creating a hire. Invalid or unreadable tool permissions block hiring with
+an instruction to repair the configuration or restore storage access. An explicit
+unrestricted setting (`tool_groups: null` or omitted) remains supported within
+the organization's configured tool catalog; an empty list grants no tools.
+Claimed titles without any custom-agent record retain that unrestricted default
+only after the agent store confirms the record is absent. These checks do not
+provision an agent or change the existing private-data, budget, or organization
+authorization rules.
+
+## Manual Browserbase public-page QA
+
+The opt-in `deerflow.community.browser_automation.browserbase_qa` runner creates
+one 60-second Browserbase session for public-page checks at 390/768/1440. It uses
+the headless HTTP/CDP API with Playwright, without model calls, form submission,
+persistent cookies or scheduler changes. It requires an exact host allowlist,
+blocks mutating requests and redirects, records overflow/target-size measurements,
+and requests release only for its own created session. Receipts and screenshots
+belong in a fresh private directory outside Git. Provider errors are sanitized;
+credential-bearing CDP URLs must never be logged.
+
+```sh
+cd backend
+uv sync --frozen --extra browser
+# Existing credential: BROWSERBASE_API_KEY, or macOS Keychain browserbase.api-key.
+# This command consumes included browser time; run only within an approved budget.
+uv run --no-sync python -m deerflow.community.browser_automation.browserbase_qa \
+  --url https://example.com/ --allow-host example.com \
+  --project-id YOUR_EXISTING_PROJECT_UUID --output /private/local/fresh-qa-run
+```
+
+The default reported-usage admission ceiling is 50 browser minutes; missing or
+invalid usage stops before session creation. This ceiling is a conservative
+local gate, not proof of the account's plan, remaining quota or an atomic shared
+budget. Request/body/screenshot admission caps bound retained QA data; HTTP
+responses are fetched before body-size rejection, so this is not a hard network
+transfer cap. API creation failures are never automatically retried; an ambiguous
+timeout must be reconciled before another attempt. This manual runner does not
+enable the general browser tool group or production Browserbase routing.
+
+## Responses multi-agent preflight (local customization)
+
+An opt-in Sol 6.1/OpenRouter Responses adapter stages bounded requests, separates
+root final answers from agent progress, and records durable spending receipts.
+It is not registered or activated by default. Native activation requires actual
+hosted child output and verified aggregate provider spending enforcement across
+all descendants and continuations; concurrency limits alone cannot cap cost.
+The ordinary read-only function-call probe is separate capability evidence.
+See [protocol, spending gates and integration criteria](backend/docs/RESPONSES_MULTI_AGENT.md).
+
+## Private agency pilot guard (local customization)
+
+For an opt-in bounded private MomoBot pilot, see the [loopback request guard and
+artifact readback example](examples/momo-agency-guard/README.md). It does not
+activate schedules or enforce budgets for preexisting gateway routes.
+
+### Preserved private Agent Room
+
+This local integration preserves the existing standby owner-private Agent Room
+API, repository, read/post tools, and admin-only Desk visibility. Original source
+was matched to deployed bytes before bringing over only its room wiring; no live
+configuration or data is copied into Git. Its shipped `0040_agent_room_messages`
+history remains unchanged. A no-DDL `0047_merge_agent_room_exec` joins that branch
+with `0046_organization_entitlements`, allowing either existing database history
+to upgrade without a manual stamp. Tests exercise actual bootstrap from both
+histories and preserve existing owner credentials and room handoff rows. This is
+not a deployment receipt. A standby update requires a quiet writer window and a
+verified pre-upgrade backup: the previous image cannot read the new revision, so
+an image-only rollback is insufficient. Do not downgrade or restamp a live DB.
+
+Key-free full-stack replay checks keep normal thread ownership active: seeded
+history has an owned native thread record but no checkpoint, and its browser
+messages must render once each in chronological order. The auth-disabled check
+compares the full current response, including MFA state and registered permissions.
+
 ## Star History
 
 [![Star History Chart](https://star-history.dera.page/svg?repos=bytedance/deer-flow&type=Date)](https://star-history.dera.page/#bytedance/deer-flow&Date)
+
+Private agency upgrade checks preserve the existing room and enforce canonical safe identifiers on client Board routes, including existing hex IDs. Board, Team and Academy PAT scope names stay aligned with route permissions; the existing default-deny PAT endpoint policy still controls reachability.
+
+The optional [fixed agency packet phases](examples/momo-approved-packets/README.md)
+let an operator pin two complete private source packets, submit producers and
+independent reviewers through the existing durable native batch queue, and
+persist exact native result bytes with immutable owner/thread-bound readback.
+The feature stays disabled without an operator digest-pinned manifest. Phase
+receipts expose evidence, not acceptance or proof of whole-gateway spend control.
