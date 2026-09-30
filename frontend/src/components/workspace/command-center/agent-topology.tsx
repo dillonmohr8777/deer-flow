@@ -43,7 +43,10 @@ export function AgentTopology({
     <div className={styles.topology}>
       <div className={styles.topologyLead}>
         <span className={styles.leadIcon}>
-          <MomoAvatar agent={{ name: `lead:${leadLabel}`, display_name: leadLabel }} size={160} />
+          <MomoAvatar
+            agent={{ name: `lead:${leadLabel}`, display_name: leadLabel }}
+            size={160}
+          />
         </span>
         <div>
           <strong>{leadLabel}</strong>

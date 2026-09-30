@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, rs } from "@rstest/core";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 
 import {
   useWorkspaceAppearance,
@@ -49,9 +55,9 @@ describe("WorkspaceAppearanceProvider coverage", () => {
     fireEvent.click(screen.getByText("Paper"));
     await waitFor(() =>
       expect(
-        container.querySelector("[data-treatment]")?.getAttribute(
-          "data-treatment",
-        ),
+        container
+          .querySelector("[data-treatment]")
+          ?.getAttribute("data-treatment"),
       ).toBe("paper"),
     );
   });

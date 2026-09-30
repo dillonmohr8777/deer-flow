@@ -93,7 +93,8 @@ export function MomoAvatar({
   const accessibleName = agent.description
     ? `${label}, ${agent.description}`
     : label;
-  const showImage = slug !== null && AVAILABLE_MOMO_SLUGS.has(slug) && !imgFailed;
+  const showImage =
+    slug !== null && AVAILABLE_MOMO_SLUGS.has(slug) && !imgFailed;
 
   return (
     <span
