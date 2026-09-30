@@ -12,6 +12,8 @@ import {
   Network,
   Newspaper,
   Radio,
+  Globe,
+  ListChecks,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -134,6 +136,43 @@ export function WorkspaceNavChatList() {
             >
               <Network />
               <span>Command Center</span>
+            </Link>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+        <SidebarMenuItem>
+          <SidebarMenuButton
+            isActive={pathname === "/workspace/openai"}
+            asChild
+          >
+            <Link className="text-muted-foreground" href="/workspace/openai">
+              <Network />
+              <span>OpenAI crew</span>
+            </Link>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+        <SidebarMenuItem>
+          <SidebarMenuButton
+            isActive={pathname === "/workspace/workflows"}
+            className="min-h-11"
+            asChild
+          >
+            <Link className="text-muted-foreground" href="/workspace/workflows">
+              <ListChecks />
+              <span>Workflows</span>
+            </Link>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+        <SidebarMenuItem>
+          <SidebarMenuButton
+            isActive={pathname === "/workspace/browser-research"}
+            asChild
+          >
+            <Link
+              className="text-muted-foreground"
+              href="/workspace/browser-research"
+            >
+              <Globe />
+              <span>Browser research</span>
             </Link>
           </SidebarMenuButton>
         </SidebarMenuItem>

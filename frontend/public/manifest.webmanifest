@@ -2,8 +2,12 @@
   "name": "MomoBot",
   "short_name": "MomoBot",
   "description": "A private workspace where a team of agents takes on real work.",
+  "id": "/workspace",
   "start_url": "/workspace",
+  "scope": "/",
   "display": "standalone",
+  "orientation": "any",
+  "prefer_related_applications": false,
   "background_color": "#f2ede3",
   "theme_color": "#1b4b9e",
   "icons": [

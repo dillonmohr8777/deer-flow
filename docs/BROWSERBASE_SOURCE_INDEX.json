@@ -1,0 +1,4886 @@
+[
+  {
+    "url": "https://docs.browserbase.com/account/billing/plan-management",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/account/billing/plan-management.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/account/billing/plans",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/account/billing/plans.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/account/enterprise/byos-setup-guide",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/account/enterprise/byos-setup-guide.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/account/enterprise/security",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/account/enterprise/security.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/account/enterprise/zero-data-retention",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/account/enterprise/zero-data-retention.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/account/team/roles",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/account/team/roles.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/account/team/sso",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/account/team/sso.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/1password/introduction",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/1password/introduction.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/1password/quickstart",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/1password/quickstart.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/agentkit/introduction",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/agentkit/introduction.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/agentkit/quickstart",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/agentkit/quickstart.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/agno/introduction",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/agno/introduction.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/agno/quickstart",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/agno/quickstart.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/anthropic/managed-agents/introduction",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/anthropic/managed-agents/introduction.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/anthropic/managed-agents/quickstart",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/anthropic/managed-agents/quickstart.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/box/introduction",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/box/introduction.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/box/quickstart",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/box/quickstart.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/braintrust/introduction",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/braintrust/introduction.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/braintrust/typescript",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/braintrust/typescript.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/browseruse/introduction",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/browseruse/introduction.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/browseruse/python",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/browseruse/python.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/crew-ai/build-a-flight-booker",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/crew-ai/build-a-flight-booker.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/crew-ai/introduction",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/crew-ai/introduction.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/crew-ai/python",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/crew-ai/python.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/get-started",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/get-started.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/google-adk/introduction",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/google-adk/introduction.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/google-adk/setup",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/google-adk/setup.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/hermes-agent/introduction",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/hermes-agent/introduction.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/hermes-agent/setup",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/hermes-agent/setup.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/ibm/introduction",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/ibm/introduction.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/ibm/quickstart",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/ibm/quickstart.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/inngest/introduction",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/inngest/introduction.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/inngest/quickstart",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/inngest/quickstart.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/inngest/stagehand",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/inngest/stagehand.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/langchain/deepagents",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/langchain/deepagents.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/langchain/introduction",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/langchain/introduction.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/langchain/python",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/langchain/python.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/mastra/introduction",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/mastra/introduction.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/mastra/quickstart",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/mastra/quickstart.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/mcp/introduction",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/mcp/introduction.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/mcp/setup",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/mcp/setup.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/mongo-db/introduction",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/mongo-db/introduction.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/mongo-db/quickstart",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/mongo-db/quickstart.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/n8n/introduction",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/n8n/introduction.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/n8n/quickstart",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/n8n/quickstart.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/openai-cua/introduction",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/openai-cua/introduction.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/openclaw/introduction",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/openclaw/introduction.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/openclaw/setup",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/openclaw/setup.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/prime-intellect/evals",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/prime-intellect/evals.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/prime-intellect/introduction",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/prime-intellect/introduction.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/prime-intellect/rl-training",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/prime-intellect/rl-training.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/skills/browse-cli",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/skills/browse-cli.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/skills/github-action",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/skills/github-action.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/skills/introduction",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/skills/introduction.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/stripe/browse-cli",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/stripe/browse-cli.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/stripe/introduction",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/stripe/introduction.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/stripe/stagehand",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/stripe/stagehand.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/temporal/introduction",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/temporal/introduction.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/temporal/quickstart",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/temporal/quickstart.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/trigger/introduction",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/trigger/introduction.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/trigger/quickstart",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/trigger/quickstart.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/val-town/introduction",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/val-town/introduction.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/val-town/slack-scout",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/val-town/slack-scout.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/vercel/agent-browser/introduction",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/vercel/agent-browser/introduction.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/vercel/agent-browser/quickstart",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/vercel/agent-browser/quickstart.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/vercel/browsegpt",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/vercel/browsegpt.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/vercel/eve/introduction",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/vercel/eve/introduction.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/vercel/eve/quickstart",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/vercel/eve/quickstart.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/vercel/introduction",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/vercel/introduction.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/vercel/puppeteer",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/vercel/puppeteer.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/vercel/quickstart",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/vercel/quickstart.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/x402/agentkit",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/x402/agentkit.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/x402/introduction",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/x402/introduction.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/x402/quickstart",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/integrations/x402/quickstart.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/llms.txt",
+    "catalog_sources": [
+      "seed"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/optimizations/concurrency/overview",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/optimizations/concurrency/overview.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/optimizations/cost/cost-optimization",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/optimizations/cost/cost-optimization.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/optimizations/cost/measuring-usage",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/optimizations/cost/measuring-usage.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/optimizations/latency/multi-region",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/optimizations/latency/multi-region.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/optimizations/latency/speed-optimization",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/optimizations/latency/speed-optimization.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/agents/examples",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/agents/examples.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/agents/generating-scripts",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/agents/generating-scripts.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/agents/how-it-works",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/agents/how-it-works.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/agents/how-to-prompt-agents",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/agents/how-to-prompt-agents.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/agents/integrate-api-sdk",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/agents/integrate-api-sdk.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/agents/managing-files",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/agents/managing-files.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/agents/optimizing-agents",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/agents/optimizing-agents.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/agents/overview",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/agents/overview.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/agents/pausing-runs",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/agents/pausing-runs.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/browser/core-features/browser-extensions",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/browser/core-features/browser-extensions.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/browser/core-features/contexts",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/browser/core-features/contexts.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/browser/core-features/overview",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/browser/core-features/overview.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/browser/core-features/session-metadata",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/browser/core-features/session-metadata.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/browser/core-features/viewports",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/browser/core-features/viewports.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/browser/files/downloads",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/browser/files/downloads.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/browser/files/overview",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/browser/files/overview.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/browser/files/pdfs",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/browser/files/pdfs.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/browser/files/screenshots",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/browser/files/screenshots.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/browser/files/uploads",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/browser/files/uploads.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/browser/getting-started/create-browser-session",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/browser/getting-started/create-browser-session.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/browser/getting-started/manage-browser-session",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/browser/getting-started/manage-browser-session.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/browser/getting-started/remote-browser-versus-local-browser",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/browser/getting-started/remote-browser-versus-local-browser.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/browser/getting-started/using-browser-session",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/browser/getting-started/using-browser-session.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/browser/getting-started/what-is-headless-browser",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/browser/getting-started/what-is-headless-browser.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/browser/long-sessions/keep-alive",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/browser/long-sessions/keep-alive.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/browser/long-sessions/overview",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/browser/long-sessions/overview.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/browser/long-sessions/timeouts",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/browser/long-sessions/timeouts.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/browser/observability/observability",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/browser/observability/observability.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/browser/observability/recording-downloads",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/browser/observability/recording-downloads.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/browser/observability/session-live-view",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/browser/observability/session-live-view.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/browser/observability/session-replay",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/browser/observability/session-replay.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/browser/security/allowed-domains",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/browser/security/allowed-domains.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/browser/security/certificate-validation",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/browser/security/certificate-validation.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/browser/security/ip-allowlisting",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/browser/security/ip-allowlisting.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/browser/techniques/dialogues",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/browser/techniques/dialogues.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/browser/techniques/timezones",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/browser/techniques/timezones.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/fetch/overview",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/fetch/overview.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/functions/deploy",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/functions/deploy.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/functions/invoke",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/functions/invoke.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/functions/limits",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/functions/limits.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/functions/overview",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/functions/overview.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/functions/quickstart",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/functions/quickstart.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/functions/secrets",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/functions/secrets.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/functions/write",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/functions/write.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/identity/authentication",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/identity/authentication.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/identity/captcha-solving",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/identity/captcha-solving.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/identity/overview",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/identity/overview.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/identity/proxies",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/identity/proxies.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/identity/verified-customization",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/identity/verified-customization.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/identity/web-bot-auth",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/identity/web-bot-auth.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/model-gateway/overview",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/model-gateway/overview.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/search/overview",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/search/overview.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/secrets/getting-started",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/secrets/getting-started.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/secrets/overview",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/secrets/overview.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/webhooks/example",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/webhooks/example.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/webhooks/overview",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/webhooks/overview.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/webhooks/registering-endpoints",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/webhooks/registering-endpoints.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/webhooks/verifying-deliveries",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/platform/webhooks/verifying-deliveries.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/attach-a-secret-to-a-function",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/attach-a-secret-to-a-function.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/create-a-context",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/create-a-context.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/create-a-secret",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/create-a-secret.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/create-a-session",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/create-a-session.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/create-a-webhook",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/create-a-webhook.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/create-an-agent",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/create-an-agent.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/create-session-recording-downloads",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/create-session-recording-downloads.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/create-session-uploads",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/create-session-uploads.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/delete-a-certificate",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/delete-a-certificate.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/delete-a-context",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/delete-a-context.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/delete-a-download",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/delete-a-download.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/delete-a-secret",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/delete-a-secret.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/delete-a-webhook",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/delete-a-webhook.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/delete-an-agent",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/delete-an-agent.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/delete-an-extension",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/delete-an-extension.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/delete-download",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/delete-download.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/detach-a-secret-from-a-function",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/detach-a-secret-from-a-function.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/fetch-a-page",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/fetch-a-page.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/get-a-certificate",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/get-a-certificate.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/get-a-context",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/get-a-context.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/get-a-download",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/get-a-download.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/get-a-function",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/get-a-function-build",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/get-a-function-build.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/get-a-function-version",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/get-a-function-version.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/get-a-function.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/get-a-keypair",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/get-a-keypair.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/get-a-project",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/get-a-project.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/get-a-run",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/get-a-run.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/get-a-secret",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/get-a-secret.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/get-a-session",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/get-a-session.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/get-a-webhook",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/get-a-webhook.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/get-an-agent",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/get-an-agent.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/get-an-extension",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/get-an-extension.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/get-an-invocation",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/get-an-invocation.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/get-download",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/get-download.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/get-function-build-logs",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/get-function-build-logs.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/get-invocation-logs",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/get-invocation-logs.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/get-project-usage",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/get-project-usage.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/invoke-a-function",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/invoke-a-function.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/list-agents",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/list-agents.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/list-all-sessions",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/list-all-sessions.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/list-certificates",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/list-certificates.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/list-downloads",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/list-downloads.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/list-function-builds",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/list-function-builds.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/list-function-secrets",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/list-function-secrets.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/list-function-versions",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/list-function-versions.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/list-functions",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/list-functions.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/list-invocations-for-a-function-version",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/list-invocations-for-a-function-version.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/list-projects",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/list-projects.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/list-run-messages",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/list-run-messages.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/list-runs",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/list-runs.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/list-secrets",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/list-secrets.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/list-session-recording-downloads",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/list-session-recording-downloads.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/list-sessions",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/list-sessions.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/list-version-invocations",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/list-version-invocations.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/list-webhooks",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/list-webhooks.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/overview",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/overview.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/resume-a-run",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/resume-a-run.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/rotate-a-webhook-signing-secret",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/rotate-a-webhook-signing-secret.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/run-an-agent",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/run-an-agent.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/session-live-urls",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/session-live-urls.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/session-logs",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/session-logs.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/session-replay-page",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/session-replay-page.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/session-replays",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/session-replays.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/stop-a-run",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/stop-a-run.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/update-a-secret",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/update-a-secret.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/update-a-session",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/update-a-session.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/update-a-webhook",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/update-a-webhook.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/update-an-agent",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/update-an-agent.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/upload-a-certificate",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/upload-a-certificate.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/upload-an-extension",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/upload-an-extension.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/web-search",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/api/web-search.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/introduction",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/introduction.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/sdk/nodejs",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/sdk/nodejs.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/sdk/overview",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/sdk/overview.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/sdk/python",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/reference/sdk/python.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/sitemap.xml",
+    "catalog_sources": [
+      "seed"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/use-cases/agents",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/use-cases/agents.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/use-cases/automating-form-submissions",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/use-cases/automating-form-submissions.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/use-cases/building-automated-tests",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/use-cases/building-automated-tests.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/use-cases/buy-with-ai-agent",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/use-cases/buy-with-ai-agent.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/use-cases/web-data-retrieval",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/use-cases/web-data-retrieval.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/welcome/getting-started",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/welcome/getting-started.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/welcome/introduction",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/welcome/introduction.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/welcome/quickstarts/agents",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/welcome/quickstarts/agents.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/welcome/quickstarts/playwright",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/welcome/quickstarts/playwright.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/welcome/quickstarts/puppeteer",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/welcome/quickstarts/puppeteer.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/welcome/quickstarts/selenium",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/welcome/quickstarts/selenium.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/welcome/quickstarts/skills",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/welcome/quickstarts/skills.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/welcome/quickstarts/stagehand",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/welcome/quickstarts/stagehand.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/welcome/what-is-browserbase",
+    "catalog_sources": [
+      "https://docs.browserbase.com/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.browserbase.com/welcome/what-is-browserbase.md",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/",
+    "catalog_sources": [
+      "https://docs.browserbase.com/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/llms.txt",
+    "catalog_sources": [
+      "seed"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/sitemap.xml",
+    "catalog_sources": [
+      "seed"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/basics/act",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/basics/act.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/basics/agent",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/basics/agent.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/basics/extract",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/basics/extract.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/basics/observe",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/basics/observe.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/best-practices/agent-fallbacks",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/best-practices/agent-fallbacks.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/best-practices/build-agent",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/best-practices/build-agent.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/best-practices/caching",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/best-practices/caching.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/best-practices/computer-use",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/best-practices/computer-use.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/best-practices/contributing",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/best-practices/contributing.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/best-practices/cost-optimization",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/best-practices/cost-optimization.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/best-practices/deployments",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/best-practices/deployments.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/best-practices/mcp-integrations",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/best-practices/mcp-integrations.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/best-practices/playwright-interop",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/best-practices/playwright-interop.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/best-practices/prompting-best-practices",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/best-practices/prompting-best-practices.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/best-practices/speed-optimization",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/best-practices/speed-optimization.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/best-practices/usecase-observe",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/best-practices/usecase-observe.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/best-practices/user-data",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/best-practices/user-data.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/best-practices/using-multiple-tabs",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/best-practices/using-multiple-tabs.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/best-practices/working-with-iframes",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/best-practices/working-with-iframes.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/configuration/browser",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/configuration/browser.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/configuration/evals",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/configuration/evals.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/configuration/logging",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/configuration/logging.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/configuration/models",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/configuration/models.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/configuration/observability",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/configuration/observability.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/first-steps/ai-rules",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/first-steps/ai-rules.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/first-steps/installation",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/first-steps/installation.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/first-steps/introduction",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/first-steps/introduction.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/first-steps/quickstart",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/first-steps/quickstart.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/integrations/crew-ai/configuration",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/integrations/crew-ai/configuration.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/integrations/crew-ai/introduction",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/integrations/crew-ai/introduction.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/integrations/langchain/configuration",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/integrations/langchain/configuration.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/integrations/langchain/introduction",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/integrations/langchain/introduction.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/integrations/mcp/configuration",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/integrations/mcp/configuration.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/integrations/mcp/introduction",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/integrations/mcp/introduction.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/integrations/mcp/setup",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/integrations/mcp/setup.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/integrations/mcp/tools",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/integrations/mcp/tools.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/integrations/vercel/configuration",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/integrations/vercel/configuration.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/integrations/vercel/introduction",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/integrations/vercel/introduction.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/references/act",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/references/act.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/references/agent",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/references/agent.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/references/extract",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/references/extract.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/references/observe",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/references/observe.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/references/stagehand",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v2/references/stagehand.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/api-reference/go/end-a-browser-session",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/api-reference/go/end-a-browser-session.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/api-reference/go/execute-an-ai-agent",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/api-reference/go/execute-an-ai-agent.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/api-reference/go/extract-data-from-the-page",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/api-reference/go/extract-data-from-the-page.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/api-reference/go/navigate-to-a-url",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/api-reference/go/navigate-to-a-url.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/api-reference/go/observe-available-actions",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/api-reference/go/observe-available-actions.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/api-reference/go/perform-an-action",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/api-reference/go/perform-an-action.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/api-reference/go/replay-session-metrics",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/api-reference/go/replay-session-metrics.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/api-reference/go/start-a-new-browser-session",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/api-reference/go/start-a-new-browser-session.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/api-reference/java/end-a-browser-session",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/api-reference/java/end-a-browser-session.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/api-reference/java/execute-an-ai-agent",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/api-reference/java/execute-an-ai-agent.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/api-reference/java/extract-data-from-the-page",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/api-reference/java/extract-data-from-the-page.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/api-reference/java/navigate-to-a-url",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/api-reference/java/navigate-to-a-url.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/api-reference/java/observe-available-actions",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/api-reference/java/observe-available-actions.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/api-reference/java/perform-an-action",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/api-reference/java/perform-an-action.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/api-reference/java/replay-session-metrics",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/api-reference/java/replay-session-metrics.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/api-reference/java/start-a-new-browser-session",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/api-reference/java/start-a-new-browser-session.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/api-reference/python/end-a-browser-session",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/api-reference/python/end-a-browser-session.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/api-reference/python/execute-an-ai-agent",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/api-reference/python/execute-an-ai-agent.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/api-reference/python/extract-data-from-the-page",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/api-reference/python/extract-data-from-the-page.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/api-reference/python/navigate-to-a-url",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/api-reference/python/navigate-to-a-url.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/api-reference/python/observe-available-actions",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/api-reference/python/observe-available-actions.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/api-reference/python/perform-an-action",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/api-reference/python/perform-an-action.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/api-reference/python/replay-session-metrics",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/api-reference/python/replay-session-metrics.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/api-reference/python/start-a-new-browser-session",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/api-reference/python/start-a-new-browser-session.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/api-reference/ruby/end-a-browser-session",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/api-reference/ruby/end-a-browser-session.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/api-reference/ruby/execute-an-ai-agent",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/api-reference/ruby/execute-an-ai-agent.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/api-reference/ruby/extract-data-from-the-page",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/api-reference/ruby/extract-data-from-the-page.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/api-reference/ruby/navigate-to-a-url",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/api-reference/ruby/navigate-to-a-url.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/api-reference/ruby/observe-available-actions",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/api-reference/ruby/observe-available-actions.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/api-reference/ruby/perform-an-action",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/api-reference/ruby/perform-an-action.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/api-reference/ruby/replay-session-metrics",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/api-reference/ruby/replay-session-metrics.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/api-reference/ruby/start-a-new-browser-session",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/api-reference/ruby/start-a-new-browser-session.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/basics/act",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/basics/act.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/basics/agent",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/basics/agent.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/basics/evals",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/basics/evals.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/basics/extract",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/basics/extract.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/basics/observe",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/basics/observe.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/basics/webmcp",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/basics/webmcp.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/best-practices/agent-fallbacks",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/best-practices/agent-fallbacks.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/best-practices/caching",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/best-practices/caching.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/best-practices/computer-use",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/best-practices/computer-use.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/best-practices/cost-optimization",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/best-practices/cost-optimization.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/best-practices/deployments",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/best-practices/deployments.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/best-practices/deterministic-agent",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/best-practices/deterministic-agent.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/best-practices/history",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/best-practices/history.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/best-practices/mcp-integrations",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/best-practices/mcp-integrations.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/best-practices/prompting-best-practices",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/best-practices/prompting-best-practices.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/best-practices/speed-optimization",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/best-practices/speed-optimization.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/best-practices/usecase-observe",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/best-practices/usecase-observe.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/best-practices/user-data",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/best-practices/user-data.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/best-practices/using-multiple-tabs",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/best-practices/using-multiple-tabs.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/configuration/browser",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/configuration/browser.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/configuration/logging",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/configuration/logging.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/configuration/models",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/configuration/models.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/configuration/observability",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/configuration/observability.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/first-steps/ai-rules",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/first-steps/ai-rules.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/first-steps/installation",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/first-steps/installation.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/first-steps/introduction",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/first-steps/introduction.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/first-steps/quickstart",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/first-steps/quickstart.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/integrations/convex/configuration",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/integrations/convex/configuration.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/integrations/convex/introduction",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/integrations/convex/introduction.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/integrations/crew-ai/configuration",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/integrations/crew-ai/configuration.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/integrations/crew-ai/introduction",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/integrations/crew-ai/introduction.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/integrations/langchain/configuration",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/integrations/langchain/configuration.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/integrations/langchain/introduction",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/integrations/langchain/introduction.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/integrations/mcp/configuration",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/integrations/mcp/configuration.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/integrations/mcp/introduction",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/integrations/mcp/introduction.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/integrations/mcp/setup",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/integrations/mcp/setup.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/integrations/mcp/tools",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/integrations/mcp/tools.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/integrations/playwright",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/integrations/playwright.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/integrations/puppeteer",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/integrations/puppeteer.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/integrations/selenium",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/integrations/selenium.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/integrations/vercel/configuration",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/integrations/vercel/configuration.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/integrations/vercel/introduction",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/integrations/vercel/introduction.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/migrations/python",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/migrations/python.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/migrations/v2",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/migrations/v2.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/references/act",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/references/act.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/references/agent",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/references/agent.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/references/clipboard",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/references/clipboard.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/references/context",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/references/context.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/references/deeplocator",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/references/deeplocator.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/references/extract",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/references/extract.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/references/locator",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/references/locator.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/references/observe",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/references/observe.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/references/page",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/references/page.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/references/response",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/references/response.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/references/stagehand",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/references/stagehand.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/sdk/go",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/sdk/go.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/sdk/java",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/sdk/java.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/sdk/python",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/sdk/python.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/sdk/ruby",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v3/sdk/ruby.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/add-ons/fetch",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/add-ons/fetch.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/add-ons/search",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/add-ons/search.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/basics/act",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/basics/act.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/basics/extract",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/basics/extract.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/basics/observe",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/basics/observe.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/basics/webmcp",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/basics/webmcp.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/best-practices/caching",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/best-practices/caching.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/best-practices/cost-optimization",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/best-practices/cost-optimization.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/best-practices/deployments",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/best-practices/deployments.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/best-practices/prompting-best-practices",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/best-practices/prompting-best-practices.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/best-practices/speed-optimization",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/best-practices/speed-optimization.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/best-practices/usecase-observe",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/best-practices/usecase-observe.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/best-practices/user-data",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/best-practices/user-data.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/best-practices/using-multiple-tabs",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/best-practices/using-multiple-tabs.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/configuration/browser",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/configuration/browser.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/configuration/logging",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/configuration/logging.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/configuration/models",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/configuration/models.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/configuration/observability",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/configuration/observability.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/first-steps/ai-rules",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/first-steps/ai-rules.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/first-steps/installation",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/first-steps/installation.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/first-steps/introduction",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/first-steps/introduction.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/first-steps/quickstart",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/first-steps/quickstart.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/integrations/agent-frameworks/crewai",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/integrations/agent-frameworks/crewai.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/integrations/agent-frameworks/deep-agents",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/integrations/agent-frameworks/deep-agents.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/integrations/agent-frameworks/eve",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/integrations/agent-frameworks/eve.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/integrations/agent-frameworks/mastra",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/integrations/agent-frameworks/mastra.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/integrations/agent-frameworks/overview",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/integrations/agent-frameworks/overview.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/integrations/agent-frameworks/vercel-ai-sdk",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/integrations/agent-frameworks/vercel-ai-sdk.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/integrations/applications/stripe",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/integrations/applications/stripe.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/integrations/cli-agents/claude-code",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/integrations/cli-agents/claude-code.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/integrations/cli-agents/codex",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/integrations/cli-agents/codex.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/integrations/cli-agents/fx",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/integrations/cli-agents/fx.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/integrations/cli-agents/overview",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/integrations/cli-agents/overview.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/integrations/cli-agents/pi",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/integrations/cli-agents/pi.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/integrations/overview",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/integrations/overview.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/migrations/playwright",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/migrations/playwright.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/migrations/v3",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/migrations/v3.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/reference/clipboard",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/reference/clipboard.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/reference/context",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/reference/context.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/reference/locator",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/reference/locator.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/reference/page",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/reference/page.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/reference/response",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/reference/response.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/reference/stagehand",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/reference/stagehand.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/reference/webmcp",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/sitemap.xml"
+    ]
+  },
+  {
+    "url": "https://docs.stagehand.dev/v4/reference/webmcp.md",
+    "catalog_sources": [
+      "https://docs.stagehand.dev/llms.txt"
+    ]
+  },
+  {
+    "url": "https://www.browserbase.com/SKILL.md",
+    "catalog_sources": [
+      "seed"
+    ]
+  }
+]
