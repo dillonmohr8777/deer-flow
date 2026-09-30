@@ -93,8 +93,26 @@ describe("ProjectThreadsSection", () => {
     expect(links[0]?.querySelector(".line-clamp-2")?.textContent).toBe("First");
     // The time is a real <time>, today as a clock time.
     const time = links[0]?.querySelector("time");
-    expect(time?.getAttribute("dateTime")).toBe(at(0));
+    expect(time?.getAttribute("dateTime")).toBe(at(0)); // already toISOString
     expect(time?.textContent).toMatch(/9:30/);
+  });
+
+  it("gives <time> a valid dateTime for the API's microsecond stamps", () => {
+    const { container } = render(
+      <Wrapper>
+        <ProjectThreadsSection
+          query={makeQuery([
+            {
+              ...makeThread("t-1", "First"),
+              updated_at: "2026-09-30T08:50:00.123456+00:00",
+            },
+          ])}
+        />
+      </Wrapper>,
+    );
+    expect(container.querySelector("time")?.getAttribute("dateTime")).toBe(
+      "2026-09-30T08:50:00.123Z",
+    );
   });
 
   it("shows the untitled fallback and the load-more button for a partial page", () => {

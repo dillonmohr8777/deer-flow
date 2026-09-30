@@ -64,7 +64,7 @@ import type {
   ScheduledTask,
   ScheduledTaskRun,
 } from "@/core/scheduled-tasks/types";
-import { formatScheduleTime } from "@/core/utils/datetime";
+import { formatScheduleTime, toDateTimeAttr } from "@/core/utils/datetime";
 import { cn } from "@/lib/utils";
 
 // DESIGN.md's 44px touch floor for the text buttons on a phone (pause,
@@ -100,7 +100,7 @@ function runTime(value: string | null, locale: string) {
     timeStyle: "short",
   }).format(new Date(value));
   return (
-    <time dateTime={new Date(value).toISOString()} title={full}>
+    <time dateTime={toDateTimeAttr(value)} title={full}>
       {words}
     </time>
   );

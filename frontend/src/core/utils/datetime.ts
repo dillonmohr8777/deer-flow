@@ -78,7 +78,7 @@ export function formatCompactStamp(
 
 /**
  * When a scheduled run happens, in words a person plans by: "Today, 11:30 PM",
- * "Tomorrow, 8:50 AM", a weekday within the week ("Sat, 2:00 PM"), otherwise
+ * "Tomorrow, 8:50 AM", a weekday within the coming week ("Sat, 2:00 PM"), otherwise
  * the day ("Nov 9, 10:00 AM") with the year only when it differs. Days are
  * calendar days, not 24-hour windows. Returns null for a missing or invalid
  * timestamp so callers can name the gap.
@@ -122,4 +122,17 @@ export function formatScheduleTime(
     }).format(parsed);
   }
   return intlLocale === "zh-CN" ? `${day} ${time}` : `${day}, ${time}`;
+}
+
+/**
+ * A valid `<time dateTime>` value. The API's Python `isoformat()` stamps carry
+ * microseconds, which HTML does not allow, so re-serialize through Date.
+ * Undefined for a missing or invalid timestamp.
+ */
+export function toDateTimeAttr(
+  value: string | null | undefined,
+): string | undefined {
+  if (!value) return undefined;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
 }

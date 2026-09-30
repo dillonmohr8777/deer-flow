@@ -19,7 +19,7 @@ import {
   dayGroupStartingAt,
 } from "@/core/threads/day-groups";
 import { pathOfThread } from "@/core/threads/utils";
-import { formatCompactStamp } from "@/core/utils/datetime";
+import { formatCompactStamp, toDateTimeAttr } from "@/core/utils/datetime";
 import { cn } from "@/lib/utils";
 
 export function ProjectThreadsSection({
@@ -39,6 +39,7 @@ export function ProjectThreadsSection({
             <Button
               variant="outline"
               size="sm"
+              className="max-sm:min-h-11"
               onClick={() => void query.refetch()}
             >
               {t.common.tryAgain}
@@ -100,7 +101,7 @@ export function ProjectThreadsSection({
                     {stamp && (
                       <time
                         className="text-muted-foreground text-sm"
-                        dateTime={thread.updated_at}
+                        dateTime={toDateTimeAttr(thread.updated_at)}
                       >
                         {stamp}
                       </time>
