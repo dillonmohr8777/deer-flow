@@ -947,6 +947,7 @@ class SubagentExecutor:
         # until then; ``_aexecute`` falls back to the raw turn count so a test
         # double replacing ``_create_agent`` still produces a runnable config.
         self._recursion_limit: int | None = None
+        self._native_lazy_startup = False
         # What this subagent was assembled from, published to extension
         # observers at the end of ``_create_agent``. The prompt and skill set
         # are captured while ``_build_initial_state`` renders them because
@@ -1023,6 +1024,17 @@ class SubagentExecutor:
         # system_prompt is included in initial state messages (see _build_initial_state)
         # to avoid multiple SystemMessages which some LLM APIs don't support.
         bound_tools = list(tools if tools is not None else self.tools)
+        from deerflow.extensions import get_agent_build_extensions
+        from deerflow.sandbox.native_startup import configure_native_lazy_startup
+
+        resolved_extensions = extensions if extensions is not None else get_agent_build_extensions()
+        self._native_lazy_startup = configure_native_lazy_startup(
+            middlewares,
+            bound_tools,
+            available_skills=set() if self.config.skills == [] else None,
+            deferred_names=deferred_setup.deferred_names if deferred_setup is not None else frozenset(),
+            has_extension_middlewares=not isinstance(app_config, AppConfig) or bool(app_config.extensions.middlewares) or resolved_extensions.has_middleware_contributors,
+        )
         agent = create_agent(
             model=model,
             tools=bound_tools,
@@ -1583,8 +1595,9 @@ class SubagentExecutor:
             if self.knowledge_scope is not None:
                 context[KNOWLEDGE_SCOPE_RUNTIME_KEY] = dict(self.knowledge_scope)
             context["is_subagent"] = True
-            context[_SANDBOX_LEASE_OWNER_CONTEXT_KEY] = sandbox_lease_owner_id
-            context[_SANDBOX_COMMAND_SCOPE_CONTEXT_KEY] = sandbox_lease_owner_id
+            if not self._native_lazy_startup:
+                context[_SANDBOX_LEASE_OWNER_CONTEXT_KEY] = sandbox_lease_owner_id
+                context[_SANDBOX_COMMAND_SCOPE_CONTEXT_KEY] = sandbox_lease_owner_id
             execution_context = context
             context["agent_id"] = self.config.name
             if self.loop_detection_recorder is not None:

@@ -7,6 +7,7 @@ from typing import NotRequired, override
 from langchain.agents import AgentState
 from langchain.agents.middleware import AgentMiddleware
 from langchain_core.messages import HumanMessage, ToolMessage
+from langchain_core.tools import BaseTool
 from langgraph.graph import END
 from langgraph.prebuilt.tool_node import ToolCallRequest
 from langgraph.runtime import Runtime
@@ -30,7 +31,7 @@ from deerflow.sandbox.lease import (
     sandbox_lease_owner,
 )
 from deerflow.sandbox.overwrite import unwrap_sandbox
-from deerflow.sandbox.sandbox_provider import get_initialized_sandbox_provider
+from deerflow.sandbox.sandbox_provider import get_initialized_sandbox_provider, native_tool_execution
 
 logger = logging.getLogger(__name__)
 
@@ -84,6 +85,65 @@ class SandboxMiddleware(AgentMiddleware[SandboxMiddlewareState]):
         self._lazy_init = lazy_init
         self._available_skills = set(available_skills) if available_skills is not None else None
         self._owns_agent_skill_projection = owns_agent_skill_projection
+        self._native_tools: tuple[BaseTool, ...] | None = None
+
+    @property
+    def native_startup_is_lazy(self) -> bool:
+        return self._lazy_init
+
+    @property
+    def native_startup_has_skills(self) -> bool:
+        return bool(self._available_skills)
+
+    @property
+    def native_lazy_startup(self) -> bool:
+        return self._native_tools is not None
+
+    def configure_native_tools(self, tools: tuple[BaseTool, ...] | None) -> None:
+        """Called only by final assembly's capability proof, never run input."""
+        self._native_tools = tools
+
+    def release_policy_parameters(self) -> dict[str, object]:
+        return {
+            "lazy_init": self._lazy_init,
+            "available_skills": sorted(self._available_skills) if self._available_skills is not None else None,
+            "owns_agent_skill_projection": self._owns_agent_skill_projection,
+            "native_lazy_startup": self.native_lazy_startup,
+            "native_tools": sorted({tool.name for tool in self._native_tools}) if self._native_tools is not None else None,
+        }
+
+    @staticmethod
+    def _require_clean_native_state(state: object, context: object) -> None:
+        """Do not clear, acquire, approve or release inherited capabilities."""
+        for carrier in (state, context):
+            if carrier is None:
+                continue
+            if not isinstance(carrier, Mapping):
+                raise SandboxRuntimeError("Host-native startup requires a valid clean runtime state")
+            if any(isinstance(key, str) and key.startswith("sandbox") and value is not None for key, value in carrier.items()):
+                raise SandboxRuntimeError("Host-native startup cannot inherit sandbox state or bindings")
+        messages = state.get("messages", []) if isinstance(state, Mapping) else []
+        if not isinstance(messages, (list, tuple)):
+            raise SandboxRuntimeError("Host-native startup requires a valid message sequence")
+        for message in messages:
+            extra = getattr(message, "additional_kwargs", {})
+            artifact = getattr(message, "artifact", None)
+            if isinstance(message, Mapping):
+                extra = message.get("additional_kwargs", {})
+                artifact = message.get("artifact")
+            for payload in (extra.get("human_input_response") if isinstance(extra, Mapping) else None, artifact.get("human_input") if isinstance(artifact, Mapping) else None):
+                if isinstance(payload, Mapping) and payload.get("source") == NETWORK_POLICY_HUMAN_INPUT_SOURCE:
+                    raise SandboxRuntimeError("Host-native startup cannot inherit sandbox network approval")
+
+    def _require_native_request(self, request: ToolCallRequest) -> None:
+        if self._native_tools is None or not any(request.tool is tool for tool in self._native_tools):
+            raise SandboxRuntimeError("Tool lacks the assembled host-native capability")
+        self._require_clean_native_state(request.runtime.state, request.runtime.context)
+
+    def _require_native_result(self, request: ToolCallRequest, result: ToolMessage | Command) -> None:
+        self._require_clean_native_state(request.runtime.state, request.runtime.context)
+        if isinstance(result, Command):
+            self._require_clean_native_state(result.update, None)
 
     def _prepare_agent_skill_projection(self, thread_id: str, *, user_id: str):
         """Build the run's physical skill view before any sandbox is reused."""
@@ -226,6 +286,9 @@ class SandboxMiddleware(AgentMiddleware[SandboxMiddlewareState]):
 
     @override
     def before_agent(self, state: SandboxMiddlewareState, runtime: Runtime) -> dict | None:
+        if self.native_lazy_startup:
+            self._require_clean_native_state(state, runtime.context)
+            return super().before_agent(state, runtime)
         thread_id = (runtime.context or {}).get("thread_id")
         if thread_id is None:
             return super().before_agent(state, runtime)
@@ -346,6 +409,9 @@ class SandboxMiddleware(AgentMiddleware[SandboxMiddlewareState]):
 
     @override
     async def abefore_agent(self, state: SandboxMiddlewareState, runtime: Runtime) -> dict | None:
+        if self.native_lazy_startup:
+            self._require_clean_native_state(state, runtime.context)
+            return await super().abefore_agent(state, runtime)
         thread_id = (runtime.context or {}).get("thread_id")
         if thread_id is None:
             return await super().abefore_agent(state, runtime)
@@ -422,6 +488,9 @@ class SandboxMiddleware(AgentMiddleware[SandboxMiddlewareState]):
 
     @override
     def after_agent(self, state: SandboxMiddlewareState, runtime: Runtime) -> dict | None:
+        if self.native_lazy_startup:
+            self._require_clean_native_state(state, runtime.context)
+            return super().after_agent(state, runtime)
         sandbox, fork_restored = unwrap_sandbox(state.get("sandbox"))
         if sandbox is not None:
             sandbox_id = sandbox["sandbox_id"]
@@ -455,6 +524,9 @@ class SandboxMiddleware(AgentMiddleware[SandboxMiddlewareState]):
 
     @override
     async def aafter_agent(self, state: SandboxMiddlewareState, runtime: Runtime) -> dict | None:
+        if self.native_lazy_startup:
+            self._require_clean_native_state(state, runtime.context)
+            return await super().aafter_agent(state, runtime)
         sandbox, fork_restored = unwrap_sandbox(state.get("sandbox"))
         if sandbox is not None:
             sandbox_id = sandbox["sandbox_id"]
@@ -542,6 +614,12 @@ class SandboxMiddleware(AgentMiddleware[SandboxMiddlewareState]):
         request: ToolCallRequest,
         handler: Callable[[ToolCallRequest], ToolMessage | Command],
     ) -> ToolMessage | Command:
+        if self.native_lazy_startup:
+            self._require_native_request(request)
+            with native_tool_execution():
+                result = handler(request)
+            self._require_native_result(request, result)
+            return result
         prev_sandbox_id = self._read_sandbox_id_from_request(request)
         result = handler(request)
         curr_sandbox_id = self._read_sandbox_id_from_request(request)
@@ -555,6 +633,12 @@ class SandboxMiddleware(AgentMiddleware[SandboxMiddlewareState]):
         request: ToolCallRequest,
         handler: Callable[[ToolCallRequest], Awaitable[ToolMessage | Command]],
     ) -> ToolMessage | Command:
+        if self.native_lazy_startup:
+            self._require_native_request(request)
+            with native_tool_execution():
+                result = await handler(request)
+            self._require_native_result(request, result)
+            return result
         prev_sandbox_id = self._read_sandbox_id_from_request(request)
         result = await handler(request)
         curr_sandbox_id = self._read_sandbox_id_from_request(request)

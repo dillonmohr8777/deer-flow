@@ -2391,6 +2391,12 @@ history has an owned native thread record but no checkpoint, and its browser
 messages must render once each in chronological order. The auth-disabled check
 compares the full current response, including MFA state and registered permissions.
 
+Agents with explicitly empty skills and a fully assembled canonical Room/batch
+toolset can start without constructing an unused sandbox provider. Unknown,
+deferred or extension capabilities keep the existing sandbox policy; inherited
+sandbox bindings are refused. This grants no Docker or network access. See the
+[native startup contract](backend/docs/NATIVE_LAZY_SANDBOX_STARTUP.md).
+
 ## Star History
 
 [![Star History Chart](https://star-history.dera.page/svg?repos=bytedance/deer-flow&type=Date)](https://star-history.dera.page/#bytedance/deer-flow&Date)
