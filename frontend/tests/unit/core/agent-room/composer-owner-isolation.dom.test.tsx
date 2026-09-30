@@ -221,6 +221,68 @@ describe("actual Room composer account lifecycle", () => {
     expect(replace).not.toHaveBeenCalled();
   });
 
+  it("resolves and caches a pending post through a same-owner access refetch, without duplicating it (f135)", async () => {
+    let settlePost!: (message: AgentRoomMessage) => void;
+    rs.mocked(postAgentRoomMessage).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          settlePost = resolve;
+        }),
+    );
+    const cache = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <AuthProvider initialUser={OWNER_A}>
+        <QueryClientProvider client={cache}>
+          <UserPreferencesBoundary>
+            <AgentRoom />
+          </UserPreferencesBoundary>
+        </QueryClientProvider>
+      </AuthProvider>,
+    );
+    const input = await screen.findByLabelText("Leave an instruction or note");
+    fireEvent.change(input, {
+      target: { value: "Survives a same-owner refocus mid-post" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Post to room" }));
+    await waitFor(() => expect(postAgentRoomMessage).toHaveBeenCalledTimes(1));
+
+    // A same-owner background access refetch (e.g. a window refocus) settles
+    // affirmatively again while the post is still in flight.
+    await act(async () => {
+      await cache.refetchQueries({
+        queryKey: ["agent-room", "access", "owner-A"],
+      });
+    });
+    await waitFor(() =>
+      expect(
+        cache.getQueryState(["agent-room", "access", "owner-A"])?.fetchStatus,
+      ).toBe("idle"),
+    );
+
+    await act(async () => {
+      settlePost({
+        id: "posted-1",
+        user_id: "owner-A",
+        author_kind: "owner",
+        agent_id: null,
+        agent_role: "",
+        message_type: "instruction",
+        body: "Survives a same-owner refocus mid-post",
+        run_id: null,
+        created_at: "2026-09-30T00:00:00Z",
+      });
+    });
+
+    const mutation = cache.getMutationCache().getAll()[0]!;
+    await waitFor(() => expect(mutation.state.status).toBe("success"));
+    expect(postAgentRoomMessage).toHaveBeenCalledTimes(1);
+    expect(cache.getQueryData(["agent-room", "messages", "owner-A"])).toEqual([
+      expect.objectContaining({ id: "posted-1" }),
+    ]);
+  });
+
   it("still redirects when a later access refetch resolves false, even after prior admission (f134)", async () => {
     rs.mocked(fetchAgentRoomEnabled)
       .mockResolvedValueOnce(true)
