@@ -1278,6 +1278,16 @@ def _assemble_lead_agent(config: RunnableConfig, *, app_config: AppConfig) -> Le
         memory_enabled=memory_enabled,
         experience_mode=cfg.get("experience_mode"),
     )
+    from deerflow.extensions import get_agent_build_extensions
+    from deerflow.sandbox.native_startup import configure_native_lazy_startup
+
+    configure_native_lazy_startup(
+        middlewares,
+        final_tools,
+        available_skills=available_skills,
+        deferred_names=setup.deferred_names,
+        has_extension_middlewares=bool(resolved_app_config.extensions.middlewares) or get_agent_build_extensions().has_middleware_contributors,
+    )
     graph = create_agent(
         model=chat_model,
         tools=final_tools,

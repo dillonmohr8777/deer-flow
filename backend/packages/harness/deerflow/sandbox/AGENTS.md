@@ -1,5 +1,10 @@
 ### Sandbox System (`packages/harness/deerflow/sandbox/`)
 
+Empty-skill native graphs may omit unused projection only after final assembly's
+exact tool/middleware proof; unknown/deferred capabilities keep ordinary policy.
+Reject inherited bindings and preserve provider fences/cleanup; see
+[native startup contract](../../../../docs/NATIVE_LAZY_SANDBOX_STARTUP.md).
+
 **Network approval policy**: Sync/async `SandboxMiddleware` wrappers use
 `resolve_run_interaction_policy()` to gate lead-run network approval cards.
 Explicit `autonomous`, `webhook`, and `scheduled` modes auto-deny pending requests,
