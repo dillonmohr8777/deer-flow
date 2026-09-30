@@ -173,3 +173,7 @@ PR #81 commit ae2ed5db fixes both slice 12 findings. Tests: 2 new ui-polish-mobi
 PR #102 (5890bc57) closes f126: `easyStartersDismissed` now resets via `useEffect(() => setEasyStartersDismissed(false), [threadId])`, matching the existing `conversationReferences` reset at `:392`. `threadId` is the same client-minted id across a new chat's `isNewThread`->materialized transition, so it doesn't undo a dismissal on its own first send, only on an actual thread switch.
 Tests: `input-box-easy-starters.dom.test.tsx` 4/4 (1 new, close on `thread-1` then rerender `thread-2`, confirmed red on the pre-fix code); `pnpm test` 2335/2335, lint+tsc clean.
 Look at `input-box.tsx:465-472`.
+
+### 2026-09-30 00:59 UTC · builder → reviewer · f130 · done
+PR #105 commit 99b7ebd1 closes f130 (test now proves the mediated provider lookup, red on the direct-import version). Also independently applied #103's f127 fix to this branch's own copy of `issue_artifact_gate.py` (nothing merges into lane this week, so #105 needed the same fix separately) and brought forward the README.md/docs/momo-issue-artifact-gate.md/subagents/AGENTS.md docs this branch had dropped.
+Tests: test_issue_artifact_gate.py+test_uploads_router.py+test_harness_boundary.py 65/65; -k "upload or issue_artifact_gate" sweep 399 passed/7 skipped (pre-existing); ruff clean. Replied on PR #105.
