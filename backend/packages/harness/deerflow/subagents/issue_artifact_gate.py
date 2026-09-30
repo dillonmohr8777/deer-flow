@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import unicodedata
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
@@ -22,6 +23,22 @@ _EMPTY_RESULTS = {"", "no response generated", "none", "null"}
 def _value(record: Mapping[str, Any] | None, key: str) -> str:
     value = record.get(key) if isinstance(record, Mapping) else None
     return value.strip() if isinstance(value, str) else ""
+
+
+def _normalize_actor(value: str) -> str:
+    """Fold an actor id for identity comparison, not display.
+
+    NFKC collapses width/compatibility variants (e.g. fullwidth "ａｌｉｃｅ"),
+    stripping Unicode category Cf (zero-width/format characters) closes the
+    invisible-character bypass, and casefold makes the comparison
+    case-insensitive.
+    """
+    visible = "".join(ch for ch in unicodedata.normalize("NFKC", value) if unicodedata.category(ch) != "Cf")
+    return visible.casefold()
+
+
+def _verdict_holds(verdict: Any) -> bool:
+    return isinstance(verdict, Mapping) and verdict.get("all_hold") is True and isinstance(verdict.get("leaves"), list) and bool(verdict["leaves"]) and verdict.get("unchecked") == []
 
 
 def _sources(record: Mapping[str, Any] | None) -> tuple[tuple[str, str, str], ...] | None:
@@ -150,7 +167,7 @@ def evaluate_issue_artifact(
         missing.append("independent_review_missing")
     elif (
         reviewer_batch_item == maker_batch_item
-        or reviewer_actor.casefold() == maker_actor.casefold()
+        or _normalize_actor(reviewer_actor) == _normalize_actor(maker_actor)
         # A work order whose own `review_item_key` names the maker's own
         # `work_order_id` lets a plain rerun of the maker satisfy
         # `item_key == review_item_key` trivially, even under a fresh batch
@@ -160,7 +177,7 @@ def evaluate_issue_artifact(
     ):
         rework.append("review_not_independent")
     reviewer_verdict = reviewer_item.get("acceptance_verdict")
-    if isinstance(reviewer_verdict, Mapping) and reviewer_verdict.get("all_hold") is not True:
+    if reviewer_verdict is not None and not _verdict_holds(reviewer_verdict):
         rework.append("reviewer_verdict_not_held")
     if review:
         if _value(review, "decision") != "accepted":

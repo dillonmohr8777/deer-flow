@@ -135,3 +135,59 @@ def test_case_variant_actor_is_not_independent():
 
     assert result["disposition"] != "ready-for-owner"
     assert "review_not_independent" in result["rework"]
+
+
+def test_reviewer_verdict_as_a_non_mapping_string_is_not_ready_for_owner():
+    case = deepcopy(_valid_case())
+    case["review_execution"]["acceptance_verdict"] = "all_hold=false"
+
+    result = _call(case)
+
+    assert result["disposition"] != "ready-for-owner"
+    assert "reviewer_verdict_not_held" in result["rework"]
+
+
+def test_reviewer_verdict_as_a_list_is_not_ready_for_owner():
+    case = deepcopy(_valid_case())
+    case["review_execution"]["acceptance_verdict"] = ["all_hold", True]
+
+    result = _call(case)
+
+    assert result["disposition"] != "ready-for-owner"
+    assert "reviewer_verdict_not_held" in result["rework"]
+
+
+def test_reviewer_verdict_with_no_leaves_is_not_ready_for_owner():
+    case = deepcopy(_valid_case())
+    case["review_execution"]["acceptance_verdict"] = {"all_hold": True, "leaves": []}
+
+    result = _call(case)
+
+    assert result["disposition"] != "ready-for-owner"
+    assert "reviewer_verdict_not_held" in result["rework"]
+
+
+def test_fullwidth_actor_variant_is_not_independent():
+    case = deepcopy(_valid_case())
+    # Same human as "alice", written in fullwidth Unicode: NFKC-normalizes to
+    # "alice" and must not read as an independent reviewer.
+    case["artifact_receipt"]["maker_actor_id"] = "alice"
+    case["review_receipt"]["reviewer_actor_id"] = "ａｌｉｃｅ"
+
+    result = _call(case)
+
+    assert result["disposition"] != "ready-for-owner"
+    assert "review_not_independent" in result["rework"]
+
+
+def test_zero_width_space_actor_variant_is_not_independent():
+    case = deepcopy(_valid_case())
+    # Same human as "alice" with an embedded zero-width space (category Cf):
+    # must not read as an independent reviewer.
+    case["artifact_receipt"]["maker_actor_id"] = "alice"
+    case["review_receipt"]["reviewer_actor_id"] = "ali​ce"
+
+    result = _call(case)
+
+    assert result["disposition"] != "ready-for-owner"
+    assert "review_not_independent" in result["rework"]
