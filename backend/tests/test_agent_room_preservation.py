@@ -108,6 +108,28 @@ async def test_tool_refuses_nonadmin_disabled_and_missing_identity(org_world, mo
 
 
 @pytest.mark.asyncio
+async def test_tool_refuses_the_real_owner_on_a_channel_run(org_world, monkeypatch):  # noqa: F811
+    """Defence in depth: a channel run must never reach the room, even for the owner.
+
+    A channel run (GitHub webhook fan-out, a Telegram bot, etc.) resolves the
+    runtime actor to the channel's bound owner regardless of which external
+    person actually triggered it, so an outside commenter or a non-owner chat
+    member looks identical to ``USER_A`` here. The lead-agent factory already
+    withholds these tools from channel runs; this is the in-tool mirror for
+    any future code path (custom factories, tests) that re-attaches them
+    directly without going through the factory.
+    """
+    await _promote_and_authenticate(org_world, monkeypatch)
+    for channel_name in ("github", "telegram"):
+        runtime = SimpleNamespace(context={"actor_user_id": USER_A, "channel_name": channel_name}, config={})
+        read_result = await agent_room_read.coroutine(runtime=runtime)
+        post_result = await agent_room_post.coroutine(runtime=runtime, body="hijacked")
+        assert channel_name in read_result, channel_name
+        assert channel_name in post_result, channel_name
+    assert await AgentRoomRepository(org_world).list_messages(user_id=USER_A) == []
+
+
+@pytest.mark.asyncio
 async def test_invalid_owner_resolution_pair_cannot_reach_storage(monkeypatch):
     async def missing_owner(_runtime):
         return None, None

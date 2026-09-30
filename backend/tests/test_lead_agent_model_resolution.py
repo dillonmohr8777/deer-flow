@@ -831,6 +831,55 @@ def test_make_lead_agent_filters_clarification_tool_for_non_interactive_runs(mon
     assert captured_prompt_policy["policy"].mode.value == "scheduled"
 
 
+@pytest.mark.parametrize("is_bootstrap", [False, True])
+@pytest.mark.parametrize("channel_name", ["github", "telegram"])
+def test_make_lead_agent_drops_agent_room_tools_on_channel_run_including_bootstrap(monkeypatch, is_bootstrap, channel_name):
+    """The bootstrap agent-creation flow must withhold the Agent Room tools
+    on a channel run too, not just the ordinary assembly path.
+
+    A bound member reaching ``/bootstrap`` over a channel run (GitHub webhook
+    fan-out, a Telegram bot) resolves to the channel's bound owner the same
+    way an ordinary run does, so the bootstrap branch needs the identical
+    channel-run gate as the non-bootstrap path.
+    """
+    app_config = _make_app_config([_make_model("safe-model", supports_thinking=False)])
+
+    import deerflow.tools as tools_module
+
+    def _named_tool(name: str):
+        tool = MagicMock()
+        tool.name = name
+        return tool
+
+    monkeypatch.setattr(lead_agent_module, "get_app_config", lambda: app_config)
+    monkeypatch.setattr(
+        tools_module,
+        "get_available_tools",
+        lambda **kwargs: [_named_tool("bash"), _named_tool("agent_room_read"), _named_tool("agent_room_post")],
+    )
+    monkeypatch.setattr(lead_agent_module, "build_middlewares", create_autospec(lead_agent_module.build_middlewares, return_value=[]))
+    monkeypatch.setattr(lead_agent_module, "apply_prompt_template", lambda **kwargs: "prompt")
+    monkeypatch.setattr(lead_agent_module, "create_chat_model", lambda **kwargs: object())
+    monkeypatch.setattr(lead_agent_module, "create_agent", lambda **kwargs: kwargs)
+
+    result = lead_agent_module.make_lead_agent(
+        {
+            "context": {
+                "model_name": "safe-model",
+                "thinking_enabled": False,
+                "subagent_enabled": False,
+                "channel_name": channel_name,
+                "is_bootstrap": is_bootstrap,
+            }
+        }
+    )
+
+    tool_names = [tool.name for tool in result["tools"]]
+    assert "agent_room_read" not in tool_names
+    assert "agent_room_post" not in tool_names
+    assert "bash" in tool_names
+
+
 def test_make_lead_agent_rejects_invalid_bootstrap_agent_name(monkeypatch):
     app_config = _make_app_config([_make_model("safe-model", supports_thinking=False)])
 

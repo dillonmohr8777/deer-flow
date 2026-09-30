@@ -795,6 +795,7 @@ class SubagentExecutor:
         oauth_id: str | None = None,
         run_id: str | None = None,
         channel_user_id: str | None = None,
+        channel_name: str | None = None,
         is_internal: bool = False,
         authz_attributes: Mapping[str, Any] | None = None,
         deerflow_trace_id: str | None = None,
@@ -831,6 +832,12 @@ class SubagentExecutor:
             oauth_id: Subject id at the external identity provider.
             run_id: Parent run id, so delegated guardrail decisions attribute to
                 the same run as the lead agent.
+            channel_name: The parent run's channel, when dispatched from one
+                (GitHub webhook fan-out, a Telegram bot, etc.). Propagated so
+                the Agent Room tools' own in-tool channel guard
+                (``deerflow.tools.builtins.agent_room_tool``) still fires for
+                a subagent even though the caller is expected to have already
+                filtered those tools out of ``tools`` for a channel run.
             deerflow_trace_id: DeerFlow request-level correlation id propagated
                 from the parent run for Langfuse metadata correlation. Falls
                 back to the ambient trace so the attribute is always a real
@@ -891,6 +898,7 @@ class SubagentExecutor:
         # chats share one thread across senders, so delegated bash commands
         # must export the dispatching turn's id, not none at all.
         self.channel_user_id = channel_user_id
+        self.channel_name = channel_name
         # Authorization identity propagated from the parent runtime context.
         # is_internal is written unconditionally (including False) so the
         # subagent's GuardrailMiddleware sees the same provenance as the lead.
@@ -1565,6 +1573,8 @@ class SubagentExecutor:
                 context[EXTENSION_TASK_STORE_KEY] = task_store
             if self.channel_user_id:
                 context["channel_user_id"] = self.channel_user_id
+            if self.channel_name:
+                context["channel_name"] = self.channel_name
             # Authorization identity: is_internal written unconditionally
             # (including False); attributes copied again on write-back.
             context["is_internal"] = self.is_internal
