@@ -339,6 +339,63 @@ describe("private Agent Room account isolation", () => {
     );
   });
 
+  it("resolves and caches a pending post through a same-owner auth refresh mid-flight (f135)", async () => {
+    const pendingPost = deferred<AgentRoomMessage>();
+    rs.mocked(postAgentRoomMessage).mockImplementation(
+      () => pendingPost.promise,
+    );
+    const pendingAuth = deferred<Response>();
+    rs.spyOn(globalThis, "fetch").mockImplementation(() => pendingAuth.promise);
+    const view = mount();
+    await waitFor(() => expect(view.result.current.room.data).toEqual([]));
+
+    let outcome!: Promise<AgentRoomMessage>;
+    act(() => {
+      outcome = view.result.current.post.mutateAsync(INPUT);
+    });
+    await waitFor(() => expect(postAgentRoomMessage).toHaveBeenCalledTimes(1));
+
+    // A same-owner background refresh -- e.g. the visibility-change refetch
+    // -- resolves to the *same* account while the post is still in flight.
+    // This must never be mistaken for a real account switch.
+    let refresh!: Promise<void>;
+    act(() => {
+      refresh = view.result.current.auth.refreshUser();
+    });
+    await waitFor(() => expect(view.result.current.auth.isLoading).toBe(true));
+
+    // The server confirms the post while the local auth refresh is still
+    // resolving (isLoading still true, so useAgentRoomAccess momentarily
+    // reports ownerId === null even though no real account change is
+    // happening).
+    await act(async () => {
+      pendingPost.resolve(message("owner-A"));
+      await Promise.resolve();
+    });
+
+    await expect(outcome).resolves.toEqual(message("owner-A"));
+    expect(postAgentRoomMessage).toHaveBeenCalledTimes(1);
+    // Asserted before the auth refresh itself settles: once it does, the
+    // messages query re-admits and its own (separately mocked) refetch
+    // supersedes this optimistic entry, which is expected in production
+    // (the server's own list would include the same message by then) but
+    // would make this assertion about the fixture data, not the fix.
+    expect(
+      view.cache.getQueryData(["agent-room", "messages", "owner-A"]),
+    ).toEqual([message("owner-A")]);
+
+    pendingAuth.resolve(
+      new Response(JSON.stringify(OWNER_A), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    await act(async () => {
+      await refresh;
+    });
+    await waitFor(() => expect(view.result.current.auth.isLoading).toBe(false));
+  });
+
   for (const user of [null, { ...OWNER_A, system_role: "user" as const }]) {
     it(`does not discover or read a private room for ${user ? "a nonadmin" : "a signed-out caller"}`, async () => {
       const view = mount(user);

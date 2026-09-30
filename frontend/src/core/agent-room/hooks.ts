@@ -155,15 +155,24 @@ export function useAgentRoomMessages() {
 }
 
 export function usePostAgentRoomMessage() {
+  const auth = useAuth();
   const access = useAgentRoomAccess();
-  const currentOwner = useOwnerFence(access.canWrite ? access.ownerId : null);
+  // Fenced on the raw signed-in identity, not on `canWrite`/`enabled`: those
+  // are derived through `access`'s own admission state, which the read path
+  // deliberately holds at `null`/`false` while merely uncertain (a
+  // same-owner auth refresh in flight, a background access re-check). That
+  // uncertainty is not an account change, so it must never trip this fence
+  // and falsely fail (and duplicate on retry) an already-sent post.
+  // `canWrite` is still the right gate for whether to send at all -- just
+  // checked once, before sending, not re-derived after the await.
+  const currentOwner = useOwnerFence(auth.user?.id.trim() ?? null);
   const ownerId = access.ownerId;
   const queryClient = useQueryClient();
   return useMutation({
     mutationKey: ["agent-room", "post", ownerId],
     retry: false,
     mutationFn: async (input: Parameters<typeof postAgentRoomMessage>[0]) => {
-      if (!ownerId || currentOwner.current !== ownerId)
+      if (!ownerId || !access.canWrite || currentOwner.current !== ownerId)
         throw new Error("Room posting is unavailable.");
       const message = await postAgentRoomMessage(input, ownerId);
       if (currentOwner.current !== ownerId)
@@ -173,9 +182,14 @@ export function usePostAgentRoomMessage() {
       return message;
     },
     onSuccess: (message) => {
-      if (!ownerId || currentOwner.current !== ownerId) return;
+      // Read from the ref and the server-confirmed message, never from the
+      // `ownerId`/`access` closure: React Query calls onSuccess against
+      // whatever render happened to be current when the mutation settled,
+      // which can be one where `access.ownerId` is transiently `null` (the
+      // same benign same-owner refresh the fence above must also ignore).
+      if (currentOwner.current !== message.user_id) return;
       queryClient.setQueryData<AgentRoomMessage[]>(
-        agentRoomMessagesQueryKey(ownerId),
+        agentRoomMessagesQueryKey(message.user_id),
         (previous) => [...(previous ?? []), message].slice(-100),
       );
     },
