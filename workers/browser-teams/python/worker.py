@@ -103,9 +103,7 @@ def crew(frame, relay):
             return []
 
     class EphemeralCrew(Crew):
-        _task_output_handler: TaskOutputStorageHandler = PrivateAttr(
-            default_factory=MemoryTaskOutputs
-        )
+        _task_output_handler: TaskOutputStorageHandler = PrivateAttr(default_factory=MemoryTaskOutputs)
 
     class GatewayLLM(BaseLLM):
         _relay: Relay = PrivateAttr()
