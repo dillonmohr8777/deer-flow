@@ -59,10 +59,15 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-function mount(initialUser: User | null = OWNER_A, boundary = true) {
+function mount(
+  initialUser: User | null = OWNER_A,
+  boundary = true,
+  prepareCache?: (cache: QueryClient) => void,
+) {
   const cache = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
+  prepareCache?.(cache);
   const Wrapper = ({ children }: { children: ReactNode }) => (
     <AuthProvider initialUser={initialUser}>
       <QueryClientProvider client={cache}>
@@ -139,6 +144,57 @@ describe("private Agent Room account isolation", () => {
     );
     expect(view.result.current.room.data).toBeUndefined();
     expect(listAgentRoomMessages).not.toHaveBeenCalled();
+  });
+
+  it("does not admit reads, cached projection or posts from a prior affirmative access cache while fresh discovery is pending", async () => {
+    const gate = deferred<boolean>();
+    rs.mocked(fetchAgentRoomEnabled).mockImplementation(() => gate.promise);
+    const view = mount(OWNER_A, true, (cache) => {
+      cache.setQueryData(["agent-room", "access", "owner-A"], true);
+      cache.setQueryData(
+        ["agent-room", "messages", "owner-A"],
+        [message("owner-A")],
+      );
+    });
+    await waitFor(() => expect(fetchAgentRoomEnabled).toHaveBeenCalled());
+    expect(view.result.current.room.data).toBeUndefined();
+    expect(listAgentRoomMessages).not.toHaveBeenCalled();
+    await expect(view.result.current.post.mutateAsync(INPUT)).rejects.toThrow(
+      "posting is unavailable",
+    );
+    expect(postAgentRoomMessage).not.toHaveBeenCalled();
+    gate.resolve(false);
+    await waitFor(() =>
+      expect(view.cache.getQueryData(["agent-room", "access", "owner-A"])).toBe(
+        false,
+      ),
+    );
+    expect(view.result.current.room.data).toBeUndefined();
+    expect(listAgentRoomMessages).not.toHaveBeenCalled();
+  });
+
+  it("refuses a prior affirmative cache after the required fresh discovery rejects", async () => {
+    rs.mocked(fetchAgentRoomEnabled).mockRejectedValue(
+      new Error("Private discovery unavailable"),
+    );
+    const view = mount(OWNER_A, true, (cache) => {
+      cache.setQueryData(["agent-room", "access", "owner-A"], true);
+      cache.setQueryData(
+        ["agent-room", "messages", "owner-A"],
+        [message("owner-A")],
+      );
+    });
+    await waitFor(() =>
+      expect(
+        view.cache.getQueryState(["agent-room", "access", "owner-A"])?.status,
+      ).toBe("error"),
+    );
+    expect(view.result.current.room.data).toBeUndefined();
+    expect(listAgentRoomMessages).not.toHaveBeenCalled();
+    await expect(view.result.current.post.mutateAsync(INPUT)).rejects.toThrow(
+      "posting is unavailable",
+    );
+    expect(postAgentRoomMessage).not.toHaveBeenCalled();
   });
 
   it("cancels and fences a late owner A read after switching to B", async () => {
