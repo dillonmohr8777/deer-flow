@@ -85,7 +85,7 @@ export default function ProjectPage() {
       <WorkspaceHeader />
       <WorkspaceBody className={pageStyles.page}>
         <ScrollArea className="size-full">
-          <div className="mx-auto flex w-full max-w-(--container-width-lg) flex-col gap-8 p-4 pt-8 pb-28 sm:p-6 sm:pt-10 sm:pb-28">
+          <div className="mx-auto flex w-full max-w-(--container-width-lg) flex-col gap-6 p-4 pt-8 pb-28 sm:gap-8 sm:p-6 sm:pt-10 sm:pb-28">
             {projectQuery.isError ? (
               <ProjectNotFoundState />
             ) : project == null ? (
@@ -99,10 +99,12 @@ export default function ProjectPage() {
                   className="flex flex-col gap-7"
                 >
                   <div className="border-b">
+                    {/* The primitive's orientation-scoped h-9 outranks a bare
+                        h-11, so match its selector to keep the 44px floor. */}
                     <TabsList
                       variant="line"
                       aria-label={project.name}
-                      className="h-11 gap-5"
+                      className="gap-5 group-data-[orientation=horizontal]/tabs:h-11"
                     >
                       <TabsTrigger value="chats" className="px-1 pb-3">
                         {t.projects.threads}
@@ -174,22 +176,38 @@ function ProjectNotFoundState() {
   );
 }
 
+// The shared page header (Chats, Scheduled tasks): the name as h1, one
+// sentence of lede, New chat on the right. The top bar already says
+// Projects, so no eyebrow repeats it; the lede is the project's own brief.
 function ProjectHeader({ project }: { project: Project }) {
   const { t } = useI18n();
+  const isArchived = project.status === "archived";
+  // An archived project's lede explains the missing New chat instead.
+  const brief = project.instructions.trim().split("\n")[0] ?? "";
+  const showBrief = !isArchived && brief !== "";
   return (
-    <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
+    <header className="flex flex-wrap items-start justify-between gap-x-6 gap-y-4">
       <div className="min-w-0 flex-1 basis-80">
-        <p className={pageStyles.eyebrow}>{t.projects.title}</p>
-        <h1 className="mt-1 text-2xl font-semibold [overflow-wrap:anywhere]">
+        <h1 className="text-2xl font-semibold [overflow-wrap:anywhere]">
           {project.name}
         </h1>
-        {project.status === "archived" && (
+        {isArchived && (
           <StatusTag tone="idle" className="mt-2">
             {t.projects.archived}
           </StatusTag>
         )}
+        <p
+          className={cn(pageStyles.lede, "mt-1 line-clamp-1 sm:line-clamp-2")}
+          title={showBrief ? brief : undefined}
+        >
+          {showBrief
+            ? brief
+            : isArchived
+              ? t.projects.archivedLede
+              : t.projects.briefMissing}
+        </p>
       </div>
-      {project.status !== "archived" && (
+      {!isArchived && (
         <Button asChild className="max-sm:min-h-11">
           <Link href={newProjectChatPath(project.id)}>
             <MessageSquarePlus />

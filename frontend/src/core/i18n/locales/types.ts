@@ -426,6 +426,8 @@ export interface Translations {
     instructionsPlaceholder: string;
     instructionsByteCount: (used: number, max: number) => string;
     instructionsTooLong: (max: number) => string;
+    briefMissing: string;
+    archivedLede: string;
     instructionsSaved: string;
     instructionsSaveFailed: string;
     // Project page — Documents tab shelf (Phase 2 Slice E)

@@ -535,6 +535,8 @@ export const enUS: Translations = {
     instructionsByteCount: (used, max) => `${used} / ${max} bytes`,
     instructionsTooLong: (max) =>
       `Instructions are over the ${max}-byte limit. Shorten them to save.`,
+    briefMissing: "No brief yet. Add one under Instructions.",
+    archivedLede: "Restore it in Settings to start a new chat.",
     instructionsSaved: "Saved",
     instructionsSaveFailed: "Failed to save instructions",
     documentsShelf: "Shelf",

@@ -498,6 +498,8 @@ export const zhCN: Translations = {
     instructionsPlaceholder: "让 Agent 始终了解该项目的背景、目标与约定…",
     instructionsByteCount: (used, max) => `${used} / ${max} 字节`,
     instructionsTooLong: (max) => `指令超过 ${max} 字节上限，请精简后再保存。`,
+    briefMissing: "还没有项目简介，可在“指令”中添加。",
+    archivedLede: "在“设置”中恢复后即可开始新对话。",
     instructionsSaved: "已保存",
     instructionsSaveFailed: "保存指令失败",
     documentsShelf: "文件架",
