@@ -595,6 +595,9 @@ test.describe("Thread history", () => {
     page,
   }) => {
     mockLangGraphAPI(page, {
+      // A metadata-only stream leaves this prompt optimistic; creation must
+      // not fabricate an unrelated persisted human message that confirms it.
+      createdThreadMessages: [],
       threads: [
         {
           thread_id: MOCK_THREAD_ID_2,

@@ -554,6 +554,7 @@ async def langgraph_runtime(app: FastAPI, startup_config: AppConfig) -> AsyncGen
         app.state.thread_store = make_thread_store(sf, app.state.store)
         if sf is not None:
             from deerflow.persistence.academy import AcademyProgressRepository
+            from deerflow.persistence.agent_room import AgentRoomRepository
             from deerflow.persistence.board import BoardRepository
             from deerflow.persistence.clients import ClientRepository
             from deerflow.persistence.entitlements import EntitlementRepository
@@ -572,6 +573,7 @@ async def langgraph_runtime(app: FastAPI, startup_config: AppConfig) -> AsyncGen
             app.state.client_repo = ClientRepository(sf)
             app.state.board_repo = BoardRepository(sf)
             app.state.team_board_repo = TeamBoardRepository(sf)
+            app.state.agent_room_repo = AgentRoomRepository(sf)
             app.state.entitlement_repo = EntitlementRepository(sf)
             app.state.academy_progress_repo = AcademyProgressRepository(sf)
             app.state.fleet_binding_repo = FleetBindingRepository(sf)
@@ -592,6 +594,7 @@ async def langgraph_runtime(app: FastAPI, startup_config: AppConfig) -> AsyncGen
             app.state.client_repo = None
             app.state.board_repo = None
             app.state.team_board_repo = None
+            app.state.agent_room_repo = None
             app.state.entitlement_repo = None
             app.state.academy_progress_repo = None
             app.state.subagent_batch_repo = None
@@ -772,6 +775,13 @@ def get_subagent_batch_service(request: Request):
     val = getattr(request.app.state, "subagent_batch_service", None)
     if val is None:
         raise HTTPException(status_code=503, detail="Subagent batch service not available")
+    return val
+
+
+def get_agent_room_repo(request: Request):
+    val = getattr(request.app.state, "agent_room_repo", None)
+    if val is None:
+        raise HTTPException(status_code=503, detail="Agent Room repository not available")
     return val
 
 

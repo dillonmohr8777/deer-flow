@@ -298,6 +298,40 @@ test.describe("Desk, the owner-only home", () => {
       await expect(flap).toHaveCSS("background-color", "rgb(216, 195, 160)");
     });
 
+    test("an agent row leads with its Momo and folds into three lines", async ({
+      page,
+    }) => {
+      await mockWorkspace(page, { desk: true });
+      await page.goto("/workspace/desk");
+
+      const rows = page.locator("section[aria-labelledby='desk-agents'] li");
+      await expect(rows).toHaveCount(2, { timeout: 15_000 });
+      // The client reporter wears the canon client-success Momo.
+      await expect(
+        rows.nth(1).locator("img[src='/momentum/momos/client-success.svg']"),
+      ).toBeVisible();
+
+      const row = rows.first();
+      const face = row.locator("[data-size]");
+      const name = row.getByText("Chief of Staff", { exact: true });
+      const model = name.locator("xpath=following-sibling::*[1]");
+      const next = row.getByText(/^Next /);
+      const receipt = row.getByRole("link", { name: /Open receipt/ });
+      const [f, n, m, x, r, box] = await Promise.all(
+        [face, name, model, next, receipt, row].map((el) => el.boundingBox()),
+      );
+      // The face holds a left column; the words sit right of it.
+      expect(n!.x).toBeGreaterThanOrEqual(f!.x + f!.width);
+      // Model and next run share the second line; the receipt is below it.
+      expect(Math.abs(m!.y - x!.y)).toBeLessThan(4);
+      expect(m!.y).toBeGreaterThanOrEqual(n!.y + n!.height - 1);
+      expect(r!.y + r!.height / 2).toBeGreaterThan(m!.y + m!.height);
+      // Three lines, not the four stacked lines it was (116px).
+      expect(box!.height).toBeLessThanOrEqual(96);
+      // The receipt link is a 44px target without growing the row.
+      expect(r!.height).toBeGreaterThanOrEqual(44);
+    });
+
     test("a result that did not fail keeps its corner", async ({ page }) => {
       await mockWorkspace(page, { desk: true });
       await page.goto("/workspace/desk");

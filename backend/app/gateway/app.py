@@ -17,6 +17,7 @@ from app.gateway.health import READINESS_CHECKPOINTER_CONFIG_ATTR, readiness_pay
 from app.gateway.routers import (
     academy,
     admin,
+    agent_room,
     agents,
     artifacts,
     assistants_compat,
@@ -1282,6 +1283,7 @@ This gateway provides runtime endpoints for agent runs plus custom endpoints for
 
     # Features API is mounted at /api/features
     app.include_router(features.router)
+    app.include_router(agent_room.router)
 
     # Console API (cross-thread observability) is mounted at /api/console
     app.include_router(console.router)

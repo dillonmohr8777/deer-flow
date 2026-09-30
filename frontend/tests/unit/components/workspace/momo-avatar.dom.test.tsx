@@ -3,6 +3,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 
 import { MomentumGlyph } from "@/components/workspace/command-center/momentum-glyph";
 import { MomoAvatar } from "@/components/workspace/command-center/momo-avatar";
+import { DEPARTMENTS } from "@/components/workspace/desk/desk-data";
 
 // Dillon Brain's pulse reads appearance state; every other slug ignores it.
 const appearance = rs.hoisted(() => ({
@@ -273,6 +274,25 @@ describe("MomoAvatar", () => {
       const imgs = container.querySelectorAll("img");
       expect(imgs).toHaveLength(1);
       expect(imgs[0]?.getAttribute("src")).toBe("/momentum/brain/flat.webp");
+      unmount();
+    }
+  });
+  it("gives the Desk's fleet templates their canon Momo, a monogram only where none fits", () => {
+    const monogram = new Set([
+      "chief-of-staff",
+      "content-studio",
+      "video-director",
+      "video-editor",
+      "brain-curator",
+    ]);
+    for (const id of DEPARTMENTS.flatMap(([, ids]) => ids)) {
+      const { container, unmount } = render(
+        <MomoAvatar agent={{ name: id, display_name: id }} size={40} />,
+      );
+      expect({
+        id,
+        glyph: Boolean(container.querySelector("svg[data-momentum-glyph]")),
+      }).toEqual({ id, glyph: monogram.has(id) });
       unmount();
     }
   });

@@ -74,10 +74,14 @@ async function openSettings(
   await page.goto("/workspace/agents");
   await page.getByTitle("Agent settings", { exact: true }).click();
   const dialog = page.getByRole("dialog");
-  await dialog.getByRole("combobox").last().click();
+  const subagentAccess = dialog.getByRole("combobox").last();
+  await subagentAccess.click();
   await page
     .getByRole("option", { name: "Selected subagents", exact: true })
     .click();
+  await expect(subagentAccess).toHaveAttribute("data-state", "closed");
+  await expect(page.locator('[data-slot="select-content"]')).toHaveCount(0);
+  await expect(subagentAccess).toBeFocused();
   return { dialog, saved: () => saved };
 }
 

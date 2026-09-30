@@ -285,6 +285,77 @@
   color: var(--muted-foreground);
 }
 
+/* Agents: each row leads with the agent's Momo, 12px from its name. */
+.face {
+  display: flex;
+  flex: 0 0 auto;
+  margin-right: -0.5rem;
+}
+
+/*
+ * Phones: the face holds a left column and the words fold into three lines,
+ * name, then model and next run, then the last run and its receipt (was four
+ * stacked lines per agent with no face).
+ */
+@media (max-width: 39.99rem) {
+  .agent {
+    display: grid;
+    grid-template-columns: auto auto minmax(0, 1fr) auto;
+    align-items: baseline;
+    gap: 0.125rem 0;
+  }
+
+  .agent > .face {
+    grid-row: 1 / span 3;
+    grid-column: 1;
+    align-self: start;
+    margin-right: 0.75rem;
+  }
+
+  .agent > .name {
+    display: contents;
+  }
+
+  .agent > .name > :first-child {
+    grid-row: 1;
+    grid-column: 2 / -1;
+  }
+
+  .agent > .name > .sub {
+    grid-row: 2;
+    grid-column: 2;
+  }
+
+  .agent > .next {
+    overflow: hidden;
+    grid-row: 2;
+    grid-column: 3 / -1;
+    color: var(--muted-foreground);
+    font-size: 0.8125rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .agent > .next::before {
+    content: "\00b7" / "";
+    padding: 0 0.375rem;
+  }
+
+  .agent > .cell:not(.next) {
+    grid-row: 3;
+    grid-column: 2 / 4;
+  }
+
+  .agent > .link {
+    grid-row: 3;
+    grid-column: 4;
+    justify-self: end;
+    /* A 44px tap target that doesn't grow the row. */
+    margin: -0.75rem 0;
+    padding: 0.75rem 0 0.75rem 1rem;
+  }
+}
+
 /* Agents: the department names a column on wide screens. */
 .group {
   display: grid;

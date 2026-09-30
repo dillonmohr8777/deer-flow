@@ -78,8 +78,16 @@ test.describe("Agent chat", () => {
     });
     await page.getByRole("button", { name: "Save", exact: true }).click();
     await expect(page.getByRole("dialog")).toBeHidden();
-    await expect(page.getByText("代码审查助手", { exact: true })).toBeVisible();
-    await page.getByRole("button", { name: "Chat", exact: true }).click();
+    await expect(
+      page.getByRole("heading", { name: "代码审查助手", exact: true }),
+    ).toBeVisible();
+    await page
+      .getByRole("listitem")
+      .filter({
+        has: page.getByRole("heading", { name: "代码审查助手", exact: true }),
+      })
+      .getByRole("button", { name: "Chat 代码审查助手", exact: true })
+      .click();
     await page.waitForURL("**/workspace/agents/test-agent/chats/**");
     await expect(
       page.getByText("代码审查助手", { exact: true }).first(),
@@ -104,8 +112,10 @@ test.describe("Agent chat", () => {
 
     await page.goto("/workspace/agents");
 
-    // The agent card should appear with the agent name
-    await expect(page.getByText("test-agent")).toBeVisible({
+    // The agent row should appear with the agent name
+    await expect(
+      page.getByRole("heading", { name: "test-agent", exact: true }),
+    ).toBeVisible({
       timeout: 15_000,
     });
   });
@@ -129,12 +139,12 @@ test.describe("Agent chat", () => {
 
       await page.goto("/workspace/agents");
 
-      const card = page.locator('[data-slot="card"]').filter({
-        has: page.getByText("test-agent", { exact: true }),
+      const row = page.getByRole("listitem").filter({
+        has: page.getByRole("heading", { name: "test-agent", exact: true }),
       });
-      await expect(card).toBeVisible({ timeout: 15_000 });
+      await expect(row).toBeVisible({ timeout: 15_000 });
       await expect(
-        card.getByText("data-analysis", { exact: true }),
+        row.getByText("data-analysis", { exact: true }),
       ).toBeVisible();
     });
   }
@@ -148,11 +158,11 @@ test.describe("Agent chat", () => {
 
     await page.goto("/workspace/agents");
 
-    const card = page.locator('[data-slot="card"]').filter({
-      has: page.getByText("test-agent", { exact: true }),
+    const row = page.getByRole("listitem").filter({
+      has: page.getByRole("heading", { name: "test-agent", exact: true }),
     });
-    await expect(card).toBeVisible({ timeout: 15_000 });
-    await expect(card.locator('[data-slot="card-content"]')).toHaveCount(0);
+    await expect(row).toBeVisible({ timeout: 15_000 });
+    await expect(row.getByRole("list")).toHaveCount(0);
   });
 
   test("agent chat page loads with input box and AI disclaimer", async ({
