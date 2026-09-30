@@ -602,16 +602,18 @@ export default function ChatPage() {
                     : "relative shrink-0 pb-[max(1.75rem,env(safe-area-inset-bottom))]",
                 )}
               >
-                {/* Welcome lifts the composer toward the middle; the min()
-                    stops short screens from pushing the Momo and its line
-                    up under the header (572px: the phone composer with its
-                    44px tool row). --tab-bar-h is the phone tab bar
-                    the page sits above (workspace-mobile.css). */}
+                {/* From sm, welcome lifts the composer toward the middle;
+                    the min() stops short screens from pushing the Momo and
+                    its line up under the header (430px: the composer with
+                    its tool row). Phones keep it low, at thumb reach above
+                    the starters and the tab bar, so the field and the
+                    starters sit where the thumb already is. --tab-bar-h is
+                    the phone tab bar (workspace-mobile.css). */}
                 <div
                   className={cn(
                     "relative w-full",
                     isWelcomeMode &&
-                      "-translate-y-[min(calc(50vh_-_100px_-_var(--tab-bar-h)/2),calc(100vh_-_572px_-_var(--tab-bar-h)))] sm:-translate-y-[min(calc(50vh_-_96px_-_var(--tab-bar-h)/2),calc(100vh_-_430px_-_var(--tab-bar-h)))]",
+                      "-translate-y-2 sm:-translate-y-[min(calc(50vh_-_96px_-_var(--tab-bar-h)/2),calc(100vh_-_430px_-_var(--tab-bar-h)))]",
                     isWelcomeMode
                       ? "max-w-(--container-width-sm)"
                       : "max-w-(--container-width-md)",

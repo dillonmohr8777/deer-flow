@@ -1026,7 +1026,7 @@ export const enUS: Translations = {
     backToRecentChats: "Back to Recent chats",
     loadingChats: "Loading your chats",
     noMatchingChats: "No matching chats in the loaded conversations",
-    loadChatsFailed: "Failed to load conversations",
+    loadChatsFailed: "Couldn't load your chats",
     retryLoadChats: "Try again",
     searchChats: "Search chats",
     branchLabel: (title, parentTitle) => `${title}, branch of ${parentTitle}`,

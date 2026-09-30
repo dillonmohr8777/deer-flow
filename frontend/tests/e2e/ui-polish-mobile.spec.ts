@@ -333,7 +333,7 @@ test.describe("UI polish mobile regressions", () => {
 
     const alert = page.locator("[role=alert]:has([data-error-tag])");
     await expect(alert).toBeVisible({ timeout: 20_000 });
-    await expect(alert).toContainText("Failed to load conversations");
+    await expect(alert).toContainText("Couldn't load your chats");
     await expect(alert).toContainText("Upstream timed out");
     const retry = alert.getByRole("button", { name: "Try again" });
     expect((await retry.boundingBox())!.height).toBeGreaterThanOrEqual(44);
@@ -449,6 +449,37 @@ test.describe("UI polish mobile regressions", () => {
     expect(style.font).not.toMatch(/Fraunces/);
     expect(style.size).toBe("11px");
     expect(style.color).toBe("rgb(58, 74, 107)");
+  });
+
+  // d11 slice 14: a new chat on a phone keeps its composer at thumb reach
+  // (it sat mid-screen, field top at 265 of 844) and its starters are 2px
+  // paper tags at the 44px floor (they were 34px pills).
+  test("a new chat keeps its composer and starters at thumb reach", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    mockLangGraphAPI(page, { threads: [] });
+
+    await page.goto("/workspace/chats/new");
+
+    const field = page.getByRole("textbox").first();
+    await expect(field).toBeVisible({ timeout: 15_000 });
+    await expect
+      .poll(async () => (await field.boundingBox())!.y)
+      .toBeGreaterThan(844 / 2);
+    const starters = page.locator("[data-chat-starters] button");
+    await expect(starters).toHaveCount(3);
+    for (const starter of await starters.all()) {
+      expect((await starter.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+      await expect(starter).toHaveCSS("border-radius", "2px");
+    }
+    // Two starters share the first row at 390, so the pile stays short.
+    const first = (await starters.nth(0).boundingBox())!.y;
+    const second = (await starters.nth(1).boundingBox())!.y;
+    expect(Math.abs(first - second)).toBeLessThan(1);
+    await expect
+      .poll(() => page.evaluate(() => document.documentElement.scrollWidth))
+      .toBeLessThanOrEqual(390);
   });
 
   test("?settings=security opens the Security section", async ({ page }) => {

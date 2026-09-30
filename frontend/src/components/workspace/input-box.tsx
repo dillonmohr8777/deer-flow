@@ -3092,13 +3092,15 @@ function StarterPrompts({
     <div
       role="group"
       aria-label={t.inputBox.startersLabel}
-      className="flex w-full max-w-full flex-wrap items-center justify-center gap-2 px-4 pt-2 sm:px-0"
+      className="flex w-full max-w-full flex-wrap items-center justify-center gap-2 pt-2"
       data-chat-starters=""
     >
+      {/* Paper tags, not pills: chips cut at 2px (DESIGN.md), and 44px tall
+          on phones, where they sit at thumb reach under the composer. */}
       {(starters ?? t.inputBox.starters).map((starter) => (
         <Suggestion
           key={starter.label}
-          className="paper-card text-foreground text-xs sm:text-sm"
+          className="paper-card text-foreground min-h-11 rounded-[2px] text-sm sm:min-h-0"
           suggestion={starter.label}
           onClick={() => {
             textInput.setInput(starter.prompt);
