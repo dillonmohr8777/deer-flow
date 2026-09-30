@@ -48,4 +48,15 @@ describe("MomentumGlyph", () => {
     // ids exist to collide, and none should come back.
     expect(container.querySelectorAll("linearGradient")).toHaveLength(0);
   });
+
+  it("draws no brass at any size: a resting identity carries no pin", () => {
+    const { container } = render(
+      <>
+        <MomentumGlyph seed="agent:omega-reporting" size={24} />
+        <MomentumGlyph seed="agent:omega-reporting" size={56} initial="Omega" />
+        <MomentumGlyph seed="agent:omega-reporting" size={96} />
+      </>,
+    );
+    expect(container.innerHTML.toLowerCase()).not.toContain("#c8a04a");
+  });
 });

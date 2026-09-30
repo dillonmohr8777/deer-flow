@@ -3,7 +3,7 @@
  *
  * Every file is the canon Momo, re-locked 2026-09-21: royal sphere body with a
  * deep crescent for form, two white 12x23 pill eyes, grey hardware, gold only
- * on the antenna ball and at most one rivet. Geometry is public/momentum/
+ * on the antenna ball. Geometry is public/momentum/
  * momo-mark.svg and the celebration paper kit (block-shots 2026-09-22), in the
  * same units, placed on a 160 frame. The body is identical across the set; the
  * one grey tool, the pose and the eyes are the character.
@@ -40,7 +40,7 @@ const DEEP = "#14346E"; // --paper-royal-deep: body form, blueprint paper
 const WHITE = "#FFFFFF"; // eyes
 const GREY = "#8E9AA6"; // hardware and tools
 const SHADE = "#5C6773"; // hardware shade
-const GOLD = "#C8A04A"; // --paper-brass: antenna ball and one rivet, never a feature
+const GOLD = "#C8A04A"; // --paper-brass: the antenna ball, nothing else
 const CREAM = "#FBF8F1"; // --paper-cream-hi: the paper each piece is cut from
 const KRAFT = "#D8C3A0"; // --paper-kraft: cards, sheets, tags, crates
 const THREAD = "#9A2B3C"; // --paper-danger: the verifier's tag thread, nowhere else
@@ -161,7 +161,7 @@ const MOMOS = {
       ) +
       `<path d="M129 66L119 98M129 66L139 98" stroke="${GREY}" stroke-width="5.5" stroke-linecap="round"/>` +
       `<circle cx="129" cy="66" r="5.5" fill="${GREY}"/>` +
-      detail(`<circle cx="129" cy="66" r="2" fill="${GOLD}"/>`) +
+      detail(`<circle cx="129" cy="66" r="2" fill="${SHADE}"/>`) +
       `</g>`,
   },
 
@@ -292,7 +292,7 @@ const MOMOS = {
       `<rect x="-3.5" y="-36" width="7" height="50" rx="3" fill="${SHADE}"/>` +
       `<rect x="-16" y="-46" width="28" height="12" rx="2" fill="${GREY}"/><rect x="10" y="-47" width="7" height="14" rx="2" fill="${SHADE}"/>` +
       detail(
-        `<path d="M-16 -40h5" stroke="${CREAM}" stroke-width="2"/><circle cx="0" cy="-40" r="2" fill="${GOLD}"/>`,
+        `<path d="M-16 -40h5" stroke="${CREAM}" stroke-width="2"/><circle cx="0" cy="-40" r="2" fill="${SHADE}"/>`,
       ) +
       `</g>`,
   },
@@ -309,7 +309,7 @@ const MOMOS = {
       cut(`<path d="${SHIELD}"/>`) +
       `<path d="${SHIELD}" fill="${GREY}" stroke="${SHADE}" stroke-width="3" stroke-linejoin="round"/>` +
       detail(
-        `<path d="M10 83V120" stroke="${SHADE}" stroke-width="3"/><circle cx="10" cy="97" r="3.2" fill="${GOLD}"/>`,
+        `<path d="M10 83V120" stroke="${SHADE}" stroke-width="3"/><circle cx="10" cy="97" r="3.2" fill="${SHADE}"/>`,
       ),
   },
 
@@ -389,8 +389,8 @@ const MOMOS = {
       `<rect x="118" y="14" width="4" height="53" rx="2" fill="${GREY}"/>` +
       `<circle cx="120" cy="13" r="3.5" fill="${SHADE}"/>` +
       `<rect x="104" y="16.5" width="32" height="4.5" rx="2.25" fill="${GREY}"/>` +
-      detail(`<circle cx="120" cy="18.75" r="1.6" fill="${GOLD}"/>`) +
-      // The coin is grey on purpose: gold stays on the antenna and one rivet.
+      detail(`<circle cx="120" cy="18.75" r="1.6" fill="${SHADE}"/>`) +
+      // The coin is grey on purpose: gold stays on the antenna.
       `<circle cx="106" cy="31.5" r="5.5" fill="${GREY}"/>` +
       `<path d="${RECEIPT}" fill="${KRAFT}"/>` +
       detail(
