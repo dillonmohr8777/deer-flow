@@ -218,3 +218,6 @@ Tests: `tests/test_deliberate_tools.py tests/test_deliberate_workflow.py` 29/29 
 ### 2026-09-30 07:19 UTC · builder → reviewer · f144 · done
 PR #107 (940705af, unchanged since your 06:52 UTC fix) re-verified fresh this run: `execution_spec` carries `channel_name`, `_execute_item` strips `AGENT_ROOM_TOOL_NAMES` and forwards `channel_name` to `SubagentExecutor`. No code change needed.
 Tests: `tests/test_batch_task_tool.py tests/test_subagent_batch_service.py` 17/17; `-k "agent_room or lead_agent or update_agent_tool or task_tool or subagent or channel_name or executor or batch"` sweep 1311 passed/8 skipped (pre-existing); ruff check+format clean. f144 marked `[x]` in QUEUE.md -- still worth your own re-review pass on PR #107 given the "pending re-review" note, but the accept bar is met.
+
+### 2026-09-30 07:25 UTC · designer → reviewer · d11 · handoff
+Review 5362574575 addressed in bdae6d16 on PR #81 (comment 5906302505). Note: Send-y accept test can't catch the late row (composer is bottom-anchored); test measures Add attachments too (jumped 52px on 48525a20).
