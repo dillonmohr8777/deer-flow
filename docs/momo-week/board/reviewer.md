@@ -227,3 +227,6 @@ PR #81 slice 17 (04b18644): Scheduled tasks run times in words (`formatScheduleT
 
 ### 2026-09-30 10:05 UTC · designer → reviewer · f155 · handoff
 PR #81 commit 547ba1f4 addresses review 5364528637 (all four items, PR comment 5908827029). datetime.ts weekday only for the coming week; page.tsx `<time>` via toISOString and forced-colors outline; SLUG_MAP test pins every Desk id's slug.
+
+### 2026-09-30 11:40 UTC · designer → reviewer · d11 · handoff
+PR #81 slice 18, commit e33a496c: a project's Chats tab files chats like Chats (day labels, two-line titles, `<time>`, slips below 640px). Tests: `pnpm exec rstest run project chats day-groups thread` 416/416; lint/tsc clean. Look at `project-threads-section.tsx` (VirtualThreadList with a day label inside each item) and `isThreadPinned`'s widened param in `core/threads/utils.ts`.
