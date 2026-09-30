@@ -165,6 +165,30 @@ async def batch_task(
         max_live_items: Optional queued-plus-running item window; when set it must be >= 1.
         max_running_items: Optional per-batch real execution concurrency; when set it must be >= 1.
     """
+    return await submit_native_batch(
+        runtime=runtime,
+        title=title,
+        items=items,
+        subagent_type=subagent_type,
+        tool_call_id=tool_call_id,
+        max_live_items=max_live_items,
+        max_running_items=max_running_items,
+    )
+
+
+async def submit_native_batch(
+    *,
+    runtime: Runtime,
+    title: str,
+    items: list[BatchTaskItem],
+    subagent_type: str,
+    tool_call_id: str,
+    max_live_items: int | None = None,
+    max_running_items: int | None = None,
+    submission_key: str | None = None,
+    max_attempts: int | None = None,
+) -> Command:
+    """Shared native boundary; fixed operator tools may supply a durable phase key."""
     submitter = _batch_submitter()
     if submitter is None:
         return _result(
@@ -201,7 +225,7 @@ async def batch_task(
         return _result(tool_call_id, content="Durable batches require a thread_id.", error=True)
     user_id = resolve_runtime_user_id(runtime)
     run_id = context.get("run_id")
-    submission_key = f"{run_id or thread_id}:{tool_call_id}"
+    submission_key = submission_key or f"{run_id or thread_id}:{tool_call_id}"
     execution_spec = {
         "subagent_config": asdict(config),
         "parent_model": metadata.get("model_name"),
@@ -211,6 +235,7 @@ async def batch_task(
         "oauth_provider": context.get("oauth_provider"),
         "oauth_id": context.get("oauth_id"),
         "channel_user_id": context.get("channel_user_id"),
+        "channel_name": context.get("channel_name"),
         "is_internal": context.get("is_internal") is True,
         "authz_attributes": normalize_authz_attributes(context.get("authz_attributes")),
     }
@@ -230,6 +255,7 @@ async def batch_task(
                 max_live_items=max_live_items,
                 max_running_items=max_running_items,
                 execution_spec=execution_spec,
+                max_attempts=max_attempts,
             )
         )
     except Exception as exc:

@@ -183,11 +183,26 @@ class AgentSeatRepository:
         must still block a run identifying itself as ``cmo-agent``, the
         normalized form ``build_run_config`` already enforces for an explicit
         ``assistant_id``.
+
+        A caller with no resolved organization (auth-disabled/internal, a
+        seat claimed with no active org) must match only a seat claimed the
+        same way -- ``organization_id IS NULL`` -- never another
+        organization's seat and never every seat regardless of organization.
+        ``_scope``'s "``None`` = no filter" convention is right for
+        admin-style listing but was wrong here twice over (queue item f99,
+        then f123's review of the first fix): failing open let a null-org
+        caller 429 an unrelated org's run and leak that seat's title;
+        failing closed made every null-org seat's pause silently
+        unenforceable, since a seat claimed with no active org is itself
+        stored with ``organization_id=None`` (``organization_for_write``'s
+        quarantine marker), not a case that never occurs.
         """
         organization_id = resolve_organization_id()
         normalized = agent_name.strip().lower().replace("_", "-")
         normalized_column = func.replace(func.lower(AgentSeatRow.agent_name), "_", "-")
-        stmt = self._scope(select(AgentSeatRow), organization_id).where(
+        org_filter = AgentSeatRow.organization_id.is_(None) if organization_id is None else AgentSeatRow.organization_id == organization_id
+        stmt = select(AgentSeatRow).where(
+            org_filter,
             normalized_column == normalized,
             AgentSeatRow.paused_at.is_not(None),
             AgentSeatRow.status.in_((AgentSeatStatus.CLAIMED, AgentSeatStatus.RATIFIED)),
@@ -274,15 +289,23 @@ class AgentSeatRepository:
         ``RunRow.assistant_id`` of ``CMO_Agent`` or a stamped identity of
         ``CMO-Agent`` must count toward a seat claimed as ``cmo-agent``
         exactly like the exact-cased form would.
+
+        ``organization_id=None`` is never "every organization's burn" -- a
+        seat claimed with no active org is itself stored with
+        ``organization_id=None`` (``organization_for_write``'s quarantine
+        marker, not a case that never occurs), so a null-org seat's own
+        burn must still count. A null-org caller (queue item f99, then
+        f123's review of the first fix) matches only null-org runs, never
+        a sum across every org's same-named agent.
         """
         normalized = agent_name.strip().lower().replace("_", "-")
         effective_identity = func.coalesce(RunRow.metadata_json[EFFECTIVE_AGENT_NAME_METADATA_KEY].as_string(), RunRow.assistant_id)
         normalized_identity = func.replace(func.lower(effective_identity), "_", "-")
+        org_filter = RunRow.organization_id.is_(None) if organization_id is None else RunRow.organization_id == organization_id
         stmt = select(func.coalesce(func.sum(RunRow.total_tokens), 0)).where(
+            org_filter,
             normalized_identity == normalized,
             RunRow.created_at >= since,
         )
-        if organization_id is not None:
-            stmt = stmt.where(RunRow.organization_id == organization_id)
         async with self._sf() as session:
             return int(await session.scalar(stmt) or 0)

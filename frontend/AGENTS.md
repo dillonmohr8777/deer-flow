@@ -43,6 +43,10 @@ Webpack is the default development bundler. Use `DEER_FLOW_DEV_BUNDLER=turbo` wi
 Rstest runs them as two projects (`rstest.config.ts`). `*.test.ts` / `*.test.tsx` run in a plain **node** environment — that is nearly the whole suite, and it is the default for anything that is pure logic. `*.dom.test.ts` / `*.dom.test.tsx` run in **happy-dom**, for tests that need a document: hooks driven through `renderHook` from `@testing-library/react`, and components. Keep the split — a DOM environment costs roughly 3x the runtime of the node suite, so tests that do not render should not opt into it. A hook whose behavior only exists under real React (effect ordering, cleanup on unmount, re-render on store change) belongs in a `.dom.test.*` file rather than a node test that mocks `react` itself.
 
 E2E tests live under `tests/e2e/` and use Playwright with Chromium. They mock all backend APIs via `page.route()` network interception and test real page interactions (navigation, chat input, streaming responses). Config: `playwright.config.ts`.
+Auth recovery fixtures use context routes so worker-owned network requests reach
+the same mock after the public PWA worker claims the page. Keep explicit active
+worker recovery coverage at desktop/mobile widths, the exact retry counts and
+registration gate; do not alter production auth or disable the worker to mask it.
 `tests/e2e/design-surfaces.spec.ts` is an opt-in design-review harness, skipped unless `DESIGN_SHOTS=1`: it captures the signed-in surfaces at 1440×900 and 390×844 into `DESIGN_SHOTS_DIR` against the mocked API. `/login` needs a second server started with `DEER_FLOW_AUTH_DISABLED=0` and an unreachable gateway, passed as `DESIGN_SIGNED_OUT_URL`; `DESIGN_SHOTS_DEBUG=1` logs unmocked API calls. `DESIGN_SHOTS_ONLY=name,name` limits a run to the named surfaces. The real-backend auth contract in `tests/e2e-real-backend/auth-disabled-contract.spec.ts` and `backend/tests/test_auth_me_permissions.py` pin the complete route-permission list; update both when adding registered permissions (including `projects:read/write/delete`).
 
 The dedicated `run-history.ts` hook replaces the unpaged runs hook. Show counts
@@ -362,3 +366,20 @@ Plugin page `openConversation(threadId)` resolves authenticated thread metadata
 with `pathOfThread`; do not let plugins hardcode default-agent routes. The page's
 abort signal fences late navigation after unmount/account changes. Synchronous
 conversation-action callbacks reject Promise returns while consuming rejections.
+
+The private Agent Room lives at `/workspace/desk/agent-room`. Its route and
+navigation use the existing Desk feature gate; message reads and owner posts use
+`core/agent-room` through the shared credential/CSRF fetcher. The Gateway retains
+owner/admin isolation and agents post through its separate principal-bound tool.
+Room access/message/mutation keys include the actual AuthProvider user ID; wait
+for affirmative private discovery before reading or projecting cached messages.
+Fence aborted/late reads, old-owner post settlement and composer drafts across
+auth transitions, without globally clearing unrelated caches. GET/POST send
+`X-Expected-User-Id`; the Gateway must enforce its optional actor mismatch fence
+before repository access. The header never grants permission or chooses storage.
+Keep existing no-header callers, admin/private gates and CSRF behavior unchanged.
+Its roster is a retained descriptive projection, not proof of live workers.
+Phone touch overrides belong to the workspace header, Background work, room
+composer and phone-only sidebar scope; do not modify generated UI primitives or
+desktop density. `tests/e2e/agent-room.spec.ts` covers readback, failed-post draft
+retention, the private gate and 390/768/1440 geometry with mocked APIs.

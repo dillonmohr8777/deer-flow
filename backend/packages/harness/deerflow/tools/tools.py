@@ -14,6 +14,8 @@ from deerflow.reflection import resolve_variable
 from deerflow.sandbox.security import is_host_bash_allowed
 from deerflow.subagents.batch_runtime import is_subagent_batch_runtime_available
 from deerflow.tools.builtins import (
+    agent_room_post,
+    agent_room_read,
     ask_clarification_tool,
     batch_status,
     batch_task,
@@ -193,6 +195,10 @@ def get_available_tools(
 
         builtin_tools.append(skill_manage_tool)
 
+    private_workspace = getattr(config, "private_workspace", None)
+    if getattr(private_workspace, "enabled", False) is True:
+        builtin_tools.extend((agent_room_read, agent_room_post))
+
     # Add subagent tools only if enabled via runtime parameter
     if subagent_enabled:
         builtin_tools.extend(SUBAGENT_TOOLS)
@@ -240,7 +246,9 @@ def get_available_tools(
     # made through the Gateway API (which runs in a separate process) are immediately
     # reflected when loading MCP tools.
     mcp_tools = []
-    if include_mcp:
+    # An explicit empty selection must prevent discovery, not merely filter its
+    # results: lazy discovery can start globally enabled HTTP/stdio servers.
+    if include_mcp and mcp_plugins != []:
         try:
             from deerflow.config.extensions_config import ExtensionsConfig
             from deerflow.mcp.cache import get_cached_mcp_tools

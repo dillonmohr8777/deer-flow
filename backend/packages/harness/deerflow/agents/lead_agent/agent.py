@@ -489,6 +489,7 @@ def build_middlewares(
     *,
     available_skills: set[str] | None = None,
     memory_enabled: bool = True,
+    tool_names: list[str] | None = None,
     owns_agent_skill_projection: bool = True,
     app_config: AppConfig | None = None,
     deferred_setup=None,
@@ -595,6 +596,7 @@ def build_middlewares(
             app_config=resolved_app_config,
             user_id=user_id,
             slash_source_owner_token=slash_source_owner_token,
+            owner_tool_names=tool_names,
         )
     )
 
@@ -950,7 +952,31 @@ def _assemble_lead_agent(config: RunnableConfig, *, app_config: AppConfig) -> Le
     non_interactive = not interaction_policy.allows_clarification
     agent_name = validate_agent_name(cfg.get("agent_name"))
 
-    agent_config = load_agent_config(agent_name, user_id=resolved_user_id) if not is_bootstrap else None
+    if is_bootstrap and agent_name:
+        try:
+            agent_config = load_agent_config(agent_name, user_id=resolved_user_id)
+        except FileNotFoundError:
+            from deerflow.persistence.agents import get_agent_store
+
+            try:
+                absent = get_agent_store().exists(agent_name, user_id=resolved_user_id) is False
+            except Exception:
+                absent = False
+            if not absent:
+                raise ValueError("Existing agent config readback is unavailable") from None
+            agent_config = None
+        except Exception:
+            raise ValueError("Existing agent config readback is unavailable") from None
+        else:
+            if agent_config is None:
+                raise ValueError("Existing agent config readback is unavailable")
+        if agent_config is not None and (not agent_config.self_update_enabled or (agent_config.tool_names is not None and "setup_agent" not in agent_config.tool_names)):
+            raise ValueError("Existing agent operator-owned permissions forbid bootstrap")
+    else:
+        agent_config = load_agent_config(agent_name, user_id=resolved_user_id) if not is_bootstrap else None
+        if agent_name and agent_config is None:
+            raise ValueError("Existing agent config readback is unavailable")
+    tool_names = getattr(agent_config, "tool_names", None)
     memory_enabled = getattr(agent_config, "memory_enabled", True) is not False
     # Keep compatibility with lightweight AgentConfig-shaped objects used by
     # integrations that predate caller-level subagent restrictions.
@@ -1060,6 +1086,13 @@ def _assemble_lead_agent(config: RunnableConfig, *, app_config: AppConfig) -> Le
         chat_model = create_chat_model(name=model_name, thinking_enabled=thinking_enabled, app_config=resolved_app_config, attach_tracing=False)
         raw_tools = get_available_tools(model_name=model_name, subagent_enabled=subagent_enabled, app_config=resolved_app_config, chat_model=chat_model) + [setup_agent]
         configured_tools = raw_tools
+        # See the channel-run gate below (the non-bootstrap branch): the
+        # bootstrap flow must withhold the Agent Room tools too, or a bound
+        # member reaching it via /bootstrap on a channel run would keep them.
+        if cfg.get("channel_name"):
+            from deerflow.tools.builtins.agent_room_tool import AGENT_ROOM_TOOL_NAMES
+
+            configured_tools = [tool for tool in configured_tools if tool.name not in AGENT_ROOM_TOOL_NAMES]
         configured_tools = [tool for tool in configured_tools if tool.name not in interaction_policy.disabled_tool_names]
         authorization_candidates = [*configured_tools]
         if skill_setup.describe_skill_tool:
@@ -1068,6 +1101,8 @@ def _assemble_lead_agent(config: RunnableConfig, *, app_config: AppConfig) -> Le
             _append_memory_tools_without_name_conflicts(authorization_candidates)
         _append_project_document_tools_if_pinned(authorization_candidates, cfg)
         append_task_continuity_tools(authorization_candidates, resolved_app_config)
+        if tool_names is not None:
+            authorization_candidates = [tool for tool in authorization_candidates if tool.name in tool_names]
         configured_tool_ids = {id(tool) for tool in configured_tools}
         authorized_tools, _authz_provider = apply_tool_authorization(
             authorization_candidates,
@@ -1089,6 +1124,7 @@ def _assemble_lead_agent(config: RunnableConfig, *, app_config: AppConfig) -> Le
             agent_name=agent_name,
             available_skills=set(_BOOTSTRAP_SKILL_NAMES),
             memory_enabled=memory_enabled,
+            tool_names=tool_names,
             owns_agent_skill_projection=False,
             app_config=resolved_app_config,
             deferred_setup=setup,
@@ -1178,7 +1214,8 @@ def _assemble_lead_agent(config: RunnableConfig, *, app_config: AppConfig) -> Le
     # leave it unset, so ``update_agent`` remains available there.
     channel_name = cfg.get("channel_name")
     is_webhook_channel = channel_name in _WEBHOOK_CHANNELS
-    extra_tools = [update_agent] if agent_name and not is_webhook_channel else []
+    self_update_enabled = getattr(agent_config, "self_update_enabled", True) is not False
+    extra_tools = [update_agent] if agent_name and self_update_enabled and not is_webhook_channel else []
     # Resolve the model once so tool guidance uses the same effective settings.
     chat_model = create_chat_model(name=model_name, thinking_enabled=thinking_enabled, reasoning_effort=reasoning_effort, app_config=resolved_app_config, attach_tracing=False, model_overrides=agent_model_overrides)
     raw_tools = get_available_tools(
@@ -1191,6 +1228,19 @@ def _assemble_lead_agent(config: RunnableConfig, *, app_config: AppConfig) -> Le
         chat_model=chat_model,
     )
     configured_tools = raw_tools + extra_tools
+    # Withhold the private Agent Room tools from any channel run. A channel
+    # run (GitHub webhook fan-out, a Telegram bot, etc.) resolves the runtime
+    # actor to the channel's bound owner regardless of which external person
+    # actually triggered it, so an outside commenter or a non-owner chat
+    # member could otherwise have the agent quote the owner-private room into
+    # a public reply, or post into it. Unlike ``update_agent``'s
+    # ``_WEBHOOK_CHANNELS``-only gate, this excludes every channel run, not
+    # just webhook ones, since the impersonation risk is the channel binding
+    # itself, not how the message arrived.
+    if channel_name:
+        from deerflow.tools.builtins.agent_room_tool import AGENT_ROOM_TOOL_NAMES
+
+        configured_tools = [tool for tool in configured_tools if tool.name not in AGENT_ROOM_TOOL_NAMES]
     configured_tools = [tool for tool in configured_tools if tool.name not in interaction_policy.disabled_tool_names]
     authorization_candidates = [*configured_tools]
     if skill_setup.describe_skill_tool:
@@ -1199,6 +1249,8 @@ def _assemble_lead_agent(config: RunnableConfig, *, app_config: AppConfig) -> Le
         _append_memory_tools_without_name_conflicts(authorization_candidates)
     _append_project_document_tools_if_pinned(authorization_candidates, cfg)
     append_task_continuity_tools(authorization_candidates, resolved_app_config)
+    if tool_names is not None:
+        authorization_candidates = [tool for tool in authorization_candidates if tool.name in tool_names]
     configured_tool_ids = {id(tool) for tool in configured_tools}
     authorized_tools, _authz_provider = apply_tool_authorization(
         authorization_candidates,
@@ -1221,6 +1273,7 @@ def _assemble_lead_agent(config: RunnableConfig, *, app_config: AppConfig) -> Le
         agent_name=agent_name,
         available_skills=available_skills,
         memory_enabled=memory_enabled,
+        tool_names=tool_names,
         app_config=resolved_app_config,
         deferred_setup=setup,
         mcp_routing_middleware=mcp_routing_middleware,
@@ -1244,6 +1297,16 @@ def _assemble_lead_agent(config: RunnableConfig, *, app_config: AppConfig) -> Le
         interaction_policy=interaction_policy,
         memory_enabled=memory_enabled,
         experience_mode=cfg.get("experience_mode"),
+    )
+    from deerflow.extensions import get_agent_build_extensions
+    from deerflow.sandbox.native_startup import configure_native_lazy_startup
+
+    configure_native_lazy_startup(
+        middlewares,
+        final_tools,
+        available_skills=available_skills,
+        deferred_names=setup.deferred_names,
+        has_extension_middlewares=not isinstance(resolved_app_config, AppConfig) or bool(resolved_app_config.extensions.middlewares) or get_agent_build_extensions().has_middleware_contributors,
     )
     graph = create_agent(
         model=chat_model,

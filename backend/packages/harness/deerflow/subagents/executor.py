@@ -795,6 +795,7 @@ class SubagentExecutor:
         oauth_id: str | None = None,
         run_id: str | None = None,
         channel_user_id: str | None = None,
+        channel_name: str | None = None,
         is_internal: bool = False,
         authz_attributes: Mapping[str, Any] | None = None,
         deerflow_trace_id: str | None = None,
@@ -831,6 +832,12 @@ class SubagentExecutor:
             oauth_id: Subject id at the external identity provider.
             run_id: Parent run id, so delegated guardrail decisions attribute to
                 the same run as the lead agent.
+            channel_name: The parent run's channel, when dispatched from one
+                (GitHub webhook fan-out, a Telegram bot, etc.). Propagated so
+                the Agent Room tools' own in-tool channel guard
+                (``deerflow.tools.builtins.agent_room_tool``) still fires for
+                a subagent even though the caller is expected to have already
+                filtered those tools out of ``tools`` for a channel run.
             deerflow_trace_id: DeerFlow request-level correlation id propagated
                 from the parent run for Langfuse metadata correlation. Falls
                 back to the ambient trace so the attribute is always a real
@@ -891,6 +898,7 @@ class SubagentExecutor:
         # chats share one thread across senders, so delegated bash commands
         # must export the dispatching turn's id, not none at all.
         self.channel_user_id = channel_user_id
+        self.channel_name = channel_name
         # Authorization identity propagated from the parent runtime context.
         # is_internal is written unconditionally (including False) so the
         # subagent's GuardrailMiddleware sees the same provenance as the lead.
@@ -939,6 +947,7 @@ class SubagentExecutor:
         # until then; ``_aexecute`` falls back to the raw turn count so a test
         # double replacing ``_create_agent`` still produces a runnable config.
         self._recursion_limit: int | None = None
+        self._native_lazy_startup = False
         # What this subagent was assembled from, published to extension
         # observers at the end of ``_create_agent``. The prompt and skill set
         # are captured while ``_build_initial_state`` renders them because
@@ -1015,6 +1024,17 @@ class SubagentExecutor:
         # system_prompt is included in initial state messages (see _build_initial_state)
         # to avoid multiple SystemMessages which some LLM APIs don't support.
         bound_tools = list(tools if tools is not None else self.tools)
+        from deerflow.extensions import get_agent_build_extensions
+        from deerflow.sandbox.native_startup import configure_native_lazy_startup
+
+        resolved_extensions = extensions if extensions is not None else get_agent_build_extensions()
+        self._native_lazy_startup = configure_native_lazy_startup(
+            middlewares,
+            bound_tools,
+            available_skills=set() if self.config.skills == [] else None,
+            deferred_names=deferred_setup.deferred_names if deferred_setup is not None else frozenset(),
+            has_extension_middlewares=not isinstance(app_config, AppConfig) or bool(app_config.extensions.middlewares) or resolved_extensions.has_middleware_contributors,
+        )
         agent = create_agent(
             model=model,
             tools=bound_tools,
@@ -1565,6 +1585,8 @@ class SubagentExecutor:
                 context[EXTENSION_TASK_STORE_KEY] = task_store
             if self.channel_user_id:
                 context["channel_user_id"] = self.channel_user_id
+            if self.channel_name:
+                context["channel_name"] = self.channel_name
             # Authorization identity: is_internal written unconditionally
             # (including False); attributes copied again on write-back.
             context["is_internal"] = self.is_internal
@@ -1573,8 +1595,9 @@ class SubagentExecutor:
             if self.knowledge_scope is not None:
                 context[KNOWLEDGE_SCOPE_RUNTIME_KEY] = dict(self.knowledge_scope)
             context["is_subagent"] = True
-            context[_SANDBOX_LEASE_OWNER_CONTEXT_KEY] = sandbox_lease_owner_id
-            context[_SANDBOX_COMMAND_SCOPE_CONTEXT_KEY] = sandbox_lease_owner_id
+            if not self._native_lazy_startup:
+                context[_SANDBOX_LEASE_OWNER_CONTEXT_KEY] = sandbox_lease_owner_id
+                context[_SANDBOX_COMMAND_SCOPE_CONTEXT_KEY] = sandbox_lease_owner_id
             execution_context = context
             context["agent_id"] = self.config.name
             if self.loop_detection_recorder is not None:

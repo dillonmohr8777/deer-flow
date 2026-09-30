@@ -1,3 +1,4 @@
+from .agent_room_tool import agent_room_post, agent_room_read
 from .background_tasks_tool import cancel_background_task, list_background_tasks
 from .batch_task_tool import batch_status, batch_task, cancel_batch
 from .clarification_tool import ask_clarification_tool
@@ -10,6 +11,8 @@ from .update_agent_tool import update_agent
 from .view_image_tool import view_image_tool
 
 __all__ = [
+    "agent_room_read",
+    "agent_room_post",
     "setup_agent",
     "update_agent",
     "present_file_tool",

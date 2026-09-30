@@ -241,6 +241,12 @@ class AgentConfig(BaseModel):
     # Disable every memory path for stateless execution-oriented agents while
     # preserving the global memory configuration for all other agents.
     memory_enabled: bool = True
+    # Operator-controlled opt-out for fixed-purpose custom agents. Existing
+    # agents retain self-update unless the owner explicitly disables it.
+    self_update_enabled: bool = True
+    # Optional owner-controlled ceiling across configured, builtin and late
+    # middleware tools. None preserves the existing catalog; [] denies all.
+    tool_names: list[str] | None = None
     # Optional binding to GitHub repositories so this agent can respond to
     # webhook events from the gateway dispatcher. None means "no GitHub
     # integration", which is the case for every existing agent.
@@ -277,6 +283,8 @@ MANAGED_AGENT_CONFIG_FIELDS: frozenset[str] = frozenset(
         "thinking_enabled",
         "reasoning_effort",
         "memory_enabled",
+        "self_update_enabled",
+        "tool_names",
     }
 )
 

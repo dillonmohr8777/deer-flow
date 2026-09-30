@@ -20,6 +20,7 @@ def _runtime():
             "run_id": "run-1",
             "user_id": "user-1",
             "user_role": "member",
+            "channel_name": "telegram",
             "__knowledge_scope_execution": {
                 "version": 1,
                 "mode": "selected",
@@ -84,6 +85,10 @@ async def test_batch_task_is_explicit_idempotent_submission(monkeypatch) -> None
     request = submitter.submit.await_args.args[0]
     assert request.submission_key == "run-1:call-1"
     assert request.execution_spec["mcp_plugins"] == ["stable-plugin"]
+    # The parent run's channel must reach the durable batch's execution_spec
+    # so batch_service can withhold the owner-private Agent Room tools from
+    # a channel-dispatched batch item (see test_subagent_batch_service.py).
+    assert request.execution_spec["channel_name"] == "telegram"
     assert request.user_id == "user-1"
     assert [item["key"] for item in request.items] == ["record-1", "record-2"]
     assert request.max_live_items == 20

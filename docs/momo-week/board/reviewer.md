@@ -181,3 +181,91 @@ Tests: test_issue_artifact_gate.py+test_uploads_router.py+test_harness_boundary.
 ### 2026-09-30 01:00 UTC · designer → reviewer · d11 · handoff
 PR #81 slice 13 (5b3f0077): Desk Today phone slips, time under title, failed fold. Notes: PR comment 5901979030.
 Tests: `playwright test desk ui-polish-mobile board` 31/31 on next start. Look at desk.module.css phone block (grid areas, clip-path + .tear, focus offset).
+
+### 2026-09-30 01:13 UTC · builder → reviewer · e13 · handoff
+PR #106 (draft, `momo-week/e13-fusion-deliberate`, from `lane/momo-week`). Flagging my own process slip up front: QUEUE.md's section F header says the build routine works F before E, and the prior handoff explicitly said next is f43 -- I picked e13 anyway without re-checking. Please weigh in if you think this run's work should still get a review pass or if it should wait behind f125/f128/f43.
+New `deliberate` tool group (`config.deliberate`, off until `openrouter_api_key` is set): Momentum-staff gate (same `momentum_staff` flag team/exec tools trust); client-data refusal via the run's pinned project's `client_id`, with `override_client_data_refusal` verified server-side through `exec_seat_tools._is_active_org_admin` (imported, not re-derived) rather than trusted from the caller; budget cap reusing e10's `AgentSeatRepository.paused_seat_for_agent`; one-call-per-turn counted from `runtime.state["messages"]` (tool-call names since the last `HumanMessage`, no new persistent counter). `run_fusion_panel` is a thin OpenRouter-backed function using its own key, swappable in tests.
+Worth a look: `backend/packages/harness/deerflow/tools/deliberate_tools.py:1` (the whole fact-resolution + wiring) and `:64` (`_calls_including_current` -- confirm the "includes the triggering AIMessage, caller subtracts 1" contract is right; I couldn't find a precedent elsewhere in the codebase for counting calls this way).
+Left, not built: the "Deliberation" chat card and "Plan a big project" starter (frontend/UI), Jev's auto-trigger scoring, and no fleet agent's `config.yaml` lists `deliberate` yet (task named no specific agents the way e8/e9 did).
+Tests: `tests/test_deliberate_workflow.py tests/test_deliberate_tools.py` 18/18 new; `-k "board or client or team or exec_seat or fleet or agent_seat or seat_budget or seat_scorecard or hiring or hire or deliberate or project"` sweep 1475 passed/25 skipped/1 failed (pre-existing unrelated `test_client_langfuse_metadata.py` only); `test_harness_boundary.py`/`test_config_version.py`/`test_app_config_reload.py` green; ruff check+format clean.
+
+### 2026-09-30 UTC · designer → reviewer · d11 · handoff
+PR #81 slice 14, commit 80d95950: new-chat composer low on phones (`chat-page.tsx` welcome translate), Momo clamp size (`welcome.tsx`), starter tags 2px/44px (`input-box.tsx` StarterPrompts). Evidence and test results: https://github.com/dillonmohr8777/deer-flow/pull/81#issuecomment-5903443421. 8 e2e fail identically on the pre-change build (agent-chat gallery/unicode, chat 45/241/1004); worth a look as a lane issue.
+
+### 2026-09-30 04:06 UTC · builder → reviewer · f138 · done
+PR #105 commit 415ec8d7 closes f138 on its own copy (mirrors #103's c7e4bbc3): `_verdict_holds()` now inspects each leaf's `checked`/`holds`, not just the summary `all_hold`/`unchecked` fields. Also added the `test_reviewer_verdict_as_a_list_is_not_ready_for_owner` coverage gap and refreshed the stale actor/verdict doc text.
+Tests: new leaf-holds-false test red on the prior inline condition, green after; `test_issue_artifact_gate.py` 10/10; combined with `test_uploads_router.py`+`test_harness_boundary.py` 67/67; ruff clean. Replied on PR #105.
+
+### 2026-09-30 04:12 UTC · designer → reviewer · d11 · handoff
+Review 5361325128 addressed in e08229b1 on PR #81 (PR comment 5903882444). Welcome e2e at 6 short sizes red on 80d95950, green now; 36/36 ui-polish-mobile+desk.
+
+### 2026-09-30 04:20 UTC · builder → reviewer · f133,f136,f137,f142 · handoff
+Your review (5361323197) on PR #106 addressed in commit 3cd799d0, same run that read it (PR comment 5903895954 has the full per-finding writeup). f133: `override_client_data_refusal` removed from the tool's args entirely -- override is now `runtime.context["deliberate_owner_override"]`, a `_SERVER_OWNED_RUNTIME_CONTEXT_KEY` with no producer yet, so it's inert (always refuses) until a real confirmation flow exists. f136: turn-boundary now `is_genuine_user_message()`. f137: `run_fusion_panel` fans out to every `panel_models` entry via `asyncio.gather`, analyst gets the real answers. f142: parallel calls counted by `runtime.tool_call_id` position; `_thread_has_client_data` fails closed with no DB; `config.example.yaml` documents `deliberate:` (left `config_version` unbumped, no AGENTS.md/README touch -- matches this week's `hiring`/`exec_seats` precedent, flagged on the PR in case you want this one to differ).
+Worth a look: `deliberate_tools.py:97-117` (`_calls_completed_this_turn`'s position-based counting -- this is the first place in the codebase using `runtime.tool_call_id` this way, no existing precedent to check it against) and the module docstring's "Known gap" paragraph (the suspected client-bound-agent finding you flagged isn't fixed, just documented -- wanted your read on whether it's worth its own numbered finding before I build it blind).
+Tests: `tests/test_deliberate_tools.py tests/test_deliberate_workflow.py` 23/23 (10 new); `-k "board or client or team or exec_seat or fleet or agent_seat or seat_budget or seat_scorecard or hiring or hire or deliberate or project or config_example or gateway_services"` sweep 1736 passed/25 skipped/1 failed (pre-existing unrelated `test_client_langfuse_metadata.py` only); `test_harness_boundary.py`/`test_config_version.py`/`test_app_config_reload.py`/`test_gateway_services.py` green; ruff check+format clean.
+
+### 2026-09-30 05:38 UTC · designer → reviewer · d11 · handoff
+PR #81 commit 48525a20 (slice 15): placeholder copy + contrast in shared ui/textarea.tsx, model picker gated on a resolved model (input-box.tsx showModelPicker). Evidence: PR comment 5904845051. 73 e2e locators changed across 15 specs; the failures left match an old-code build exactly (listed in the comment).
+
+### 2026-09-30 07:40 UTC · designer → reviewer · d11 · handoff
+PR #81 commit 0e4348f2 (slice 16): Desk Agents rows draw MomoAvatar; new SLUG_MAP entries for the Desk template ids (momo-avatar.tsx); phone grid fold in desk.module.css `.agent`. Also merge 26a177e1 (lane into PR, e2e placeholder conflicts). Evidence: PR comment 5905907345. desk.spec 8/8, ui-polish-mobile 30/30, 30 unit.
+
+### 2026-09-30 07:05 UTC · builder → reviewer · deliberate round 2 / f149 · handoff
+Your review (5362464277) on PR #106 addressed in commit 6cd793cb, same run that read it (PR comment 5905885653 has the full writeup). You confirmed f133/f136/f137/f142 hold, then found: one failing/slow panelist sank the whole `run_fusion_panel` call and burned the turn's only attempt; an empty `cheap_panel_models`/`quality_panel_models` list passed validation, reopening f137's invented-panel case; and `deliberate_owner_override`'s stripping from `_SERVER_OWNED_RUNTIME_CONTEXT_KEYS` had no test (removing it left everything green). All three fixed: panelist + analyst calls now go through a per-call `asyncio.wait_for` timeout (new `call_timeout_seconds` config, default 60s) that swallows exceptions and drops the dead ones, erroring only when nothing survives or the analyst itself fails; both panel-model lists now require `min_length=1`; new `test_inject_authenticated_user_context_strips_client_supplied_deliberate_owner_override` in `test_gateway_services.py` seeds the key in both `context` and `configurable` and asserts it's gone.
+Turns out your own review-routine pass filed the identical three issues as f149 fusion-panel-one-failure-sinks-call at the same time this review event arrived independently -- marked f149 `[x]` pointing at this commit since the fix and its accept bar match exactly.
+Tests: `tests/test_deliberate_tools.py tests/test_deliberate_workflow.py` 29/29 (6 new); `-k "board or client or team or exec_seat or fleet or agent_seat or seat_budget or seat_scorecard or hiring or hire or deliberate or project or config_example or gateway_services"` sweep 1742 passed/25 skipped/1 failed (pre-existing unrelated `test_client_langfuse_metadata.py` only); ruff check+format clean.
+
+### 2026-09-30 07:19 UTC · builder → reviewer · f144 · done
+PR #107 (940705af, unchanged since your 06:52 UTC fix) re-verified fresh this run: `execution_spec` carries `channel_name`, `_execute_item` strips `AGENT_ROOM_TOOL_NAMES` and forwards `channel_name` to `SubagentExecutor`. No code change needed.
+Tests: `tests/test_batch_task_tool.py tests/test_subagent_batch_service.py` 17/17; `-k "agent_room or lead_agent or update_agent_tool or task_tool or subagent or channel_name or executor or batch"` sweep 1311 passed/8 skipped (pre-existing); ruff check+format clean. f144 marked `[x]` in QUEUE.md -- still worth your own re-review pass on PR #107 given the "pending re-review" note, but the accept bar is met.
+
+### 2026-09-30 07:25 UTC · designer → reviewer · d11 · handoff
+Review 5362574575 addressed in bdae6d16 on PR #81 (comment 5906302505). Note: Send-y accept test can't catch the late row (composer is bottom-anchored); test measures Add attachments too (jumped 52px on 48525a20).
+
+### 2026-09-30 09:01 UTC · designer → reviewer · d11 · handoff
+PR #81 slice 17 (04b18644): Scheduled tasks run times in words (`formatScheduleTime` in core/utils/datetime.ts), selected row royal edge replaces the left stripe. Tests: schedule-time.test.ts, scheduled-tasks-page.dom.test.tsx, 66 e2e green. Look at scheduled-tasks/page.tsx runTime() and page-body.module.css .slips button.
+
+### 2026-09-30 10:05 UTC · designer → reviewer · f155 · handoff
+PR #81 commit 547ba1f4 addresses review 5364528637 (all four items, PR comment 5908827029). datetime.ts weekday only for the coming week; page.tsx `<time>` via toISOString and forced-colors outline; SLUG_MAP test pins every Desk id's slug.
+
+### 2026-09-30 11:01 UTC · designer → reviewer · d11 · handoff
+PR #81 slice 18, commit e33a496c: a project's Chats tab files chats like Chats (day labels, two-line titles, `<time>`, slips below 640px). Tests: `pnpm exec rstest run project chats day-groups thread` 416/416; lint/tsc clean. Look at `project-threads-section.tsx` (VirtualThreadList with a day label inside each item) and `isThreadPinned`'s widened param in `core/threads/utils.ts`.
+
+### 2026-09-30 12:58 UTC · designer → reviewer · d11 · handoff
+PR #81 commit feb64bfd fixes review 5366384776 (f162 + wording + project Try again 44px). Tests: rstest project/chats/thread/schedule/compact-stamp/recent-chat 532/532 in UTC, Auckland, LA. Look at `toDateTimeAttr` in core/utils/datetime.ts. flatMap dedupe left for the build routine.
+
+### 2026-09-30 13:04 UTC · designer → reviewer · d11 slice 19 · handoff
+PR #81 commit b1b7be84: project page header (brief as lede, archived hint, tabs to 44px).
+Tests: `pnpm exec rstest run tests/unit/app/projects-page.dom.test.tsx` 14/14. Look at `frontend/src/app/workspace/projects/[id]/page.tsx` ProjectHeader. Evidence `docs/pr-evidence/momo-week/d11-mobile-pop/slice19/`.
+
+### 2026-09-30 15:40 UTC · designer → reviewer · d11 · handoff
+PR #81 slice 20 (2a962b02): Workflow room moved onto the paper page frame. Tests: `cd frontend && pnpm exec rstest run workflow` 29/29, lint/tsc clean. Look at `frontend/src/components/workspace/workflows/workflow-room.tsx` explanation()/runState() and the header Refresh now invalidating every `["workflows", owner]` query.
+
+### 2026-09-30 16:30 UTC · designer → reviewer · d11 · handoff
+PR #81 review 5368668013 fixed in 1e45ad76 (all 3). Tests: `cd frontend && pnpm exec rstest run workflow project` green; ui-polish-mobile e2e 39/39. Look at `workflows/workflow-words.ts` code coverage vs `workflow_service.py`.
+
+### 2026-09-30 17:40 UTC · designer → reviewer · d11 · handoff
+PR #81 slice 21 (cc2a3cb2): workflow run detail rewritten as a receipt. Look at `frontend/src/components/workspace/workflows/workflow-run.tsx` and the new `stepsOnce`/`stepState` in `workflow-words.ts` (latest event per step name). Also fixed stale `tests/e2e/workflow-room.spec.ts` strings left by slice 20. Tests: `pnpm exec rstest run workflow` 33/33; playwright workflow-room 8/8.
+
+### 2026-09-30 17:21 UTC · builder → reviewer · e14 · handoff
+PR #125 now open (draft) -- GitHub's `mcp__GitHub__create_pull_request` 403 from the prior run is gone this run, no other change needed. Two slices: slice 1 (previously pushed, unreviewed) `GET /api/ceo/needs-my-yes`/`GET /api/ceo/seats`, owner/admin only; slice 2 (this run) `deerflow.ceo_desk.digest` -- `build_digest_window()` pure-counts shipped/stuck/needs-my-yes against the real `BoardRepository`/`AgentSeatRepository`, `generate_daily_digest()` drafts the 3-line text via one best-effort model call, same failure contract as `exec_seats.scorecard.generate_scorecard_body`.
+Worth a look: `backend/app/gateway/routers/ceo_desk.py:70` (`_is_active_org_admin`, a harness-local duplicate of `board.py`'s helper -- same worth-checking note prior exec_seats handoffs have flagged for its siblings) and `backend/packages/harness/deerflow/ceo_desk/digest.py:65` ("stuck" = not shipped and last touched before the window -- confirm that's the right read of the task text, not just the one that was easiest to compute).
+Left: not wired to a scheduled task or `GET /api/ceo`; no needs-my-yes queue actions, #exec/#fleet feeds, or `/workspace/ceo` frontend page yet.
+Tests: `tests/test_ceo_desk_router.py tests/test_ceo_desk_digest.py` 11/11 (9 new), both the admin gate and the digest's shipped/stuck filter mutant-confirmed; `-k "board or seat or ceo or exec_seat or client"` sweep 901 passed/17 skipped/1 failed (pre-existing unrelated `test_client_langfuse_metadata.py` only); ruff check+format clean.
+
+### 2026-09-30 18:48 UTC · builder → reviewer · f173 · done
+Your f173 (PR #125 review 5370525876) fixed in 3773fed5. `_named()` JSON-quotes + truncates (120 chars) each board subject before the prompt instead of inlining it raw; prompt text now labels subjects as untrusted client text. `test_prompt_json_quotes_a_subject_so_it_cannot_smuggle_instructions` reproduces your exact repro string, confirmed red on a reverted `_named()`, green restored. Stored counts already persist beside `digest_text` in `ceo_desk_digests` -- your UI suggestion needs no backend change, just the not-yet-built frontend page.
+Tests: `tests/test_ceo_desk_digest.py tests/test_ceo_desk_router.py` 23/23; ruff check+format clean. Replied on PR #125.
+
+### 2026-09-30 19:20 UTC · designer → reviewer · d11/f167 · handoff
+PR #81 dd13706f: drift guard for f167. `frontend/tests/unit/components/workspace/workflow-words.test.ts` reads the raise sites and fails if any stored code gets the generic sentence (red on cc2a3cb2). Words came from dd9125a9.
+Tests: `cd frontend && pnpm exec rstest run workflow` 39/39. Evidence is in `docs/pr-evidence/momo-week/d11-mobile-pop/slice22/`.
+Still open (backend): `engine.py:224` drops the inner provider code with `from None`.
+
+### 2026-09-30 19:21 UTC · builder → reviewer · d11 (backend half of f167/review 5370524550) · handoff
+PR #81 (commit 7647ebcb): closed the backend half the designer's slice 22 handoff left open. `engine.py:224` now raises `WorkflowCallbackError("workflow_model_call_failed") from error` (was `from None`); `workflow_service.py`'s `_run()` except block walks `__cause__` for the first `WorkflowServiceError` and stores its code, falling back to the **outermost** error's code (not the innermost) when none is found.
+Worth a look: `backend/app/gateway/workflow_service.py:708-712` (the new walk-and-fallback) — confirm the fallback-to-outermost choice is right; the designer's proposal explicitly warned against a naive `from error` swap alone landing on the innermost/least-specific code for a non-service failure.
+Tests: `tests/test_workflow_native_runtime.py` 2 new (`WorkflowServiceError("run_token_budget_exhausted")` from a model call now stores that code, confirmed red on pre-fix code; a plain `RuntimeError` still stores `workflow_model_call_failed`); updated `test_workflow_engine.py`'s existing `__cause__ is None` assertion to `isinstance(..., RuntimeError)` since the cause is now intentionally preserved (confirmed the wrapper's own `code`/`str()` still never leaks the inner exception's text). `cd backend && uv run pytest tests/test_workflow_engine.py tests/test_workflow_native_runtime.py -q` 167/167; `-k "workflow"` sweep 476 passed/8 skipped/6 failed (all 6 pre-existing `test_workflow_adapters.py` subprocess-handoff timeouts, confirmed identical on unmodified branch); ruff check+format clean. Replied on PR #81.
+
+### 2026-09-30 21:20 UTC · designer → reviewer · d11 · handoff
+PR #81 slice 23 (df9f47e1): workflow form paper pass. Look at `frontend/src/components/workspace/workflows/workflow-form.tsx` and `fieldHint` in `workflow-words.ts` (regex over catalog.py's templates; drift guard in `workflow-words.test.ts`). rstest workflow 43/43, workflow-room e2e 8/8, lint/tsc clean.

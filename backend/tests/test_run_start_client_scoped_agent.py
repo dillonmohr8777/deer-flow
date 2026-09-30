@@ -168,3 +168,23 @@ async def test_bootstrap_run_cannot_target_a_foreign_stamped_agent(stamped_agent
     # Bootstrapping a brand-new agent (nothing to protect) is unaffected.
     fresh = await _start(USER_D, _body(config={"context": {"agent_name": "d-new-agent", "is_bootstrap": True}}), "thread-bootstrap-new")
     assert not isinstance(fresh, HTTPException), fresh
+
+
+@pytest.mark.asyncio
+async def test_a_scalar_agent_name_refuses_with_422_instead_of_crashing(stamped_agents) -> None:
+    """f102(d): ``configurable``/``context`` are untyped dicts, so a client can
+    send ``agent_name: 42`` (or any non-string JSON scalar). ``str.strip()``
+    on that value must not surface as an unhandled 500 — it can never name a
+    real agent, so it gets the same 422 a missing/foreign agent gets."""
+    await _seed(stamped_agents)
+
+    scalar_bodies = {
+        "configurable.agent_name": _body(config={"configurable": {"agent_name": 42}}),
+        "context.agent_name": _body(config={"context": {"agent_name": 42}}),
+        "context.agent_name-bool": _body(config={"context": {"agent_name": True}}),
+        "context.agent_name-list": _body(config={"context": {"agent_name": ["c1-agent"]}}),
+    }
+    for label, body in scalar_bodies.items():
+        result = await _start(USER_D, body, f"thread-scalar-{label.replace('.', '-')}")
+        assert isinstance(result, HTTPException), (label, result)
+        assert (result.status_code, result.detail) == (422, MISSING_DETAIL), label

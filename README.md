@@ -110,6 +110,12 @@ That prompt is intended for coding agents. It tells the agent to clone the repo 
 
 ## Quick Start
 
+Fixed-purpose custom agents can set `self_update_enabled: false` to withhold
+their self-update tool while keeping owner/API edits available. Existing agents
+retain the default `true` behavior.
+An optional `tool_names` allowlist caps configured, builtin and middleware tools;
+omitting it preserves the existing catalog, while `[]` permits no tools.
+
 ### Configuration
 
 Optional per-model [`request_admission`](backend/docs/CONFIGURATION.md#model-request-admission)
@@ -1924,7 +1930,9 @@ DeerFlow is model-agnostic — it works with any LLM that implements the OpenAI-
 For `DeerFlowClient(agent_name="researcher")`, the named agent's `mcp_plugins`
 selection applies to both the lead agent and its `task` / `batch_task`
 delegations: `null` inherits all enabled MCP plugins, `[]` selects none, and
-installation IDs select only those plugins. Call `client.reset_agent()` after
+installation IDs select only those plugins. An explicit `[]` also skips MCP
+configuration reads and discovery, so assembling that agent cannot start globally
+enabled MCP servers. Call `client.reset_agent()` after
 editing the saved agent configuration to refresh the selection.
 
 `DeerFlowClient.stream()` includes `summary_text` in each `values` event. This is the current compacted context summary, or `None` when absent. Consumers can record changes without reading checkpoint internals; repeated snapshots may carry the same summary, and an initial snapshot may already contain one from an earlier turn.
@@ -2300,6 +2308,155 @@ Runtime execution and artifact controls remain in the existing DeerFlow services
 For an independent local preview, set `NEXT_BUILD_DIR=.next-momentum` and run the
 frontend on a separate loopback port with the existing gateway configured.
 
+Agent-seat weekly scorecard checks require a confirmed `#exec` post before
+resetting an employee's missed-week streak. A completed blank scorecard counts
+as a missed week only after its miss notice is delivered; two evaluated misses
+reopen the title. Model, usage-store and delivery outages are inconclusive and
+preserve the streak, title and last evaluated week, so a later sweep can retry.
+The recurring sweep remains opt-in (`exec_seats.scorecard_check_enabled: false`
+by default); this policy does not turn on scheduled work.
+
+### Hiring tool permissions
+
+Momentum staff hiring tools check a titled manager's stored agent configuration
+before creating a hire. Invalid or unreadable tool permissions block hiring with
+an instruction to repair the configuration or restore storage access. An explicit
+unrestricted setting (`tool_groups: null` or omitted) remains supported within
+the organization's configured tool catalog; an empty list grants no tools.
+Claimed titles without any custom-agent record retain that unrestricted default
+only after the agent store confirms the record is absent. These checks do not
+provision an agent or change the existing private-data, budget, or organization
+authorization rules.
+
+## Manual Browserbase public-page QA
+
+The opt-in `deerflow.community.browser_automation.browserbase_qa` runner creates
+one 60-second Browserbase session for public-page checks at 390/768/1440. It uses
+the headless HTTP/CDP API with Playwright, without model calls, form submission,
+persistent cookies or scheduler changes. It requires an exact host allowlist,
+blocks mutating requests and redirects, records overflow/target-size measurements,
+and requests release only for its own created session. Receipts and screenshots
+belong in a fresh private directory outside Git. Provider errors are sanitized;
+credential-bearing CDP URLs must never be logged.
+
+```sh
+cd backend
+uv sync --frozen --extra browser
+# Existing credential: BROWSERBASE_API_KEY, or macOS Keychain browserbase.api-key.
+# This command consumes included browser time; run only within an approved budget.
+uv run --no-sync python -m deerflow.community.browser_automation.browserbase_qa \
+  --url https://example.com/ --allow-host example.com \
+  --project-id YOUR_EXISTING_PROJECT_UUID --output /private/local/fresh-qa-run
+```
+
+The default reported-usage admission ceiling is 50 browser minutes; missing or
+invalid usage stops before session creation. This ceiling is a conservative
+local gate, not proof of the account's plan, remaining quota or an atomic shared
+budget. Request/body/screenshot admission caps bound retained QA data; HTTP
+responses are fetched before body-size rejection, so this is not a hard network
+transfer cap. API creation failures are never automatically retried; an ambiguous
+timeout must be reconciled before another attempt. This manual runner does not
+enable the general browser tool group or production Browserbase routing.
+
+## Responses multi-agent preflight (local customization)
+
+An opt-in Sol 6.1/OpenRouter Responses adapter stages bounded requests, separates
+root final answers from agent progress, and records durable spending receipts.
+It is not registered or activated by default. Native activation requires actual
+hosted child output and verified aggregate provider spending enforcement across
+all descendants and continuations; concurrency limits alone cannot cap cost.
+The ordinary read-only function-call probe is separate capability evidence.
+See [protocol, spending gates and integration criteria](backend/docs/RESPONSES_MULTI_AGENT.md).
+
+## Private agency pilot guard (local customization)
+
+For an opt-in bounded private MomoBot pilot, see the [loopback request guard and
+artifact readback example](examples/momo-agency-guard/README.md). It does not
+activate schedules or enforce budgets for preexisting gateway routes.
+
+### Preserved private Agent Room
+
+This local integration preserves the existing standby owner-private Agent Room
+API, repository, read/post tools, and admin-only Desk visibility. Original source
+was matched to deployed bytes before bringing over only its room wiring; no live
+configuration or data is copied into Git. Its shipped `0040_agent_room_messages`
+history remains unchanged. A no-DDL `0047_merge_agent_room_exec` joins that branch
+with `0046_organization_entitlements`, allowing either existing database history
+to upgrade without a manual stamp. Tests exercise actual bootstrap from both
+histories and preserve existing owner credentials and room handoff rows. This is
+not a deployment receipt. A standby update requires a quiet writer window and a
+verified pre-upgrade backup: the previous image cannot read the new revision, so
+an image-only rollback is insufficient. Do not downgrade or restamp a live DB.
+
+Key-free full-stack replay checks keep normal thread ownership active: seeded
+history has an owned native thread record but no checkpoint, and its browser
+messages must render once each in chronological order. The auth-disabled check
+compares the full current response, including MFA state and registered permissions.
+
+Agents with explicitly empty skills and a fully assembled canonical Room/batch
+toolset can start without constructing an unused sandbox provider. Unknown,
+deferred or extension capabilities keep the existing sandbox policy; inherited
+sandbox bindings are refused. This grants no Docker or network access. See the
+[native startup contract](backend/docs/NATIVE_LAZY_SANDBOX_STARTUP.md).
+
 ## Star History
 
 [![Star History Chart](https://star-history.dera.page/svg?repos=bytedance/deer-flow&type=Date)](https://star-history.dera.page/#bytedance/deer-flow&Date)
+
+Private agency upgrade checks preserve the existing room and enforce canonical safe identifiers on client Board routes, including existing hex IDs. Board, Team and Academy PAT scope names stay aligned with route permissions; the existing default-deny PAT endpoint policy still controls reachability.
+
+The optional [fixed agency packet phases](examples/momo-approved-packets/README.md)
+let an operator pin two complete private source packets, submit producers and
+independent reviewers through the existing durable native batch queue, and
+persist exact native result bytes with immutable owner/thread-bound readback.
+The feature stays disabled without an operator digest-pinned manifest. Phase
+receipts expose evidence, not acceptance or proof of whole-gateway spend control.
+
+## MomoBot iPhone and desktop app
+
+The private workspace adds **OpenAI crew** at `/workspace/openai` for durable
+GPT-6.1 Sol hosted tasks with up to three subagents, saved results and file
+downloads. **Browser research** at `/workspace/browser-research` captures up to
+three public HTTPS sources with a bounded Browserbase session and source
+receipts. Captures render sanitized source text; they do not represent live
+origin-page interaction. Existing client records and queues remain authoritative.
+
+On iPhone, open the authenticated HTTPS workspace in Safari and use Share →
+Add to Home Screen; the in-app install help explains iOS and desktop steps.
+Offline mode contains only generic help and icons, never private workspace data.
+The Electron client lives in [desktop](desktop/README.md). A private environment
+file supplies credentials only to the server; the web app and native bundle
+contain no API keys. See [release setup](docs/MOMOBOT_APP_RELEASE.md),
+[OpenAI lifecycle](backend/docs/MOMOBOT_OPENAI_LIFECYCLE.md), and
+[Browserbase configuration](backend/docs/BROWSERBASE_APP.md).
+
+The workflow, hosted crew and browser rooms retain session-only admission, owner/workspace fences and uncertain-call holds alongside the existing private Agent Room and native startup controls. Integration preserves the current migration graph; deployment and accepted output still require their own runtime evidence.
+
+The opt-in **Workflows** room at `/workspace/workflows` adds 120 concrete recipes:
+100 Momentum marketing, operations and development tasks plus 20 personal
+writing, music, research, coding and administration tasks. Each recipe has a
+closed input/output schema, synthetic preview and independent acceptance criteria.
+LangGraph retains the durable controller and the application's native run,
+thread and event stores; CrewAI, Mastra, Deep Agents, Agno and Inngest AgentKit
+are finite adapters under the same owner scope and provider meter.
+
+The default budget is three executing jobs, capacity for 100 waiting jobs,
+six model attempts and 8,192 output / 60,000 input tokens per run, and 240 model
+attempts across the ledger in a rolling 24 hours. Browser work uses one bounded
+Browserbase session per owner scope. Optional Stagehand analyzes inert public
+snapshots through the same admitted model callback. Results stay reviewable
+drafts with immutable, hash-checked downloads; unknown billed cost stays unavailable.
+See [workflow operation and limits](backend/docs/WORKFLOWS.md),
+[isolated adapters](backend/docs/WORKFLOW_ADAPTERS.md), and the
+[Mac workbench client](scripts/MOMO_WORKBENCH.md). The separate
+[AgentOS probe](docs/AGNO_AGENTOS_PROBE.md) tests bounded native persistence and
+authorization; it does not activate another production platform.
+
+Before starting a newly prepared dedicated private app state, stop its Gateway
+and run `scripts/run_momobot_openai_app.py prepare-config` with `--state-dir`
+and the reviewed `--expected-config-sha256`. This appends a missing
+`run_events.backend: db` setting using the existing SQLite database and retains
+an exact private backup. Explicit owner settings, authentication, signing secret,
+provider budgets and development defaults are preserved. The private Gateway
+rejects an omitted journal setting; previous memory-only pilot events remain
+historical. See the exact invocation in [private setup](docs/MOMOBOT_APP_RELEASE.md).

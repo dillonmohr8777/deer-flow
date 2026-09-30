@@ -1,10 +1,14 @@
 import asyncio
 import threading
 from abc import ABC, abstractmethod
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from typing import TYPE_CHECKING
 
 from deerflow.config import get_app_config
 from deerflow.reflection import resolve_class
+from deerflow.sandbox.exceptions import SandboxRuntimeError
 from deerflow.sandbox.lease import run_sync_lifecycle_operation
 from deerflow.sandbox.sandbox import Sandbox
 
@@ -148,10 +152,27 @@ _default_sandbox_provider: SandboxProvider | None = None
 # self-deadlock such a provider and would block every concurrent `get()` during a
 # slow teardown. Keeping callbacks off the lock avoids both.
 _provider_lock = threading.Lock()
+_NATIVE_TOOL_EXECUTION: ContextVar[bool] = ContextVar("deerflow_native_tool_execution", default=False)
+
+
+@contextmanager
+def native_tool_execution() -> Iterator[None]:
+    """Fence transitive sandbox resolution in one admitted native tool call."""
+    token = _NATIVE_TOOL_EXECUTION.set(True)
+    try:
+        yield
+    finally:
+        _NATIVE_TOOL_EXECUTION.reset(token)
+
+
+def _require_sandbox_capability() -> None:
+    if _NATIVE_TOOL_EXECUTION.get():
+        raise SandboxRuntimeError("Host-native tool execution cannot resolve a sandbox provider")
 
 
 def get_initialized_sandbox_provider() -> SandboxProvider | None:
     """Return the provider only when another lifecycle path initialized it."""
+    _require_sandbox_capability()
     with _provider_lock:
         return _default_sandbox_provider
 
@@ -165,6 +186,7 @@ def get_sandbox_provider(**kwargs) -> SandboxProvider:
     Returns:
         A sandbox provider instance.
     """
+    _require_sandbox_capability()
     global _default_sandbox_provider
     # Fast path: a single locked read so a concurrent reset/shutdown can't null
     # the global between the check and the return.

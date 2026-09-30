@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 
 from app.gateway.browser_capability import browser_capability
 from app.gateway.conversation_access import conversation_references_enabled
-from app.gateway.deps import get_config
+from app.gateway.deps import get_config, is_admin_user
 from app.gateway.knowledge_scope_admission import RAGFLOW_KNOWLEDGE_SEARCH_PROVIDER
 from app.gateway.momentum_internal import is_momentum_staff
 from app.gateway.run_models import MAX_CONVERSATION_REFERENCES
@@ -128,7 +128,7 @@ async def list_features(request: Request, config: AppConfig = Depends(get_config
         ),
         # Config-only, read per request. Off unless config.yaml says
         # private_workspace.enabled: true, so client-facing MomoBot never shows Desk.
-        desk=DeskFeature(enabled=config.private_workspace.enabled is True),
+        desk=DeskFeature(enabled=config.private_workspace.enabled is True and await is_admin_user(request)),
         # Per caller, not per instance: the agency's own workspace (by slug,
         # from config) plus a staff role in it. The routes behind it enforce
         # the same predicate.

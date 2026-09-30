@@ -1693,6 +1693,14 @@ async def _load_scope_agent_config(
 ) -> Any | None:
     if not assistant_id or assistant_id == _DEFAULT_ASSISTANT_ID:
         return None
+    if not isinstance(assistant_id, str):
+        # A client can send any JSON scalar as configurable/context.agent_name
+        # (both are untyped dicts); a non-string value can never name a real
+        # agent, so answer like a missing one instead of crashing on .strip().
+        raise HTTPException(
+            status_code=422,
+            detail="knowledge_scope assistant configuration could not be resolved",
+        )
     normalized = assistant_id.strip().lower().replace("_", "-")
     try:
         return await asyncio.to_thread(
@@ -2357,6 +2365,36 @@ async def launch_scheduled_thread_run(
         raise PermissionError("scheduled task has no active delegation in its organization")
     request = _delegated_internal_request(app, delegation)
     owner_user_id = delegation.owner_user_id
+    # f96 (review follow-up on f88/PR #82): the create/PATCH gate alone isn't
+    # enough -- a task's assistant_id is fixed at creation, but the actor's
+    # visibility into that agent's client can change later (unassigned,
+    # agent re-stamped, or a pre-f88 task already named a foreign client's
+    # agent), and start_run's own _require_run_agent_visible always skips
+    # internal callers. Re-run the same check on every launch, against the
+    # delegation owner -- the real acting person a scheduled run answers
+    # for -- under the storage context _start_delegated_run would set,
+    # since _visible_client_ids resolves the org/actor from that context,
+    # not from a parameter.
+    state = request.state
+    context_token = set_storage_context(
+        WorkspaceStorageContext(
+            actor_user_id=state.actor_user_id,
+            organization_id=state.organization_id,
+            storage_user_id=state.storage_user_id,
+            role=state.organization_role,
+        )
+    )
+    try:
+        agent_config = await _load_scope_agent_config(assistant_id=assistant_id, user_id=state.storage_user_id)
+        await _require_run_agent_visible(
+            agent_name=assistant_id,
+            agent_config=agent_config,
+            is_bootstrap=False,
+            content_user_id=state.storage_user_id,
+            actor_user_id=owner_user_id,
+        )
+    finally:
+        reset_storage_context(context_token)
     body = RunCreateRequest(
         assistant_id=assistant_id,
         input={"messages": [{"role": "user", "content": prompt}]},
