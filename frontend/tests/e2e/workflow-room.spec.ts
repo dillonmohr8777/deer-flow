@@ -138,7 +138,7 @@ test("catalog search, editable synthetic inputs and accepted artifact survive re
   const state = await setup(page);
   await page.goto("/workspace/workflows");
   await expect(
-    page.getByRole("heading", { name: "Workflow room", exact: true }),
+    page.getByRole("heading", { name: "Workflows", exact: true }),
   ).toBeVisible();
   await expect(page.getByText("100 of 100 workflow definitions")).toBeVisible();
   await page.getByLabel("Workflow category").selectOption("Operations");
@@ -156,9 +156,9 @@ test("catalog search, editable synthetic inputs and accepted artifact survive re
   expect(state.receipts).toEqual([]);
   await page.getByRole("button", { name: "Run workflow", exact: true }).click();
   await expect(
-    page.getByText("completed · LangGraph · acceptance passed"),
-  ).toBeVisible();
-  await expect(page.getByText(/Cost unavailable/)).toBeVisible();
+    page.locator("section[aria-label='Workflow run']").getByRole("status"),
+  ).toHaveText("Accepted · LangGraph");
+  await expect(page.getByText("Unavailable", { exact: true })).toBeVisible();
   expect(state.payloads[0]).toEqual(
     expect.objectContaining({
       workflow_id: "fixture-099",
@@ -184,11 +184,11 @@ test("catalog search, editable synthetic inputs and accepted artifact survive re
   await expect(page.getByText(/size and SHA-256 matched/)).toBeVisible();
   await page.reload();
   await page
-    .getByRole("button", { name: /^Synthetic saved run completed/ })
+    .getByRole("button", { name: /^Synthetic saved run Accepted/ })
     .click();
   await expect(
-    page.getByText("completed · LangGraph · acceptance passed"),
-  ).toBeVisible();
+    page.locator("section[aria-label='Workflow run']").getByRole("status"),
+  ).toHaveText("Accepted · LangGraph");
   expect(state.receipts).toHaveLength(1);
   expect(errors).toEqual([]);
 });
@@ -204,7 +204,9 @@ test("unconfirmed admission retries the same exact request and receipt", async (
   await expect(page.getByText(/request is unconfirmed/)).toBeVisible();
   await expect(page.getByLabel("Task brief (required)")).toBeDisabled();
   await page.getByRole("button", { name: "Retry same request" }).click();
-  await expect(page.getByText(/acceptance passed/)).toBeVisible();
+  await expect(
+    page.locator("section[aria-label='Workflow run']").getByRole("status"),
+  ).toHaveText("Accepted · LangGraph");
   expect(state.receipts).toHaveLength(2);
   expect(new Set(state.receipts).size).toBe(1);
   expect(state.payloads[0]).toEqual(state.payloads[1]);
@@ -233,11 +235,13 @@ test("interrupted resume uses the existing record and original budget", async ({
   const state = await setup(page, { interrupted: true });
   await page.goto("/workspace/workflows");
   await page
-    .getByRole("button", { name: /^Synthetic saved run interrupted/ })
+    .getByRole("button", { name: /^Synthetic saved run Interrupted/ })
     .click();
   await expect(page.getByText(/remaining budget/)).toBeVisible();
   await page.getByRole("button", { name: "Resume interrupted run" }).click();
-  await expect(page.getByText(/acceptance passed/)).toBeVisible();
+  await expect(
+    page.locator("section[aria-label='Workflow run']").getByRole("status"),
+  ).toHaveText("Accepted · LangGraph");
   expect(state.actions).toEqual(["/api/workflows/runs/owned-run/resume"]);
   expect(state.receipts).toEqual([]);
 });

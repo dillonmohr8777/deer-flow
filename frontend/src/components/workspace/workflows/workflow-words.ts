@@ -138,3 +138,93 @@ export function runTime(iso: string): string {
     ...(sameYear ? {} : { year: "numeric" }),
   })}, ${clock}`;
 }
+
+/** Plain names for the steps `deerflow.workflows.engine` journals. */
+const STEP_NAMES: Record<string, string> = {
+  validate: "Check the inputs",
+  research: "Gather public sources",
+  stagehand: "Capture browser evidence",
+  plan: "Plan the work",
+  draft: "Draft the result",
+  revise: "Revise after review",
+  verify: "Independent review",
+  accept: "Acceptance checks",
+};
+
+/** The engine's step detail codes; a sentence from a worker passes through. */
+const STEP_DETAILS: Record<string, string> = {
+  input_schema_validated: "Every field is present and inside its limits.",
+  not_required: "Not needed for this workflow.",
+  public_read_only_sources: "Reading public pages only.",
+  sources_retrieved: "Sources read and recorded as evidence.",
+  schema_and_independent_review_passed:
+    "The result matched its format and passed the independent review.",
+};
+
+const EVIDENCE_KINDS: Record<string, string> = {
+  input: "Supplied input",
+  browserbase: "Browser capture",
+  review: "Review receipt",
+};
+
+/** "not_required" or "Review" to "Not required" or "Review". */
+export function humanize(code: string): string {
+  const words = code.replaceAll("_", " ").trim();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+export type RunStep = WorkflowRun["steps"][number];
+
+/**
+ * The journal logs a step once as it starts and again as it ends, so the
+ * receipt shows each step once, in the order it began, at its latest word.
+ */
+export function stepsOnce(steps: RunStep[]): RunStep[] {
+  const latest = new Map<string, RunStep>();
+  for (const step of steps) latest.set(step.name, step);
+  return [...latest.values()];
+}
+
+export function stepName(name: string): string {
+  return STEP_NAMES[name] ?? humanize(name);
+}
+
+/** A detail code in words; an unknown bare code is an internal id, so none. */
+export function stepDetail(detail?: string): string | null {
+  if (!detail) return null;
+  return STEP_DETAILS[detail] ?? (/^[a-z0-9_]+$/.test(detail) ? null : detail);
+}
+
+/**
+ * A step's word beside its shape. A step still "running" in a run that has
+ * ended is where the run stopped, not work in progress.
+ */
+export function stepState(
+  step: RunStep,
+  run: WorkflowRun,
+): { tone: StatusTone; label: string } {
+  switch (step.status) {
+    case "completed":
+      return { tone: "ok", label: "Done" };
+    case "failed":
+      return { tone: "danger", label: "Failed" };
+    case "running":
+      if (run.status === "running") return { tone: "active", label: "Working" };
+      return run.status === "failed"
+        ? { tone: "danger", label: "Stopped here" }
+        : { tone: "idle", label: "Stopped here" };
+    default:
+      return { tone: "unknown", label: humanize(step.status) };
+  }
+}
+
+export function evidenceKind(kind: string): string {
+  return EVIDENCE_KINDS[kind] ?? humanize(kind);
+}
+
+/** 48213 to "47.1 KB". */
+export function byteSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} bytes`;
+  const kb = bytes / 1024;
+  return kb < 1024 ? `${kb.toFixed(1)} KB` : `${(kb / 1024).toFixed(1)} MB`;
+}

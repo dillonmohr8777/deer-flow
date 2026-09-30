@@ -295,8 +295,9 @@ describe("Workflow room behavior", () => {
       "scope-one",
       expect.any(AbortSignal),
     );
-    await screen.findByText("Model gpt-6.1-sol · effort high");
-    await screen.findByText(/Cost unavailable/);
+    await screen.findByText(", high effort", { exact: false });
+    expect(screen.getByText("gpt-6.1-sol").className).toContain("font-mono");
+    await screen.findByText("Unavailable");
     expect(mocks.create).not.toHaveBeenCalled();
   });
   it("renders unaccepted output as plain text and never offers an accepted artifact", async () => {
@@ -314,7 +315,8 @@ describe("Workflow room behavior", () => {
       }),
     );
     await detailSays("Not accepted · LangGraph");
-    expect(screen.getByText(/Synthetic verified result/).tagName).toBe("PRE");
+    await screen.findByText("Result, not accepted");
+    expect(screen.getByText(/Synthetic verified result/).tagName).toBe("P");
     expect(document.querySelector("script")).toBeNull();
     expect(
       screen.queryByRole("button", { name: "Download accepted artifact" }),
@@ -340,8 +342,8 @@ describe("Workflow room behavior", () => {
         name: /^Synthetic saved run Accepted/,
       }),
     );
-    await screen.findByText(/Known minimum: 0 input tokens/);
-    await screen.findByText(/2 attempts have unresolved usage/);
+    await screen.findByText("Input tokens, at least");
+    await screen.findByText(/Known minimum\. 2 attempts have unresolved usage/);
   });
   it("aborts an old owner's artifact and never hands a late download to the browser", async () => {
     let settle: (blob: Blob) => void = () => undefined;
@@ -539,5 +541,68 @@ describe("Workflow room behavior", () => {
       await screen.findByRole("button", { name: "Resume interrupted run" }),
     );
     await screen.findByText(/cannot be resumed again/);
+  });
+  it("reads the step journal as one plain row per step, never raw codes or worker ids", async () => {
+    const worker = "wf_3f9a1c0d2e4b5a6978c1d2e3f4a5b6c7";
+    const failed: WorkflowRun = {
+      ...WORKFLOW_RUN,
+      status: "failed",
+      accepted: false,
+      output: null,
+      error: "run_model_budget_exhausted",
+      steps: [
+        {
+          name: "validate",
+          status: "completed",
+          detail: "input_schema_validated",
+        },
+        {
+          name: "plan",
+          status: "running",
+          worker_id: worker,
+          model: "gpt-6.1-sol",
+          effort: "low",
+        },
+        {
+          name: "plan",
+          status: "completed",
+          worker_id: worker,
+          model: "gpt-6.1-sol",
+          effort: "low",
+        },
+        {
+          name: "draft",
+          status: "running",
+          worker_id: worker,
+          model: "gpt-6.1-sol",
+          effort: "medium",
+        },
+        { name: "mystery", status: "completed", detail: "some_internal_code" },
+      ],
+    };
+    mocks.list.mockResolvedValue({ runs: [failed] });
+    mocks.read.mockResolvedValue(failed);
+    render(<WorkflowRoom />, { wrapper: Wrapper });
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: /^Synthetic saved run Failed/,
+      }),
+    );
+    const list = await screen.findByRole("list", {
+      name: "Recorded workflow steps",
+    });
+    const rows = within(list).getAllByRole("listitem");
+    expect(rows.map((row) => row.textContent)).toEqual([
+      "Check the inputsEvery field is present and inside its limits.Done",
+      "Plan the workgpt-6.1-sol, low effortDone",
+      "Draft the resultgpt-6.1-sol, medium effortStopped here",
+      "MysteryDone",
+    ]);
+    const sheet = screen.getByLabelText("Workflow run");
+    expect(sheet.textContent).not.toContain(worker);
+    expect(sheet.textContent).not.toMatch(/_[a-z]+_/);
+    expect(within(sheet).getByText("owned-run").className).toContain(
+      "font-mono",
+    );
   });
 });
