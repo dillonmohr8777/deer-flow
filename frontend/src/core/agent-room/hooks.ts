@@ -57,17 +57,21 @@ export function useAgentRoomAccess() {
     enabled: ownerId !== null,
     retry: false,
     staleTime: 0,
-    refetchOnMount: true,
+    refetchOnMount: "always",
   });
   const enabled =
     ownerId !== null &&
+    access.isSuccess &&
+    !access.isFetching &&
     access.data === true &&
     hasPermission(auth.user, "threads:read");
   return {
     ownerId,
     enabled,
     canWrite: enabled && hasPermission(auth.user, "threads:write"),
-    isLoading: auth.isLoading || (ownerId !== null && access.isPending),
+    isLoading:
+      auth.isLoading ||
+      (ownerId !== null && (access.isPending || access.isFetching)),
   };
 }
 

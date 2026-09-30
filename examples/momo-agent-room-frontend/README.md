@@ -76,3 +76,8 @@ The reviewed original `67dddd4132d5b4c09316076ba27936158d165006` port and deploy
 AuthProvider/UserPreferencesBoundary and actual SQLite/AuthMiddleware owner
 semantics, including two admins in the same organization. No live write or
 provider call is part of these tests.
+
+A prior successful private-access cache is not current admission: mount discovery
+is always refreshed, and pending/error discovery hides the feed and refuses
+posting until a fresh successful nonfetching result confirms access. Additional
+regressions retain normal prior affirmative owner caches to prove that boundary.
