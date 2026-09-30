@@ -482,6 +482,38 @@ test.describe("UI polish mobile regressions", () => {
       .toBeLessThanOrEqual(390);
   });
 
+  // d11 slice 15: the composer's placeholder reads at full ink-muted (it was
+  // 60%, about 3.1:1 on cream-hi), says what to write, and Send shares the
+  // tools' row when there is no model picker (an empty 44px picker cost the
+  // phone a whole row).
+  test("a new chat's composer is two rows and its placeholder reads", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    mockLangGraphAPI(page, { threads: [] });
+
+    await page.goto("/workspace/chats/new");
+
+    const field = page.locator("textarea").first();
+    await expect(field).toBeVisible({ timeout: 15_000 });
+    await expect(field).toHaveAttribute(
+      "placeholder",
+      "Describe the job and what done looks like",
+    );
+    expect(
+      await field.evaluate((el) => getComputedStyle(el, "::placeholder").color),
+    ).toBe("rgb(58, 74, 107)");
+    const send = page.getByRole("button", { name: "Send" });
+    const attach = page.getByRole("button", { name: "Add attachments" });
+    await expect
+      .poll(async () => {
+        const a = (await attach.boundingBox())!;
+        const s = (await send.boundingBox())!;
+        return Math.abs(a.y + a.height / 2 - (s.y + s.height / 2));
+      })
+      .toBeLessThan(2);
+  });
+
   // Review of slice 14: the welcome block is bottom-anchored, so on short
   // phones its Momo and greeting rose under the header (360x640 lost 71px,
   // 320x568 lost the Momo entirely).

@@ -293,6 +293,7 @@ export interface Translations {
   // Input Box
   inputBox: {
     placeholder: string;
+    replyPlaceholder: string;
     disclaimer: string;
     createSkillPrompt: string;
     addAttachments: string;

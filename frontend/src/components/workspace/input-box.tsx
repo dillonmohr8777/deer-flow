@@ -1484,6 +1484,13 @@ export function InputBox({
   const isComposerDisabled = disabled === true;
   const isMockThread = isMock === true;
   const composerLocked = isComposerDisabled || polishingInput;
+  // No resolved model (none configured, or easy mode) means no picker: an
+  // empty 44px button has no name to read and costs the phone a row.
+  const showModelPicker =
+    context.experience_mode !== "easy" && Boolean(selectedModel);
+  const composerPlaceholder = isWelcomeMode
+    ? t.inputBox.placeholder
+    : t.inputBox.replyPlaceholder;
   // A denied runs:cancel role sees a disabled stop affordance, not a removed
   // one — the composer must still show that a turn is in flight.
   const stopDenied = status === "streaming" && !canStopStreaming;
@@ -2496,11 +2503,11 @@ export function InputBox({
                 onRemove={clearSelectedSlashSkill}
               />
               <span
-                aria-label={t.inputBox.placeholder}
+                aria-label={composerPlaceholder}
                 aria-multiline="true"
                 contentEditable={!composerLocked}
                 data-empty={textInput.value.length === 0}
-                data-placeholder={t.inputBox.placeholder}
+                data-placeholder={composerPlaceholder}
                 data-slot="input-group-control"
                 onBlur={() => setTextareaFocused(false)}
                 onCompositionEnd={() => {
@@ -2513,7 +2520,7 @@ export function InputBox({
                 onInput={handleInlineSkillInput}
                 onKeyDown={handleInlineSkillKeyDown}
                 onPaste={handleInlineSkillPaste}
-                aria-placeholder={t.inputBox.placeholder}
+                aria-placeholder={composerPlaceholder}
                 ref={inlineSkillTextRef}
                 role="textbox"
                 suppressContentEditableWarning
@@ -2533,7 +2540,7 @@ export function InputBox({
                 context.experience_mode === "easy" && "text-base!",
               )}
               disabled={composerLocked}
-              placeholder={t.inputBox.placeholder}
+              placeholder={composerPlaceholder}
               autoFocus={autoFocus}
               defaultValue={initialValue}
               onBlur={() => setTextareaFocused(false)}
@@ -2545,12 +2552,19 @@ export function InputBox({
           )}
         </div>
         <PromptInputFooter className="flex flex-wrap gap-2 sm:flex-nowrap max-sm:[&_button]:min-h-11 max-sm:[&_button]:min-w-11">
-          {/* Phones: the tools take a full row and the model and Send the
-              next, at the right edge by the thumb, so the composer stays
-              two rows tall. Every footer control keeps the 44px phone
-              touch floor (DESIGN.md, Phones); the tools row is pulled out
-              by that inset so its first glyph meets the text edge. */}
-          <PromptInputTools className="min-w-0 flex-1 basis-full flex-wrap max-sm:-ml-3.5 sm:basis-auto">
+          {/* Phones: with a model picker the tools take a full row and the
+              model and Send the next, at the right edge by the thumb. With
+              no picker Send shares the tools' row, so the composer is not
+              a row taller for one button. Every footer control keeps the
+              44px phone touch floor (DESIGN.md, Phones); the tools row is
+              pulled out by that inset so its first glyph meets the text
+              edge. */}
+          <PromptInputTools
+            className={cn(
+              "min-w-0 flex-1 flex-wrap max-sm:-ml-3.5",
+              showModelPicker && "basis-full sm:basis-auto",
+            )}
+          >
             <AddAttachmentsButton
               className="px-2!"
               disabled={composerLocked}
@@ -2919,7 +2933,7 @@ export function InputBox({
                 {goalObjectiveCounter.length}/{goalObjectiveCounter.max}
               </span>
             )}
-            {context.experience_mode !== "easy" && (
+            {showModelPicker && (
               <ModelPicker
                 open={modelDialogOpen}
                 onOpenChange={setModelDialogOpen}

@@ -310,7 +310,8 @@ export const zhCN: Translations = {
 
   // Input Box
   inputBox: {
-    placeholder: "今天我能为你做些什么？",
+    placeholder: "描述任务，以及怎样算完成",
+    replyPlaceholder: "回复，或给出下一步",
     disclaimer: "智能体可能会出错，请核查记录。",
     createSkillPrompt:
       "我们一起用 skill-creator 技能来创建一个技能吧。先问问我希望这个技能能做什么。",

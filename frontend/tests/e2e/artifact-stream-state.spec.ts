@@ -131,7 +131,9 @@ test("keeps artifact trigger after stream values omit artifacts", async ({
   const artifactTrigger = page.getByRole("button", { name: /artifacts/i });
   await expect(artifactTrigger).toBeVisible({ timeout: 15_000 });
 
-  const textarea = page.getByPlaceholder(/how can i assist you/i);
+  const textarea = page.getByPlaceholder(
+    /describe the job|reply, or give the next step/i,
+  );
   await textarea.fill("Continue");
   await textarea.press("Enter");
 
