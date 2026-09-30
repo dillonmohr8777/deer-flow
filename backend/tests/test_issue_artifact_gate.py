@@ -183,3 +183,29 @@ def test_zero_width_spliced_actor_variant_is_not_independent():
 
     assert result["disposition"] != "ready-for-owner"
     assert "review_not_independent" in result["rework"]
+
+
+def test_reviewer_verdict_all_hold_true_but_a_leaf_does_not_hold_is_not_ready_for_owner():
+    case = deepcopy(_valid_case())
+    # A verdict can claim all_hold=True while a leaf itself says otherwise;
+    # the leaves must be inspected, not just the summary flag.
+    case["review_execution"]["acceptance_verdict"] = {
+        "all_hold": True,
+        "leaves": [{"criterion": "criterion one", "checked": False, "holds": False}],
+        "unchecked": [],
+    }
+
+    result = _call(case)
+
+    assert result["disposition"] != "ready-for-owner"
+    assert "reviewer_verdict_not_held" in result["rework"]
+
+
+def test_reviewer_verdict_as_a_list_is_not_ready_for_owner():
+    case = deepcopy(_valid_case())
+    case["review_execution"]["acceptance_verdict"] = ["all_hold", True]
+
+    result = _call(case)
+
+    assert result["disposition"] != "ready-for-owner"
+    assert "reviewer_verdict_not_held" in result["rework"]

@@ -25,6 +25,23 @@ def _value(record: Mapping[str, Any] | None, key: str) -> str:
     return value.strip() if isinstance(value, str) else ""
 
 
+def _verdict_holds(verdict: Any) -> bool:
+    """Shape-check a bare acceptance verdict (no criteria list to match against).
+
+    Mirrors the maker's own per-leaf inspection (``checked``/``holds`` both
+    ``True`` on every leaf) minus the criteria-identity checks that only apply
+    where a criteria list exists to compare against.
+    """
+    return (
+        isinstance(verdict, Mapping)
+        and verdict.get("all_hold") is True
+        and isinstance(verdict.get("leaves"), list)
+        and bool(verdict["leaves"])
+        and all(isinstance(leaf, Mapping) and leaf.get("checked") is True and leaf.get("holds") is True for leaf in verdict["leaves"])
+        and verdict.get("unchecked") == []
+    )
+
+
 def _normalize_actor(actor_id: str) -> str:
     """Fold an actor id for identity comparison, closing look-alike bypasses.
 
@@ -173,9 +190,7 @@ def evaluate_issue_artifact(
     ):
         rework.append("review_not_independent")
     reviewer_verdict = reviewer_item.get("acceptance_verdict")
-    if reviewer_verdict is not None and (
-        not isinstance(reviewer_verdict, Mapping) or reviewer_verdict.get("all_hold") is not True or not isinstance(reviewer_verdict.get("leaves"), list) or not reviewer_verdict["leaves"] or reviewer_verdict.get("unchecked") != []
-    ):
+    if reviewer_verdict is not None and not _verdict_holds(reviewer_verdict):
         rework.append("reviewer_verdict_not_held")
     if review:
         if _value(review, "decision") != "accepted":

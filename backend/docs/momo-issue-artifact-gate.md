@@ -41,14 +41,20 @@ must bind `work_order_id`, `artifact_sha256`, the same source snapshots,
 artifact directly. The separate review execution record must be a completed,
 nonempty, untruncated batch item matching `review_item_key`; its `id` must
 equal the review receipt's `review_batch_item_id`, differ from the maker's
-batch item `id`, and use a distinct actor (actor ids are compared casefolded,
-so the same person under a different capitalization is still the same
-reviewer). A work order whose own `review_item_key` names its own
-`work_order_id` never counts as independent either, even if the rerun's batch
-item `id` and actor happen to differ from the maker's: that key names a rerun
-of the maker's own task, not a second one. If the review execution carries its
-own `acceptance_verdict`, that verdict must also hold (`all_hold: true`); one
-that does not is rework, not a silent pass. Both IDs therefore share the
+batch item `id`, and use a distinct actor. Actor ids are normalized before
+comparison (Unicode NFKC, then Unicode category Cf format/zero-width
+characters stripped, then casefolded), so the same person is still the same
+reviewer whether written in a different capitalization, a fullwidth Unicode
+variant, or with an invisible character embedded. A work order whose own
+`review_item_key` names its own `work_order_id` never counts as independent
+either, even if the rerun's batch item `id` and actor happen to differ from
+the maker's: that key names a rerun of the maker's own task, not a second one.
+If the review execution carries an `acceptance_verdict` at all, it must be a
+mapping with `all_hold: true`, every leaf's own `checked`/`holds` also `true`,
+a nonempty `leaves` list, and `unchecked: []` — the same shape the maker's own
+verdict must have; a verdict present in any other shape (a bare string or
+list, a mapping missing those fields, a summary flag that disagrees with its
+own leaves, an unheld one) is rework, not a silent pass. Both IDs therefore share the
 durable batch-item namespace. Store and authorize these receipts outside
 model-authored room text; matching JSON strings alone are not an
 authentication mechanism. The export command creates a new output file and
