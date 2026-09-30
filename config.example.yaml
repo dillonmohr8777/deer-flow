@@ -2341,6 +2341,19 @@ momentum_internal:
   enabled: false
   organization_slugs: []
 
+# OpenRouter Fusion deliberation panel for big-project planning (queue item
+# e13, the `deliberate` tool group below). Off until both `enabled: true` and
+# `openrouter_api_key` are set -- deliberately its own key, never the
+# Luna/Muse-restricted default model lane, since a call fans the prompt out
+# to every model in the selected preset's panel.
+deliberate:
+  enabled: false
+  openrouter_api_key: null # e.g. $DELIBERATE_OPENROUTER_API_KEY
+  cheap_panel_models: ["openrouter/auto"]
+  quality_panel_models: ["openrouter/auto"]
+  analyst_model: "openrouter/auto"
+  max_calls_per_turn: 1
+
 # ============================================================================
 # Skill Self-Evolution Configuration
 # ============================================================================
