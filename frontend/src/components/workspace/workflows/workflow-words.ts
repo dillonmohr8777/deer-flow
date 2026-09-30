@@ -7,6 +7,57 @@ import type { WorkflowRun } from "@/core/workflows/types";
  * happened and, where there is one, the next step.
  */
 const MESSAGES: Record<string, string> = {
+  // The workflow engine's own codes (deerflow/workflows/engine.py). A failed
+  // run stores these far more often than the service codes below.
+  workflow_independent_review_rejected:
+    "An independent reviewer rejected the draft, and the one revision did not pass either.",
+  workflow_output_not_accepted: "The run finished without an accepted result.",
+  workflow_review_criteria_incomplete:
+    "The reviewer did not check every acceptance criterion, so the result was not accepted.",
+  workflow_model_call_failed:
+    "A model call failed, often a budget or provider limit. Check the steps below, then run it again.",
+  workflow_call_limit_exceeded:
+    "The run used all of its model calls before it finished.",
+  workflow_context_too_large:
+    "The sources were too long to review together. Use fewer or shorter sources.",
+  workflow_model_receipt_invalid:
+    "A model's receipt could not be verified, so its answer was not used.",
+  workflow_usage_receipt_missing:
+    "A model call returned no usage receipt, so its answer was not used.",
+  workflow_usage_receipt_invalid:
+    "A model's usage receipt could not be verified, so its answer was not used.",
+  workflow_output_schema_invalid:
+    "The draft did not have the fields this workflow requires.",
+  workflow_output_too_large: "The draft was longer than this workflow allows.",
+  workflow_output_provenance_invalid:
+    "The draft cited sources the run did not capture, so it was not accepted.",
+  workflow_browser_unavailable:
+    "Browser capture was unavailable, so the public sources could not be read.",
+  workflow_browser_call_failed: "Capturing a public source failed.",
+  workflow_browser_output_invalid:
+    "A captured source came back in a form the run cannot use.",
+  workflow_browser_evidence_missing:
+    "A source was captured without its evidence, so it was not used.",
+  workflow_browser_evidence_invalid:
+    "A captured source's evidence could not be verified, so it was not used.",
+  workflow_browser_extract_invalid:
+    "The text taken from a source could not be verified.",
+  workflow_browser_extract_quote_invalid:
+    "A quote did not match the captured source, so it was not used.",
+  workflow_requires_public_https_sources: "Sources must be public https pages.",
+  workflow_input_schema_invalid:
+    "Check the required fields and their allowed bounds.",
+  workflow_input_too_large: "The inputs are longer than this workflow allows.",
+  workflow_execution_identity_invalid:
+    "This run's saved identity could not be read, so it was not started.",
+  workflow_checkpoint_identity_mismatch:
+    "This run's saved progress belongs to a different run, so it cannot be resumed.",
+  workflow_checkpoint_not_found:
+    "This run's saved progress is missing, so it cannot be resumed. Start a new run.",
+  workflow_run_requires_resume:
+    "This run already has saved progress. Resume it instead of starting it again.",
+  workflow_checkpointer_required:
+    "The workflow runtime is unavailable right now.",
   // Admission and requests
   queue_full:
     "The workflow queue is full. Wait for a slot before trying again.",

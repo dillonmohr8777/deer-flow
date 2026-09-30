@@ -493,7 +493,7 @@ describe("Workflow room behavior", () => {
       "2026-09-30T08:00:00.123Z",
     );
   });
-  it("gives each stored failure code its own words in the list and the detail", async () => {
+  it("gives each code the engine stores its own words in the list and the detail", async () => {
     const failed = (id: string, error: string) => ({
       ...WORKFLOW_RUN,
       id,
@@ -503,16 +503,16 @@ describe("Workflow room behavior", () => {
       error,
     });
     const runs = [
-      failed("a", "acceptance_failed"),
-      failed("b", "run_token_budget_exhausted"),
+      failed("a", "workflow_independent_review_rejected"),
+      failed("b", "workflow_call_limit_exceeded"),
     ];
     mocks.list.mockResolvedValue({ runs });
     mocks.read.mockImplementation((id: string) =>
       Promise.resolve(runs.find((run) => run.id === id)),
     );
     render(<WorkflowRoom />, { wrapper: Wrapper });
-    const acceptance = "did not pass its acceptance checks";
-    const budget = "used all of its token budget";
+    const acceptance = "independent reviewer rejected the draft";
+    const budget = "used all of its model calls";
     const a = await screen.findByRole("button", { name: /^Run a Failed/ });
     const b = screen.getByRole("button", { name: /^Run b Failed/ });
     expect(a.textContent).toContain(acceptance);
@@ -520,7 +520,7 @@ describe("Workflow room behavior", () => {
     fireEvent.click(b);
     const detail = await screen.findByLabelText("Workflow run");
     await waitFor(() => expect(detail.textContent).toContain(budget));
-    expect(detail.textContent).not.toContain("run_token_budget_exhausted");
+    expect(detail.textContent).not.toContain("workflow_call_limit_exceeded");
   });
   it("says a run at its resume limit cannot be resumed again", async () => {
     const interrupted = {
@@ -604,5 +604,52 @@ describe("Workflow room behavior", () => {
     expect(within(sheet).getByText("owned-run").className).toContain(
       "font-mono",
     );
+  });
+  it("has words for every workflow_ code the engine raises", async () => {
+    // Codes engine.py raises into a failed run's stored error.
+    const codes = [
+      "workflow_independent_review_rejected",
+      "workflow_output_not_accepted",
+      "workflow_review_criteria_incomplete",
+      "workflow_model_call_failed",
+      "workflow_call_limit_exceeded",
+      "workflow_context_too_large",
+      "workflow_output_provenance_invalid",
+      "workflow_browser_unavailable",
+      "workflow_browser_evidence_invalid",
+      "workflow_usage_receipt_invalid",
+    ];
+    const { explanation } =
+      await import("@/components/workspace/workflows/workflow-words");
+    const words = codes.map((code) => explanation(new Error(code)));
+    for (const text of words) {
+      expect(text).not.toBe(
+        "The workflow service could not complete this request.",
+      );
+    }
+    expect(new Set(words).size).toBe(codes.length);
+  });
+  it("prices a sub-cent run and words an unknown attempt count", async () => {
+    const run = {
+      ...WORKFLOW_RUN,
+      usage: {
+        ...WORKFLOW_RUN.usage,
+        cost: 0.0042,
+        complete: false,
+        unknown_model_calls: 0,
+      },
+    };
+    mocks.list.mockResolvedValue({ runs: [run] });
+    mocks.read.mockResolvedValue(run);
+    render(<WorkflowRoom />, { wrapper: Wrapper });
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: /^Synthetic saved run Accepted/,
+      }),
+    );
+    const detail = await screen.findByLabelText("Workflow run");
+    await waitFor(() => expect(detail.textContent).toContain("Under $0.01"));
+    expect(detail.textContent).toContain("Some attempts have unresolved");
+    expect(detail.textContent).not.toContain("0 attempts");
   });
 });

@@ -25,6 +25,18 @@ import {
   stepState,
 } from "./workflow-words";
 
+/** Provider cost in US dollars; a sub-cent run is not "$0". */
+function usd(cost: number): string {
+  if (cost > 0 && cost < 0.01) return "Under $0.01";
+  return cost.toLocaleString("en-US", { style: "currency", currency: "USD" });
+}
+
+/** "2 attempts have", "1 attempt has", or "Some attempts have" when unknown. */
+function unresolvedAttempts(count: number | undefined): string {
+  if (!count) return "Some attempts have";
+  return count === 1 ? "1 attempt has" : `${count} attempts have`;
+}
+
 /** A section name inside the receipt, in the label voice. */
 function Label({ children }: { children: ReactNode }) {
   return <h4 className={cn(pageStyles.eyebrow, "mb-2")}>{children}</h4>;
@@ -74,10 +86,7 @@ export function WorkflowRunDetail({
     ["Model attempts", run.usage.model_calls.toLocaleString()],
     [`Input tokens${atLeast}`, run.usage.input_tokens.toLocaleString()],
     [`Output tokens${atLeast}`, run.usage.output_tokens.toLocaleString()],
-    [
-      "Cost",
-      run.usage.cost === null ? "Unavailable" : run.usage.cost.toLocaleString(),
-    ],
+    ["Cost", run.usage.cost === null ? "Unavailable" : usd(run.usage.cost)],
   ];
   return (
     <section
@@ -252,8 +261,8 @@ export function WorkflowRunDetail({
         </dl>
         {incomplete && (
           <p className="text-muted-foreground mt-3 text-sm">
-            Known minimum. {run.usage.unknown_model_calls ?? "Some"} attempts
-            have unresolved usage, so these token counts are not final totals.
+            Known minimum. {unresolvedAttempts(run.usage.unknown_model_calls)}{" "}
+            unresolved usage, so these token counts are not final totals.
           </p>
         )}
       </div>
