@@ -138,6 +138,8 @@ class UsageLedger:
             if db.execute("SELECT 1 FROM reservation WHERE occurrence=?", (occurrence,)).fetchone():
                 raise FleetBlocked("Occurrence already reserved; no automatic retry")
             if agent_runs is not None:
+                if db.execute("SELECT 1 FROM reservation r JOIN native_charge c ON c.reservation_id=r.id WHERE r.state IN ('reserved','running','uncertain')").fetchone():
+                    raise FleetBlocked("Another native agent reservation is active")
                 # Account usage includes runs outside this fleet. Keep charges
                 # cycle-scoped and independent of mutable manifest job names.
                 db.execute("INSERT OR IGNORE INTO native_cycle VALUES (?,?)", (cycle, agent_used))
