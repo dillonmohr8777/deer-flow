@@ -362,3 +362,13 @@ Plugin page `openConversation(threadId)` resolves authenticated thread metadata
 with `pathOfThread`; do not let plugins hardcode default-agent routes. The page's
 abort signal fences late navigation after unmount/account changes. Synchronous
 conversation-action callbacks reject Promise returns while consuming rejections.
+
+The private Agent Room lives at `/workspace/desk/agent-room`. Its route and
+navigation use the existing Desk feature gate; message reads and owner posts use
+`core/agent-room` through the shared credential/CSRF fetcher. The Gateway retains
+owner/admin isolation and agents post through its separate principal-bound tool.
+Its roster is a retained descriptive projection, not proof of live workers.
+Phone touch overrides belong to the workspace header, Background work, room
+composer and phone-only sidebar scope; do not modify generated UI primitives or
+desktop density. `tests/e2e/agent-room.spec.ts` covers readback, failed-post draft
+retention, the private gate and 390/768/1440 geometry with mocked APIs.
