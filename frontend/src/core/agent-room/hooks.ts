@@ -72,20 +72,51 @@ export function useAgentRoomAccess() {
   // network hiccup, a 5xx -- must not evict the composer or redirect away.
   // Only an explicit `false` result or a real access-denial error (403/404)
   // revokes it.
+  //
+  // `ownerId` above also reads null while `auth.isLoading` is true, which
+  // covers more than a sign-out: AuthProvider's tab-visibility handler calls
+  // `refreshUser()` for the *same* signed-in owner on every refocus, and
+  // that flips `isLoading` too. Only touch `admittedOwner` once loading has
+  // actually settled, so a same-owner refresh in flight leaves a prior
+  // admission exactly as it was; a genuinely different owner (or a real
+  // sign-out) is caught the moment the refresh resolves, before `admitted`
+  // is computed below.
   const admittedOwner = useRef<string | null>(null);
-  if (ownerId === null || currentOwner.current !== ownerId) {
-    admittedOwner.current = null;
-  } else if (!access.isFetching) {
-    if (access.isSuccess && access.data === true) {
-      admittedOwner.current = ownerId;
+  // Switching from owner X to a real, different owner Y and back to X can
+  // re-render with X's query key before X's own fresh refetch (forced by
+  // `refetchOnMount: "always"`) has actually started: React Query shows the
+  // OLD cached success optimistically first (`isFetching: false`, stale
+  // `data`), and only flips to fetching on a later tick. `dataUpdatedAt` is
+  // only bumped by a fetch that actually completed, so remembering which
+  // one admission last consumed -- instead of trusting any `isSuccess` --
+  // stops that stale snapshot from re-admitting X before its real refetch
+  // lands.
+  const consumedFetchAt = useRef<number | null>(null);
+  if (!auth.isLoading) {
+    if (ownerId === null) {
+      admittedOwner.current = null;
     } else if (
-      access.data === false ||
-      access.error instanceof AgentRoomAccessDeniedError
+      admittedOwner.current !== null &&
+      admittedOwner.current !== ownerId
     ) {
       admittedOwner.current = null;
+    } else if (!access.isFetching) {
+      if (
+        access.isSuccess &&
+        access.data === true &&
+        access.dataUpdatedAt !== consumedFetchAt.current
+      ) {
+        admittedOwner.current = ownerId;
+        consumedFetchAt.current = access.dataUpdatedAt;
+      } else if (
+        access.data === false ||
+        access.error instanceof AgentRoomAccessDeniedError
+      ) {
+        admittedOwner.current = null;
+      }
     }
   }
-  const admitted = ownerId !== null && admittedOwner.current === ownerId;
+  const admitted = admittedOwner.current !== null;
 
   const enabled = admitted && hasPermission(auth.user, "threads:read");
   return {
@@ -93,10 +124,9 @@ export function useAgentRoomAccess() {
     enabled,
     canWrite: enabled && hasPermission(auth.user, "threads:write"),
     isLoading:
-      auth.isLoading ||
-      (ownerId !== null &&
-        !admitted &&
-        (access.isPending || access.isFetching)),
+      !admitted &&
+      (auth.isLoading ||
+        (ownerId !== null && (access.isPending || access.isFetching))),
   };
 }
 

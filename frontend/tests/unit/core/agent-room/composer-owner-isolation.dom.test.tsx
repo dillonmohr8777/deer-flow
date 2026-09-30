@@ -169,11 +169,129 @@ describe("actual Room composer account lifecycle", () => {
     );
     await screen.findByLabelText("Leave an instruction or note");
     expect(fetchAgentRoomEnabled).toHaveBeenCalledTimes(1);
+    // React Query's focusManager listens for `visibilitychange` on `window`,
+    // not `focus` (verified against @tanstack/query-core's own source) --
+    // this is the event `refetchOnWindowFocus: false` actually suppresses.
     await act(async () => {
-      fireEvent.focus(window);
+      window.dispatchEvent(new Event("visibilitychange"));
       await Promise.resolve();
     });
     expect(fetchAgentRoomEnabled).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the composer and draft through a same-owner tab-refocus refresh, and never redirects (f134 review)", async () => {
+    rs.mocked(fetchAgentRoomEnabled)
+      .mockResolvedValueOnce(true) // initial admission
+      .mockRejectedValueOnce(new Error("network blip")); // the fresh discovery fired once the refresh resolves back to the same owner
+    const authMe = rs.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify(OWNER_A), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    const cache = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <AuthProvider initialUser={OWNER_A}>
+        <QueryClientProvider client={cache}>
+          <UserPreferencesBoundary>
+            <AgentRoom />
+          </UserPreferencesBoundary>
+        </QueryClientProvider>
+      </AuthProvider>,
+    );
+    const input = await screen.findByLabelText("Leave an instruction or note");
+    fireEvent.change(input, {
+      target: { value: "Draft survives a same-owner tab refocus" },
+    });
+
+    // AuthProvider listens for `visibilitychange` on `document` and calls
+    // `refreshUser()` for the signed-in owner -- the real trigger behind
+    // this finding's reproduction, distinct from React Query's own
+    // window-level focus listener exercised above.
+    await act(async () => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await waitFor(() => expect(authMe).toHaveBeenCalled());
+    await waitFor(() => expect(fetchAgentRoomEnabled).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(
+        cache.getQueryState(["agent-room", "access", "owner-A"])?.fetchStatus,
+      ).toBe("idle"),
+    );
+
+    expect(
+      screen.getByLabelText<HTMLTextAreaElement>("Leave an instruction or note")
+        .value,
+    ).toBe("Draft survives a same-owner tab refocus");
+    expect(replace).not.toHaveBeenCalled();
+  });
+
+  it("hides the room when a tab-refocus refresh returns a different owner (f134 review)", async () => {
+    rs.mocked(fetchAgentRoomEnabled).mockResolvedValue(true);
+    rs.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify(OWNER_B), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    const cache = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <AuthProvider initialUser={OWNER_A}>
+        <QueryClientProvider client={cache}>
+          <UserPreferencesBoundary>
+            <AgentRoom />
+          </UserPreferencesBoundary>
+        </QueryClientProvider>
+      </AuthProvider>,
+    );
+    await screen.findByLabelText("Leave an instruction or note");
+
+    await act(async () => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+
+    // B is a real, different owner: re-earning admission is correct, not a
+    // bug -- unlike the same-owner case above, this one may legitimately
+    // show the loading view while B's own fresh discovery runs.
+    await waitFor(() =>
+      expect(
+        screen.queryByLabelText("Leave an instruction or note"),
+      ).toBeNull(),
+    );
+  });
+
+  it("hides the room when a tab-refocus refresh comes back 401 (f134 review)", async () => {
+    rs.mocked(fetchAgentRoomEnabled).mockResolvedValue(true);
+    rs.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(null, { status: 401 }),
+    );
+    const cache = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <AuthProvider initialUser={OWNER_A}>
+        <QueryClientProvider client={cache}>
+          <UserPreferencesBoundary>
+            <AgentRoom />
+          </UserPreferencesBoundary>
+        </QueryClientProvider>
+      </AuthProvider>,
+    );
+    await screen.findByLabelText("Leave an instruction or note");
+
+    await act(async () => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+
+    await waitFor(() =>
+      expect(
+        screen.queryByLabelText("Leave an instruction or note"),
+      ).toBeNull(),
+    );
   });
 
   it("keeps the composer and draft through a background access refetch that merely fails, and does not redirect (f134)", async () => {

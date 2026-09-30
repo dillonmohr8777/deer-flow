@@ -9,6 +9,7 @@ import {
   postAgentRoomMessage,
 } from "@/core/agent-room/api";
 import {
+  useAgentRoomAccess,
   useAgentRoomMessages,
   usePostAgentRoomMessage,
 } from "@/core/agent-room/hooks";
@@ -83,6 +84,7 @@ function mount(
   const view = renderHook(
     () => ({
       auth: useAuth(),
+      access: useAgentRoomAccess(),
       room: useAgentRoomMessages(),
       post: usePostAgentRoomMessage(),
     }),
@@ -351,4 +353,33 @@ describe("private Agent Room account isolation", () => {
       );
     });
   }
+
+  it("does not re-admit A instantly after an intervening switch to B, before A's own fresh discovery settles (f134 review, low)", async () => {
+    const gateA = deferred<boolean>();
+    const gateB = deferred<boolean>();
+    rs.mocked(fetchAgentRoomEnabled).mockImplementation((ownerId: string) =>
+      ownerId === "owner-A" ? gateA.promise : gateB.promise,
+    );
+    // No `UserPreferencesBoundary`: that boundary remounts its subtree on
+    // every user change, which would reset `admittedOwner`'s ref itself and
+    // mask exactly the bug this test targets (per the review: "In
+    // production this is masked by the UserPreferencesBoundary remount").
+    const view = mount(OWNER_A, false);
+    gateA.resolve(true);
+    await waitFor(() => expect(view.result.current.access.enabled).toBe(true));
+
+    // A real, different owner: switching to B must not carry A's admission
+    // over, and switching straight back to A (before B's own discovery
+    // settles) must not instantly re-admit A off stale memory either -- A
+    // needs its own fresh discovery to complete again.
+    act(() => view.result.current.auth.applyUser(OWNER_B));
+    expect(view.result.current.access.enabled).toBe(false);
+    act(() => view.result.current.auth.applyUser(OWNER_A));
+    expect(view.result.current.access.enabled).toBe(false);
+
+    // A's re-admission is a genuinely new call (`gateA.promise` was already
+    // resolved, so this settles on the next tick without a further resolve()).
+    await waitFor(() => expect(fetchAgentRoomEnabled).toHaveBeenCalledTimes(3));
+    await waitFor(() => expect(view.result.current.access.enabled).toBe(true));
+  });
 });
