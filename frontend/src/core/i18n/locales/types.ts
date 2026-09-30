@@ -1025,6 +1025,11 @@ export interface Translations {
     deliberationContradictions: string;
     deliberationUniqueInsights: string;
     deliberationBlindSpots: string;
+    deliberationPartialPanel: (
+      answered: number,
+      total: number,
+      droppedModels: string,
+    ) => string;
     skillInstallTooltip: string;
     browserNavigate: (url: string) => string;
     browserNavigateGeneric: string;

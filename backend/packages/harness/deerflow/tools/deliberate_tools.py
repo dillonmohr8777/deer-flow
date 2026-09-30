@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from typing import Literal
 
 from langchain.tools import tool
@@ -56,6 +57,8 @@ from deerflow.runtime.user_context import resolve_organization_id
 from deerflow.tools.exec_seat_tools import _agent_name
 from deerflow.tools.types import Runtime
 from deerflow.utils.llm_text import extract_response_text
+
+logger = logging.getLogger(__name__)
 
 _RESULT_KEYS = ("consensus", "contradictions", "unique_insights", "blind_spots")
 
@@ -175,11 +178,15 @@ async def _call_model(prompt: str, *, model: str, api_key: str, system: str | No
 async def _call_panelist(prompt: str, *, model: str, api_key: str, timeout_seconds: float, system: str | None = None) -> str | None:
     """A single panelist's (or the analyst's) answer, or ``None`` on any failure or timeout.
 
-    Never raises: one bad panelist must not sink the whole deliberation.
+    Never raises: one bad panelist must not sink the whole deliberation. Logs
+    the drop (model name, exception type -- never the prompt or any provider
+    response body) at warning level so a silently thinning panel shows up in
+    logs, not just as a smaller ``panelists_answered`` count on the result.
     """
     try:
         return await asyncio.wait_for(_call_model(prompt, model=model, api_key=api_key, system=system), timeout=timeout_seconds)
-    except Exception:
+    except Exception as exc:
+        logger.warning("Deliberation call to %s failed or timed out: %s", model, type(exc).__name__)
         return None
 
 
@@ -189,16 +196,23 @@ async def run_fusion_panel(prompt: str, *, panel_models: list[str], analyst_mode
     Uses its own OpenRouter key, never ``create_chat_model``'s Luna/Muse
     model registry. Each panelist answers the same prompt independently (no
     fusion tool/plugin call exists to reach for instead); a panelist that
-    raises or exceeds *call_timeout_seconds* is dropped rather than sinking
-    the whole call, and the analyst only ever sees the survivors' real
-    answers -- it is never asked to invent opinions it was never shown. If
-    every panelist fails, returns an error instead of calling the analyst on
-    nothing. On an unparseable (or failed/timed-out) analyst response,
-    returns its raw text as ``consensus`` with the other fields empty and
-    ``fallback: True``.
+    raises or exceeds *call_timeout_seconds* is dropped (logged, see
+    ``_call_panelist``) rather than sinking the whole call, and the analyst
+    only ever sees the survivors' real answers -- it is never asked to
+    invent opinions it was never shown. If every panelist fails, returns an
+    error instead of calling the analyst on nothing. If the analyst call
+    itself fails or times out, also returns an error -- only an analyst
+    response that comes back but doesn't parse as the expected JSON shape
+    falls back to its raw text as ``consensus`` (other fields empty,
+    ``fallback: True``). Every non-error result, fallback or not, carries
+    ``panel_size`` (how many models were asked) and ``panelists_answered``
+    (how many survived), plus ``dropped_models`` when any panelist didn't --
+    so a caller (or the chat card) never mistakes a partial panel's answer
+    for the whole panel's consensus.
     """
     panel_answers = await asyncio.gather(*(_call_panelist(prompt, model=model, api_key=api_key, timeout_seconds=call_timeout_seconds) for model in panel_models))
     survivors = [(model, answer) for model, answer in zip(panel_models, panel_answers, strict=True) if answer is not None]
+    dropped_models = [model for model, answer in zip(panel_models, panel_answers, strict=True) if answer is None]
     if not survivors:
         return _error("Every deliberation panel model failed or timed out.")
     transcript = "\n\n".join(f"Panelist {index + 1} ({model}):\n{answer}" for index, (model, answer) in enumerate(survivors))
@@ -206,13 +220,16 @@ async def run_fusion_panel(prompt: str, *, panel_models: list[str], analyst_mode
     raw = await _call_panelist(analyst_prompt, model=analyst_model, api_key=api_key, timeout_seconds=call_timeout_seconds, system=_ANALYST_INSTRUCTIONS)
     if raw is None:
         return _error("The deliberation analyst call failed or timed out.")
+    meta: dict = {"panel_size": len(panel_models), "panelists_answered": len(survivors)}
+    if dropped_models:
+        meta["dropped_models"] = dropped_models
     try:
         parsed = json.loads(raw)
     except (json.JSONDecodeError, TypeError):
         parsed = None
     if isinstance(parsed, dict) and all(key in parsed for key in _RESULT_KEYS):
-        return {key: str(parsed[key]) for key in _RESULT_KEYS}
-    return {"consensus": raw, "contradictions": "", "unique_insights": "", "blind_spots": "", "fallback": True}
+        return {**{key: str(parsed[key]) for key in _RESULT_KEYS}, **meta}
+    return {"consensus": raw, "contradictions": "", "unique_insights": "", "blind_spots": "", "fallback": True, **meta}
 
 
 async def _deliberate_impl(
@@ -270,6 +287,8 @@ async def deliberate(
         preset: "cheap" or "quality" panel.
 
     Returns:
-        {"consensus", "contradictions", "unique_insights", "blind_spots"}, or {"error": ...}.
+        {"consensus", "contradictions", "unique_insights", "blind_spots",
+        "panel_size", "panelists_answered", optionally "dropped_models"},
+        or {"error": ...}.
     """
     return await _deliberate_impl(prompt, preset=preset, runtime=runtime)

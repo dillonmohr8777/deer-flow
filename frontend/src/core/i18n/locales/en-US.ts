@@ -1201,6 +1201,8 @@ export const enUS: Translations = {
     deliberationContradictions: "Contradictions",
     deliberationUniqueInsights: "Unique insights",
     deliberationBlindSpots: "Blind spots",
+    deliberationPartialPanel: (answered, total, droppedModels) =>
+      `${answered} of ${total} panelists answered (dropped: ${droppedModels})`,
     skillInstallTooltip: "Install skill and make it available to MomoBot",
     browserNavigate: (url: string) => `Open ${url} in browser`,
     browserNavigateGeneric: "Open page in browser",

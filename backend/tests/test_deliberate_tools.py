@@ -245,7 +245,15 @@ async def test_run_fusion_panel_fans_out_to_every_panelist_then_synthesizes(monk
 
     result = await run_fusion_panel("plan the migration", panel_models=["panelist-a", "panelist-b"], analyst_model="analyst-model", api_key="test-key")
 
-    assert result == {"consensus": "agree on X", "contradictions": "disagree on Y", "unique_insights": "Z", "blind_spots": "W"}
+    assert result == {
+        "consensus": "agree on X",
+        "contradictions": "disagree on Y",
+        "unique_insights": "Z",
+        "blind_spots": "W",
+        "panel_size": 2,
+        "panelists_answered": 2,
+    }
+    assert "dropped_models" not in result
     panelist_calls = [c for c in calls if c[1] != "analyst-model"]
     assert {c[1] for c in panelist_calls} == {"panelist-a", "panelist-b"}
     assert all(c[0] == "plan the migration" for c in panelist_calls)
@@ -264,14 +272,20 @@ async def test_run_fusion_panel_falls_back_on_an_unparseable_analyst_response(mo
 
     result = await run_fusion_panel("plan it", panel_models=["panelist-a"], analyst_model="analyst-model", api_key="test-key")
     assert result["fallback"] is True
+    assert result["consensus"] == "not json"
+    assert result["panel_size"] == 1
+    assert result["panelists_answered"] == 1
 
 
 @pytest.mark.asyncio
 async def test_one_failing_panelist_does_not_sink_the_call(monkeypatch):
     """Review finding: a raising panelist must not throw away the survivors' paid
-    answers -- the analyst should see only the real ones."""
+    answers -- the analyst should see only the real ones, and the broken one
+    must show up as dropped rather than silently missing from the count."""
+    calls: list[tuple[str, str]] = []
 
     async def fake_call_model(prompt, *, model, api_key, system=None):
+        calls.append((model, prompt))
         if model == "broken-panelist":
             raise RuntimeError("provider 500")
         if model == "analyst-model":
@@ -282,6 +296,12 @@ async def test_one_failing_panelist_does_not_sink_the_call(monkeypatch):
 
     result = await run_fusion_panel("plan it", panel_models=["broken-panelist", "good-panelist"], analyst_model="analyst-model", api_key="test-key")
     assert "error" not in result
+    assert result["panel_size"] == 2
+    assert result["panelists_answered"] == 1
+    assert result["dropped_models"] == ["broken-panelist"]
+    analyst_prompt = next(prompt for model, prompt in calls if model == "analyst-model")
+    assert "broken-panelist" not in analyst_prompt
+    assert "good-panelist's real answer" in analyst_prompt
 
 
 @pytest.mark.asyncio
@@ -301,7 +321,10 @@ async def test_every_panelist_failing_returns_an_error_not_an_empty_analyst_call
 
 @pytest.mark.asyncio
 async def test_a_slow_panelist_times_out_and_is_dropped(monkeypatch):
+    calls: list[tuple[str, str]] = []
+
     async def fake_call_model(prompt, *, model, api_key, system=None):
+        calls.append((model, prompt))
         if model == "slow-panelist":
             await asyncio.sleep(0.2)
             return "too slow"
@@ -313,6 +336,10 @@ async def test_a_slow_panelist_times_out_and_is_dropped(monkeypatch):
 
     result = await run_fusion_panel("plan it", panel_models=["slow-panelist", "fast-panelist"], analyst_model="analyst-model", api_key="test-key", call_timeout_seconds=0.02)
     assert "error" not in result
+    assert result["dropped_models"] == ["slow-panelist"]
+    assert result["panelists_answered"] == 1
+    analyst_prompt = next(prompt for model, prompt in calls if model == "analyst-model")
+    assert "too slow" not in analyst_prompt
 
 
 @pytest.mark.asyncio

@@ -718,6 +718,72 @@ describe("MessageGroup deliberation panel", () => {
     expect(html).not.toContain("Unique insights");
     expect(html).not.toContain("Blind spots");
   });
+
+  // Review finding: a partial panel (some panelists dropped) must not read as
+  // the whole panel's consensus with no indication anything was missing.
+  it("names the dropped panelists when the panel was partial", () => {
+    const html = renderToolCall(
+      "deliberate",
+      { prompt: "Plan the migration." },
+      JSON.stringify({
+        ...recordedPanelFixture,
+        panel_size: 3,
+        panelists_answered: 2,
+        dropped_models: ["openrouter/flaky-model"],
+      }),
+    );
+
+    expect(html).toContain("2 of 3 panelists answered");
+    expect(html).toContain("openrouter/flaky-model");
+  });
+
+  it("shows no partial-panel note when every panelist answered", () => {
+    const html = renderToolCall(
+      "deliberate",
+      { prompt: "Plan the migration." },
+      JSON.stringify({
+        ...recordedPanelFixture,
+        panel_size: 3,
+        panelists_answered: 3,
+      }),
+    );
+
+    expect(html).not.toContain("panelists answered");
+  });
+
+  // Review finding: a plain-text tool error (JSON.parse failure) must render
+  // as text, not silently produce an empty card by being cast to the panel
+  // shape and having every field read as undefined.
+  it("renders a plain-text tool error instead of an empty card", () => {
+    const html = renderToolCall(
+      "deliberate",
+      { prompt: "Plan the migration." },
+      "Error: the OpenRouter request failed.",
+    );
+
+    expect(html).toContain("Error: the OpenRouter request failed.");
+  });
+
+  // Review finding: an object-valued `error` or `consensus` (e.g. from an
+  // unrelated MCP tool that happens to be named "deliberate") must not throw
+  // "Objects are not valid as a React child".
+  it("does not throw on an object-valued error or consensus field", () => {
+    const objectErrorRender = () =>
+      renderToolCall(
+        "deliberate",
+        { prompt: "Plan the migration." },
+        JSON.stringify({ error: { code: 500, message: "boom" } }),
+      );
+    const objectConsensusRender = () =>
+      renderToolCall(
+        "deliberate",
+        { prompt: "Plan the migration." },
+        JSON.stringify({ consensus: { text: "not actually a string" } }),
+      );
+
+    expect(objectErrorRender).not.toThrow();
+    expect(objectConsensusRender).not.toThrow();
+  });
 });
 
 function renderToolCall(

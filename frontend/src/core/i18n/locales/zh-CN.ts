@@ -1121,6 +1121,8 @@ export const zhCN: Translations = {
     deliberationContradictions: "分歧",
     deliberationUniqueInsights: "独特见解",
     deliberationBlindSpots: "盲点",
+    deliberationPartialPanel: (answered, total, droppedModels) =>
+      `${total} 名研判成员中有 ${answered} 名给出了回答(未回应:${droppedModels})`,
     skillInstallTooltip: "安装技能并使其可在 MomoBot 中使用",
     browserNavigate: (url: string) => `在浏览器中打开 ${url}`,
     browserNavigateGeneric: "在浏览器中打开页面",

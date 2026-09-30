@@ -1020,40 +1020,97 @@ function ToolCall({
       ></ChainOfThoughtStep>
     );
   } else if (kind === "deliberate") {
+    // A tool result that failed JSON parsing arrives as a plain string (e.g. a
+    // provider error message); render it as text instead of casting it to the
+    // panel shape below, where every field access silently reads as undefined.
+    if (typeof result === "string") {
+      return (
+        <ChainOfThoughtStep
+          key={id}
+          label={resolveLabel(t.toolCalls.deliberation)}
+          icon={UsersIcon}
+        >
+          <ChainOfThoughtSearchResult>{result}</ChainOfThoughtSearchResult>
+        </ChainOfThoughtStep>
+      );
+    }
     const panel = result as
       | {
-          consensus?: string;
-          contradictions?: string;
-          unique_insights?: string;
-          blind_spots?: string;
-          error?: string;
+          consensus?: unknown;
+          contradictions?: unknown;
+          unique_insights?: unknown;
+          blind_spots?: unknown;
+          error?: unknown;
+          panel_size?: unknown;
+          panelists_answered?: unknown;
+          dropped_models?: unknown;
         }
       | undefined;
+    // Every field is caller/provider-shaped (an MCP tool can also be named
+    // "deliberate"), so each is typeof-guarded before it reaches JSX --
+    // rendering a non-string value directly throws "Objects are not valid as
+    // a React child".
+    const errorText =
+      typeof panel?.error === "string" ? panel.error : undefined;
+    const consensus =
+      typeof panel?.consensus === "string" ? panel.consensus : undefined;
+    const droppedModels = Array.isArray(panel?.dropped_models)
+      ? panel.dropped_models.filter((m): m is string => typeof m === "string")
+      : [];
+    const panelSize =
+      typeof panel?.panel_size === "number" ? panel.panel_size : undefined;
+    const panelistsAnswered =
+      typeof panel?.panelists_answered === "number"
+        ? panel.panelists_answered
+        : undefined;
     return (
       <ChainOfThoughtStep
         key={id}
         label={resolveLabel(t.toolCalls.deliberation)}
         icon={UsersIcon}
       >
-        {panel?.error ? (
-          <ChainOfThoughtSearchResult>{panel.error}</ChainOfThoughtSearchResult>
-        ) : panel?.consensus !== undefined ? (
+        {errorText ? (
+          <ChainOfThoughtSearchResult>{errorText}</ChainOfThoughtSearchResult>
+        ) : consensus !== undefined ? (
           <div className="space-y-2 text-sm">
+            {droppedModels.length > 0 &&
+              panelSize !== undefined &&
+              panelistsAnswered !== undefined && (
+                <div className="text-muted-foreground text-xs">
+                  {t.toolCalls.deliberationPartialPanel(
+                    panelistsAnswered,
+                    panelSize,
+                    droppedModels.join(", "),
+                  )}
+                </div>
+              )}
             <DeliberationField
               label={t.toolCalls.deliberationConsensus}
-              value={panel.consensus}
+              value={consensus}
             />
             <DeliberationField
               label={t.toolCalls.deliberationContradictions}
-              value={panel.contradictions}
+              value={
+                typeof panel?.contradictions === "string"
+                  ? panel.contradictions
+                  : undefined
+              }
             />
             <DeliberationField
               label={t.toolCalls.deliberationUniqueInsights}
-              value={panel.unique_insights}
+              value={
+                typeof panel?.unique_insights === "string"
+                  ? panel.unique_insights
+                  : undefined
+              }
             />
             <DeliberationField
               label={t.toolCalls.deliberationBlindSpots}
-              value={panel.blind_spots}
+              value={
+                typeof panel?.blind_spots === "string"
+                  ? panel.blind_spots
+                  : undefined
+              }
             />
           </div>
         ) : null}
