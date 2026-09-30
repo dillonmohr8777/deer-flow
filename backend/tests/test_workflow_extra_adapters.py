@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import shutil
 from pathlib import Path
 
 import pytest
@@ -19,9 +20,11 @@ async def test_actual_framework_lifecycle_one_admitted_call_and_exact_output(fra
             pytest.skip("isolated Agno environment not installed")
     else:
         worker = ROOT / "workers/inngest-team"
-        command = ["node", str(worker / "worker.js")]
         if not (worker / "node_modules/@inngest/agent-kit").exists():
             pytest.skip("isolated Inngest environment not installed")
+        node = shutil.which("node")
+        assert node is not None, "installed AgentKit worker requires the configured Node runtime"
+        command = [node, str(worker / "worker.js")]
     data = {
         "type": "invoke",
         "version": 1,
