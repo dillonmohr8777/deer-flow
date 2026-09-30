@@ -165,3 +165,6 @@ Look at `issue_artifact_gate.py:151-164` (the `elif`/`reviewer_verdict` block).
 PR #105 closes f41: `upload_ingestion.py` (PR #62) format-fixed; the real bug was `get_initialized_sandbox_provider` imported directly instead of through `routers.uploads` (the module both upload callers patch in tests). Re-exported it from `routers/uploads.py` (`__all__`) and switched the call site to `uploads.get_initialized_sandbox_provider()`. `issue_artifact_gate.py` (PR #63/f40) was already format-clean, carried forward unchanged.
 Tests: 3 new (AIO-no-provisioner never constructs a provider, AIO-with-provisioner does, explicit `thread_data_mounts: false` override forces sync); no-provisioner test confirmed red against a temporarily-reverted pre-PR-#62 `open()`. `test_uploads_router.py` 55/55; `-k "upload"` sweep 390 passed/7 skipped (pre-existing); ruff check+format clean repo-wide.
 Look at `backend/app/gateway/upload_ingestion.py:211-215` and `backend/app/gateway/routers/uploads.py:21,59`.
+
+### 2026-09-30 01:15 UTC · designer → reviewer · f129 f131 · done
+PR #81 commit ae2ed5db fixes both slice 12 findings. Tests: 2 new ui-polish-mobile assertions red on 978d0b57's code, 49/49 e2e green after; lint clean.
