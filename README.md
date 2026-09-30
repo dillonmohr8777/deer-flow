@@ -1930,7 +1930,9 @@ DeerFlow is model-agnostic — it works with any LLM that implements the OpenAI-
 For `DeerFlowClient(agent_name="researcher")`, the named agent's `mcp_plugins`
 selection applies to both the lead agent and its `task` / `batch_task`
 delegations: `null` inherits all enabled MCP plugins, `[]` selects none, and
-installation IDs select only those plugins. Call `client.reset_agent()` after
+installation IDs select only those plugins. An explicit `[]` also skips MCP
+configuration reads and discovery, so assembling that agent cannot start globally
+enabled MCP servers. Call `client.reset_agent()` after
 editing the saved agent configuration to refresh the selection.
 
 `DeerFlowClient.stream()` includes `summary_text` in each `values` event. This is the current compacted context summary, or `None` when absent. Consumers can record changes without reading checkpoint internals; repeated snapshots may carry the same summary, and an initial snapshot may already contain one from an earlier turn.
