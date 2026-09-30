@@ -694,6 +694,46 @@ async def test_an_admin_internal_note_never_counts_as_delivered(org_world):  # n
         assert (await client.get(f"/api/board/threads/{tid}/messages", headers=headers_d)).status_code == 404
 
 
+async def test_an_admin_internal_note_stays_hidden_even_after_the_thread_is_delivered(org_world):  # noqa: F811
+    """f175: ``list_board_messages`` dropped only ``author_kind == "momo"`` --
+    once the thread becomes visible (a real reply ships), an owner's own
+    earlier internal note (also ``author_kind == "owner"``, but never
+    delivered) rode along for free just by sharing that author kind with the
+    delivered reply. The note must stay hidden forever; only the delivered
+    reply should ever reach the client.
+    """
+    session_factory = org_world
+    app = _build_app(session_factory)
+    board_repo = app.state.board_repo
+    headers_a = auth_headers(USER_A, ORG_S)  # owner
+
+    await _add_plain_member(session_factory, USER_D, ORG_S)
+    headers_d = auth_headers(USER_D, ORG_S)
+
+    async with _client(app) as client:
+        acme = await _create_client(client, headers_a, "Acme")
+        cid = acme["id"]
+        assign = await client.post(f"/api/clients/{cid}/assignments", json={"user_id": USER_D, "role": "client_contact"}, headers=headers_a)
+        assert assign.status_code == 201
+
+        with acting_as(USER_A, ORG_S):
+            tool_thread = await board_repo.create_thread(client_id=cid, kind="post", subject="Plan", created_by_user_id=None)
+            tid = tool_thread["id"]
+            await board_repo.add_message(tid, author_kind="momo", author_user_id=None, body="Here's the plan.")
+            await board_repo.patch_thread(tid, status=BoardThreadStatus.DRAFTED)
+
+        note = await client.post(f"/api/board/threads/{tid}/messages", json={"body": "INTERNAL: churn risk, soften para 2"}, headers=headers_a)
+        assert note.status_code == 201, note.text
+
+        assert (await client.post(f"/api/board/threads/{tid}/approve", headers=headers_a)).status_code == 200
+        assert (await client.post(f"/api/board/threads/{tid}/reply", json={"body": "Here's the plan."}, headers=headers_a)).status_code == 200
+
+        d_messages = (await client.get(f"/api/board/threads/{tid}/messages", headers=headers_d)).json()["messages"]
+        bodies = [m["body"] for m in d_messages]
+        assert "INTERNAL: churn risk, soften para 2" not in bodies
+        assert bodies == ["Here's the plan."]
+
+
 async def test_a_superseded_draft_never_leaks_even_after_the_next_one_ships(org_world):  # noqa: F811
     """f157 round 2: draft A -> triaged -> draft B -> approve -> reply must
     show the client only B's sent content, never A's earlier, superseded

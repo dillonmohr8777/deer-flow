@@ -341,12 +341,19 @@ async def list_board_messages(thread_id: str, request: Request) -> BoardMessageL
     if not await _is_active_org_admin(user_id):
         # A non-admin never sees momo's own raw message, approved or not:
         # whatever actually ships to the client is always separately written
-        # as an `owner`-authored message by `send_board_reply` (`:464`), so
+        # as an `owner`-authored message by `send_board_reply` (`:479`), so
         # the momo draft itself has nothing a client needs to read. This is
         # deliberately unconditional (not keyed on thread status, f157 round
         # 2) -- status can be walked back to new/triaged/closed by a PATCH at
         # any time, so it can never safely stand in for "was this approved".
-        messages = [m for m in messages if m["author_kind"] != "momo"]
+        #
+        # An `owner`-authored message additionally needs `delivered_at` set
+        # (f175): `add_board_message` (`:372`) lets an admin post an internal
+        # note with that same author kind, e.g. review feedback on a
+        # still-unapproved draft -- once the thread later becomes visible
+        # (a real reply ships), that earlier note must not ride along just
+        # because it shares `author_kind == "owner"` with the delivered one.
+        messages = [m for m in messages if m["author_kind"] == "client" or (m["author_kind"] == "owner" and m.get("delivered_at") is not None)]
     return BoardMessageListResponse(messages=[_to_message_response(m) for m in messages])
 
 
