@@ -542,6 +542,36 @@ def test_pat_default_denied_on_route_outside_pat_policy(client):
     assert "PAT" in response.json()["detail"]
 
 
+@pytest.mark.parametrize(
+    ("method", "path", "scope"),
+    [
+        ("GET", "/api/board/threads", "board:read"),
+        ("POST", "/api/board/threads", "board:write"),
+        ("GET", "/api/team/channels", "team:read"),
+        ("POST", "/api/team/channels", "team:write"),
+        ("GET", "/api/academy/progress", "academy:read"),
+        ("POST", "/api/academy/progress", "academy:write"),
+    ],
+)
+def test_private_feature_scopes_do_not_expand_pat_endpoint_admission(client, method, path, scope):
+    from app.gateway.authz import require_permission
+
+    entered = []
+
+    @client.app.api_route(path, methods=[method])
+    @require_permission(*scope.split(":"))
+    async def feature(request: Request):
+        entered.append(True)
+        return {"ok": True}
+
+    created = _create_pat(client, scopes=[scope])
+    client.cookies.clear()
+    response = client.request(method, path, headers={"Authorization": f"Bearer {created['token']}"})
+    assert response.status_code == 403
+    assert "PAT" in response.json()["detail"]
+    assert not entered
+
+
 def test_session_cookie_reaches_route_that_denies_pat(client):
     """The default-deny is PAT-specific: the same route stays open to the
     owning user's session cookie (PATs narrow, never widen, and never
