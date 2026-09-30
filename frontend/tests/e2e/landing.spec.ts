@@ -7,14 +7,19 @@ test.describe("Landing page", () => {
     await page.goto("/");
 
     await expect(
-      page.locator("header").first().getByText("DeerFlow", { exact: true }),
+      page
+        .locator("header")
+        .first()
+        .getByRole("img", { name: "Momentum", exact: true }),
     ).toBeVisible();
     await expect(page.locator("h1")).toHaveCount(1);
-    await expect(page.locator("h1")).toContainText("DeerFlow");
+    await expect(page.locator("h1")).toHaveText(
+      /^The future needs\s*Momentum$/,
+    );
 
-    // "Get Started" call-to-action button in hero
+    // "Enter the workspace" call-to-action button in hero
     await expect(
-      page.getByRole("link", { name: /get started/i }),
+      page.getByRole("link", { name: /enter the workspace/i }),
     ).toBeVisible();
   });
 
@@ -30,16 +35,20 @@ test.describe("Landing page", () => {
     });
   }
 
-  test("Get Started link navigates to workspace", async ({ page }) => {
+  test("Enter the workspace link navigates to command center", async ({
+    page,
+  }) => {
     mockLangGraphAPI(page);
 
     await page.goto("/");
 
-    const getStarted = page.getByRole("link", { name: /get started/i });
-    await getStarted.click();
+    const enterWorkspace = page.getByRole("link", {
+      name: /enter the workspace/i,
+    });
+    await enterWorkspace.click();
 
-    // Should redirect to /workspace/chats/new
-    await page.waitForURL("**/workspace/chats/new");
-    await expect(page).toHaveURL(/\/workspace\/chats\/new/);
+    // Should redirect to /workspace/command-center
+    await page.waitForURL("**/workspace/command-center");
+    await expect(page).toHaveURL(/\/workspace\/command-center/);
   });
 });

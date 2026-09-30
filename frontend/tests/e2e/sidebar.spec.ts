@@ -97,7 +97,9 @@ test.describe("Sidebar navigation", () => {
       expect(box!.x + box!.width).toBeLessThanOrEqual(viewportWidth + 1);
     };
 
-    await expectInsideViewport(page.getByText(/欢迎使用 🦌 DeerFlow/).first());
+    await expectInsideViewport(
+      page.getByRole("heading", { name: "你好，欢迎回来！", exact: true }),
+    );
     await expectInsideViewport(page.getByRole("textbox").first());
     await expectInsideViewport(page.locator("[data-slot='suggestions-list']"));
 

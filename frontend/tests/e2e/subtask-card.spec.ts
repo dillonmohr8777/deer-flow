@@ -99,7 +99,7 @@ async function expectSingleLineEllipsis(title: Locator) {
 /**
  * SSE server that emits one `values` frame carrying an unresolved `task` tool
  * call and then holds the connection open, keeping `thread.isLoading` true so
- * the subtask card renders its running (shimmer) branch. Closed via
+ * the subtask card renders its running state. Closed via
  * `closeAllConnections` in test teardown.
  */
 async function startRunningSubtaskStream() {
@@ -311,9 +311,7 @@ test.describe("Subtask card", () => {
     expect(rowMetrics.scrollWidth).toBeLessThanOrEqual(rowMetrics.clientWidth);
     await expectSingleLineEllipsis(title);
   });
-  test("truncates a running task title with the shimmer inline", async ({
-    page,
-  }) => {
+  test("truncates a running task title as plain text", async ({ page }) => {
     const streamServer = await startRunningSubtaskStream();
     mockLangGraphAPI(page, {
       runStreamHandler: (route) => route.continue({ url: streamServer.url }),
@@ -330,12 +328,11 @@ test.describe("Subtask card", () => {
       await expect(title).toBeVisible({ timeout: 15_000 });
       await expect(page.getByText("Subtask failed")).toHaveCount(0);
 
-      // The shimmer must stay one inline text run inside the truncating span:
-      // `as="span"` avoids nesting the component's default <p>, and
-      // `className="inline"` overrides its `inline-block` so the parent span's
-      // nowrap/ellipsis still apply.
-      const shimmer = title.locator("span").first();
-      await expect(shimmer).toHaveCSS("display", "inline");
+      // Momentum renders the running title as plain text in the truncating
+      // span. Preserve the complete title and the single-line layout contract.
+      await expect(title).toHaveText(LONG_TASK_PROMPT);
+      await expect(title).toHaveCSS("display", "block");
+      await expect(title.locator(":scope > *")).toHaveCount(0);
       await expectSingleLineEllipsis(title);
     } finally {
       await streamServer.close();
