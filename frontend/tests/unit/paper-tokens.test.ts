@@ -6,14 +6,7 @@ import { describe, expect, it } from "@rstest/core";
 // Reads the real stylesheet — this test is the proof for the palette, not a
 // second copy of it. If someone edits a hex in paper.css without checking
 // contrast, this is what catches it.
-const paperCssPath = join(
-  __dirname,
-  "..",
-  "..",
-  "src",
-  "styles",
-  "paper.css",
-);
+const paperCssPath = join(__dirname, "..", "..", "src", "styles", "paper.css");
 const paperCss = readFileSync(paperCssPath, "utf8");
 
 /** Parses every `--paper-<name>: #rrggbb;` declaration out of paper.css. */

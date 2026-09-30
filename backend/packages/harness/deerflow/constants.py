@@ -8,6 +8,8 @@ CONVERSATION_READER_CONTEXT_KEY = "__conversation_reader"
 CONVERSATION_TOOL_USE = "deerflow.tools.conversation:read_conversation"
 # The Gateway sizes reader pages by this tool's tool-output budget entry.
 CONVERSATION_TOOL_NAME = "read_conversation"
+MOMENTUM_SDK_CONTEXT_KEY = "__momentum_sdk_reviewer"
+MOMENTUM_SDK_TOOL_USE = "deerflow.community.momentum_sdk.tools:momentum_sdk_draft"
 
 # Hidden subdirectory (under a thread's outputs dir) that holds the browser
 # tools' per-step screenshots. These are transient live-progress frames, not

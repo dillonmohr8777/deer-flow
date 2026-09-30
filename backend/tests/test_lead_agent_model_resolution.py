@@ -666,7 +666,9 @@ def test_make_lead_agent_reads_runtime_options_from_context(monkeypatch):
         "reasoning_effort": "high",
         "app_config": app_config,
     }
-    get_available_tools.assert_called_once_with(model_name="context-model", groups=None, subagent_enabled=True, mcp_plugins=None, include_conversation_reader=False, app_config=app_config, chat_model=result["model"])
+    get_available_tools.assert_called_once_with(
+        model_name="context-model", groups=None, subagent_enabled=True, mcp_plugins=None, include_conversation_reader=False, include_momentum_sdk=False, app_config=app_config, chat_model=result["model"]
+    )
     assert result["model"] is not None
 
 
@@ -1540,6 +1542,7 @@ def test_empty_allowed_subagents_disables_requested_delegation(monkeypatch, mcp_
         mcp_plugins=mcp_plugins,
         subagent_enabled=False,
         include_conversation_reader=False,
+        include_momentum_sdk=False,
         app_config=app_config,
         chat_model=ANY,
     )

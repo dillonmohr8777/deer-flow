@@ -296,8 +296,7 @@
   background: var(--paper-kraft);
   color: var(--paper-ink);
   border-color: var(--paper-line);
-  box-shadow: 3px 6px 14px
-    color-mix(in srgb, var(--paper-ink) 22%, transparent);
+  box-shadow: 3px 6px 14px color-mix(in srgb, var(--paper-ink) 22%, transparent);
 }
 .root[data-treatment="paper"] .topologyLead div span {
   color: var(--paper-ink-muted);
@@ -365,8 +364,7 @@
 .root[data-treatment="paper"] .runDetail {
   background: var(--paper-cream-hi);
   border-left-color: var(--paper-line);
-  box-shadow: -12px 0 32px
-    color-mix(in srgb, var(--paper-ink) 14%, transparent);
+  box-shadow: -12px 0 32px color-mix(in srgb, var(--paper-ink) 14%, transparent);
 }
 .root[data-treatment="paper"] .runDetail > h3 {
   font-family: var(--m-font-serif);
@@ -655,8 +653,7 @@
   gap: 11px;
   margin-top: 24px;
   border-top: 2px solid transparent;
-  border-image: linear-gradient(90deg, transparent, var(--blue), transparent)
-    1;
+  border-image: linear-gradient(90deg, transparent, var(--blue), transparent) 1;
   padding-top: 22px;
 }
 .topologyRoster::before {

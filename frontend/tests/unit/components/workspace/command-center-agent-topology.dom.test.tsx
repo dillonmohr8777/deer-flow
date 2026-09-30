@@ -79,6 +79,8 @@ describe("AgentTopology", () => {
     // MomentumGlyph fallback inside MomoAvatar - no 404 request, no flash.
     expect(container.querySelectorAll("img")).toHaveLength(0);
     // Lead + 2 specialists = 3 rendered glyphs, none of them an empty box.
-    expect(container.querySelectorAll("svg[data-momentum-glyph]")).toHaveLength(3);
+    expect(container.querySelectorAll("svg[data-momentum-glyph]")).toHaveLength(
+      3,
+    );
   });
 });

@@ -102,12 +102,19 @@ async def test_postgres_task_create_serializes_with_thread_mutation(postgres_rep
         await blocker.commit()
 
     await asyncio.wait_for(mutation_task, timeout=5)
-    await asyncio.wait_for(create_task, timeout=5)
+    if mutation == "update_owner":
+        with pytest.raises(ValueError, match="thread belongs to a different user"):
+            await asyncio.wait_for(create_task, timeout=5)
+    else:
+        await asyncio.wait_for(create_task, timeout=5)
 
     async with session_factory() as session:
         task = await session.get(McpTaskRow, f"task-{mutation}")
-    assert task is not None
-    assert task.thread_incarnation is None
+    if mutation == "update_owner":
+        assert task is None
+    else:
+        assert task is not None
+        assert task.thread_incarnation is None
 
 
 @pytest.mark.asyncio

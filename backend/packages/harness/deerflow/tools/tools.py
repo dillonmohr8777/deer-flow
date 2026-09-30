@@ -8,7 +8,7 @@ from pydantic import BaseModel
 
 from deerflow.config import get_app_config
 from deerflow.config.app_config import AppConfig
-from deerflow.constants import CONVERSATION_TOOL_USE
+from deerflow.constants import CONVERSATION_TOOL_USE, MOMENTUM_SDK_TOOL_USE
 from deerflow.mcp.tasks.runtime import is_mcp_task_runtime_available
 from deerflow.reflection import resolve_variable
 from deerflow.sandbox.security import is_host_bash_allowed
@@ -110,6 +110,7 @@ def get_available_tools(
     mcp_plugins: list[str] | None = None,
     include_upload_tool: bool = True,
     include_conversation_reader: bool = False,
+    include_momentum_sdk: bool = False,
     app_config: AppConfig | None = None,
     extensions=None,
     chat_model: BaseChatModel | None = None,
@@ -140,6 +141,8 @@ def get_available_tools(
     """
     config = app_config or get_app_config()
     tool_configs = [tool for tool in config.tools if groups is None or tool.group in groups]
+    if not include_momentum_sdk or groups is None or "momentum_sdk" not in groups:
+        tool_configs = [tool for tool in tool_configs if tool.use != MOMENTUM_SDK_TOOL_USE]
     if not include_conversation_reader:
         tool_configs = [tool for tool in tool_configs if tool.use != CONVERSATION_TOOL_USE]
 
@@ -155,6 +158,9 @@ def get_available_tools(
         tool_configs = [tool for tool in tool_configs if not _is_host_bash_tool(tool)]
 
     loaded_tools_raw = [(cfg, resolve_variable(cfg.use, BaseTool)) for cfg in tool_configs]
+    # Also deny alternate import aliases resolving to this sensitive tool.
+    if not include_momentum_sdk or groups is None or "momentum_sdk" not in groups:
+        loaded_tools_raw = [(cfg, loaded) for cfg, loaded in loaded_tools_raw if loaded.name != "momentum_sdk_draft"]
 
     # Warn when the config ``name`` field and the tool object's ``.name``
     # attribute diverge — this mismatch is the root cause of issue #1803 where

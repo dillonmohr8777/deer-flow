@@ -148,7 +148,10 @@ function AccountAppearance({
     >
       {/* display: contents keeps this wrapper out of the layout tree while
           still letting [data-treatment="paper"] descendant rules match. */}
-      <div data-treatment={preferences.treatment} style={{ display: "contents" }}>
+      <div
+        data-treatment={preferences.treatment}
+        style={{ display: "contents" }}
+      >
         {children}
       </div>
     </AppearanceContext.Provider>
