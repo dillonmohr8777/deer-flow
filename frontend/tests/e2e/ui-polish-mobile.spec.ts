@@ -312,10 +312,12 @@ test.describe("UI polish mobile regressions", () => {
     ).toBeVisible();
     const back = page.getByRole("button", { name: "Back to Recent chats" });
     expect((await back.boundingBox())!.height).toBeGreaterThanOrEqual(44);
-    await back.click();
-    await expect(
-      page.getByRole("tab", { name: "Recent chats" }),
-    ).toHaveAttribute("aria-selected", "true");
+    await back.focus();
+    await page.keyboard.press("Enter");
+    const recent = page.getByRole("tab", { name: "Recent chats" });
+    await expect(recent).toHaveAttribute("aria-selected", "true");
+    // The button unmounts with the view; focus must land on the tab, not body.
+    await expect(recent).toBeFocused();
   });
 
   test("a failed chats read is an ErrorState with Try again", async ({
@@ -336,6 +338,28 @@ test.describe("UI polish mobile regressions", () => {
     const retry = alert.getByRole("button", { name: "Try again" });
     expect((await retry.boundingBox())!.height).toBeGreaterThanOrEqual(44);
     await expect(page.getByPlaceholder("Search chats")).toHaveCount(0);
+  });
+
+  test("a failed chats read with no server reason stays in the page's locale", async ({
+    page,
+    context,
+    baseURL,
+  }) => {
+    await context.addCookies([
+      { name: "locale", value: "zh-CN", url: baseURL! },
+    ]);
+    await page.setViewportSize({ width: 390, height: 844 });
+    mockLangGraphAPI(page, { threads: [] });
+    await page.route(/\/api\/(?:langgraph\/)?threads\/search$/, (route) =>
+      route.fulfill({ status: 500, json: {} }),
+    );
+
+    await page.goto("/workspace/chats");
+
+    const alert = page.locator("[role=alert]:has([data-error-tag])");
+    await expect(alert).toBeVisible({ timeout: 20_000 });
+    await expect(alert).toContainText("加载会话失败");
+    await expect(alert).not.toContainText("Failed to load conversations");
   });
 
   test("chats page heads itself and files chats as slips on phones", async ({
