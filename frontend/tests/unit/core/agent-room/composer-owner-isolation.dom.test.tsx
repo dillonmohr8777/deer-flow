@@ -21,8 +21,9 @@ import { AUTH_DISABLED_USER } from "@/core/auth/auth-disabled-user";
 import { AuthProvider, useAuth } from "@/core/auth/AuthProvider";
 import { UserPreferencesBoundary } from "@/core/settings/user-preferences-boundary";
 
+const { replace } = rs.hoisted(() => ({ replace: rs.fn() }));
 rs.mock("next/navigation", () => ({
-  useRouter: () => ({ push: rs.fn(), replace: rs.fn() }),
+  useRouter: () => ({ push: rs.fn(), replace }),
   usePathname: () => "/workspace/desk/agent-room",
 }));
 rs.mock("@/core/static-mode", () => ({ isStaticWebsiteOnly: () => false }));
@@ -31,6 +32,7 @@ rs.mock("@/core/settings/user-preferences", () => ({
 }));
 rs.mock("@/core/agent-room/api", () => ({
   AGENT_ROOM_MESSAGES_QUERY_KEY: ["agent-room", "messages"],
+  AgentRoomAccessDeniedError: class AgentRoomAccessDeniedError extends Error {},
   fetchAgentRoomEnabled: rs.fn(),
   listAgentRoomMessages: rs.fn(),
   postAgentRoomMessage: rs.fn(),
@@ -68,6 +70,7 @@ function AccountSwitch() {
 beforeEach(() => {
   rs.mocked(fetchAgentRoomEnabled).mockResolvedValue(true);
   rs.mocked(listAgentRoomMessages).mockResolvedValue([]);
+  replace.mockClear();
 });
 afterEach(() => {
   cleanup();
@@ -149,5 +152,101 @@ describe("actual Room composer account lifecycle", () => {
         .disabled,
     ).toBe(true);
     expect(postAgentRoomMessage).not.toHaveBeenCalled();
+  });
+
+  it("does not refetch access on a window focus event (f134)", async () => {
+    const cache = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <AuthProvider initialUser={OWNER_A}>
+        <QueryClientProvider client={cache}>
+          <UserPreferencesBoundary>
+            <AgentRoom />
+          </UserPreferencesBoundary>
+        </QueryClientProvider>
+      </AuthProvider>,
+    );
+    await screen.findByLabelText("Leave an instruction or note");
+    expect(fetchAgentRoomEnabled).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      fireEvent.focus(window);
+      await Promise.resolve();
+    });
+    expect(fetchAgentRoomEnabled).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the composer and draft through a background access refetch that merely fails, and does not redirect (f134)", async () => {
+    rs.mocked(fetchAgentRoomEnabled)
+      .mockResolvedValueOnce(true)
+      .mockRejectedValueOnce(new Error("network blip"));
+    const cache = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <AuthProvider initialUser={OWNER_A}>
+        <QueryClientProvider client={cache}>
+          <UserPreferencesBoundary>
+            <AgentRoom />
+          </UserPreferencesBoundary>
+        </QueryClientProvider>
+      </AuthProvider>,
+    );
+    const input = await screen.findByLabelText("Leave an instruction or note");
+    fireEvent.change(input, {
+      target: { value: "Draft survives a rejected refocus refetch" },
+    });
+
+    await act(async () => {
+      await cache
+        .refetchQueries({ queryKey: ["agent-room", "access", "owner-A"] })
+        .catch(() => {
+          // The rejection is the point of this test; only the UI's reaction matters.
+        });
+    });
+    // The query settling and React committing the resulting re-render are
+    // two separate ticks; wait for the query itself to go idle before
+    // asserting on the DOM it drives.
+    await waitFor(() =>
+      expect(
+        cache.getQueryState(["agent-room", "access", "owner-A"])?.fetchStatus,
+      ).toBe("idle"),
+    );
+
+    expect(fetchAgentRoomEnabled).toHaveBeenCalledTimes(2);
+    expect(
+      screen.getByLabelText<HTMLTextAreaElement>("Leave an instruction or note")
+        .value,
+    ).toBe("Draft survives a rejected refocus refetch");
+    expect(replace).not.toHaveBeenCalled();
+  });
+
+  it("still redirects when a later access refetch resolves false, even after prior admission (f134)", async () => {
+    rs.mocked(fetchAgentRoomEnabled)
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(false);
+    const cache = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <AuthProvider initialUser={OWNER_A}>
+        <QueryClientProvider client={cache}>
+          <UserPreferencesBoundary>
+            <AgentRoom />
+          </UserPreferencesBoundary>
+        </QueryClientProvider>
+      </AuthProvider>,
+    );
+    await screen.findByLabelText("Leave an instruction or note");
+
+    await act(async () => {
+      await cache.refetchQueries({
+        queryKey: ["agent-room", "access", "owner-A"],
+      });
+    });
+
+    await waitFor(() =>
+      expect(replace).toHaveBeenCalledWith("/workspace/command-center"),
+    );
   });
 });

@@ -8,6 +8,7 @@ import { isStaticWebsiteOnly } from "../static-mode";
 
 import {
   AGENT_ROOM_MESSAGES_QUERY_KEY,
+  AgentRoomAccessDeniedError,
   fetchAgentRoomEnabled,
   listAgentRoomMessages,
   postAgentRoomMessage,
@@ -58,20 +59,44 @@ export function useAgentRoomAccess() {
     retry: false,
     staleTime: 0,
     refetchOnMount: "always",
+    // A window refocus must not swap the page away from a live draft: a
+    // background revalidation is handled by the sticky-admission logic
+    // below instead of by refetching here at all.
+    refetchOnWindowFocus: false,
   });
-  const enabled =
-    ownerId !== null &&
-    access.isSuccess &&
-    !access.isFetching &&
-    access.data === true &&
-    hasPermission(auth.user, "threads:read");
+
+  // First admission for an owner requires a completed, successful fresh
+  // discovery (the existing `refetchOnMount: "always"` + `staleTime: 0`
+  // behavior below). Once granted, admission is sticky: a later background
+  // refetch (reconnect, a manual refetch, ...) that merely fails -- a
+  // network hiccup, a 5xx -- must not evict the composer or redirect away.
+  // Only an explicit `false` result or a real access-denial error (403/404)
+  // revokes it.
+  const admittedOwner = useRef<string | null>(null);
+  if (ownerId === null || currentOwner.current !== ownerId) {
+    admittedOwner.current = null;
+  } else if (!access.isFetching) {
+    if (access.isSuccess && access.data === true) {
+      admittedOwner.current = ownerId;
+    } else if (
+      access.data === false ||
+      access.error instanceof AgentRoomAccessDeniedError
+    ) {
+      admittedOwner.current = null;
+    }
+  }
+  const admitted = ownerId !== null && admittedOwner.current === ownerId;
+
+  const enabled = admitted && hasPermission(auth.user, "threads:read");
   return {
     ownerId,
     enabled,
     canWrite: enabled && hasPermission(auth.user, "threads:write"),
     isLoading:
       auth.isLoading ||
-      (ownerId !== null && (access.isPending || access.isFetching)),
+      (ownerId !== null &&
+        !admitted &&
+        (access.isPending || access.isFetching)),
   };
 }
 

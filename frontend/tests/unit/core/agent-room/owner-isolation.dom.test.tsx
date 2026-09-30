@@ -28,6 +28,7 @@ rs.mock("@/core/settings/user-preferences", () => ({
 }));
 rs.mock("@/core/agent-room/api", () => ({
   AGENT_ROOM_MESSAGES_QUERY_KEY: ["agent-room", "messages"],
+  AgentRoomAccessDeniedError: class AgentRoomAccessDeniedError extends Error {},
   fetchAgentRoomEnabled: rs.fn(),
   listAgentRoomMessages: rs.fn(),
   postAgentRoomMessage: rs.fn(),
