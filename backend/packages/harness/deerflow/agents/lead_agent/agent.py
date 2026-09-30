@@ -87,6 +87,12 @@ _BOOTSTRAP_SKILL_NAMES = {"bootstrap"}
 # ``ChannelManager._resolve_run_params``.
 _WEBHOOK_CHANNELS: frozenset[str] = frozenset({"github"})
 
+# Names of the owner-private Agent Room tools (``deerflow.tools.builtins.agent_room_tool``).
+# Withheld from every channel run, not just webhook ones -- see the gate in
+# :func:`_assemble_lead_agent` for why the channel binding itself, not how the
+# message arrived, is the risk here.
+_AGENT_ROOM_TOOL_NAMES: frozenset[str] = frozenset({"agent_room_read", "agent_room_post"})
+
 
 @dataclass(frozen=True)
 class LeadAgentAssembly:
@@ -1221,6 +1227,17 @@ def _assemble_lead_agent(config: RunnableConfig, *, app_config: AppConfig) -> Le
         chat_model=chat_model,
     )
     configured_tools = raw_tools + extra_tools
+    # Withhold the private Agent Room tools from any channel run. A channel
+    # run (GitHub webhook fan-out, a Telegram bot, etc.) resolves the runtime
+    # actor to the channel's bound owner regardless of which external person
+    # actually triggered it, so an outside commenter or a non-owner chat
+    # member could otherwise have the agent quote the owner-private room into
+    # a public reply, or post into it. Unlike ``update_agent``'s
+    # ``_WEBHOOK_CHANNELS``-only gate, this excludes every channel run, not
+    # just webhook ones, since the impersonation risk is the channel binding
+    # itself, not how the message arrived.
+    if channel_name:
+        configured_tools = [tool for tool in configured_tools if tool.name not in _AGENT_ROOM_TOOL_NAMES]
     configured_tools = [tool for tool in configured_tools if tool.name not in interaction_policy.disabled_tool_names]
     authorization_candidates = [*configured_tools]
     if skill_setup.describe_skill_tool:

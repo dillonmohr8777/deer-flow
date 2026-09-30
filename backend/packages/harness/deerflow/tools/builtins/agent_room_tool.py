@@ -20,6 +20,28 @@ _ROLE_LABELS = {
 }
 
 
+def _channel_run_refusal(runtime: Runtime | None) -> str | None:
+    """Refuse the Agent Room tools on any channel run.
+
+    Channel runs (GitHub webhook fan-out, a Telegram bot, etc.) resolve the
+    runtime actor to the channel's bound owner regardless of which external
+    person actually sent the triggering message -- an outside commenter or a
+    non-owner chat member. That makes ``resolve_runtime_actor_user_id`` look
+    like the real owner even though the request did not come from them, so
+    the room's owner-only check in :func:`_owner_repository` cannot tell them
+    apart. Mirrors ``update_agent``'s in-tool channel gate
+    (``deerflow.tools.builtins.update_agent_tool``); the lead-agent factory
+    also withholds these tools from channel runs (see
+    ``deerflow.agents.lead_agent.agent``), so this is defence in depth for
+    any future code path that re-attaches them directly.
+    """
+    context = runtime.context if runtime is not None and isinstance(runtime.context, dict) else {}
+    channel_name = context.get("channel_name")
+    if not channel_name:
+        return None
+    return f"Agent Room is disabled on the {channel_name!r} channel. It resolves to the bound owner regardless of who actually sent the message, so it is not a safe place for the owner-private room."
+
+
 async def _owner_repository(runtime: Runtime | None):
     if runtime is None:
         return None, "Agent Room requires authenticated runtime context."
@@ -50,6 +72,9 @@ async def agent_room_read(runtime: Runtime, limit: int = 25) -> str:
     Args:
         limit: Number of recent messages to read, from 1 to 50.
     """
+    channel_refusal = _channel_run_refusal(runtime)
+    if channel_refusal is not None:
+        return channel_refusal
     owner, error = await _owner_repository(runtime)
     if error is not None or owner is None:
         return error or "Agent Room requires an authenticated owner."
@@ -73,6 +98,9 @@ async def agent_room_post(
         body: The update, finding, deliverable summary, question, or handoff (up to 4000 chars).
         message_type: Label for this entry in the shared room.
     """
+    channel_refusal = _channel_run_refusal(runtime)
+    if channel_refusal is not None:
+        return channel_refusal
     text = body.strip()
     if not text:
         return "Agent Room messages cannot be empty."
