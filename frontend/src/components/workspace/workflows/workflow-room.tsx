@@ -11,7 +11,6 @@ import {
   ErrorState,
   pageStyles,
   StatusTag,
-  type StatusTone,
   WorkingState,
 } from "@/components/workspace/page-body";
 import {
@@ -23,6 +22,7 @@ import { useAuth } from "@/core/auth/AuthProvider";
 import { hasPermission, PERMISSIONS } from "@/core/auth/permissions";
 import { handOffResearchDownload } from "@/core/browserbase/api";
 import { isStaticWebsiteOnly } from "@/core/static-mode";
+import { toDateTimeAttr } from "@/core/utils/datetime";
 import {
   createWorkflowRun,
   downloadWorkflowArtifact,
@@ -46,72 +46,7 @@ import { cn } from "@/lib/utils";
 
 import { WorkflowForm } from "./workflow-form";
 import { WorkflowRunDetail } from "./workflow-run";
-
-function explanation(error: Error): string {
-  const messages: Record<string, string> = {
-    queue_full:
-      "The workflow queue is full. Wait for a slot before trying again.",
-    daily_model_budget_exhausted:
-      "The daily model-call budget has been reached.",
-    framework_unavailable: "This execution framework is currently unavailable.",
-    not_enabled: "Workflow execution is disabled.",
-    input_invalid: "Check the required fields and their allowed bounds.",
-    uncertain_provider_attempt:
-      "The provider outcome is unconfirmed. This run is held until it can be reconciled.",
-    run_not_interrupted:
-      "This run is no longer interrupted. Refresh its saved state.",
-    workflow_request_failed: "The workflow service did not answer.",
-    invalid_workflow_response:
-      "The workflow service sent back something this page cannot read.",
-  };
-  const known = messages[error.message];
-  if (known) return known;
-  // A bare snake_case code is an internal identifier, not a reason a person
-  // can act on (DESIGN.md Copy); a sentence from the server passes through.
-  return /^[a-z0-9_]+$/.test(error.message)
-    ? "The workflow service could not complete this request."
-    : error.message;
-}
-
-/** A run's status as a word beside a shape; colour is never the only signal. */
-function runState(run: WorkflowRun): { tone: StatusTone; label: string } {
-  switch (run.status) {
-    case "running":
-      return { tone: "active", label: "Running" };
-    case "queued":
-      return { tone: "idle", label: "Queued" };
-    case "interrupted":
-      return { tone: "idle", label: "Interrupted" };
-    case "completed":
-      return run.accepted
-        ? { tone: "ok", label: "Accepted" }
-        : { tone: "attention", label: "Not accepted" };
-    case "failed":
-      return { tone: "danger", label: "Failed" };
-    case "cancelled":
-      return { tone: "idle", label: "Cancelled" };
-    default:
-      return { tone: "unknown", label: "Unknown state" };
-  }
-}
-
-/** "Today, 2:05 PM" for today, "Sep 28, 2:05 PM" otherwise. */
-function runTime(iso: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "Time not recorded";
-  const clock = date.toLocaleTimeString(undefined, {
-    hour: "numeric",
-    minute: "2-digit",
-  });
-  if (date.toDateString() === new Date().toDateString())
-    return `Today, ${clock}`;
-  const sameYear = date.getFullYear() === new Date().getFullYear();
-  return `${date.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    ...(sameYear ? {} : { year: "numeric" }),
-  })}, ${clock}`;
-}
+import { explanation, runState, runTime } from "./workflow-words";
 
 function ScopedWorkflowRoom({
   owner,
@@ -431,7 +366,7 @@ function ScopedWorkflowRoom({
                       </span>
                       <span className="text-muted-foreground">
                         <time
-                          dateTime={entry.created_at}
+                          dateTime={toDateTimeAttr(entry.created_at)}
                           title={new Date(entry.created_at).toLocaleString()}
                         >
                           {runTime(entry.created_at)}

@@ -99,23 +99,35 @@ export default function ProjectPage() {
                   className="flex flex-col gap-7"
                 >
                   <div className="border-b">
-                    {/* The primitive's orientation-scoped h-9 outranks a bare
-                        h-11, so match its selector to keep the 44px floor. */}
+                    {/* Each trigger is h-[calc(100%-1px)] of the list's padded
+                        box, so an h-11 list left 37px tabs. The list sizes to
+                        its tabs instead (matching the primitive's
+                        orientation-scoped h-9 so it outranks it), and each
+                        tab holds the 44px floor itself. */}
                     <TabsList
                       variant="line"
                       aria-label={project.name}
-                      className="gap-5 group-data-[orientation=horizontal]/tabs:h-11"
+                      className="gap-5 group-data-[orientation=horizontal]/tabs:h-auto"
                     >
-                      <TabsTrigger value="chats" className="px-1 pb-3">
+                      <TabsTrigger value="chats" className="min-h-11 px-1 pb-3">
                         {t.projects.threads}
                       </TabsTrigger>
-                      <TabsTrigger value="documents" className="px-1 pb-3">
+                      <TabsTrigger
+                        value="documents"
+                        className="min-h-11 px-1 pb-3"
+                      >
                         {t.projects.documents}
                       </TabsTrigger>
-                      <TabsTrigger value="instructions" className="px-1 pb-3">
+                      <TabsTrigger
+                        value="instructions"
+                        className="min-h-11 px-1 pb-3"
+                      >
                         {t.projects.instructions}
                       </TabsTrigger>
-                      <TabsTrigger value="settings" className="px-1 pb-3">
+                      <TabsTrigger
+                        value="settings"
+                        className="min-h-11 px-1 pb-3"
+                      >
                         {t.projects.settings}
                       </TabsTrigger>
                     </TabsList>

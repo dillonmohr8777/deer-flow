@@ -1,13 +1,15 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { pageStyles } from "@/components/workspace/page-body";
+import { pageStyles, StatusTag } from "@/components/workspace/page-body";
 import {
   FRAMEWORK_LABELS,
   isWorkflowActive,
   type WorkflowRun,
 } from "@/core/workflows/types";
 import { cn } from "@/lib/utils";
+
+import { explanation, runState } from "./workflow-words";
 
 export function WorkflowRunDetail({
   run,
@@ -24,6 +26,7 @@ export function WorkflowRunDetail({
   onAction: (action: "cancel" | "resume") => void;
   onDownload: () => void;
 }) {
+  const state = runState(run);
   const incomplete =
     run.usage.complete === false || (run.usage.unknown_model_calls ?? 0) > 0;
   return (
@@ -36,12 +39,11 @@ export function WorkflowRunDetail({
             second Fraunces heading louder than its section. */}
         <h3 className="text-lg font-bold break-words">{run.title}</h3>
         <p role="status" className="text-sm">
-          {run.status} · {FRAMEWORK_LABELS[run.framework] ?? run.framework}
-          {run.status === "completed"
-            ? run.accepted
-              ? " · acceptance passed"
-              : " · output not accepted"
-            : ""}
+          <StatusTag tone={state.tone}>{state.label}</StatusTag>
+          <span className="text-muted-foreground">
+            {" · "}
+            {FRAMEWORK_LABELS[run.framework] ?? run.framework}
+          </span>
         </p>
         <p className="text-muted-foreground text-xs break-all">Run {run.id}</p>
       </div>
@@ -53,7 +55,7 @@ export function WorkflowRunDetail({
       )}
       {run.error && (
         <p role="alert" className="text-destructive text-sm break-words">
-          {run.error}
+          {explanation(new Error(run.error))}
         </p>
       )}
       <div className="flex flex-wrap gap-2">

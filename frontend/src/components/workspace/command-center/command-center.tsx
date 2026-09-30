@@ -41,7 +41,7 @@ import {
 import { useModels } from "@/core/models/hooks";
 import { useSubagents } from "@/core/subagents";
 import { pathOfThread } from "@/core/threads/utils";
-import { formatCompactStamp } from "@/core/utils/datetime";
+import { toDateTimeAttr, formatCompactStamp } from "@/core/utils/datetime";
 
 import { AgentTopology } from "./agent-topology";
 import { useWorkspaceAppearance } from "./appearance-provider";
@@ -417,7 +417,7 @@ export function CommandCenter() {
                       <>
                         <time
                           className={styles.metaStamp}
-                          dateTime={run.created_at}
+                          dateTime={toDateTimeAttr(run.created_at)}
                         >
                           {stamp}
                         </time>{" "}

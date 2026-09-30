@@ -10,7 +10,7 @@ import {
   WorkingState,
 } from "@/components/workspace/page-body";
 import type { ConsoleRunItem } from "@/core/console";
-import { formatCompactStamp } from "@/core/utils/datetime";
+import { toDateTimeAttr, formatCompactStamp } from "@/core/utils/datetime";
 import { cn } from "@/lib/utils";
 
 import styles from "./dispatch-board.module.css";
@@ -107,7 +107,7 @@ function Started({ value }: { value: string | null }) {
   if (!value || !stamp) return <span>Start time not recorded</span>;
   return (
     <span>
-      Started <time dateTime={value}>{stamp}</time>
+      Started <time dateTime={toDateTimeAttr(value)}>{stamp}</time>
     </span>
   );
 }

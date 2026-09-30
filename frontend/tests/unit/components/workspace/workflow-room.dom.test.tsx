@@ -6,6 +6,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { useState, type PropsWithChildren } from "react";
 
@@ -78,6 +79,15 @@ function Wrapper({ children }: PropsWithChildren) {
   );
   if (!clients.includes(client)) clients.push(client);
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+}
+/** The open run's status line, in the detail sheet, not the list row. */
+async function detailSays(text: string) {
+  await waitFor(() =>
+    expect(
+      within(screen.getByLabelText("Workflow run")).getByRole("status")
+        .textContent,
+    ).toBe(text),
+  );
 }
 async function chooseAndRun() {
   fireEvent.click(
@@ -163,7 +173,7 @@ describe("Workflow room behavior", () => {
         .disabled,
     ).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: "Retry same request" }));
-    await screen.findByText(/completed · LangGraph · acceptance passed/);
+    await detailSays("Accepted · LangGraph");
     expect(mocks.create.mock.calls[0]?.slice(0, 3)).toEqual(
       mocks.create.mock.calls[1]?.slice(0, 3),
     );
@@ -278,7 +288,7 @@ describe("Workflow room behavior", () => {
     fireEvent.click(
       screen.getByRole("button", { name: "Resume interrupted run" }),
     );
-    await screen.findByText(/acceptance passed/);
+    await detailSays("Accepted · LangGraph");
     expect(mocks.action).toHaveBeenCalledWith(
       "owned-run",
       "resume",
@@ -303,7 +313,7 @@ describe("Workflow room behavior", () => {
         name: /^Synthetic saved run Not accepted/,
       }),
     );
-    await screen.findByText(/output not accepted/);
+    await detailSays("Not accepted · LangGraph");
     expect(screen.getByText(/Synthetic verified result/).tagName).toBe("PRE");
     expect(document.querySelector("script")).toBeNull();
     expect(
@@ -453,7 +463,7 @@ describe("Workflow room behavior", () => {
       "Model-call budget reached before review",
     );
     expect(failed.querySelector("time")?.getAttribute("dateTime")).toBe(
-      WORKFLOW_RUN.created_at,
+      new Date(WORKFLOW_RUN.created_at).toISOString(),
     );
     expect(document.body.textContent).not.toMatch(/\bcompleted ·/);
   });
@@ -466,5 +476,68 @@ describe("Workflow room behavior", () => {
         .getAttribute("href"),
     ).toBe("#workflow-catalog");
     expect(document.getElementById("workflow-catalog")).not.toBeNull();
+  });
+  it("stamps a microsecond run time as a valid <time dateTime>", async () => {
+    mocks.list.mockResolvedValue({
+      runs: [
+        { ...WORKFLOW_RUN, created_at: "2026-09-30T08:00:00.123456+00:00" },
+      ],
+    });
+    render(<WorkflowRoom />, { wrapper: Wrapper });
+    const row = await screen.findByRole("button", {
+      name: /^Synthetic saved run Accepted/,
+    });
+    expect(row.querySelector("time")?.getAttribute("dateTime")).toBe(
+      "2026-09-30T08:00:00.123Z",
+    );
+  });
+  it("gives each stored failure code its own words in the list and the detail", async () => {
+    const failed = (id: string, error: string) => ({
+      ...WORKFLOW_RUN,
+      id,
+      title: `Run ${id}`,
+      status: "failed" as const,
+      accepted: false,
+      error,
+    });
+    const runs = [
+      failed("a", "acceptance_failed"),
+      failed("b", "run_token_budget_exhausted"),
+    ];
+    mocks.list.mockResolvedValue({ runs });
+    mocks.read.mockImplementation((id: string) =>
+      Promise.resolve(runs.find((run) => run.id === id)),
+    );
+    render(<WorkflowRoom />, { wrapper: Wrapper });
+    const acceptance = "did not pass its acceptance checks";
+    const budget = "used all of its token budget";
+    const a = await screen.findByRole("button", { name: /^Run a Failed/ });
+    const b = screen.getByRole("button", { name: /^Run b Failed/ });
+    expect(a.textContent).toContain(acceptance);
+    expect(b.textContent).toContain(budget);
+    fireEvent.click(b);
+    const detail = await screen.findByLabelText("Workflow run");
+    await waitFor(() => expect(detail.textContent).toContain(budget));
+    expect(detail.textContent).not.toContain("run_token_budget_exhausted");
+  });
+  it("says a run at its resume limit cannot be resumed again", async () => {
+    const interrupted = {
+      ...WORKFLOW_RUN,
+      status: "interrupted" as const,
+      accepted: false,
+    };
+    mocks.list.mockResolvedValue({ runs: [interrupted] });
+    mocks.read.mockResolvedValue(interrupted);
+    mocks.action.mockRejectedValue(new Error("resume_limit"));
+    render(<WorkflowRoom />, { wrapper: Wrapper });
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: /^Synthetic saved run Interrupted/,
+      }),
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Resume interrupted run" }),
+    );
+    await screen.findByText(/cannot be resumed again/);
   });
 });

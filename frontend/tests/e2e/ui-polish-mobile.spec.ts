@@ -913,3 +913,20 @@ test("a filter rail keeps its parent's gap below it at 390px", async ({
   // Poll: the block under the rail renders once the catalog loads.
   await expect.poll(gap).toBeGreaterThanOrEqual(16);
 });
+
+// Review 5368668013: the list was 44px but each tab only 37px inside it.
+test("a project's tabs each meet the 44px floor at 390px", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const id = "11111111-1111-4111-8111-111111111111";
+  mockLangGraphAPI(page, {
+    projects: [{ id, name: "Acme Landscaping retainer" }],
+  });
+  await page.goto(`/workspace/projects/${id}`);
+  const tabs = page.getByRole("tab");
+  await expect(tabs).toHaveCount(4);
+  for (const height of await tabs.evaluateAll((els) =>
+    els.map((el) => el.getBoundingClientRect().height),
+  )) {
+    expect(height).toBeGreaterThanOrEqual(44);
+  }
+});

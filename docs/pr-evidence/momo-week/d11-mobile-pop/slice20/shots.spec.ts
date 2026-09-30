@@ -71,7 +71,7 @@ const run = (id: string, title: string, status: string, minsAgo: number, accepte
 const RUNS = [
   run("r1", "Local SEO audit: Acme Landscaping", "running", 3),
   run("r2", "Monthly performance recap: Omega", "completed", 95, true),
-  run("r3", "Pre-launch site QA: Fresh Blends", "failed", 60 * 26, false, "Model-call budget reached before review"),
+  run("r3", "Pre-launch site QA: Fresh Blends", "failed", 60 * 26, false, "run_model_budget_exhausted"),
 ];
 
 for (const [w, h, mobile] of [[390, 844, true], [430, 932, true], [1440, 900, false]] as const) {
