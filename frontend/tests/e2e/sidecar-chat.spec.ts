@@ -1,3 +1,5 @@
+import { writeFile } from "node:fs/promises";
+
 import {
   expect,
   test,
@@ -378,6 +380,30 @@ type SidecarDiagnosticsWindow = Window & {
   __sidecarCleanupDiagnostics?: () => void;
 };
 
+type SidecarTransitionSample = {
+  event: string;
+  timeMs: number;
+  transitionRunning: boolean;
+  transitionTimeMs: number | null;
+  pinnedWidth: string;
+  contentWidth: number | null;
+  scrollHeight: number | null;
+  clientHeight: number | null;
+  scrollTop: number | null;
+};
+
+type SidecarTransitionWindow = Window & {
+  __sidecarTransitionProbe?: {
+    samples: SidecarTransitionSample[];
+    observedFrames: number;
+    truncated: boolean;
+    transitionEndCount: number;
+    transitionCancelCount: number;
+  };
+  __readSidecarTransition?: () => SidecarTransitionSample;
+  __stopSidecarTransitionProbe?: () => void;
+};
+
 async function openSidecarAndExpectNoAnimatedScroll(
   page: Page,
   testInfo: TestInfo,
@@ -533,16 +559,21 @@ async function openSidecarAndExpectNoAnimatedScroll(
       };
     });
 
+  const diagnosticPath = testInfo.outputPath(
+    `sidecar-${opening}-scroll-diagnostics.json`,
+  );
+  await writeFile(
+    diagnosticPath,
+    JSON.stringify({
+      opening,
+      distinctScrollTopCount: distinctScrollTops.length,
+      distinctScrollTops: distinctScrollTops.slice(0, 128),
+      panelTransforms,
+      ...scrollDiagnostics,
+    }),
+  );
   await testInfo.attach(`sidecar-${opening}-scroll-diagnostics`, {
-    body: Buffer.from(
-      JSON.stringify({
-        opening,
-        distinctScrollTopCount: distinctScrollTops.length,
-        distinctScrollTops: distinctScrollTops.slice(0, 128),
-        panelTransforms,
-        ...scrollDiagnostics,
-      }),
-    ),
+    path: diagnosticPath,
     contentType: "application/json",
   });
 
@@ -1363,6 +1394,316 @@ test.describe("Side chat", () => {
     await expect(page.getByTestId("sidecar-panel")).toBeHidden();
     await page.waitForTimeout(350);
     await openSidecarAndExpectNoAnimatedScroll(page, testInfo, "reopen");
+  });
+
+  test("keeps restored side chat content stable until a delayed desktop transition finishes", async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    const messages = Array.from({ length: 12 }).flatMap((_, index) => [
+      {
+        type: "human",
+        id: `side-human-${index}`,
+        content: [{ type: "text", text: `Follow-up ${index + 1}` }],
+      },
+      {
+        type: "ai",
+        id: `side-ai-${index}`,
+        content: [
+          `Restored side answer ${index + 1}.`,
+          "This paragraph gives the side chat enough height to require scrolling.",
+          "Opening the panel should reveal the existing history without a visible scroll animation.",
+        ].join(" "),
+      },
+    ]);
+    mockLangGraphAPI(page, {
+      threads: [
+        {
+          thread_id: MOCK_THREAD_ID,
+          title: "Main conversation",
+          messages: [
+            {
+              type: "human",
+              id: "parent-human-1",
+              content: [{ type: "text", text: "Plan the feature." }],
+            },
+            {
+              type: "ai",
+              id: "parent-ai-1",
+              content: "Build it as a side conversation.",
+            },
+          ],
+        },
+        {
+          thread_id: MOCK_SIDECAR_THREAD_ID,
+          title: "Restored side chat",
+          updated_at: "2025-01-01T00:00:01Z",
+          metadata: {
+            deerflow_sidecar: true,
+            parent_thread_id: MOCK_THREAD_ID,
+            sidecar_context_type: "referenced_message",
+            sidecar_context_label: "Selected assistant text #2",
+            sidecar_context_count: 1,
+            referenced_message_id: "parent-ai-1",
+            referenced_message_ids: ["parent-ai-1"],
+            referenced_message_role: "assistant",
+            referenced_message_roles: ["assistant"],
+          },
+          messages,
+        },
+      ],
+    });
+    await page.goto(`/workspace/chats/${MOCK_THREAD_ID}`);
+    const trigger = page.getByTestId("sidecar-header-trigger");
+    await expect(trigger).toBeVisible();
+    await trigger.click();
+    await expect(page.getByTestId("sidecar-message-list")).toBeVisible();
+    await page.waitForFunction(() => {
+      const scroll = document.querySelector(
+        '[data-testid="sidecar-message-list"]',
+      )?.firstElementChild;
+      const wrapper = document.querySelector("#artifacts")?.firstElementChild;
+      const panel = document
+        .querySelector("#artifacts")
+        ?.closest("[data-panel]");
+      return (
+        scroll instanceof HTMLElement &&
+        wrapper instanceof HTMLElement &&
+        panel instanceof HTMLElement &&
+        wrapper.style.width === "" &&
+        !panel
+          .getAnimations()
+          .some((animation) => animation.playState === "running") &&
+        scroll.scrollHeight > scroll.clientHeight &&
+        Math.abs(
+          scroll.scrollHeight - scroll.clientHeight - scroll.scrollTop,
+        ) <= 1
+      );
+    });
+    const baseline = await page.evaluate(() => {
+      const scroll = document.querySelector(
+        '[data-testid="sidecar-message-list"]',
+      )!.firstElementChild!;
+      const content = scroll.firstElementChild!;
+      const panel = document
+        .querySelector("#artifacts")!
+        .closest("[data-panel]")!;
+      return {
+        contentWidth: content.getBoundingClientRect().width,
+        scrollHeight: scroll.scrollHeight,
+        scrollTop: scroll.scrollTop,
+        selector: `#${CSS.escape(panel.parentElement!.id)} > [data-panel]`,
+      };
+    });
+    await trigger.click();
+    await expect(page.getByTestId("sidecar-panel")).toBeHidden();
+    await page.waitForFunction(() => {
+      const panel = document
+        .querySelector("#artifacts")
+        ?.closest("[data-panel]");
+      return (
+        panel instanceof HTMLElement &&
+        panel.getBoundingClientRect().width < 1 &&
+        !panel
+          .getAnimations()
+          .some((animation) => animation.playState === "running")
+      );
+    });
+    // Extend only this desktop group's transition; no app timers or scroll code
+    // are changed. The browser's actual transition completion is the boundary.
+    await page.addStyleTag({
+      content: `@media (min-width: 768px) { ${baseline.selector} { transition-duration: 900ms !important; } }`,
+    });
+    expect(
+      await page.evaluate(
+        () =>
+          getComputedStyle(
+            document.querySelector("#artifacts")!.closest("[data-panel]")!,
+          ).transitionDuration,
+      ),
+    ).toBe("0.9s");
+    await page.evaluate(() => {
+      const target = window as SidecarTransitionWindow;
+      const panel = document
+        .querySelector("#artifacts")!
+        .closest("[data-panel]")!;
+      const probe = {
+        samples: [] as SidecarTransitionSample[],
+        observedFrames: 0,
+        truncated: false,
+        transitionEndCount: 0,
+        transitionCancelCount: 0,
+      };
+      target.__sidecarTransitionProbe = probe;
+      target.__readSidecarTransition = () => {
+        const animation = panel
+          .getAnimations()
+          .find(
+            (candidate) =>
+              candidate instanceof CSSTransition &&
+              candidate.transitionProperty === "flex-grow" &&
+              candidate.playState === "running",
+          );
+        const scroll = document.querySelector(
+          '[data-testid="sidecar-message-list"]',
+        )?.firstElementChild;
+        const wrapper = document.querySelector("#artifacts")?.firstElementChild;
+        return {
+          event: "frame",
+          timeMs: performance.now(),
+          transitionRunning: animation !== undefined,
+          transitionTimeMs:
+            typeof animation?.currentTime === "number"
+              ? animation.currentTime
+              : null,
+          pinnedWidth:
+            wrapper instanceof HTMLElement ? wrapper.style.width : "",
+          contentWidth:
+            scroll?.firstElementChild?.getBoundingClientRect().width ?? null,
+          scrollHeight: scroll?.scrollHeight ?? null,
+          clientHeight: scroll?.clientHeight ?? null,
+          scrollTop: scroll?.scrollTop ?? null,
+        };
+      };
+      let collecting = false;
+      let frame = 0;
+      const record = (event: string) => {
+        const sample = target.__readSidecarTransition!();
+        if (
+          sample.transitionRunning &&
+          sample.scrollTop !== null &&
+          sample.scrollHeight !== null &&
+          sample.clientHeight !== null &&
+          sample.scrollHeight > sample.clientHeight &&
+          Math.abs(
+            sample.scrollHeight - sample.clientHeight - sample.scrollTop,
+          ) <= 1
+        )
+          collecting = true;
+        if (!collecting) return;
+        probe.observedFrames += 1;
+        if (probe.samples.length < 120)
+          probe.samples.push({ ...sample, event });
+        else probe.truncated = true;
+      };
+      const sampleFrame = () => {
+        record("frame");
+        frame = requestAnimationFrame(sampleFrame);
+      };
+      const onEnd = (event: Event) => {
+        if (
+          event instanceof TransitionEvent &&
+          event.target === panel &&
+          event.propertyName === "flex-grow"
+        ) {
+          probe.transitionEndCount += 1;
+          record("transitionend");
+        }
+      };
+      const onCancel = (event: Event) => {
+        if (
+          event instanceof TransitionEvent &&
+          event.target === panel &&
+          event.propertyName === "flex-grow"
+        ) {
+          probe.transitionCancelCount += 1;
+          record("transitioncancel");
+        }
+      };
+      panel.addEventListener("transitionend", onEnd);
+      panel.addEventListener("transitioncancel", onCancel);
+      frame = requestAnimationFrame(sampleFrame);
+      target.__stopSidecarTransitionProbe = () => {
+        cancelAnimationFrame(frame);
+        panel.removeEventListener("transitionend", onEnd);
+        panel.removeEventListener("transitioncancel", onCancel);
+      };
+    });
+    let midpoint: SidecarTransitionSample | undefined;
+    try {
+      await trigger.click();
+      await expect(page.getByTestId("sidecar-message-list")).toBeVisible();
+      await page.waitForFunction(() => {
+        const sample = (window as SidecarTransitionWindow)
+          .__readSidecarTransition!();
+        return (
+          sample.transitionRunning &&
+          sample.transitionTimeMs !== null &&
+          sample.transitionTimeMs >= 450
+        );
+      });
+      midpoint = await page.evaluate(() =>
+        (window as SidecarTransitionWindow).__readSidecarTransition!(),
+      );
+      expect(midpoint.transitionRunning).toBe(true);
+      expect(midpoint.pinnedWidth).not.toBe("");
+      expect(
+        Math.abs(midpoint.contentWidth! - baseline.contentWidth),
+      ).toBeLessThanOrEqual(1);
+      expect(midpoint.scrollHeight).toBe(baseline.scrollHeight);
+      expect(
+        Math.abs(midpoint.scrollTop! - baseline.scrollTop),
+      ).toBeLessThanOrEqual(1);
+      await page.waitForFunction(() => {
+        const target = window as SidecarTransitionWindow;
+        const sample = target.__readSidecarTransition!();
+        return (
+          target.__sidecarTransitionProbe!.transitionEndCount > 0 &&
+          !sample.transitionRunning &&
+          sample.pinnedWidth === ""
+        );
+      });
+      const probe = await page.evaluate(
+        () => (window as SidecarTransitionWindow).__sidecarTransitionProbe!,
+      );
+      const duringTransition = probe.samples.filter(
+        (sample) => sample.transitionRunning,
+      );
+      expect(duringTransition.length).toBeGreaterThan(0);
+      expect(probe.truncated).toBe(false);
+      expect(probe.transitionCancelCount).toBe(0);
+      expect(
+        duringTransition.every((sample) => sample.pinnedWidth !== ""),
+      ).toBe(true);
+      expect(
+        duringTransition.every(
+          (sample) =>
+            Math.abs(sample.contentWidth! - baseline.contentWidth) <= 1,
+        ),
+      ).toBe(true);
+      expect(
+        duringTransition.every(
+          (sample) =>
+            sample.scrollHeight === baseline.scrollHeight &&
+            Math.abs(sample.scrollTop! - baseline.scrollTop) <= 1,
+        ),
+      ).toBe(true);
+      const final = await page.evaluate(() =>
+        (window as SidecarTransitionWindow).__readSidecarTransition!(),
+      );
+      expect(final.pinnedWidth).toBe("");
+      expect(final.transitionRunning).toBe(false);
+      expect(
+        Math.abs(final.contentWidth! - baseline.contentWidth),
+      ).toBeLessThanOrEqual(1);
+      expect(final.scrollHeight).toBe(baseline.scrollHeight);
+      expect(
+        Math.abs(final.scrollTop! - baseline.scrollTop),
+      ).toBeLessThanOrEqual(1);
+    } finally {
+      const probe = await page.evaluate(() => {
+        const target = window as SidecarTransitionWindow;
+        target.__stopSidecarTransitionProbe?.();
+        return target.__sidecarTransitionProbe;
+      });
+      const path = testInfo.outputPath("delayed-sidecar-transition.json");
+      await writeFile(path, JSON.stringify({ baseline, midpoint, probe }));
+      await testInfo.attach("delayed-sidecar-transition", {
+        path,
+        contentType: "application/json",
+      });
+    }
   });
 
   test("self-heals the trigger when the sidecar thread is deleted elsewhere", async ({

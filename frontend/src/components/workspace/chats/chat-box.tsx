@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   type Layout,
   type PanelSize,
+  useGroupRef,
   usePanelRef,
 } from "react-resizable-panels";
 
@@ -30,6 +31,8 @@ import { useArtifacts } from "../artifacts/context";
 import { useMaybeBrowserView } from "../browser-view/context";
 import { useThread } from "../messages/context";
 import { useMaybeSidecar } from "../sidecar/context";
+
+import { waitForRightPanelTransition } from "./right-panel-transition";
 
 function RightPanelLoading() {
   return (
@@ -168,20 +171,25 @@ const ChatBox: React.FC<{
   }, [pathname]);
 
   const sidePanelRef = usePanelRef();
+  const panelGroupRef = useGroupRef();
+  const panelGroupElementRef = useRef<HTMLDivElement | null>(null);
+  const animatedGroupRef = useRef<HTMLDivElement | null>(null);
+  const cancelPanelTransitionRef = useRef<(() => void) | null>(null);
   // Width the panel reopens at: the last size the user dragged it to.
   const openSizeRef = useRef(RIGHT_PANEL_DEFAULT_SIZE);
   // While the panel width animates, the content is held at its final width and
   // clipped instead of reflowing every frame — a reflowing message list keeps
   // re-running its scroll-to-bottom (pinned by the sidecar scroll regression
   // test), and re-wrapping text mid-animation looks unsettled. Expressed in
-  // `cqw` against the group so it tracks the final width even if the group
-  // itself resizes during the animation.
+  // `cqw` against the group, minus its separator's share, so it tracks the
+  // actual final panel width even if the group resizes during the animation.
   const [pinnedContentWidth, setPinnedContentWidth] = useState<string | null>(
     null,
   );
   // Size transitions belong to open/close only: leaving them on during a drag
   // would interpolate every pointer frame and make the handle feel laggy.
   const [animatingRightPanel, setAnimatingRightPanel] = useState(false);
+  const animatingRightPanelRef = useRef(false);
   const rightPanelOpenRef = useRef(rightPanelOpen);
   // Read once: `defaultSize` only applies on mount, the effect below owns every
   // later open/close.
@@ -190,10 +198,27 @@ const ChatBox: React.FC<{
   );
 
   const handleSidePanelResize = useCallback((size: PanelSize) => {
-    if (!rightPanelOpenRef.current || size.asPercentage <= 0) {
+    if (
+      !rightPanelOpenRef.current ||
+      animatingRightPanelRef.current ||
+      size.asPercentage <= 0
+    ) {
       return;
     }
     openSizeRef.current = `${size.asPercentage}%`;
+  }, []);
+
+  const interruptPanelTransition = useCallback(() => {
+    if (!animatingRightPanelRef.current) {
+      return;
+    }
+    // A user drag owns the size immediately. Its eventual release must not be
+    // overwritten by completion of the preceding open/close animation.
+    cancelPanelTransitionRef.current?.();
+    cancelPanelTransitionRef.current = null;
+    animatingRightPanelRef.current = false;
+    setAnimatingRightPanel(false);
+    setPinnedContentWidth(null);
   }, []);
 
   const handlePanelGroupLayoutChanged = useCallback(
@@ -220,11 +245,26 @@ const ChatBox: React.FC<{
   );
 
   useEffect(() => {
-    if (rightPanelOpenRef.current === rightPanelOpen) {
+    const group = panelGroupElementRef.current;
+    if (isMobile || !group) {
+      rightPanelOpenRef.current = rightPanelOpen;
+      animatedGroupRef.current = null;
+      animatingRightPanelRef.current = false;
+      setAnimatingRightPanel(false);
+      setPinnedContentWidth(null);
+      return;
+    }
+    if (
+      rightPanelOpenRef.current === rightPanelOpen &&
+      animatedGroupRef.current === group &&
+      !animatingRightPanelRef.current
+    ) {
       return;
     }
     rightPanelOpenRef.current = rightPanelOpen;
+    animatedGroupRef.current = group;
 
+    animatingRightPanelRef.current = true;
     setAnimatingRightPanel(true);
     if (!rightPanelOpen) {
       // Remember the width now: the closing animation reports shrinking sizes,
@@ -235,11 +275,6 @@ const ChatBox: React.FC<{
       }
     }
 
-    const openPercentage = Number.parseFloat(openSizeRef.current);
-    setPinnedContentWidth(
-      Number.isFinite(openPercentage) ? `${openPercentage}cqw` : null,
-    );
-
     // resize() rather than expand(): the library expands to `minSize` until it
     // has recorded a size of its own, which would reopen narrower than before.
     if (rightPanelOpen) {
@@ -248,19 +283,65 @@ const ChatBox: React.FC<{
       sidePanelRef.current?.collapse();
     }
 
-    const timeout = window.setTimeout(() => {
+    // The library commits the layout in React after resize() returns. Keep the
+    // content at that target width until both actual flex transitions finish;
+    // a timer started in this effect can expire before their final frame.
+    const targetLayout = panelGroupRef.current?.getLayout() ?? {};
+    const openPercentage = rightPanelOpen
+      ? targetLayout[`${resizableIdBase}-side`]
+      : Number.parseFloat(openSizeRef.current);
+    const separatorWidth = Array.from(group.children).reduce(
+      (width, child) =>
+        child.hasAttribute("data-separator")
+          ? width + child.getBoundingClientRect().width
+          : width,
+      0,
+    );
+    setPinnedContentWidth(
+      openPercentage !== undefined && Number.isFinite(openPercentage)
+        ? `calc(${openPercentage}cqw - ${(openPercentage / 100) * separatorWidth}px)`
+        : null,
+    );
+    const cancel = waitForRightPanelTransition(group, targetLayout, () => {
+      cancelPanelTransitionRef.current = null;
+      animatingRightPanelRef.current = false;
       setAnimatingRightPanel(false);
       setPinnedContentWidth(null);
-    }, RIGHT_PANEL_ANIMATION_MS);
+      if (rightPanelOpen) {
+        const size = targetLayout[`${resizableIdBase}-side`];
+        if (size !== undefined && size > 0) {
+          openSizeRef.current = `${size}%`;
+        }
+      } else {
+        setRenderedRightPanel(null);
+      }
+    });
+    cancelPanelTransitionRef.current = cancel;
 
     return () => {
-      window.clearTimeout(timeout);
+      cancel();
+      if (cancelPanelTransitionRef.current === cancel) {
+        cancelPanelTransitionRef.current = null;
+      }
     };
-  }, [rightPanelOpen, sidePanelRef]);
+  }, [
+    isMobile,
+    panelGroupRef,
+    resizableIdBase,
+    rightPanelOpen,
+    sidePanelRef,
+    threadId,
+  ]);
 
   useEffect(() => {
     if (activeRightPanel) {
       setRenderedRightPanel(activeRightPanel);
+      return;
+    }
+
+    // Desktop closing content follows the same actual flex completion above.
+    // The mobile Sheet retains its separate exit-animation lifecycle.
+    if (!isMobile) {
       return;
     }
 
@@ -271,7 +352,7 @@ const ChatBox: React.FC<{
     return () => {
       window.clearTimeout(timeout);
     };
-  }, [activeRightPanel]);
+  }, [activeRightPanel, isMobile]);
 
   useEffect(() => {
     if (sidecarOpen && artifactsOpen) {
@@ -399,8 +480,30 @@ const ChatBox: React.FC<{
   return (
     <ResizablePanelGroup
       id={`${resizableIdBase}-group`}
+      elementRef={panelGroupElementRef}
+      groupRef={panelGroupRef}
       orientation="horizontal"
       onLayoutChanged={handlePanelGroupLayoutChanged}
+      onPointerDownCapture={(event) => {
+        if (
+          event.target instanceof Element &&
+          event.target.closest("[data-separator]")
+        ) {
+          interruptPanelTransition();
+        }
+      }}
+      onKeyDownCapture={(event) => {
+        if (
+          (event.key.startsWith("Arrow") ||
+            event.key === "Home" ||
+            event.key === "End" ||
+            event.key === "Enter") &&
+          event.target instanceof Element &&
+          event.target.closest("[data-separator]")
+        ) {
+          interruptPanelTransition();
+        }
+      }}
       className={cn(
         "[container-type:inline-size] size-full min-h-0",
         // The sized flex item is the library's own `[data-panel]` element, not
