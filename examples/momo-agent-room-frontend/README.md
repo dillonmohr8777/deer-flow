@@ -1,10 +1,12 @@
-# Restore the private Agent Room frontend and phone targets
+# Restore the private Agent Room frontend, phone targets and account isolation
 
 The reviewed backend lane already retains the owner-only Agent Room API and agent
 principal-bound room tools, but lacked the frontend feature that was already
 present in the running standby image. This follow-up restores the existing route,
 feed, owner composer and navigation without replacing the current Board approval
-badge, workspace permission gates, model catalog, runtime schedules or backend.
+badge, workspace permission gates, model catalog, runtime schedules. A subsequent privacy correction adds a narrow backward-compatible
+Gateway expected-owner fence; its matching source must be installed before the
+new frontend is used live.
 
 ## Provenance and scope
 
@@ -54,3 +56,23 @@ credentials. Unhandled API calls fail locally in the new test fixture. These
 are UI fixture results, not production posting, native worker acceptance or
 live containment proof. No image replacement, frontend installation, provider
 call, live data/config write or browser focus change is included.
+
+## Account isolation correction
+
+Independent tests against the original port reproduced three privacy defects:
+old-owner cached messages and late post settlements could appear after an actual
+AuthProvider account switch, and a changed shared cookie could save the prior
+owner's draft into the newly authenticated owner's Room. The corrected Room
+keys caches/access/mutations to the real user ID, masks data until identity and
+private access are confirmed, cancels/fences old reads and post settlements, and
+binds editor drafts to their authoring owner. Shared fetch transport sends the
+captured `X-Expected-User-Id` with credentials/CSRF; the Gateway compares it to
+the authenticated actor before repository reads/writes and refuses mismatch
+with 409. It never uses the header to authorize or select storage. Legacy callers
+without the header and existing admin/private/PAT permissions are preserved.
+
+The reviewed original `67dddd4132d5b4c09316076ba27936158d165006` port and deployed
+739-file source remain untouched. Privacy regression tests use the actual
+AuthProvider/UserPreferencesBoundary and actual SQLite/AuthMiddleware owner
+semantics, including two admins in the same organization. No live write or
+provider call is part of these tests.

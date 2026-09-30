@@ -19,12 +19,12 @@ import {
 } from "@/components/workspace/workspace-container";
 import {
   AGENT_ROOM_ROLES,
+  useAgentRoomAccess,
   useAgentRoomMessages,
   usePostAgentRoomMessage,
   type AgentRoomMessage,
   type AgentRoomMessageType,
 } from "@/core/agent-room";
-import { useDeskEnabled } from "@/core/features";
 import { cn } from "@/lib/utils";
 
 function messageTone(type: AgentRoomMessageType) {
@@ -78,9 +78,10 @@ function MessageRow({ message }: { message: AgentRoomMessage }) {
 }
 
 export function AgentRoom() {
-  const { enabled, isLoading } = useDeskEnabled();
+  const { ownerId, enabled, isLoading, canWrite } = useAgentRoomAccess();
   const router = useRouter();
-  const [draft, setDraft] = useState("");
+  const [storedDraft, setDraft] = useState({ ownerId, body: "" });
+  const draft = storedDraft.ownerId === ownerId ? storedDraft.body : "";
   const messages = useAgentRoomMessages();
   const postMessage = usePostAgentRoomMessage();
 
@@ -95,10 +96,12 @@ export function AgentRoom() {
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const body = draft.trim();
-    if (!body || postMessage.isPending) return;
+    if (!body || !canWrite || postMessage.isPending) return;
     try {
       await postMessage.mutateAsync({ body, message_type: "instruction" });
-      setDraft("");
+      setDraft((previous) =>
+        previous.ownerId === ownerId ? { ownerId, body: "" } : previous,
+      );
     } catch {
       // The mutation error stays visible below the composer.
     }
@@ -211,7 +214,10 @@ export function AgentRoom() {
                   <textarea
                     id="agent-room-instruction"
                     value={draft}
-                    onChange={(event) => setDraft(event.target.value)}
+                    onChange={(event) =>
+                      setDraft({ ownerId, body: event.target.value })
+                    }
+                    disabled={!canWrite}
                     maxLength={4000}
                     rows={3}
                     className="bg-background focus-visible:ring-ring mt-2 block w-full resize-y rounded-md border px-3 py-2 text-sm outline-none focus-visible:ring-2"
@@ -224,7 +230,9 @@ export function AgentRoom() {
                     <Button
                       type="submit"
                       className="min-h-11"
-                      disabled={!draft.trim() || postMessage.isPending}
+                      disabled={
+                        !canWrite || !draft.trim() || postMessage.isPending
+                      }
                     >
                       {postMessage.isPending ? "Posting…" : "Post to room"}
                     </Button>

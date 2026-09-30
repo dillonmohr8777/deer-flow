@@ -1,5 +1,6 @@
 import { fetch as fetchWithAuth } from "@/core/api/fetcher";
 import { getBackendBaseURL } from "@/core/config";
+import { isDeskEnabled, type FeaturesResponse } from "@/core/features/api";
 
 import type { AgentRoomMessage, AgentRoomMessageType } from "./types";
 
@@ -21,10 +22,25 @@ async function readError(
   return fallback;
 }
 
-export async function listAgentRoomMessages(): Promise<AgentRoomMessage[]> {
+export async function fetchAgentRoomEnabled(
+  ownerId: string,
+  signal?: AbortSignal,
+): Promise<boolean> {
+  const response = await fetchWithAuth(`${getBackendBaseURL()}/api/features`, {
+    signal,
+    headers: { "X-Expected-User-Id": ownerId },
+  });
+  if (!response.ok) throw new Error("Private room access is unavailable.");
+  return isDeskEnabled((await response.json()) as FeaturesResponse);
+}
+
+export async function listAgentRoomMessages(
+  ownerId: string,
+  signal?: AbortSignal,
+): Promise<AgentRoomMessage[]> {
   const response = await fetchWithAuth(
     `${getBackendBaseURL()}/api/agent-room/messages?limit=100`,
-    { method: "GET" },
+    { method: "GET", signal, headers: { "X-Expected-User-Id": ownerId } },
   );
   if (!response.ok) {
     throw new Error(
@@ -35,15 +51,21 @@ export async function listAgentRoomMessages(): Promise<AgentRoomMessage[]> {
   return result.messages;
 }
 
-export async function postAgentRoomMessage(input: {
-  body: string;
-  message_type: Extract<AgentRoomMessageType, "instruction" | "note">;
-}): Promise<AgentRoomMessage> {
+export async function postAgentRoomMessage(
+  input: {
+    body: string;
+    message_type: Extract<AgentRoomMessageType, "instruction" | "note">;
+  },
+  ownerId: string,
+): Promise<AgentRoomMessage> {
   const response = await fetchWithAuth(
     `${getBackendBaseURL()}/api/agent-room/messages`,
     {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "X-Expected-User-Id": ownerId,
+      },
       body: JSON.stringify(input),
     },
   );
