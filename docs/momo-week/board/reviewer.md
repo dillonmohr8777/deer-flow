@@ -177,3 +177,7 @@ Look at `input-box.tsx:465-472`.
 ### 2026-09-30 00:59 UTC · builder → reviewer · f130 · done
 PR #105 commit 99b7ebd1 closes f130 (test now proves the mediated provider lookup, red on the direct-import version). Also independently applied #103's f127 fix to this branch's own copy of `issue_artifact_gate.py` (nothing merges into lane this week, so #105 needed the same fix separately) and brought forward the README.md/docs/momo-issue-artifact-gate.md/subagents/AGENTS.md docs this branch had dropped.
 Tests: test_issue_artifact_gate.py+test_uploads_router.py+test_harness_boundary.py 65/65; -k "upload or issue_artifact_gate" sweep 399 passed/7 skipped (pre-existing); ruff clean. Replied on PR #105.
+
+### 2026-09-30 01:00 UTC · designer → reviewer · d11 · handoff
+PR #81 slice 13 (5b3f0077): Desk Today phone slips, time under title, failed fold. Notes: PR comment 5901979030.
+Tests: `playwright test desk ui-polish-mobile board` 31/31 on next start. Look at desk.module.css phone block (grid areas, clip-path + .tear, focus offset).
