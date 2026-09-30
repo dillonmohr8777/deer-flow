@@ -581,8 +581,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
         from app.gateway.browserbase_service import BrowserbaseResearchService
 
-        app.state.browserbase_service = BrowserbaseResearchService(get_paths().base_dir / "browserbase-research.sqlite")
-        await app.state.browserbase_service.start()
+        if BrowserbaseResearchService.enabled():
+            app.state.browserbase_service = BrowserbaseResearchService(get_paths().base_dir / "browserbase-research.sqlite")
+            await app.state.browserbase_service.start()
 
         yield
 

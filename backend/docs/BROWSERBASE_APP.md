@@ -10,13 +10,23 @@ The screenshot shows the sanitized source snapshot, **not the original live layo
 
 ## Configuration and lifecycle
 
-The gateway owns one `BrowserbaseResearchService(path)` in `app.state.browserbase_service`, calls `await start()` in startup and `await aclose()` in shutdown, and includes `routers.browserbase_research.router`. Runtime credentials remain in a private ignored file or injected process environment:
+When enabled, the gateway owns one `BrowserbaseResearchService(path)` in `app.state.browserbase_service`, calls `await start()` in startup and `await aclose()` in shutdown, and includes `routers.browserbase_research.router`. Creation follows `runs:create` permission checks with the actual integration lane's `runs.create` entitlement gate when that subsystem exists. Only a fully absent subsystem on the old base permits compatibility passthrough; partial/invalid policy fails startup. Configured policy errors are never swallowed. The gate and offline denial evidence are documented in `OPENAI_AGENTS_APP.md`. Runtime credentials remain in a private ignored file or injected process environment:
 
 ```dotenv
 BROWSERBASE_API_KEY=${BROWSERBASE_API_KEY}
 MOMOBOT_BROWSERBASE_ENABLED=true
 MOMOBOT_BROWSERBASE_MONTHLY_MINUTE_LIMIT=6000
 ```
+
+Gateway startup checks the pure `BrowserbaseResearchService.enabled()` predicate
+before constructing or starting this worker. When disabled, the real lazy status
+accessor reports `not_enabled`, and admission/storage requests return503 before
+creating a SQLite file, artifact directory, process lease, or provider request.
+Ordinary multi-worker Gateway startup therefore stays available; a disabled
+Windows installation does not import or require `fcntl`. The constructor itself
+has no storage side effects. `tests/test_managed_provider_startup.py` exercises
+overlapping real lifespans and authenticated status/admission/list requests,
+including missing `fcntl`, with no provider storage or network access.
 
 The limit must come from current account-plan evidence, not a guessed public pricing tier. This owner's verified account plan has 6000 shared browser minutes, resets October 1, and supports 25 concurrent sessions; these observations are time-specific and are not a new purchase. The code requests no project ID: the latest Browserbase API infers the project from the key. No `BROWSERBASE_PROJECT_ID` is needed.
 

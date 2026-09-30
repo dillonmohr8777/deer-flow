@@ -511,6 +511,8 @@ class OpenAIAgentService:
                     if length > MAX_ARTIFACT_BYTES:
                         raise AgentServiceError("artifact_size_unavailable_or_exceeded", 413)
                     chunks.append(chunk)
+            if length != size:
+                raise AgentServiceError("artifact_read_failed", 502)
             return b"".join(chunks)
         except AgentServiceError:
             raise

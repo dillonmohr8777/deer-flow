@@ -227,3 +227,5 @@ Batch workers pin `app.state.extensions`; never persist snapshots.
 
 Managed OpenAI sessions preserve owner scope and uncertain admissions;
 follow `backend/docs/OPENAI_AGENTS_APP.md`.
+
+Browserbase off: no I/O.

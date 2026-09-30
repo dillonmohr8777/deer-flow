@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.gateway.authz import get_auth_context, require_permission
 from app.gateway.openai_agent_service import AgentServiceError, OpenAIAgentService
+from app.gateway.paid_run_entitlement import require_paid_run_entitlement
 from deerflow.config.paths import get_paths
 
 router = APIRouter(prefix="/api/openai-agents", tags=["openai-agents"])
@@ -90,6 +91,7 @@ async def list_sessions(request: Request) -> dict:
 
 @router.post("/sessions")
 @require_permission("runs", "create")
+@require_paid_run_entitlement
 async def create_session(body: CreateSessionRequest, request: Request, idempotency_key: IdempotencyKey) -> dict:
     owner = _scoped_owner(request)
     return await _call(_service(request).create(owner, body.input, body.title, idempotency_key))
@@ -104,6 +106,7 @@ async def get_session(session_id: str, request: Request) -> dict:
 
 @router.post("/sessions/{session_id}/messages")
 @require_permission("runs", "create")
+@require_paid_run_entitlement
 async def message(session_id: str, body: MessageRequest, request: Request, idempotency_key: IdempotencyKey) -> dict:
     owner = _scoped_owner(request)
     return await _call(_service(request).message(owner, session_id, body.input, idempotency_key))

@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.gateway.authz import get_auth_context, require_permission
 from app.gateway.browserbase_service import BrowserbaseError, BrowserbaseResearchService, public_https_url
+from app.gateway.paid_run_entitlement import require_paid_run_entitlement
 from deerflow.config.paths import get_paths
 
 router = APIRouter(prefix="/api/browserbase", tags=["browserbase-research"])
@@ -85,6 +86,7 @@ async def list_research(request: Request) -> dict:
 
 @router.post("/research")
 @require_permission("runs", "create")
+@require_paid_run_entitlement
 async def create_research(body: ResearchRequest, request: Request, idempotency_key: IdempotencyKey) -> dict:
     owner = _owner(request)
     return await _call(_service(request).create(owner, body.urls, body.title, idempotency_key))

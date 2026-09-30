@@ -8,6 +8,25 @@ It is a new execution choice, not a replacement business database.
 
 ## Runtime and access
 
+OpenAI create/follow-up admissions and Browserbase creation share
+`paid_run_entitlement.require_paid_run_entitlement`, composed below the existing
+`runs:create` permission guard. On `lane/momo-week` it calls the real
+`app.gateway.authz.require_entitlement("runs.create")`: that policy remains the
+authority for configuration, trusted organization context, missing/suspended
+grants and runtime errors. The old `943fc338` base has no entitlement subsystem;
+only complete absence permits passthrough. A present-but-invalid gate, or any
+entitlement configuration/evaluator/repository module without the gate, fails
+startup rather than admitting paid work. Cancellation retains its existing
+permission/ownership gates and does not consume a paid admission.
+
+Offline tests cover all three route admissions and deny missing/suspended grants
+before service/provider calls, preserve old-base permission/workspace fences,
+and reject malformed or partially installed policies. A separate bounded check
+loaded the exact `require_entitlement` function from `origin/lane/momo-week` at
+`9e97559c` with repository/config doubles: all six missing/suspended route cases
+returned 403 with zero provider calls. This does not import or deploy the lane's
+107 other changed files into the verified private runtime.
+
 `OPENAI_API_KEY` remains server-side. `MOMOBOT_OPENAI_AGENTS_ENABLED=true` is
 required before paid requests are admitted. Status reads disclose only key
 presence, SDK version and configuration readiness. `available=true` does not
@@ -93,7 +112,10 @@ it stopped. `POST /sessions/{id}/browser-approval` is unavailable.
 
 `GET /sessions/{id}/artifacts/{artifact_id}/content` checks ownership and provider
 artifact metadata, enforces 20 MiB before reading, then enforces the same limit
-during SDK streaming even if metadata is inaccurate. The body is an attachment
+during SDK streaming even if metadata is inaccurate. At EOF the streamed byte
+count must equal the declared size, including zero-byte artifacts; a truncated
+or excess body returns `502 artifact_read_failed` after closing the stream.
+Exceeding 20 MiB still stops reading immediately with 413. The body is an attachment
 with `application/octet-stream`, `nosniff`, and private/no-store cache headers.
 Generated HTML must never execute under the app origin.
 

@@ -3,7 +3,7 @@
 import asyncio
 import sqlite3
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -205,9 +205,54 @@ async def test_streaming_artifact_rejects_oversize_before_body_read(setup):
     service, client = setup
     row = await service.create("alice", "Task", "Task", "c")
     client.beta.agents.sessions.artifacts.retrieve.return_value = {"size_bytes": 30 * 1024 * 1024}
+    content = Mock(side_effect=AssertionError("Oversized metadata must prevent opening the stream"))
+    client.beta.agents.sessions.artifacts.with_streaming_response = SimpleNamespace(content=content)
     with pytest.raises(AgentServiceError, match="artifact_size_unavailable_or_exceeded"):
         await service.artifact("alice", row["id"], "artifact1")
-    client.beta.agents.sessions.artifacts.content.assert_not_awaited()
+    content.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "size,chunks,expected",
+    [(3, [b"a"], None), (1, [b"a", b"bc"], None), (0, [], b""), (3, [b"a", b"bc"], b"abc")],
+    ids=["truncated", "excess-within-limit", "empty", "exact-multiple-chunks"],
+)
+async def test_artifact_eof_matches_metadata_and_always_closes_stream(setup, size, chunks, expected):
+    service, client = setup
+    row = await service.create("alice", "Task", "Task", "c")
+    artifacts = client.beta.agents.sessions.artifacts
+    artifacts.retrieve.return_value = {"size_bytes": size}
+    state = {"entered": 0, "closed": 0, "read": 0, "eof": False, "exit_error": None}
+
+    class Stream:
+        async def iter_bytes(self, chunk_size):
+            assert chunk_size == 65536
+            for chunk in chunks:
+                state["read"] += len(chunk)
+                yield chunk
+            state["eof"] = True
+
+    class Context:
+        async def __aenter__(self):
+            state["entered"] += 1
+            return Stream()
+
+        async def __aexit__(self, error_type, _error, _traceback):
+            state["closed"] += 1
+            state["exit_error"] = error_type
+
+    content = Mock(return_value=Context())
+    artifacts.with_streaming_response = SimpleNamespace(content=content)
+    if expected is None:
+        with pytest.raises(AgentServiceError, match="artifact_read_failed") as error:
+            await service.artifact("alice", row["id"], "artifact1")
+        assert error.value.status_code == 502
+    else:
+        assert await service.artifact("alice", row["id"], "artifact1") == expected
+    artifacts.retrieve.assert_awaited_once_with("artifact1", session_id="sess_remote")
+    content.assert_called_once_with("artifact1", session_id="sess_remote")
+    assert state == {"entered": 1, "closed": 1, "read": sum(map(len, chunks)), "eof": True, "exit_error": None}
 
 
 @pytest.mark.asyncio

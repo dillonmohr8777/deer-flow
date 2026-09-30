@@ -31,6 +31,7 @@ import httpx
 
 MAX_PAGES = 3
 SESSION_TIMEOUT = 180
+CREATE_REQUEST_TIMEOUT = 10
 MAX_BODY_BYTES = 2 * 1024 * 1024
 MAX_SCREENSHOT_BYTES = 4 * 1024 * 1024
 MODE = "public_read_only_snapshot"
@@ -42,6 +43,15 @@ ALLOWED_CONNECT_HOSTS = {
 _TERMINAL = {"completed", "failed", "cancelled"}
 _PNG = b"\x89PNG\r\n\x1a\n"
 _SECRET_QUERY = re.compile(r"(?:api[_-]?key|token|auth|authorization|password|passwd|secret|signature|credential|jwt|session|code|key)$", re.I)
+
+
+def _owner_reserved(data: dict, now: float) -> bool:
+    if data["status"] not in _TERMINAL:
+        return True
+    if data.get("session_closed") is True:
+        return False
+    expires_at = data.get("session_expires_at")
+    return isinstance(expires_at, (int, float)) and expires_at > now
 
 
 class BrowserbaseError(Exception):
@@ -272,7 +282,10 @@ class BrowserbaseResearchService:
         self.lock = asyncio.Lock()
         self.started = False
         self.closing = False
-        self._init_db()
+
+    @staticmethod
+    def enabled() -> bool:
+        return os.environ.get("MOMOBOT_BROWSERBASE_ENABLED", "").lower() in ("1", "true", "yes")
 
     async def _fetch(self, url):
         return await asyncio.to_thread(PublicPageFetcher().fetch, url)
@@ -296,6 +309,9 @@ class BrowserbaseResearchService:
             if action == "active":
                 rows = [json.loads(row[0]) for row in db.execute("SELECT data FROM research")]
                 return [row for row in rows if row["status"] not in _TERMINAL]
+            if action == "held":
+                rows = [json.loads(row[0]) for row in db.execute("SELECT data FROM research")]
+                return [row for row in rows if _owner_reserved(row, time.time())]
             if action == "save":
                 data = args[0]
                 db.execute("UPDATE research SET data=? WHERE id=?", (json.dumps(data, separators=(",", ":")), data["id"]))
@@ -309,7 +325,7 @@ class BrowserbaseResearchService:
                         raise BrowserbaseError("idempotency_conflict", 409)
                     return json.loads(previous[1]), False
                 rows = db.execute("SELECT data FROM research WHERE owner=?", (owner,))
-                if any(json.loads(row[0])["status"] not in _TERMINAL for row in rows):
+                if any(_owner_reserved(json.loads(row[0]), time.time()) for row in rows):
                     raise BrowserbaseError("owner_busy", 409)
                 db.execute("INSERT INTO research VALUES (?,?,?,?,?)", (data["id"], owner, key, fingerprint, json.dumps(data, separators=(",", ":"))))
                 return data, True
@@ -319,6 +335,8 @@ class BrowserbaseResearchService:
         raise ValueError("Unknown storage action")
 
     async def _storage(self, action, *args):
+        if not self.started:
+            raise BrowserbaseError("service_unavailable" if self.enabled() else "not_enabled", 503)
         return await asyncio.to_thread(self._db, action, *args)
 
     async def _save(self, data):
@@ -326,12 +344,15 @@ class BrowserbaseResearchService:
         await self._storage("save", data)
 
     async def start(self):
+        if not self.enabled():
+            return
         async with self.lock:
             if self.started:
                 return
             try:
                 import fcntl
 
+                self.path.parent.mkdir(parents=True, exist_ok=True)
                 lease = self.path.with_suffix(".lock").open("a+b")
                 os.chmod(self.path.with_suffix(".lock"), 0o600)
                 try:
@@ -342,12 +363,21 @@ class BrowserbaseResearchService:
                 self.lease = lease
             except ImportError:
                 raise BrowserbaseError("process_lock_unavailable", 503) from None
+            try:
+                await asyncio.to_thread(self._init_db)
+            except BaseException:
+                self.lease.close()
+                self.lease = None
+                raise
             self.started = True
-            for data in await self._storage("active"):
+            for data in await self._storage("held"):
                 if data.get("session_id"):
                     data["session_closed"] = await self._release(data["session_id"])
-                data["status"] = "failed"
-                data["last_error"] = "interrupted_by_restart"
+                    if data["session_closed"]:
+                        data["session_expires_at"] = None
+                if data["status"] not in _TERMINAL:
+                    data["status"] = "failed"
+                    data["last_error"] = "interrupted_by_restart"
                 await self._save(data)
 
     async def aclose(self):
@@ -393,7 +423,7 @@ class BrowserbaseResearchService:
             raise BrowserbaseError("provider_request_failed", 502) from None
 
     async def status(self):
-        configured = bool(os.environ.get("BROWSERBASE_API_KEY")) and os.environ.get("MOMOBOT_BROWSERBASE_ENABLED", "").lower() in ("1", "true", "yes")
+        configured = bool(os.environ.get("BROWSERBASE_API_KEY")) and self.enabled()
         state = {
             "configured": configured,
             "available": False,
@@ -404,6 +434,9 @@ class BrowserbaseResearchService:
             "mode": MODE,
             "limits": {"max_pages": MAX_PAGES, "session_timeout_seconds": SESSION_TIMEOUT, "max_sessions_per_owner": 1},
         }
+        if not self.enabled():
+            state["reason"] = "not_enabled"
+            return state
         if not configured:
             state["reason"] = "provider_unconfigured"
             return state
@@ -445,6 +478,10 @@ class BrowserbaseResearchService:
         return state
 
     async def create(self, owner: str, urls: list[str], title: str, idempotency_key: str):
+        if not self.enabled():
+            raise BrowserbaseError("not_enabled", 503)
+        if not os.environ.get("BROWSERBASE_API_KEY"):
+            raise BrowserbaseError("provider_unconfigured", 503)
         await self.start()
         if self.closing:
             raise BrowserbaseError("service_stopping", 503)
@@ -479,6 +516,7 @@ class BrowserbaseResearchService:
                 "urls": normalized,
                 "pages": [],
                 "session_id": None,
+                "session_expires_at": None,
                 "replay_url": None,
                 "session_closed": None,
                 "usage": {"browser_minutes": None, "elapsed_seconds": 0, "cost_usd": None},
@@ -499,7 +537,7 @@ class BrowserbaseResearchService:
         try:
             for _ in range(3):
                 result = await self._request("GET", f"/v1/sessions/{session_id}")
-                if isinstance(result, dict) and result.get("status") in ("COMPLETED", "ERROR", "TIMED_OUT"):
+                if isinstance(result, dict) and result.get("id") == session_id and result.get("status") in ("COMPLETED", "ERROR", "TIMED_OUT"):
                     return True
                 await asyncio.sleep(0.25)
         except BrowserbaseError:
@@ -525,13 +563,19 @@ class BrowserbaseResearchService:
                 if not state["available"]:
                     raise BrowserbaseError(state["reason"] or "provider_unavailable", 503)
                 phase = "provider_create_uncertain"
-                session = await self._request(
-                    "POST", "/v1/sessions", {"timeout": SESSION_TIMEOUT, "keepAlive": False, "proxies": False, "browserSettings": {"recordSession": True}, "userMetadata": {"purpose": MODE, "momobot_run": data["id"]}}
-                )
+                # Persist before dispatch: a lost response or process death must
+                # retain ownership through the latest possible session timeout.
+                data["session_expires_at"] = time.time() + CREATE_REQUEST_TIMEOUT + SESSION_TIMEOUT
+                await self._save(data)
+                async with asyncio.timeout(CREATE_REQUEST_TIMEOUT):
+                    session = await self._request(
+                        "POST", "/v1/sessions", {"timeout": SESSION_TIMEOUT, "keepAlive": False, "proxies": False, "browserSettings": {"recordSession": True}, "userMetadata": {"purpose": MODE, "momobot_run": data["id"]}}
+                    )
                 session_id = session.get("id") if isinstance(session, dict) else None
                 if not isinstance(session_id, str) or not re.fullmatch(r"[a-zA-Z0-9_-]{1,128}", session_id):
                     raise BrowserbaseError("invalid_provider_response", 502)
                 data["session_id"] = session_id
+                data["session_expires_at"] = time.time() + SESSION_TIMEOUT
                 data["replay_url"] = f"https://www.browserbase.com/sessions/{session_id}"
                 await self._save(data)
                 connect_url = session.get("connectUrl", "")
@@ -565,7 +609,7 @@ class BrowserbaseResearchService:
             data["last_error"] = None
         except TimeoutError:
             data["status"] = "failed"
-            data["last_error"] = "research_timeout"
+            data["last_error"] = "provider_create_uncertain" if phase == "provider_create_uncertain" else "research_timeout"
         except BrowserbaseError as error:
             data["status"] = "failed"
             data["last_error"] = error.code
@@ -585,6 +629,8 @@ class BrowserbaseResearchService:
                     data["session_closed"] = await self._release(data["session_id"])
             except TimeoutError:
                 data["session_closed"] = False
+            if data["session_closed"]:
+                data["session_expires_at"] = None
         data["usage"]["elapsed_seconds"] = round(time.monotonic() - started, 3)
         await self._save(data)
 

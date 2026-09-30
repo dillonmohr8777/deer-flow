@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from pathlib import Path
 
 import httpx
 import pytest
 
+from app.gateway import browserbase_service
 from app.gateway.browserbase_service import BrowserbaseError, BrowserbaseResearchService, PublicPageFetcher, public_https_url
 
 
@@ -368,4 +370,199 @@ async def test_concurrent_repeated_cancel_waits_for_one_durable_cleanup(monkeypa
     results = await asyncio.gather(first, second)
     assert all(result["status"] == "cancelled" and result["session_closed"] is True for result in results)
     assert len([c for c in calls if c[2] == {"status": "REQUEST_RELEASE"}]) == 1
+    await service.aclose()
+
+
+@pytest.mark.asyncio
+async def test_uncertain_creation_holds_owner_across_restart_until_possible_ttl(monkeypatch, tmp_path):
+    service, calls, _ = provider_fixture(monkeypatch, tmp_path)
+    clock = [1000.0]
+    monkeypatch.setattr(browserbase_service.time, "time", lambda: clock[0])
+
+    async def uncertain_request(method, path, body=None):
+        calls.append((method, path, body))
+        if path == "/v1/projects":
+            return [{"id": "project-a"}]
+        if path.endswith("/usage"):
+            return {"browserMinutes": 72}
+        if method == "POST" and path == "/v1/sessions":
+            raise BrowserbaseError("provider_request_failed", 502)
+        pytest.fail("unknown session must not be retried or released without its id")
+
+    service._request = uncertain_request
+    run = await service.create("owner-a", ["https://example.com"], "Unknown", "first")
+    result = await settled(service, "owner-a", run["id"])
+    assert result["status"] == "failed"
+    assert result["session_id"] is None
+    assert result["session_closed"] is None
+    assert result["session_expires_at"] == 1190
+    assert (await service.create("owner-a", ["https://example.com"], "Unknown", "first"))["id"] == run["id"]
+    with pytest.raises(BrowserbaseError, match="owner_busy"):
+        await service.create("owner-a", ["https://other.example"], "Next", "second")
+    await service.aclose()
+
+    restored = BrowserbaseResearchService(service.path, browser_runner=service.browser_runner, fetcher=service.fetcher)
+    restored._request = uncertain_request
+    await restored.start()
+    assert (await restored.snapshot("owner-a", run["id"]))["status"] == "failed"
+    assert (await restored.create("owner-a", ["https://example.com"], "Unknown", "first"))["id"] == run["id"]
+    clock[0] = 1189.999
+    with pytest.raises(BrowserbaseError, match="owner_busy"):
+        await restored.create("owner-a", ["https://other.example"], "Next", "second")
+    assert len([call for call in calls if call[:2] == ("POST", "/v1/sessions")]) == 1
+    clock[0] = 1190
+    next_run = await restored.create("owner-a", ["https://other.example"], "Next", "second")
+    await settled(restored, "owner-a", next_run["id"])
+    assert len([call for call in calls if call[:2] == ("POST", "/v1/sessions")]) == 2
+    await restored.aclose()
+
+
+@pytest.mark.asyncio
+async def test_cancel_during_paid_create_preserves_possible_session_owner_hold(monkeypatch, tmp_path):
+    service, calls, _ = provider_fixture(monkeypatch, tmp_path)
+    entered = asyncio.Event()
+    original_request = service._request
+
+    async def pending_request(method, path, body=None):
+        if method == "POST" and path == "/v1/sessions":
+            calls.append((method, path, body))
+            entered.set()
+            await asyncio.Event().wait()
+        return await original_request(method, path, body)
+
+    service._request = pending_request
+    run = await service.create("owner-a", ["https://example.com"], "Pending", "first")
+    await asyncio.wait_for(entered.wait(), 2)
+    result = await service.cancel("owner-a", run["id"])
+    assert result["status"] == "cancelled"
+    assert result["session_id"] is None and result["session_closed"] is None
+    assert result["session_expires_at"] > browserbase_service.time.time() + 179
+    with pytest.raises(BrowserbaseError, match="owner_busy"):
+        await service.create("owner-a", ["https://other.example"], "Next", "second")
+    assert (await service.create("owner-a", ["https://example.com"], "Pending", "first"))["id"] == run["id"]
+    assert len([call for call in calls if call[:2] == ("POST", "/v1/sessions")]) == 1
+    await service.aclose()
+
+
+@pytest.mark.asyncio
+async def test_known_session_holds_owner_until_exact_terminal_readback(monkeypatch, tmp_path):
+    service, calls, _ = provider_fixture(monkeypatch, tmp_path)
+    original_request = service._request
+    completed = [False]
+
+    async def request(method, path, body=None):
+        if path == "/v1/sessions/session-a":
+            calls.append((method, path, body))
+            if method == "POST":
+                raise BrowserbaseError("provider_request_failed", 502)
+            return {"id": "session-a", "status": "COMPLETED" if completed[0] else "RUNNING"}
+        return await original_request(method, path, body)
+
+    service._request = request
+    run = await service.create("owner-a", ["https://example.com"], "Known", "first")
+    result = await settled(service, "owner-a", run["id"])
+    assert result["status"] == "completed"
+    assert result["session_closed"] is False
+    with pytest.raises(BrowserbaseError, match="owner_busy"):
+        await service.create("owner-a", ["https://other.example"], "Next", "second")
+    await service.aclose()
+    completed[0] = True
+    restored = BrowserbaseResearchService(service.path, browser_runner=service.browser_runner, fetcher=service.fetcher)
+    restored._request = request
+    await restored.start()
+    closed = await restored.snapshot("owner-a", run["id"])
+    assert closed["status"] == "completed"
+    assert closed["session_closed"] is True
+    assert closed["session_expires_at"] is None
+    next_run = await restored.create("owner-a", ["https://other.example"], "Next", "second")
+    await settled(restored, "owner-a", next_run["id"])
+    assert len([call for call in calls if call[:2] == ("POST", "/v1/sessions")]) == 2
+    await restored.aclose()
+
+
+@pytest.mark.asyncio
+async def test_cancel_before_paid_create_does_not_retain_owner(monkeypatch, tmp_path):
+    service, calls, _ = provider_fixture(monkeypatch, tmp_path)
+    entered = asyncio.Event()
+    original_fetcher = service.fetcher
+
+    async def pending_fetch(_url):
+        entered.set()
+        await asyncio.Event().wait()
+
+    service.fetcher = pending_fetch
+    run = await service.create("owner-a", ["https://example.com"], "Fetching", "first")
+    await asyncio.wait_for(entered.wait(), 2)
+    result = await service.cancel("owner-a", run["id"])
+    assert result["status"] == "cancelled"
+    assert result["session_expires_at"] is None
+    assert not any(call[:2] == ("POST", "/v1/sessions") for call in calls)
+    service.fetcher = original_fetcher
+    next_run = await service.create("owner-a", ["https://other.example"], "Next", "second")
+    assert (await settled(service, "owner-a", next_run["id"]))["status"] == "completed"
+    await service.aclose()
+
+
+@pytest.mark.asyncio
+async def test_disabled_service_has_no_storage_lease_or_provider_side_effects(monkeypatch, tmp_path):
+    service, calls, _ = provider_fixture(monkeypatch, tmp_path / "absent")
+    monkeypatch.setenv("MOMOBOT_BROWSERBASE_ENABLED", "false")
+    await service.start()
+    assert service.started is False
+    assert service.lease is None
+    assert (await service.status())["reason"] == "not_enabled"
+    for action in (
+        service.create("owner-a", ["https://example.com"], "Disabled", "disabled"),
+        service.list_runs("owner-a"),
+        service.snapshot("owner-a", "unknown"),
+    ):
+        with pytest.raises(BrowserbaseError, match="not_enabled"):
+            await action
+    await service.aclose()
+    assert calls == []
+    assert not service.path.parent.exists()
+
+
+@pytest.mark.asyncio
+async def test_different_session_terminal_readback_does_not_release_owner(monkeypatch, tmp_path):
+    service, calls, _ = provider_fixture(monkeypatch, tmp_path)
+    original_request = service._request
+
+    async def wrong_session_request(method, path, body=None):
+        if method == "GET" and path == "/v1/sessions/session-a":
+            return {"id": "different-session", "status": "COMPLETED"}
+        return await original_request(method, path, body)
+
+    service._request = wrong_session_request
+    run = await service.create("owner-a", ["https://example.com"], "Known", "first")
+    result = await settled(service, "owner-a", run["id"])
+    assert result["session_closed"] is False
+    with pytest.raises(BrowserbaseError, match="owner_busy"):
+        await service.create("owner-a", ["https://other.example"], "Next", "second")
+    assert len([call for call in calls if call[:2] == ("POST", "/v1/sessions")]) == 1
+    await service.aclose()
+
+
+@pytest.mark.asyncio
+async def test_paid_create_deadline_leaves_unknown_owner_hold_without_retry(monkeypatch, tmp_path):
+    service, calls, _ = provider_fixture(monkeypatch, tmp_path)
+    monkeypatch.setattr(browserbase_service, "CREATE_REQUEST_TIMEOUT", 0.02)
+    original_request = service._request
+
+    async def pending_request(method, path, body=None):
+        if method == "POST" and path == "/v1/sessions":
+            calls.append((method, path, body))
+            await asyncio.Event().wait()
+        return await original_request(method, path, body)
+
+    service._request = pending_request
+    run = await service.create("owner-a", ["https://example.com"], "Timed out", "first")
+    result = await settled(service, "owner-a", run["id"])
+    assert result["status"] == "failed"
+    assert result["last_error"] == "provider_create_uncertain"
+    assert result["session_id"] is None and result["session_closed"] is None
+    assert result["session_expires_at"] > browserbase_service.time.time() + 179
+    with pytest.raises(BrowserbaseError, match="owner_busy"):
+        await service.create("owner-a", ["https://other.example"], "Next", "second")
+    assert len([call for call in calls if call[:2] == ("POST", "/v1/sessions")]) == 1
     await service.aclose()
