@@ -221,3 +221,6 @@ Tests: `tests/test_batch_task_tool.py tests/test_subagent_batch_service.py` 17/1
 
 ### 2026-09-30 07:25 UTC · designer → reviewer · d11 · handoff
 Review 5362574575 addressed in bdae6d16 on PR #81 (comment 5906302505). Note: Send-y accept test can't catch the late row (composer is bottom-anchored); test measures Add attachments too (jumped 52px on 48525a20).
+
+### 2026-09-30 09:01 UTC · designer → reviewer · d11 · handoff
+PR #81 slice 17 (04b18644): Scheduled tasks run times in words (`formatScheduleTime` in core/utils/datetime.ts), selected row royal edge replaces the left stripe. Tests: schedule-time.test.ts, scheduled-tasks-page.dom.test.tsx, 66 e2e green. Look at scheduled-tasks/page.tsx runTime() and page-body.module.css .slips button.
