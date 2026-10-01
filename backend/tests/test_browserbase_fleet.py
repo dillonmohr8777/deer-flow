@@ -375,8 +375,9 @@ class AgentAPI:
     async def agent_runs(self, status):
         return {"data": [{"status": status}] if status in self.active else []}
 
-    async def start_agent_run(self, agent_id, task):
+    async def start_agent_run(self, agent_id, task, *, reservation_id=None):
         self.tasks.append(task)
+        self.reservation_ids = [*getattr(self, "reservation_ids", []), reservation_id]
         return {"runId": RUN, "status": "PENDING"}
 
     async def agent_run(self, run_id):
@@ -516,6 +517,94 @@ def test_native_agent_own_failure_stops_run_and_reconcile_repairs(tmp_path, monk
     asyncio.run(browserbase_fleet.reconcile_native_run(api, target.ledger, token, RUN))
     row = target.ledger.status()[0]
     assert row["state"] == "finished" and row["session"] == "session-1" and row["minutes"] == 9
+
+
+def test_native_agent_start_run_carries_reservation_token(tmp_path, monkeypatch):
+    from deerflow.community.browser_automation import browserbase_fleet
+
+    monkeypatch.setattr(browserbase_fleet, "_AGENT_POLL_SECONDS", 0)
+    target = native_fleet(tmp_path)
+    api = AgentAPI(["RUNNING", "COMPLETED"])
+    asyncio.run(target.run("seo-audit", "today", api))
+    assert api.reservation_ids == [target.ledger.status()[0]["id"]]
+
+
+def test_native_agent_definite_start_rejection_settles_finished_not_locked(tmp_path, monkeypatch):
+    """A confirmed HTTP 400 means no run could exist -- unlike every other start failure, it must not
+    leave an uncertain reservation that can never reconcile (no run id will ever exist for it)."""
+    from deerflow.community.browser_automation import browserbase_fleet
+
+    monkeypatch.setattr(browserbase_fleet, "_AGENT_POLL_SECONDS", 0)
+    target = native_fleet(tmp_path)
+
+    class Rejected(AgentAPI):
+        async def start_agent_run(self, agent_id, task, *, reservation_id=None):
+            raise RuntimeError("Browserbase API request failed (HTTP 400)")
+
+    with pytest.raises(RuntimeError, match="HTTP 400"):
+        asyncio.run(target.run("seo-audit", "today", Rejected([])))
+    assert target.ledger.status()[0]["state"] == "finished"
+    # Dispatch is not locked: a later reservation on a different job succeeds immediately.
+    asyncio.run(target.run("prospect", "tomorrow", AgentAPI(["COMPLETED"])))
+
+
+def test_native_agent_ambiguous_start_failure_still_stays_uncertain(tmp_path, monkeypatch):
+    """Every start failure other than a confirmed HTTP 400 may still have created a billable run and
+    must stay uncertain until an operator reconciles it -- the HTTP 400 carve-out must not widen."""
+    from deerflow.community.browser_automation import browserbase_fleet
+
+    monkeypatch.setattr(browserbase_fleet, "_AGENT_POLL_SECONDS", 0)
+    target = native_fleet(tmp_path)
+
+    class Ambiguous(AgentAPI):
+        async def start_agent_run(self, agent_id, task, *, reservation_id=None):
+            raise RuntimeError("Browserbase API request failed (HTTP 500)")
+
+    with pytest.raises(RuntimeError, match="HTTP 500"):
+        asyncio.run(target.run("seo-audit", "today", Ambiguous([])))
+    assert target.ledger.status()[0]["state"] == "uncertain"
+    with pytest.raises(FleetBlocked, match="reconciliation"):
+        asyncio.run(target.run("prospect", "tomorrow", AgentAPI(["COMPLETED"])))
+
+
+def test_reconcile_unbound_native_run_claims_by_provider_metadata(tmp_path, monkeypatch):
+    """No started.json was ever written (start_agent_run failed before a run id could be recorded), so
+    the operator-supplied run id is proven only by the provider echoing the reservation token back in
+    the run's own metadata -- never trusted bare, unlike the started.json-backed reconcile_native_run."""
+    from deerflow.community.browser_automation import browserbase_fleet
+
+    monkeypatch.setattr(browserbase_fleet, "_AGENT_POLL_SECONDS", 0)
+    target = native_fleet(tmp_path)
+
+    class Unbound(AgentAPI):
+        async def start_agent_run(self, agent_id, task, *, reservation_id=None):
+            raise RuntimeError("Browserbase API request failed (HTTP 503)")
+
+    with pytest.raises(RuntimeError, match="HTTP 503"):
+        asyncio.run(target.run("seo-audit", "today", Unbound([])))
+    token = target.ledger.status()[0]["id"]
+    assert target.ledger.status()[0]["state"] == "uncertain"
+
+    class Readback(AgentAPI):
+        metadata_token = "wrong"
+        status = "COMPLETED"
+
+        async def agent_run(self, run_id):
+            return {"runId": run_id, "status": self.status, "sessionId": "session-1", "metadata": {"reservation_id": self.metadata_token}}
+
+    api = Readback([])
+    with pytest.raises(FleetBlocked, match="metadata"):
+        asyncio.run(browserbase_fleet.reconcile_unbound_native_run(api, target.ledger, token, RUN))
+    assert target.ledger.status()[0]["state"] == "uncertain"
+
+    api.metadata_token = token
+    asyncio.run(browserbase_fleet.reconcile_unbound_native_run(api, target.ledger, token, RUN))
+    row = target.ledger.status()[0]
+    assert row["state"] == "finished" and row["session"] == "session-1"
+
+    # Already bound and finished: a second call finds no matching uncertain row left to claim.
+    with pytest.raises(FleetBlocked, match="unbound"):
+        asyncio.run(browserbase_fleet.reconcile_unbound_native_run(api, target.ledger, token, RUN))
 
 
 def test_native_agent_fails_closed_on_unreadable_run_list(tmp_path):

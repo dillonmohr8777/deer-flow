@@ -329,7 +329,16 @@ class Fleet:
         token = await asyncio.to_thread(self.ledger.reserve, job.id, occurrence, account, observed, cadence=job.interval_seconds, minutes=job.max_minutes + 1, agent_runs=(agent_jobs, included_runs))
         terminal, run_id = False, None
         try:
-            run = await api.start_agent_run(cast(str, job.agent_id), _native_task(job))
+            try:
+                run = await api.start_agent_run(cast(str, job.agent_id), _native_task(job), reservation_id=token)
+            except RuntimeError as exc:
+                if _is_definite_start_rejection(exc):
+                    # The provider confirmed the request itself was invalid before creating
+                    # anything: settle now instead of leaving an unbound reservation that can
+                    # never reconcile (no run, and so no started.json, will ever exist for it)
+                    # and would otherwise block every later dispatch forever.
+                    terminal = True
+                raise
             run_id = str(UUID(run["runId"]))
             # Ownership record for reconcile_native_run, written before anything else can fail.
             await asyncio.to_thread(_artifact, destination, "started.json", {"reservation_id": token, "run_id": run_id, "job": job.id, "agent_id": job.agent_id})
@@ -405,8 +414,17 @@ async def _request_stop(api: BrowserbaseAPI, run_id: str) -> bool:
     return True
 
 
+def _is_definite_start_rejection(exc: RuntimeError) -> bool:
+    """True only when the provider confirms the start request itself was rejected before any run
+    could exist (HTTP 400) -- never inferred from a timeout, a 429, a 5xx or a transport failure,
+    any of which may still have created a billable run that must stay uncertain until reconciled."""
+    return "HTTP 400" in str(exc)
+
+
 async def reconcile_native_run(api: BrowserbaseAPI, ledger: UsageLedger, token: str, run_id: str) -> None:
-    """Operator-only repair of an uncertain native_agent reservation (token and run_id from started.json)."""
+    """Operator-only repair of an uncertain native_agent reservation whose `started.json` recorded this
+    exact token/run_id pair together at start time (see `reconcile_unbound_native_run` for a reservation
+    with no such record)."""
     run = await api.agent_run(run_id)
     session = run.get("sessionId")
     if run.get("status") not in _AGENT_DONE or not session:
@@ -418,6 +436,35 @@ async def reconcile_native_run(api: BrowserbaseAPI, ledger: UsageLedger, token: 
     row = next((row for row in rows if row["id"] == token), None)
     if row is None:
         raise FleetBlocked("Unknown reservation")
+    if row["session"] is None:
+        await asyncio.to_thread(ledger.bind_owned_readback, token, str(session))
+    await asyncio.to_thread(ledger.reconcile, token, str(session), str(final.get("status")))
+
+
+async def reconcile_unbound_native_run(api: BrowserbaseAPI, ledger: UsageLedger, token: str, run_id: str) -> None:
+    """Operator-only repair for a native_agent reservation with no `started.json` -- `start_agent_run`
+    raised (timeout, 5xx, an ambiguous 4xx) or returned an unparseable run id before that file could be
+    written, so `reconcile_native_run`'s own token/run_id pairing (trusted only because `started.json`
+    recorded both together at start time) has nothing to check against. The operator supplies a run id
+    read back from the provider directly (by `agentId` and time, from the dashboard or API); ownership
+    is proven the same way `reconcile_owned_session` already proves a QA session's -- the reservation
+    token the provider echoes back in the run's own metadata (set by `start_agent_run`'s
+    `reservation_id`), never an unauthenticated guess or elapsed time.
+    """
+    run = await api.agent_run(run_id)
+    metadata = run.get("metadata")
+    if run.get("runId") != run_id or not isinstance(metadata, dict) or metadata.get("reservation_id") != token:
+        raise FleetBlocked("Run metadata does not prove ownership of this reservation")
+    rows = await asyncio.to_thread(ledger.status)
+    row = next((row for row in rows if row["id"] == token), None)
+    if row is None or row["state"] != "uncertain":
+        raise FleetBlocked("Reservation is not an unbound, uncertain native run")
+    session = run.get("sessionId")
+    if run.get("status") not in _AGENT_DONE or not session:
+        return  # bound only by this proof check; finish it later once the run is terminal
+    final = await api.retrieve(str(session))
+    if final.get("projectId") != api.project_id:
+        raise FleetBlocked("Agent run session is not in this provider project")
     if row["session"] is None:
         await asyncio.to_thread(ledger.bind_owned_readback, token, str(session))
     await asyncio.to_thread(ledger.reconcile, token, str(session), str(final.get("status")))
