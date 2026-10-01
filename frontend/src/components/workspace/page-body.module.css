@@ -169,6 +169,15 @@
   color: var(--paper-ink-muted);
 }
 
+/* An eyebrow is a label even when it is a section heading (OpenAI crew's
+   Your sessions), so it keeps the text voice under the same rule. */
+:global([data-treatment="paper"]) .page h2.eyebrow {
+  font-family: var(--m-font-text);
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  color: var(--paper-ink-muted);
+}
+
 @media (forced-colors: active) {
   .dayLabel::after {
     background: CanvasText;

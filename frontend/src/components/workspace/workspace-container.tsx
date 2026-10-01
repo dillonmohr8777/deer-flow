@@ -145,6 +145,7 @@ export function nameOfSegment(
     projects: t.projects.title,
     trash: t.trash.title,
     "command-center": "Command Center",
+    openai: "OpenAI crew",
   };
   // Unknown sections read as words in sentence case, never as a raw slug
   // ("Scheduled-tasks" was the old fallback).
