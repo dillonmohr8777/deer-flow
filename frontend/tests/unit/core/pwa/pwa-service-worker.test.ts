@@ -449,6 +449,10 @@ describe("MomoBot public-only service worker", () => {
     for (const payload of [
       undefined,
       MALFORMED_PUSH,
+      null,
+      [],
+      false,
+      "text",
       { title: 42, body: { nested: true } },
       { url: "https://evil.example.test/phish" },
       { url: "//evil.example.test" },
@@ -493,10 +497,35 @@ describe("MomoBot public-only service worker", () => {
       "https://evil.example.test/phish",
       "//evil.example.test/phish",
       "/\\evil.example.test/phish",
+      "/\n/evil.example.test/phish",
+      "/\t/evil.example.test/phish",
+      "/\r\\evil.example.test/phish",
     ]) {
       const worker = createWorker();
       await worker.notificationclick({ url: hostile });
       expect(worker.openedUrl()).toBe(ORIGIN + "/workspace");
+    }
+  });
+
+  it("canonicalizes same-origin notification paths while preserving the query and fragment", async () => {
+    const worker = createWorker();
+    await worker.notificationclick({
+      url: "/workspace/board/../ceo?tab=pending#item",
+    });
+    expect(worker.openedUrl()).toBe(ORIGIN + "/workspace/ceo?tab=pending#item");
+  });
+
+  it("rejects control characters in push destinations before storing notification data", async () => {
+    for (const url of [
+      "/\n/evil.example.test",
+      "/\t/evil.example.test",
+      "/\r\\evil.example.test",
+    ]) {
+      const worker = createWorker();
+      await worker.push({ url });
+      expect(worker.notifications[0]?.options.data).toEqual({
+        url: "/workspace",
+      });
     }
   });
 });
