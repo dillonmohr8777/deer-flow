@@ -166,9 +166,11 @@ class UsageLedger:
                 raise FleetBlocked("Reservation ownership lost")
 
     def bind_native_run(self, token: str, run_id: str, agent_id: str, project_id: str) -> None:
-        """Persist the exact start response before polling or artifact writes."""
+        """Persist the exact start response before polling or artifact writes -- or, for a reservation
+        an operator is reconciling after an unbound failure, retroactively once provider metadata has
+        proven ownership (the reservation is 'uncertain' by then, not 'reserved')."""
         with self.transaction() as db:
-            if not db.execute("SELECT 1 FROM reservation WHERE id=? AND state='reserved' AND session IS NULL", (token,)).fetchone():
+            if not db.execute("SELECT 1 FROM reservation WHERE id=? AND state IN ('reserved','uncertain') AND session IS NULL", (token,)).fetchone():
                 raise FleetBlocked("Native run reservation ownership lost")
             try:
                 db.execute("INSERT INTO native_run VALUES (?,?,?,?)", (token, run_id, agent_id, project_id))
@@ -359,7 +361,16 @@ class Fleet:
         token = await asyncio.to_thread(self.ledger.reserve, job.id, occurrence, account, observed, cadence=job.interval_seconds, minutes=minutes, agent_runs=included_runs)
         terminal, run_id = False, None
         try:
-            run = await api.start_agent_run(cast(str, job.agent_id), _native_task(job))
+            try:
+                run = await api.start_agent_run(cast(str, job.agent_id), _native_task(job), reservation_id=token)
+            except RuntimeError as exc:
+                if _is_definite_start_rejection(exc):
+                    # The provider confirmed the request itself was invalid before creating
+                    # anything: settle now instead of leaving an unbound reservation that can
+                    # never reconcile (no run, and so no started.json/native_run row, will ever
+                    # exist for it) blocking every later dispatch forever.
+                    terminal = True
+                raise
             run_id = str(UUID(run["runId"]))
             await asyncio.to_thread(self.ledger.bind_native_run, token, run_id, cast(str, job.agent_id), api.project_id)
             # Ownership record for reconcile_native_run, written before anything else can fail.
@@ -442,6 +453,13 @@ async def _request_stop(api: BrowserbaseAPI, run_id: str) -> bool:
     return True
 
 
+def _is_definite_start_rejection(exc: RuntimeError) -> bool:
+    """True only when the provider confirms the start request itself was rejected before any run
+    could exist (HTTP 400) -- never inferred from a timeout, a 429, a 5xx or a transport failure,
+    any of which may still have created a billable run that must stay uncertain until reconciled."""
+    return "HTTP 400" in str(exc)
+
+
 async def reconcile_native_run(api: BrowserbaseAPI, ledger: UsageLedger, token: str, run_id: str) -> None:
     """Operator-only repair of an uncertain native_agent reservation (token and run_id from started.json)."""
     ownership = await asyncio.to_thread(ledger.native_ownership, token)
@@ -460,6 +478,37 @@ async def reconcile_native_run(api: BrowserbaseAPI, ledger: UsageLedger, token: 
     _verify_terminal_session(final, api.project_id, str(session))
     if row["session"] is None:
         await asyncio.to_thread(ledger.bind_owned_readback, token, str(session))
+    await asyncio.to_thread(ledger.reconcile, token, str(session), str(final.get("status")))
+
+
+async def reconcile_unbound_native_run(api: BrowserbaseAPI, ledger: UsageLedger, token: str, run_id: str) -> None:
+    """Operator-only repair for a native_agent reservation that never recorded a `native_run` row --
+    `start_agent_run` raised (timeout, 5xx, an ambiguous 4xx) or returned an unparseable run id before
+    `bind_native_run` could run, so `reconcile_native_run` has no local ownership record to check
+    against. The operator supplies a run id read back from the provider directly (by `agentId` and
+    time, from the dashboard or API); ownership is proven the same way `reconcile_owned_session`
+    already proves a QA session's -- the reservation token the provider echoes back in the run's own
+    metadata (set by `start_agent_run`'s `reservation_id`), never an unauthenticated guess or elapsed
+    time. Once bound, poll normally or call `reconcile_native_run` to finish a terminal run.
+    """
+    if await asyncio.to_thread(ledger.native_ownership, token) is not None:
+        raise FleetBlocked("Reservation is already bound to a run; use reconcile_native_run")
+    rows = await asyncio.to_thread(ledger.status)
+    row = next((row for row in rows if row["id"] == token), None)
+    if row is None or row["state"] != "uncertain":
+        raise FleetBlocked("Reservation is not an unbound, uncertain native run")
+    run = await api.agent_run(run_id)
+    metadata = run.get("metadata")
+    agent_id = run.get("agentId")
+    if run.get("runId") != run_id or not isinstance(metadata, dict) or metadata.get("reservation_id") != token or not isinstance(agent_id, str):
+        raise FleetBlocked("Run metadata does not prove ownership of this reservation")
+    await asyncio.to_thread(ledger.bind_native_run, token, run_id, agent_id, api.project_id)
+    session = run.get("sessionId")
+    if run.get("status") not in _AGENT_DONE or not session:
+        return
+    final = await api.retrieve(str(session))
+    _verify_terminal_session(final, api.project_id, str(session))
+    await asyncio.to_thread(ledger.bind_owned_readback, token, str(session))
     await asyncio.to_thread(ledger.reconcile, token, str(session), str(final.get("status")))
 
 

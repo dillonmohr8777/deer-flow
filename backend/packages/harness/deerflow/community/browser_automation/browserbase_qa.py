@@ -111,9 +111,15 @@ class BrowserbaseAPI:
     async def agent_runs(self, status: str) -> dict:
         return await self._request("GET", f"/v1/agents/runs?status={status}&limit=1")
 
-    async def start_agent_run(self, agent_id: str, task: str) -> dict:
-        # No context, proxies or Verified mode: signed-out public browsing only.
-        return await self._request("POST", "/v1/agents/runs", {"agentId": str(UUID(agent_id)), "task": task, "browserSettings": {"proxies": False}})
+    async def start_agent_run(self, agent_id: str, task: str, *, reservation_id: str | None = None) -> dict:
+        # No context, proxies or Verified mode: signed-out public browsing only. The reservation id
+        # is echoed back in the run's own metadata, the same provider-readback proof `create()`
+        # already gives QA sessions, so a run can be claimed later even if this call's response is
+        # never seen locally (timeout, malformed body, or any other failure before we record it).
+        body = {"agentId": str(UUID(agent_id)), "task": task, "browserSettings": {"proxies": False}}
+        if reservation_id:
+            body["metadata"] = {"reservation_id": reservation_id}
+        return await self._request("POST", "/v1/agents/runs", body)
 
     async def agent_run(self, run_id: str) -> dict:
         return await self._request("GET", f"/v1/agents/runs/{UUID(run_id)}")

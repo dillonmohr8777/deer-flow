@@ -370,6 +370,7 @@ class AgentAPI:
         self.statuses = list(statuses)
         self.active = list(active)
         self.tasks, self.stops = [], 0
+        self.start_reservation_ids = []
 
     async def usage(self):
         return {"browserMinutes": 0}
@@ -377,8 +378,9 @@ class AgentAPI:
     async def agent_runs(self, status):
         return {"data": [{"status": status}] if status in self.active else []}
 
-    async def start_agent_run(self, agent_id, task):
+    async def start_agent_run(self, agent_id, task, *, reservation_id=None):
         self.tasks.append(task)
+        self.start_reservation_ids.append(reservation_id)
         return {"runId": RUN, "status": "PENDING"}
 
     async def agent_run(self, run_id):
@@ -530,6 +532,87 @@ def test_native_reconcile_cannot_adopt_unrelated_terminal_run(tmp_path):
         asyncio.run(reconcile_native_run(AgentAPI(["COMPLETED"]), target.ledger, token, RUN))
     assert target.ledger.status()[0]["state"] == "uncertain"
     assert target.ledger.status()[0]["session"] is None
+
+
+def test_native_agent_tags_start_with_reservation_token(tmp_path, monkeypatch):
+    from deerflow.community.browser_automation import browserbase_fleet
+
+    monkeypatch.setattr(browserbase_fleet, "_AGENT_POLL_SECONDS", 0)
+    target = native_fleet(tmp_path)
+    api = AgentAPI(["RUNNING", "COMPLETED"])
+    asyncio.run(target.run("seo-audit", "today", api))
+    assert api.start_reservation_ids == [target.ledger.status()[0]["id"]]
+
+
+def test_native_agent_settles_definite_400_and_unblocks_dispatch(tmp_path):
+    class Rejecting(AgentAPI):
+        async def start_agent_run(self, agent_id, task, *, reservation_id=None):
+            await super().start_agent_run(agent_id, task, reservation_id=reservation_id)
+            raise RuntimeError("Browserbase API request failed (HTTP 400)")
+
+    target = native_fleet(tmp_path)
+    with pytest.raises(RuntimeError, match="HTTP 400"):
+        asyncio.run(target.run("seo-audit", "today", Rejecting(["COMPLETED"])))
+    row = target.ledger.status()[0]
+    # Settled, not uncertain -- the charge is kept, but nothing is left to reconcile.
+    assert row["state"] == "finished" and row["session"] is None and row["minutes"] == 12
+    asyncio.run(target.run("prospect", "tomorrow", AgentAPI(["COMPLETED"])))
+    assert target.ledger.status()[1]["state"] == "finished"
+
+
+def test_native_agent_stays_uncertain_on_ambiguous_start_failure(tmp_path):
+    class Flaky(AgentAPI):
+        async def start_agent_run(self, agent_id, task, *, reservation_id=None):
+            await super().start_agent_run(agent_id, task, reservation_id=reservation_id)
+            raise RuntimeError("Browserbase API request failed (HTTP 503)")
+
+    target = native_fleet(tmp_path)
+    with pytest.raises(RuntimeError, match="HTTP 503"):
+        asyncio.run(target.run("seo-audit", "today", Flaky(["COMPLETED"])))
+    assert target.ledger.status()[0]["state"] == "uncertain"
+    with pytest.raises(FleetBlocked, match="reconciliation"):
+        asyncio.run(target.run("prospect", "tomorrow", AgentAPI(["COMPLETED"])))
+
+
+def test_reconcile_unbound_native_run_claims_by_provider_metadata(tmp_path):
+    from deerflow.community.browser_automation.browserbase_fleet import reconcile_native_run, reconcile_unbound_native_run
+
+    target = native_fleet(tmp_path)
+    token = target.ledger.reserve("seo-audit", "today", target.config["account"], 0)
+    target.ledger.finish(token, False)
+    assert target.ledger.status()[0]["state"] == "uncertain"
+    assert target.ledger.native_ownership(token) is None
+
+    class Claimable:
+        project_id = "fake-project"
+        metadata_token = "wrong"
+        status = "RUNNING"
+
+        async def agent_run(self, run_id):
+            return {"runId": run_id, "status": self.status, "sessionId": "session-1", "agentId": AGENT, "metadata": {"reservation_id": self.metadata_token}}
+
+        async def retrieve(self, session_id):
+            return {"id": session_id, "status": "COMPLETED", "projectId": self.project_id}
+
+    api = Claimable()
+    with pytest.raises(FleetBlocked, match="metadata"):
+        asyncio.run(reconcile_unbound_native_run(api, target.ledger, token, RUN))
+    assert target.ledger.native_ownership(token) is None
+
+    api.metadata_token = token
+    asyncio.run(reconcile_unbound_native_run(api, target.ledger, token, RUN))
+    ownership = target.ledger.native_ownership(token)
+    assert ownership == {"reservation_id": token, "run_id": RUN, "agent_id": AGENT, "project_id": "fake-project"}
+    assert target.ledger.status()[0]["state"] == "uncertain"  # still running; not finished yet
+
+    with pytest.raises(FleetBlocked, match="already bound"):
+        asyncio.run(reconcile_unbound_native_run(api, target.ledger, token, RUN))
+
+    # Now that provider metadata has bound ownership, the regular reconcile path finishes it.
+    api.status = "COMPLETED"
+    asyncio.run(reconcile_native_run(api, target.ledger, token, RUN))
+    row = target.ledger.status()[0]
+    assert row["state"] == "finished" and row["session"] == "session-1"
 
 
 @pytest.mark.parametrize("field,value", [("runId", "other-run"), ("sessionId", "other-session")])
