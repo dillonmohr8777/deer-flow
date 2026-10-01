@@ -126,6 +126,17 @@ model calls, or five with a revision. Browser AI consumes the same allowance:
 the default Stagehand extraction uses two calls, so a later revision may stop at
 the six-attempt ceiling instead of accepting an incomplete review.
 
+Select **Review plan before drafting** in the Workflow room to opt into the
+supervisor loop (`supervisor: true` on `POST /api/workflows/runs`). A separate
+plan reviewer must approve every criterion against admitted context before the
+producer starts. Failed checks, blockers, missing criteria or a mismatched plan
+hash stop the run. Final draft review can still request one revision from the
+same producer. The mode is optional and defaults off: four normal model calls,
+six with a revision, within the unchanged shared ceiling. Browser extraction can
+leave insufficient budget for a revision; that fails closed. The mode remains
+fixed across retries/resume, and `review_plan` events appear in the existing run
+timeline. Accepted output remains a draft requiring owner review before use.
+
 Acceptance rejects invalid schemas, invented evidence references, missing or
 duplicated criteria, a changed candidate hash, failed checks or unresolved
 blockers. It is a specified draft gate, not proof of factual truth, human approval

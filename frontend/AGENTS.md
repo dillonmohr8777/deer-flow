@@ -88,6 +88,12 @@ More specific `AGENTS.md` files under `src/` contain the frontend sections split
 
 ## Code Style
 
+Page-body paper colour overrides apply only while the root is light and paper.
+Use theme-aware status tokens for coloured text; treatment tokens alone do not
+follow the light/dark switch. Agent Room E2E checks rendered foreground and
+composited backgrounds across every treatment and both themes; normal text must
+keep at least 4.5:1 contrast, including390/768/1440px paper layouts.
+
 `core/utils/markdown.ts` reads web-fetch titles from the first nonblank line.
 Match zero to three literal spaces before `# ` without trimming indentation;
 mixed space/tab code blocks must fall back to the URL. Keep this local to title

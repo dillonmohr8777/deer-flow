@@ -51,6 +51,30 @@ def payload():
     return {"workflow_id": definition.id, "inputs": definition.example_inputs, "framework": "langgraph"}
 
 
+async def test_supervisor_http_admission_is_immutable_and_uses_existing_native_budget(api):
+    headers = await scope_headers(api)
+    created = await api.client.post("/api/workflows/runs", headers=headers, json={**payload(), "supervisor": True})
+    assert created.status_code == 200 and created.json()["supervisor"] is True
+    await drain(api.service)
+    detail = (await api.client.get(f"/api/workflows/runs/{created.json()['id']}", headers=headers)).json()
+    assert detail["accepted"] is True and detail["usage"]["model_calls"] == 4
+    assert [call["role"] for call in api.adapter.calls][:2] == ["planner", "plan_reviewer"]
+    assert any(step["name"] == "review_plan" for step in detail["steps"])
+    replay = await api.client.post("/api/workflows/runs", headers=headers, json={**payload(), "supervisor": True})
+    assert replay.status_code == 200 and replay.json()["id"] == created.json()["id"]
+    changed = await api.client.post("/api/workflows/runs", headers=headers, json=payload())
+    assert changed.status_code == 409
+    assert len(api.adapter.calls) == 4
+
+
+async def test_supervisor_mode_rejects_coerced_values_before_admission(api):
+    headers = await scope_headers(api)
+    for invalid in ("false", 1, None):
+        response = await api.client.post("/api/workflows/runs", headers=headers, json={**payload(), "supervisor": invalid})
+        assert response.status_code == 422
+    assert not api.adapter.calls
+
+
 async def scope_headers(value, actor="alice", organization="org-a"):
     headers = session_headers(actor, organization)
     state = await value.client.get("/api/workflows/status", headers={**headers, "X-Expected-User-Id": value.users[actor].id})

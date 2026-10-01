@@ -383,7 +383,9 @@ class WorkflowService:
         counts = await self._storage("counts", owner) if self.started else {}
         return {"enabled": self.started and not self.closing, "frameworks": await self.capabilities(), "limits": self.limits, "running": counts.get("running", 0), "queued": counts.get("queued", 0)}
 
-    async def create(self, owner: str, workflow_id: str, inputs: dict, framework: str, idempotency_key: str, *, actor: str, organization: str | None, storage_user: str):
+    async def create(self, owner: str, workflow_id: str, inputs: dict, framework: str, idempotency_key: str, *, actor: str, organization: str | None, storage_user: str, supervisor: bool = False):
+        if type(supervisor) is not bool:
+            raise WorkflowServiceError("workflow_supervisor_mode_invalid", 422)
         from deerflow.workflows.catalog import get_workflow, validate_inputs
 
         if not self.started or self.closing:
@@ -401,13 +403,14 @@ class WorkflowService:
         except (KeyError, ValueError, TypeError):
             raise WorkflowServiceError("input_invalid", 422) from None
         definition_data = _definition_dict(definition)
-        fingerprint = hashlib.sha256(_json([workflow_id, inputs, framework]).encode()).hexdigest()
+        fingerprint = hashlib.sha256(_json([workflow_id, inputs, framework] + ([{"supervisor": True}] if supervisor else [])).encode()).hexdigest()
         now = _now()
         data = {
             "id": str(uuid.uuid4()),
             "workflow_id": workflow_id,
             "title": definition_data["title"],
             "framework": framework,
+            "supervisor": supervisor,
             "status": "queued",
             "accepted": False,
             "created_at": now,
@@ -694,6 +697,7 @@ class WorkflowService:
                     browser_call=lambda urls: self._browser(data, urls),
                     event=lambda name, status, **details: self._event(data, name, status, **details),
                     resume=data.get("_resume", False),
+                    supervisor=data.get("supervisor", False),
                 )
             if result.get("accepted") is not True:
                 raise WorkflowServiceError("acceptance_failed", 422)

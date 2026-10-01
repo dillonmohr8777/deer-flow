@@ -2330,6 +2330,18 @@ authorization rules.
 
 ## Manual Browserbase public-page QA
 
+For reusable operator-approved jobs, the optional [Browserbase fleet adapter](docs/browserbase/fleet.md)
+adds public research, mobile QA and local draft workflows. It remains inactive
+until the private operator manifest and current account allowance are verified.
+Native Agent recovery requires the recorded run and terminal session to match
+the original reservation; changing a job name cannot reset account-wide charges.
+Native Agent task instructions do not enforce website or write permissions.
+
+The existing CrewAI department workflow also has an offline recovery test that
+runs the real isolated worker, resumes its verifier after shutdown and preserves
+the original token limits and receipts. This verifies recovery with synthetic
+provider responses, without claiming a new paid run or a production deployment.
+
 The opt-in `deerflow.community.browser_automation.browserbase_qa` runner creates
 one 60-second Browserbase session for public-page checks at 390/768/1440. It uses
 the headless HTTP/CDP API with Playwright, without model calls, form submission,
@@ -2440,6 +2452,11 @@ LangGraph retains the durable controller and the application's native run,
 thread and event stores; CrewAI, Mastra, Deep Agents, Agno and Inngest AgentKit
 are finite adapters under the same owner scope and provider meter.
 
+Select **Review plan before drafting** to require a separate worker's approval
+before the producer starts. The existing final review can request one revision;
+the optional supervisor path stays within the same six-call server budget and
+returns a reviewable draft. See [workflow limits](backend/docs/WORKFLOWS.md).
+
 The default budget is three executing jobs, capacity for 100 waiting jobs,
 six model attempts and 8,192 output / 60,000 input tokens per run, and 240 model
 attempts across the ledger in a rolling 24 hours. Browser work uses one bounded
@@ -2451,6 +2468,12 @@ See [workflow operation and limits](backend/docs/WORKFLOWS.md),
 [Mac workbench client](scripts/MOMO_WORKBENCH.md). The separate
 [AgentOS probe](docs/AGNO_AGENTOS_PROBE.md) tests bounded native persistence and
 authorization; it does not activate another production platform.
+
+The default Gateway image excludes optional framework worker dependencies.
+The separate [private worker image](workers/browser-teams/README.md#optional-private-container-image)
+adds locked Python3.13/Node24 adapters to an explicitly reviewed Gateway image;
+the default backend build and publication pipeline retain their current behavior.
+Its disposable offline smoke uses synthetic model responses with network disabled.
 
 Before starting a newly prepared dedicated private app state, stop its Gateway
 and run `scripts/run_momobot_openai_app.py prepare-config` with `--state-dir`

@@ -121,6 +121,10 @@
 :root:not(.dark) [data-workspace-shell][data-treatment="space"] {
   --background: var(--space-void);
   --foreground: var(--space-cream);
+  --status-ok: var(--space-ok);
+  --status-active: var(--space-cyan);
+  --status-attention: var(--space-cream);
+  --status-danger: var(--space-danger);
   --card: var(--space-panel);
   --card-foreground: var(--space-cream);
   --popover: var(--space-panel-hi);

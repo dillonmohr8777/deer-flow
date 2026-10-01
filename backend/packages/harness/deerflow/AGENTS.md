@@ -171,3 +171,15 @@ continue, and consume/log its outcome in a completion callback. Prepare-stage
 cancellation retains its handoff/reclaim path. Regressions in
 `tests/blocking_io/test_workspace_changes_cancellation.py` must cover prompt
 metadata cancellation and text-cache drain/cleanup.
+
+### Opt-in Browserbase fleet
+
+`community/browser_automation/browserbase_fleet.py` admits only operator-defined
+canonical client jobs against a shared private SQLite allowance ledger. Account-wide
+included usage/cycle and no-overage proof must be current; never infer it from
+project usage. Reserve before create, retain ambiguous creates, keep charged
+reservations for the cycle, enforce cadence/concurrency transactionally and match
+exact provider-owned session metadata before reconciliation. Agent tool is explicitly
+registered after review, enabled-system-admin-only and default dry-run. No automatic
+activation, persistent contexts, portal login, CMS write or submission. Full lifecycle
+runs off the Gateway loop. See `docs/browserbase/fleet.md` and offline fleet tests.
