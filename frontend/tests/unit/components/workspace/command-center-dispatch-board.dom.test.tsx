@@ -124,7 +124,7 @@ describe("DispatchBoard", () => {
   it("stamps finished work with its date and returns failures with the reason", () => {
     board();
     const stamp = slip("Done slip").querySelector('[data-testid="ink-stamp"]');
-    expect(stamp?.textContent).toMatch(/Done\s*Sep 2[45]/);
+    expect(stamp?.textContent).toMatch(/Run completed\s*Sep 2[45]/);
     expect(slip("Failed slip").textContent).toContain("Failed");
     expect(slip("Slow slip").textContent).toContain("Timed out");
     expect(

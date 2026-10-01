@@ -316,7 +316,7 @@ function Slip({
       ) : null}
       {lane === "stamped" ? (
         <span className={styles.stamp} data-testid="ink-stamp">
-          <span>Done</span>
+          <span>Run completed</span>
           <span>{date ?? "Date not recorded"}</span>
         </span>
       ) : null}

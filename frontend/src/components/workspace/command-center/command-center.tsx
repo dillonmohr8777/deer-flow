@@ -148,7 +148,7 @@ function money(value: number | null | undefined, currency?: string | null) {
 function Status({ status }: { status: string }) {
   const label =
     {
-      success: "Completed",
+      success: "Run completed",
       error: "Failed",
       timeout: "Timed out",
       interrupted: "Interrupted",
@@ -359,7 +359,7 @@ export function CommandCenter() {
           <option value="">All states</option>
           <option value="running">Running</option>
           <option value="pending">Pending</option>
-          <option value="success">Completed</option>
+          <option value="success">Run completed</option>
           <option value="error">Error</option>
           <option value="interrupted">Interrupted</option>
           <option value="timeout">Timeout</option>
@@ -1024,6 +1024,11 @@ export function CommandCenter() {
                 </button>
               </div>
               <Status status={selectedRun.status} />
+              {selectedRun.status === "success" && (
+                <p className="mt-1 text-sm text-[var(--muted)]">
+                  Delivery acceptance not recorded.
+                </p>
+              )}
               <h3>{selectedRun.thread_title ?? "Untitled assignment"}</h3>
               <dl>
                 <div>

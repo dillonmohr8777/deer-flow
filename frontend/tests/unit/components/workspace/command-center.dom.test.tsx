@@ -479,6 +479,16 @@ describe("CommandCenter", () => {
     );
     const tokens = screen.getByText("Tokens", { selector: "dt" });
     expect(tokens.nextElementSibling?.textContent).toBe("Not recorded");
+    expect(screen.getByText("Delivery acceptance not recorded.")).toBeDefined();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Close execution receipt" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Still working/ }));
+    expect(screen.queryByText("Delivery acceptance not recorded.")).toBeNull();
+    expect(
+      screen.getByText("Tokens", { selector: "dt" }).nextElementSibling
+        ?.textContent,
+    ).toBe("Still counting");
   });
 
   it("labels the tabs the backend only partly supports as Preview", () => {

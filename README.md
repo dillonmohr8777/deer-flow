@@ -18,6 +18,11 @@ https://github.com/user-attachments/assets/a8bcadc4-e040-4cf2-8fda-dd768b999c18
 
 ## Official Website
 
+MomoBot's dispatch board and execution receipts label a successful backend run
+as **Run completed**, not accepted delivery. Successful execution receipts show
+**Delivery acceptance not recorded.** The current run data has no delivery
+acceptance field; conversation and artifact links are not acceptance evidence.
+
 Learn more and see **real demos** on our [**official website**](https://deerflow.tech).
 The landing-page case studies open as allowlisted, read-only showcases without requiring a sign-in.
 
