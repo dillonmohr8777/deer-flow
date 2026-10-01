@@ -10,7 +10,7 @@ from alembic import command
 from alembic.script import ScriptDirectory
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from deerflow.persistence.bootstrap import _get_alembic_config, bootstrap_schema
+from deerflow.persistence.bootstrap import _get_alembic_config, _get_head_revision, bootstrap_schema
 
 ROOM = "0040_agent_room_messages"
 LANE = "0046_organization_entitlements"
@@ -21,10 +21,12 @@ PREVIOUS = "0039_team_board_academy"
 def test_merge_preserves_both_published_parent_edges():
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")
     script = ScriptDirectory.from_config(_get_alembic_config(engine))
-    assert script.get_heads() == [MERGE]
+    assert script.get_heads() == [_get_head_revision()]
     assert script.get_revision(ROOM).down_revision == PREVIOUS
     assert script.get_revision("0040_agent_seats").down_revision == PREVIOUS
-    assert set(script.get_revision(MERGE).down_revision) == {ROOM, LANE}
+    parents = script.get_revision(MERGE).down_revision
+    assert isinstance(parents, tuple)
+    assert set(parents) == {ROOM, LANE}
 
 
 @pytest.mark.asyncio
@@ -54,7 +56,7 @@ async def test_existing_history_upgrades_and_preserves_owner_rows(tmp_path, orig
         # Exercise the actual application bootstrap, not a stamp shortcut.
         await bootstrap_schema(engine, backend="sqlite")
         async with engine.connect() as conn:
-            assert (await conn.execute(sa.text("SELECT version_num FROM alembic_version"))).scalar_one() == MERGE
+            assert (await conn.execute(sa.text("SELECT version_num FROM alembic_version"))).scalar_one() == _get_head_revision()
             assert (await conn.execute(sa.text("SELECT * FROM users WHERE id='retained-owner'"))).mappings().one() == user_before
             assert (await conn.execute(sa.text("SELECT * FROM agent_room_messages"))).mappings().all() == room_before
             tables = await conn.run_sync(lambda sync: set(sa.inspect(sync).get_table_names()))
@@ -74,7 +76,7 @@ async def test_empty_bootstrap_has_room_and_executive_schema(tmp_path):
     try:
         await bootstrap_schema(engine, backend="sqlite")
         async with engine.connect() as conn:
-            assert (await conn.execute(sa.text("SELECT version_num FROM alembic_version"))).scalar_one() == MERGE
+            assert (await conn.execute(sa.text("SELECT version_num FROM alembic_version"))).scalar_one() == _get_head_revision()
             tables = await conn.run_sync(lambda sync: set(sa.inspect(sync).get_table_names()))
             assert {"agent_room_messages", "agent_seats", "hired_agents", "organization_entitlements"} <= tables
     finally:
