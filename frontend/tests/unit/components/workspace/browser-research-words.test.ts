@@ -26,7 +26,8 @@ const SITE =
 const PROPAGATED = [
   /^\s*(?:error\.code|None)\b/,
   /^\s*code if isinstance\(code, str\) and code in safe_worker_codes else phase/,
-  /^\s*getattr\(error, "code", None\)/,
+  // Reading the code off an exception (getattr names are masked above).
+  /^\s*getattr\(\)\s*$/,
   // BrowserbaseError.__init__ storing its own argument.
   /^\s*code\s*$/,
 ];
@@ -39,15 +40,32 @@ function sitesAndCodes() {
     lines.forEach((line, index) => {
       const site = SITE.exec(line);
       if (!site || /^\s*(?:#|class |def )/.test(line)) return;
-      const value = line.slice(site.index + site[0].length);
+      // Subscripts (`state["reason"]`) and getattr names are keys, not codes.
+      const value = line
+        .slice(site.index + site[0].length)
+        .replace(/\[\s*["'][^"']*["']\s*\]/g, "[key]")
+        .replace(/getattr\([^)]*\)/g, "getattr()");
+      const where = `${file}:${index + 1} ${line.trim()}`;
       const literals = [...value.matchAll(/(f?)(["'])(.*?)\2/g)];
       if (literals.some((match) => match[1] === "f" || match[3]!.includes("{")))
-        unreviewed.push(`${file}:${index + 1} formats a code`);
+        unreviewed.push(`${where} (formats a code)`);
+      // A code built from pieces cannot be looked up.
+      if (/["']\s*[+%]|[+%]\s*["']|["']\s*\.(?:format|join)\(/.test(value))
+        unreviewed.push(`${where} (builds a code)`);
       for (const match of literals)
-        if (/^[a-z][a-z0-9]*(?:_[a-z0-9]+)+$/.test(match[3]!))
-          codes.add(match[3]!);
-      if (!literals.length && !PROPAGATED.some((form) => form.test(value)))
-        unreviewed.push(`${file}:${index + 1} ${line.trim()}`);
+        if (/^[a-z][a-z0-9_]*$/.test(match[3]!)) codes.add(match[3]!);
+      const propagated = PROPAGATED.some((form) => form.test(value));
+      if (!literals.length && !propagated) unreviewed.push(where);
+      // A literal with a variable fallback (`"x" if c else var`, `or var`)
+      // can still store an unmapped code.
+      if (
+        literals.length &&
+        !propagated &&
+        /\b(?:else|or)\s+(?!None\b)[A-Za-z_][\w.]*(?:\[key\])?\s*(?:[,)]|$)/.test(
+          value,
+        )
+      )
+        unreviewed.push(`${where} (variable fallback)`);
     });
     const safe =
       /safe_worker_codes\s*=\s*\{([^}]*)\}/.exec(lines.join("\n"))?.[1] ?? "";

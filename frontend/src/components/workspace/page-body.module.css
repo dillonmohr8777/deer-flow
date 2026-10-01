@@ -488,6 +488,14 @@
     outline: 2px solid;
     outline-offset: -2px;
   }
+
+  /* The pressed outline is unlayered and would hide the focus ring; a
+     focused filter keeps a ring outside the choice marking. */
+  .filter:focus-visible,
+  .filter[aria-pressed="true"]:focus-visible {
+    outline: 3px solid Highlight;
+    outline-offset: 2px;
+  }
 }
 
 /* ---------- Loading: working squares tick in steps(3) ---------- */

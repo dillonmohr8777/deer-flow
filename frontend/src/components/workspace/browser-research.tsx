@@ -150,7 +150,12 @@ export function BrowserResearchWorkspace() {
   // Create and URL errors belong to the form; stop and download notices
   // belong to the receipt, so each reason shows beside what it is about.
   const [formNotice, setFormNotice] = useState<string | null>(null);
-  const [receiptNotice, setReceiptNotice] = useState<string | null>(null);
+  // Tied to the capture it is about, so switching captures never shows
+  // one capture's notice on another.
+  const [receiptNotice, setReceiptNotice] = useState<{
+    id: string;
+    text: string;
+  } | null>(null);
   const [submission, setSubmission] = useState<Submission | null>(null);
   const receiptRef = useRef<HTMLDivElement>(null);
   const receiptHeading = useRef<HTMLHeadingElement>(null);
@@ -269,7 +274,7 @@ export function BrowserResearchWorkspace() {
         currentOwner.current === request.owner &&
         currentScope.current === request.scope
       )
-        setReceiptNotice(browserWords(error));
+        setReceiptNotice({ id: request.id, text: browserWords(error) });
     },
   });
   const download = useMutation({
@@ -286,16 +291,17 @@ export function BrowserResearchWorkspace() {
         new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }),
         `browser-research-${data.id}.json`,
       );
-      setReceiptNotice(
-        "Captured evidence was handed to your browser for download. Confirm the saved file in Downloads.",
-      );
+      setReceiptNotice({
+        id: request.id,
+        text: "Captured evidence was handed to your browser for download. Confirm the saved file in Downloads.",
+      });
     },
     onError: (error, request) => {
       if (
         currentOwner.current === request.owner &&
         currentScope.current === request.scope
       )
-        setReceiptNotice(browserWords(error));
+        setReceiptNotice({ id: request.id, text: browserWords(error) });
     },
   });
 
@@ -317,6 +323,12 @@ export function BrowserResearchWorkspace() {
     bringReceipt.current = null;
     revealReceipt();
   }, [data]);
+  // A failed read or a selection the tap did not make drops the pending
+  // reveal, so a later refetch never pulls focus out of the form.
+  useEffect(() => {
+    if (run.error || bringReceipt.current !== selected)
+      bringReceipt.current = null;
+  }, [run.error, selected]);
   const active =
     (runs.data?.data.some((item) => isBrowserResearchBusy(item.status)) ??
       false) ||
@@ -523,7 +535,11 @@ export function BrowserResearchWorkspace() {
                       owner={owner}
                       scope={scope}
                       headingRef={receiptHeading}
-                      notice={receiptNotice}
+                      notice={
+                        receiptNotice?.id === data.id
+                          ? receiptNotice.text
+                          : null
+                      }
                       mayCancel={mayCancel}
                       stopping={cancel.isPending}
                       downloading={download.isPending}

@@ -278,6 +278,62 @@ describe("Browser research workspace", () => {
     expect(document.activeElement).toBe(field);
   });
 
+  it("a failed read drops the pending reveal, so a later refetch never steals focus", async () => {
+    mocks.list.mockResolvedValue({ data: [DETAIL] });
+    mocks.read.mockRejectedValueOnce(new Error("not_found"));
+    render(<BrowserResearchWorkspace />, { wrapper: Wrapper });
+    fireEvent.click(
+      await screen.findByRole("button", { name: /^Official docs Captured/ }),
+    );
+    await screen.findByText("This capture no longer exists.");
+    const field = screen.getByLabelText<HTMLTextAreaElement>(
+      "Public HTTPS URLs, one per line",
+    );
+    field.focus();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Refresh saved captures" }),
+    );
+    await screen.findByRole("heading", { level: 3, name: "Official docs" });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(document.activeElement).toBe(field);
+  });
+
+  it("a stop or download notice shows only on the capture it is about", async () => {
+    const other = { ...DETAIL, id: "other-run", title: "Other docs" };
+    mocks.list.mockResolvedValue({ data: [DETAIL, other] });
+    mocks.read.mockImplementation((id: string) =>
+      Promise.resolve(id === other.id ? other : DETAIL),
+    );
+    render(<BrowserResearchWorkspace />, { wrapper: Wrapper });
+    fireEvent.click(
+      await screen.findByRole("button", { name: /^Official docs Captured/ }),
+    );
+    await screen.findByRole("heading", { level: 3, name: "Official docs" });
+    // A's download fails while A is open: the reason shows in A's receipt.
+    mocks.read.mockRejectedValueOnce(new Error("not_found"));
+    fireEvent.click(screen.getByRole("button", { name: "Download evidence" }));
+    const notice = await screen.findByText("This capture no longer exists.");
+    expect(notice.closest('[aria-label="Capture evidence"]')).not.toBeNull();
+    // Start another download on A, switch to B, then let A's download fail.
+    let rejectDownload: (error: Error) => void = () => undefined;
+    // Only A's next read (the download) waits; B reads normally.
+    mocks.read.mockImplementation((id: string) =>
+      id === other.id
+        ? Promise.resolve(other)
+        : new Promise((_, reject) => {
+            rejectDownload = reject;
+          }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Download evidence" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /^Other docs Captured/ }),
+    );
+    await screen.findByRole("heading", { level: 3, name: "Other docs" });
+    rejectDownload(new Error("not_found"));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(screen.queryByText("This capture no longer exists.")).toBeNull();
+  });
+
   it("shows a rejected capture's reason inside the form", async () => {
     mocks.list.mockResolvedValue({ data: [{ ...DETAIL, id: "older" }] });
     mocks.create.mockRejectedValueOnce(new Error("owner_busy"));

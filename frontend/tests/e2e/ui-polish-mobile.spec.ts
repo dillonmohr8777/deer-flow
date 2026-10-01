@@ -811,6 +811,30 @@ test.describe("scheduled tasks on a phone", () => {
     expect(small).toEqual([]);
   });
 
+  test("a focused pressed filter keeps a visible ring in forced colours", async ({
+    page,
+  }) => {
+    await page.emulateMedia({ forcedColors: "active" });
+    mockLangGraphAPI(page, {
+      threads: [],
+      scheduledTasks: [task("a", "Weekly SEO report draft")],
+    });
+    await page.goto("/workspace/scheduled-tasks");
+    const pressed = page.locator('button[aria-pressed="true"]').first();
+    await expect(pressed).toBeVisible();
+    const ring = () =>
+      pressed.evaluate((node) => {
+        const style = getComputedStyle(node);
+        return `${style.outlineWidth} ${style.outlineOffset}`;
+      });
+    const resting = await ring();
+    await page.keyboard.press("Tab");
+    await pressed.focus();
+    await expect(pressed).toBeFocused();
+    expect(await ring()).not.toBe(resting);
+    expect(await ring()).toBe("3px 2px");
+  });
+
   test("filters are one-row rails and tasks are slips that name a failure", async ({
     page,
   }) => {

@@ -136,6 +136,14 @@
     .dismiss {
     border-left-color: #8c7a5c;
   }
+
+  /* The strip runs edge to edge, so an outside ring would be clipped by
+     the screen; draw it inside the control instead. */
+  :root:has([data-slot="workspace-tab-bar"])
+    .hint[data-workspace="true"]
+    :is(.trigger, .dismiss):focus-visible {
+    outline-offset: -3px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

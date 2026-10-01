@@ -136,6 +136,15 @@ test.describe("install help on a phone workspace", () => {
       .boundingBox())!;
     expect(disclaimer.y + disclaimer.height).toBeLessThanOrEqual(strip.y);
 
+    // The strip runs edge to edge, so its focus rings sit inside the controls.
+    await hint.getByRole("button", { name: /Install MomoBot/ }).focus();
+    await page.keyboard.press("Tab");
+    const dismiss = hint.getByRole("button", { name: "Dismiss install help" });
+    await expect(dismiss).toBeFocused();
+    expect(
+      await dismiss.evaluate((node) => getComputedStyle(node).outlineOffset),
+    ).toBe("-3px");
+
     // Inside a conversation the composer owns the bottom edge.
     await page.goto(`/workspace/chats/${MOCK_THREAD_ID}`);
     await expect(page.getByTestId("workspace-tab-bar")).toBeHidden();
