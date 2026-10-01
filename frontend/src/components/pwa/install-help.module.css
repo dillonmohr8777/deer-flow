@@ -102,9 +102,39 @@
   outline-offset: 3px;
 }
 
+/* Phones in the workspace: the offer is a strip docked on the tab bar, and
+   workspace-mobile.css grows --tab-bar-h by its 45px so pages end above it
+   instead of under it. Inside a conversation the bar steps aside for the
+   composer, and so does the offer; it comes back on the next page. */
 @media (max-width: 767px) {
   .hint[data-workspace="true"] {
-    bottom: calc(88px + env(safe-area-inset-bottom));
+    display: none;
+  }
+
+  :root:has([data-slot="workspace-tab-bar"]) .hint[data-workspace="true"] {
+    display: flex;
+    right: 0;
+    bottom: calc(57px + env(safe-area-inset-bottom));
+    left: 0;
+    max-width: none;
+    padding-right: env(safe-area-inset-right);
+    padding-left: env(safe-area-inset-left);
+    border-width: 1px 0 0;
+    border-color: #8c7a5c;
+    border-radius: 0;
+  }
+
+  :root:has([data-slot="workspace-tab-bar"])
+    .hint[data-workspace="true"]
+    .trigger {
+    flex: 1;
+    padding-left: 16px;
+  }
+
+  :root:has([data-slot="workspace-tab-bar"])
+    .hint[data-workspace="true"]
+    .dismiss {
+    border-left-color: #8c7a5c;
   }
 }
 

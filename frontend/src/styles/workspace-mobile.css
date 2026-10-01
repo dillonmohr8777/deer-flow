@@ -33,3 +33,14 @@
 :root:has([data-slot="workspace-tab-bar"]) {
   --tab-bar-h: calc(57px + env(safe-area-inset-bottom));
 }
+
+/* The install offer docks on the bar as a 45px strip (install-help.module.css).
+   The bar grows by that much in flow, and --tab-bar-h with it, so pages end
+   above the strip whether they size by flex or against the viewport. */
+:root:has([data-slot="workspace-tab-bar"]):has([data-slot="install-hint"]) {
+  --tab-bar-h: calc(102px + env(safe-area-inset-bottom));
+}
+
+:root:has([data-slot="install-hint"]) [data-slot="workspace-tab-bar"] {
+  padding-top: 45px;
+}

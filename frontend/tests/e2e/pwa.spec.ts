@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
 
+import { mockLangGraphAPI, MOCK_THREAD_ID } from "./utils/mock-api";
+
 // Dedicated worker tests opt in; API fixture suites keep workers blocked.
 test.use({ serviceWorkers: "allow" });
 
@@ -102,6 +104,44 @@ for (const width of [390, 768, 1440]) {
     await expect(trigger).toBeHidden();
   });
 }
+
+test.describe("install help on a phone workspace", () => {
+  test.use({
+    serviceWorkers: "block",
+    viewport: { width: 390, height: 844 },
+    userAgent: IPHONE_USER_AGENT,
+    isMobile: true,
+    hasTouch: true,
+  });
+
+  test("docks on the tab bar and the page ends above it", async ({ page }) => {
+    await page.addInitScript(() =>
+      Object.defineProperty(navigator, "standalone", { get: () => false }),
+    );
+    mockLangGraphAPI(page);
+    await page.goto("/workspace/chats/new");
+    const hint = page.getByRole("complementary", {
+      name: "MomoBot installation",
+    });
+    await expect(hint).toBeVisible();
+    const strip = (await hint.boundingBox())!;
+    const tabs = (await page
+      .getByRole("link", { name: "Chat", exact: true })
+      .boundingBox())!;
+    expect(strip.width).toBe(390);
+    expect(strip.y + strip.height).toBeLessThanOrEqual(tabs.y + 0.5);
+    const disclaimer = (await page
+      .getByText("Agents can make mistakes")
+      .first()
+      .boundingBox())!;
+    expect(disclaimer.y + disclaimer.height).toBeLessThanOrEqual(strip.y);
+
+    // Inside a conversation the composer owns the bottom edge.
+    await page.goto(`/workspace/chats/${MOCK_THREAD_ID}`);
+    await expect(page.getByTestId("workspace-tab-bar")).toBeHidden();
+    await expect(hint).toBeHidden();
+  });
+});
 
 test("installed iPhone sessions do not receive an install prompt", async ({
   page,
