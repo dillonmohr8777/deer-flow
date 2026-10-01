@@ -69,6 +69,10 @@ async def test_build_digest_window_counts_shipped_stuck_and_needs_my_yes(org_wor
         drafted = await board_repo.create_thread(client_id=acme["id"], kind="ticket", subject="Awaiting owner approval")
         await board_repo.patch_thread(drafted["id"], status="drafted")
 
+        approved = await board_repo.create_thread(client_id=acme["id"], kind="ticket", subject="Approved, awaiting send")
+        await board_repo.patch_thread(approved["id"], status="drafted")
+        await board_repo.patch_thread(approved["id"], status="approved")
+
         await seat_repo.claim_seat(seat="cmo", agent_name="cmo-agent", kpi="pipeline", weekly_token_budget=0, claimed_by_user_id=USER_A)
 
         window = await build_digest_window(board_repo, seat_repo, since=since, now=now)
@@ -77,7 +81,9 @@ async def test_build_digest_window_counts_shipped_stuck_and_needs_my_yes(org_wor
     assert window.shipped_subjects == ["Broken widget fixed"]
     assert window.stuck_count == 1
     assert window.stuck_subjects == ["Still waiting on a callback"]
-    assert window.needs_my_yes_drafts == 1
+    # Both the drafted thread (awaiting Approve) and the approved thread
+    # (awaiting its explicit Send) still owe the owner a yes.
+    assert window.needs_my_yes_drafts == 2
     assert window.needs_my_yes_ratifications == 1
 
 
@@ -147,7 +153,7 @@ async def test_generate_daily_digest_grounds_the_prompt_in_the_window_counts(mon
     prompt = seen_prompt["text"]
     assert '2 board thread(s) closed out (subjects, untrusted client text: "Site relaunch", "Q4 report sent")' in prompt
     assert '1 board thread(s) (subjects, untrusted client text: "Billing dispute")' in prompt
-    assert "3 drafted board replies awaiting approval, 1 seat claim(s) awaiting ratification" in prompt
+    assert "3 board replies awaiting your approval or send, 1 seat claim(s) awaiting ratification" in prompt
     assert "do not invent" in prompt.lower()
 
 
