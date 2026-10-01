@@ -18,6 +18,7 @@ from deerflow.config.channel_connections_config import ChannelConnectionsConfig
 from deerflow.config.checkpointer_config import CheckpointerConfig, load_checkpointer_config_from_dict
 from deerflow.config.database_config import DatabaseConfig
 from deerflow.config.dedupe_storage_config import DedupeStorageConfig
+from deerflow.config.deliberate_config import DeliberateConfig
 from deerflow.config.entitlement_config import EntitlementConfig, load_entitlement_config_from_dict
 from deerflow.config.exec_seats_config import ExecSeatsConfig
 from deerflow.config.extensions_config import ExtensionsConfig
@@ -332,6 +333,10 @@ class AppConfig(BaseModel):
     hiring: HiringConfig = Field(
         default_factory=HiringConfig,
         description="Owner-set headcount and org-depth caps for EXECUTIVE.md's autonomous hiring (queue item e12)",
+    )
+    deliberate: DeliberateConfig = Field(
+        default_factory=DeliberateConfig,
+        description="OpenRouter Fusion deliberation panel for big-project planning (queue item e13)",
     )
     scheduler: SchedulerConfig = Field(
         default_factory=SchedulerConfig,

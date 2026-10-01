@@ -90,7 +90,7 @@ describe("empty thread", () => {
     expect(container.querySelectorAll("p")).toHaveLength(0);
   });
 
-  it("offers three starters that fill the composer without sending", async () => {
+  it("offers starters that fill the composer without sending", async () => {
     const onSubmit = rs.fn();
     const { container } = renderWelcomeComposer(onSubmit);
 

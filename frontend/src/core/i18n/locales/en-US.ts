@@ -432,6 +432,11 @@ export const enUS: Translations = {
         prompt:
           "Draft this month's report for [client]: results, spend, and next steps. Mark every number you couldn't verify.",
       },
+      {
+        label: "Plan a big project",
+        prompt:
+          "Plan a big project for [client]: think it through from multiple angles, flag the risks and blind spots, and put together a plan for me to review.",
+      },
     ],
     pleaseWaitStreaming: "Please wait for the current response to finish.",
     stopStreamingUnavailable:
@@ -1196,6 +1201,13 @@ export const enUS: Translations = {
     writeFile: "Write file",
     clickToViewContent: "Click to view file content",
     writeTodos: "Update to-do list",
+    deliberation: "Run deliberation panel",
+    deliberationConsensus: "Consensus",
+    deliberationContradictions: "Contradictions",
+    deliberationUniqueInsights: "Unique insights",
+    deliberationBlindSpots: "Blind spots",
+    deliberationPartialPanel: (answered, total, droppedModels) =>
+      `${answered} of ${total} panelists answered (dropped: ${droppedModels})`,
     skillInstallTooltip: "Install skill and make it available to MomoBot",
     browserNavigate: (url: string) => `Open ${url} in browser`,
     browserNavigateGeneric: "Open page in browser",

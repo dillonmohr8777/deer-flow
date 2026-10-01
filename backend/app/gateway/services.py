@@ -594,6 +594,14 @@ _CONTEXT_INTERNAL_CALLER_KEYS: frozenset[str] = frozenset({"interaction_mode", "
 #                                 run once at run start and stamped here; see
 #                                 ``inject_authenticated_user_context``. Team
 #                                 board tools trust only this flag.
+#   ``deliberate_owner_override`` — an organization owner's explicit
+#                                 confirmation to run the deliberate tool
+#                                 (queue item e13) on a client-data thread.
+#                                 No producer stamps this yet (no Gateway
+#                                 confirmation flow exists), so it is cleared
+#                                 defensively: a model-chosen tool argument
+#                                 could never prove a human asked for it, and
+#                                 neither can a client-supplied context value.
 _SERVER_OWNED_RUNTIME_CONTEXT_KEYS: frozenset[str] = (
     frozenset(
         {
@@ -601,6 +609,7 @@ _SERVER_OWNED_RUNTIME_CONTEXT_KEYS: frozenset[str] = (
             "authz_attributes",
             "channel_user_id",
             "momentum_staff",
+            "deliberate_owner_override",
             "is_subagent",
             "agent_id",
             "__run_loop_detection_recorder",

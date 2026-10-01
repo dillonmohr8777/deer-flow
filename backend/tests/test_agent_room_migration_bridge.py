@@ -18,10 +18,24 @@ MERGE = "0047_merge_agent_room_exec"
 PREVIOUS = "0039_team_board_academy"
 
 
+def _current_head(script: ScriptDirectory) -> str:
+    """The tree's actual single head, wherever later migrations have moved it.
+
+    f174 (queue): this file pins a historical merge point (MERGE joins the
+    independently shipped ROOM and LANE histories), not "the" head forever --
+    a later migration landing on top of MERGE (e.g. board_messages.delivered_at,
+    0048) is expected and must not make this file's own checks fail. Only the
+    merge revision's own parentage is asserted against fixed names.
+    """
+    heads = script.get_heads()
+    assert len(heads) == 1, f"expected a single migration head, found {heads}"
+    return heads[0]
+
+
 def test_merge_preserves_both_published_parent_edges():
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")
     script = ScriptDirectory.from_config(_get_alembic_config(engine))
-    assert script.get_heads() == [MERGE]
+    _current_head(script)  # asserts single-headedness on its own
     assert script.get_revision(ROOM).down_revision == PREVIOUS
     assert script.get_revision("0040_agent_seats").down_revision == PREVIOUS
     assert set(script.get_revision(MERGE).down_revision) == {ROOM, LANE}
@@ -32,6 +46,7 @@ def test_merge_preserves_both_published_parent_edges():
 async def test_existing_history_upgrades_and_preserves_owner_rows(tmp_path, origin):
     engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'upgrade.db'}")
     cfg = _get_alembic_config(engine)
+    head = _current_head(ScriptDirectory.from_config(cfg))
     try:
         await asyncio.to_thread(command.upgrade, cfg, origin)
         async with engine.begin() as conn:
@@ -54,7 +69,7 @@ async def test_existing_history_upgrades_and_preserves_owner_rows(tmp_path, orig
         # Exercise the actual application bootstrap, not a stamp shortcut.
         await bootstrap_schema(engine, backend="sqlite")
         async with engine.connect() as conn:
-            assert (await conn.execute(sa.text("SELECT version_num FROM alembic_version"))).scalar_one() == MERGE
+            assert (await conn.execute(sa.text("SELECT version_num FROM alembic_version"))).scalar_one() == head
             assert (await conn.execute(sa.text("SELECT * FROM users WHERE id='retained-owner'"))).mappings().one() == user_before
             assert (await conn.execute(sa.text("SELECT * FROM agent_room_messages"))).mappings().all() == room_before
             tables = await conn.run_sync(lambda sync: set(sa.inspect(sync).get_table_names()))
@@ -71,10 +86,11 @@ async def test_existing_history_upgrades_and_preserves_owner_rows(tmp_path, orig
 @pytest.mark.asyncio
 async def test_empty_bootstrap_has_room_and_executive_schema(tmp_path):
     engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'empty.db'}")
+    head = _current_head(ScriptDirectory.from_config(_get_alembic_config(engine)))
     try:
         await bootstrap_schema(engine, backend="sqlite")
         async with engine.connect() as conn:
-            assert (await conn.execute(sa.text("SELECT version_num FROM alembic_version"))).scalar_one() == MERGE
+            assert (await conn.execute(sa.text("SELECT version_num FROM alembic_version"))).scalar_one() == head
             tables = await conn.run_sync(lambda sync: set(sa.inspect(sync).get_table_names()))
             assert {"agent_room_messages", "agent_seats", "hired_agents", "organization_entitlements"} <= tables
     finally:
