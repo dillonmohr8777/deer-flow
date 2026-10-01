@@ -35,7 +35,9 @@ MAX_ACTIVE_SESSIONS = 3
 MAX_OWNER_ADMISSIONS_24H = 16
 WATCHDOG_LEASE_SECONDS = 60
 WATCHDOG_WARNING_THROTTLE_SECONDS = 300
+UNBOUND_RESOLUTION_MARGIN_SECONDS = 60
 _TERMINAL = {"completed", "failed", "cancelled"}
+_DEFINITE_REJECTION_EXCLUDED_STATUS_CODES = {408, 409}
 try:
     _SDK_VERSION = importlib.metadata.version("openai")
 except importlib.metadata.PackageNotFoundError:
@@ -102,6 +104,20 @@ def _check_owner_admissions(db: sqlite3.Connection, owner: str) -> None:
     ).fetchone()[0]
     if count >= MAX_OWNER_ADMISSIONS_24H:
         raise AgentServiceError("owner_admission_limit")
+
+
+def _is_definite_create_rejection(error: BaseException) -> bool:
+    # A 4xx the SDK surfaces as a structured API error (not a timeout/conflict,
+    # both of which leave whether the provider acted ambiguous) means the
+    # request never dispatched: safe to settle without waiting on the provider.
+    from openai import APIStatusError
+
+    return isinstance(error, APIStatusError) and 400 <= error.status_code < 500 and error.status_code not in _DEFINITE_REJECTION_EXCLUDED_STATUS_CODES
+
+
+def _unbound_create_is_stale(row: dict[str, Any]) -> bool:
+    created = datetime.fromisoformat(row["created_at"]).timestamp()
+    return time.time() - created >= TURN_TIMEOUT_SECONDS + UNBOUND_RESOLUTION_MARGIN_SECONDS
 
 
 def _item_subagent(item: dict[str, Any]) -> str | None:
@@ -316,6 +332,14 @@ class OpenAIAgentService:
             elif action == "unknown":
                 code = args[2]
                 db.execute("UPDATE sessions SET status='unknown',last_error=?,updated_at=? WHERE id=?", (code, _now(), session_id))
+            elif action == "fail_unbound":
+                # A create that never reached the provider (confirmed rejection,
+                # or a confirmed-empty provider-side search long past the create
+                # deadline): terminal and off the active-session count for good,
+                # unlike "unknown" which keeps a row in limbo indefinitely.
+                code = args[2]
+                db.execute("UPDATE sessions SET status='failed',last_error=?,updated_at=? WHERE id=?", (code, _now(), session_id))
+                db.execute("UPDATE deadlines SET state='settled',lease_expires_at=NULL WHERE session_id=?", (session_id,))
             elif action == "deadline_sent":
                 expires_at, lease_expires_at = args[2:]
                 db.execute(
@@ -404,6 +428,9 @@ class OpenAIAgentService:
                 metadata={"momo_local_session": row["id"], "momo_owner_scope": _hash(owner)},
             )
         except BaseException as error:
+            if not isinstance(error, asyncio.CancelledError) and _is_definite_create_rejection(error):
+                await asyncio.shield(self._storage("fail_unbound", row["id"], owner, "provider_rejected_request"))
+                raise AgentServiceError("provider_rejected_request", 422) from None
             await asyncio.shield(self._storage("unknown", row["id"], owner, "provider_outcome_unknown"))
             if isinstance(error, asyncio.CancelledError):
                 raise
@@ -433,6 +460,12 @@ class OpenAIAgentService:
                 candidates, more = await self._pages(client.beta.agents.sessions.list(limit=100))
                 matches = [item for item in candidates if item.get("metadata", {}).get("momo_local_session") == session_id and item.get("metadata", {}).get("momo_owner_scope") == _hash(owner)]
                 if len(matches) != 1 or more:
+                    if not matches and not more and _unbound_create_is_stale(row):
+                        # A complete, confirmed-empty search well past the create
+                        # deadline: the provider never created a matching session.
+                        # Settle for good instead of re-listing forever.
+                        row = await self._storage("fail_unbound", session_id, owner, "provider_create_not_found")
+                        return {**_summary(row), "turn": None, "items": [], "artifacts": [], "required_actions": [], "usage": None, "operation_pending": False, "history_truncated": False}
                     return {**_summary(row), "turn": None, "items": [], "artifacts": [], "required_actions": [], "usage": None, "operation_pending": True, "history_truncated": more}
                 row = await self._storage("bind", session_id, owner, matches[0]["id"], matches[0]["status"])
             provider_id = row["provider_id"]

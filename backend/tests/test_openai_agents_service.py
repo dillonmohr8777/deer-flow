@@ -5,13 +5,21 @@ import contextlib
 import logging
 import sqlite3
 import time
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
+import httpx
 import pytest
+from openai import APIStatusError
 
 from app.gateway import openai_agent_service as agent_service
 from app.gateway.openai_agent_service import AgentServiceError, OpenAIAgentService
+
+
+def _api_status_error(status_code: int) -> APIStatusError:
+    response = httpx.Response(status_code, request=httpx.Request("POST", "https://api.openai.com/v1/agents/sessions"))
+    return APIStatusError("rejected", response=response, body=None)
 
 
 class FakePage:
@@ -88,6 +96,66 @@ async def test_unknown_creation_is_not_retried_and_errors_are_redacted(setup):
     client.session["metadata"] = {}
     await service.create("alice", "Task", "Task", "same")
     assert client.beta.agents.sessions.create.await_count == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status_code", [400, 401, 429])
+async def test_definite_4xx_create_rejection_settles_failed_and_frees_the_slot(setup, status_code):
+    service, client = setup
+    original_side_effect = client.beta.agents.sessions.create.side_effect
+    client.beta.agents.sessions.create.side_effect = _api_status_error(status_code)
+    with pytest.raises(AgentServiceError, match="provider_rejected_request") as error:
+        await service.create("alice", "Task", "Task", "rejected")
+    assert error.value.status_code == 422
+    rows = await service.list_sessions("alice")
+    assert rows[0]["status"] == "failed"
+    # A confirmed, never-dispatched create must not permanently occupy an
+    # active-session slot: all MAX_ACTIVE_SESSIONS real sessions still fit.
+    client.beta.agents.sessions.create.side_effect = original_side_effect
+    for index in range(agent_service.MAX_ACTIVE_SESSIONS):
+        client.session.update(id=f"ok_{index}", status="in_progress")
+        await service.create("alice", "Task", "Task", f"ok_{index}")
+    with pytest.raises(AgentServiceError, match="active_session_limit"):
+        await service.create("alice", "Task", "Task", "overflow")
+    assert client.beta.agents.sessions.list.await_count == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status_code", [408, 409])
+async def test_ambiguous_4xx_create_rejection_stays_unknown(setup, status_code):
+    service, client = setup
+    client.beta.agents.sessions.create.side_effect = _api_status_error(status_code)
+    with pytest.raises(AgentServiceError, match="provider_outcome_unknown"):
+        await service.create("alice", "Task", "Task", "ambiguous")
+    rows = await service.list_sessions("alice")
+    assert rows[0]["status"] == "unknown"
+
+
+@pytest.mark.asyncio
+async def test_stale_unbound_creates_settle_failed_and_stop_relisting(setup):
+    service, client = setup
+    original_side_effect = client.beta.agents.sessions.create.side_effect
+    client.beta.agents.sessions.list.side_effect = lambda **kwargs: FakePage([])
+    client.beta.agents.sessions.create.side_effect = RuntimeError("provider response lost")
+    for index in range(3):
+        with pytest.raises(AgentServiceError, match="provider_outcome_unknown"):
+            await service.create("alice", "Task", "Task", f"lost_{index}")
+    stale_created_at = datetime.fromtimestamp(time.time() - agent_service.TURN_TIMEOUT_SECONDS - agent_service.UNBOUND_RESOLUTION_MARGIN_SECONDS - 10, UTC).isoformat()
+    with sqlite3.connect(service.path) as db:
+        db.execute("UPDATE sessions SET created_at=?", (stale_created_at,))
+        db.execute("UPDATE deadlines SET expires_at=0")
+    await service.enforce_deadlines()
+    rows = await service.list_sessions("alice")
+    assert len(rows) == 3
+    assert all(row["status"] == "failed" for row in rows)
+    assert client.beta.agents.sessions.list.await_count == 3
+    # Settled rows drop out of the unbound-due scan: no further relisting.
+    await service.enforce_deadlines()
+    assert client.beta.agents.sessions.list.await_count == 3
+    # The three failed creates no longer occupy active-session slots.
+    client.beta.agents.sessions.create.side_effect = original_side_effect
+    await service.create("alice", "Task", "Task", "finally_ok")
+    assert client.beta.agents.sessions.create.await_count == 4
 
 
 @pytest.mark.asyncio
