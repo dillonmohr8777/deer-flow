@@ -706,26 +706,11 @@ async def _startup_workflow_service(app: FastAPI) -> None:
 
     if not WorkflowService.enabled():
         return
-    browserbase_service = getattr(app.state, "browserbase_service", None)
-    if BrowserbaseResearchService.enabled() and not (browserbase_service and browserbase_service.started):
-        # Browserbase and Workflow take separate, independent exclusive
-        # leases, so a worker can win one and lose the other. Starting
-        # Workflow here anyway would hand it a browser_service that is not
-        # actually running on this process: WorkflowService.create() admits
-        # a browser workflow without checking browser capability, so it
-        # would be accepted and only fail partway through (possibly after
-        # model spend) once it tried to use the dead browser_service. Stay
-        # unstarted here too instead, matching the lease this worker lost.
-        logger.warning(
-            "Workflow service needs this worker's own Browserbase lease, which it did not win; "
-            "leaving Workflow unstarted here too so an admitted workflow never sees a dead "
-            "browser_service. Keep GATEWAY_WORKERS=1 whenever Browserbase and Workflows are both enabled."
-        )
-        return
     from app.gateway.workflow_adapters import WorkflowModelAdapter
     from app.gateway.workflow_authority import workflow_actor_authorized
     from deerflow.config.paths import get_paths
 
+    browserbase_service = getattr(app.state, "browserbase_service", None)
     app.state.workflow_service = WorkflowService(
         get_paths().base_dir / "workflows.sqlite",
         checkpointer=app.state.checkpointer,
@@ -736,6 +721,25 @@ async def _startup_workflow_service(app: FastAPI) -> None:
         event_store=app.state.run_event_store,
         authority=workflow_actor_authorized,
     )
+    if BrowserbaseResearchService.enabled() and not (browserbase_service and browserbase_service.started):
+        # Browserbase and Workflow take separate, independent exclusive
+        # leases, so a worker can win one and lose the other. Starting
+        # Workflow here anyway would hand it a browser_service that is not
+        # actually running on this process: WorkflowService.create() admits
+        # a browser workflow without checking browser capability, so it
+        # would be accepted and only fail partway through (possibly after
+        # model spend) once it tried to use the dead browser_service. Stay
+        # unstarted here too instead, matching the lease this worker lost
+        # (the object itself is still installed on app.state, exactly like
+        # a worker that lost the Workflow lease directly, so /api/workflows
+        # routes see `self.started is False` and degrade normally instead
+        # of 503ing on a missing service).
+        logger.warning(
+            "Workflow service needs this worker's own Browserbase lease, which it did not win; "
+            "leaving Workflow unstarted here too so an admitted workflow never sees a dead "
+            "browser_service. Keep GATEWAY_WORKERS=1 whenever Browserbase and Workflows are both enabled."
+        )
+        return
     await _start_singleton_service(app.state.workflow_service, error_cls=WorkflowServiceError, label="Workflow service")
 
 

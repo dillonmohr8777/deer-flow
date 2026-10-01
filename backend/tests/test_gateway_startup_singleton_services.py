@@ -22,11 +22,14 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
+import httpx
 import pytest
 from fastapi import FastAPI
 
 from app.gateway.app import _start_singleton_service, _startup_workflow_service
+from app.gateway.authz import AuthContext
 from app.gateway.browserbase_service import BrowserbaseError, BrowserbaseResearchService
+from app.gateway.routers import workflows
 
 
 class _FakeStartupError(Exception):
@@ -127,7 +130,33 @@ async def test_workflow_service_skipped_when_this_workers_browserbase_lease_was_
     app = _workflow_app(tmp_path, browserbase_service=lost_browserbase)
     await _startup_workflow_service(app)
 
-    assert getattr(app.state, "workflow_service", None) is None
+    # The object is still installed on app.state -- exactly like a worker
+    # that lost the Workflow lease directly -- just never started, so its
+    # own routes degrade normally (200 enabled:false, 503 on admission)
+    # instead of a router-level "not_enabled" from a missing service.
+    assert app.state.workflow_service is not None
+    assert app.state.workflow_service.started is False
+
+    router_app = FastAPI()
+    router_app.state.workflow_service = app.state.workflow_service
+    router_app.include_router(workflows.router)
+
+    @router_app.middleware("http")
+    async def authenticate(request, call_next):
+        request.state.auth = AuthContext(user=SimpleNamespace(id="me"), permissions=["runs:read", "runs:create"], actor_user_id="me", organization_id="org-a", storage_user_id="me")
+        return await call_next(request)
+
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=router_app), base_url="http://gateway.test") as client:
+        status = await client.get("/api/workflows/status", headers={"X-Expected-User-Id": "me"})
+        assert status.status_code == 200
+        assert status.json()["enabled"] is False
+
+        headers = {"X-Expected-Workflow-Scope": status.json()["owner_scope"], "Idempotency-Key": "loser-run"}
+        created = await client.post("/api/workflows/runs", headers=headers, json={"workflow_id": "demo", "inputs": {}})
+        assert created.status_code == 503
+
+        listed = await client.get("/api/workflows/runs", headers=headers)
+        assert listed.status_code == 503
 
 
 @pytest.mark.asyncio
