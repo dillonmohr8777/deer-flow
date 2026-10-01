@@ -112,13 +112,15 @@ class BrowserbaseAPI:
         return await self._request("GET", f"/v1/agents/runs?status={status}&limit=1")
 
     async def start_agent_run(self, agent_id: str, task: str, *, reservation_id: str | None = None) -> dict:
-        # No context, proxies or Verified mode: signed-out public browsing only. The reservation id
-        # is echoed back in the run's own metadata, the same provider-readback proof `create()`
-        # already gives QA sessions, so a run can be claimed later even if this call's response is
-        # never seen locally (timeout, malformed body, or any other failure before we record it).
+        # No context, proxies or Verified mode: signed-out public browsing only. Only documented
+        # request fields: the "Run an agent" reference lists no `metadata` (that is a sessions-only
+        # field -- see `create()`'s `userMetadata`); `variables` is documented, though whether the
+        # provider echoes it back in the AgentRun response is unconfirmed, so reservation ownership is
+        # never trusted on that alone -- see `reconcile_unbound_native_run`'s `agentId`+`createdAt`
+        # proof, which needs no echo at all.
         body = {"agentId": str(UUID(agent_id)), "task": task, "browserSettings": {"proxies": False}}
         if reservation_id:
-            body["metadata"] = {"reservation_id": reservation_id}
+            body["variables"] = {"reservation_id": reservation_id}
         return await self._request("POST", "/v1/agents/runs", body)
 
     async def agent_run(self, run_id: str) -> dict:

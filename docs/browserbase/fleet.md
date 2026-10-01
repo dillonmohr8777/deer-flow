@@ -76,23 +76,31 @@ project. An unrelated run from the same project cannot settle the reservation.
 Normal completion also needs this exact terminal session readback before the
 reservation can finish.
 
-Every `start_agent_run` call also carries the reservation token in the run's own
-provider metadata, the same proof `reconcile_owned_session` already trusts for
-QA sessions. If the start call itself fails (timeout, 5xx, an ambiguous 4xx) or
-returns a run ID the ledger never parses, no local `native_run`/`started.json`
-record is written at all -- but the run (if one was created) still carries that
-metadata, so the reservation is not permanently lost. An operator reads the
-run back from the provider directly (by agent and time) and calls
-`reconcile_unbound_native_run(api, ledger, token, run_id)`, which only binds
-ownership once the run's own metadata echoes this exact token; elapsed time or
-a supplied run ID alone still never establishes ownership. Once bound, it
-finishes the reservation immediately if the run is already terminal, otherwise
-`reconcile_native_run` finishes it once polling later shows it terminal. A
-start call that confirms the request itself was rejected (HTTP 400, before any
-run could exist) settles the reservation as finished right away -- the charge
-is kept, but there is nothing left to reconcile. Every other start failure
-still leaves the reservation uncertain, since the provider may have created a
-billable run regardless of what the response said.
+Every `start_agent_run` call sends only documented request fields (the "Run an
+agent" reference lists no `metadata`, which is a sessions-only field): the
+reservation token travels in `variables` instead. Whether the provider echoes
+`variables` back in the AgentRun response is unconfirmed, so it is never the
+only proof trusted. If the start call itself fails (timeout, 5xx, an ambiguous
+4xx) or returns a run ID the ledger never parses, no local `native_run`/
+`started.json` record is written at all, but the reservation is not
+permanently lost. An operator reads the run back from the provider directly
+(by agent and time) and calls
+`reconcile_unbound_native_run(api, ledger, token, run_id, agent_id)`, which
+binds ownership once the run proves it from documented AgentRun fields: either
+a `variables` echo matching this token, or `agentId` matching the job's own
+agent together with `createdAt` falling at or after this reservation's own
+`created` time (minus a small clock-skew allowance) -- `reserve()` refuses a
+second reservation while this one is uncertain, and the account-busy check
+refuses a start while any run is active, so at most one run for this agent
+could exist in that window. Elapsed time alone or a supplied run ID alone
+still never establishes ownership. Once bound, it finishes the reservation
+immediately if the run is already terminal, otherwise `reconcile_native_run`
+finishes it once polling later shows it terminal. A start call that confirms
+the request itself was rejected (HTTP 400, before any run could exist) settles
+the reservation as finished right away -- the charge is kept, but there is
+nothing left to reconcile. Every other start failure still leaves the
+reservation uncertain, since the provider may have created a billable run
+regardless of what the response said.
 The run record, messages and any screenshot parts are saved privately. Through
 the tool, a native run blocks until it ends (up to `max_minutes` + 3).
 
