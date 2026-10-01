@@ -24,6 +24,42 @@ Backend CI installs all isolated workers in every duration-balanced shard using
 Python3.13 and Node24.21.0. Real framework tests still assert availability and
 one admitted native relay; missing workers fail rather than being skipped.
 These tests use synthetic offline responses and never enable paid providers.
+## Optional private container image
+
+The normal Gateway image excludes these worker environments. Build the opt-in
+`workflow-runtime` from a reviewed local Gateway image; no provider key, private
+config, host environment or runtime state belongs in the build context:
+
+```sh
+docker build -f workers/Dockerfile --target workflow-runtime \
+  --build-arg MOMOBOT_GATEWAY_IMAGE=YOUR_REVIEWED_LOCAL_GATEWAY_IMAGE \
+  --build-arg MOMOBOT_WORKER_SOURCE_REVISION=YOUR_REVIEWED_WORKER_COMMIT \
+  -t momobot-private-workers:local .
+cd backend
+MOMOBOT_WORKER_SMOKE_IMAGE=momobot-private-workers:local \
+  PYTHONPATH=. uv run pytest tests/test_workflow_worker_image.py -q
+```
+
+Use the selected Docker context for both operations (the test accepts
+`MOMOBOT_WORKER_SMOKE_CONTEXT`). The smoke runs a disposable container with
+network disabled and a read-only root, real credential-free framework handoffs,
+synthetic model responses and no Gateway/server startup. It also verifies the
+Gateway retains Python3.12/OpenAI3.22.1. Worker dependencies remain isolated in
+Python3.13 environments and Node24; frozen lockfiles are installed and TypeScript
+is compiled inside the Linux builder. Adding this image does not enable workflows,
+schedules, keys, provider calls or another controller. Stagehand availability
+proves packaging only; browser connections and useful artifacts need their own
+admission and downstream acceptance. Production installation is a separate step.
+
+CrewAI1.15.23 imports its cloud-trace token manager even when tracing is disabled.
+The disposable Python worker installs version-checked hooks before importing
+CrewAI: cloud-auth lookup is denied, import/settings paths use a private temporary
+directory and trace consent is explicitly disabled there. That directory is
+removed on success or error. The real Flow/Crew and existing network/SQLite bans
+remain active; no host-home credential or settings directory is read or created.
+Regression traps verify real auth/storage access is absent and fail when the guard
+is removed. Image labels distinguish Gateway base from worker source revision;
+an `unrecorded` worker label is not source-provenance evidence.
 
 Mastra executes its real `Agent.generate` with a standard AI SDK custom provider, one step, no tools/memory/retries. CrewAI executes a real `Flow.kickoff` with one `@start` department step that calls one real `Crew.kickoff`, custom `BaseLLM`, one iteration, no delegation/code/tools/retries and an ephemeral task-output handler. Flow persistence/checkpoint/tracing are disabled; the pinned1.15.23 source hook `_skip_auto_memory` prevents `memory=None` from creating its default LLM-backed Memory. Each final receipt reports actual step/crew/model counts; output must exactly equal the parent response. Python workers deny socket and SQLite connections before framework import, preventing default stores or telemetry transport. Deep Agents uses real `create_deep_agent` with an admitted custom model, bounded recursion and no external memory/store/checkpointer. No model worker receives provider keys. Native LangGraph/gateway owns durable run state, history, continuation, call IDs, schema validation, actual usage and budgets.
 
