@@ -32,3 +32,23 @@ export function getPluginStatus(
     return { label: t.capabilities.notInstalled, tone: "idle" };
   return { label: labels.notConfigured, tone: "idle" };
 }
+
+/**
+ * Whether a row belongs under Connected: installed, readable, not waiting on
+ * an account, and switched on and selectable. Anything short of that still
+ * needs someone, so it stays with what is available to connect.
+ */
+export function isPluginConnected(
+  status:
+    | Pick<CapabilityInstallation, "auth_status" | "enabled" | "selectable">
+    | undefined,
+  unavailable?: boolean,
+): boolean {
+  return (
+    !!status &&
+    !unavailable &&
+    status.auth_status !== "required" &&
+    status.enabled !== false &&
+    status.selectable !== false
+  );
+}

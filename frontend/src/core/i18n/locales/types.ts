@@ -72,6 +72,11 @@ export interface Translations {
       guideHint: string;
       unknownStatus: string;
       notConnected: string;
+      connectedSection: string;
+      connectedHint: string;
+      availableSection: string;
+      connect: string;
+      detailsShort: string;
     };
     integrationSkills: string;
     sharedSkills: string;

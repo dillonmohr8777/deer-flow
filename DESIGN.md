@@ -186,6 +186,7 @@ Items 1, 2 and 5 need both `prefers-reduced-motion: no-preference` and the user'
      - The agent team uses the board's words for the same runs: a specialist or the lead with a running run is pinned and says Working in royal beside the three working squares; one whose only live run is pending says Queued in ink-muted, unpinned and still; otherwise Idle. Without run history every agent says "Live state unknown". Agent Studio shows the same team at the frame's full width, so the lead stands as a column there too.
      - Slips open the run's receipt drawer. The board shows the latest page of runs and says so; the full, filterable history stays in the Jobs tab.
 - **Selection.** Selecting a run opens its receipt drawer on the right.
+- **Catalogs lead with what works.** Capability Center puts connected tools first on their own sheet (installed, switched on, selectable and not waiting on an account; anything short of that waits with the rest), then what is available by category, integrations MomoBot can configure before setup guides. A row's one action says what it does: Connect (an account flow, royal outline), Configure (settings the viewer may change, outline), Details or Setup guide (read only, quiet). An unconnected row carries no status tag; its section already says it.
 
 ## States
 

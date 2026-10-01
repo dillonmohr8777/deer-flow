@@ -30,6 +30,7 @@ import type { Translations } from "@/core/i18n/locales/types";
 import { isStaticWebsiteOnly } from "@/core/static-mode";
 
 import { MCPPluginManager } from "./mcp-plugin-manager";
+import { getPluginAction, type PluginAction } from "./plugin-action";
 import { pluginSettingsAdapters } from "./plugin-adapters";
 import {
   catalogText,
@@ -37,23 +38,20 @@ import {
   type PluginCategory,
 } from "./plugin-catalog";
 import {
+  PluginActionButton,
   PluginDirectory,
   PluginRow,
   type PluginDirectoryEntry,
 } from "./plugin-directory";
 import { PluginIcon } from "./plugin-icon";
-import { getPluginStatus } from "./plugin-status";
+import { getPluginStatus, isPluginConnected } from "./plugin-status";
 
-function getPluginActionLabel(
-  adapter: string,
-  installed: boolean,
-  canManage: boolean,
-  t: Translations,
-) {
-  if (installed) return t.capabilities.manage;
-  if (adapter === "guide" || !canManage) return t.capabilities.directory.view;
-  if (adapter === "lark") return t.common.install;
-  return t.capabilities.configure;
+function pluginActionLabel(action: PluginAction, t: Translations) {
+  const copy = t.capabilities.directory;
+  if (action === "connect") return copy.connect;
+  if (action === "configure") return t.capabilities.configure;
+  if (action === "guide") return copy.guide;
+  return copy.detailsShort;
 }
 
 export function PluginGallery({ query }: { query: string }) {
@@ -118,14 +116,18 @@ export function PluginGallery({ query }: { query: string }) {
         t,
         labels,
       );
+      const action = getPluginAction(plugin.adapter, status, canManage);
+      const actionLabel = pluginActionLabel(action, t);
+      const name = catalogText(plugin.name, locale);
       return {
         id: plugin.id,
         category: plugin.category,
-        installed: !!status,
+        installed: isPluginConnected(status, unavailable),
+        guide: plugin.adapter === "guide",
         search: `${Object.values(plugin.name).join(" ")} ${Object.values(plugin.description).join(" ")} ${plugin.aliases.join(" ")}`,
         node: (
           <PluginRow
-            name={catalogText(plugin.name, locale)}
+            name={name}
             description={catalogText(plugin.description, locale)}
             icon={
               <PluginIcon
@@ -134,19 +136,23 @@ export function PluginGallery({ query }: { query: string }) {
                 capabilityId={plugin.id}
               />
             }
-            label={<StatusTag tone={state.tone}>{state.label}</StatusTag>}
+            // An unconnected row's state is its section; only a state that
+            // tells the reader something new earns a tag.
+            label={
+              status || state.tone !== "idle" ? (
+                <StatusTag tone={state.tone}>{state.label}</StatusTag>
+              ) : undefined
+            }
             onDetails={() => setSelectedId(plugin.id)}
-            detailsLabel={`${t.capabilities.details} ${catalogText(plugin.name, locale)}`}
+            detailsLabel={`${t.capabilities.details} ${name}`}
           >
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-8 text-xs"
-              aria-label={`${plugin.adapter === "guide" ? copy.guide : t.capabilities.configure} ${catalogText(plugin.name, locale)}`}
+            <PluginActionButton
+              action={action}
+              aria-label={`${actionLabel} ${name}`}
               onClick={() => setSelectedId(plugin.id)}
             >
-              {getPluginActionLabel(plugin.adapter, !!status, canManage, t)}
-            </Button>
+              {actionLabel}
+            </PluginActionButton>
           </PluginRow>
         ),
       };
@@ -161,7 +167,7 @@ export function PluginGallery({ query }: { query: string }) {
         id: item.id,
         category: manifest?.category ?? "custom",
         search: `${item.name} ${item.description}`,
-        installed: true,
+        installed: isPluginConnected(item),
         node: (
           <PluginRow
             name={item.name}
@@ -203,7 +209,7 @@ export function PluginGallery({ query }: { query: string }) {
       onChange={setFilter}
       options={[
         { value: "all", label: t.capabilities.allPlugins },
-        { value: "installed", label: t.capabilities.installed },
+        { value: "installed", label: copy.connectedSection },
       ]}
     />
   );
