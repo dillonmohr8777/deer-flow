@@ -61,6 +61,14 @@ rather than raw exception traces.
 
 The native graph is validate → research → plan → draft → verify → accept, with
 one revise/reverify cycle allowed. This is three normal model calls, five maximum.
+Opt in with `supervisor=True` to insert `review_plan` before drafting. A fourth,
+independent worker checks every acceptance criterion and binds approval to the
+exact plan hash. Rejection, failed/duplicate checks or blockers stop before the
+producer starts. This path uses four normal calls, six with one draft revision;
+callback admission still owns the original shared budget, including browser AI.
+The mode is checkpoint-bound and cannot change on resume. Existing checkpoints
+without the mode retain their original unsupervised behavior. Plan review hashes
+are recorded as evidence; model approval remains a draft gate, not human approval.
 Revision reuses the same producer identity and its previous conversation; the
 verifier also retains its prior review. Stable identities derive from the opaque
 scope, server run ID and role. Graph checkpoints retain admitted input hashes,

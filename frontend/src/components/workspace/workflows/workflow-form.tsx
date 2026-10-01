@@ -39,6 +39,7 @@ export function WorkflowForm({
   const [draft, setDraft] = useState<InputDraft>({});
   const [framework, setFramework] = useState<WorkflowFramework | "">("");
   const [example, setExample] = useState(false);
+  const [supervisor, setSupervisor] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const reported = FRAMEWORKS.filter((name) => status.frameworks[name]);
   const available = reported.filter(
@@ -64,7 +65,12 @@ export function WorkflowForm({
     try {
       const inputs = parseWorkflowInputs(definition.input_schema, draft);
       setError(null);
-      onRun({ workflow_id: definition.id, inputs, framework: selected });
+      onRun({
+        workflow_id: definition.id,
+        inputs,
+        framework: selected,
+        ...(supervisor ? { supervisor: true } : {}),
+      });
     } catch (error) {
       setError(
         error instanceof Error ? error.message : "Check the workflow inputs.",
@@ -262,6 +268,27 @@ export function WorkflowForm({
             </option>
           ))}
         </select>
+        <div className="space-y-1">
+          <label className="flex min-h-11 items-center gap-3 text-sm">
+            <input
+              type="checkbox"
+              checked={supervisor}
+              disabled={locked || !mayCreate}
+              onChange={(event) => setSupervisor(event.target.checked)}
+              aria-describedby="workflow-supervisor-description"
+              className="size-5"
+            />
+            Review plan before drafting
+          </label>
+          <p
+            id="workflow-supervisor-description"
+            className="text-muted-foreground text-xs leading-relaxed"
+          >
+            A separate reviewer must approve the plan before drafting starts.
+            Adds one model call within the existing budget; a rejected plan
+            stops the run. Final draft review can request one revision.
+          </p>
+        </div>
         <p className="text-muted-foreground text-xs leading-relaxed">
           Each run is bounded to {status.limits.max_model_calls_per_run} model
           calls and {status.limits.max_output_tokens_per_run.toLocaleString()}{" "}

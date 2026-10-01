@@ -1,6 +1,9 @@
 ### Gateway API (`app/gateway/`)
 
 Agent Room preserves actor/admin isolation; read [its contract](../../docs/AGENT_ROOM.md) before changing room wiring.
+Workflow admission optionally accepts strict boolean `supervisor`; persist it and
+bind it to idempotency and graph resume. Never raise shared model/browser limits
+for plan review or bypass uncertain admissions. Existing requests default off.
 
 Capability Center's `business` adapter validates only the bundled provider's
 credential fields and creates a normal MCP connection. The MCP API accepts the

@@ -129,6 +129,37 @@ async function choose(page: Page, number = "001") {
     .click();
 }
 
+for (const width of [390, 768, 1440]) {
+  test(`supervisor plan review admission at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 1000 });
+    const state = await setup(page);
+    await page.goto("/workspace/workflows");
+    await choose(page);
+    const control = page.getByRole("checkbox", {
+      name: "Review plan before drafting",
+    });
+    await expect(control).not.toBeChecked();
+    await control.check();
+    await page
+      .getByLabel("Task brief (required)")
+      .fill("Synthetic supervised task for offline QA");
+    await page
+      .getByRole("button", { name: "Run workflow", exact: true })
+      .click();
+    await expect(
+      page.getByText("completed · LangGraph · acceptance passed"),
+    ).toBeVisible();
+    expect(state.payloads[0]).toEqual(
+      expect.objectContaining({ supervisor: true }),
+    );
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBe(true);
+  });
+}
+
 test("catalog search, editable synthetic inputs and accepted artifact survive reopening on phone", async ({
   page,
 }) => {

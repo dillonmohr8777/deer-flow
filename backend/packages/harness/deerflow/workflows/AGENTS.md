@@ -16,6 +16,10 @@ independent-review criteria, matching output SHA-256 and no unresolved blockers.
 This is a reviewable draft contract, not a semantic truth or publication guarantee.
 Budgets stay enforced in callback admission; model-selected role/effort never
 raises server limits. All six adapter names still share this bounded controller.
+Optional `supervisor=True` adds a distinct plan-review worker before any producer.
+Its criterion-complete approval binds the exact plan hash; failures stop drafting.
+Keep the mode immutable across checkpoint resume and Gateway idempotent admission.
+Six kernel calls maximum in this mode still share the existing Gateway budget.
 
 Core tests: `tests/test_workflow_catalog.py`, `tests/test_workflow_engine.py`.
 Gateway tests: `test_workflow_native_runtime.py`, `test_workflow_routes.py`,

@@ -2440,6 +2440,11 @@ LangGraph retains the durable controller and the application's native run,
 thread and event stores; CrewAI, Mastra, Deep Agents, Agno and Inngest AgentKit
 are finite adapters under the same owner scope and provider meter.
 
+Select **Review plan before drafting** to require a separate worker's approval
+before the producer starts. The existing final review can request one revision;
+the optional supervisor path stays within the same six-call server budget and
+returns a reviewable draft. See [workflow limits](backend/docs/WORKFLOWS.md).
+
 The default budget is three executing jobs, capacity for 100 waiting jobs,
 six model attempts and 8,192 output / 60,000 input tokens per run, and 240 model
 attempts across the ledger in a rolling 24 hours. Browser work uses one bounded

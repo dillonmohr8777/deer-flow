@@ -105,6 +105,27 @@ afterEach(() => {
 });
 
 describe("Workflow room behavior", () => {
+  it("opts into plan review and retains that mode when admission is uncertain", async () => {
+    mocks.create.mockRejectedValueOnce(new Error("provider_outcome_unknown"));
+    render(<WorkflowRoom />, { wrapper: Wrapper });
+    fireEvent.click(
+      await screen.findByRole("button", { name: /^Synthetic workflow 001/ }),
+    );
+    const control = screen.getByRole<HTMLInputElement>("checkbox", {
+      name: "Review plan before drafting",
+    });
+    expect(control.checked).toBe(false);
+    fireEvent.click(control);
+    fireEvent.change(screen.getByLabelText("Task brief (required)"), {
+      target: { value: "Actual edited task" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Run workflow" }));
+    await waitFor(() => expect(mocks.create).toHaveBeenCalled());
+    expect(mocks.create.mock.calls[0]?.[0]).toEqual(
+      expect.objectContaining({ supervisor: true }),
+    );
+    await waitFor(() => expect(control.disabled).toBe(true));
+  });
   it("searches/categories the server catalog and edits a clearly synthetic example without dispatch", async () => {
     render(<WorkflowRoom />, { wrapper: Wrapper });
     await screen.findByText("100 of 100 workflow definitions");

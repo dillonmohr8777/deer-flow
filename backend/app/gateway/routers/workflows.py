@@ -29,6 +29,7 @@ class WorkflowRequest(BaseModel):
     workflow_id: str = Field(min_length=1, max_length=100, pattern=r"^[a-z0-9_-]+$")
     inputs: dict = Field(default_factory=dict)
     framework: Literal["langgraph", "crewai", "mastra", "deepagents", "agno", "agentkit"] = "langgraph"
+    supervisor: bool = Field(default=False, strict=True)
 
 
 def _identity(request: Request):
@@ -86,7 +87,7 @@ async def catalog(request: Request):
 @require_paid_run_entitlement
 async def create(body: WorkflowRequest, request: Request, idempotency_key: IdempotencyKey):
     actor, organization, storage, scope = _owner(request)
-    return await _call(_service(request).create(scope, body.workflow_id, body.inputs, body.framework, idempotency_key, actor=actor, organization=organization, storage_user=storage))
+    return await _call(_service(request).create(scope, body.workflow_id, body.inputs, body.framework, idempotency_key, actor=actor, organization=organization, storage_user=storage, supervisor=body.supervisor))
 
 
 @router.get("/runs")

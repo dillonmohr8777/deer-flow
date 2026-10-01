@@ -53,7 +53,7 @@ class SyntheticAdapter:
         properties = kwargs["output_schema"]["properties"]
         if kwargs["role"] == "planner":
             output = {"approach": ["Separate supplied facts from unanswered questions."], "producer_role": properties["producer_role"]["enum"][0], "effort": "low", "browser_needed": False}
-        elif kwargs["role"] == "verifier":
+        elif kwargs["role"] in {"verifier", "plan_reviewer"}:
             criteria = properties["checks"]["items"]["properties"]["criterion"]["enum"]
             output = {
                 "approved": True,
