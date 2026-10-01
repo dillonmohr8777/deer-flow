@@ -1052,3 +1052,78 @@ test("a project's tabs each meet the 44px floor at 390px", async ({ page }) => {
     expect(height).toBeGreaterThanOrEqual(44);
   }
 });
+
+// d11 slice 29: Trash at 390 is paper slips with thumb-reach actions.
+test("trash documents are slips with 44px actions and say when time is short", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const ago = (days: number) =>
+    new Date(Date.now() - days * 86_400_000).toISOString();
+  const longName = "keyword-gap-analysis-q3-final-reviewed-by-client.xlsx";
+  mockLangGraphAPI(page, {
+    projects: [{ id: "p-acme", name: "Acme spring launch" }],
+    trashDocuments: [
+      {
+        id: "d1",
+        project_id: "p-acme",
+        name: longName,
+        size_bytes: 48_213,
+        trashed_at: ago(2),
+        trash_origin: { project_id: "p-acme", project_name: "Acme" },
+      },
+      {
+        id: "d2",
+        project_id: "p-x",
+        name: "site-crawl.csv",
+        size_bytes: 2_048,
+        trashed_at: ago(29.6),
+        trash_origin: null,
+      },
+    ],
+  });
+  await page.goto("/workspace/trash");
+  const slips = page
+    .getByRole("listitem")
+    .filter({ has: page.getByRole("button", { name: "Restore" }) });
+  await expect(slips).toHaveCount(2);
+
+  // A slip is a cream-hi sheet on the desk, not a hairline row.
+  const background = await slips
+    .first()
+    .evaluate((el) => getComputedStyle(el).backgroundColor);
+  expect(background).toBe("rgb(251, 248, 241)");
+
+  // The long name wraps instead of losing its end to an ellipsis.
+  const name = slips.first().getByText(longName);
+  const box = await name.boundingBox();
+  expect(box!.height).toBeGreaterThan(30);
+
+  // Restore and the permanent delete both meet the 44px floor.
+  for (const button of [
+    slips.first().getByRole("button", { name: "Restore", exact: true }),
+    slips.first().getByRole("button", {
+      name: "Delete permanently",
+      exact: true,
+    }),
+    page.getByRole("button", { name: "Empty trash", exact: true }),
+  ]) {
+    expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  }
+
+  // Less than a day left is an attention tag; a missing origin says so.
+  const short = slips.nth(1);
+  await expect(short.getByText("1 day left")).toHaveAttribute(
+    "data-tone",
+    "attention",
+  );
+  await expect(short.getByText("Project not recorded")).toBeVisible();
+  await expect(slips.first().getByText("28 days left")).not.toHaveAttribute(
+    "data-tone",
+  );
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth - window.innerWidth,
+    ),
+  ).toBeLessThanOrEqual(0);
+});

@@ -599,7 +599,7 @@ export const enUS: Translations = {
     loadFailed: "Couldn't load trash",
     retry: "Try again",
     originProject: (projectName) => `from ${projectName}`,
-    unknownProject: "Unknown project",
+    unknownProject: "Project not recorded",
     retentionLeft: (days) =>
       days <= 0
         ? "Less than a day left"

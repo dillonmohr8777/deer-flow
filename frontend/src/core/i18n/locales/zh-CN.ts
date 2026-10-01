@@ -557,7 +557,7 @@ export const zhCN: Translations = {
     loadFailed: "无法加载回收站",
     retry: "重试",
     originProject: (projectName) => `来自 ${projectName}`,
-    unknownProject: "未知项目",
+    unknownProject: "来源项目未记录",
     retentionLeft: (days) =>
       days <= 0 ? "保留期不足 1 天" : `剩余 ${days} 天`,
     retentionNote: (days) =>
