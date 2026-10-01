@@ -2,7 +2,6 @@ import { describe, expect, it } from "@rstest/core";
 
 import {
   draftClientLabel,
-  feedAuthorLabel,
   formatSeatBurn,
   formatStamp,
   formatTokenCount,
@@ -11,7 +10,6 @@ import {
   seatStatusTone,
 } from "@/components/workspace/ceo-desk/ceo-desk-data";
 import type { SeatRosterEntry } from "@/core/ceo-desk";
-import type { TeamMember } from "@/core/team";
 
 function seat(overrides: Partial<SeatRosterEntry> = {}): SeatRosterEntry {
   return {
@@ -114,29 +112,5 @@ describe("seat status", () => {
     expect(seatStatusTone(seat({ status: "ratified" }))).toBe("ok");
     expect(seatStatusTone(seat({ status: "claimed" }))).toBe("attention");
     expect(seatStatusTone(seat({ status: "reopened" }))).toBe("idle");
-  });
-});
-
-describe("feedAuthorLabel", () => {
-  const members: TeamMember[] = [
-    { user_id: "user-a", email: "dillon.mohr@momentum.example", role: "owner" },
-  ];
-
-  it("labels the current user as You", () => {
-    expect(feedAuthorLabel("user-a", members, "user-a")).toBe("You");
-  });
-
-  it("names a known staff member from the directory", () => {
-    expect(feedAuthorLabel("user-a", members, "user-b")).toBe("dillon.mohr");
-  });
-
-  it("falls back to Momentum for a fleet-agent's signing user id, not Former teammate", () => {
-    expect(feedAuthorLabel("fleet-service-account", members, "user-b")).toBe(
-      "Momentum",
-    );
-  });
-
-  it("falls back to Momentum with no directory loaded", () => {
-    expect(feedAuthorLabel("user-a", undefined, "user-b")).toBe("Momentum");
   });
 });

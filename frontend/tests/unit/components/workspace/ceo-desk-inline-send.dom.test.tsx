@@ -63,19 +63,6 @@ rs.mock("@/core/board", () => ({
   }),
 }));
 
-rs.mock("@/core/team", () => ({
-  useTeamMembers: () => ({
-    data: [],
-    isLoading: false,
-    isError: false,
-    error: null,
-  }),
-}));
-
-rs.mock("@/core/auth/AuthProvider", () => ({
-  useAuth: () => ({ user: { id: "user-a" } }),
-}));
-
 function draft(
   overrides: Partial<BoardDraftAwaitingApproval>,
 ): BoardDraftAwaitingApproval {

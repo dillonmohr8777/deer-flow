@@ -62,30 +62,11 @@ rs.mock("@/core/board", () => ({
   useSendBoardReply: () => ({ mutate: rs.fn(), isPending: false, error: null }),
 }));
 
-rs.mock("@/core/team", () => ({
-  useTeamMembers: () => ({
-    data: [
-      {
-        user_id: "user-a",
-        email: "dillon.mohr@momentum.example",
-        role: "owner",
-      },
-    ],
-    isLoading: false,
-    isError: false,
-    error: null,
-  }),
-}));
-
 rs.mock("@/core/features", () => ({
   useCeoDeskEnabled: () => ({ enabled: true, isLoading: false }),
   // The feeds are Momentum-staff only (f189); these tests exercise a staff
   // caller, matching the agency workspace the real /api/ceo feed routes gate on.
   useMomentumInternalEnabled: mocks.momentumInternalEnabled,
-}));
-
-rs.mock("@/core/auth/AuthProvider", () => ({
-  useAuth: () => ({ user: { id: "user-a" } }),
 }));
 
 function renderBody() {
@@ -112,6 +93,7 @@ describe("CEO Desk live #exec/#fleet feeds (e14 live feeds)", () => {
           {
             id: "m1",
             author_user_id: "user-a",
+            author_display_name: "You",
             body: "ratified cmo for cmo-agent via CEO Desk",
             created_at: "2026-09-30T12:00:00.000Z",
           },
@@ -173,6 +155,7 @@ describe("CEO Desk live #exec/#fleet feeds (e14 live feeds)", () => {
           {
             id: "m1",
             author_user_id: "user-a",
+            author_display_name: "You",
             body: "first",
             created_at: "2026-09-30T12:00:00.000Z",
           },
@@ -190,7 +173,7 @@ describe("CEO Desk live #exec/#fleet feeds (e14 live feeds)", () => {
     expect(scrollIntoView).not.toHaveBeenCalled();
   });
 
-  it("names a fleet-agent's signed message as Momentum, not Former teammate", () => {
+  it("renders the server-resolved author_display_name verbatim (f193)", () => {
     mocks.feeds = {
       exec: {
         channel: "exec",
@@ -199,6 +182,7 @@ describe("CEO Desk live #exec/#fleet feeds (e14 live feeds)", () => {
           {
             id: "m2",
             author_user_id: "fleet-service-account",
+            author_display_name: "Momentum",
             body: "[cmo-agent] pipeline review posted",
             created_at: "2026-09-30T12:00:00.000Z",
           },

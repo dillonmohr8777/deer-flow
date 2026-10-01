@@ -361,6 +361,42 @@ async def test_exec_feed_reads_and_posts(org_world):  # noqa: F811
         assert messages[0]["body"] == "Shipping the Q4 plan today."
 
 
+async def test_feed_resolves_author_display_names(org_world):  # noqa: F811
+    """f193: the feed endpoint itself resolves each message's author name,
+    so the frontend never needs its own ``/api/team/members`` lookup. The
+    poster always sees "You"; another admin reading the same message sees
+    the poster's own name (the local part of their email, looked up by id
+    directly rather than filtered to current staff -- a genuinely unlisted
+    or former human author still gets their real name); a fleet agent's
+    signing user id, which matches no user row at all, falls back to
+    "Momentum"."""
+    session_factory = org_world
+    app = _build_app(session_factory)
+    headers_a = auth_headers(USER_A, ORG_S)
+    headers_c = auth_headers(USER_C, ORG_S)
+
+    async with _client(app) as client:
+        posted = await client.post("/api/ceo/channels/exec/messages", json={"body": "Shipping today."}, headers=headers_a)
+        assert posted.status_code == 201, posted.text
+        assert posted.json()["author_display_name"] == "You"
+
+        seen_by_poster = await client.get("/api/ceo/channels/exec/messages", headers=headers_a)
+        assert seen_by_poster.json()["messages"][0]["author_display_name"] == "You"
+
+        seen_by_other_admin = await client.get("/api/ceo/channels/exec/messages", headers=headers_c)
+        assert seen_by_other_admin.json()["messages"][0]["author_display_name"] == USER_A
+
+    team_repo = TeamBoardRepository(session_factory)
+    with acting_as(USER_A, ORG_S):
+        exec_channel = next(c for c in await team_repo.list_channels() if c["slug"] == "exec")
+        await team_repo.add_message(exec_channel["id"], author_user_id="fleet-service-account", body="[cmo-agent] pipeline review posted")
+
+    async with _client(app) as client:
+        after = await client.get("/api/ceo/channels/exec/messages", headers=headers_a)
+        assert after.status_code == 200, after.text
+        assert after.json()["messages"][-1]["author_display_name"] == "Momentum"
+
+
 async def test_feed_post_rejects_a_whitespace_only_body(org_world):  # noqa: F811
     """f193: a body that is only whitespace is empty after the handler's own
     .strip(), so it must 422 the same as a truly empty body (mutant-checked:

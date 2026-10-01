@@ -25,6 +25,7 @@ from deerflow.exec_seats import SeatTransitionError, assert_can_ratify, assert_c
 from deerflow.persistence.board.model import BoardThreadStatus
 from deerflow.persistence.exec_seats.model import AgentSeatStatus
 from deerflow.persistence.organizations.model import OrganizationMemberRow
+from deerflow.persistence.user.model import UserRow
 from deerflow.runtime.user_context import resolve_organization_id
 from deerflow.tools.exec_seat_tools import announce_to_exec
 
@@ -102,6 +103,7 @@ class DailyDigestResponse(BaseModel):
 class CeoFeedMessage(BaseModel):
     id: str
     author_user_id: str
+    author_display_name: str
     body: str
     created_at: str
 
@@ -184,6 +186,35 @@ def _normalize_feed_slug(slug: str) -> str:
 
 def _invalid_feed_channel() -> HTTPException:
     return HTTPException(status_code=404, detail="Only the #exec and #fleet feeds are available here")
+
+
+async def _resolve_author_display_names(author_user_ids: set[str], caller_user_id: str) -> dict[str, str]:
+    """Name each feed message's author for display (f193).
+
+    The caller's own id is always "You". Anyone else is looked up directly by
+    id -- not filtered to current, active staff the way ``/api/team/members``
+    is, since a genuinely unlisted or former human author (left the org,
+    disabled) must still show their own name rather than falling through to
+    the generic fallback -- and named by the local part of their email. An id
+    with no matching user row at all (a fleet agent's signing user id) falls
+    back to "Momentum" rather than implying a departed human.
+    """
+    names = {caller_user_id: "You"}
+    remaining = {uid for uid in author_user_ids if uid != caller_user_id}
+    if remaining:
+        from deerflow.persistence.engine import get_session_factory
+
+        session_factory = get_session_factory()
+        if session_factory is not None:
+            stmt = select(UserRow.id, UserRow.email).where(UserRow.id.in_(remaining))
+            async with session_factory() as session:
+                rows = (await session.execute(stmt)).all()
+            for uid, email in rows:
+                local = email.split("@")[0] if email else ""
+                names[str(uid)] = local or email
+    for uid in remaining:
+        names.setdefault(uid, "Momentum")
+    return names
 
 
 async def _find_feed_channel(team_repo, slug: str) -> dict | None:
@@ -369,7 +400,7 @@ async def get_feed_messages(slug: str, request: Request, limit: int = 200, confi
     own owner/admin requirement on top -- these feeds show the agency's own
     #exec/#fleet chatter, never a client workspace's (f189).
     """
-    await _require_staff_admin(request, config)
+    user_id = await _require_staff_admin(request, config)
     normalized = _normalize_feed_slug(slug)
     if normalized not in _FEED_CHANNEL_SLUGS:
         raise _invalid_feed_channel()
@@ -379,10 +410,11 @@ async def get_feed_messages(slug: str, request: Request, limit: int = 200, confi
     if channel is None:
         return CeoFeedResponse(channel=normalized, exists=False, messages=[])
     messages = await team_repo.list_messages(channel["id"], limit=bounded_limit) or []
+    names = await _resolve_author_display_names({m["author_user_id"] for m in messages}, user_id)
     return CeoFeedResponse(
         channel=normalized,
         exists=True,
-        messages=[CeoFeedMessage(id=m["id"], author_user_id=m["author_user_id"], body=m.get("body", ""), created_at=m.get("created_at", "")) for m in messages],
+        messages=[CeoFeedMessage(id=m["id"], author_user_id=m["author_user_id"], author_display_name=names.get(m["author_user_id"], "Momentum"), body=m.get("body", ""), created_at=m.get("created_at", "")) for m in messages],
     )
 
 
@@ -411,4 +443,6 @@ async def post_feed_message(slug: str, body: CeoFeedPostRequest, request: Reques
     if posted is None:
         raise HTTPException(status_code=404, detail=f"No #{normalized} channel in this organization yet.")
     await record_audit_event(request, action="ceo.feed.post", outcome="success", actor_user_id=user_id, organization_id=resolve_organization_id(), target_type="team_channel", target_id=channel["id"])
-    return CeoFeedMessage(id=posted["id"], author_user_id=posted["author_user_id"], body=posted.get("body", ""), created_at=posted.get("created_at", ""))
+    # The poster is always the signed-in caller, so their own display name is
+    # always "You" here -- no lookup needed.
+    return CeoFeedMessage(id=posted["id"], author_user_id=posted["author_user_id"], author_display_name="You", body=posted.get("body", ""), created_at=posted.get("created_at", ""))

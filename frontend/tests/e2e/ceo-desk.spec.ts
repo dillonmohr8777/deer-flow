@@ -43,6 +43,7 @@ type SeatRow = {
 type FeedMessage = {
   id: string;
   author_user_id: string;
+  author_display_name: string;
   body: string;
   created_at: string;
 };
@@ -211,6 +212,7 @@ async function mockCeoDesk(
       const message: FeedMessage = {
         id: `${slug}-${state.messages.length + 1}`,
         author_user_id: "user-1",
+        author_display_name: "You",
         body: body.body,
         created_at: at(0),
       };
@@ -359,6 +361,7 @@ test.describe("CEO Desk", () => {
         {
           id: "exec-1",
           author_user_id: "user-2",
+          author_display_name: "Momentum",
           body: "[cmo-agent] pipeline review posted to the board",
           created_at: at(-1),
         },
@@ -432,6 +435,7 @@ test.describe("CEO Desk layout", () => {
           {
             id: "exec-1",
             author_user_id: "user-2",
+            author_display_name: "Momentum",
             body: "[cmo-agent] pipeline review posted to the board, a fairly long line of status text to stress the layout",
             created_at: at(-1),
           },
@@ -441,6 +445,7 @@ test.describe("CEO Desk layout", () => {
           {
             id: "fleet-1",
             author_user_id: "user-3",
+            author_display_name: "Momentum",
             body: "[fleet-builder] shipped the migration script",
             created_at: at(-1),
           },

@@ -19,7 +19,6 @@ import {
   WorkspaceContainer,
   WorkspaceHeader,
 } from "@/components/workspace/workspace-container";
-import { useAuth } from "@/core/auth/AuthProvider";
 import { useApproveBoardReply, useSendBoardReply } from "@/core/board";
 import {
   CEO_NEEDS_MY_YES_QUERY_KEY,
@@ -37,12 +36,10 @@ import {
   type SeatRosterEntry,
 } from "@/core/ceo-desk";
 import { useCeoDeskEnabled, useMomentumInternalEnabled } from "@/core/features";
-import { useTeamMembers, type TeamMember } from "@/core/team";
 import { cn } from "@/lib/utils";
 
 import {
   draftClientLabel,
-  feedAuthorLabel,
   formatSeatBurn,
   formatStamp,
   seatKpiLabel,
@@ -432,14 +429,12 @@ const FEED_SLUGS: readonly CeoFeedSlug[] = ["exec", "fleet"];
 
 /**
  * Live #exec and #fleet Team Board feeds, read and reply, right on the CEO
- * Desk. Reuses the Team Board's own staff directory for author names;
- * `/api/team/members` 404s on a workspace with momentum_internal off, which
- * only drops the author labels (feedAuthorLabel falls back to "Momentum"),
- * never the feeds themselves.
+ * Desk. Author names are resolved server-side (f193): the feed endpoint
+ * itself returns each message's `author_display_name` ("You", the author's
+ * own name, or "Momentum" for a fleet agent's signing user id), so this
+ * never depends on the separate `/api/team/members` lookup.
  */
 function FeedsSection() {
-  const { user } = useAuth();
-  const members = useTeamMembers();
   return (
     <section className={styles.section} aria-labelledby="ceo-feeds-heading">
       <h2 id="ceo-feeds-heading" className={styles.sectionTitle}>
@@ -447,27 +442,14 @@ function FeedsSection() {
       </h2>
       <div className={styles.feedGrid}>
         {FEED_SLUGS.map((slug) => (
-          <FeedPanel
-            key={slug}
-            slug={slug}
-            members={members.data}
-            currentUserId={user?.id ?? null}
-          />
+          <FeedPanel key={slug} slug={slug} />
         ))}
       </div>
     </section>
   );
 }
 
-function FeedPanel({
-  slug,
-  members,
-  currentUserId,
-}: {
-  slug: CeoFeedSlug;
-  members: TeamMember[] | undefined;
-  currentUserId: string | null;
-}) {
+function FeedPanel({ slug }: { slug: CeoFeedSlug }) {
   const feed = useCeoFeed(slug);
   const post = usePostCeoFeedMessage(slug);
   const [draft, setDraft] = useState("");
@@ -533,11 +515,7 @@ function FeedPanel({
             <li key={message.id} className={styles.feedMessage}>
               <span className={styles.feedMessageHead}>
                 <span className={styles.author}>
-                  {feedAuthorLabel(
-                    message.author_user_id,
-                    members,
-                    currentUserId,
-                  )}
+                  {message.author_display_name}
                 </span>
                 <time
                   className={styles.feedStamp}

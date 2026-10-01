@@ -61,6 +61,8 @@ export type CeoFeedSlug = "exec" | "fleet";
 export interface CeoFeedMessage {
   id: string;
   author_user_id: string;
+  /** Resolved server-side: "You", the author's own name, or "Momentum". */
+  author_display_name: string;
   body: string;
   created_at: string;
 }

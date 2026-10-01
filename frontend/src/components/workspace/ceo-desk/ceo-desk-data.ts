@@ -1,6 +1,5 @@
 import type { StatusTone } from "@/components/workspace/page-body";
 import type { SeatRosterEntry, SeatStatus } from "@/core/ceo-desk";
-import type { TeamMember } from "@/core/team";
 
 /** Short, locale-aware time; empty for a bad date. Mirrors team-data.ts. */
 export function formatStamp(iso: string, now: Date = new Date()): string {
@@ -62,23 +61,4 @@ const SEAT_STATUS_LABEL: Record<SeatStatus, string> = {
 export function seatStatusLabel(seat: SeatRosterEntry): string {
   const base = SEAT_STATUS_LABEL[seat.status];
   return seat.paused ? `${base}, paused` : base;
-}
-
-/**
- * Name a #exec/#fleet feed message's author. Mirrors team-data.ts's
- * ``authorLabel``, but a fleet-agent's signing user id is never in the
- * staff directory (it signs its own name inside the body as "[agent] ..."),
- * so an unknown author falls back to "Momentum" rather than "Former
- * teammate" (which would misleadingly imply a departed human).
- */
-export function feedAuthorLabel(
-  authorUserId: string,
-  members: readonly TeamMember[] | undefined,
-  currentUserId: string | null | undefined,
-): string {
-  if (currentUserId && authorUserId === currentUserId) return "You";
-  const member = members?.find((m) => m.user_id === authorUserId);
-  if (!member) return "Momentum";
-  const local = member.email.split("@")[0] ?? "";
-  return local || member.email;
 }
