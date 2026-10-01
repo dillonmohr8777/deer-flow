@@ -269,3 +269,19 @@ Tests: `tests/test_workflow_native_runtime.py` 2 new (`WorkflowServiceError("run
 
 ### 2026-09-30 21:20 UTC · designer → reviewer · d11 · handoff
 PR #81 slice 23 (df9f47e1): workflow form paper pass. Look at `frontend/src/components/workspace/workflows/workflow-form.tsx` and `fieldHint` in `workflow-words.ts` (regex over catalog.py's templates; drift guard in `workflow-words.test.ts`). rstest workflow 43/43, workflow-room e2e 8/8, lint/tsc clean.
+
+### 2026-09-30 22:30 UTC · builder → reviewer · e14 · handoff
+PR #125 gained slice 6, commit dd971ea3: composing a board reply inline on the CEO Desk instead of routing to Board. `GET /api/ceo/needs-my-yes` now also returns `approved`-status threads (not just `drafted`), each with a new `status` + `draft_body` field, via a new shared pure helper `deerflow.board.workflow.latest_momo_draft_body()` (also swapped into `board.py`'s own reply-verbatim check, replacing its private duplicate -- no behavior change there, just dedup). `BoardDraftCard` shows the draft body read-only and switches between Approve (`drafted`) and Send reply (`approved`, via `useSendBoardReply` with the exact draft body -- `assert_can_reply`'s verbatim-match rule is untouched).
+Worth a look: `backend/app/gateway/routers/ceo_desk.py:135-161` (the merged drafted+approved fetch, one `list_messages` call per thread -- fine at today's scale, would want batching if a queue ever gets large) and `frontend/src/components/workspace/ceo-desk/ceo-desk.tsx`'s `BoardDraftCard` (status-based branch between Approve/Send).
+Left: the digest's own "drafts waiting" count still only counts `drafted`, not `approved`-awaiting-send (not touched, digest semantics weren't in scope here); no live #exec/#fleet feeds; no mobile Playwright walk yet.
+Tests: `tests/test_ceo_desk_router.py tests/test_ceo_desk_digest.py tests/test_ceo_desk_digest_enforcement.py tests/test_board_router.py` 44/44 (2 new); `-k "board or client or ceo or exec_seat or hiring or hire"` sweep 952 passed/17 skipped/1 failed (pre-existing unrelated `test_client_langfuse_metadata.py` only); ruff check+format clean. `cd frontend && pnpm exec rstest run ceo-desk` 17/17 (3 new dom tests); full `pnpm exec rstest run` 2469/2469 individual tests, 0 new failures (1 pre-existing unrelated `sidecar-delete-gating` crash); `pnpm typecheck`/`eslint`/`prettier --check` on touched files clean.
+
+### 2026-09-30 23:40 UTC · designer → reviewer · d11 slice 24 · handoff
+PR #81 commit 68c0cfda: Browser research on the paper page frame. Look at `frontend/src/components/workspace/browser-research.tsx` (render rewritten; query/mutation logic unchanged except notices through `browserWords`) and `browser-research-words.ts` + its raise-site drift guard in `tests/unit/components/workspace/browser-research-words.test.ts`.
+Tests: `cd frontend && pnpm exec rstest run tests/unit/components/workspace` 704/704; `playwright test browser-research ui-polish-mobile` 38/38; lint/tsc clean.
+
+### 2026-10-01 01:30 UTC · designer → reviewer · f184/f185/f187 · handoff
+PR #81 commit 54708e4d answers review 5373643117. Look at `revealReceipt`/`bringReceipt` and `formNotice`/`receiptNotice` in `browser-research.tsx`, and `sitesAndCodes()` in `browser-research-words.test.ts`. Tests: rstest workspace 706/706, e2e browser-research+ui-polish-mobile 38/38.
+
+### 2026-10-01 01:08 UTC · designer → reviewer · d11 · handoff
+PR #81 slice 25 (02a765bf): install offer docks on the phone tab bar. Look at frontend/src/components/pwa/install-help.module.css (phone block) and workspace-mobile.css (:has rules adding 45px to the bar and --tab-bar-h). Tests: playwright pwa.spec.ts 7/7 (new dock test), ui-polish-mobile 34/34, lint clean. Notes: https://github.com/dillonmohr8777/deer-flow/pull/81#issuecomment-5922656609
