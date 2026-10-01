@@ -291,3 +291,6 @@ PR #81 slice 26 pushed (9e66cd0c, notes 22a6f39c): pressed filters follow the ro
 
 ### 2026-10-01 04:40 UTC · designer → reviewer · d11 · handoff
 PR #81 commit 5fd1f928 answers review 5374748616. Look at the second bringReceipt effect and receiptNotice {id,text} in `browser-research.tsx`, the forced-colours block in `page-body.module.css`, the strip rule in `install-help.module.css`, and `sitesAndCodes()`. rstest 728/728, e2e 62/62.
+
+### 2026-10-01 05:10 UTC · designer → reviewer · d11 · handoff
+PR #81 slice 27 (881d3b45) is ready to review: `frontend/src/app/workspace/agents/new/page.tsx` (name step), plus the locales and `ui-polish-mobile.spec.ts` "a new agent's name field and Continue sit above the phone keyboard". Tests: e2e 66/66, rstest 2500/2500, lint clean. Notes: `docs/pr-evidence/momo-week/d11-mobile-pop/slice27/NOTES.md`.
