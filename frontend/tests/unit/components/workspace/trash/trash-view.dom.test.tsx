@@ -32,6 +32,7 @@ const mocks = rs.hoisted(() => {
     documentsHasNextPage: false,
     retentionDays: 30 as number | undefined,
     activeProjects: [] as Project[],
+    projectsLoading: false,
     fetchNextTrashPage: rs.fn(),
     restoreMutate: rs.fn(),
     purgeMutate: rs.fn(),
@@ -102,11 +103,15 @@ rs.mock("@/core/projects", () => ({
   }),
   useProjects: () => ({
     data: mocks.activeProjects,
-    isLoading: false,
+    isLoading: mocks.projectsLoading,
   }),
 }));
 
-import { TrashView } from "@/components/workspace/trash/trash-view";
+import {
+  RETENTION_ATTENTION_DAYS,
+  retentionDaysLeft,
+  TrashView,
+} from "@/components/workspace/trash/trash-view";
 import { I18nProvider } from "@/core/i18n/context";
 import type { Project } from "@/core/projects/types";
 import type { TrashDocument } from "@/core/trash/types";
@@ -141,6 +146,7 @@ beforeEach(() => {
   mocks.documentsHasNextPage = false;
   mocks.retentionDays = 30;
   mocks.activeProjects = [];
+  mocks.projectsLoading = false;
 });
 
 afterEach(() => {
@@ -313,5 +319,64 @@ describe("TrashView", () => {
     mocks.documents = [makeTrashDocument()];
     render(<TrashView />, { wrapper: Wrapper });
     expect(screen.getByText(/20 days left/)).toBeDefined();
+  });
+
+  it("counts down in whole days and says less than a day once under one", () => {
+    const now = Date.parse("2026-10-01T12:00:00Z");
+    const trashedFor = (daysLeft: number) =>
+      new Date(now - (30 - daysLeft) * 86_400_000).toISOString();
+    expect(retentionDaysLeft(trashedFor(0.4), 30, now)).toBe(0);
+    expect(retentionDaysLeft(trashedFor(1), 30, now)).toBe(1);
+    expect(retentionDaysLeft(trashedFor(1.2), 30, now)).toBe(2);
+    expect(retentionDaysLeft(trashedFor(3), 30, now)).toBe(3);
+    expect(retentionDaysLeft(trashedFor(3.5), 30, now)).toBe(4);
+    expect(retentionDaysLeft(trashedFor(-2), 30, now)).toBe(0);
+  });
+
+  it("tags three days or less as attention, and no more (DESIGN.md)", () => {
+    expect(RETENTION_ATTENTION_DAYS).toBe(3);
+    const ago = (daysLeft: number) =>
+      new Date(Date.now() - (30 - daysLeft) * 86_400_000).toISOString();
+    mocks.documents = [
+      makeTrashDocument({ id: "a", name: "soon.pdf", trashed_at: ago(0.4) }),
+      makeTrashDocument({ id: "b", name: "three.pdf", trashed_at: ago(2.9) }),
+      makeTrashDocument({ id: "c", name: "later.pdf", trashed_at: ago(3.5) }),
+    ];
+    render(<TrashView />, { wrapper: Wrapper });
+    expect(
+      screen.getByText("Less than a day left").getAttribute("data-tone"),
+    ).toBe("attention");
+    expect(screen.getByText("3 days left").getAttribute("data-tone")).toBe(
+      "attention",
+    );
+    expect(
+      screen.getByText("4 days left").getAttribute("data-tone"),
+    ).toBeNull();
+  });
+
+  it("names the permanent delete for assistive tech at every width, and a missing origin says so", () => {
+    mocks.documents = [makeTrashDocument({ trash_origin: null })];
+    render(<TrashView />, { wrapper: Wrapper });
+    const purge = screen.getByRole("button", { name: "Delete permanently" });
+    // Phones hide the word visually only: sr-only, never display:none.
+    const label = within(purge).getByText("Delete permanently");
+    expect(label.className).toMatch(/\bmax-sm:sr-only\b/);
+    expect(label.className).not.toMatch(/(^|\s)(max-sm:)?hidden(\s|$)/);
+    expect(screen.getByText("Project not recorded")).toBeDefined();
+  });
+
+  it("says the project picker is loading as a status, not a blank dialog", async () => {
+    mocks.documents = [makeTrashDocument()];
+    mocks.projectsLoading = true;
+    mocks.restoreMutate.mockImplementation(
+      (
+        _input: { documentId: string; projectId?: string },
+        options: { onError?: (error: Error) => void },
+      ) => options.onError?.(new mocks.MockTrashNotFoundError("gone")),
+    );
+    render(<TrashView />, { wrapper: Wrapper });
+    fireEvent.click(screen.getByRole("button", { name: /Restore/ }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByRole("status")).toBeDefined();
   });
 });

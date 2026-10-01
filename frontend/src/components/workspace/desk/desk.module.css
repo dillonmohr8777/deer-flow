@@ -75,6 +75,146 @@
 }
 
 /*
+ * Phones: each result is its own paper slip, and the whole slip opens the
+ * receipt, so the tap target is the slip rather than a 20px text link.
+ */
+@media (max-width: 39.99rem) {
+  .slips {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    border-bottom: 0;
+  }
+
+  /* Doubled so the full hairline beats the shared lighter row rule. */
+  .slips.slips > li {
+    position: relative;
+    padding: 0.875rem 1rem;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 2px 5px 3px 6px;
+    box-shadow: 0 1px 0 color-mix(in srgb, var(--foreground) 10%, transparent);
+  }
+
+  .slips.slips > li:nth-child(even) {
+    border-radius: 5px 2px 6px 3px;
+  }
+
+  /*
+   * Slip order: title (two lines), when, the failure reason in full, then
+   * the state and the receipt link on one foot line. The name wrapper steps
+   * aside so its title and reason take their own grid rows.
+   */
+  .slips.slips > li {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "title title"
+      "when when"
+      "reason reason"
+      "status link";
+    gap: 0.125rem 1rem;
+  }
+
+  .slips .name {
+    display: contents;
+  }
+
+  .slips .name > :first-child {
+    display: -webkit-box;
+    grid-area: title;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    font-size: 0.9375rem;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+    white-space: normal;
+  }
+
+  .slips .when {
+    grid-area: when;
+    color: var(--muted-foreground);
+    font-size: 0.8125rem;
+  }
+
+  .slips .sub {
+    grid-area: reason;
+    margin-top: 0.25rem;
+    color: var(--destructive);
+    white-space: normal;
+  }
+
+  .slips .cell:not(.when) {
+    grid-area: status;
+    align-self: center;
+    margin-top: 0.5rem;
+  }
+
+  .slips .link {
+    grid-area: link;
+    align-self: center;
+    margin-top: 0.5rem;
+  }
+
+  .slips .link::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+  }
+
+  .slips .link:focus-visible {
+    outline: none;
+  }
+
+  /*
+   * A failed result: the top right corner folds down along a straight
+   * crease and the kraft flap lies over the slip, the same language as a
+   * failed slip on the Command Center dispatch board.
+   */
+  .slips.slips > li[data-failed="true"] {
+    clip-path: polygon(0 0, calc(100% - 48px) 0, 100% 32px, 100% 100%, 0 100%);
+  }
+
+  .slips > li[data-failed="true"] .name > :first-child {
+    padding-inline-end: 2.25rem;
+  }
+
+  .slips .tear {
+    display: block;
+    position: absolute;
+    top: -1px;
+    right: -1px;
+    width: 48px;
+    height: 46px;
+    background: var(--paper-kraft, var(--border));
+    clip-path: polygon(
+      0 0,
+      48px 32px,
+      41px 35px,
+      35px 36px,
+      29px 40px,
+      23px 41px,
+      18px 45px,
+      14px 36px,
+      11px 30px,
+      8px 21px,
+      4px 14px,
+      3px 7px
+    );
+  }
+
+  /* clip-path clips outer rings too, so a torn slip draws focus inside. */
+  .slips > li[data-failed="true"]:has(.link:focus-visible) {
+    outline-offset: -5px;
+  }
+
+  .slips > li:has(.link:focus-visible) {
+    outline: 3px solid var(--ring);
+    outline-offset: 2px;
+  }
+}
+
+/*
  * One row per record at every width. Cells have fixed bases so they line
  * up as columns on desktop; on phones the name takes the line and the
  * self-describing cells wrap under it.
@@ -127,8 +267,93 @@
   text-underline-offset: 4px;
 }
 
+.tear {
+  display: none;
+}
+
+@media (forced-colors: active) {
+  .slips .tear {
+    display: none !important;
+  }
+
+  .slips.slips > li[data-failed="true"] {
+    clip-path: none;
+  }
+}
+
 .muted {
   color: var(--muted-foreground);
+}
+
+/* Agents: each row leads with the agent's Momo, 12px from its name. */
+.face {
+  display: flex;
+  flex: 0 0 auto;
+  margin-right: -0.5rem;
+}
+
+/*
+ * Phones: the face holds a left column and the words fold into three lines,
+ * name, then model and next run, then the last run and its receipt (was four
+ * stacked lines per agent with no face).
+ */
+@media (max-width: 39.99rem) {
+  .agent {
+    display: grid;
+    grid-template-columns: auto auto minmax(0, 1fr) auto;
+    align-items: baseline;
+    gap: 0.125rem 0;
+  }
+
+  .agent > .face {
+    grid-row: 1 / span 3;
+    grid-column: 1;
+    align-self: start;
+    margin-right: 0.75rem;
+  }
+
+  .agent > .name {
+    display: contents;
+  }
+
+  .agent > .name > :first-child {
+    grid-row: 1;
+    grid-column: 2 / -1;
+  }
+
+  .agent > .name > .sub {
+    grid-row: 2;
+    grid-column: 2;
+  }
+
+  .agent > .next {
+    overflow: hidden;
+    grid-row: 2;
+    grid-column: 3 / -1;
+    color: var(--muted-foreground);
+    font-size: 0.8125rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .agent > .next::before {
+    content: "\00b7" / "";
+    padding: 0 0.375rem;
+  }
+
+  .agent > .cell:not(.next) {
+    grid-row: 3;
+    grid-column: 2 / 4;
+  }
+
+  .agent > .link {
+    grid-row: 3;
+    grid-column: 4;
+    justify-self: end;
+    /* A 44px tap target that doesn't grow the row. */
+    margin: -0.75rem 0;
+    padding: 0.75rem 0 0.75rem 1rem;
+  }
 }
 
 /* Agents: the department names a column on wide screens. */

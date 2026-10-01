@@ -91,13 +91,12 @@ test("phone task returns persisted root output and survives reopening", async ({
   await expect(
     page.getByText("Three reviewed launch checks are saved in the workspace."),
   ).toBeVisible();
-  await expect(
-    page.getByText("Turn completed · final output retrieved"),
-  ).toBeVisible();
+  await expect(page.getByRole("status").getByText("Done")).toBeVisible();
+  await expect(page.getByText("Final answer retrieved")).toBeVisible();
   expect(receipts).toHaveLength(1);
   expect(receipts[0]).toMatch(/^[0-9a-f-]{36}$/);
   await page.reload();
-  await page.getByRole("button", { name: "Launch task idle" }).click();
+  await page.getByRole("button", { name: /^Launch task Ready/ }).click();
   await expect(
     page.getByText("Three reviewed launch checks are saved in the workspace."),
   ).toBeVisible();
@@ -114,10 +113,17 @@ test("unconfigured runtime cannot dispatch a paid request", async ({
 }) => {
   const { receipts } = await setup(page, false);
   await page.goto("/workspace/openai");
-  await page.getByLabel("Task for the crew").fill("A task");
+  // The reason is in words, and nothing is offered that could not run.
+  await expect(
+    page.getByText(
+      "OpenAI is not connected on this server. An admin adds the API key.",
+    ),
+  ).toBeVisible();
+  await expect(page.getByText("missing_api_key")).toHaveCount(0);
+  await expect(page.getByLabel("Task for the crew")).toHaveCount(0);
   await expect(
     page.getByRole("button", { name: "Send task", exact: true }),
-  ).toBeDisabled();
+  ).toHaveCount(0);
   expect(receipts).toHaveLength(0);
 });
 
@@ -157,5 +163,54 @@ test("HTTP success with an unresolved admission keeps a second dispatch paused",
   await expect(
     page.getByRole("button", { name: "Send task", exact: true }),
   ).toBeDisabled();
-  await expect(page.getByText(/final output retrieved/)).toHaveCount(0);
+  await expect(page.getByText(/Final answer retrieved/)).toHaveCount(0);
+});
+
+test("phone shows one pane at a time, in words, with focus that follows", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await setup(page);
+  const lost = {
+    ...SUMMARY,
+    id: "lost-session",
+    title: "Pricing table",
+    status: "unknown",
+    last_error: "provider_outcome_unknown",
+  };
+  await page.route("**/api/openai-agents/sessions", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ data: [SUMMARY, lost] }),
+    });
+  });
+  await page.goto("/workspace/openai");
+  const slip = page.getByRole("button", { name: /^Launch task/ });
+  // The list says state and failure in words, never as a stored code.
+  await expect(slip.getByText("Ready")).toBeVisible();
+  await expect(
+    page.getByText(/OpenAI did not confirm what happened/),
+  ).toBeVisible();
+  await expect(page.getByText("provider_outcome_unknown")).toHaveCount(0);
+  await expect(page.getByText("unknown", { exact: true })).toHaveCount(0);
+  const box = await slip.boundingBox();
+  expect(box!.height).toBeGreaterThanOrEqual(44);
+
+  await slip.click();
+  const heading = page.getByRole("heading", { name: "Launch task" });
+  await expect(heading).toBeFocused();
+  // One pane: the page heading and the list step aside for the session.
+  await expect(page.getByRole("heading", { name: "OpenAI crew" })).toBeHidden();
+  await expect(slip).toBeHidden();
+  await expect(page.getByText("MomoBot", { exact: true })).toBeVisible();
+
+  const back = page.getByRole("button", { name: "All sessions" });
+  expect((await back.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  await back.click();
+  await expect(slip).toBeFocused();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
 });

@@ -178,7 +178,9 @@ async function expectComposerGeometryWithDisclaimerReserve(page: Page) {
     };
 
     return {
-      main: findFormByPlaceholder(/how can i assist you/i),
+      main: findFormByPlaceholder(
+        /describe the job|reply, or give the next step/i,
+      ),
       sidecar: findFormByPlaceholder(/deeper follow-up/i),
     };
   });
@@ -250,7 +252,10 @@ async function expectSidecarModelPinnedToSubmit(page: Page) {
     };
 
     return {
-      main: getComposerMetrics(/how can i assist you/i, "Send"),
+      main: getComposerMetrics(
+        /describe the job|reply, or give the next step/i,
+        "Send",
+      ),
       sidecar: getComposerMetrics(/deeper follow-up/i, "Submit"),
     };
   });
@@ -940,7 +945,9 @@ test.describe("Side chat", () => {
     );
     const quoteAttachment = page.getByTestId("conversation-quote-attachment");
     const mainInputForm = page.locator("form").filter({
-      has: page.getByPlaceholder(/how can i assist you/i),
+      has: page.getByPlaceholder(
+        /describe the job|reply, or give the next step/i,
+      ),
     });
     await expect(quoteAttachment).toBeVisible();
     await expect(
@@ -1026,7 +1033,9 @@ test.describe("Side chat", () => {
     await expect(
       sidecarInputForm.getByRole("button", { name: "Ultra", exact: true }),
     ).toBeVisible();
-    const mainInput = page.getByPlaceholder(/how can i assist you/i);
+    const mainInput = page.getByPlaceholder(
+      /describe the job|reply, or give the next step/i,
+    );
     const sidecarInput = page.getByPlaceholder(/deeper follow-up/i);
     await mainInput.fill("Left draft");
     await expect(sidecarInput).toHaveValue("");

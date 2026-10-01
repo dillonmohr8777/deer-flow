@@ -158,3 +158,33 @@ it("says loading, empty and failed plainly", () => {
   fireEvent.click(within(alert).getByRole("button", { name: "Try again" }));
   expect(mocks.tasks.refetch).toHaveBeenCalledTimes(1);
 });
+
+it("says when a task runs in words, with the full date on the element", () => {
+  const next = new Date();
+  next.setDate(next.getDate() + 1);
+  next.setHours(8, 50, 0, 0);
+  mocks.tasks.data = [task({ id: "a", next_run_at: next.toISOString() })];
+  render(<ScheduledTasksPage />, { wrapper: Wrapper });
+  const row = screen.getByTestId("scheduled-task-item-a");
+  const when = within(row).getByText("Tomorrow, 8:50 AM");
+  expect(when.tagName).toBe("TIME");
+  expect(when.getAttribute("dateTime")).toBe(next.toISOString());
+  expect(when.getAttribute("title")).toContain(String(next.getFullYear()));
+  // Selected is edged in royal, never a coloured left stripe.
+  fireEvent.click(row);
+  expect(row.getAttribute("aria-pressed")).toBe("true");
+  expect(row.className).toContain("shadow-[inset_0_0_0_1px_var(--primary)]");
+  expect(row.className).toContain("forced-colors:outline-[color:Highlight]");
+  expect(row.className).not.toContain("border-l");
+});
+
+it("gives <time> a valid dateTime from a microsecond isoformat", () => {
+  mocks.tasks.data = [
+    task({ id: "a", next_run_at: "2026-09-30T08:50:00.123456+00:00" }),
+  ];
+  render(<ScheduledTasksPage />, { wrapper: Wrapper });
+  const time = within(screen.getByTestId("scheduled-task-item-a")).getByText(
+    (_, el) => el?.tagName === "TIME",
+  );
+  expect(time.getAttribute("dateTime")).toBe("2026-09-30T08:50:00.123Z");
+});

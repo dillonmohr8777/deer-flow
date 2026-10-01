@@ -95,7 +95,9 @@ test.describe("Agent chat", () => {
     await page.screenshot({
       path: testInfo.outputPath("display-name-gallery.png"),
     });
-    const textarea = page.getByPlaceholder(/how can i assist you/i);
+    const textarea = page.getByPlaceholder(
+      /describe the job|reply, or give the next step/i,
+    );
     await textarea.fill("Review this code");
     await textarea.press("Enter");
     await expect.poll(() => streamBody).toBeDefined();
@@ -171,7 +173,9 @@ test.describe("Agent chat", () => {
     await page.goto("/workspace/agents/test-agent/chats/new");
 
     // The prompt input textarea should be visible
-    const textarea = page.getByPlaceholder(/how can i assist you/i);
+    const textarea = page.getByPlaceholder(
+      /describe the job|reply, or give the next step/i,
+    );
     await expect(textarea).toBeVisible({ timeout: 15_000 });
     await expect(
       page.getByText("Agents can make mistakes. Check the record.", {
@@ -217,7 +221,9 @@ test.describe("Agent chat", () => {
     await threadLink.click();
     await page.waitForURL(`**/workspace/agents/researcher/chats/${threadId}`);
 
-    const textarea = page.getByPlaceholder(/how can i assist you/i);
+    const textarea = page.getByPlaceholder(
+      /describe the job|reply, or give the next step/i,
+    );
     await expect(textarea).toBeVisible({ timeout: 15_000 });
     await textarea.fill("Continue this research");
     await textarea.press("Enter");
@@ -283,19 +289,23 @@ test.describe("Agent chat", () => {
     mockLangGraphAPI(page, { agents: MOCK_AGENTS });
 
     await page.goto("/workspace/agents/test-agent/chats/new");
-    const firstAgentInput = page.getByPlaceholder(/how can i assist you/i);
+    const firstAgentInput = page.getByPlaceholder(
+      /describe the job|reply, or give the next step/i,
+    );
     await expect(firstAgentInput).toBeVisible({ timeout: 15_000 });
     await firstAgentInput.fill("Draft for the first agent");
 
     await page.goto("/workspace/agents/second-agent/chats/new");
-    const secondAgentInput = page.getByPlaceholder(/how can i assist you/i);
+    const secondAgentInput = page.getByPlaceholder(
+      /describe the job|reply, or give the next step/i,
+    );
     await expect(secondAgentInput).toHaveValue("");
     await secondAgentInput.fill("Draft for the second agent");
 
     await page.goto("/workspace/agents/test-agent/chats/new");
-    await expect(page.getByPlaceholder(/how can i assist you/i)).toHaveValue(
-      "Draft for the first agent",
-    );
+    await expect(
+      page.getByPlaceholder(/describe the job|reply, or give the next step/i),
+    ).toHaveValue("Draft for the first agent");
   });
 
   test("agent chat page shows agent badge", async ({ page }) => {
@@ -421,7 +431,9 @@ test.describe("Agent chat", () => {
     });
 
     await page.goto("/workspace/agents/browser-agent/chats/new");
-    await expect(page.getByPlaceholder(/how can i assist you/i)).toBeVisible({
+    await expect(
+      page.getByPlaceholder(/describe the job|reply, or give the next step/i),
+    ).toBeVisible({
       timeout: 15_000,
     });
     await expect(page.getByTestId("browser-trigger")).toHaveCount(0);

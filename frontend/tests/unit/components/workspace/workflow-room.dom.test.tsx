@@ -6,6 +6,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { useState, type PropsWithChildren } from "react";
 
@@ -30,8 +31,12 @@ rs.mock("@/core/auth/AuthProvider", () => ({
 rs.mock("@/core/static-mode", () => ({
   isStaticWebsiteOnly: () => mocks.static,
 }));
-rs.mock("@/components/ui/sidebar", () => ({
-  SidebarTrigger: () => <button aria-label="Toggle sidebar" />,
+rs.mock("@/components/workspace/workspace-container", () => ({
+  WorkspaceContainer: ({ children }: PropsWithChildren) => (
+    <div>{children}</div>
+  ),
+  WorkspaceHeader: () => <div />,
+  WorkspaceBody: ({ children }: PropsWithChildren) => <main>{children}</main>,
 }));
 rs.mock("@/core/browserbase/api", () => ({
   handOffResearchDownload: mocks.handOff,
@@ -75,11 +80,20 @@ function Wrapper({ children }: PropsWithChildren) {
   if (!clients.includes(client)) clients.push(client);
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 }
+/** The open run's status line, in the detail sheet, not the list row. */
+async function detailSays(text: string) {
+  await waitFor(() =>
+    expect(
+      within(screen.getByLabelText("Workflow run")).getByRole("status")
+        .textContent,
+    ).toBe(text),
+  );
+}
 async function chooseAndRun() {
   fireEvent.click(
     await screen.findByRole("button", { name: /^Synthetic workflow 001/ }),
   );
-  fireEvent.change(screen.getByLabelText("Task brief (required)"), {
+  fireEvent.change(screen.getByLabelText("Task brief"), {
     target: { value: "Actual edited task" },
   });
   fireEvent.click(screen.getByRole("button", { name: "Run workflow" }));
@@ -120,16 +134,16 @@ describe("Workflow room behavior", () => {
       screen.getByRole("button", { name: /^Synthetic workflow 100/ }),
     );
     fireEvent.click(
-      screen.getByRole("button", { name: "Load synthetic example" }),
+      screen.getByRole("button", { name: "Fill in sample inputs" }),
     );
-    await screen.findByText(/Synthetic example loaded/);
+    await screen.findByText(/Sample inputs filled in/);
     expect(
-      screen.getByLabelText<HTMLTextAreaElement>("Task brief (required)").value,
+      screen.getByLabelText<HTMLTextAreaElement>("Task brief").value,
     ).toContain("Synthetic");
     expect(mocks.create).not.toHaveBeenCalled();
     expect(
       screen.getByRole<HTMLOptionElement>("option", {
-        name: "CrewAI (unavailable)",
+        name: "CrewAI (not set up)",
       }).disabled,
     ).toBe(true);
   });
@@ -155,11 +169,10 @@ describe("Workflow room behavior", () => {
     await chooseAndRun();
     await screen.findByText(/The request is unconfirmed/);
     expect(
-      screen.getByLabelText<HTMLTextAreaElement>("Task brief (required)")
-        .disabled,
+      screen.getByLabelText<HTMLTextAreaElement>("Task brief").disabled,
     ).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: "Retry same request" }));
-    await screen.findByText(/completed · LangGraph · acceptance passed/);
+    await detailSays("Accepted · LangGraph");
     expect(mocks.create.mock.calls[0]?.slice(0, 3)).toEqual(
       mocks.create.mock.calls[1]?.slice(0, 3),
     );
@@ -267,22 +280,23 @@ describe("Workflow room behavior", () => {
     render(<WorkflowRoom />, { wrapper: Wrapper });
     fireEvent.click(
       await screen.findByRole("button", {
-        name: /^Synthetic saved run interrupted/,
+        name: /^Synthetic saved run Interrupted/,
       }),
     );
     await screen.findByText(/remaining budget/);
     fireEvent.click(
       screen.getByRole("button", { name: "Resume interrupted run" }),
     );
-    await screen.findByText(/acceptance passed/);
+    await detailSays("Accepted · LangGraph");
     expect(mocks.action).toHaveBeenCalledWith(
       "owned-run",
       "resume",
       "scope-one",
       expect.any(AbortSignal),
     );
-    await screen.findByText("Model gpt-6.1-sol · effort high");
-    await screen.findByText(/Cost unavailable/);
+    await screen.findByText(", high effort", { exact: false });
+    expect(screen.getByText("gpt-6.1-sol").className).toContain("font-mono");
+    await screen.findByText("Unavailable");
     expect(mocks.create).not.toHaveBeenCalled();
   });
   it("renders unaccepted output as plain text and never offers an accepted artifact", async () => {
@@ -296,11 +310,12 @@ describe("Workflow room behavior", () => {
     render(<WorkflowRoom />, { wrapper: Wrapper });
     fireEvent.click(
       await screen.findByRole("button", {
-        name: /^Synthetic saved run completed/,
+        name: /^Synthetic saved run Not accepted/,
       }),
     );
-    await screen.findByText(/output not accepted/);
-    expect(screen.getByText(/Synthetic verified result/).tagName).toBe("PRE");
+    await detailSays("Not accepted · LangGraph");
+    await screen.findByText("Result, not accepted");
+    expect(screen.getByText(/Synthetic verified result/).tagName).toBe("P");
     expect(document.querySelector("script")).toBeNull();
     expect(
       screen.queryByRole("button", { name: "Download accepted artifact" }),
@@ -323,11 +338,11 @@ describe("Workflow room behavior", () => {
     render(<WorkflowRoom />, { wrapper: Wrapper });
     fireEvent.click(
       await screen.findByRole("button", {
-        name: /^Synthetic saved run completed/,
+        name: /^Synthetic saved run Accepted/,
       }),
     );
-    await screen.findByText(/Known minimum: 0 input tokens/);
-    await screen.findByText(/2 attempts have unresolved usage/);
+    await screen.findByText("Input tokens, at least");
+    await screen.findByText(/Known minimum\. 2 attempts have unresolved usage/);
   });
   it("aborts an old owner's artifact and never hands a late download to the browser", async () => {
     let settle: (blob: Blob) => void = () => undefined;
@@ -346,7 +361,7 @@ describe("Workflow room behavior", () => {
     const { rerender } = render(<WorkflowRoom />, { wrapper: Wrapper });
     fireEvent.click(
       await screen.findByRole("button", {
-        name: /^Synthetic saved run completed/,
+        name: /^Synthetic saved run Accepted/,
       }),
     );
     fireEvent.click(
@@ -394,12 +409,248 @@ describe("Workflow room behavior", () => {
     fireEvent.click(
       await screen.findByRole("button", { name: /^Synthetic workflow 010/ }),
     );
-    await screen.findByText(/Public browser evidence is unavailable/);
-    await screen.findByText("You have read-only access.");
+    await screen.findByText(/page capture is not set up/);
+    await screen.findByText(
+      "You can read workflows here, but running them needs more access.",
+    );
     expect(
       screen.getByRole<HTMLButtonElement>("button", { name: "Run workflow" })
         .disabled,
     ).toBe(true);
     expect(mocks.create).not.toHaveBeenCalled();
+  });
+  it("names a failed read in plain words with one next step, never the raw code", async () => {
+    mocks.status.mockRejectedValueOnce(new Error("workflow_request_failed"));
+    render(<WorkflowRoom />, { wrapper: Wrapper });
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("Workflows could not be loaded.");
+    expect(alert.textContent).toContain("The workflow service did not answer.");
+    expect(document.body.textContent).not.toContain("workflow_request_failed");
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    await screen.findByText("Your runs");
+    expect(mocks.status).toHaveBeenCalledTimes(2);
+  });
+  it("hides an unknown server code behind a sentence and keeps a readable one", async () => {
+    mocks.list.mockRejectedValueOnce(new Error("some_internal_code"));
+    render(<WorkflowRoom />, { wrapper: Wrapper });
+    await screen.findByText("Your runs could not be loaded.");
+    expect(document.body.textContent).not.toContain("some_internal_code");
+    await screen.findByText(
+      "The workflow service could not complete this request.",
+    );
+  });
+  it("files each saved run with its state in words, and pins only a running one", async () => {
+    mocks.list.mockResolvedValue({
+      runs: [
+        { ...WORKFLOW_RUN, id: "a", title: "Audit", status: "running" },
+        { ...WORKFLOW_RUN, id: "b", title: "Recap" },
+        {
+          ...WORKFLOW_RUN,
+          id: "c",
+          title: "Site QA",
+          status: "failed",
+          accepted: false,
+          error: "Model-call budget reached before review",
+        },
+      ],
+    });
+    render(<WorkflowRoom />, { wrapper: Wrapper });
+    const running = await screen.findByRole("button", {
+      name: /^Audit Running/,
+    });
+    expect(running.closest("li")?.classList.contains("pinned")).toBe(true);
+    const accepted = screen.getByRole("button", { name: /^Recap Accepted/ });
+    expect(accepted.closest("li")?.classList.contains("pinned")).toBe(false);
+    const failed = screen.getByRole("button", { name: /^Site QA Failed/ });
+    expect(failed.textContent).toContain(
+      "Model-call budget reached before review",
+    );
+    expect(failed.querySelector("time")?.getAttribute("dateTime")).toBe(
+      new Date(WORKFLOW_RUN.created_at).toISOString(),
+    );
+    expect(document.body.textContent).not.toMatch(/\bcompleted ·/);
+  });
+  it("says what will appear when there are no runs and leads to the catalog", async () => {
+    render(<WorkflowRoom />, { wrapper: Wrapper });
+    await screen.findByText("No runs yet");
+    expect(
+      screen
+        .getByRole("link", { name: "Choose a workflow" })
+        .getAttribute("href"),
+    ).toBe("#workflow-catalog");
+    expect(document.getElementById("workflow-catalog")).not.toBeNull();
+  });
+  it("stamps a microsecond run time as a valid <time dateTime>", async () => {
+    mocks.list.mockResolvedValue({
+      runs: [
+        { ...WORKFLOW_RUN, created_at: "2026-09-30T08:00:00.123456+00:00" },
+      ],
+    });
+    render(<WorkflowRoom />, { wrapper: Wrapper });
+    const row = await screen.findByRole("button", {
+      name: /^Synthetic saved run Accepted/,
+    });
+    expect(row.querySelector("time")?.getAttribute("dateTime")).toBe(
+      "2026-09-30T08:00:00.123Z",
+    );
+  });
+  it("gives each code the engine stores its own words in the list and the detail", async () => {
+    const failed = (id: string, error: string) => ({
+      ...WORKFLOW_RUN,
+      id,
+      title: `Run ${id}`,
+      status: "failed" as const,
+      accepted: false,
+      error,
+    });
+    const runs = [
+      failed("a", "workflow_independent_review_rejected"),
+      failed("b", "workflow_call_limit_exceeded"),
+    ];
+    mocks.list.mockResolvedValue({ runs });
+    mocks.read.mockImplementation((id: string) =>
+      Promise.resolve(runs.find((run) => run.id === id)),
+    );
+    render(<WorkflowRoom />, { wrapper: Wrapper });
+    const acceptance = "independent reviewer rejected the draft";
+    const budget = "used all of its model calls";
+    const a = await screen.findByRole("button", { name: /^Run a Failed/ });
+    const b = screen.getByRole("button", { name: /^Run b Failed/ });
+    expect(a.textContent).toContain(acceptance);
+    expect(b.textContent).toContain(budget);
+    fireEvent.click(b);
+    const detail = await screen.findByLabelText("Workflow run");
+    await waitFor(() => expect(detail.textContent).toContain(budget));
+    expect(detail.textContent).not.toContain("workflow_call_limit_exceeded");
+  });
+  it("says a run at its resume limit cannot be resumed again", async () => {
+    const interrupted = {
+      ...WORKFLOW_RUN,
+      status: "interrupted" as const,
+      accepted: false,
+    };
+    mocks.list.mockResolvedValue({ runs: [interrupted] });
+    mocks.read.mockResolvedValue(interrupted);
+    mocks.action.mockRejectedValue(new Error("resume_limit"));
+    render(<WorkflowRoom />, { wrapper: Wrapper });
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: /^Synthetic saved run Interrupted/,
+      }),
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Resume interrupted run" }),
+    );
+    await screen.findByText(/cannot be resumed again/);
+  });
+  it("reads the step journal as one plain row per step, never raw codes or worker ids", async () => {
+    const worker = "wf_3f9a1c0d2e4b5a6978c1d2e3f4a5b6c7";
+    const failed: WorkflowRun = {
+      ...WORKFLOW_RUN,
+      status: "failed",
+      accepted: false,
+      output: null,
+      error: "run_model_budget_exhausted",
+      steps: [
+        {
+          name: "validate",
+          status: "completed",
+          detail: "input_schema_validated",
+        },
+        {
+          name: "plan",
+          status: "running",
+          worker_id: worker,
+          model: "gpt-6.1-sol",
+          effort: "low",
+        },
+        {
+          name: "plan",
+          status: "completed",
+          worker_id: worker,
+          model: "gpt-6.1-sol",
+          effort: "low",
+        },
+        {
+          name: "draft",
+          status: "running",
+          worker_id: worker,
+          model: "gpt-6.1-sol",
+          effort: "medium",
+        },
+        { name: "mystery", status: "completed", detail: "some_internal_code" },
+      ],
+    };
+    mocks.list.mockResolvedValue({ runs: [failed] });
+    mocks.read.mockResolvedValue(failed);
+    render(<WorkflowRoom />, { wrapper: Wrapper });
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: /^Synthetic saved run Failed/,
+      }),
+    );
+    const list = await screen.findByRole("list", {
+      name: "Recorded workflow steps",
+    });
+    const rows = within(list).getAllByRole("listitem");
+    expect(rows.map((row) => row.textContent)).toEqual([
+      "Check the inputsEvery field is present and inside its limits.Done",
+      "Plan the workgpt-6.1-sol, low effortDone",
+      "Draft the resultgpt-6.1-sol, medium effortStopped here",
+      "MysteryDone",
+    ]);
+    const sheet = screen.getByLabelText("Workflow run");
+    expect(sheet.textContent).not.toContain(worker);
+    expect(sheet.textContent).not.toMatch(/_[a-z]+_/);
+    expect(within(sheet).getByText("owned-run").className).toContain(
+      "font-mono",
+    );
+  });
+  it("has words for every workflow_ code the engine raises", async () => {
+    // Codes engine.py raises into a failed run's stored error.
+    const codes = [
+      "workflow_independent_review_rejected",
+      "workflow_output_not_accepted",
+      "workflow_review_criteria_incomplete",
+      "workflow_model_call_failed",
+      "workflow_call_limit_exceeded",
+      "workflow_context_too_large",
+      "workflow_output_provenance_invalid",
+      "workflow_browser_unavailable",
+      "workflow_browser_evidence_invalid",
+      "workflow_usage_receipt_invalid",
+    ];
+    const { explanation } =
+      await import("@/components/workspace/workflows/workflow-words");
+    const words = codes.map((code) => explanation(new Error(code)));
+    for (const text of words) {
+      expect(text).not.toBe(
+        "The workflow service could not complete this request.",
+      );
+    }
+    expect(new Set(words).size).toBe(codes.length);
+  });
+  it("prices a sub-cent run and words an unknown attempt count", async () => {
+    const run = {
+      ...WORKFLOW_RUN,
+      usage: {
+        ...WORKFLOW_RUN.usage,
+        cost: 0.0042,
+        complete: false,
+        unknown_model_calls: 0,
+      },
+    };
+    mocks.list.mockResolvedValue({ runs: [run] });
+    mocks.read.mockResolvedValue(run);
+    render(<WorkflowRoom />, { wrapper: Wrapper });
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: /^Synthetic saved run Accepted/,
+      }),
+    );
+    const detail = await screen.findByLabelText("Workflow run");
+    await waitFor(() => expect(detail.textContent).toContain("Under $0.01"));
+    expect(detail.textContent).toContain("Some attempts have unresolved");
+    expect(detail.textContent).not.toContain("0 attempts");
   });
 });

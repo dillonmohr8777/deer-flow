@@ -337,3 +337,32 @@ describe("ProjectPage rename reconciliation", () => {
     expect(screen.getByRole("button", { name: "Restore" })).toBeDefined();
   });
 });
+
+describe("ProjectPage header", () => {
+  const lede = () => screen.getByRole("banner").querySelector("p");
+
+  it("leads with the first line of the project's brief, no eyebrow", () => {
+    mocks.project = makeProject("Monthly SEO for Acme.\n\nNever quote prices.");
+    render(<ProjectPage />, { wrapper: Wrapper });
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Alpha");
+    expect(lede()?.textContent).toBe("Monthly SEO for Acme.");
+    expect(screen.queryByText("Projects")).toBeNull();
+    expect(screen.getByRole("link", { name: "New chat" })).toBeDefined();
+  });
+
+  it("says where to add a brief when there is none", () => {
+    render(<ProjectPage />, { wrapper: Wrapper });
+    expect(lede()?.textContent).toBe(
+      "No brief yet. Add one under Instructions.",
+    );
+  });
+
+  it("explains the missing New chat on an archived project", () => {
+    mocks.project = { ...makeProject("Monthly SEO"), status: "archived" };
+    render(<ProjectPage />, { wrapper: Wrapper });
+    expect(lede()?.textContent).toBe(
+      "Restore it in Settings to start a new chat.",
+    );
+    expect(screen.queryByRole("link", { name: "New chat" })).toBeNull();
+  });
+});

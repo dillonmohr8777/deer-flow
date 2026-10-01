@@ -380,7 +380,9 @@ test.describe("Thread message ordering", () => {
       timeout: 15_000,
     });
 
-    const textarea = page.getByPlaceholder(/how can i assist you/i);
+    const textarea = page.getByPlaceholder(
+      /describe the job|reply, or give the next step/i,
+    );
     await textarea.fill("final-turn question");
     await textarea.press("Enter");
 

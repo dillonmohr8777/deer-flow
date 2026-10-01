@@ -3,6 +3,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 
 import { MomentumGlyph } from "@/components/workspace/command-center/momentum-glyph";
 import { MomoAvatar } from "@/components/workspace/command-center/momo-avatar";
+import { DEPARTMENTS } from "@/components/workspace/desk/desk-data";
 
 // Dillon Brain's pulse reads appearance state; every other slug ignores it.
 const appearance = rs.hoisted(() => ({
@@ -273,6 +274,50 @@ describe("MomoAvatar", () => {
       const imgs = container.querySelectorAll("img");
       expect(imgs).toHaveLength(1);
       expect(imgs[0]?.getAttribute("src")).toBe("/momentum/brain/flat.webp");
+      unmount();
+    }
+  });
+  it("gives the Desk's fleet templates their canon Momo, a monogram only where none fits", () => {
+    const expected: Record<string, string | null> = {
+      "chief-of-staff": null,
+      "delivery-auditor": "verifier",
+      "research-swarm": "research",
+      "muse-scout": "research",
+      "job-radar": "research",
+      "marketing-lead": "growth",
+      "seo-geo-strategist": "growth",
+      "content-studio": null,
+      "paid-media-analyst": "analytics",
+      "outreach-drafter": "growth",
+      "eng-lead": "engineer",
+      "reliability-scout": "reliability",
+      "qa-critic": "qa",
+      "web-designer": "builder",
+      "web-builder": "builder",
+      "video-director": null,
+      "video-editor": null,
+      "momo-concierge": "client-success",
+      "client-reporter": "client-success",
+      "revenue-ops": "revenue",
+      "brain-curator": null,
+    };
+    // Every Desk department id is covered here, so a new one must be decided.
+    expect(Object.keys(expected).sort()).toEqual(
+      DEPARTMENTS.flatMap(([, ids]) => ids).sort(),
+    );
+    for (const [id, slug] of Object.entries(expected)) {
+      const { container, unmount } = render(
+        <MomoAvatar agent={{ name: id, display_name: id }} size={40} />,
+      );
+      expect({
+        id,
+        src: container.querySelector("img")?.getAttribute("src") ?? null,
+        glyph: Boolean(container.querySelector("svg[data-momentum-glyph]")),
+      }).toEqual({
+        id,
+        src: slug ? `/momentum/momos/${slug}.svg` : null,
+        glyph: slug === null,
+      });
       unmount();
     }
   });

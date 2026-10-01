@@ -31,7 +31,13 @@ export function WorkspaceContainer({
   ...props
 }: React.ComponentProps<"div">) {
   return (
-    <div className={cn("flex h-screen w-full flex-col", className)} {...props}>
+    <div
+      className={cn(
+        "flex h-[calc(100vh-var(--tab-bar-h))] w-full flex-col",
+        className,
+      )}
+      {...props}
+    >
       {children}
     </div>
   );
@@ -139,6 +145,7 @@ export function nameOfSegment(
     projects: t.projects.title,
     trash: t.trash.title,
     "command-center": "Command Center",
+    openai: "OpenAI crew",
   };
   // Unknown sections read as words in sentence case, never as a raw slug
   // ("Scheduled-tasks" was the old fallback).

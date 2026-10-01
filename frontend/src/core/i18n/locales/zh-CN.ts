@@ -157,6 +157,7 @@ export const zhCN: Translations = {
     export: "导出",
     exportAsMarkdown: "导出为 Markdown",
     exportAsJSON: "导出为 JSON",
+    chatActions: "对话操作",
     exportSuccess: "对话已导出",
     exportFailed: "导出对话失败。",
     regenerate: "重新生成",
@@ -309,7 +310,9 @@ export const zhCN: Translations = {
 
   // Input Box
   inputBox: {
-    placeholder: "今天我能为你做些什么？",
+    placeholder: "描述任务，以及怎样算完成",
+    replyPlaceholder: "回复，或给出下一步",
+    messageLabel: "消息",
     disclaimer: "智能体可能会出错，请核查记录。",
     createSkillPrompt:
       "我们一起用 skill-creator 技能来创建一个技能吧。先问问我希望这个技能能做什么。",
@@ -495,6 +498,8 @@ export const zhCN: Translations = {
     instructionsPlaceholder: "让 Agent 始终了解该项目的背景、目标与约定…",
     instructionsByteCount: (used, max) => `${used} / ${max} 字节`,
     instructionsTooLong: (max) => `指令超过 ${max} 字节上限，请精简后再保存。`,
+    briefMissing: "还没有项目简介，可在“指令”中添加。",
+    archivedLede: "在“设置”中恢复后即可开始新对话。",
     instructionsSaved: "已保存",
     instructionsSaveFailed: "保存指令失败",
     documentsShelf: "文件架",
@@ -552,7 +557,7 @@ export const zhCN: Translations = {
     loadFailed: "无法加载回收站",
     retry: "重试",
     originProject: (projectName) => `来自 ${projectName}`,
-    unknownProject: "未知项目",
+    unknownProject: "来源项目未记录",
     retentionLeft: (days) =>
       days <= 0 ? "保留期不足 1 天" : `剩余 ${days} 天`,
     retentionNote: (days) =>
@@ -843,9 +848,10 @@ export const zhCN: Translations = {
     createPageTitle: "设计你的智能体",
     createPageSubtitle: "描述你想要的智能体，我来帮你通过对话创建。",
     nameStepTitle: "给新智能体起个名字",
-    nameStepHint:
-      "只允许字母、数字和连字符，存储时自动转为小写（例如 code-reviewer）",
-    nameStepPlaceholder: "例如 code-reviewer",
+    nameStepHint: "只允许字母、数字和连字符，存储时自动转为小写。",
+    nameStepPlaceholder: "例如 seo-auditor",
+    nameStepNext:
+      "接下来，你在对话中描述这份工作，MomoBot 和你一起起草这个智能体。你确认后才会保存。",
     nameStepContinue: "继续",
     nameStepInvalidError: "名称无效，只允许字母、数字和连字符",
     nameStepAlreadyExistsError: "已存在同名智能体",
@@ -860,16 +866,16 @@ export const zhCN: Translations = {
     saving: "正在保存智能体...",
     saveRequested:
       "已提交保存请求，MomoBot 正在根据当前对话生成并保存初版智能体。",
-    saveHint:
-      "你可以在右上角的菜单里随时保存这个智能体，就算目前还只是初稿也可以。",
+    chatStepEyebrow: "新智能体",
+    chatStepPlaceholder: "描述这个智能体要做的工作，以及怎样才算完成",
+    chatStepSaved: "已保存",
     saveCommandMessage:
       "请现在根据我们目前已经讨论的全部内容保存这个自定义智能体。这就是我明确的保存确认。如果仍有少量细节缺失，请根据上下文做出合理假设，生成一份简洁的英文初始 SOUL.md，并直接调用 setup_agent，不要再向我索要额外确认。",
     agentCreatedPendingRefresh:
       "智能体已创建，但 MomoBot 暂时还无法读取到它。请稍后刷新当前页面。",
-    more: "更多操作",
-    agentCreated: "智能体已创建！",
+    agentCreated: "{name} 已加入你的智能体列表，可以接手第一份工作了。",
     startChatting: "开始对话",
-    backToGallery: "返回 Gallery",
+    backToGallery: "返回智能体列表",
     settings: "智能体设置",
     settingsTitle: "智能体设置",
     settingsDisplayName: "显示名称",
@@ -934,6 +940,7 @@ export const zhCN: Translations = {
 
   // Chats
   chats: {
+    lede: "你与团队的所有会话，最新的在最前。",
     deleteChat: "删除对话",
     deleteConfirm: (title) =>
       `确定删除“${title}”吗？这将删除对话及其文件，此操作不可撤销。`,
@@ -951,12 +958,24 @@ export const zhCN: Translations = {
       "归档会保留消息和文件，不会停止运行中的任务或暂停定时任务。",
     undoArchive: "撤销",
     noArchivedChats: "暂无已归档会话",
+    noArchivedChatsHint:
+      "从最近会话归档的对话会连同消息和文件保存在这里，随时可以恢复。",
+    backToRecentChats: "返回最近会话",
+    loadingChats: "正在加载会话",
     noMatchingChats: "已加载的会话中没有匹配结果",
     loadChatsFailed: "加载会话失败",
     retryLoadChats: "重试",
     searchChats: "搜索对话",
     branchLabel: (title, parentTitle) => `${title}，分叉自 ${parentTitle}`,
     loadMoreToSearch: "加载更多以搜索更早的对话",
+    dayGroups: {
+      pinned: "已置顶",
+      today: "今天",
+      yesterday: "昨天",
+      lastWeek: "过去 7 天",
+      earlierIn: (month) => `${month}早些时候`,
+      undated: "日期未记录",
+    },
     loadingMore: "正在加载...",
     loadOlderChats: "加载更早的对话",
     pinChat: "置顶对话",

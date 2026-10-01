@@ -19,6 +19,8 @@ import { cn } from "@/lib/utils";
 
 import { AgentCard } from "./agent-card";
 
+import styles from "./agent-gallery.module.css";
+
 export function AgentGallery() {
   const { t } = useI18n();
   const { motionOn } = useWorkspaceAppearance();
@@ -31,7 +33,12 @@ export function AgentGallery() {
 
   return (
     <div
-      className={cn("momentum-page flex size-full flex-col", pageStyles.page)}
+      className={cn(
+        // Phones scroll the whole page, so the header leaves with it rather
+        // than holding a fifth of the screen above the roster.
+        "momentum-page flex size-full flex-col max-sm:overflow-y-auto",
+        pageStyles.page,
+      )}
     >
       {/* Page header. Agents has no WorkspaceHeader, so it carries the same
           phone-only sidebar trigger the other workspace pages do. */}
@@ -56,7 +63,7 @@ export function AgentGallery() {
       </div>
 
       {/* Roster */}
-      <div className="flex-1 overflow-y-auto px-4 pb-28 sm:px-8">
+      <div className="flex-1 overflow-y-auto px-4 pb-28 max-sm:flex-none max-sm:overflow-visible sm:px-8">
         <div className="mx-auto w-full max-w-5xl">
           {isLoading ? (
             <WorkingState label={t.common.loading} />
@@ -100,7 +107,7 @@ export function AgentGallery() {
               </EmptyState>
             </>
           ) : (
-            <ul className={cn("mt-2 divide-y", pageStyles.rows)}>
+            <ul className={cn("mt-2 divide-y", pageStyles.rows, styles.roster)}>
               {agents.map((agent) => (
                 <AgentCard key={agent.name} agent={agent} />
               ))}

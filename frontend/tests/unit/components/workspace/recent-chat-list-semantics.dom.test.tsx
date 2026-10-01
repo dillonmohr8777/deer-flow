@@ -117,7 +117,7 @@ describe("RecentChatList", () => {
     expect(metas).toHaveLength(2);
     for (const meta of metas) {
       expect(meta.querySelector("time")?.getAttribute("dateTime")).toBe(
-        "2026-01-02T00:00:00Z",
+        "2026-01-02T00:00:00.000Z",
       );
     }
     expect(metas[1]?.textContent).toContain("Omega relaunch");
