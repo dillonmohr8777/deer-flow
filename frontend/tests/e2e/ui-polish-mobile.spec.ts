@@ -683,6 +683,55 @@ test.describe("UI polish mobile regressions", () => {
     ).toBe(0);
   });
 
+  // d11 slice 28: after Continue the page is a conversation, so the composer
+  // owns the bottom edge and the tab bar steps aside (it sat under the
+  // composer). The header names the agent being built and keeps Save, the
+  // page's one action, in the open instead of behind a "..." menu.
+  test("the new agent chat step names the agent, shows Save and drops the tab bar", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    mockLangGraphAPI(page);
+    await page.route("**/api/agents/check?*", (route) =>
+      route.fulfill({ json: { available: true, name: "seo-auditor" } }),
+    );
+    await page.goto("/workspace/agents/new");
+    await expect(page.getByTestId("workspace-tab-bar")).toBeVisible();
+
+    await page.getByLabel("Name your new agent").fill("seo-auditor");
+    await page.getByRole("button", { name: "Continue" }).click();
+
+    await expect(
+      page.getByRole("heading", { level: 1, name: "seo-auditor" }),
+    ).toBeVisible();
+    await expect(page.getByText("New agent", { exact: true })).toBeVisible();
+    await expect(page.getByTestId("workspace-tab-bar")).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "More actions" }),
+    ).toHaveCount(0);
+    const save = page.getByRole("button", { name: "Save agent" });
+    await expect(save).toBeEnabled();
+    const box = (await save.boundingBox())!;
+    expect(box.height).toBeGreaterThanOrEqual(44);
+    expect(box.x + box.width).toBeLessThanOrEqual(390 - 16);
+    // One header row: Save sits beside the name, not wrapped under it.
+    const header = (await page.locator("header").first().boundingBox())!;
+    expect(box.y + box.height).toBeLessThanOrEqual(header.y + header.height);
+    await expect(
+      page.getByPlaceholder("Describe the job this agent does"),
+    ).toBeVisible();
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth - window.innerWidth,
+      ),
+    ).toBe(0);
+
+    // Leaving the chat step hands the edge back to the bar.
+    await page.getByRole("link", { name: "Back to Agents" }).click();
+    await page.waitForURL("**/workspace/agents");
+    await expect(page.getByTestId("workspace-tab-bar")).toBeVisible();
+  });
+
   test("?settings=security opens the Security section", async ({ page }) => {
     mockLangGraphAPI(page);
 

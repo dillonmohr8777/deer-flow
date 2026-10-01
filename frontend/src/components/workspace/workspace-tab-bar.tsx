@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useSyncExternalStore } from "react";
 
 import { useSidebar } from "@/components/ui/sidebar";
 import { useDeskEnabled } from "@/core/features";
@@ -28,6 +29,44 @@ export function isConversationPath(pathname: string) {
   return /\/chats\/(?!new$)[^/]+/.test(pathname);
 }
 
+// A page whose composer owns the bottom edge without a conversation URL (the
+// New agent chat step stays on /workspace/agents/new) claims the edge here.
+let bottomEdgeClaims = 0;
+const bottomEdgeListeners = new Set<() => void>();
+
+function emitBottomEdge() {
+  for (const listener of bottomEdgeListeners) listener();
+}
+
+/** Claim the bottom edge for a composer; returns the release. */
+export function claimBottomEdge() {
+  bottomEdgeClaims += 1;
+  emitBottomEdge();
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    bottomEdgeClaims -= 1;
+    emitBottomEdge();
+  };
+}
+
+export function isBottomEdgeClaimed() {
+  return bottomEdgeClaims > 0;
+}
+
+function subscribeBottomEdge(listener: () => void) {
+  bottomEdgeListeners.add(listener);
+  return () => {
+    bottomEdgeListeners.delete(listener);
+  };
+}
+
+/** While `active`, the tab bar steps aside as it does inside a conversation. */
+export function useComposerOwnsBottomEdge(active: boolean) {
+  useEffect(() => (active ? claimBottomEdge() : undefined), [active]);
+}
+
 const TAB =
   "relative flex min-h-14 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-1 pt-1.5 pb-1 text-xs font-bold outline-offset-[-3px]";
 
@@ -41,8 +80,13 @@ export function WorkspaceTabBar() {
   const pathname = usePathname();
   const { isMobile, openMobile, setOpenMobile } = useSidebar();
   const { enabled: deskEnabled } = useDeskEnabled();
+  const edgeClaimed = useSyncExternalStore(
+    subscribeBottomEdge,
+    isBottomEdgeClaimed,
+    () => false,
+  );
 
-  if (!isMobile || isConversationPath(pathname)) return null;
+  if (!isMobile || edgeClaimed || isConversationPath(pathname)) return null;
 
   const tabs: Tab[] = [
     {

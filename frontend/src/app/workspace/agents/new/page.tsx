@@ -1,15 +1,9 @@
 "use client";
 
-import {
-  ArrowLeftIcon,
-  CheckCircleIcon,
-  InfoIcon,
-  MoreHorizontalIcon,
-  SaveIcon,
-} from "lucide-react";
+import { ArrowLeftIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import {
@@ -18,20 +12,14 @@ import {
   PromptInputSubmit,
   PromptInputTextarea,
 } from "@/components/ai-elements/prompt-input";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { ArtifactsProvider } from "@/components/workspace/artifacts";
 import { MessageList } from "@/components/workspace/messages";
 import { ThreadContext } from "@/components/workspace/messages/context";
-import { pageStyles } from "@/components/workspace/page-body";
+import { pageStyles, StatusTag } from "@/components/workspace/page-body";
+import { useComposerOwnsBottomEdge } from "@/components/workspace/workspace-tab-bar";
 import type { Agent } from "@/core/agents";
 import {
   AgentNameCheckError,
@@ -45,7 +33,6 @@ import {
   type HumanInputRequest,
   type HumanInputResponse,
 } from "@/core/messages/human-input";
-import { safeLocalStorage } from "@/core/settings/local";
 import { hasToolResult, useThreadStream } from "@/core/threads/hooks";
 import { uuid } from "@/core/utils/uuid";
 import { isIMEComposing } from "@/lib/ime";
@@ -55,7 +42,6 @@ type Step = "name" | "chat";
 type SetupAgentStatus = "idle" | "requested" | "completed";
 
 const NAME_RE = /^[A-Za-z0-9-]+$/;
-const SAVE_HINT_STORAGE_KEY = "deerflow.agent-create.save-hint-seen";
 const AGENT_READ_RETRY_DELAYS_MS = [200, 500, 1_000, 2_000];
 
 function wait(ms: number) {
@@ -88,7 +74,6 @@ export default function NewAgentPage() {
   const [isCheckingName, setIsCheckingName] = useState(false);
   const [agentName, setAgentName] = useState("");
   const [agent, setAgent] = useState<Agent | null>(null);
-  const [showSaveHint, setShowSaveHint] = useState(false);
   const [setupAgentStatus, setSetupAgentStatus] =
     useState<SetupAgentStatus>("idle");
 
@@ -119,16 +104,9 @@ export default function NewAgentPage() {
       });
     },
   });
-  useEffect(() => {
-    if (typeof window === "undefined" || step !== "chat") {
-      return;
-    }
-    if (safeLocalStorage.getItem(SAVE_HINT_STORAGE_KEY) === "1") {
-      return;
-    }
-    setShowSaveHint(true);
-    safeLocalStorage.setItem(SAVE_HINT_STORAGE_KEY, "1");
-  }, [step]);
+  // The composer owns the bottom edge in the chat step, as in any
+  // conversation, so the phone tab bar steps aside.
+  useComposerOwnsBottomEdge(step === "chat");
 
   const handleConfirmName = useCallback(async () => {
     const trimmed = nameInput.trim();
@@ -266,7 +244,6 @@ export default function NewAgentPage() {
     }
 
     setSetupAgentStatus("requested");
-    setShowSaveHint(false);
     try {
       await sendMessage(
         threadId,
@@ -290,46 +267,63 @@ export default function NewAgentPage() {
     threadId,
   ]);
 
+  const saved = Boolean(agent);
+  const saveDisabled = saved || thread.isLoading || setupAgentStatus !== "idle";
+
+  // The chat step heads itself with the agent being built (the name step
+  // already chose it) and keeps Save, the page's one action, in the open:
+  // it used to sit behind a "..." menu that a banner had to explain.
   const header = (
-    <header className="flex shrink-0 items-center justify-between gap-3 border-b px-4 py-3">
-      <div className="flex items-center gap-3">
-        <SidebarTrigger className="md:hidden" />
-        <Button
-          variant="ghost"
-          size="icon-sm"
+    <header className="flex shrink-0 items-center gap-1 border-b px-4 py-2 sm:gap-2 sm:py-3">
+      <SidebarTrigger className="-ml-2 md:hidden" />
+      <Button
+        asChild
+        variant="ghost"
+        size="icon-sm"
+        className="max-md:-ml-1 md:-ml-2"
+      >
+        <Link
+          href="/workspace/agents"
           aria-label={t.agents.backToGallery}
           title={t.agents.backToGallery}
-          onClick={() => router.push("/workspace/agents")}
         >
           <ArrowLeftIcon className="h-4 w-4" />
-        </Button>
-        <h1 className="text-sm font-semibold">{t.agents.createPageTitle}</h1>
+        </Link>
+      </Button>
+      {/* The builder Momo again: the same new teammate the name step drew. */}
+      <img
+        src="/momentum/momos/builder.svg"
+        alt=""
+        aria-hidden="true"
+        width={32}
+        height={32}
+        className="size-8 shrink-0"
+      />
+      <div className="min-w-0 flex-1 pl-1">
+        <p className={cn(pageStyles.eyebrow, "leading-4")}>
+          {t.agents.chatStepEyebrow}
+        </p>
+        <h1
+          className="truncate text-sm leading-5 font-semibold"
+          title={agentName}
+        >
+          {agentName}
+        </h1>
       </div>
-
-      {step === "chat" ? (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon-sm" aria-label={t.agents.more}>
-              <MoreHorizontalIcon className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem
-              onSelect={() => void handleSaveAgent()}
-              disabled={[
-                Boolean(agent),
-                thread.isLoading,
-                setupAgentStatus !== "idle",
-              ].some(Boolean)}
-            >
-              <SaveIcon className="h-4 w-4" />
-              {setupAgentStatus === "requested"
-                ? t.agents.saving
-                : t.agents.save}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      ) : null}
+      {saved ? (
+        <StatusTag tone="ok" className="shrink-0">
+          {t.agents.chatStepSaved}
+        </StatusTag>
+      ) : (
+        <Button
+          size="sm"
+          className="shrink-0 max-sm:h-11 max-sm:px-4"
+          onClick={() => void handleSaveAgent()}
+          disabled={saveDisabled}
+        >
+          {setupAgentStatus === "requested" ? t.agents.saving : t.agents.save}
+        </Button>
+      )}
     </header>
   );
 
@@ -450,20 +444,9 @@ export default function NewAgentPage() {
           {header}
 
           <main className="flex min-h-0 flex-1 flex-col">
-            {showSaveHint ? (
-              <div className="px-4 pt-4">
-                <div className="mx-auto w-full max-w-(--container-width-md)">
-                  <Alert>
-                    <InfoIcon className="h-4 w-4" />
-                    <AlertDescription>{t.agents.saveHint}</AlertDescription>
-                  </Alert>
-                </div>
-              </div>
-            ) : null}
-
             <div className="flex min-h-0 flex-1 justify-center">
               <MessageList
-                className={cn("size-full", showSaveHint ? "pt-4" : "pt-10")}
+                className="size-full pt-6 sm:pt-10"
                 threadId={threadId}
                 thread={thread}
                 onSubmitHumanInput={
@@ -472,14 +455,26 @@ export default function NewAgentPage() {
               />
             </div>
 
-            <div className="bg-background flex shrink-0 justify-center border-t px-4 py-4">
+            <div className="bg-background flex shrink-0 justify-center border-t px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:py-4">
               <div className="w-full max-w-(--container-width-md)">
                 {agent ? (
-                  <div className="flex flex-col items-center gap-4 rounded-2xl border py-8 text-center">
-                    <CheckCircleIcon className="text-primary h-10 w-10" />
-                    <p className="font-semibold">{t.agents.agentCreated}</p>
-                    <div className="flex gap-2">
+                  // Saved: a cream-hi sheet that says what happened and
+                  // offers the two ways on, not a centred check mark.
+                  <div
+                    role="status"
+                    className={cn(
+                      pageStyles.sheet,
+                      "flex flex-col gap-4 border p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5",
+                    )}
+                  >
+                    {/* The header already says Saved; the sheet says where
+                        the agent went and what to do with it. */}
+                    <p className="min-w-0 text-sm font-semibold">
+                      {t.agents.agentCreated.replace("{name}", agentName)}
+                    </p>
+                    <div className="flex flex-col gap-2 sm:flex-row">
                       <Button
+                        className="max-sm:h-11"
                         onClick={() =>
                           router.push(
                             `/workspace/agents/${agentName}/chats/new`,
@@ -490,6 +485,7 @@ export default function NewAgentPage() {
                       </Button>
                       <Button
                         variant="outline"
+                        className="max-sm:h-11"
                         onClick={() => router.push("/workspace/agents")}
                       >
                         {t.agents.backToGallery}
@@ -503,7 +499,7 @@ export default function NewAgentPage() {
                   >
                     <PromptInputTextarea
                       autoFocus
-                      placeholder={t.agents.createPageSubtitle}
+                      placeholder={t.agents.chatStepPlaceholder}
                       disabled={thread.isLoading}
                     />
                     <PromptInputFooter className="justify-end">

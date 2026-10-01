@@ -929,14 +929,15 @@ export const enUS: Translations = {
     saving: "Saving agent...",
     saveRequested:
       "Save requested. MomoBot is generating and saving an initial version now.",
-    saveHint:
-      "You can save this agent at any time from the top-right menu, even if this is only a first draft.",
+    chatStepEyebrow: "New agent",
+    chatStepPlaceholder:
+      "Describe the job this agent does and what done looks like",
+    chatStepSaved: "Saved",
     saveCommandMessage:
       "Please save this custom agent now based on everything we've discussed so far. Treat this as my explicit confirmation to save. If some details are still missing, make reasonable assumptions, generate a concise first SOUL.md in English, and call setup_agent immediately without asking me for more confirmation.",
     agentCreatedPendingRefresh:
       "The agent was created, but MomoBot couldn't load it yet. Please refresh this page in a moment.",
-    more: "More actions",
-    agentCreated: "Agent created!",
+    agentCreated: "{name} is in your Agents, ready for its first job.",
     startChatting: "Start chatting",
     backToGallery: "Back to Agents",
     settings: "Agent settings",

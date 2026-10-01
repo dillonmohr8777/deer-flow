@@ -792,10 +792,11 @@ export interface Translations {
     save: string;
     saving: string;
     saveRequested: string;
-    saveHint: string;
+    chatStepEyebrow: string;
+    chatStepPlaceholder: string;
+    chatStepSaved: string;
     saveCommandMessage: string;
     agentCreatedPendingRefresh: string;
-    more: string;
     agentCreated: string;
     startChatting: string;
     backToGallery: string;
