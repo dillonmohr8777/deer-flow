@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import importlib.util
 import ipaddress
 import json
 import math
@@ -17,7 +18,7 @@ import subprocess
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 from urllib.parse import urlsplit
 from uuid import UUID
 
@@ -87,7 +88,7 @@ class BrowserbaseAPI:
     async def usage(self) -> dict:
         return await self._request("GET", f"/v1/projects/{self.project_id}/usage")
 
-    async def create(self, policy: QaPolicy) -> dict:
+    async def create(self, policy: QaPolicy, *, reservation_id: str | None = None) -> dict:
         return await self._request(
             "POST",
             "/v1/sessions",
@@ -97,7 +98,7 @@ class BrowserbaseAPI:
                 "keepAlive": False,
                 "proxies": False,
                 "browserSettings": {"allowedDomains": list(policy.allowed_hosts), "recordSession": False, "logSession": False, "solveCaptchas": False, "blockAds": True},
-                "userMetadata": {"purpose": "momobot-public-readonly-qa"},
+                "userMetadata": {"purpose": "momobot-public-readonly-qa", **({"reservation_id": reservation_id} if reservation_id else {})},
             },
         )
 
@@ -107,8 +108,45 @@ class BrowserbaseAPI:
     async def retrieve(self, session_id: str) -> dict:
         return await self._request("GET", f"/v1/sessions/{UUID(session_id)}")
 
+    async def agent_runs(self, status: str) -> dict:
+        return await self._request("GET", f"/v1/agents/runs?status={status}&limit=1")
 
-async def capture_page(connect_url: str, policy: QaPolicy, target: str, output: Path) -> list[dict]:
+    async def start_agent_run(self, agent_id: str, task: str, *, reservation_id: str | None = None) -> dict:
+        # No context, proxies or Verified mode: signed-out public browsing only. Only documented
+        # request fields: the "Run an agent" reference lists no `metadata` (that is a sessions-only
+        # field -- see `create()`'s `userMetadata`); `variables` is documented, though whether the
+        # provider echoes it back in the AgentRun response is unconfirmed, so reservation ownership is
+        # never trusted on that alone -- see `reconcile_unbound_native_run`'s `agentId`+`createdAt`
+        # proof, which needs no echo at all.
+        body: dict = {"agentId": str(UUID(agent_id)), "task": task, "browserSettings": {"proxies": False}}
+        if reservation_id:
+            body["variables"] = {"reservation_id": reservation_id}
+        return await self._request("POST", "/v1/agents/runs", body)
+
+    async def agent_run(self, run_id: str) -> dict:
+        return await self._request("GET", f"/v1/agents/runs/{UUID(run_id)}")
+
+    async def stop_agent_run(self, run_id: str) -> dict:
+        return await self._request("POST", f"/v1/agents/runs/{UUID(run_id)}/stop")
+
+    async def agent_run_messages(self, run_id: str) -> dict:
+        return await self._request("GET", f"/v1/agents/runs/{UUID(run_id)}/messages?all=true")
+
+
+def _output_preflight(output: Path, *, create: bool = False) -> None:
+    if output.is_symlink() or (output.exists() and (not output.is_dir() or any(output.iterdir()))):
+        raise ValueError("QA output must be a fresh, empty local directory")
+    if create:
+        output.mkdir(mode=0o700, parents=True, exist_ok=True)
+
+
+def _screenshot_write(path: Path, image: bytes) -> None:
+    with path.open("xb") as handle:
+        handle.write(image)
+    path.chmod(0o600)
+
+
+async def capture_page(connect_url: str, policy: QaPolicy, target: str, output: Path, *, extract_text: bool = False) -> list[dict]:
     from playwright.async_api import async_playwright
 
     endpoint = urlsplit(connect_url)
@@ -173,10 +211,15 @@ async def capture_page(connect_url: str, policy: QaPolicy, target: str, output: 
                 if len(image) > _MAX_SCREENSHOT_BYTES:
                     raise ValueError("QA screenshot exceeds size limit")
                 screenshot = output / f"viewport-{width}.png"
-                with screenshot.open("xb") as handle:
-                    handle.write(image)
-                screenshot.chmod(0o600)
+                await asyncio.to_thread(_screenshot_write, screenshot, image)
                 reports.append({**metrics, "http_status": response.status if response else None, "screenshot": screenshot.name})
+            if extract_text:
+                # Bounded public source material, never model instructions.
+                reports[-1]["public_evidence"] = await page.evaluate("""() => ({
+                    text: (document.body.innerText || '').slice(0,12000),
+                    links: [...document.querySelectorAll('a[href]')].slice(0,40)
+                        .map(a => ({label:(a.textContent || '').slice(0,120),url:a.href}))
+                })""")
             dropdown = {"available": False}
             select = page.locator("select").first
             if await select.count():
@@ -200,15 +243,32 @@ async def capture_page(connect_url: str, policy: QaPolicy, target: str, output: 
 Capture = Callable[[str, QaPolicy, str, Path], Awaitable[list[dict]]]
 
 
-async def run_qa(api: BrowserbaseAPI, target: str, policy: QaPolicy, output: Path, *, capture: Capture = capture_page) -> dict[str, Any]:
+class QaAPI(Protocol):
+    project_id: str
+
+    async def usage(self) -> dict: ...
+
+    async def create(self, policy: QaPolicy, *, reservation_id: str | None = None) -> dict: ...
+
+    async def release(self, session_id: str) -> dict: ...
+
+    async def retrieve(self, session_id: str) -> dict: ...
+
+
+def playwright_available() -> bool:
+    return importlib.util.find_spec("playwright") is not None
+
+
+async def run_qa(api: QaAPI, target: str, policy: QaPolicy, output: Path, *, capture: Capture = capture_page) -> dict[str, Any]:
     policy.validate_url(target, target=True)
-    if output.is_symlink() or (output.exists() and (not output.is_dir() or any(output.iterdir()))):
-        raise ValueError("QA output must be a fresh, empty local directory")
+    await asyncio.to_thread(_output_preflight, output)
     usage = await api.usage()
     minutes = usage.get("browserMinutes")
     if isinstance(minutes, bool) or not isinstance(minutes, (int, float)) or not math.isfinite(minutes) or minutes < 0 or minutes >= policy.max_reported_browser_minutes:
         raise ValueError("Missing, invalid or exhausted browser-usage allowance; no session created")
-    output.mkdir(mode=0o700, parents=True, exist_ok=True)
+    if capture is capture_page and not playwright_available():
+        raise ValueError("Playwright is not installed; no session created")
+    await asyncio.to_thread(_output_preflight, output, create=True)
     created = await api.create(policy)  # Exactly one attempt; ambiguous failures are not retried.
     session_id = str(UUID(created["id"]))
     result: dict[str, Any] = {"status": "failed", "session_id": session_id, "project_id": api.project_id, "usage_before_browser_minutes": minutes, "target": target, "max_session_seconds": 60, "model_calls": 0}
@@ -241,7 +301,7 @@ def existing_api_key() -> str:
 
 
 async def _main(args) -> int:
-    policy = QaPolicy(tuple(args.allow_host))
+    policy = QaPolicy(tuple(args.allow_host), max_reported_browser_minutes=args.max_browser_minutes)
     async with httpx.AsyncClient(timeout=10, follow_redirects=False, trust_env=False) as http:
         result = await run_qa(BrowserbaseAPI(existing_api_key(), args.project_id, http), args.url, policy, Path(args.output))
     receipt = Path(args.output) / "receipt.json"
@@ -257,6 +317,7 @@ if __name__ == "__main__":
     parser.add_argument("--url", required=True)
     parser.add_argument("--allow-host", action="append", required=True)
     parser.add_argument("--project-id", required=True)
+    parser.add_argument("--max-browser-minutes", type=float, default=50, help="Refuse when project usage is at or above this (set from the verified plan allowance)")
     parser.add_argument("--output", required=True, help="A fresh private local output directory; keep receipts outside Git")
     try:
         raise SystemExit(asyncio.run(_main(parser.parse_args())))
