@@ -10,6 +10,11 @@
 # subnet so nginx can trust X-Forwarded-For only from the network gateway
 # (where host traffic, i.e. tailscaled, arrives), and the Gateway trusts
 # X-Real-IP only from nginx's fixed address.
+#
+# f89 (Mac half): redis/frontend/gateway attach with no static address and
+# get one auto-assigned from the whole subnet starting at .2; ip_range below
+# carves that auto-assign pool away from nginx's static .10, mirroring the
+# VPS overlay's Caddy/nginx carve-out (deploy/momentum/vps/compose.public.yaml).
 services:
   redis:
     container_name: ${COMPOSE_PROJECT_NAME:?run via deploy/momentum/mac/restart.sh}-redis
@@ -53,3 +58,9 @@ networks:
       config:
         - subnet: 172.30.26.0/24
           gateway: 172.30.26.1
+          # redis/frontend/gateway attach with no static address and get one
+          # auto-assigned from the whole subnet starting at .2 -- without
+          # this, one of them could start before nginx and take the address
+          # a static container needs. Keep every static ipv4_address below
+          # .128, out of this range.
+          ip_range: 172.30.26.128/25
