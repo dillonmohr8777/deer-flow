@@ -37,6 +37,17 @@ rs.mock("@/core/ceo-desk", () => ({
   }),
   useRatifySeat: () => ({ mutate: rs.fn(), isPending: false, error: null }),
   useReopenSeat: () => ({ mutate: rs.fn(), isPending: false, error: null }),
+  useCeoFeed: () => ({
+    data: { channel: "exec", exists: true, messages: [] },
+    isLoading: false,
+    isError: false,
+    error: null,
+  }),
+  usePostCeoFeedMessage: () => ({
+    mutate: rs.fn(),
+    isPending: false,
+    error: null,
+  }),
 }));
 
 rs.mock("@/core/board", () => ({
@@ -50,6 +61,19 @@ rs.mock("@/core/board", () => ({
     isPending: false,
     error: null,
   }),
+}));
+
+rs.mock("@/core/team", () => ({
+  useTeamMembers: () => ({
+    data: [],
+    isLoading: false,
+    isError: false,
+    error: null,
+  }),
+}));
+
+rs.mock("@/core/auth/AuthProvider", () => ({
+  useAuth: () => ({ user: { id: "user-a" } }),
 }));
 
 function draft(

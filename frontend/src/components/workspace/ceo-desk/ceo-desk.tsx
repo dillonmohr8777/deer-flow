@@ -3,7 +3,7 @@
 import { useQueryClient, type useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -19,24 +19,30 @@ import {
   WorkspaceContainer,
   WorkspaceHeader,
 } from "@/components/workspace/workspace-container";
+import { useAuth } from "@/core/auth/AuthProvider";
 import { useApproveBoardReply, useSendBoardReply } from "@/core/board";
 import {
   CEO_NEEDS_MY_YES_QUERY_KEY,
+  useCeoFeed,
   useDailyDigest,
   useNeedsMyYes,
+  usePostCeoFeedMessage,
   useRatifySeat,
   useReopenSeat,
   useSeatRoster,
   type BoardDraftAwaitingApproval,
+  type CeoFeedSlug,
   type DailyDigest,
   type SeatAwaitingRatification,
   type SeatRosterEntry,
 } from "@/core/ceo-desk";
 import { useCeoDeskEnabled } from "@/core/features";
+import { useTeamMembers, type TeamMember } from "@/core/team";
 import { cn } from "@/lib/utils";
 
 import {
   draftClientLabel,
+  feedAuthorLabel,
   formatSeatBurn,
   formatStamp,
   seatKpiLabel,
@@ -96,6 +102,7 @@ export function CeoDeskBody() {
       <DigestSection digest={digest} />
       <NeedsMyYesSection needsMyYes={needsMyYes} />
       <SeatRosterSection seats={seats} />
+      <FeedsSection />
     </div>
   );
 }
@@ -414,5 +421,161 @@ function SeatRosterSection({
         </div>
       )}
     </section>
+  );
+}
+
+const FEED_SLUGS: readonly CeoFeedSlug[] = ["exec", "fleet"];
+
+/**
+ * Live #exec and #fleet Team Board feeds, read and reply, right on the CEO
+ * Desk. Reuses the Team Board's own staff directory for author names;
+ * `/api/team/members` 404s on a workspace with momentum_internal off, which
+ * only drops the author labels (feedAuthorLabel falls back to "Momentum"),
+ * never the feeds themselves.
+ */
+function FeedsSection() {
+  const { user } = useAuth();
+  const members = useTeamMembers();
+  return (
+    <section className={styles.section} aria-labelledby="ceo-feeds-heading">
+      <h2 id="ceo-feeds-heading" className={styles.sectionTitle}>
+        Live feeds
+      </h2>
+      <div className={styles.feedGrid}>
+        {FEED_SLUGS.map((slug) => (
+          <FeedPanel
+            key={slug}
+            slug={slug}
+            members={members.data}
+            currentUserId={user?.id ?? null}
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function FeedPanel({
+  slug,
+  members,
+  currentUserId,
+}: {
+  slug: CeoFeedSlug;
+  members: TeamMember[] | undefined;
+  currentUserId: string | null;
+}) {
+  const feed = useCeoFeed(slug);
+  const post = usePostCeoFeedMessage(slug);
+  const [draft, setDraft] = useState("");
+  const endRef = useRef<HTMLLIElement>(null);
+  const count = feed.data?.messages.length ?? 0;
+
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ block: "end" });
+  }, [count]);
+
+  const send = () => {
+    const body = draft.trim();
+    if (!body || post.isPending) return;
+    post.mutate(body, { onSuccess: () => setDraft("") });
+  };
+
+  const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (
+      event.key === "Enter" &&
+      !event.shiftKey &&
+      !event.nativeEvent.isComposing
+    ) {
+      event.preventDefault();
+      send();
+    }
+  };
+
+  return (
+    <div className={styles.feedPanel} data-testid={`ceo-feed-${slug}`}>
+      <h3 className={styles.feedTitle}>#{slug}</h3>
+      {feed.isError ? (
+        <ErrorState
+          message={`Couldn't load #${slug}.`}
+          detail={feed.error.message}
+          action={
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void feed.refetch()}
+            >
+              Try again
+            </Button>
+          }
+        />
+      ) : feed.isLoading ? (
+        <WorkingState label={`Loading #${slug}`} />
+      ) : feed.data && !feed.data.exists ? (
+        <p className={styles.hint}>
+          No #{slug} channel yet. Create it once from Team.
+        </p>
+      ) : (
+        <ol className={styles.feedMessages} aria-live="polite">
+          {count === 0 ? (
+            <li className={styles.hint}>Nothing here yet.</li>
+          ) : null}
+          {feed.data?.messages.map((message) => (
+            <li key={message.id} className={styles.feedMessage}>
+              <span className={styles.feedMessageHead}>
+                <span className={styles.author}>
+                  {feedAuthorLabel(
+                    message.author_user_id,
+                    members,
+                    currentUserId,
+                  )}
+                </span>
+                <time
+                  className={styles.feedStamp}
+                  dateTime={message.created_at}
+                >
+                  {formatStamp(message.created_at)}
+                </time>
+              </span>
+              {message.body}
+            </li>
+          ))}
+          <li ref={endRef} aria-hidden />
+        </ol>
+      )}
+      {feed.data?.exists ? (
+        <form
+          className={styles.feedComposer}
+          onSubmit={(event) => {
+            event.preventDefault();
+            send();
+          }}
+        >
+          <label htmlFor={`ceo-feed-composer-${slug}`} className="sr-only">
+            Message #{slug}
+          </label>
+          <Textarea
+            id={`ceo-feed-composer-${slug}`}
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={onKeyDown}
+            placeholder={`Message #${slug}`}
+            rows={2}
+            maxLength={4000}
+          />
+          <Button
+            type="submit"
+            size="sm"
+            disabled={!draft.trim() || post.isPending}
+          >
+            {post.isPending ? "Sending" : "Send"}
+          </Button>
+        </form>
+      ) : null}
+      {post.isError ? (
+        <p className={styles.errorText} role="alert">
+          {post.error.message}
+        </p>
+      ) : null}
+    </div>
   );
 }

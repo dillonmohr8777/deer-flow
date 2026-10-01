@@ -40,6 +40,13 @@ type SeatRow = {
   paused: boolean;
 };
 
+type FeedMessage = {
+  id: string;
+  author_user_id: string;
+  body: string;
+  created_at: string;
+};
+
 async function mockCeoDesk(
   page: Page,
   {
@@ -48,6 +55,9 @@ async function mockCeoDesk(
     claims = [],
     seats = [],
     digest = null,
+    execMessages = [],
+    fleetExists = false,
+    fleetMessages = [],
   }: {
     ceo?: boolean;
     drafts?: Draft[];
@@ -61,6 +71,9 @@ async function mockCeoDesk(
       needs_my_yes_ratifications: number;
       created_at: string;
     } | null;
+    execMessages?: FeedMessage[];
+    fleetExists?: boolean;
+    fleetMessages?: FeedMessage[];
   } = {},
 ) {
   mockLangGraphAPI(page, { scheduledTasks: [] });
@@ -68,6 +81,13 @@ async function mockCeoDesk(
   const draftState = new Map(drafts.map((d) => [d.thread_id, d]));
   const claimState = new Map(claims.map((c) => [c.seat_id, c]));
   const seatState = new Map(seats.map((s) => [s.seat_id, s]));
+  const feedState: Record<
+    "exec" | "fleet",
+    { exists: boolean; messages: FeedMessage[] }
+  > = {
+    exec: { exists: true, messages: [...execMessages] },
+    fleet: { exists: fleetExists, messages: [...fleetMessages] },
+  };
 
   await page.route("**/api/features", (route) =>
     route.fulfill(
@@ -94,6 +114,13 @@ async function mockCeoDesk(
 
   await page.route("**/api/ceo/digest", (route) =>
     route.fulfill(json({ digest })),
+  );
+
+  // FeedsSection's author lookup is best-effort; a mocked empty directory
+  // keeps the feed test deterministic without needing momentum_internal's
+  // own mock setup.
+  await page.route("**/api/team/members", (route) =>
+    route.fulfill(json({ members: [] })),
   );
 
   await page.route(/\/api\/ceo\/seats\/([^/]+)\/ratify$/, async (route) => {
@@ -144,6 +171,51 @@ async function mockCeoDesk(
           updated_at: at(0),
         }),
       );
+    },
+  );
+
+  await page.route(
+    /\/api\/ceo\/channels\/([^/]+)\/messages$/,
+    async (route) => {
+      const slug = /channels\/([^/]+)\/messages/.exec(
+        route.request().url(),
+      )![1]! as "exec" | "fleet";
+      const state = feedState[slug];
+      if (route.request().method() === "GET") {
+        await route.fulfill(
+          json({
+            channel: slug,
+            exists: state.exists,
+            messages: state.messages,
+          }),
+        );
+        return;
+      }
+      if (!state.exists) {
+        await route.fulfill({
+          status: 404,
+          contentType: "application/json",
+          body: JSON.stringify({
+            detail: `No #${slug} channel in this organization yet.`,
+          }),
+        });
+        return;
+      }
+      const body = JSON.parse(route.request().postData() ?? "{}") as {
+        body: string;
+      };
+      const message: FeedMessage = {
+        id: `${slug}-${state.messages.length + 1}`,
+        author_user_id: "user-1",
+        body: body.body,
+        created_at: at(0),
+      };
+      state.messages.push(message);
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify(message),
+      });
     },
   );
 
@@ -274,6 +346,35 @@ test.describe("CEO Desk", () => {
     await expect(desk.getByText("Nothing waiting on you")).toBeVisible();
     await expect(desk.getByText("No seats yet")).toBeVisible();
   });
+
+  test("reads the live #exec feed and replies; #fleet shows a not-yet-created state", async ({
+    page,
+  }) => {
+    await mockCeoDesk(page, {
+      execMessages: [
+        {
+          id: "exec-1",
+          author_user_id: "user-2",
+          body: "[cmo-agent] pipeline review posted to the board",
+          created_at: at(-1),
+        },
+      ],
+      fleetExists: false,
+    });
+    await page.goto("/workspace/ceo");
+
+    const execPanel = page.getByTestId("ceo-feed-exec");
+    await expect(
+      execPanel.getByText("pipeline review posted to the board"),
+    ).toBeVisible({ timeout: 15_000 });
+
+    const fleetPanel = page.getByTestId("ceo-feed-fleet");
+    await expect(fleetPanel.getByText(/No #fleet channel yet/)).toBeVisible();
+
+    await execPanel.getByLabel("Message #exec").fill("Great work, team.");
+    await execPanel.getByRole("button", { name: "Send" }).click();
+    await expect(execPanel.getByText("Great work, team.")).toBeVisible();
+  });
 });
 
 async function expectNoHorizontalOverflow(page: Page) {
@@ -309,6 +410,23 @@ test.describe("CEO Desk layout", () => {
           needs_my_yes_ratifications: 1,
           created_at: at(-1),
         },
+        execMessages: [
+          {
+            id: "exec-1",
+            author_user_id: "user-2",
+            body: "[cmo-agent] pipeline review posted to the board, a fairly long line of status text to stress the layout",
+            created_at: at(-1),
+          },
+        ],
+        fleetExists: true,
+        fleetMessages: [
+          {
+            id: "fleet-1",
+            author_user_id: "user-3",
+            body: "[fleet-builder] shipped the migration script",
+            created_at: at(-1),
+          },
+        ],
       });
       await page.setViewportSize({ width, height: 900 });
       await page.goto("/workspace/ceo");

@@ -13,11 +13,11 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from app.gateway.authz import require_permission
-from app.gateway.deps import get_agent_seat_repo, get_board_repo, get_ceo_desk_digest_repo, get_current_user_from_request, record_audit_event
+from app.gateway.deps import get_agent_seat_repo, get_board_repo, get_ceo_desk_digest_repo, get_current_user_from_request, get_team_board_repo, record_audit_event
 from deerflow.board.workflow import latest_momo_draft_body
 from deerflow.exec_seats import SeatTransitionError, assert_can_ratify, assert_can_reopen
 from deerflow.persistence.board.model import BoardThreadStatus
@@ -32,6 +32,11 @@ _ORG_ADMIN_ROLES = ("owner", "admin")
 # Matches deerflow.exec_seats.budget's trailing-week window, so the roster's
 # burn figure is the same number that would pause the seat.
 _BUDGET_WINDOW = timedelta(days=7)
+# The only two Team Board channels the CEO Desk's "Live #exec and #fleet
+# feeds" item (e14) names. #exec is a default channel every workspace
+# already has (DEFAULT_TEAM_CHANNELS); #fleet is not, so it may not exist
+# yet -- see CeoFeedResponse.exists.
+_FEED_CHANNEL_SLUGS = ("exec", "fleet")
 
 
 class BoardDraftAwaitingApproval(BaseModel):
@@ -92,6 +97,25 @@ class DailyDigestResponse(BaseModel):
     digest: DailyDigest | None
 
 
+class CeoFeedMessage(BaseModel):
+    id: str
+    author_user_id: str
+    body: str
+    created_at: str
+
+
+class CeoFeedResponse(BaseModel):
+    channel: str
+    # False only for #fleet before an owner/admin has created it once from
+    # the Team Board (see team_board_tools.py's identical gap).
+    exists: bool
+    messages: list[CeoFeedMessage]
+
+
+class CeoFeedPostRequest(BaseModel):
+    body: str = Field(..., min_length=1, max_length=4000)
+
+
 async def _is_active_org_admin(user_id: str) -> bool:
     """Whether *user_id* is an active owner/admin of the caller's active organization.
 
@@ -128,6 +152,27 @@ async def _require_admin(request: Request) -> str:
 
 def _seat_not_found() -> HTTPException:
     return HTTPException(status_code=404, detail="No such seat claim in this organization")
+
+
+def _normalize_feed_slug(slug: str) -> str:
+    return slug.strip().lstrip("#").strip().lower()
+
+
+def _invalid_feed_channel() -> HTTPException:
+    return HTTPException(status_code=404, detail="Only the #exec and #fleet feeds are available here")
+
+
+async def _find_feed_channel(team_repo, slug: str) -> dict | None:
+    """Resolve *slug* (already validated against ``_FEED_CHANNEL_SLUGS``) within
+    the caller's organization, creating the defaults first so #exec always
+    resolves. #fleet has no default and may not exist yet.
+    """
+    if slug == "exec":
+        await team_repo.ensure_default_channels()
+    for row in await team_repo.list_channels():
+        if row["slug"] == slug:
+            return row
+    return None
 
 
 @router.get("/needs-my-yes", response_model=NeedsMyYesResponse)
@@ -287,3 +332,59 @@ async def get_digest(request: Request) -> DailyDigestResponse:
             created_at=latest.get("created_at", ""),
         )
     )
+
+
+@router.get("/channels/{slug}/messages", response_model=CeoFeedResponse)
+@require_permission("ceo", "read")
+async def get_feed_messages(slug: str, request: Request, limit: int = 200) -> CeoFeedResponse:
+    """Read the #exec or #fleet Team Board feed from the CEO Desk itself.
+
+    Reuses ``TeamBoardRepository`` directly rather than routing through
+    ``/api/team``: that router's gate is ``momentum_internal`` (a staff
+    workspace flag, see ``app/gateway/momentum_internal.py``), independent
+    of the CEO Desk's own owner/admin gate (``_require_admin``), so an
+    owner/admin sees these feeds here even on a workspace where the Team
+    Board page itself is hidden.
+    """
+    await _require_admin(request)
+    normalized = _normalize_feed_slug(slug)
+    if normalized not in _FEED_CHANNEL_SLUGS:
+        raise _invalid_feed_channel()
+    bounded_limit = max(1, min(int(limit), 500))
+    team_repo = get_team_board_repo(request)
+    channel = await _find_feed_channel(team_repo, normalized)
+    if channel is None:
+        return CeoFeedResponse(channel=normalized, exists=False, messages=[])
+    messages = await team_repo.list_messages(channel["id"], limit=bounded_limit) or []
+    return CeoFeedResponse(
+        channel=normalized,
+        exists=True,
+        messages=[CeoFeedMessage(id=m["id"], author_user_id=m["author_user_id"], body=m.get("body", ""), created_at=m.get("created_at", "")) for m in messages],
+    )
+
+
+@router.post("/channels/{slug}/messages", response_model=CeoFeedMessage, status_code=201)
+@require_permission("ceo", "write")
+async def post_feed_message(slug: str, body: CeoFeedPostRequest, request: Request) -> CeoFeedMessage:
+    """Reply into #exec or #fleet from the CEO Desk, authored as the signed-in admin.
+
+    #exec always exists (a default channel); #fleet does not until an
+    owner/admin creates it once from the Team Board, matching
+    ``team_board_tools.py``'s identical gap for the fleet-agent tools.
+    """
+    user_id = await _require_admin(request)
+    normalized = _normalize_feed_slug(slug)
+    if normalized not in _FEED_CHANNEL_SLUGS:
+        raise _invalid_feed_channel()
+    text = body.body.strip()
+    if not text:
+        raise HTTPException(status_code=422, detail="Message is empty")
+    team_repo = get_team_board_repo(request)
+    channel = await _find_feed_channel(team_repo, normalized)
+    if channel is None:
+        raise HTTPException(status_code=404, detail=f"No #{normalized} channel in this organization yet. Create it once from the Team Board.")
+    posted = await team_repo.add_message(channel["id"], author_user_id=user_id, body=text)
+    if posted is None:
+        raise HTTPException(status_code=404, detail=f"No #{normalized} channel in this organization yet.")
+    await record_audit_event(request, action="ceo.feed.post", outcome="success", actor_user_id=user_id, organization_id=resolve_organization_id(), target_type="team_channel", target_id=channel["id"])
+    return CeoFeedMessage(id=posted["id"], author_user_id=posted["author_user_id"], body=posted.get("body", ""), created_at=posted.get("created_at", ""))

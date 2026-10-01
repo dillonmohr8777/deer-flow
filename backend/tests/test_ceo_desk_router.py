@@ -43,6 +43,7 @@ def _build_app(session_factory) -> FastAPI:
     app.state.ceo_desk_digest_repo = CeoDeskDigestRepository(session_factory)
     app.state.fleet_binding_repo = FleetBindingRepository(session_factory)
     app.state.audit_repo = AuditEventRepository(session_factory)
+    app.state.team_board_repo = TeamBoardRepository(session_factory)
     app.include_router(clients.router)
     app.include_router(board.router)
     app.include_router(ceo_desk.router)
@@ -321,3 +322,86 @@ async def test_digest_endpoint_reads_the_latest_recorded_digest(org_world):  # n
         body = after.json()["digest"]
         assert body["digest_text"] == "Shipped 1. Stuck on 0. Nothing needs your yes."
         assert body["shipped_count"] == 1
+
+
+async def test_exec_feed_reads_and_posts(org_world):  # noqa: F811
+    """#exec is a default channel: it exists before anyone creates it, and the
+    CEO Desk can read it and reply into it as the signed-in owner/admin."""
+    session_factory = org_world
+    app = _build_app(session_factory)
+    headers_a = auth_headers(USER_A, ORG_S)
+
+    async with _client(app) as client:
+        before = await client.get("/api/ceo/channels/exec/messages", headers=headers_a)
+        assert before.status_code == 200, before.text
+        assert before.json() == {"channel": "exec", "exists": True, "messages": []}
+
+        # Leading '#' and mixed case are accepted, matching team_board_tools.py.
+        posted = await client.post("/api/ceo/channels/%23EXEC/messages", json={"body": "Shipping the Q4 plan today."}, headers=headers_a)
+        assert posted.status_code == 201, posted.text
+        assert posted.json()["author_user_id"] == USER_A
+        assert posted.json()["body"] == "Shipping the Q4 plan today."
+
+        after = await client.get("/api/ceo/channels/exec/messages", headers=headers_a)
+        assert after.status_code == 200, after.text
+        messages = after.json()["messages"]
+        assert len(messages) == 1
+        assert messages[0]["body"] == "Shipping the Q4 plan today."
+
+
+async def test_fleet_feed_before_creation_then_after(org_world):  # noqa: F811
+    """#fleet has no default: reading it before anyone creates it reports
+    ``exists: false`` with no messages, and posting 404s; once an owner/admin
+    creates it (from the Team Board), both work."""
+    session_factory = org_world
+    app = _build_app(session_factory)
+    headers_a = auth_headers(USER_A, ORG_S)
+
+    async with _client(app) as client:
+        before = await client.get("/api/ceo/channels/fleet/messages", headers=headers_a)
+        assert before.status_code == 200, before.text
+        assert before.json() == {"channel": "fleet", "exists": False, "messages": []}
+
+        refused = await client.post("/api/ceo/channels/fleet/messages", json={"body": "hello"}, headers=headers_a)
+        assert refused.status_code == 404
+
+        with acting_as(USER_A, ORG_S):
+            team_repo = TeamBoardRepository(session_factory)
+            await team_repo.create_channel(slug="fleet", name="Fleet", topic="", created_by_user_id=USER_A)
+
+        after = await client.get("/api/ceo/channels/fleet/messages", headers=headers_a)
+        assert after.status_code == 200, after.text
+        assert after.json() == {"channel": "fleet", "exists": True, "messages": []}
+
+        posted = await client.post("/api/ceo/channels/fleet/messages", json={"body": "Fleet, status check."}, headers=headers_a)
+        assert posted.status_code == 201, posted.text
+        assert posted.json()["body"] == "Fleet, status check."
+
+
+async def test_feed_rejects_a_non_exec_non_fleet_channel(org_world):  # noqa: F811
+    session_factory = org_world
+    app = _build_app(session_factory)
+    headers_a = auth_headers(USER_A, ORG_S)
+
+    with acting_as(USER_A, ORG_S):
+        team_repo = TeamBoardRepository(session_factory)
+        await team_repo.ensure_default_channels(created_by_user_id=USER_A)
+
+    async with _client(app) as client:
+        get_resp = await client.get("/api/ceo/channels/general/messages", headers=headers_a)
+        assert get_resp.status_code == 404
+        post_resp = await client.post("/api/ceo/channels/general/messages", json={"body": "hi"}, headers=headers_a)
+        assert post_resp.status_code == 404
+
+
+async def test_feed_requires_admin(org_world):  # noqa: F811
+    session_factory = org_world
+    app = _build_app(session_factory)
+    await _add_plain_member(session_factory, USER_D, ORG_S)
+    headers_d = auth_headers(USER_D, ORG_S)
+
+    async with _client(app) as client:
+        get_resp = await client.get("/api/ceo/channels/exec/messages", headers=headers_d)
+        assert get_resp.status_code == 403
+        post_resp = await client.post("/api/ceo/channels/exec/messages", json={"body": "hi"}, headers=headers_d)
+        assert post_resp.status_code == 403

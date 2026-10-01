@@ -168,3 +168,86 @@
   text-transform: uppercase;
   letter-spacing: 0.02em;
 }
+
+.hint {
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+}
+
+/* Mobile-first: stacked by default, side by side once there's room for both. */
+.feedGrid {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+@media (min-width: 48rem) {
+  .feedGrid {
+    flex-direction: row;
+  }
+
+  .feedPanel {
+    flex: 1;
+    min-width: 0;
+  }
+}
+
+.feedPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+  color: var(--card-foreground);
+}
+
+.feedTitle {
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.feedMessages {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 14rem;
+  overflow-y: auto;
+}
+
+.feedMessage {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  font-size: 0.8125rem;
+  overflow-wrap: anywhere;
+}
+
+.feedMessageHead {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.author {
+  font-weight: 600;
+}
+
+.feedStamp {
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+}
+
+.feedComposer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: flex-end;
+}
+
+.feedComposer textarea {
+  flex: 1;
+  min-width: 0;
+  resize: none;
+}

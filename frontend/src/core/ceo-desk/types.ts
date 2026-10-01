@@ -54,3 +54,20 @@ export interface DailyDigest {
   needs_my_yes_ratifications: number;
   created_at: string;
 }
+
+/** The two Team Board channels the CEO Desk surfaces live. */
+export type CeoFeedSlug = "exec" | "fleet";
+
+export interface CeoFeedMessage {
+  id: string;
+  author_user_id: string;
+  body: string;
+  created_at: string;
+}
+
+export interface CeoFeed {
+  channel: CeoFeedSlug;
+  /** False only for #fleet before an owner/admin has created it once. */
+  exists: boolean;
+  messages: CeoFeedMessage[];
+}

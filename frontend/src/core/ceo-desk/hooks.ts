@@ -6,13 +6,26 @@ import {
   CEO_DIGEST_QUERY_KEY,
   CEO_NEEDS_MY_YES_QUERY_KEY,
   CEO_SEATS_QUERY_KEY,
+  ceoFeedQueryKey,
+  getCeoFeed,
   getDailyDigest,
   getNeedsMyYes,
   getSeatRoster,
+  postCeoFeedMessage,
   ratifySeat,
   reopenSeat,
 } from "./api";
-import type { DailyDigest, NeedsMyYes, SeatRosterEntry } from "./types";
+import type {
+  CeoFeed,
+  CeoFeedSlug,
+  DailyDigest,
+  NeedsMyYes,
+  SeatRosterEntry,
+} from "./types";
+
+// Live feeds, not a chat: a short poll keeps #exec/#fleet current on the
+// CEO Desk without a socket, matching core/team's own MESSAGE_POLL_MS.
+const FEED_POLL_MS = 15_000;
 
 export function useNeedsMyYes(enabled = true) {
   return useQuery<NeedsMyYes>({
@@ -61,4 +74,31 @@ export function useRatifySeat() {
 
 export function useReopenSeat() {
   return useSeatAction(reopenSeat);
+}
+
+export function useCeoFeed(slug: CeoFeedSlug, enabled = true) {
+  return useQuery<CeoFeed>({
+    queryKey: ceoFeedQueryKey(slug),
+    queryFn: () => getCeoFeed(slug),
+    enabled: enabled && !isStaticWebsiteOnly(),
+    refetchInterval: FEED_POLL_MS,
+  });
+}
+
+export function usePostCeoFeedMessage(slug: CeoFeedSlug) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: string) => postCeoFeedMessage(slug, body),
+    onSuccess: (message) => {
+      queryClient.setQueryData<CeoFeed>(ceoFeedQueryKey(slug), (previous) =>
+        previous
+          ? {
+              ...previous,
+              exists: true,
+              messages: [...previous.messages, message],
+            }
+          : { channel: slug, exists: true, messages: [message] },
+      );
+    },
+  });
 }
