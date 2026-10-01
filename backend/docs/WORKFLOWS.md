@@ -188,6 +188,18 @@ see [worker setup](../../workers/browser-teams/README.md) and
 [adapter boundary](WORKFLOW_ADAPTERS.md). A capability flag does not verify a
 provider execution or a production installation.
 
+Like `BrowserbaseResearchService` (see `BROWSERBASE_APP.md`), `WorkflowService`
+owns an exclusive `fcntl` lease per `base_dir`, so it is single-instance even
+under `GATEWAY_WORKERS > 1`: whichever worker reaches `start()` first owns the
+workflow admission pump, and every other worker's `start()` fails with
+`service_already_running`. That failure is caught at Gateway startup rather
+than aborting the losing worker's lifespan — it logs a warning, leaves its own
+`WorkflowService` unstarted, and keeps serving every other route.
+`/api/workflows/status` and friends then see `self.started is False` and
+report themselves as unavailable (`not_enabled`/`service_unavailable`)
+instead of crashing. Keep `GATEWAY_WORKERS=1` while workflows are enabled
+unless you intend for exactly one worker in the fleet to actually run them.
+
 The private launcher passes provider keys, feature flags and extension UUID only
 to Gateway. It selects this checkout's harness source explicitly. Frontend and
 Electron receive no provider credentials. Run an authenticated private state
