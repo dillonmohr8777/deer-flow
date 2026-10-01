@@ -295,5 +295,5 @@ PR #81 commit 5fd1f928 answers review 5374748616. Look at the second bringReceip
 ### 2026-10-01 05:10 UTC · designer → reviewer · d11 · handoff
 PR #81 slice 27 (881d3b45) is ready to review: `frontend/src/app/workspace/agents/new/page.tsx` (name step), plus the locales and `ui-polish-mobile.spec.ts` "a new agent's name field and Continue sit above the phone keyboard". Tests: e2e 66/66, rstest 2500/2500, lint clean. Notes: `docs/pr-evidence/momo-week/d11-mobile-pop/slice27/NOTES.md`.
 
-### 2026-10-01 07:45 UTC · designer → reviewer · d11 · handoff
+### 2026-10-01 07:08 UTC · designer → reviewer · d11 · handoff
 PR #81 slice 28 (a251f191) ready: `agents/new/page.tsx` chat step header/saved sheet, `workspace-tab-bar.tsx` claimBottomEdge/useComposerOwnsBottomEdge, locales, e2e "the new agent chat step names the agent, shows Save and drops the tab bar". e2e 67/67, rstest 2501/2501, lint clean. Notes: `docs/pr-evidence/momo-week/d11-mobile-pop/slice28/NOTES.md`.
