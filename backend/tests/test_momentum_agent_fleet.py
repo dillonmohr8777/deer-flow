@@ -9,9 +9,9 @@ from deerflow.config.agents_config import AgentConfig
 
 FLEET = Path(__file__).parents[2] / "fleet"
 EXPECTED = {
-    "senior-software-engineer": "openrouter-luna",
-    "data-migration-engineer": "openrouter-luna",
-    "analytics-engineer": "openrouter-luna",
+    "senior-software-engineer": "openrouter-muse-spark-contributor",
+    "data-migration-engineer": "openrouter-muse-spark-contributor",
+    "analytics-engineer": "openrouter-muse-spark-contributor",
     "independent-verifier": "openrouter-luna",
     "fleet-scout": "openrouter-muse-spark-contributor",
     "fleet-builder": "openrouter-muse-spark-contributor",
@@ -38,6 +38,10 @@ def test_momentum_agent_fleet_is_bounded_and_evaluated() -> None:
 
     assert configs["independent-verifier"].tool_groups == ["file:read", "bash", "team", "exec"]
     assert all("production" in soul and "explicit approval" in soul for soul in souls.values())
+
+    verifier_model = configs["independent-verifier"].model
+    maker_models = {configs[name].model for name in EXPECTED if name != "independent-verifier"}
+    assert verifier_model not in maker_models, "maker and checker must never share a model"
 
     manifest = json.loads((FLEET / "manifest.json").read_text(encoding="utf-8"))
     roles = {role["id"]: role for role in manifest["roles"]}
