@@ -329,6 +329,31 @@
 }
 
 /*
+ * Corners — how resting paper is held down, so a pin can keep meaning
+ * "working". An aria-hidden <span class="paper-corners"> inside a
+ * positioned sheet draws two kraft photo corners over its bottom edge: the
+ * sheet is slotted into them, not pinned. Bottom only, because most sheets
+ * carry a torn top edge and a mount would hide the tear. Print depth, not
+ * glow: a 1px ink hairline under each corner.
+ */
+[data-treatment="paper"] .paper-corners {
+  --paper-corner: 22px;
+  position: absolute;
+  inset: auto 0 0;
+  height: var(--paper-corner);
+  z-index: 1;
+  pointer-events: none;
+  background:
+    linear-gradient(45deg, var(--paper-kraft) 50%, transparent 50%) left
+      bottom / var(--paper-corner) var(--paper-corner) no-repeat,
+    linear-gradient(-45deg, var(--paper-kraft) 50%, transparent 50%) right
+      bottom / var(--paper-corner) var(--paper-corner) no-repeat;
+  filter: drop-shadow(
+    0 -1px 0 color-mix(in srgb, var(--paper-ink) 18%, transparent)
+  );
+}
+
+/*
  * All paper decoration is aria-hidden by contract and must be neutralised
  * under forced-colors: it carries no information, so it has no business
  * fighting the user's own high-contrast palette.
@@ -341,7 +366,8 @@
   }
 
   [data-treatment="paper"] .sheet::after,
-  [data-treatment="paper"] .pinned::before {
+  [data-treatment="paper"] .pinned::before,
+  [data-treatment="paper"] .paper-corners {
     display: none;
   }
 }

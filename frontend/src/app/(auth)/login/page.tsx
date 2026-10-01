@@ -279,7 +279,7 @@ export default function LoginPage() {
   const errorStyle = paper ? { color: "var(--paper-danger)" } : undefined;
 
   // Paper: the sign-in is the same physical object as the invite — one
-  // deckled cream sheet pinned on the blueprint field (invite.module.css
+  // deckled cream sheet held on the blueprint field (invite.module.css
   // .field/.frame/.sheet). No flickering grid, no motion: the static
   // composition is the thesis for this surface. Auth logic is untouched.
   const card = (
@@ -592,7 +592,12 @@ export default function LoginPage() {
             >
               <MomoFilm name="momo-hello" live={introMotion.live} />
             </BouncingMomo>
-            <div className={cn(inviteStyles.frame, "pinned")}>{card}</div>
+            {/* Photo corners hold the sheet at rest; the pin goes in only
+                while a sign-in request runs, since a pin means working. */}
+            <div className={cn(inviteStyles.frame, loading && "pinned")}>
+              {card}
+              <span className="paper-corners" aria-hidden="true" />
+            </div>
           </div>
         </>
       ) : (
