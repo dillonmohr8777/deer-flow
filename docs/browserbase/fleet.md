@@ -74,7 +74,11 @@ so a run read back for the wrong job can't be laundered in by also passing its
 agent id -- together with `createdAt` falling inside the window
 `start_agent_run`'s own http client could still have been in flight: at or
 after this reservation's own `created` time (minus clock skew) and at or
-before `created` plus the request timeout (plus clock skew). `reserve()`
+before `created` plus the request timeout (plus clock skew). The request
+timeout is the client's four `httpx.Timeout` phases (connect, write, read,
+pool) summed, not any single phase's value -- httpx enforces each phase
+independently, so a single `timeout=N` bounds each phase to `N`, not the
+whole request to `N`. `reserve()`
 refuses a second reservation while this one is uncertain, and the
 account-busy check refuses a start while any run is active, so at most one run
 for this agent could exist in that window. A `variables` echo naming a

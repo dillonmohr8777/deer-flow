@@ -3,6 +3,7 @@ import concurrent.futures
 import json
 import time
 import types
+from datetime import UTC
 from pathlib import Path
 
 import pytest
@@ -661,6 +662,42 @@ def test_reconcile_unbound_native_run_rejects_run_created_well_after_the_start_w
     assert target.ledger.status()[0]["state"] == "uncertain"
 
 
+def test_reconcile_unbound_native_run_accepts_run_created_just_inside_the_widened_window(tmp_path, monkeypatch):
+    """`_START_TIMEOUT_SECONDS` must be the http client's four timeout phases (connect/write/read/pool)
+    summed to 40s, not one phase's 10s value -- httpx bounds each phase independently, not the request
+    as a whole. A run created 39s later (just inside the new, wider ceiling) is still provably this
+    reservation's own; the single-phase assumption would have wrongly refused it at this point. The
+    bound is hardcoded here (not read back from the module) so a regression to the old 10s value, or
+    to a non-summed client timeout, fails this test instead of silently redefining its own target."""
+    from deerflow.community.browser_automation import browserbase_fleet
+
+    target, token, created = _unbind(tmp_path, monkeypatch)
+
+    class Readback(AgentAPI):
+        async def agent_run(self, run_id):
+            return {"runId": run_id, "status": "COMPLETED", "sessionId": "session-1", "agentId": AGENT, "createdAt": created + 39}
+
+    asyncio.run(browserbase_fleet.reconcile_unbound_native_run(Readback([]), target, token, RUN))
+    row = target.ledger.status()[0]
+    assert row["state"] == "finished" and row["session"] == "session-1"
+
+
+def test_reconcile_unbound_native_run_rejects_run_created_just_past_the_widened_window(tmp_path, monkeypatch):
+    """One second past the 40s summed timeout ceiling plus 5s clock skew (46s total) is outside any
+    window `start_agent_run` could actually still have been in flight for."""
+    from deerflow.community.browser_automation import browserbase_fleet
+
+    target, token, created = _unbind(tmp_path, monkeypatch)
+
+    class Readback(AgentAPI):
+        async def agent_run(self, run_id):
+            return {"runId": run_id, "status": "COMPLETED", "sessionId": "session-1", "agentId": AGENT, "createdAt": created + 46}
+
+    with pytest.raises(FleetBlocked, match="ownership"):
+        asyncio.run(browserbase_fleet.reconcile_unbound_native_run(Readback([]), target, token, RUN))
+    assert target.ledger.status()[0]["state"] == "uncertain"
+
+
 def test_reconcile_unbound_native_run_rejects_a_mismatched_variables_echo_even_inside_the_window(tmp_path, monkeypatch):
     """A `variables.reservation_id` that names a different reservation is affirmative proof the run
     belongs to someone else's token -- it must be refused outright, never papered over by a `createdAt`
@@ -723,18 +760,21 @@ def test_reconcile_unbound_native_run_accepts_echoed_variables_without_window(tm
 
 
 def test_reconcile_unbound_native_run_rejects_millisecond_epoch_timestamp(tmp_path, monkeypatch):
-    """A real event a day before the reservation, expressed as a millisecond epoch, used to be
-    misread as raw seconds -- a number so large it was wrongly accepted as proof of a run far in the
-    future rather than rejected for having no upper bound. Numbers above the epoch-seconds ceiling are
-    now refused outright rather than guessed at."""
+    """A plausible-looking event just after the reservation, expressed as a millisecond epoch (the
+    units a careless provider or client might send instead of seconds), used to be misread as raw
+    seconds -- a number ~1000x too large. The window check alone already rejects a value that far
+    outside its bound regardless of this guard (any ms-scale number near `created` lands many orders
+    of magnitude past a window of tens of seconds), so the direct assertion below is what actually
+    pins the ceiling guard itself rather than relying on that redundant backstop."""
     from deerflow.community.browser_automation import browserbase_fleet
 
     target, token, created = _unbind(tmp_path, monkeypatch)
-    day_earlier_in_ms = (created - 86400) * 1000
+    just_after_in_ms = (created + 1) * 1000
+    assert browserbase_fleet._parse_epoch_seconds(just_after_in_ms) is None
 
     class Readback(AgentAPI):
         async def agent_run(self, run_id):
-            return {"runId": run_id, "status": "COMPLETED", "sessionId": "session-1", "agentId": AGENT, "createdAt": day_earlier_in_ms}
+            return {"runId": run_id, "status": "COMPLETED", "sessionId": "session-1", "agentId": AGENT, "createdAt": just_after_in_ms}
 
     with pytest.raises(FleetBlocked, match="ownership"):
         asyncio.run(browserbase_fleet.reconcile_unbound_native_run(Readback([]), target, token, RUN))
@@ -743,24 +783,39 @@ def test_reconcile_unbound_native_run_rejects_millisecond_epoch_timestamp(tmp_pa
 
 def test_reconcile_unbound_native_run_rejects_naive_datetime_string(tmp_path, monkeypatch):
     """A naive ISO 8601 string (no `Z`, no UTC offset) carries no timezone, so `datetime.fromisoformat`
-    would read it in the host's own local timezone -- on a host set to, say, America/Los_Angeles, a
-    string that is actually 6 hours before the reservation's `created` time would be misread as hours
-    later and wrongly land inside the window. Naive strings are refused outright instead."""
-    from datetime import datetime, timedelta
+    would read it in the host's own local timezone. Built from the true UTC wall-clock of a moment 6
+    hours before `created` and read back on a host 6 hours behind UTC, the misread would land exactly
+    on `created` -- squarely inside the start window -- instead of 6 hours outside it; a prior version
+    of this test used the *same* host timezone to build and re-read the string, which round-trips back
+    to the true 6-hours-earlier value regardless of timezone and so never actually exercised a misread.
+    Naive strings are refused outright instead, regardless of the host's timezone."""
+    import os
+    import time as time_module
+    from datetime import datetime
 
     from deerflow.community.browser_automation import browserbase_fleet
 
     target, token, created = _unbind(tmp_path, monkeypatch)
-    naive = (datetime.fromtimestamp(created) - timedelta(hours=6)).replace(tzinfo=None).isoformat()
-    assert "+" not in naive and "Z" not in naive
+    previous_tz = os.environ.get("TZ")
+    os.environ["TZ"] = "Etc/GMT+6"  # POSIX sign is inverted: this is UTC-6, six hours behind UTC.
+    time_module.tzset()
+    try:
+        naive = datetime.fromtimestamp(created - 6 * 3600, tz=UTC).replace(tzinfo=None).isoformat()
+        assert "+" not in naive and "Z" not in naive
 
-    class Readback(AgentAPI):
-        async def agent_run(self, run_id):
-            return {"runId": run_id, "status": "COMPLETED", "sessionId": "session-1", "agentId": AGENT, "createdAt": naive}
+        class Readback(AgentAPI):
+            async def agent_run(self, run_id):
+                return {"runId": run_id, "status": "COMPLETED", "sessionId": "session-1", "agentId": AGENT, "createdAt": naive}
 
-    with pytest.raises(FleetBlocked, match="ownership"):
-        asyncio.run(browserbase_fleet.reconcile_unbound_native_run(Readback([]), target, token, RUN))
-    assert target.ledger.status()[0]["state"] == "uncertain"
+        with pytest.raises(FleetBlocked, match="ownership"):
+            asyncio.run(browserbase_fleet.reconcile_unbound_native_run(Readback([]), target, token, RUN))
+        assert target.ledger.status()[0]["state"] == "uncertain"
+    finally:
+        if previous_tz is None:
+            os.environ.pop("TZ", None)
+        else:
+            os.environ["TZ"] = previous_tz
+        time_module.tzset()
 
 
 def test_reconcile_unbound_native_run_refuses_non_terminal_instead_of_silently_doing_nothing(tmp_path, monkeypatch):
