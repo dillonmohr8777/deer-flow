@@ -701,9 +701,26 @@ async def _startup_browserbase_service(app: FastAPI) -> None:
 
 
 async def _startup_workflow_service(app: FastAPI) -> None:
+    from app.gateway.browserbase_service import BrowserbaseResearchService
     from app.gateway.workflow_service import WorkflowService, WorkflowServiceError
 
     if not WorkflowService.enabled():
+        return
+    browserbase_service = getattr(app.state, "browserbase_service", None)
+    if BrowserbaseResearchService.enabled() and not (browserbase_service and browserbase_service.started):
+        # Browserbase and Workflow take separate, independent exclusive
+        # leases, so a worker can win one and lose the other. Starting
+        # Workflow here anyway would hand it a browser_service that is not
+        # actually running on this process: WorkflowService.create() admits
+        # a browser workflow without checking browser capability, so it
+        # would be accepted and only fail partway through (possibly after
+        # model spend) once it tried to use the dead browser_service. Stay
+        # unstarted here too instead, matching the lease this worker lost.
+        logger.warning(
+            "Workflow service needs this worker's own Browserbase lease, which it did not win; "
+            "leaving Workflow unstarted here too so an admitted workflow never sees a dead "
+            "browser_service. Keep GATEWAY_WORKERS=1 whenever Browserbase and Workflows are both enabled."
+        )
         return
     from app.gateway.workflow_adapters import WorkflowModelAdapter
     from app.gateway.workflow_authority import workflow_actor_authorized
@@ -713,7 +730,7 @@ async def _startup_workflow_service(app: FastAPI) -> None:
         get_paths().base_dir / "workflows.sqlite",
         checkpointer=app.state.checkpointer,
         adapter=WorkflowModelAdapter(),
-        browser_service=getattr(app.state, "browserbase_service", None),
+        browser_service=browserbase_service,
         run_manager=app.state.run_manager,
         thread_store=app.state.thread_store,
         event_store=app.state.run_event_store,

@@ -40,12 +40,20 @@ instance's `lock_contended` flag makes `/api/browserbase/status` report
 process that does not own the lease, and any admission/storage call lazily
 retries `start()` (self-healing if the owning worker later exits) and
 surfaces `service_already_running` as a 503 while the lease is still held
-elsewhere. `MOMOBOT_WORKFLOWS_ENABLED`'s `WorkflowService` shares this same
+elsewhere. `MOMOBOT_WORKFLOWS_ENABLED`'s `WorkflowService` shares the same
 exclusive-lease-per-`base_dir` pattern and the same non-fatal-loser startup
-behavior (see `WORKFLOWS.md`). Keep `GATEWAY_WORKERS=1` for either feature
-unless every worker shares the same `base_dir` on purpose and you have
-accepted that only one worker actually runs it; running them under separate
-`base_dir`s (one per worker) is not supported today.
+behavior (see `WORKFLOWS.md`), but — unlike Browserbase — it does not lazily
+retry `start()` on later calls, so a worker that lost the Workflow lease
+stays unavailable for its own lifetime even after the owning worker exits.
+Browserbase and Workflow take *separate* leases, so a worker can win one and
+lose the other; when both features are enabled, Gateway startup skips
+`WorkflowService.start()` on a worker that lost the Browserbase lease even if
+that worker would have otherwise won the Workflow lease, since an admitted
+browser workflow trusts `browser_service` to actually be running. Keep
+`GATEWAY_WORKERS=1` for either feature unless every worker shares the same
+`base_dir` on purpose and you have accepted that only one worker actually
+runs it; running them under separate `base_dir`s (one per worker) is not
+supported today.
 `tests/test_managed_provider_startup.py::test_enabled_browserbase_survives_lock_contention_across_gateway_workers`
 covers this path end to end.
 
