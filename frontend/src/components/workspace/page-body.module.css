@@ -10,32 +10,34 @@
 /* ---------- Paper: page frame ---------- */
 
 /* Fraunces for page and section headings; row titles stay Nunito Sans. */
-:global([data-treatment="paper"]) .page :is(h1, h2) {
+:global(:root:not(.dark)[data-treatment="paper"]) .page :is(h1, h2) {
   font-family: var(--m-font-serif);
   font-weight: 700;
   letter-spacing: -0.01em;
   color: var(--paper-ink);
 }
 
-:global([data-treatment="paper"]) .page h1 {
+:global(:root:not(.dark)[data-treatment="paper"]) .page h1 {
   font-size: clamp(1.75rem, 1.25rem + 1.2vw, 2.25rem);
   line-height: 1.15;
 }
 
 /* Inactive tabs: the shared trigger fades --foreground to 60%, which is
    4.2:1 on cream (axe color-contrast). Ink-muted is 7.59:1. */
-:global([data-treatment="paper"]) .page [data-slot="tabs-trigger"] {
+:global(:root:not(.dark)[data-treatment="paper"])
+  .page
+  [data-slot="tabs-trigger"] {
   color: var(--paper-ink-muted);
 }
 
-:global([data-treatment="paper"])
+:global(:root:not(.dark)[data-treatment="paper"])
   .page
   [data-slot="tabs-trigger"][data-state="active"] {
   color: var(--paper-ink);
 }
 
 /* A cream sheet on the cream page: hairline edge, a hint of print depth. */
-:global([data-treatment="paper"]) .sheet {
+:global(:root:not(.dark)[data-treatment="paper"]) .sheet {
   background: var(--paper-cream-hi);
   border: 1px solid var(--paper-line);
   border-radius: 2px 5px 3px 6px;
@@ -43,11 +45,11 @@
 }
 
 /* Row lists: lighter hairlines between rows than around sheets. */
-:global([data-treatment="paper"]) .rows > * {
+:global(:root:not(.dark)[data-treatment="paper"]) .rows > * {
   border-color: color-mix(in srgb, var(--paper-line) 45%, transparent);
 }
 
-:global([data-treatment="paper"]) .eyebrow {
+:global(:root:not(.dark)[data-treatment="paper"]) .eyebrow {
   color: var(--paper-ink-muted);
 }
 
@@ -56,7 +58,7 @@
   position: relative;
 }
 
-:global([data-treatment="paper"]) .pin::before {
+:global(:root:not(.dark)[data-treatment="paper"]) .pin::before {
   top: -6px;
   left: 18px;
   z-index: 1;
@@ -95,14 +97,14 @@
   white-space: nowrap;
 }
 
-:global([data-treatment="paper"]) .chip {
+:global(:root:not(.dark)[data-treatment="paper"]) .chip {
   border-color: color-mix(in srgb, var(--paper-line) 60%, transparent);
   border-radius: 2px;
   background: var(--paper-cream);
 }
 
 /* A capability or file mark. Paper: cream tile, hairline, no decorative hue. */
-:global([data-treatment="paper"]) .mark {
+:global(:root:not(.dark)[data-treatment="paper"]) .mark {
   border: 1px solid color-mix(in srgb, var(--paper-line) 60%, transparent);
   border-radius: 4px;
   background: var(--paper-cream-hi);
@@ -240,7 +242,7 @@
   border-top: 1px dashed var(--border);
 }
 
-:global([data-treatment="paper"]) .trashStrip {
+:global(:root:not(.dark)[data-treatment="paper"]) .trashStrip {
   border-top-color: var(--paper-line);
 }
 
@@ -267,7 +269,7 @@
 }
 
 .status[data-tone="ok"] {
-  color: var(--paper-ok, #047857);
+  color: var(--status-ok);
 }
 
 .status[data-tone="ok"]::before,
@@ -276,11 +278,11 @@
 }
 
 .status[data-tone="active"] {
-  color: var(--paper-royal, #1d4ed8);
+  color: var(--status-active);
 }
 
 .status[data-tone="attention"] {
-  color: var(--paper-brass-text, #92400e);
+  color: var(--status-attention);
 }
 
 .status[data-tone="attention"]::before {
@@ -289,7 +291,7 @@
 }
 
 .status[data-tone="danger"] {
-  color: var(--paper-danger, #b91c1c);
+  color: var(--status-danger);
 }
 
 .status[data-tone="danger"]::before {
@@ -336,11 +338,11 @@
   box-shadow: inset 0 -2px 0 var(--foreground);
 }
 
-:global([data-treatment="paper"]) .filter {
+:global(:root:not(.dark)[data-treatment="paper"]) .filter {
   border-radius: 2px;
 }
 
-:global([data-treatment="paper"]) .filter[aria-pressed="true"] {
+:global(:root:not(.dark)[data-treatment="paper"]) .filter[aria-pressed="true"] {
   background: var(--paper-kraft);
   box-shadow: none;
 }

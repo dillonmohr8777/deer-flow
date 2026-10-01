@@ -268,6 +268,10 @@
   /* Momentum --m-muted. The shadcn default (#737373) measured 4.27:1 on the
      cream sidebar and failed AA on every workspace page; this is 5.37:1. */
   --muted-foreground: #636465;
+  --status-ok: #0a6b4f;
+  --status-active: #1b4b9e;
+  --status-attention: #7a5e18;
+  --status-danger: #9a2b3c;
   --accent: oklch(0.94 0.0098 87.47);
   --accent-foreground: oklch(0.205 0 0);
   --destructive: oklch(0.577 0.245 27.325);
@@ -306,6 +310,10 @@ html.dark .shiki span {
   --secondary-foreground: oklch(0.985 0 0);
   --muted-surface: oklch(0.269 0.0036 106.64);
   --muted-foreground: oklch(0.708 0 0);
+  --status-ok: #6ee7b7;
+  --status-active: #93c5fd;
+  --status-attention: #fcd34d;
+  --status-danger: #fda4af;
   --accent: oklch(0.32 0.0036 106.64);
   --accent-foreground: oklch(0.985 0 0);
   --destructive: oklch(0.704 0.191 22.216);
