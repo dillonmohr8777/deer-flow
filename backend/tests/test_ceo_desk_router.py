@@ -26,6 +26,7 @@ from deerflow.persistence.clients import ClientRepository
 from deerflow.persistence.exec_seats import AgentSeatRepository
 from deerflow.persistence.fleet import FleetBindingRepository
 from deerflow.persistence.organizations.model import OrganizationMemberRow
+from deerflow.persistence.team_board import TeamBoardRepository
 from deerflow.persistence.user.model import UserRow
 
 pytestmark = pytest.mark.asyncio
@@ -258,6 +259,37 @@ async def test_reopen_seat_is_owner_or_admin_only(org_world):  # noqa: F811
         assert len(events) == 2  # the owner's reopen and the admin's reopen; the denied 409 records no event
         assert all(e["outcome"] == "success" for e in events)
         assert {e["target_id"] for e in events} == {seat_id, reclaimed["id"]}
+
+
+async def test_ratify_and_reopen_announce_to_exec(org_world):  # noqa: F811
+    """f186(a): deleting either announce_to_exec call left every other test
+    green, so the #exec post itself was unpinned. Mirrors
+    test_exec_seat_tools.py's own announcement assertions."""
+    session_factory = org_world
+    app = _build_app(session_factory)
+    headers_a = auth_headers(USER_A, ORG_S)
+    headers_c = auth_headers(USER_C, ORG_S)
+
+    with acting_as(USER_A, ORG_S):
+        team_repo = TeamBoardRepository(session_factory)
+        await team_repo.ensure_default_channels(created_by_user_id=USER_A)
+        seat_repo = AgentSeatRepository(session_factory)
+        claimed = await seat_repo.claim_seat(seat="cmo", agent_name="cmo-agent", kpi="pipeline", weekly_token_budget=0, claimed_by_user_id=USER_A)
+    seat_id = claimed["id"]
+
+    async with _client(app) as client:
+        ratified = await client.post(f"/api/ceo/seats/{seat_id}/ratify", headers=headers_c)
+        assert ratified.status_code == 200, ratified.text
+
+        reopened = await client.post(f"/api/ceo/seats/{seat_id}/reopen", headers=headers_a)
+        assert reopened.status_code == 200, reopened.text
+
+    with acting_as(USER_A, ORG_S):
+        exec_channel = next(c for c in await team_repo.list_channels() if c["slug"] == "exec")
+        messages = await team_repo.list_messages(exec_channel["id"])
+    bodies = [m["body"] for m in messages]
+    assert any("ratified cmo for cmo-agent" in b for b in bodies)
+    assert any("reopened cmo (was held by cmo-agent)" in b for b in bodies)
 
 
 async def test_ratify_and_reopen_unknown_seat_404(org_world):  # noqa: F811

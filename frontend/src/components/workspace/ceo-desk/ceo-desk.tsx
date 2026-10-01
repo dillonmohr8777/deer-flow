@@ -21,7 +21,6 @@ import {
 } from "@/components/workspace/workspace-container";
 import { useApproveBoardReply, useSendBoardReply } from "@/core/board";
 import {
-  CEO_DIGEST_QUERY_KEY,
   CEO_NEEDS_MY_YES_QUERY_KEY,
   useDailyDigest,
   useNeedsMyYes,
@@ -144,7 +143,7 @@ function DigestSection({
               </dd>
             </div>
             <div className={styles.digestStat}>
-              <dt className={styles.digestStatLabel}>Drafts waiting</dt>
+              <dt className={styles.digestStatLabel}>Replies waiting</dt>
               <dd className={styles.digestStatValue}>
                 {digest.data.needs_my_yes_drafts}
               </dd>
@@ -230,14 +229,16 @@ function BoardDraftCard({ draft }: { draft: BoardDraftAwaitingApproval }) {
   const queryClient = useQueryClient();
   const subject = draft.subject || "(no subject)";
   // Both actions land here rather than in useApproveBoardReply/useSendBoardReply
-  // themselves: those hooks only invalidate board query keys, and the
-  // needs-my-yes queue plus the digest's drafts-waiting count also need to
-  // drop this thread once it moves on (same pattern as f178's approve fix).
+  // themselves: those hooks only invalidate board query keys, so the
+  // needs-my-yes queue also needs to drop this thread once it moves on
+  // (same pattern as f178's approve fix). The digest is a stored snapshot
+  // the background sweep writes once a day (GET /api/ceo/digest never
+  // regenerates it), so invalidating its query key here would only refetch
+  // the same unchanged row -- there is nothing to invalidate.
   const onThreadAdvanced = () => {
     void queryClient.invalidateQueries({
       queryKey: CEO_NEEDS_MY_YES_QUERY_KEY,
     });
-    void queryClient.invalidateQueries({ queryKey: CEO_DIGEST_QUERY_KEY });
   };
   const error = approve.error ?? send.error;
   return (

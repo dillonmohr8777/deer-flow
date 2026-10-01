@@ -3,7 +3,10 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 
 import { CeoDeskBody } from "@/components/workspace/ceo-desk/ceo-desk";
-import type { BoardDraftAwaitingApproval } from "@/core/ceo-desk";
+import {
+  CEO_NEEDS_MY_YES_QUERY_KEY,
+  type BoardDraftAwaitingApproval,
+} from "@/core/ceo-desk";
 
 const mocks = rs.hoisted(() => ({
   boardDrafts: [] as BoardDraftAwaitingApproval[],
@@ -66,11 +69,13 @@ function draft(
 
 function renderWithClient() {
   const queryClient = new QueryClient();
-  return render(
+  const invalidateQueries = rs.spyOn(queryClient, "invalidateQueries");
+  render(
     <QueryClientProvider client={queryClient}>
       <CeoDeskBody />
     </QueryClientProvider>,
   );
+  return { invalidateQueries };
 }
 
 afterEach(() => {
@@ -81,7 +86,7 @@ afterEach(() => {
 describe("CEO Desk needs-my-yes queue, composing a reply inline (e14 next step)", () => {
   it("shows Momo's draft body and an Approve action for a drafted thread", () => {
     mocks.boardDrafts = [draft({ status: "drafted" })];
-    renderWithClient();
+    const { invalidateQueries } = renderWithClient();
 
     expect(
       screen.getByLabelText<HTMLTextAreaElement>(
@@ -91,16 +96,22 @@ describe("CEO Desk needs-my-yes queue, composing a reply inline (e14 next step)"
     fireEvent.click(
       screen.getByRole("button", { name: "Approve Broken widget" }),
     );
-    expect(mocks.approveMutate).toHaveBeenCalledWith(
-      { threadId: "t1" },
-      expect.anything(),
-    );
     expect(mocks.sendMutate).not.toHaveBeenCalled();
+
+    // f186(d): assert the real behavior of the second (options) argument,
+    // not just that one was passed -- a no-op onSuccess would otherwise
+    // satisfy the old `expect.anything()` assertion.
+    const [args, options] = mocks.approveMutate.mock.calls[0]!;
+    expect(args).toEqual({ threadId: "t1" });
+    options.onSuccess();
+    expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: CEO_NEEDS_MY_YES_QUERY_KEY,
+    });
   });
 
   it("shows a Send reply action for an approved thread, using the draft body verbatim", () => {
     mocks.boardDrafts = [draft({ status: "approved" })];
-    renderWithClient();
+    const { invalidateQueries } = renderWithClient();
 
     expect(
       screen.queryByRole("button", { name: "Approve Broken widget" }),
@@ -108,10 +119,16 @@ describe("CEO Desk needs-my-yes queue, composing a reply inline (e14 next step)"
     fireEvent.click(
       screen.getByRole("button", { name: "Send reply to Broken widget" }),
     );
-    expect(mocks.sendMutate).toHaveBeenCalledWith(
-      { threadId: "t1", body: "Here's a proposed reply." },
-      expect.anything(),
-    );
+
+    const [args, options] = mocks.sendMutate.mock.calls[0]!;
+    expect(args).toEqual({
+      threadId: "t1",
+      body: "Here's a proposed reply.",
+    });
+    options.onSuccess();
+    expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: CEO_NEEDS_MY_YES_QUERY_KEY,
+    });
   });
 
   it("disables Send when there is no draft body to send", () => {

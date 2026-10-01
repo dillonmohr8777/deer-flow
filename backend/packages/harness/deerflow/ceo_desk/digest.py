@@ -35,6 +35,10 @@ logger = logging.getLogger(__name__)
 
 _WINDOW = timedelta(hours=24)
 _SHIPPED_STATUSES = frozenset({BoardThreadStatus.REPLIED, BoardThreadStatus.CLOSED})
+# A drafted/approved thread already counts toward needs_my_yes_drafts below;
+# excluding it from "stuck" too keeps the three counts from double-counting
+# the same thread (f186).
+_AWAITING_YES_STATUSES = frozenset({BoardThreadStatus.DRAFTED, BoardThreadStatus.APPROVED})
 _MAX_NAMED_SUBJECTS = 5
 # A board thread's subject is client-controlled (any client_contact can set
 # one via POST /api/board/threads); truncated to bound prompt size, not as an
@@ -79,10 +83,11 @@ async def build_digest_window(
 
     "Shipped" is a thread that reached ``replied``/``closed`` since *since*
     (default: the trailing 24h). "Stuck" is any thread not yet
-    ``replied``/``closed`` whose last update predates *since* -- open, and
-    already open before this window started. "Needs my yes" is the same
-    live count the needs-my-yes queue itself shows (drafted threads awaiting
-    Approve, approved threads still awaiting their explicit Send, plus
+    ``replied``/``closed``, not already counted as needing a yes (drafted or
+    approved), whose last update predates *since* -- open, and already open
+    before this window started. "Needs my yes" is the same live count the
+    needs-my-yes queue itself shows (drafted threads awaiting Approve,
+    approved threads still awaiting their explicit Send, plus
     claimed/unratified seats), not windowed, since it describes right now.
     """
     now = now or datetime.now(UTC)
@@ -90,7 +95,7 @@ async def build_digest_window(
 
     threads = await board_repo.list_threads()
     shipped = [t for t in threads if t.get("status") in _SHIPPED_STATUSES and (updated_at := _parse_dt(t.get("updated_at"))) is not None and updated_at >= since]
-    stuck = [t for t in threads if t.get("status") not in _SHIPPED_STATUSES and (updated_at := _parse_dt(t.get("updated_at"))) is not None and updated_at < since]
+    stuck = [t for t in threads if t.get("status") not in _SHIPPED_STATUSES and t.get("status") not in _AWAITING_YES_STATUSES and (updated_at := _parse_dt(t.get("updated_at"))) is not None and updated_at < since]
     # Matches the needs-my-yes queue (ceo_desk.py's get_needs_my_yes): a
     # drafted thread needs an Approve, an approved one still needs its
     # explicit Send -- both are a "yes" still owed.

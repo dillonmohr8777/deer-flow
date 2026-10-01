@@ -87,6 +87,35 @@ async def test_build_digest_window_counts_shipped_stuck_and_needs_my_yes(org_wor
     assert window.needs_my_yes_ratifications == 1
 
 
+async def test_build_digest_window_excludes_drafted_and_approved_threads_from_stuck(org_world):  # noqa: F811
+    """f186(b): a drafted/approved thread idle past the window used to count
+    toward both ``stuck`` and ``needs_my_yes_drafts``; it must count once."""
+    session_factory = org_world
+    now = datetime.now(UTC)
+    since = now - timedelta(hours=24)
+
+    with acting_as(USER_A, ORG_S):
+        client_repo = ClientRepository(session_factory)
+        board_repo = BoardRepository(session_factory)
+        seat_repo = AgentSeatRepository(session_factory)
+        acme = await client_repo.create(display_name="Acme")
+
+        old_drafted = await board_repo.create_thread(client_id=acme["id"], kind="ticket", subject="Old draft, still unapproved")
+        await board_repo.patch_thread(old_drafted["id"], status="drafted")
+        await _age_thread(session_factory, old_drafted["id"], now - timedelta(days=5))
+
+        old_approved = await board_repo.create_thread(client_id=acme["id"], kind="ticket", subject="Old approval, still unsent")
+        await board_repo.patch_thread(old_approved["id"], status="drafted")
+        await board_repo.patch_thread(old_approved["id"], status="approved")
+        await _age_thread(session_factory, old_approved["id"], now - timedelta(days=5))
+
+        window = await build_digest_window(board_repo, seat_repo, since=since, now=now)
+
+    assert window.stuck_count == 0
+    assert window.stuck_subjects == []
+    assert window.needs_my_yes_drafts == 2
+
+
 async def test_build_digest_window_is_all_zero_with_nothing_recorded(org_world):  # noqa: F811
     session_factory = org_world
     with acting_as(USER_A, ORG_S):
