@@ -36,7 +36,7 @@ import {
   type SeatAwaitingRatification,
   type SeatRosterEntry,
 } from "@/core/ceo-desk";
-import { useCeoDeskEnabled } from "@/core/features";
+import { useCeoDeskEnabled, useMomentumInternalEnabled } from "@/core/features";
 import { useTeamMembers, type TeamMember } from "@/core/team";
 import { cn } from "@/lib/utils";
 
@@ -89,6 +89,10 @@ export function CeoDeskBody() {
   const digest = useDailyDigest();
   const needsMyYes = useNeedsMyYes();
   const seats = useSeatRoster();
+  // The feeds are Momentum's own #exec/#fleet chatter, never a client
+  // workspace's (f189) -- the backend 404s a non-staff caller, so the
+  // frontend never even asks on a workspace where Team itself is hidden.
+  const { enabled: feedsEnabled } = useMomentumInternalEnabled();
 
   return (
     <div className={styles.frame} data-testid="ceo-desk">
@@ -102,7 +106,7 @@ export function CeoDeskBody() {
       <DigestSection digest={digest} />
       <NeedsMyYesSection needsMyYes={needsMyYes} />
       <SeatRosterSection seats={seats} />
-      <FeedsSection />
+      {feedsEnabled ? <FeedsSection /> : null}
     </div>
   );
 }
@@ -467,11 +471,16 @@ function FeedPanel({
   const feed = useCeoFeed(slug);
   const post = usePostCeoFeedMessage(slug);
   const [draft, setDraft] = useState("");
-  const endRef = useRef<HTMLLIElement>(null);
+  const listRef = useRef<HTMLOListElement>(null);
   const count = feed.data?.messages.length ?? 0;
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ block: "end" });
+    // f190: scroll only this panel's own list, not scrollIntoView, which
+    // walks every scrollable ancestor including the page -- a new message
+    // arriving from the 15s poll must never yank the viewport away from
+    // the digest or needs-my-yes queue above.
+    const list = listRef.current;
+    if (list) list.scrollTop = list.scrollHeight;
   }, [count]);
 
   const send = () => {
@@ -514,11 +523,12 @@ function FeedPanel({
         <p className={styles.hint}>
           No #{slug} channel yet. Create it once from Team.
         </p>
+      ) : count === 0 ? (
+        <EmptyState momo="verifier" title="Nothing here yet">
+          Replies in #{slug} will show up here as they come in.
+        </EmptyState>
       ) : (
-        <ol className={styles.feedMessages} aria-live="polite">
-          {count === 0 ? (
-            <li className={styles.hint}>Nothing here yet.</li>
-          ) : null}
+        <ol ref={listRef} className={styles.feedMessages} aria-live="polite">
           {feed.data?.messages.map((message) => (
             <li key={message.id} className={styles.feedMessage}>
               <span className={styles.feedMessageHead}>
@@ -539,7 +549,6 @@ function FeedPanel({
               {message.body}
             </li>
           ))}
-          <li ref={endRef} aria-hidden />
         </ol>
       )}
       {feed.data?.exists ? (

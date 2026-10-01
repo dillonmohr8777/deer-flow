@@ -12,13 +12,15 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from app.gateway.authz import require_permission
-from app.gateway.deps import get_agent_seat_repo, get_board_repo, get_ceo_desk_digest_repo, get_current_user_from_request, get_team_board_repo, record_audit_event
+from app.gateway.deps import get_agent_seat_repo, get_board_repo, get_ceo_desk_digest_repo, get_config, get_current_user_from_request, get_team_board_repo, record_audit_event
+from app.gateway.momentum_internal import require_momentum_staff
 from deerflow.board.workflow import latest_momo_draft_body
+from deerflow.config.app_config import AppConfig
 from deerflow.exec_seats import SeatTransitionError, assert_can_ratify, assert_can_reopen
 from deerflow.persistence.board.model import BoardThreadStatus
 from deerflow.persistence.exec_seats.model import AgentSeatStatus
@@ -152,6 +154,28 @@ async def _require_admin(request: Request) -> str:
 
 def _seat_not_found() -> HTTPException:
     return HTTPException(status_code=404, detail="No such seat claim in this organization")
+
+
+async def _require_staff_admin(request: Request, config: AppConfig) -> str:
+    """Gate the #exec/#fleet feed routes.
+
+    f189 review: the feed routes reused the Team Board's "create the default
+    set on GET" pattern (list_team_channels does the same) without that
+    router's own ``momentum_staff_only`` gate, so any owner/admin of *any*
+    organization -- including a client's own workspace -- could call GET and
+    have ``ensure_default_channels()`` write Team Board channels into it,
+    something ``momentum_internal.py`` says must never happen ("a client
+    never sees these surfaces even as the owner of their own workspace").
+    Gating on staff first (404 for anyone outside the agency workspace, same
+    as ``/api/team``) also closes the suspected gap where an admin who also
+    holds a ``client_contact`` assignment could read #exec: staff status
+    itself already excludes that assignment (see ``is_momentum_staff``).
+    Staff but not owner/admin still gets the CEO Desk's usual 403.
+    """
+    _, user_id, role = await require_momentum_staff(request, config)
+    if role not in _ORG_ADMIN_ROLES:
+        raise HTTPException(status_code=403, detail="The CEO Desk is for an organization owner/admin only")
+    return user_id
 
 
 def _normalize_feed_slug(slug: str) -> str:
@@ -336,17 +360,16 @@ async def get_digest(request: Request) -> DailyDigestResponse:
 
 @router.get("/channels/{slug}/messages", response_model=CeoFeedResponse)
 @require_permission("ceo", "read")
-async def get_feed_messages(slug: str, request: Request, limit: int = 200) -> CeoFeedResponse:
+async def get_feed_messages(slug: str, request: Request, limit: int = 200, config: AppConfig = Depends(get_config)) -> CeoFeedResponse:
     """Read the #exec or #fleet Team Board feed from the CEO Desk itself.
 
     Reuses ``TeamBoardRepository`` directly rather than routing through
-    ``/api/team``: that router's gate is ``momentum_internal`` (a staff
-    workspace flag, see ``app/gateway/momentum_internal.py``), independent
-    of the CEO Desk's own owner/admin gate (``_require_admin``), so an
-    owner/admin sees these feeds here even on a workspace where the Team
-    Board page itself is hidden.
+    ``/api/team``, but gated exactly the same way that router is
+    (``momentum_staff_only``/``require_momentum_staff``) plus the CEO Desk's
+    own owner/admin requirement on top -- these feeds show the agency's own
+    #exec/#fleet chatter, never a client workspace's (f189).
     """
-    await _require_admin(request)
+    await _require_staff_admin(request, config)
     normalized = _normalize_feed_slug(slug)
     if normalized not in _FEED_CHANNEL_SLUGS:
         raise _invalid_feed_channel()
@@ -365,14 +388,15 @@ async def get_feed_messages(slug: str, request: Request, limit: int = 200) -> Ce
 
 @router.post("/channels/{slug}/messages", response_model=CeoFeedMessage, status_code=201)
 @require_permission("ceo", "write")
-async def post_feed_message(slug: str, body: CeoFeedPostRequest, request: Request) -> CeoFeedMessage:
+async def post_feed_message(slug: str, body: CeoFeedPostRequest, request: Request, config: AppConfig = Depends(get_config)) -> CeoFeedMessage:
     """Reply into #exec or #fleet from the CEO Desk, authored as the signed-in admin.
 
-    #exec always exists (a default channel); #fleet does not until an
-    owner/admin creates it once from the Team Board, matching
-    ``team_board_tools.py``'s identical gap for the fleet-agent tools.
+    Staff-gated exactly like ``get_feed_messages`` above (f189). #exec always
+    exists (a default channel); #fleet does not until an owner/admin creates
+    it once from the Team Board, matching ``team_board_tools.py``'s identical
+    gap for the fleet-agent tools.
     """
-    user_id = await _require_admin(request)
+    user_id = await _require_staff_admin(request, config)
     normalized = _normalize_feed_slug(slug)
     if normalized not in _FEED_CHANNEL_SLUGS:
         raise _invalid_feed_channel()

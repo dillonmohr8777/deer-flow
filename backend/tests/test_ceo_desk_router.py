@@ -11,20 +11,24 @@ empty or filtered list.
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from types import SimpleNamespace
 
 import httpx
 import pytest
 from fastapi import FastAPI
-from org_isolation_fixtures import ORG_S, USER_A, USER_C, acting_as, auth_headers, org_world  # noqa: F401
+from org_isolation_fixtures import ORG_S, STORAGE_S, USER_A, USER_C, acting_as, auth_headers, org_world  # noqa: F401
 
 from app.gateway.auth_middleware import AuthMiddleware
+from app.gateway.deps import get_config
 from app.gateway.routers import board, ceo_desk, clients
 from deerflow.persistence.audit_events import AuditEventRepository
 from deerflow.persistence.board import BoardRepository
 from deerflow.persistence.ceo_desk import CeoDeskDigestRepository
 from deerflow.persistence.clients import ClientRepository
+from deerflow.persistence.clients.model import ClientAssignmentRow
 from deerflow.persistence.exec_seats import AgentSeatRepository
 from deerflow.persistence.fleet import FleetBindingRepository
+from deerflow.persistence.organizations.identity import private_organization_slug
 from deerflow.persistence.organizations.model import OrganizationMemberRow
 from deerflow.persistence.team_board import TeamBoardRepository
 from deerflow.persistence.user.model import UserRow
@@ -32,9 +36,16 @@ from deerflow.persistence.user.model import UserRow
 pytestmark = pytest.mark.asyncio
 
 USER_D = "user-d"
+# ORG_S plays Momentum's own workspace by default (its momentum_internal slug
+# matches), mirroring test_team_board_router.py's convention.
+MOMENTUM_SLUG = private_organization_slug(STORAGE_S)
 
 
-def _build_app(session_factory) -> FastAPI:
+def _momentum_internal_config(*, enabled: bool = True, slugs: list[str] | None = None) -> SimpleNamespace:
+    return SimpleNamespace(momentum_internal=SimpleNamespace(enabled=enabled, organization_slugs=[MOMENTUM_SLUG] if slugs is None else slugs))
+
+
+def _build_app(session_factory, *, config: SimpleNamespace | None = None) -> FastAPI:
     app = FastAPI()
     app.add_middleware(AuthMiddleware)
     app.state.client_repo = ClientRepository(session_factory)
@@ -47,6 +58,7 @@ def _build_app(session_factory) -> FastAPI:
     app.include_router(clients.router)
     app.include_router(board.router)
     app.include_router(ceo_desk.router)
+    app.dependency_overrides[get_config] = lambda: config or _momentum_internal_config()
     return app
 
 
@@ -349,6 +361,19 @@ async def test_exec_feed_reads_and_posts(org_world):  # noqa: F811
         assert messages[0]["body"] == "Shipping the Q4 plan today."
 
 
+async def test_feed_post_rejects_a_whitespace_only_body(org_world):  # noqa: F811
+    """f193: a body that is only whitespace is empty after the handler's own
+    .strip(), so it must 422 the same as a truly empty body (mutant-checked:
+    deleting this branch left every other test green)."""
+    session_factory = org_world
+    app = _build_app(session_factory)
+    headers_a = auth_headers(USER_A, ORG_S)
+
+    async with _client(app) as client:
+        resp = await client.post("/api/ceo/channels/exec/messages", json={"body": "   "}, headers=headers_a)
+        assert resp.status_code == 422, resp.text
+
+
 async def test_fleet_feed_before_creation_then_after(org_world):  # noqa: F811
     """#fleet has no default: reading it before anyone creates it reports
     ``exists: false`` with no messages, and posting 404s; once an owner/admin
@@ -405,3 +430,50 @@ async def test_feed_requires_admin(org_world):  # noqa: F811
         assert get_resp.status_code == 403
         post_resp = await client.post("/api/ceo/channels/exec/messages", json={"body": "hi"}, headers=headers_d)
         assert post_resp.status_code == 403
+
+
+async def test_feeds_404_for_a_non_momentum_workspace_and_create_no_channels(org_world):  # noqa: F811
+    """f189: the feeds are Momentum's own #exec/#fleet chatter, never a client
+    workspace's -- an owner/admin outside the configured agency workspace must
+    get the same 404 /api/team gives, and GET must never write Team Board
+    channels into that workspace (the probed cross-tenant leak)."""
+    session_factory = org_world
+    # ORG_S is not the configured Momentum workspace in this app.
+    app = _build_app(session_factory, config=_momentum_internal_config(slugs=["someone-elses-agency"]))
+    headers_a = auth_headers(USER_A, ORG_S)
+
+    async with _client(app) as client:
+        get_resp = await client.get("/api/ceo/channels/exec/messages", headers=headers_a)
+        assert get_resp.status_code == 404, get_resp.text
+        post_resp = await client.post("/api/ceo/channels/exec/messages", json={"body": "hi"}, headers=headers_a)
+        assert post_resp.status_code == 404, post_resp.text
+
+    with acting_as(USER_A, ORG_S):
+        team_repo = TeamBoardRepository(session_factory)
+        assert await team_repo.list_channels() == []  # the GET above created nothing
+
+
+async def test_feed_refuses_an_admin_who_is_also_a_client_contact(org_world):  # noqa: F811
+    """f189 suspected gap: ``_require_admin`` alone doesn't exclude an admin who
+    also holds a ``client_contact`` assignment; staffing on ``is_momentum_staff``
+    does (it already denies a client_contact everywhere else), so the same
+    gate closes this too."""
+    session_factory = org_world
+    app = _build_app(session_factory)
+    headers_a = auth_headers(USER_A, ORG_S)
+
+    async with _client(app) as client:
+        acme = await client.post("/api/clients", json={"display_name": "Acme"}, headers=headers_a)
+        assert acme.status_code == 201
+        client_id = acme.json()["id"]
+
+    now = datetime.now(UTC)
+    async with session_factory() as session, session.begin():
+        session.add(UserRow(id=USER_D, email=f"{USER_D}@example.com", password_hash=None, system_role="user", needs_setup=False, token_version=0, created_at=now))
+        session.add(OrganizationMemberRow(organization_id=ORG_S, user_id=USER_D, role="admin", status="active", created_at=now, updated_at=now))
+        session.add(ClientAssignmentRow(client_id=client_id, user_id=USER_D, organization_id=ORG_S, role="client_contact", created_at=now, updated_at=now))
+    headers_d = auth_headers(USER_D, ORG_S)
+
+    async with _client(app) as client:
+        get_resp = await client.get("/api/ceo/channels/exec/messages", headers=headers_d)
+        assert get_resp.status_code == 404, get_resp.text

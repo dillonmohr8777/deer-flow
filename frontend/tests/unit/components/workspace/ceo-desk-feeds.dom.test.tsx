@@ -14,6 +14,7 @@ import type { CeoFeed, CeoFeedSlug } from "@/core/ceo-desk";
 const mocks = rs.hoisted(() => ({
   feeds: {} as Record<CeoFeedSlug, CeoFeed>,
   postMutate: rs.fn(),
+  momentumInternalEnabled: rs.fn(() => ({ enabled: true, isLoading: false })),
 }));
 
 rs.mock("@/core/ceo-desk", () => ({
@@ -74,6 +75,13 @@ rs.mock("@/core/team", () => ({
     isError: false,
     error: null,
   }),
+}));
+
+rs.mock("@/core/features", () => ({
+  useCeoDeskEnabled: () => ({ enabled: true, isLoading: false }),
+  // The feeds are Momentum-staff only (f189); these tests exercise a staff
+  // caller, matching the agency workspace the real /api/ceo feed routes gate on.
+  useMomentumInternalEnabled: mocks.momentumInternalEnabled,
 }));
 
 rs.mock("@/core/auth/AuthProvider", () => ({
@@ -139,6 +147,47 @@ describe("CEO Desk live #exec/#fleet feeds (e14 live feeds)", () => {
     const fleetPanel = screen.getByTestId("ceo-feed-fleet");
     expect(within(fleetPanel).getByText(/No #fleet channel yet/)).toBeTruthy();
     expect(within(fleetPanel).queryByLabelText("Message #fleet")).toBeNull();
+  });
+
+  it("hides the feeds entirely off the agency workspace (f189)", () => {
+    mocks.feeds = {
+      exec: { channel: "exec", exists: true, messages: [] },
+      fleet: { channel: "fleet", exists: false, messages: [] },
+    };
+    mocks.momentumInternalEnabled.mockReturnValueOnce({
+      enabled: false,
+      isLoading: false,
+    });
+    renderBody();
+
+    expect(screen.queryByText("Live feeds")).toBeNull();
+    expect(screen.queryByTestId("ceo-feed-exec")).toBeNull();
+  });
+
+  it("scrolls only the feed list on a new message, never the page (f190)", () => {
+    mocks.feeds = {
+      exec: {
+        channel: "exec",
+        exists: true,
+        messages: [
+          {
+            id: "m1",
+            author_user_id: "user-a",
+            body: "first",
+            created_at: "2026-09-30T12:00:00.000Z",
+          },
+        ],
+      },
+      fleet: { channel: "fleet", exists: false, messages: [] },
+    };
+    const scrollIntoView = rs.fn();
+    // happy-dom has no real layout, so scrollHeight is always 0; the
+    // assertion that matters is that scrollIntoView (which walks every
+    // scrollable ancestor, including the page) is never called.
+    HTMLElement.prototype.scrollIntoView = scrollIntoView;
+    renderBody();
+
+    expect(scrollIntoView).not.toHaveBeenCalled();
   });
 
   it("names a fleet-agent's signed message as Momentum, not Former teammate", () => {

@@ -51,6 +51,7 @@ async function mockCeoDesk(
   page: Page,
   {
     ceo = true,
+    momentumInternal = true,
     drafts = [],
     claims = [],
     seats = [],
@@ -60,6 +61,8 @@ async function mockCeoDesk(
     fleetMessages = [],
   }: {
     ceo?: boolean;
+    /** f189: the live #exec/#fleet feeds are gated on the agency workspace. */
+    momentumInternal?: boolean;
     drafts?: Draft[];
     claims?: SeatClaim[];
     seats?: SeatRow[];
@@ -95,6 +98,7 @@ async function mockCeoDesk(
         agents_api: { enabled: true },
         desk: { enabled: false },
         ceo: { enabled: ceo },
+        momentum_internal: { enabled: momentumInternal },
       }),
     ),
   );
@@ -374,6 +378,20 @@ test.describe("CEO Desk", () => {
     await execPanel.getByLabel("Message #exec").fill("Great work, team.");
     await execPanel.getByRole("button", { name: "Send" }).click();
     await expect(execPanel.getByText("Great work, team.")).toBeVisible();
+  });
+
+  test("hides the live feeds entirely off the agency workspace (f189)", async ({
+    page,
+  }) => {
+    await mockCeoDesk(page, { momentumInternal: false });
+    await page.goto("/workspace/ceo");
+
+    const desk = page.getByTestId("ceo-desk");
+    await expect(desk.getByText("No digest yet")).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(desk.getByText("Live feeds")).toHaveCount(0);
+    await expect(page.getByTestId("ceo-feed-exec")).toHaveCount(0);
   });
 });
 
