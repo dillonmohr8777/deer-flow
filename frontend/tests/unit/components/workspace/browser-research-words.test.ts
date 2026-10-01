@@ -20,17 +20,19 @@ const SOURCES = [
 // last_error and phase, keyword forms, and the router's HTTP detail.
 const SITE =
   /BrowserbaseError\(|\[["'](?:reason|last_error)["']\]\s*=|\blast_error\s*=|\bphase\s*=|\bcode\s*=|\bdetail\s*=/;
-// A site whose value is not a literal must be one of these reviewed forms:
-// passing on a code that was itself raised at a literal site, or the worker
-// code checked against safe_worker_codes.
-const PROPAGATED = [
-  /^\s*(?:error\.code|None)\b/,
-  /^\s*code if isinstance\(code, str\) and code in safe_worker_codes else phase/,
-  // Reading the code off an exception (getattr names are masked above).
-  /^\s*getattr\(\)\s*$/,
-  // BrowserbaseError.__init__ storing its own argument.
-  /^\s*code\s*$/,
-];
+// The only sites allowed to pass a code on through a variable, matched as
+// whole lines so nothing can be appended to them: each passes on a code
+// that was itself raised at a literal site, or the worker code checked
+// against safe_worker_codes. A new propagation line must be reviewed here.
+const PROPAGATED_LINES = new Set([
+  "self.code = code",
+  'state["reason"] = error.code',
+  'data["last_error"] = error.code',
+  'code = getattr(error, "code", None)',
+  'data["last_error"] = code if isinstance(code, str) and code in safe_worker_codes else phase',
+  "raise ValueError(error.code) from None",
+  "raise HTTPException(error.status_code, detail=error.code) from None",
+]);
 
 const REVIEWED_NAMES = new Set([
   // Python keywords and constants that cannot carry a code.
@@ -74,16 +76,19 @@ function sitesAndCodes() {
         unreviewed.push(`${where} (builds a code)`);
       for (const match of literals)
         if (/^[a-z][a-z0-9_]*$/.test(match[3]!)) codes.add(match[3]!);
-      const propagated = PROPAGATED.some((form) => form.test(value));
-      if (!literals.length && !propagated) unreviewed.push(where);
-      // Any other name mixed into a code (`kind or "x"`, `CODES[kind]`,
-      // `kind.lower()`, `else kind`) can carry an unmapped code. Only names
-      // reviewed against the service may appear: the stored reason, the
-      // enabled check and phase, each assigned only at literal sites.
-      const names = value.replace(/(["']).*?\1/g, "").match(/[A-Za-z_][\w]*/g);
-      const stray = (names ?? []).filter((name) => !REVIEWED_NAMES.has(name));
-      if (literals.length && !propagated && stray.length)
+      if (PROPAGATED_LINES.has(line.trim())) return;
+      // Every other name mixed into a code (`kind or "x"`, `CODES[kind]`,
+      // `kind.lower()`, `else kind`, `error.code or kind`) can carry an
+      // unmapped code. Only names reviewed against the service may appear:
+      // the stored reason, the enabled check and phase, each assigned only
+      // at literal sites.
+      const names =
+        value.replace(/(["']).*?\1/g, "").match(/[A-Za-z_]\w*/g) ?? [];
+      const stray = names.filter((name) => !REVIEWED_NAMES.has(name));
+      if (stray.length)
         unreviewed.push(`${where} (mixes in ${stray.join(", ")})`);
+      else if (!literals.length && !/^\s*None\b/.test(value))
+        unreviewed.push(where);
     });
     const safe =
       /safe_worker_codes\s*=\s*\{([^}]*)\}/.exec(lines.join("\n"))?.[1] ?? "";

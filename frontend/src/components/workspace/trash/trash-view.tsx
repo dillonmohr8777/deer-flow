@@ -46,14 +46,20 @@ function errorToastMessage(error: unknown, fallback: string): string {
 /** Remaining whole days of the retention window (spec §8.3); the effective
  * window comes from ``GET /api/projects/config`` — expired rows are swept
  * server-side. */
-function retentionDaysLeft(trashedAt: string, retentionDays: number): number {
+export function retentionDaysLeft(
+  trashedAt: string,
+  retentionDays: number,
+  now = Date.now(),
+): number {
   const expiresAt = new Date(trashedAt).getTime() + retentionDays * 86_400_000;
-  return Math.max(0, Math.ceil((expiresAt - Date.now()) / 86_400_000));
+  const left = expiresAt - now;
+  // Under a day is "Less than a day left" (0), not a rounded-up "1 day".
+  return left < 86_400_000 ? 0 : Math.ceil(left / 86_400_000);
 }
 
 /** Days left at or under which a row says so as an attention tag: the
  * document is about to be deleted for good. */
-const RETENTION_ATTENTION_DAYS = 3;
+export const RETENTION_ATTENTION_DAYS = 3;
 
 /**
  * Trash view (spec §9): trashed shelf documents with their origin project

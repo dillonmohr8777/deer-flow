@@ -3,7 +3,7 @@
 import { ArrowLeftIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import {
@@ -74,6 +74,7 @@ export default function NewAgentPage() {
   const [isCheckingName, setIsCheckingName] = useState(false);
   const [agentName, setAgentName] = useState("");
   const [agent, setAgent] = useState<Agent | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [setupAgentStatus, setSetupAgentStatus] =
     useState<SetupAgentStatus>("idle");
 
@@ -101,6 +102,7 @@ export default function NewAgentPage() {
         }
 
         toast.error(t.agents.agentCreatedPendingRefresh);
+        setLoadFailed(true);
       });
     },
   });
@@ -267,8 +269,20 @@ export default function NewAgentPage() {
     threadId,
   ]);
 
-  const saved = Boolean(agent);
+  // Saved also when setup succeeded but the agent could not be read back
+  // yet: the page then says so itself instead of leaving Save disabled.
+  const saved = Boolean(agent) || loadFailed;
   const saveDisabled = saved || thread.isLoading || setupAgentStatus !== "idle";
+  // Save is replaced by the Saved tag, so the focused button disappears
+  // and focus would fall to the page. Hand it to the saved sheet instead,
+  // only when focus was actually lost.
+  const savedSheetRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!saved) return;
+    const active = document.activeElement;
+    if (!active || active === document.body)
+      savedSheetRef.current?.focus({ preventScroll: true });
+  }, [saved]);
 
   // The chat step heads itself with the agent being built (the name step
   // already chose it) and keeps Save, the page's one action, in the open:
@@ -457,10 +471,12 @@ export default function NewAgentPage() {
 
             <div className="bg-background flex shrink-0 justify-center border-t px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:py-4">
               <div className="w-full max-w-(--container-width-md)">
-                {agent ? (
+                {saved ? (
                   // Saved: a cream-hi sheet that says what happened and
                   // offers the two ways on, not a centred check mark.
                   <div
+                    ref={savedSheetRef}
+                    tabIndex={-1}
                     role="status"
                     className={cn(
                       pageStyles.sheet,
@@ -470,7 +486,9 @@ export default function NewAgentPage() {
                     {/* The header already says Saved; the sheet says where
                         the agent went and what to do with it. */}
                     <p className="min-w-0 text-sm font-semibold">
-                      {t.agents.agentCreated.replace("{name}", agentName)}
+                      {agent
+                        ? t.agents.agentCreated.replace("{name}", agentName)
+                        : t.agents.agentCreatedPendingRefresh}
                     </p>
                     <div className="flex flex-col gap-2 sm:flex-row">
                       <Button

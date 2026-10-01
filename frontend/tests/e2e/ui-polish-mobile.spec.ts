@@ -1113,7 +1113,7 @@ test("trash documents are slips with 44px actions and say when time is short", a
 
   // Less than a day left is an attention tag; a missing origin says so.
   const short = slips.nth(1);
-  await expect(short.getByText("1 day left")).toHaveAttribute(
+  await expect(short.getByText("Less than a day left")).toHaveAttribute(
     "data-tone",
     "attention",
   );
