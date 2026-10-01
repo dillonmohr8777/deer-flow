@@ -285,3 +285,18 @@ PR #81 commit 54708e4d answers review 5373643117. Look at `revealReceipt`/`bring
 
 ### 2026-10-01 01:08 UTC · designer → reviewer · d11 · handoff
 PR #81 slice 25 (02a765bf): install offer docks on the phone tab bar. Look at frontend/src/components/pwa/install-help.module.css (phone block) and workspace-mobile.css (:has rules adding 45px to the bar and --tab-bar-h). Tests: playwright pwa.spec.ts 7/7 (new dock test), ui-polish-mobile 34/34, lint clean. Notes: https://github.com/dillonmohr8777/deer-flow/pull/81#issuecomment-5922656609
+
+### 2026-10-01 03:30 UTC · designer → reviewer · d11 · handoff
+PR #81 slice 26 pushed (9e66cd0c, notes 22a6f39c): pressed filters follow the royal selected rule. CSS only in `page-body.module.css` (paper `.filter[aria-pressed]` + forced-colors outline), DESIGN.md rule, e2e assertion in `ui-polish-mobile.spec.ts` filter test. Tests: rstest page-body/paper-tokens 23/23, e2e 63/63, lint clean. Notes in `docs/pr-evidence/momo-week/d11-mobile-pop/slice26/NOTES.md` (PR comment 403'd).
+
+### 2026-10-01 04:40 UTC · designer → reviewer · d11 · handoff
+PR #81 commit 5fd1f928 answers review 5374748616. Look at the second bringReceipt effect and receiptNotice {id,text} in `browser-research.tsx`, the forced-colours block in `page-body.module.css`, the strip rule in `install-help.module.css`, and `sitesAndCodes()`. rstest 728/728, e2e 62/62.
+
+### 2026-10-01 05:10 UTC · designer → reviewer · d11 · handoff
+PR #81 slice 27 (881d3b45) is ready to review: `frontend/src/app/workspace/agents/new/page.tsx` (name step), plus the locales and `ui-polish-mobile.spec.ts` "a new agent's name field and Continue sit above the phone keyboard". Tests: e2e 66/66, rstest 2500/2500, lint clean. Notes: `docs/pr-evidence/momo-week/d11-mobile-pop/slice27/NOTES.md`.
+
+### 2026-10-01 07:08 UTC · designer → reviewer · d11 · handoff
+PR #81 slice 28 (a251f191) ready: `agents/new/page.tsx` chat step header/saved sheet, `workspace-tab-bar.tsx` claimBottomEdge/useComposerOwnsBottomEdge, locales, e2e "the new agent chat step names the agent, shows Save and drops the tab bar". e2e 67/67, rstest 2501/2501, lint clean. Notes: `docs/pr-evidence/momo-week/d11-mobile-pop/slice28/NOTES.md`.
+
+### 2026-10-01 09:06 UTC · designer → reviewer · d11 slice 29 · handoff
+PR #81 commit 70de4c2f: Trash at 390 (frontend/src/components/workspace/trash/trash-view.tsx). Tests: ui-polish-mobile + project-documents e2e 43/43, rstest 2503/2503, lint clean. Look at the retention attention threshold (RETENTION_ATTENTION_DAYS) and the icon-only delete's accessible name on phones.
