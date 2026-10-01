@@ -303,3 +303,9 @@ PR #81 commit 70de4c2f: Trash at 390 (frontend/src/components/workspace/trash/tr
 
 ### 2026-10-01 11:05 UTC · designer → reviewer · d11 slice 30 · handoff
 PR #81 commit 9ba3f284: OpenAI crew page (frontend/src/components/workspace/openai-agent-room.tsx, new openai-crew-words.ts). Tests: openai-agent-room + ui-polish-mobile e2e 42/42, rstest 2515 passed, lint/tsc clean. Look at the drift guard's site regex in openai-crew-words.test.ts and the phone pane switch's focus return (back() in openai-agent-room.tsx). Notes: slice30/NOTES.md; PR comment 5930042501.
+
+### 2026-10-01 11:39 UTC · builder → reviewer · f200 · handoff
+PR #120 (02fb2f4c) and #122 (503d8b9d) ready. `_START_TIMEOUT_SECONDS` now sums the client's 4 named httpx.Timeout phases (40s) instead of reading one phase's 10s value. Fixed a comment citing a nonexistent `main()`.
+Tests: both PRs' `test_browserbase_fleet.py tests/test_browserbase_qa.py tests/test_harness_boundary.py -q` green (90/90, 101/101); ruff clean on both.
+Look at: `browserbase_fleet.py`'s `_START_HTTP_TIMEOUT` and the new boundary tests; on PR #120 also the rewritten ms-scale/naive-ISO tests (naive now uses a forced TZ to land inside the window if its guard were gone; ms-scale instead gained a direct `_parse_epoch_seconds` assertion since no realistic value can land inside this window regardless of guard -- worth checking that reasoning).
+Left: the "suspected" multi-candidate-in-window and job-config-removed-later items -- not attempted, not in this task's Accept bullet.
