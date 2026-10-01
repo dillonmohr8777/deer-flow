@@ -1,7 +1,7 @@
 "use client";
 
 import { CheckIcon, CopyIcon, TriangleAlertIcon } from "lucide-react";
-import { useCallback, useEffect, useId, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -42,7 +42,15 @@ function formatExpiry(iso: string): string {
 export function InviteSettingsPage() {
   const { t } = useI18n();
   const text = t.settings.invite;
-  const ids = { email: useId(), role: useId(), org: useId(), link: useId() };
+  const ids = {
+    email: useId(),
+    emailError: useId(),
+    role: useId(),
+    roleHelp: useId(),
+    org: useId(),
+    link: useId(),
+  };
+  const linkInputRef = useRef<HTMLInputElement>(null);
 
   const [workspaces, setWorkspaces] = useState<WorkspaceState>({
     status: "loading",
@@ -79,6 +87,10 @@ export function InviteSettingsPage() {
       });
     return () => controller.abort();
   }, [reloadKey]);
+
+  useEffect(() => {
+    if (created) linkInputRef.current?.focus();
+  }, [created]);
 
   const submit = useCallback(
     async (event: React.FormEvent<HTMLFormElement>) => {
@@ -167,7 +179,7 @@ export function InviteSettingsPage() {
   } else if (created) {
     body = (
       <div className="space-y-4">
-        <p className="text-sm font-medium">
+        <p role="status" aria-live="polite" className="text-sm font-medium">
           {text.successTitle(created.email)}
         </p>
         <div className="space-y-2">
@@ -176,6 +188,7 @@ export function InviteSettingsPage() {
           </label>
           <input
             id={ids.link}
+            ref={linkInputRef}
             readOnly
             value={created.link}
             onFocus={(event) => event.currentTarget.select()}
@@ -251,6 +264,10 @@ export function InviteSettingsPage() {
             placeholder={text.emailPlaceholder}
             value={email}
             onChange={(event) => setEmail(event.target.value)}
+            aria-invalid={failure === "invalid_email"}
+            aria-describedby={
+              failure === "invalid_email" ? ids.emailError : undefined
+            }
           />
         </div>
         <div className="space-y-2">
@@ -261,6 +278,7 @@ export function InviteSettingsPage() {
             id={ids.role}
             className={CONTROL_CLASS}
             value={role}
+            aria-describedby={ids.roleHelp}
             onChange={(event) => setRole(event.target.value as InviteRole)}
           >
             {INVITE_ROLES.map((value) => (
@@ -275,10 +293,16 @@ export function InviteSettingsPage() {
               </option>
             ))}
           </select>
-          <p className="text-muted-foreground text-sm">{text.roleHelp[role]}</p>
+          <p id={ids.roleHelp} className="text-muted-foreground text-sm">
+            {text.roleHelp[role]}
+          </p>
         </div>
         {failure && (
-          <p role="alert" className="text-destructive text-sm">
+          <p
+            role="alert"
+            id={failure === "invalid_email" ? ids.emailError : undefined}
+            className="text-destructive text-sm"
+          >
             {errorMessages[failure]}
           </p>
         )}
