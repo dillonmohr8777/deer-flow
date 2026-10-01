@@ -328,9 +328,30 @@ class OpenAIAgentService:
                 return dict(operation) if operation else None
             if action == "bind":
                 # Never resurrect a row already settled failed: a late-arriving
-                # provider match must not undo a definitive dead-letter outcome.
+                # provider match (or a slow create() landing after the watchdog
+                # dead-letters it) must not undo a definitive dead-letter
+                # outcome. Report whether this actually matched a row so the
+                # caller can reconcile the now-orphaned remote session instead
+                # of silently losing track of it.
                 provider_id, status = args[2:]
-                db.execute("UPDATE sessions SET provider_id=?,status=?,updated_at=?,last_error=NULL WHERE id=? AND status!='failed'", (provider_id, status, _now(), session_id))
+                cursor = db.execute("UPDATE sessions SET provider_id=?,status=?,updated_at=?,last_error=NULL WHERE id=? AND status!='failed'", (provider_id, status, _now(), session_id))
+                matched = cursor.rowcount > 0
+                updated = dict(db.execute("SELECT * FROM sessions WHERE id=?", (session_id,)).fetchone())
+                deadline_row = db.execute("SELECT state FROM deadlines WHERE session_id=?", (session_id,)).fetchone()
+                return {**updated, "deadline_pending": deadline_row is not None and deadline_row["state"] in {"claimed", "cancel_requested"}}, matched
+            elif action == "force_bind":
+                # Reconciliation fallback when the guarded "bind" above was
+                # refused and cancelling the now-real remote session also
+                # failed: bind anyway so a live, billable session stays
+                # tracked and supervised rather than orphaned, and give it a
+                # fresh deadline since its old one may already be settled.
+                provider_id, status = args[2:]
+                db.execute("UPDATE sessions SET provider_id=?,status=?,updated_at=?,last_error=NULL WHERE id=?", (provider_id, status, _now(), session_id))
+                db.execute(
+                    """INSERT INTO deadlines(session_id,expires_at,state) VALUES (?,?,?)
+                    ON CONFLICT(session_id) DO UPDATE SET expires_at=excluded.expires_at,state='waiting',lease_expires_at=NULL""",
+                    (session_id, time.time() + TURN_TIMEOUT_SECONDS, "waiting"),
+                )
             elif action == "unknown":
                 code = args[2]
                 db.execute("UPDATE sessions SET status='unknown',last_error=?,updated_at=? WHERE id=?", (code, _now(), session_id))
@@ -340,10 +361,13 @@ class OpenAIAgentService:
                 # deadline): terminal and off the active-session count for good,
                 # unlike "unknown" which keeps a row in limbo indefinitely. Guard
                 # against a concurrent late bind: never clobber a row that is
-                # already provider-bound back into failed.
+                # already provider-bound back into failed, and only settle the
+                # deadline when the sessions row actually settled too -- else a
+                # row a concurrent bind just made live loses watchdog coverage.
                 code = args[2]
-                db.execute("UPDATE sessions SET status='failed',last_error=?,updated_at=? WHERE id=? AND provider_id IS NULL", (code, _now(), session_id))
-                db.execute("UPDATE deadlines SET state='settled',lease_expires_at=NULL WHERE session_id=?", (session_id,))
+                cursor = db.execute("UPDATE sessions SET status='failed',last_error=?,updated_at=? WHERE id=? AND provider_id IS NULL", (code, _now(), session_id))
+                if cursor.rowcount:
+                    db.execute("UPDATE deadlines SET state='settled',lease_expires_at=NULL WHERE session_id=?", (session_id,))
             elif action == "deadline_sent":
                 expires_at, lease_expires_at = args[2:]
                 db.execute(
@@ -441,7 +465,7 @@ class OpenAIAgentService:
             raise AgentServiceError("provider_outcome_unknown", 502) from None
         remote = _dict(session)
         try:
-            await self._storage("bind", row["id"], owner, remote["id"], remote["status"])
+            _, matched = await self._storage("bind", row["id"], owner, remote["id"], remote["status"])
         except BaseException:
             # Known remote resource: attempt cleanup before reporting local failure.
             # If cleanup fails, recover by server-created metadata; never redispatch.
@@ -454,7 +478,24 @@ class OpenAIAgentService:
             except Exception:
                 pass
             raise
+        if not matched:
+            # The row was already settled failed by the time this (genuinely
+            # real, now billable) session came back -- e.g. the watchdog
+            # dead-lettered it while this create() was still in flight.
+            # Reconcile instead of leaving an untracked orphan.
+            await self._reconcile_unmatched_bind(client, row["id"], owner, remote["id"], remote["status"])
         return await self.snapshot(owner, row["id"])
+
+    async def _reconcile_unmatched_bind(self, client, session_id: str, owner: str, remote_id: str, remote_status: str) -> None:
+        # A guarded "bind" was refused because the local row was already
+        # settled terminal. A genuinely real remote session now exists with
+        # nothing local pointing at it. Prefer cancelling it, since the row
+        # is already final; if that fails, fall back to tracking it as
+        # active (with a fresh deadline) rather than losing it untracked.
+        try:
+            await asyncio.shield(client.beta.agents.sessions.delete(remote_id))
+        except Exception:
+            await asyncio.shield(self._storage("force_bind", session_id, owner, remote_id, remote_status))
 
     async def snapshot(self, owner: str, session_id: str):
         row = await self._storage("get", session_id, owner)
@@ -476,7 +517,14 @@ class OpenAIAgentService:
                         row = await self._storage("fail_unbound", session_id, owner, "provider_create_not_found")
                         return {**_summary(row), "turn": None, "items": [], "artifacts": [], "required_actions": [], "usage": None, "operation_pending": False, "history_truncated": False}
                     return {**_summary(row), "turn": None, "items": [], "artifacts": [], "required_actions": [], "usage": None, "operation_pending": True, "history_truncated": more}
-                row = await self._storage("bind", session_id, owner, matches[0]["id"], matches[0]["status"])
+                row, matched = await self._storage("bind", session_id, owner, matches[0]["id"], matches[0]["status"])
+                if not matched:
+                    # Lost a race: the row was settled failed between our
+                    # "get" above and this bind (e.g. a concurrent watchdog
+                    # dead-letter). Reconcile the now-orphaned match instead
+                    # of continuing with a stale/null provider_id.
+                    await self._reconcile_unmatched_bind(client, session_id, owner, matches[0]["id"], matches[0]["status"])
+                    return await self.snapshot(owner, session_id)
             provider_id = row["provider_id"]
             remote = _dict(await client.beta.agents.sessions.retrieve(provider_id))
             turns, turns_more = await self._pages(client.beta.agents.sessions.turns.list(provider_id, order="desc", limit=100))

@@ -228,6 +228,64 @@ async def test_failed_unbound_row_is_not_relisted_or_resurrected_by_a_late_match
 
 
 @pytest.mark.asyncio
+async def test_slow_create_landing_after_dead_letter_is_cancelled_not_orphaned(setup):
+    # A create() whose sessions.create() call is slow enough that the
+    # watchdog dead-letters the row (provider_id still NULL) before it
+    # returns must not leave the real, now-billable session untracked once
+    # it finally lands: the guarded "bind" silently no-ops, so the caller
+    # must reconcile (here: cancel it) instead of just dropping the result.
+    service, client = setup
+    entered, release = asyncio.Event(), asyncio.Event()
+
+    async def slow_create(**kwargs):
+        entered.set()
+        await release.wait()
+        return client.session
+
+    client.beta.agents.sessions.create.side_effect = slow_create
+    client.beta.agents.sessions.list.side_effect = lambda **kwargs: FakePage([])
+    pending = asyncio.create_task(service.create("alice", "Task", "Task", "slow"))
+    await entered.wait()
+
+    session_id = (await service.list_sessions("alice"))[0]["id"]
+    stale_created_at = datetime.fromtimestamp(time.time() - agent_service.TURN_TIMEOUT_SECONDS - agent_service.UNBOUND_RESOLUTION_MARGIN_SECONDS - 10, UTC).isoformat()
+    with sqlite3.connect(service.path) as db:
+        db.execute("UPDATE sessions SET created_at=?", (stale_created_at,))
+        db.execute("UPDATE deadlines SET expires_at=0")
+    await service.enforce_deadlines()
+    assert (await service.list_sessions("alice"))[0]["status"] == "failed"
+
+    release.set()
+    await pending
+
+    # The late-landing real session must be reconciled (cancelled, here,
+    # since the fake client's delete always succeeds), never silently lost.
+    client.beta.agents.sessions.delete.assert_awaited_once_with("sess_remote")
+    rows = await service.list_sessions("alice")
+    assert rows[0]["status"] == "failed"
+    assert rows[0]["id"] == session_id
+
+
+@pytest.mark.asyncio
+async def test_fail_unbound_does_not_settle_deadline_of_a_row_already_bound(setup):
+    # If a concurrent bind wins the race first (row is live, provider-bound),
+    # a losing fail_unbound call must not settle its deadline -- otherwise a
+    # session that is genuinely still running loses watchdog coverage for
+    # good (its deadline state never matches the "due" query again).
+    service, client = setup
+    client.turns = [{"id": "root", "status": "in_progress", "subagent_id": None}]
+    client.session["status"] = "in_progress"
+    row = await service.create("alice", "Task", "Task", "create")
+    assert row["status"] == "in_progress"
+    await service._storage("fail_unbound", row["id"], "alice", "provider_create_not_found")
+    with sqlite3.connect(service.path) as db:
+        deadline_state = db.execute("SELECT state FROM deadlines WHERE session_id=?", (row["id"],)).fetchone()[0]
+    assert deadline_state == "waiting"
+    rows = await service.list_sessions("alice")
+    assert rows[0]["status"] == "in_progress"
+
+
+@pytest.mark.asyncio
 async def test_terminal_child_turn_cannot_mark_root_done(setup):
     service, client = setup
     row = await service.create("alice", "Task", "Task", "a")
