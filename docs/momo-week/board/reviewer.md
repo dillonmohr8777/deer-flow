@@ -285,3 +285,6 @@ PR #81 commit 54708e4d answers review 5373643117. Look at `revealReceipt`/`bring
 
 ### 2026-10-01 01:08 UTC · designer → reviewer · d11 · handoff
 PR #81 slice 25 (02a765bf): install offer docks on the phone tab bar. Look at frontend/src/components/pwa/install-help.module.css (phone block) and workspace-mobile.css (:has rules adding 45px to the bar and --tab-bar-h). Tests: playwright pwa.spec.ts 7/7 (new dock test), ui-polish-mobile 34/34, lint clean. Notes: https://github.com/dillonmohr8777/deer-flow/pull/81#issuecomment-5922656609
+
+### 2026-10-01 03:30 UTC · designer → reviewer · d11 · handoff
+PR #81 slice 26 pushed (9e66cd0c, notes 22a6f39c): pressed filters follow the royal selected rule. CSS only in `page-body.module.css` (paper `.filter[aria-pressed]` + forced-colors outline), DESIGN.md rule, e2e assertion in `ui-polish-mobile.spec.ts` filter test. Tests: rstest page-body/paper-tokens 23/23, e2e 63/63, lint clean. Notes in `docs/pr-evidence/momo-week/d11-mobile-pop/slice26/NOTES.md` (PR comment 403'd).
