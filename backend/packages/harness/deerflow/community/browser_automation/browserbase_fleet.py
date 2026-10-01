@@ -32,6 +32,12 @@ _AGENT_BUSY = {"PENDING", "RUNNING", "PAUSED"}
 _AGENT_POLL_SECONDS = 10
 _AGENT_STOP_GRACE_SECONDS = 180
 _CLOCK_SKEW_SECONDS = 5
+# Mirrors main()'s BrowserbaseAPI http client timeout: the longest a start_agent_run call can be
+# in flight before our own client gives up, bounding how late a run it actually created can appear.
+_START_TIMEOUT_SECONDS = 10
+# A raw epoch number above this is almost certainly milliseconds, not seconds (seconds this large
+# would be centuries past any real run); refuse to guess rather than misread it as the far future.
+_EPOCH_SECONDS_CEILING = 1e11
 
 
 class FleetBlocked(ValueError):
@@ -444,50 +450,66 @@ async def reconcile_native_run(api: BrowserbaseAPI, ledger: UsageLedger, token: 
 
 
 def _parse_epoch_seconds(value: Any) -> float | None:
-    """Best-effort epoch seconds from a documented AgentRun `createdAt` -- a raw epoch number or an
-    ISO 8601 string (including a trailing `Z`). Any other shape returns None rather than ever being
+    """Best-effort epoch seconds from a documented AgentRun `createdAt` -- a raw epoch-seconds number
+    or a timezone-aware ISO 8601 string (including a trailing `Z`). A naive ISO string carries no
+    timezone at all, so `datetime.fromisoformat(...).timestamp()` would silently read it in the host's
+    own local timezone; refused instead. Any other shape, including a number past
+    `_EPOCH_SECONDS_CEILING` (almost certainly milliseconds), returns None rather than ever being
     treated as a match."""
     if isinstance(value, (int, float)) and not isinstance(value, bool):
-        return float(value)
+        seconds = float(value)
+        return seconds if seconds <= _EPOCH_SECONDS_CEILING else None
     if isinstance(value, str):
         try:
-            return datetime.fromisoformat(value[:-1] + "+00:00" if value.endswith("Z") else value).timestamp()
+            parsed = datetime.fromisoformat(value[:-1] + "+00:00" if value.endswith("Z") else value)
         except ValueError:
             return None
+        return parsed.timestamp() if parsed.tzinfo is not None else None
     return None
 
 
-async def reconcile_unbound_native_run(api: BrowserbaseAPI, ledger: UsageLedger, token: str, run_id: str, agent_id: str) -> None:
+async def reconcile_unbound_native_run(api: BrowserbaseAPI, fleet: Fleet, token: str, run_id: str) -> None:
     """Operator-only repair for a native_agent reservation with no `started.json` -- `start_agent_run`
     raised (timeout, 5xx, an ambiguous 4xx) or returned an unparseable run id before that file could be
     written, so `reconcile_native_run`'s own token/run_id pairing (trusted only because `started.json`
-    recorded both together at start time) has nothing to check against. The operator supplies a run id
-    read back from the provider directly (by `agentId` and time, from the dashboard or API) and the
-    job's own `agent_id`.
+    recorded both together at start time) has nothing to check against. The operator supplies only a
+    run id read back from the provider directly (by time, from the dashboard or API); the expected
+    agent comes from the reservation's own job config, never a caller-supplied value, so a run id read
+    back for the wrong job can never be laundered in by also passing its agent id.
 
     The Browserbase "Run an agent" reference documents no `metadata` field on the AgentRun response
     (that is a sessions-only field -- see `reconcile_owned_session`'s `userMetadata`), and whether it
     echoes back the `variables` object `start_agent_run` sends is unconfirmed, so ownership is never
     trusted on that alone. It is proven unconditionally from two fields the reference does document:
-    `agentId` must match the job this reservation belongs to, and `createdAt` must fall at or after
-    this reservation's own `created` time (minus a small clock-skew allowance) -- `reserve()` refuses a
-    second reservation while this one is `reserved`/`uncertain`, and `_agent_run_active` refuses a
-    start while any run on the account is busy, so at most one run for this agent could exist in that
-    window. A `variables` echo matching this token, when present, is accepted as additional proof.
+    `agentId` must match the reservation's own job, and `createdAt` must fall within the window
+    `start_agent_run` could actually have been in flight -- at or after this reservation's own
+    `created` time (minus clock skew) and at or before `created` plus the http client's own request
+    timeout (plus clock skew) -- `reserve()` refuses a second reservation while this one is
+    `reserved`/`uncertain`, and `_agent_run_active` refuses a start while any run on the account is
+    busy, so at most one run for this agent could exist in that window. A `variables` echo naming this
+    exact token, when present, is accepted as additional proof on its own (even outside the window);
+    one naming a different token is proof the run belongs to another reservation and is refused
+    outright, never papered over by a timestamp that happens to fall in range.
     """
-    rows = await asyncio.to_thread(ledger.status)
+    rows = await asyncio.to_thread(fleet.ledger.status)
     row = next((r for r in rows if r["id"] == token), None)
     if row is None or row["state"] != "uncertain":
         raise FleetBlocked("Reservation is not an unbound, uncertain native run")
+    job = fleet.jobs.get(row["job"])
+    if job is None or job.agent_id is None:
+        raise FleetBlocked("Reservation's job is not a configured native agent job")
     run = await api.agent_run(run_id)
-    if run.get("runId") != run_id or run.get("agentId") != agent_id:
+    if run.get("runId") != run_id or run.get("agentId") != job.agent_id:
         raise FleetBlocked("Run identity does not match this reservation's own agent")
     variables = run.get("variables")
-    echoed = isinstance(variables, dict) and variables.get("reservation_id") == token
+    reservation_echo = variables.get("reservation_id") if isinstance(variables, dict) else None
+    if reservation_echo is not None and reservation_echo != token:
+        raise FleetBlocked("Run's variables echo a different reservation")
     created_at = _parse_epoch_seconds(run.get("createdAt"))
-    in_window = created_at is not None and created_at >= row["created"] - _CLOCK_SKEW_SECONDS
-    if not echoed and not in_window:
+    in_window = created_at is not None and row["created"] - _CLOCK_SKEW_SECONDS <= created_at <= row["created"] + _START_TIMEOUT_SECONDS + _CLOCK_SKEW_SECONDS
+    if reservation_echo != token and not in_window:
         raise FleetBlocked("Run does not prove ownership of this reservation")
+    ledger = fleet.ledger
     session = run.get("sessionId")
     if run.get("status") not in _AGENT_DONE or not session:
         raise FleetBlocked("Agent run is not terminal; reservation retained")

@@ -587,20 +587,43 @@ def _unbind(tmp_path, monkeypatch):
     return target, row["id"], row["created"]
 
 
-def test_reconcile_unbound_native_run_rejects_wrong_agent(tmp_path, monkeypatch):
-    """Only documented AgentRun fields prove ownership (no `metadata`, which the "Run an agent"
-    reference does not list): a run for a different agent is never accepted regardless of anything
-    else it reports."""
+OTHER_AGENT = "00000000-0000-4000-8000-00000000b2e1"
+
+
+def test_parse_epoch_seconds_rejects_millisecond_scale_numbers():
+    """A millisecond epoch (~1000x a real epoch-seconds value) used to be read as raw seconds, landing
+    far in the future instead of being refused -- numbers past the ceiling now return None."""
+    from deerflow.community.browser_automation.browserbase_fleet import _parse_epoch_seconds
+
+    assert _parse_epoch_seconds(time.time() * 1000) is None
+    assert _parse_epoch_seconds(time.time()) is not None
+
+
+def test_parse_epoch_seconds_rejects_naive_datetime_strings():
+    """A naive ISO 8601 string (no `Z`, no UTC offset) used to parse to a real timestamp via the host's
+    own local timezone; it now returns None regardless of the host's timezone."""
+    from deerflow.community.browser_automation.browserbase_fleet import _parse_epoch_seconds
+
+    assert _parse_epoch_seconds("2026-10-01T12:00:00") is None
+    assert _parse_epoch_seconds("2026-10-01T12:00:00Z") is not None
+    assert _parse_epoch_seconds("2026-10-01T12:00:00+00:00") is not None
+
+
+def test_reconcile_unbound_native_run_derives_agent_from_job_not_a_caller_argument(tmp_path, monkeypatch):
+    """The expected agent comes from the reservation's own job config, never a caller-supplied
+    argument (there is none to spoof): a run genuinely belonging to a different job's real,
+    provisioned agent is never accepted for this reservation regardless of anything else it reports."""
     from deerflow.community.browser_automation import browserbase_fleet
 
     target, token, _created = _unbind(tmp_path, monkeypatch)
+    assert target.jobs["seo-audit"].agent_id == AGENT
 
     class Readback(AgentAPI):
         async def agent_run(self, run_id):
-            return {"runId": run_id, "status": "COMPLETED", "sessionId": "session-1", "agentId": "wrong-agent", "createdAt": time.time() + 10}
+            return {"runId": run_id, "status": "COMPLETED", "sessionId": "session-1", "agentId": OTHER_AGENT, "createdAt": time.time() + 1}
 
     with pytest.raises(FleetBlocked, match="identity"):
-        asyncio.run(browserbase_fleet.reconcile_unbound_native_run(Readback([]), target.ledger, token, RUN, AGENT))
+        asyncio.run(browserbase_fleet.reconcile_unbound_native_run(Readback([]), target, token, RUN))
     assert target.ledger.status()[0]["state"] == "uncertain"
 
 
@@ -617,34 +640,69 @@ def test_reconcile_unbound_native_run_rejects_run_created_before_reservation(tmp
             return {"runId": run_id, "status": "COMPLETED", "sessionId": "session-1", "agentId": AGENT, "createdAt": created - 1000}
 
     with pytest.raises(FleetBlocked, match="ownership"):
-        asyncio.run(browserbase_fleet.reconcile_unbound_native_run(Readback([]), target.ledger, token, RUN, AGENT))
+        asyncio.run(browserbase_fleet.reconcile_unbound_native_run(Readback([]), target, token, RUN))
+    assert target.ledger.status()[0]["state"] == "uncertain"
+
+
+def test_reconcile_unbound_native_run_rejects_run_created_well_after_the_start_window(tmp_path, monkeypatch):
+    """No upper bound used to exist on `createdAt`, so a run from a day later -- long after
+    `start_agent_run`'s own http client could still have been in flight -- was wrongly accepted as
+    proof. The window is now bounded by the request timeout plus clock skew."""
+    from deerflow.community.browser_automation import browserbase_fleet
+
+    target, token, created = _unbind(tmp_path, monkeypatch)
+
+    class Readback(AgentAPI):
+        async def agent_run(self, run_id):
+            return {"runId": run_id, "status": "COMPLETED", "sessionId": "session-1", "agentId": AGENT, "createdAt": created + 86400}
+
+    with pytest.raises(FleetBlocked, match="ownership"):
+        asyncio.run(browserbase_fleet.reconcile_unbound_native_run(Readback([]), target, token, RUN))
+    assert target.ledger.status()[0]["state"] == "uncertain"
+
+
+def test_reconcile_unbound_native_run_rejects_a_mismatched_variables_echo_even_inside_the_window(tmp_path, monkeypatch):
+    """A `variables.reservation_id` that names a different reservation is affirmative proof the run
+    belongs to someone else's token -- it must be refused outright, never papered over by a `createdAt`
+    that happens to land inside the start window (previously: a mismatched echo was silently treated as
+    no echo at all, falling through to the time check alone)."""
+    from deerflow.community.browser_automation import browserbase_fleet
+
+    target, token, created = _unbind(tmp_path, monkeypatch)
+
+    class Readback(AgentAPI):
+        async def agent_run(self, run_id):
+            return {"runId": run_id, "status": "COMPLETED", "sessionId": "session-1", "agentId": AGENT, "createdAt": created + 1, "variables": {"reservation_id": "some-other-reservation"}}
+
+    with pytest.raises(FleetBlocked, match="different reservation"):
+        asyncio.run(browserbase_fleet.reconcile_unbound_native_run(Readback([]), target, token, RUN))
     assert target.ledger.status()[0]["state"] == "uncertain"
 
 
 def test_reconcile_unbound_native_run_claims_by_agent_and_window(tmp_path, monkeypatch):
     """No started.json was ever written (start_agent_run failed before a run id could be recorded), so
-    the operator-supplied run id and agent are proven from documented AgentRun fields: matching
-    `agentId` plus a `createdAt` at or after this reservation's own `created` time -- never a bare
-    elapsed-time guess, and never the undocumented `metadata` field the old proof relied on."""
+    the operator-supplied run id is proven from documented AgentRun fields: matching the job's own
+    `agentId` plus a `createdAt` inside the start window -- never a bare elapsed-time guess, and never
+    the undocumented `metadata` field the old proof relied on."""
     from deerflow.community.browser_automation import browserbase_fleet
 
     target, token, created = _unbind(tmp_path, monkeypatch)
 
     class Readback(AgentAPI):
         status = "COMPLETED"
-        created_at: float = created + 10
+        created_at: float = created + 1
 
         async def agent_run(self, run_id):
             return {"runId": run_id, "status": self.status, "sessionId": "session-1", "agentId": AGENT, "createdAt": self.created_at}
 
     api = Readback([])
-    asyncio.run(browserbase_fleet.reconcile_unbound_native_run(api, target.ledger, token, RUN, AGENT))
+    asyncio.run(browserbase_fleet.reconcile_unbound_native_run(api, target, token, RUN))
     row = target.ledger.status()[0]
     assert row["state"] == "finished" and row["session"] == "session-1"
 
     # Already bound and finished: a second call finds no matching uncertain row left to claim.
     with pytest.raises(FleetBlocked, match="unbound"):
-        asyncio.run(browserbase_fleet.reconcile_unbound_native_run(api, target.ledger, token, RUN, AGENT))
+        asyncio.run(browserbase_fleet.reconcile_unbound_native_run(api, target, token, RUN))
 
 
 def test_reconcile_unbound_native_run_accepts_echoed_variables_without_window(tmp_path, monkeypatch):
@@ -659,9 +717,50 @@ def test_reconcile_unbound_native_run_accepts_echoed_variables_without_window(tm
         async def agent_run(self, run_id):
             return {"runId": run_id, "status": "COMPLETED", "sessionId": "session-1", "agentId": AGENT, "createdAt": "not-a-timestamp", "variables": {"reservation_id": token}}
 
-    asyncio.run(browserbase_fleet.reconcile_unbound_native_run(Readback([]), target.ledger, token, RUN, AGENT))
+    asyncio.run(browserbase_fleet.reconcile_unbound_native_run(Readback([]), target, token, RUN))
     row = target.ledger.status()[0]
     assert row["state"] == "finished" and row["session"] == "session-1"
+
+
+def test_reconcile_unbound_native_run_rejects_millisecond_epoch_timestamp(tmp_path, monkeypatch):
+    """A real event a day before the reservation, expressed as a millisecond epoch, used to be
+    misread as raw seconds -- a number so large it was wrongly accepted as proof of a run far in the
+    future rather than rejected for having no upper bound. Numbers above the epoch-seconds ceiling are
+    now refused outright rather than guessed at."""
+    from deerflow.community.browser_automation import browserbase_fleet
+
+    target, token, created = _unbind(tmp_path, monkeypatch)
+    day_earlier_in_ms = (created - 86400) * 1000
+
+    class Readback(AgentAPI):
+        async def agent_run(self, run_id):
+            return {"runId": run_id, "status": "COMPLETED", "sessionId": "session-1", "agentId": AGENT, "createdAt": day_earlier_in_ms}
+
+    with pytest.raises(FleetBlocked, match="ownership"):
+        asyncio.run(browserbase_fleet.reconcile_unbound_native_run(Readback([]), target, token, RUN))
+    assert target.ledger.status()[0]["state"] == "uncertain"
+
+
+def test_reconcile_unbound_native_run_rejects_naive_datetime_string(tmp_path, monkeypatch):
+    """A naive ISO 8601 string (no `Z`, no UTC offset) carries no timezone, so `datetime.fromisoformat`
+    would read it in the host's own local timezone -- on a host set to, say, America/Los_Angeles, a
+    string that is actually 6 hours before the reservation's `created` time would be misread as hours
+    later and wrongly land inside the window. Naive strings are refused outright instead."""
+    from datetime import datetime, timedelta
+
+    from deerflow.community.browser_automation import browserbase_fleet
+
+    target, token, created = _unbind(tmp_path, monkeypatch)
+    naive = (datetime.fromtimestamp(created) - timedelta(hours=6)).replace(tzinfo=None).isoformat()
+    assert "+" not in naive and "Z" not in naive
+
+    class Readback(AgentAPI):
+        async def agent_run(self, run_id):
+            return {"runId": run_id, "status": "COMPLETED", "sessionId": "session-1", "agentId": AGENT, "createdAt": naive}
+
+    with pytest.raises(FleetBlocked, match="ownership"):
+        asyncio.run(browserbase_fleet.reconcile_unbound_native_run(Readback([]), target, token, RUN))
+    assert target.ledger.status()[0]["state"] == "uncertain"
 
 
 def test_reconcile_unbound_native_run_refuses_non_terminal_instead_of_silently_doing_nothing(tmp_path, monkeypatch):
@@ -673,10 +772,10 @@ def test_reconcile_unbound_native_run_refuses_non_terminal_instead_of_silently_d
 
     class Readback(AgentAPI):
         async def agent_run(self, run_id):
-            return {"runId": run_id, "status": "RUNNING", "sessionId": "session-1", "agentId": AGENT, "createdAt": created + 10}
+            return {"runId": run_id, "status": "RUNNING", "sessionId": "session-1", "agentId": AGENT, "createdAt": created + 1}
 
     with pytest.raises(FleetBlocked, match="not terminal"):
-        asyncio.run(browserbase_fleet.reconcile_unbound_native_run(Readback([]), target.ledger, token, RUN, AGENT))
+        asyncio.run(browserbase_fleet.reconcile_unbound_native_run(Readback([]), target, token, RUN))
     assert target.ledger.status()[0]["state"] == "uncertain"
 
 
