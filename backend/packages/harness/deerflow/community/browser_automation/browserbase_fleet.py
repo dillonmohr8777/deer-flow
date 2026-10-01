@@ -18,6 +18,7 @@ import sqlite3
 import time
 from contextlib import contextmanager
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any, TypeGuard, cast
 from uuid import UUID, uuid4
@@ -30,6 +31,7 @@ _AGENT_DONE = {"COMPLETED", "FAILED", "STOPPED", "TIMED_OUT"}
 _AGENT_BUSY = {"PENDING", "RUNNING", "PAUSED"}
 _AGENT_POLL_SECONDS = 10
 _AGENT_STOP_GRACE_SECONDS = 180
+_CLOCK_SKEW_SECONDS = 5
 
 
 class FleetBlocked(ValueError):
@@ -441,27 +443,54 @@ async def reconcile_native_run(api: BrowserbaseAPI, ledger: UsageLedger, token: 
     await asyncio.to_thread(ledger.reconcile, token, str(session), str(final.get("status")))
 
 
-async def reconcile_unbound_native_run(api: BrowserbaseAPI, ledger: UsageLedger, token: str, run_id: str) -> None:
+def _parse_epoch_seconds(value: Any) -> float | None:
+    """Best-effort epoch seconds from a documented AgentRun `createdAt` -- a raw epoch number or an
+    ISO 8601 string (including a trailing `Z`). Any other shape returns None rather than ever being
+    treated as a match."""
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return datetime.fromisoformat(value[:-1] + "+00:00" if value.endswith("Z") else value).timestamp()
+        except ValueError:
+            return None
+    return None
+
+
+async def reconcile_unbound_native_run(api: BrowserbaseAPI, ledger: UsageLedger, token: str, run_id: str, agent_id: str) -> None:
     """Operator-only repair for a native_agent reservation with no `started.json` -- `start_agent_run`
     raised (timeout, 5xx, an ambiguous 4xx) or returned an unparseable run id before that file could be
     written, so `reconcile_native_run`'s own token/run_id pairing (trusted only because `started.json`
     recorded both together at start time) has nothing to check against. The operator supplies a run id
-    read back from the provider directly (by `agentId` and time, from the dashboard or API); ownership
-    is proven the same way `reconcile_owned_session` already proves a QA session's -- the reservation
-    token the provider echoes back in the run's own metadata (set by `start_agent_run`'s
-    `reservation_id`), never an unauthenticated guess or elapsed time.
+    read back from the provider directly (by `agentId` and time, from the dashboard or API) and the
+    job's own `agent_id`.
+
+    The Browserbase "Run an agent" reference documents no `metadata` field on the AgentRun response
+    (that is a sessions-only field -- see `reconcile_owned_session`'s `userMetadata`), and whether it
+    echoes back the `variables` object `start_agent_run` sends is unconfirmed, so ownership is never
+    trusted on that alone. It is proven unconditionally from two fields the reference does document:
+    `agentId` must match the job this reservation belongs to, and `createdAt` must fall at or after
+    this reservation's own `created` time (minus a small clock-skew allowance) -- `reserve()` refuses a
+    second reservation while this one is `reserved`/`uncertain`, and `_agent_run_active` refuses a
+    start while any run on the account is busy, so at most one run for this agent could exist in that
+    window. A `variables` echo matching this token, when present, is accepted as additional proof.
     """
-    run = await api.agent_run(run_id)
-    metadata = run.get("metadata")
-    if run.get("runId") != run_id or not isinstance(metadata, dict) or metadata.get("reservation_id") != token:
-        raise FleetBlocked("Run metadata does not prove ownership of this reservation")
     rows = await asyncio.to_thread(ledger.status)
-    row = next((row for row in rows if row["id"] == token), None)
+    row = next((r for r in rows if r["id"] == token), None)
     if row is None or row["state"] != "uncertain":
         raise FleetBlocked("Reservation is not an unbound, uncertain native run")
+    run = await api.agent_run(run_id)
+    if run.get("runId") != run_id or run.get("agentId") != agent_id:
+        raise FleetBlocked("Run identity does not match this reservation's own agent")
+    variables = run.get("variables")
+    echoed = isinstance(variables, dict) and variables.get("reservation_id") == token
+    created_at = _parse_epoch_seconds(run.get("createdAt"))
+    in_window = created_at is not None and created_at >= row["created"] - _CLOCK_SKEW_SECONDS
+    if not echoed and not in_window:
+        raise FleetBlocked("Run does not prove ownership of this reservation")
     session = run.get("sessionId")
     if run.get("status") not in _AGENT_DONE or not session:
-        return  # bound only by this proof check; finish it later once the run is terminal
+        raise FleetBlocked("Agent run is not terminal; reservation retained")
     final = await api.retrieve(str(session))
     if final.get("projectId") != api.project_id:
         raise FleetBlocked("Agent run session is not in this provider project")

@@ -58,16 +58,24 @@ and any fleet-side error after start requests a stop before re-raising.
 `started.json` records the reservation and run ID first; an operator repairs an
 uncertain row with `reconcile_native_run(api, ledger, token, run_id)` after the
 provider shows the run terminal and its session in this project.
-Every `start_agent_run` call also carries the reservation token in the run's own
-provider metadata, the same proof `reconcile_owned_session` already trusts for
-QA sessions. If `start_agent_run` itself fails (timeout, 5xx, an ambiguous 4xx)
-or returns an unparseable run id, `started.json` is never written, but the
-token still reaches the provider in that run's metadata, so the reservation is
-not permanently lost. An operator reads a run id back from the provider
-directly (dashboard or API) and calls
-`reconcile_unbound_native_run(api, ledger, token, run_id)`, which only binds
-ownership once the run's own metadata echoes this exact token; elapsed time or
-an unauthenticated guess is never accepted. A start call that confirms the
+Every `start_agent_run` call sends only documented request fields (the "Run an
+agent" reference lists no `metadata`, which is a sessions-only field): the
+reservation token travels in `variables` instead. Whether the provider echoes
+`variables` back in the AgentRun response is unconfirmed, so it is never the
+only proof trusted. If `start_agent_run` itself fails (timeout, 5xx, an
+ambiguous 4xx) or returns an unparseable run id, `started.json` is never
+written, but the reservation is not permanently lost. An operator reads a run
+id back from the provider directly (dashboard or API) and calls
+`reconcile_unbound_native_run(api, ledger, token, run_id, agent_id)`, which
+binds ownership once the run proves it from documented AgentRun fields: either
+a `variables` echo matching this token, or `agentId` matching the job's own
+agent together with `createdAt` falling at or after this reservation's own
+`created` time (minus a small clock-skew allowance) -- `reserve()` refuses a
+second reservation while this one is uncertain, and the account-busy check
+refuses a start while any run is active, so at most one run for this agent
+could exist in that window. Elapsed time alone or an unauthenticated guess is
+never accepted. A non-terminal run is never silently accepted either: the call
+raises until the provider shows it done. A start call that confirms the
 request itself was rejected (HTTP 400, before any run could exist) settles the
 reservation as finished right away instead -- the charge is kept, but there is
 nothing left to reconcile.

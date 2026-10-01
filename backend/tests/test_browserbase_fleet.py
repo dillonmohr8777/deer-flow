@@ -548,9 +548,11 @@ def test_native_agent_definite_start_rejection_settles_finished_not_locked(tmp_p
     asyncio.run(target.run("prospect", "tomorrow", AgentAPI(["COMPLETED"])))
 
 
-def test_native_agent_ambiguous_start_failure_still_stays_uncertain(tmp_path, monkeypatch):
-    """Every start failure other than a confirmed HTTP 400 may still have created a billable run and
-    must stay uncertain until an operator reconciles it -- the HTTP 400 carve-out must not widen."""
+@pytest.mark.parametrize("code", [401, 404, 409, 422, 429, 500, 503])
+def test_native_agent_ambiguous_start_failure_still_stays_uncertain(tmp_path, monkeypatch, code):
+    """Every start failure other than a confirmed HTTP 400 -- including every other 4xx -- may still
+    have created a billable run and must stay uncertain until an operator reconciles it. The HTTP 400
+    carve-out must not widen to any `"HTTP 4"` prefix match."""
     from deerflow.community.browser_automation import browserbase_fleet
 
     monkeypatch.setattr(browserbase_fleet, "_AGENT_POLL_SECONDS", 0)
@@ -558,19 +560,17 @@ def test_native_agent_ambiguous_start_failure_still_stays_uncertain(tmp_path, mo
 
     class Ambiguous(AgentAPI):
         async def start_agent_run(self, agent_id, task, *, reservation_id=None):
-            raise RuntimeError("Browserbase API request failed (HTTP 500)")
+            raise RuntimeError(f"Browserbase API request failed (HTTP {code})")
 
-    with pytest.raises(RuntimeError, match="HTTP 500"):
+    with pytest.raises(RuntimeError, match=f"HTTP {code}"):
         asyncio.run(target.run("seo-audit", "today", Ambiguous([])))
     assert target.ledger.status()[0]["state"] == "uncertain"
     with pytest.raises(FleetBlocked, match="reconciliation"):
         asyncio.run(target.run("prospect", "tomorrow", AgentAPI(["COMPLETED"])))
 
 
-def test_reconcile_unbound_native_run_claims_by_provider_metadata(tmp_path, monkeypatch):
-    """No started.json was ever written (start_agent_run failed before a run id could be recorded), so
-    the operator-supplied run id is proven only by the provider echoing the reservation token back in
-    the run's own metadata -- never trusted bare, unlike the started.json-backed reconcile_native_run."""
+def _unbind(tmp_path, monkeypatch):
+    """Shared setup: a start failure that leaves a reservation uncertain with no started.json."""
     from deerflow.community.browser_automation import browserbase_fleet
 
     monkeypatch.setattr(browserbase_fleet, "_AGENT_POLL_SECONDS", 0)
@@ -582,29 +582,102 @@ def test_reconcile_unbound_native_run_claims_by_provider_metadata(tmp_path, monk
 
     with pytest.raises(RuntimeError, match="HTTP 503"):
         asyncio.run(target.run("seo-audit", "today", Unbound([])))
-    token = target.ledger.status()[0]["id"]
-    assert target.ledger.status()[0]["state"] == "uncertain"
+    row = target.ledger.status()[0]
+    assert row["state"] == "uncertain"
+    return target, row["id"], row["created"]
+
+
+def test_reconcile_unbound_native_run_rejects_wrong_agent(tmp_path, monkeypatch):
+    """Only documented AgentRun fields prove ownership (no `metadata`, which the "Run an agent"
+    reference does not list): a run for a different agent is never accepted regardless of anything
+    else it reports."""
+    from deerflow.community.browser_automation import browserbase_fleet
+
+    target, token, _created = _unbind(tmp_path, monkeypatch)
 
     class Readback(AgentAPI):
-        metadata_token = "wrong"
-        status = "COMPLETED"
-
         async def agent_run(self, run_id):
-            return {"runId": run_id, "status": self.status, "sessionId": "session-1", "metadata": {"reservation_id": self.metadata_token}}
+            return {"runId": run_id, "status": "COMPLETED", "sessionId": "session-1", "agentId": "wrong-agent", "createdAt": time.time() + 10}
 
-    api = Readback([])
-    with pytest.raises(FleetBlocked, match="metadata"):
-        asyncio.run(browserbase_fleet.reconcile_unbound_native_run(api, target.ledger, token, RUN))
+    with pytest.raises(FleetBlocked, match="identity"):
+        asyncio.run(browserbase_fleet.reconcile_unbound_native_run(Readback([]), target.ledger, token, RUN, AGENT))
     assert target.ledger.status()[0]["state"] == "uncertain"
 
-    api.metadata_token = token
-    asyncio.run(browserbase_fleet.reconcile_unbound_native_run(api, target.ledger, token, RUN))
+
+def test_reconcile_unbound_native_run_rejects_run_created_before_reservation(tmp_path, monkeypatch):
+    """With no `variables` echo, a run that predates this reservation's own `created` time cannot be
+    the one it started -- `reserve()` and `_agent_run_active` together make a same-agent run inside the
+    window unambiguous, but a run from before that window proves nothing."""
+    from deerflow.community.browser_automation import browserbase_fleet
+
+    target, token, created = _unbind(tmp_path, monkeypatch)
+
+    class Readback(AgentAPI):
+        async def agent_run(self, run_id):
+            return {"runId": run_id, "status": "COMPLETED", "sessionId": "session-1", "agentId": AGENT, "createdAt": created - 1000}
+
+    with pytest.raises(FleetBlocked, match="ownership"):
+        asyncio.run(browserbase_fleet.reconcile_unbound_native_run(Readback([]), target.ledger, token, RUN, AGENT))
+    assert target.ledger.status()[0]["state"] == "uncertain"
+
+
+def test_reconcile_unbound_native_run_claims_by_agent_and_window(tmp_path, monkeypatch):
+    """No started.json was ever written (start_agent_run failed before a run id could be recorded), so
+    the operator-supplied run id and agent are proven from documented AgentRun fields: matching
+    `agentId` plus a `createdAt` at or after this reservation's own `created` time -- never a bare
+    elapsed-time guess, and never the undocumented `metadata` field the old proof relied on."""
+    from deerflow.community.browser_automation import browserbase_fleet
+
+    target, token, created = _unbind(tmp_path, monkeypatch)
+
+    class Readback(AgentAPI):
+        status = "COMPLETED"
+        created_at: float = created + 10
+
+        async def agent_run(self, run_id):
+            return {"runId": run_id, "status": self.status, "sessionId": "session-1", "agentId": AGENT, "createdAt": self.created_at}
+
+    api = Readback([])
+    asyncio.run(browserbase_fleet.reconcile_unbound_native_run(api, target.ledger, token, RUN, AGENT))
     row = target.ledger.status()[0]
     assert row["state"] == "finished" and row["session"] == "session-1"
 
     # Already bound and finished: a second call finds no matching uncertain row left to claim.
     with pytest.raises(FleetBlocked, match="unbound"):
-        asyncio.run(browserbase_fleet.reconcile_unbound_native_run(api, target.ledger, token, RUN))
+        asyncio.run(browserbase_fleet.reconcile_unbound_native_run(api, target.ledger, token, RUN, AGENT))
+
+
+def test_reconcile_unbound_native_run_accepts_echoed_variables_without_window(tmp_path, monkeypatch):
+    """A `variables` echo matching this token is accepted as proof on its own, even with no usable
+    `createdAt` -- `variables` is a documented request field, unlike `metadata`, so an echo of it (if
+    the provider gives one) is trusted the same way session `userMetadata` already is."""
+    from deerflow.community.browser_automation import browserbase_fleet
+
+    target, token, _created = _unbind(tmp_path, monkeypatch)
+
+    class Readback(AgentAPI):
+        async def agent_run(self, run_id):
+            return {"runId": run_id, "status": "COMPLETED", "sessionId": "session-1", "agentId": AGENT, "createdAt": "not-a-timestamp", "variables": {"reservation_id": token}}
+
+    asyncio.run(browserbase_fleet.reconcile_unbound_native_run(Readback([]), target.ledger, token, RUN, AGENT))
+    row = target.ledger.status()[0]
+    assert row["state"] == "finished" and row["session"] == "session-1"
+
+
+def test_reconcile_unbound_native_run_refuses_non_terminal_instead_of_silently_doing_nothing(tmp_path, monkeypatch):
+    """A proven-owned run that is not yet terminal must raise, not silently return with nothing
+    persisted -- the same contract `reconcile_native_run` already gives a started.json-backed run."""
+    from deerflow.community.browser_automation import browserbase_fleet
+
+    target, token, created = _unbind(tmp_path, monkeypatch)
+
+    class Readback(AgentAPI):
+        async def agent_run(self, run_id):
+            return {"runId": run_id, "status": "RUNNING", "sessionId": "session-1", "agentId": AGENT, "createdAt": created + 10}
+
+    with pytest.raises(FleetBlocked, match="not terminal"):
+        asyncio.run(browserbase_fleet.reconcile_unbound_native_run(Readback([]), target.ledger, token, RUN, AGENT))
+    assert target.ledger.status()[0]["state"] == "uncertain"
 
 
 def test_native_agent_fails_closed_on_unreadable_run_list(tmp_path):

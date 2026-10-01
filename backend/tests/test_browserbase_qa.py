@@ -122,6 +122,44 @@ async def test_api_errors_do_not_echo_provider_payloads_or_credentials():
     assert "secret" not in str(exc.value)
 
 
+AGENT = "00000000-0000-4000-8000-00000000a9e7"
+
+
+@pytest.mark.asyncio
+async def test_start_agent_run_request_body_uses_only_documented_fields():
+    """The Browserbase "Run an agent" reference lists task/agentId/resultSchema/browserSettings/
+    variables/pauseWhen on the request -- no `metadata`, which is a sessions-only field. A reservation
+    id must travel in `variables`, never `metadata`, and nothing else undocumented is sent."""
+    bodies: list[dict] = []
+
+    def transport(request: httpx.Request) -> httpx.Response:
+        bodies.append(json.loads(request.content))
+        return httpx.Response(200, json={"runId": "r", "status": "PENDING"})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(transport)) as http:
+        await BrowserbaseAPI("secret", PROJECT, http).start_agent_run(AGENT, "Measure the homepage.", reservation_id="token-1")
+
+    assert len(bodies) == 1
+    body = bodies[0]
+    assert set(body) <= {"task", "agentId", "resultSchema", "browserSettings", "variables", "pauseWhen"}
+    assert "metadata" not in body
+    assert body["variables"] == {"reservation_id": "token-1"}
+
+
+@pytest.mark.asyncio
+async def test_start_agent_run_omits_variables_with_no_reservation_id():
+    bodies: list[dict] = []
+
+    def transport(request: httpx.Request) -> httpx.Response:
+        bodies.append(json.loads(request.content))
+        return httpx.Response(200, json={"runId": "r", "status": "PENDING"})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(transport)) as http:
+        await BrowserbaseAPI("secret", PROJECT, http).start_agent_run(AGENT, "Measure the homepage.")
+
+    assert "variables" not in bodies[0] and "metadata" not in bodies[0]
+
+
 @pytest.mark.asyncio
 async def test_missing_playwright_never_creates_a_session(tmp_path: Path, monkeypatch):
     from deerflow.community.browser_automation import browserbase_qa
