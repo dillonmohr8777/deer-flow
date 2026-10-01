@@ -848,9 +848,10 @@ export const zhCN: Translations = {
     createPageTitle: "设计你的智能体",
     createPageSubtitle: "描述你想要的智能体，我来帮你通过对话创建。",
     nameStepTitle: "给新智能体起个名字",
-    nameStepHint:
-      "只允许字母、数字和连字符，存储时自动转为小写（例如 code-reviewer）",
-    nameStepPlaceholder: "例如 code-reviewer",
+    nameStepHint: "只允许字母、数字和连字符，存储时自动转为小写。",
+    nameStepPlaceholder: "例如 seo-auditor",
+    nameStepNext:
+      "接下来，你在对话中描述这份工作，MomoBot 和你一起起草这个智能体。你确认后才会保存。",
     nameStepContinue: "继续",
     nameStepInvalidError: "名称无效，只允许字母、数字和连字符",
     nameStepAlreadyExistsError: "已存在同名智能体",
@@ -874,7 +875,7 @@ export const zhCN: Translations = {
     more: "更多操作",
     agentCreated: "智能体已创建！",
     startChatting: "开始对话",
-    backToGallery: "返回 Gallery",
+    backToGallery: "返回智能体列表",
     settings: "智能体设置",
     settingsTitle: "智能体设置",
     settingsDisplayName: "显示名称",

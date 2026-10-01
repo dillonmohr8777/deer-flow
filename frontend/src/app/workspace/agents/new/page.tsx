@@ -7,6 +7,7 @@ import {
   MoreHorizontalIcon,
   SaveIcon,
 } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -333,25 +334,60 @@ export default function NewAgentPage() {
   );
 
   if (step === "name") {
+    // The page heads itself like Agents and leads with the field at the top
+    // of the frame, not centred: the field autofocuses, so on a phone the
+    // keyboard is up from the first frame and a centred form sat under it.
     return (
-      <div className={cn("flex size-full flex-col", pageStyles.page)}>
-        {header}
-        <main className="flex flex-1 flex-col items-center justify-center px-4">
-          <div className="w-full max-w-sm space-y-8">
-            <div className="space-y-3 text-center">
-              {/* A new teammate: the builder Momo, decorative beside the title. */}
+      <div
+        className={cn(
+          "flex size-full flex-col overflow-y-auto",
+          pageStyles.page,
+        )}
+      >
+        <main className="mx-auto w-full max-w-2xl px-4 pt-3 pb-28 sm:px-8 sm:pt-6">
+          <div className="-ml-2 flex items-center gap-1">
+            <SidebarTrigger className="md:hidden" />
+            <Button
+              asChild
+              variant="ghost"
+              size="sm"
+              className="text-muted-foreground max-sm:h-11"
+            >
+              <Link href="/workspace/agents">
+                <ArrowLeftIcon className="h-4 w-4" />
+                {t.agents.title}
+              </Link>
+            </Button>
+          </div>
+          <h1 className="mt-2">{t.agents.createPageTitle}</h1>
+          <p className={cn(pageStyles.lede, "mt-1")}>
+            {t.agents.createPageSubtitle}
+          </p>
+
+          <div
+            className={cn(
+              pageStyles.sheet,
+              // A fresh sheet torn off the pad; the tear takes the top 24px.
+              "paper-torn mt-6 space-y-4 border p-4 pt-8 sm:p-6 sm:pt-9",
+            )}
+          >
+            <div className="flex items-start gap-4">
+              {/* A new teammate: the builder Momo, decorative beside the label. */}
               <img
                 src="/momentum/momos/builder.svg"
                 alt=""
                 aria-hidden="true"
-                width={56}
-                height={56}
-                className="mx-auto size-14"
+                width={64}
+                height={64}
+                className="size-14 shrink-0 sm:size-16"
               />
-              <div className="space-y-1">
-                <h2 className="text-xl font-semibold">
+              <div className="min-w-0 space-y-1 pt-1">
+                <label
+                  htmlFor="agent-name"
+                  className="block text-base font-bold"
+                >
                   {t.agents.nameStepTitle}
-                </h2>
+                </label>
                 <p
                   id="agent-name-hint"
                   className="text-muted-foreground text-sm"
@@ -361,34 +397,46 @@ export default function NewAgentPage() {
               </div>
             </div>
 
-            <div className="space-y-3">
-              <Input
-                autoFocus
-                aria-label={t.agents.nameStepTitle}
-                aria-describedby="agent-name-hint"
-                aria-invalid={Boolean(nameError)}
-                placeholder={t.agents.nameStepPlaceholder}
-                value={nameInput}
-                onChange={(e) => {
-                  setNameInput(e.target.value);
-                  setNameError("");
-                }}
-                onKeyDown={handleNameKeyDown}
-                className={cn(nameError && "border-destructive")}
-              />
-              {nameError ? (
-                <p role="alert" className="text-destructive text-sm">
-                  {nameError}
-                </p>
-              ) : null}
-              <Button
-                className="w-full"
-                onClick={() => void handleConfirmName()}
-                disabled={!nameInput.trim() || isCheckingName}
+            <Input
+              id="agent-name"
+              autoFocus
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              aria-describedby={
+                nameError
+                  ? "agent-name-error agent-name-hint"
+                  : "agent-name-hint"
+              }
+              aria-invalid={Boolean(nameError)}
+              placeholder={t.agents.nameStepPlaceholder}
+              value={nameInput}
+              onChange={(e) => {
+                setNameInput(e.target.value);
+                setNameError("");
+              }}
+              onKeyDown={handleNameKeyDown}
+              className={cn("max-sm:h-11", nameError && "border-destructive")}
+            />
+            {nameError ? (
+              <p
+                id="agent-name-error"
+                role="alert"
+                className="text-destructive text-sm"
               >
-                {t.agents.nameStepContinue}
-              </Button>
-            </div>
+                {nameError}
+              </p>
+            ) : null}
+            <Button
+              className="w-full max-sm:h-11 sm:w-auto"
+              onClick={() => void handleConfirmName()}
+              disabled={!nameInput.trim() || isCheckingName}
+            >
+              {t.agents.nameStepContinue}
+            </Button>
+            <p className="text-muted-foreground border-border/50 border-t border-dashed pt-4 text-sm">
+              {t.agents.nameStepNext}
+            </p>
           </div>
         </main>
       </div>

@@ -651,6 +651,38 @@ test.describe("UI polish mobile regressions", () => {
     });
   }
 
+  // d11 slice 27: the name field autofocuses, so the keyboard is up from the
+  // first frame. The form leads the page instead of sitting mid-screen, where
+  // field and Continue (482 to 566 of 844) fell under a 336px keyboard.
+  test("a new agent's name field and Continue sit above the phone keyboard", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    mockLangGraphAPI(page);
+    await page.goto("/workspace/agents/new");
+
+    await expect(
+      page.getByRole("heading", { level: 1, name: "Design your agent" }),
+    ).toBeVisible();
+    const field = page.getByLabel("Name your new agent");
+    await expect(field).toBeFocused();
+    const cont = page.getByRole("button", { name: "Continue" });
+    for (const el of [field, cont]) {
+      const box = (await el.boundingBox())!;
+      expect(box.height).toBeGreaterThanOrEqual(44);
+      expect(box.y + box.height).toBeLessThanOrEqual(844 - 336);
+    }
+    await expect(page.getByRole("link", { name: "Agents" })).toHaveAttribute(
+      "href",
+      "/workspace/agents",
+    );
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth - window.innerWidth,
+      ),
+    ).toBe(0);
+  });
+
   test("?settings=security opens the Security section", async ({ page }) => {
     mockLangGraphAPI(page);
 

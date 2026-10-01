@@ -905,13 +905,15 @@ export const enUS: Translations = {
       "Are you sure you want to delete this agent? This action can't be undone.",
     deleteSuccess: "Agent deleted",
     newChat: "New chat",
-    createPageTitle: "Design your Agent",
+    createPageTitle: "Design your agent",
     createPageSubtitle:
       "Describe the agent you want, and we will shape it together in conversation.",
-    nameStepTitle: "Name your new Agent",
+    nameStepTitle: "Name your new agent",
     nameStepHint:
-      "Letters, digits and hyphens only, stored lowercase (for example code-reviewer)",
-    nameStepPlaceholder: "e.g. code-reviewer",
+      "Letters, digits and hyphens only. It is stored in lowercase.",
+    nameStepPlaceholder: "for example, seo-auditor",
+    nameStepNext:
+      "Next, you describe the job in a chat and MomoBot drafts the agent with you. It is saved when you say so.",
     nameStepContinue: "Continue",
     nameStepInvalidError: "Invalid name. Use only letters, digits and hyphens.",
     nameStepAlreadyExistsError: "An agent with this name already exists",
@@ -936,7 +938,7 @@ export const enUS: Translations = {
     more: "More actions",
     agentCreated: "Agent created!",
     startChatting: "Start chatting",
-    backToGallery: "Back to Gallery",
+    backToGallery: "Back to Agents",
     settings: "Agent settings",
     settingsTitle: "Agent settings",
     settingsDisplayName: "Display name",

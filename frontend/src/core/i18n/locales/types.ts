@@ -780,6 +780,7 @@ export interface Translations {
     nameStepTitle: string;
     nameStepHint: string;
     nameStepPlaceholder: string;
+    nameStepNext: string;
     nameStepContinue: string;
     nameStepInvalidError: string;
     nameStepAlreadyExistsError: string;

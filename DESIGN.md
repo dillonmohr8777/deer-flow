@@ -239,6 +239,7 @@ Use the shared components in `components/workspace/page-body.tsx`. Do not write 
 - `EmptyState` art (Momo and its two scraps) stays inside the content box at every width; no scrap crosses the gutter.
 - The chat composer keeps its disclaimer clear of the bottom edge with safe-area padding. The background-work control never covers the submit button.
 - Dialog headers are left-aligned at every width.
+- A form whose field autofocuses (New agent) leads the page under its header, never centred in the viewport: the phone keyboard is up from the first frame and covers the lower half.
 
 ## Copy
 
