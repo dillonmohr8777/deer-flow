@@ -2444,6 +2444,15 @@ contain no API keys. See [release setup](docs/MOMOBOT_APP_RELEASE.md),
 
 The workflow, hosted crew and browser rooms retain session-only admission, owner/workspace fences and uncertain-call holds alongside the existing private Agent Room and native startup controls. Integration preserves the current migration graph; deployment and accepted output still require their own runtime evidence.
 
+The direct Agents service also has an internal canonical work-binding path for
+operator-pinned source packets and actual canonical validator receipts. It
+records work provenance and immutable root-artifact byte receipts in the existing
+private session ledger; ordinary HTTP create requests cannot set this binding.
+It does not update the client queue or accept, publish or send a result. The
+binding path is tested offline and does not activate provider access or prove
+live account eligibility or spending enforcement. See the
+[internal binding contract](backend/docs/OPENAI_AGENTS_APP.md#internal-canonical-work-binding).
+
 The opt-in **Workflows** room at `/workspace/workflows` adds 120 concrete recipes:
 100 Momentum marketing, operations and development tasks plus 20 personal
 writing, music, research, coding and administration tasks. Each recipe has a

@@ -4,6 +4,19 @@ Agent Room preserves actor/admin isolation; read [its contract](../../docs/AGENT
 `supervisor` is a strict boolean, default off; persist and bind it to idempotency
 and resume. Preserve shared budgets and uncertain-admission holds.
 
+Direct Agents canonical work binding is internal-only. Obtain independently
+trusted operator pins and actual current canonical validator output before
+`create_bound`; a constructed binding or model assertion is not approval. Keep
+the loader's synchronous file reads off-loop. Persist binding metadata atomically
+with admission in the existing private session SQLite, preserve stable execution
+identity and unknown-outcome holds, and reject unvalidated free-text followups
+for bound sessions. Immutable root-artifact readback receipts establish exact
+bytes/provenance only; the canonical Chief retains current client/queue handoff
+acceptance. Preserve public request schemas/routes, server-side credentials,
+disabled tools/network and separate provider/account/spend activation gates.
+Tests must use synthetic packets/fake transports without canonical writes or
+provider keys; offline acceptance does not prove installed or useful live output.
+
 Capability Center's `business` adapter uses bundled credential fields and normal
 MCP connections. Permit only the exact isolated launcher and credential key set
 from `deerflow.capabilities.business`, never arbitrary Python or manifest policy

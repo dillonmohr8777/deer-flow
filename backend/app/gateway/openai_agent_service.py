@@ -23,6 +23,8 @@ from uuid import uuid4
 if TYPE_CHECKING:
     from openai.types.beta.environment_param import EnvironmentParamOpenAIHosted
 
+    from app.gateway.openai_agent_work_binding import CanonicalWorkBinding
+
 logger = logging.getLogger(__name__)
 
 MODEL = "gpt-6.1-sol"
@@ -252,12 +254,19 @@ class OpenAIAgentService:
                 CREATE TABLE IF NOT EXISTS deadlines (
                     session_id TEXT PRIMARY KEY, expires_at REAL NOT NULL,
                     state TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS bound_artifact_receipts (
+                    session_id TEXT NOT NULL, artifact_id TEXT NOT NULL,
+                    receipt_json TEXT NOT NULL, created_at TEXT NOT NULL,
+                    PRIMARY KEY(session_id, artifact_id));
             """)
             db.execute("BEGIN IMMEDIATE")
             if "lease_expires_at" not in {column["name"] for column in db.execute("PRAGMA table_info(deadlines)")}:
                 db.execute("ALTER TABLE deadlines ADD COLUMN lease_expires_at REAL")
+            if "work_binding_json" not in {column["name"] for column in db.execute("PRAGMA table_info(sessions)")}:
+                db.execute("ALTER TABLE sessions ADD COLUMN work_binding_json TEXT")
             if action == "create":
-                owner, title, key, digest = args
+                owner, title, key, digest = args[:4]
+                work_binding_json = args[4] if len(args) == 5 else None
                 row = db.execute("SELECT * FROM sessions WHERE owner=? AND create_key=?", (owner, key)).fetchone()
                 if row:
                     if row["request_hash"] != digest:
@@ -267,7 +276,10 @@ class OpenAIAgentService:
                     raise AgentServiceError("active_session_limit")
                 _check_owner_admissions(db, owner)
                 session_id, stamp = uuid4().hex, _now()
-                db.execute("INSERT INTO sessions VALUES (?,?,?,?,?,?,?,?,?,?,?)", (session_id, owner, None, title, "creating", stamp, stamp, None, key, digest, None))
+                db.execute(
+                    "INSERT INTO sessions(id,owner,provider_id,title,status,created_at,updated_at,last_error,create_key,request_hash,active_op,work_binding_json) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (session_id, owner, None, title, "creating", stamp, stamp, None, key, digest, None, work_binding_json),
+                )
                 db.execute("INSERT INTO events(session_id,event,created_at) VALUES (?,?,?)", (session_id, "create.admitted", stamp))
                 db.execute("INSERT INTO deadlines(session_id,expires_at,state) VALUES (?,?,?)", (session_id, time.time() + TURN_TIMEOUT_SECONDS, "waiting"))
                 return dict(db.execute("SELECT * FROM sessions WHERE id=?", (session_id,)).fetchone()), True
@@ -307,6 +319,18 @@ class OpenAIAgentService:
             deadline_pending = deadline is not None and deadline["state"] in {"claimed", "cancel_requested"}
             if action == "get":
                 return {**dict(row), "deadline_pending": deadline_pending}
+            if action == "artifact_receipt":
+                artifact_id, receipt_json = args[2:]
+                if not row["work_binding_json"]:
+                    raise AgentServiceError("work_binding_required")
+                old = db.execute("SELECT receipt_json FROM bound_artifact_receipts WHERE session_id=? AND artifact_id=?", (session_id, artifact_id)).fetchone()
+                if old is not None:
+                    if old["receipt_json"] != receipt_json:
+                        raise AgentServiceError("artifact_receipt_conflict")
+                    return json.loads(old["receipt_json"])
+                db.execute("INSERT INTO bound_artifact_receipts VALUES (?,?,?,?)", (session_id, artifact_id, receipt_json, _now()))
+                db.execute("INSERT INTO events(session_id,event,created_at) VALUES (?,?,?)", (session_id, "artifact.read_back", _now()))
+                return json.loads(receipt_json)
             if action == "operation":
                 operation = db.execute("SELECT * FROM operations WHERE session_id=? AND idem=?", (session_id, args[2])).fetchone()
                 return dict(operation) if operation else None
@@ -390,18 +414,48 @@ class OpenAIAgentService:
         return [_summary(row) for row in await self._storage("list", owner)]
 
     async def create(self, owner: str, text: str, title: str, key: str):
+        return await self._create(owner, text, title, key)
+
+    async def create_bound(self, owner: str, binding: CanonicalWorkBinding):
+        """Internal-only, trusted pinned export; ordinary HTTP bodies cannot bind work.
+
+        This prepares the existing admission path, not a scheduler or authority
+        grant. Production provider configuration/entitlements remain separate.
+        The stable execution identity cannot be replaced with a new retry key.
+        """
+        from app.gateway.openai_agent_work_binding import WorkBindingStop, assert_binding_current, prepare_bound_input
+
+        try:
+            assert_binding_current(binding, owner)
+            prepared = prepare_bound_input(binding)
+        except WorkBindingStop as error:
+            raise AgentServiceError(str(error)) from None
+        provenance = {"binding_digest": prepared.binding_digest, "metadata": prepared.metadata}
+        return await self._create(
+            owner,
+            prepared.text,
+            prepared.title,
+            "direct-work:" + binding.execution_id,
+            work_binding_json=json.dumps(provenance, sort_keys=True, ensure_ascii=False, separators=(",", ":")),
+        )
+
+    async def _create(self, owner: str, text: str, title: str, key: str, *, work_binding_json: str | None = None):
         client = self._client()
         await self.start()
-        row, admitted = await self._storage("create", owner, title, _hash(key), _hash([text, title]))
+        digest = _hash([text, title]) if work_binding_json is None else _hash([text, title, json.loads(work_binding_json)])
+        row, admitted = await self._storage("create", owner, title, _hash(key), digest, work_binding_json)
         if not admitted:
             return await self.snapshot(owner, row["id"])
         environment: EnvironmentParamOpenAIHosted = {"type": "openai_hosted", "network": {"access": "disabled"}}
+        metadata = {"momo_local_session": row["id"], "momo_owner_scope": _hash(owner)}
+        if work_binding_json is not None:
+            metadata["momo_work_binding"] = json.loads(work_binding_json)["binding_digest"]
         try:
             session = await client.beta.agents.sessions.create(
                 agent={"model": MODEL, "instructions": _INSTRUCTIONS, "tools": [], "multi_agent": {"enabled": True, "max_concurrent_subagents": MAX_SUBAGENTS}, "reasoning": {"effort": "low"}, "service_tier": "default"},
                 environment=environment,
                 input=text,
-                metadata={"momo_local_session": row["id"], "momo_owner_scope": _hash(owner)},
+                metadata=metadata,
             )
         except BaseException as error:
             await asyncio.shield(self._storage("unknown", row["id"], owner, "provider_outcome_unknown"))
@@ -477,6 +531,9 @@ class OpenAIAgentService:
         }
 
     async def message(self, owner: str, session_id: str, text: str, key: str):
+        row = await self._storage("get", session_id, owner)
+        if row["work_binding_json"] is not None:
+            raise AgentServiceError("bound_session_followup_requires_validation")
         existing = await self._storage("operation", session_id, owner, _hash(key))
         if existing:
             if existing["digest"] != _hash(text) or existing["kind"] != "message":
@@ -521,13 +578,60 @@ class OpenAIAgentService:
                 raise AgentServiceError("provider_outcome_unknown", 502) from None
         return await self.snapshot(owner, session_id)
 
-    async def artifact(self, owner: str, session_id: str, artifact_id: str) -> bytes:
+    async def record_bound_artifact(self, owner: str, session_id: str, binding: CanonicalWorkBinding, artifact_id: str) -> dict[str, Any]:
+        """Read back exact root artifact bytes and journal provenance, not acceptance.
+
+        A canonical Chief must still copy/read back the actual bytes under its
+        existing client root and validate/accept its own handoff. No such action
+        is performed here; provider locations are not canonical artifact paths.
+        """
+        from app.gateway.openai_agent_work_binding import RootArtifactEvidence, WorkBindingStop, build_bound_artifact_receipt, prepare_bound_input
+
+        row = await self._storage("get", session_id, owner)
+        try:
+            prepared = prepare_bound_input(binding)
+        except WorkBindingStop as error:
+            raise AgentServiceError(str(error)) from None
+        saved = json.loads(row["work_binding_json"]) if row["work_binding_json"] else None
+        if binding.owner_scope != owner or saved != {"binding_digest": prepared.binding_digest, "metadata": prepared.metadata}:
+            raise AgentServiceError("work_binding_conflict")
+        current = await self.snapshot(owner, session_id)
+        turn = current.get("turn")
+        artifact = next((item for item in current.get("artifacts", []) if item.get("id") == artifact_id), None)
+        root_final_present = turn is not None and any(
+            item.get("type") == "message" and item.get("role") == "assistant" and item.get("phase") == "final_answer" and item.get("turn_id") == turn["id"] and item.get("subagent_id") is None and item.get("text")
+            for item in current.get("items", [])
+        )
+        if not turn or turn["status"] != "completed" or not root_final_present or not artifact or artifact.get("turn_id") != turn["id"] or current.get("history_truncated") is not False or current.get("operation_pending") is not False:
+            raise AgentServiceError("bound_artifact_completion_unproven")
+        evidence = RootArtifactEvidence(
+            owner_scope=owner,
+            execution_id=binding.execution_id,
+            session_id=session_id,
+            root_turn_id=turn["id"],
+            artifact_id=artifact_id,
+            artifact_turn_id=artifact["turn_id"],
+            root_status="completed",
+            root_final_present=True,
+            history_truncated=False,
+            operation_pending=False,
+        )
+        data = await self.artifact(owner, session_id, artifact_id, expected_turn_id=turn["id"])
+        try:
+            receipt = build_bound_artifact_receipt(binding, evidence, data).metadata()
+        except WorkBindingStop as error:
+            raise AgentServiceError(str(error)) from None
+        return await self._storage("artifact_receipt", session_id, owner, artifact_id, json.dumps(receipt, sort_keys=True, separators=(",", ":")))
+
+    async def artifact(self, owner: str, session_id: str, artifact_id: str, *, expected_turn_id: str | None = None) -> bytes:
         row = await self._storage("get", session_id, owner)
         if not row["provider_id"]:
             raise AgentServiceError("not_found", 404)
         try:
             artifacts = self._client().beta.agents.sessions.artifacts
             info = _dict(await artifacts.retrieve(artifact_id, session_id=row["provider_id"]))
+            if expected_turn_id is not None and info.get("turn_id") != expected_turn_id:
+                raise AgentServiceError("artifact_root_turn_mismatch", 502)
             size = info.get("size_bytes")
             if type(size) is not int or size > MAX_ARTIFACT_BYTES or size < 0:
                 raise AgentServiceError("artifact_size_unavailable_or_exceeded", 413)

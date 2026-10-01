@@ -175,6 +175,57 @@ Closing the SDK client does not delete remote sessions or stop remote turns.
 No user artifacts or sessions are silently deleted during normal shutdown.
 Deletion/archival and per-project budgeting are separate reviewed additions.
 
+## Internal canonical work binding
+
+This preparation seam is internal-only and tested with synthetic packets and
+fake provider transports. It registers no route or tool and grants no execution
+authority. Existing public request schemas and ordinary unbound-session behavior
+stay unchanged. It does not activate the provider, reconcile an uncertain paid
+request or establish account eligibility or finite project spending enforcement.
+
+`load_pinned_work_packet` reads an operator-pinned manifest, graph, redacted source
+and independently pinned actual canonical validator output. The validator pin
+must come from the trusted current Chief/operator export, not a model assertion
+or the manifest alone. The loader checks owner/client/work-item identities and
+versions, queue snapshot, declared canonical commit, hashes and the validated
+local/read-only scope. Approval must be automatic with no gate, blockers must be
+empty, and canonical, external and durable-memory writes must be forbidden.
+Validator freshness is at most five minutes; a narrower operator expiry is
+preserved. No live canonical validator or queue writer runs in this module.
+A constructed or modified `CanonicalWorkBinding` is not an authority boundary;
+internal callers remain responsible for retaining the trusted operator pins.
+Async callers must offload the loader's synchronous file reads.
+
+Internal `create_bound(owner, binding)` rechecks owner and validator freshness
+before client/storage access and frames bounded source input: at most 16000
+characters and 65536 UTF-8 bytes. Its stable key is
+`direct-work:<execution_id>`. Binding metadata and digest are stored atomically
+with admission in nullable `sessions.work_binding_json` in the same private
+`openai-agents.sqlite`. That metadata excludes source/task text and operator
+filesystem paths; the provider receives the reviewed source as task input and
+the binding digest as correlation metadata. Different pinned work with the same
+execution identity conflicts; an unknown paid outcome never redispatches.
+Use the existing GET recovery path for already admitted older sessions, rather
+than inventing another execution key. Bound sessions reject free-text followups
+until a separately reviewed revalidation contract exists.
+
+`record_bound_artifact` requires the supplied binding to match saved provenance,
+a completed root turn with a nonempty root final answer, complete history with
+no pending operation, and an artifact assigned to that root turn. Retrieval
+rechecks metadata against the expected root turn and reads bounded exact binary
+bytes. `bound_artifact_receipts` in the same SQLite ledger stores an immutable
+receipt per local session/artifact, including byte count and SHA-256. Repeating
+the same receipt is idempotent; changed receipt contents conflict.
+
+The receipt declares `semantic_acceptance=not_evaluated` and
+`canonical_adoption=not_performed`. The existing canonical Chief must separately
+retain/read back the actual bytes under its client root, validate current
+queue/client handoff state and perform any authorized adoption. A provider
+artifact location is not a canonical local path, and byte identity or root final
+presence is not semantic acceptance. The seam adds no scheduler, client registry,
+canonical writer, new provider grant or dollar budget. Preserve disabled runtime
+settings and original uncertainty ledgers until their separate gates pass.
+
 ## Validation
 
 Offline tests exercise real production code: durable owner isolation/restart,
