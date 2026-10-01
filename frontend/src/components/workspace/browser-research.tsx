@@ -147,14 +147,18 @@ export function BrowserResearchWorkspace() {
   const [selected, setSelected] = useState<string | undefined>();
   const [title, setTitle] = useState("");
   const [urls, setUrls] = useState("");
-  const [notice, setNotice] = useState<string | null>(null);
+  // Create and URL errors belong to the form; stop and download notices
+  // belong to the receipt, so each reason shows beside what it is about.
+  const [formNotice, setFormNotice] = useState<string | null>(null);
+  const [receiptNotice, setReceiptNotice] = useState<string | null>(null);
   const [submission, setSubmission] = useState<Submission | null>(null);
   const receiptRef = useRef<HTMLDivElement>(null);
   const receiptHeading = useRef<HTMLHeadingElement>(null);
   // A chosen capture opens under the list; once it has loaded, bring it into
   // view (instantly under reduced motion) and hand it focus, as Scheduled
   // tasks does for its sheet, so a tap never changes something off screen.
-  const bringReceipt = useRef(false);
+  // The id of the capture to reveal once it has loaded.
+  const bringReceipt = useRef<string | null>(null);
 
   const status = useQuery({
     queryKey: ["browserbase", owner, "status"],
@@ -168,7 +172,8 @@ export function BrowserResearchWorkspace() {
     setSelected(undefined);
     setTitle("");
     setUrls("");
-    setNotice(null);
+    setFormNotice(null);
+    setReceiptNotice(null);
     setSubmission(null);
   }, [owner, scope]);
   const runs = useQuery({
@@ -219,7 +224,7 @@ export function BrowserResearchWorkspace() {
       setSubmission(null);
       setUrls("");
       setTitle("");
-      setNotice(null);
+      setFormNotice(null);
       queryClient.setQueryData(
         ["browserbase", request.owner, request.scope, "research", data.id],
         data,
@@ -237,7 +242,7 @@ export function BrowserResearchWorkspace() {
         currentScope.current !== request.scope
       )
         return;
-      setNotice(
+      setFormNotice(
         `${browserWords(error)} The request is unconfirmed. Retry uses the same receipt; check saved captures before continuing.`,
       );
       refresh();
@@ -264,7 +269,7 @@ export function BrowserResearchWorkspace() {
         currentOwner.current === request.owner &&
         currentScope.current === request.scope
       )
-        setNotice(browserWords(error));
+        setReceiptNotice(browserWords(error));
     },
   });
   const download = useMutation({
@@ -281,7 +286,7 @@ export function BrowserResearchWorkspace() {
         new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }),
         `browser-research-${data.id}.json`,
       );
-      setNotice(
+      setReceiptNotice(
         "Captured evidence was handed to your browser for download. Confirm the saved file in Downloads.",
       );
     },
@@ -290,14 +295,12 @@ export function BrowserResearchWorkspace() {
         currentOwner.current === request.owner &&
         currentScope.current === request.scope
       )
-        setNotice(browserWords(error));
+        setReceiptNotice(browserWords(error));
     },
   });
 
   const data = run.data;
-  useEffect(() => {
-    if (!bringReceipt.current || !data || data.id !== selected) return;
-    bringReceipt.current = false;
+  function revealReceipt() {
     const reduce = window.matchMedia?.(
       "(prefers-reduced-motion: reduce)",
     ).matches;
@@ -306,7 +309,14 @@ export function BrowserResearchWorkspace() {
       behavior: reduce ? "auto" : "smooth",
     });
     receiptHeading.current?.focus({ preventScroll: true });
-  }, [data, selected]);
+  }
+  // Only the load the tap asked for reveals the receipt; a later poll never
+  // moves focus, so typing in the form is never interrupted.
+  useEffect(() => {
+    if (bringReceipt.current !== data?.id) return;
+    bringReceipt.current = null;
+    revealReceipt();
+  }, [data]);
   const active =
     (runs.data?.data.some((item) => isBrowserResearchBusy(item.status)) ??
       false) ||
@@ -333,10 +343,10 @@ export function BrowserResearchWorkspace() {
         key: crypto.randomUUID(),
       };
       setSubmission(request);
-      setNotice(null);
+      setFormNotice(null);
       create.mutate(request);
     } catch (error) {
-      setNotice(
+      setFormNotice(
         error instanceof Error ? browserWords(error) : "Check the page URLs.",
       );
     }
@@ -407,17 +417,6 @@ export function BrowserResearchWorkspace() {
                 <h2 id="captures-title" className="text-xl">
                   Your captures
                 </h2>
-                {notice && (
-                  <p
-                    role="alert"
-                    className={cn(
-                      pageStyles.sheet,
-                      "mt-3 p-3 text-sm break-words",
-                    )}
-                  >
-                    {notice}
-                  </p>
-                )}
                 <div className="mt-3">
                   {runs.isLoading && (
                     <WorkingState label="Loading saved captures" />
@@ -466,9 +465,16 @@ export function BrowserResearchWorkspace() {
                               )}
                               aria-pressed={chosen}
                               onClick={() => {
-                                bringReceipt.current = true;
+                                setReceiptNotice(null);
+                                if (data?.id === item.id) {
+                                  // Already open: reveal it now rather than
+                                  // on some later poll.
+                                  bringReceipt.current = null;
+                                  revealReceipt();
+                                  return;
+                                }
+                                bringReceipt.current = item.id;
                                 setSelected(item.id);
-                                setNotice(null);
                               }}
                             >
                               <span className="flex items-start justify-between gap-3">
@@ -517,6 +523,7 @@ export function BrowserResearchWorkspace() {
                       owner={owner}
                       scope={scope}
                       headingRef={receiptHeading}
+                      notice={receiptNotice}
                       mayCancel={mayCancel}
                       stopping={cancel.isPending}
                       downloading={download.isPending}
@@ -631,6 +638,11 @@ export function BrowserResearchWorkspace() {
                     </p>
                   )}
                 </div>
+                {formNotice && (
+                  <p role="alert" className="border-t pt-4 text-sm break-words">
+                    {formNotice}
+                  </p>
+                )}
               </form>
             )}
           </div>
@@ -645,6 +657,7 @@ function CaptureReceipt({
   owner,
   scope,
   headingRef,
+  notice,
   mayCancel,
   stopping,
   downloading,
@@ -655,6 +668,7 @@ function CaptureReceipt({
   owner: string | undefined;
   scope: string | undefined;
   headingRef: RefObject<HTMLHeadingElement | null>;
+  notice: string | null;
   mayCancel: boolean;
   stopping: boolean;
   downloading: boolean;
@@ -730,6 +744,11 @@ function CaptureReceipt({
             </Button>
           )}
         </div>
+      )}
+      {notice && (
+        <p role="alert" className="text-sm break-words">
+          {notice}
+        </p>
       )}
       <div>
         <h4 className={cn(pageStyles.eyebrow, "mb-2")}>Pages</h4>
