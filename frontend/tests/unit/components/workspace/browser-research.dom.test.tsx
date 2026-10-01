@@ -245,6 +245,50 @@ describe("Browser research workspace", () => {
     expect(mocks.create).not.toHaveBeenCalled();
   });
 
+  it("re-tapping the open capture never steals focus on a later refresh", async () => {
+    mocks.list.mockResolvedValue({ data: [DETAIL] });
+    render(<BrowserResearchWorkspace />, { wrapper: Wrapper });
+    const row = await screen.findByRole("button", {
+      name: /^Official docs Captured/,
+    });
+    fireEvent.click(row);
+    const title = await screen.findByRole("heading", {
+      level: 3,
+      name: "Official docs",
+    });
+    await waitFor(() => expect(document.activeElement).toBe(title));
+    // Re-tap the open capture, then go and type in the form.
+    fireEvent.click(row);
+    expect(document.activeElement).toBe(title);
+    const field = screen.getByLabelText<HTMLTextAreaElement>(
+      "Public HTTPS URLs, one per line",
+    );
+    field.focus();
+    mocks.read.mockResolvedValue({
+      ...DETAIL,
+      updated_at: "2026-09-30T00:00:00Z",
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Refresh saved captures" }),
+    );
+    await waitFor(() =>
+      expect(mocks.read.mock.calls.length).toBeGreaterThan(1),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(document.activeElement).toBe(field);
+  });
+
+  it("shows a rejected capture's reason inside the form", async () => {
+    mocks.list.mockResolvedValue({ data: [{ ...DETAIL, id: "older" }] });
+    mocks.create.mockRejectedValueOnce(new Error("owner_busy"));
+    render(<BrowserResearchWorkspace />, { wrapper: Wrapper });
+    await fillAndSubmit();
+    const alert = await screen.findByText(
+      /A capture is already queued or running\. Wait for it to finish\./,
+    );
+    expect(alert.closest("#capture-form")).not.toBeNull();
+  });
+
   it("reuses the admission receipt after an unconfirmed transport failure", async () => {
     mocks.create
       .mockRejectedValueOnce(new Error("Connection lost"))
