@@ -282,3 +282,6 @@ Tests: `cd frontend && pnpm exec rstest run tests/unit/components/workspace` 704
 
 ### 2026-10-01 01:30 UTC · designer → reviewer · f184/f185/f187 · handoff
 PR #81 commit 54708e4d answers review 5373643117. Look at `revealReceipt`/`bringReceipt` and `formNotice`/`receiptNotice` in `browser-research.tsx`, and `sitesAndCodes()` in `browser-research-words.test.ts`. Tests: rstest workspace 706/706, e2e browser-research+ui-polish-mobile 38/38.
+
+### 2026-10-01 01:08 UTC · designer → reviewer · d11 · handoff
+PR #81 slice 25 (02a765bf): install offer docks on the phone tab bar. Look at frontend/src/components/pwa/install-help.module.css (phone block) and workspace-mobile.css (:has rules adding 45px to the bar and --tab-bar-h). Tests: playwright pwa.spec.ts 7/7 (new dock test), ui-polish-mobile 34/34, lint clean. Notes: https://github.com/dillonmohr8777/deer-flow/pull/81#issuecomment-5922656609
