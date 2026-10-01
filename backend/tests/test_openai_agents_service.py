@@ -30,6 +30,22 @@ class FakePage:
         return False
 
 
+class EndlessEmptyPage:
+    """A provider list page that never completes: always another page, no matches.
+
+    Exercises the `not more` guard on the stale-settle path: a search that is
+    truncated at MAX_PAGES has not actually confirmed zero matches.
+    """
+
+    data: list = []
+
+    def has_next_page(self):
+        return True
+
+    async def get_next_page(self):
+        return self
+
+
 class FakeClient:
     def __init__(self):
         self.turns = []
@@ -156,6 +172,59 @@ async def test_stale_unbound_creates_settle_failed_and_stop_relisting(setup):
     client.beta.agents.sessions.create.side_effect = original_side_effect
     await service.create("alice", "Task", "Task", "finally_ok")
     assert client.beta.agents.sessions.create.await_count == 4
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status_code", [500, 502, 503])
+async def test_5xx_create_rejection_stays_unknown(setup, status_code):
+    # Guards the `< 500` boundary in _is_definite_create_rejection: a 5xx means
+    # the provider may have processed the request, so it must stay ambiguous,
+    # never a confirmed "failed" (which would risk masking a billable session).
+    service, client = setup
+    client.beta.agents.sessions.create.side_effect = _api_status_error(status_code)
+    with pytest.raises(AgentServiceError, match="provider_outcome_unknown"):
+        await service.create("alice", "Task", "Task", "servererror")
+    rows = await service.list_sessions("alice")
+    assert rows[0]["status"] == "unknown"
+
+
+@pytest.mark.asyncio
+async def test_stale_unbound_create_with_truncated_search_stays_unknown(setup):
+    # Guards the `not more` condition in snapshot()'s stale-settle branch: a
+    # search truncated at MAX_PAGES has not confirmed zero matches, so even a
+    # very stale row must stay ambiguous instead of settling "failed" (which
+    # would orphan a session that exists past page MAX_PAGES).
+    service, client = setup
+    client.beta.agents.sessions.create.side_effect = RuntimeError("provider response lost")
+    with pytest.raises(AgentServiceError, match="provider_outcome_unknown"):
+        await service.create("alice", "Task", "Task", "lost")
+    client.beta.agents.sessions.list.side_effect = lambda **kwargs: EndlessEmptyPage()
+    stale_created_at = datetime.fromtimestamp(time.time() - agent_service.TURN_TIMEOUT_SECONDS - agent_service.UNBOUND_RESOLUTION_MARGIN_SECONDS - 10, UTC).isoformat()
+    with sqlite3.connect(service.path) as db:
+        db.execute("UPDATE sessions SET created_at=?", (stale_created_at,))
+        db.execute("UPDATE deadlines SET expires_at=0")
+    await service.enforce_deadlines()
+    rows = await service.list_sessions("alice")
+    assert rows[0]["status"] == "unknown"
+
+
+@pytest.mark.asyncio
+async def test_failed_unbound_row_is_not_relisted_or_resurrected_by_a_late_match(setup):
+    # A row already dead-lettered "failed" must stay that way even if a
+    # matching provider session shows up later (list-endpoint lag): re-listing
+    # and binding it would resurrect a row the watchdog has already stopped
+    # watching (its deadline is "settled"), leaking an unsupervised session.
+    service, client = setup
+    client.beta.agents.sessions.create.side_effect = _api_status_error(400)
+    with pytest.raises(AgentServiceError, match="provider_rejected_request"):
+        await service.create("alice", "Task", "Task", "rejected")
+    session_id = (await service.list_sessions("alice"))[0]["id"]
+    client.session.update(id="late_arrival", status="in_progress", metadata={"momo_local_session": session_id, "momo_owner_scope": agent_service._hash("alice")})
+    result = await service.snapshot("alice", session_id)
+    assert result["status"] == "failed"
+    assert client.beta.agents.sessions.list.await_count == 0
+    rows = await service.list_sessions("alice")
+    assert rows[0]["status"] == "failed"
 
 
 @pytest.mark.asyncio

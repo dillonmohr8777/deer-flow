@@ -327,8 +327,10 @@ class OpenAIAgentService:
                 operation = db.execute("SELECT * FROM operations WHERE session_id=? AND idem=?", (session_id, args[2])).fetchone()
                 return dict(operation) if operation else None
             if action == "bind":
+                # Never resurrect a row already settled failed: a late-arriving
+                # provider match must not undo a definitive dead-letter outcome.
                 provider_id, status = args[2:]
-                db.execute("UPDATE sessions SET provider_id=?,status=?,updated_at=?,last_error=NULL WHERE id=?", (provider_id, status, _now(), session_id))
+                db.execute("UPDATE sessions SET provider_id=?,status=?,updated_at=?,last_error=NULL WHERE id=? AND status!='failed'", (provider_id, status, _now(), session_id))
             elif action == "unknown":
                 code = args[2]
                 db.execute("UPDATE sessions SET status='unknown',last_error=?,updated_at=? WHERE id=?", (code, _now(), session_id))
@@ -336,9 +338,11 @@ class OpenAIAgentService:
                 # A create that never reached the provider (confirmed rejection,
                 # or a confirmed-empty provider-side search long past the create
                 # deadline): terminal and off the active-session count for good,
-                # unlike "unknown" which keeps a row in limbo indefinitely.
+                # unlike "unknown" which keeps a row in limbo indefinitely. Guard
+                # against a concurrent late bind: never clobber a row that is
+                # already provider-bound back into failed.
                 code = args[2]
-                db.execute("UPDATE sessions SET status='failed',last_error=?,updated_at=? WHERE id=?", (code, _now(), session_id))
+                db.execute("UPDATE sessions SET status='failed',last_error=?,updated_at=? WHERE id=? AND provider_id IS NULL", (code, _now(), session_id))
                 db.execute("UPDATE deadlines SET state='settled',lease_expires_at=NULL WHERE session_id=?", (session_id,))
             elif action == "deadline_sent":
                 expires_at, lease_expires_at = args[2:]
@@ -457,6 +461,11 @@ class OpenAIAgentService:
         client = self._client()
         try:
             if not row["provider_id"]:
+                if row["status"] == "failed":
+                    # Already settled dead-lettered: no provider work left, and
+                    # re-listing here is exactly the window a late-arriving
+                    # provider match could otherwise resurrect this row through.
+                    return {**_summary(row), "turn": None, "items": [], "artifacts": [], "required_actions": [], "usage": None, "operation_pending": False, "history_truncated": False}
                 candidates, more = await self._pages(client.beta.agents.sessions.list(limit=100))
                 matches = [item for item in candidates if item.get("metadata", {}).get("momo_local_session") == session_id and item.get("metadata", {}).get("momo_owner_scope") == _hash(owner)]
                 if len(matches) != 1 or more:
