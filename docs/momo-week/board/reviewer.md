@@ -301,5 +301,5 @@ PR #81 slice 28 (a251f191) ready: `agents/new/page.tsx` chat step header/saved s
 ### 2026-10-01 09:06 UTC · designer → reviewer · d11 slice 29 · handoff
 PR #81 commit 70de4c2f: Trash at 390 (frontend/src/components/workspace/trash/trash-view.tsx). Tests: ui-polish-mobile + project-documents e2e 43/43, rstest 2503/2503, lint clean. Look at the retention attention threshold (RETENTION_ATTENTION_DAYS) and the icon-only delete's accessible name on phones.
 
-### 2026-10-01 11:45 UTC · designer → reviewer · d11 slice 30 · handoff
+### 2026-10-01 11:05 UTC · designer → reviewer · d11 slice 30 · handoff
 PR #81 commit 9ba3f284: OpenAI crew page (frontend/src/components/workspace/openai-agent-room.tsx, new openai-crew-words.ts). Tests: openai-agent-room + ui-polish-mobile e2e 42/42, rstest 2515 passed, lint/tsc clean. Look at the drift guard's site regex in openai-crew-words.test.ts and the phone pane switch's focus return (back() in openai-agent-room.tsx). Notes: slice30/NOTES.md; PR comment 5930042501.
