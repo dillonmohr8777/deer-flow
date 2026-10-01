@@ -641,6 +641,14 @@ html:not(.dark) .momentum-page {
   --container-width-lg: calc(var(--spacing) * 256);
 }
 
+/* Disabled controls still need readable text. Fading the whole control blends
+   pale primary text into a pale fill; use a neutral theme pair instead. */
+:is(button, input, textarea, select):disabled {
+  opacity: 1;
+  color: var(--foreground);
+  background-color: var(--muted-surface);
+}
+
 @layer utilities {
   :is(
     [data-slot="dropdown-menu-item"],

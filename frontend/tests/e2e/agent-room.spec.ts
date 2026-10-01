@@ -32,7 +32,7 @@ async function roomTextContrast(page: Page) {
     };
     return [
       ...document.querySelectorAll(
-        "main h1,main h2,main h3,main p,main time,main label,main span,main strong,main textarea",
+        "main h1,main h2,main h3,main p,main time,main label,main span,main strong,main textarea,main button,main a,main input",
       ),
     ]
       .filter(
@@ -49,14 +49,21 @@ async function roomTextContrast(page: Page) {
         )
           parents.unshift(parent);
         let background = [255, 255, 255];
-        for (const parent of parents)
+        let parentBackground = background;
+        for (const parent of parents) {
+          parentBackground = background;
           background = mix(
             rgba(getComputedStyle(parent).backgroundColor),
             background,
           );
-        const foreground = mix(
-          rgba(getComputedStyle(element).color),
-          background,
+        }
+        let foreground = mix(rgba(getComputedStyle(element).color), background);
+        const opacity = Number(getComputedStyle(element).opacity);
+        foreground = foreground.map(
+          (v, i) => v * opacity + parentBackground[i]! * (1 - opacity),
+        );
+        background = background.map(
+          (v, i) => v * opacity + parentBackground[i]! * (1 - opacity),
         );
         const a = luminance(foreground),
           b = luminance(background);
