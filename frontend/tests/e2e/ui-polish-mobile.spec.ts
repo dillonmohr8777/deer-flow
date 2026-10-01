@@ -857,6 +857,23 @@ test.describe("scheduled tasks on a phone", () => {
     for (const h of facts.railHeights) expect(h).toBeLessThanOrEqual(56);
     expect(facts.listRight).toBeLessThanOrEqual(390 - 16);
     expect(facts.slipGap).toBeGreaterThanOrEqual(8);
+
+    // Selected is royal (DESIGN.md): the pressed choice is royal on cream-hi
+    // with a royal edge, the selected slip's rule, not a kraft fill.
+    const pressed = await page
+      .locator("[role='group'] [aria-pressed='true']")
+      .first()
+      .evaluate((el) => {
+        const s = getComputedStyle(el);
+        return {
+          color: s.color,
+          bg: s.backgroundColor,
+          edge: s.boxShadow,
+        };
+      });
+    expect(pressed.color).toBe("rgb(27, 75, 158)");
+    expect(pressed.bg).toBe("rgb(251, 248, 241)");
+    expect(pressed.edge).toContain("rgb(27, 75, 158)");
   });
 
   // The failure names itself in the row at every width, not only on phones.
