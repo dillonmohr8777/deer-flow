@@ -1,0 +1,448 @@
+"""Read-only CEO Desk API (queue item e14, backend slice 1).
+
+Backs ``/workspace/ceo``'s "needs my yes" queue and agent-seat roster
+(the daily digest and the frontend page itself are a later slice). Owner/admin
+only, unlike the Momo Board's per-client access: a plain member or a client
+sees the whole organization's queue and roster if let in at all, so a
+non-admin gets a flat 403 here rather than ``board.py``'s "foreign looks
+missing" 404.
+"""
+
+from __future__ import annotations
+
+from datetime import UTC, datetime, timedelta
+
+from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel, Field
+from sqlalchemy import select
+
+from app.gateway.authz import require_permission
+from app.gateway.deps import get_agent_seat_repo, get_board_repo, get_ceo_desk_digest_repo, get_config, get_current_user_from_request, get_team_board_repo, record_audit_event
+from app.gateway.momentum_internal import require_momentum_staff
+from deerflow.board.workflow import latest_momo_draft_body
+from deerflow.config.app_config import AppConfig
+from deerflow.exec_seats import SeatTransitionError, assert_can_ratify, assert_can_reopen
+from deerflow.persistence.board.model import BoardThreadStatus
+from deerflow.persistence.exec_seats.model import AgentSeatStatus
+from deerflow.persistence.organizations.model import OrganizationMemberRow
+from deerflow.persistence.user.model import UserRow
+from deerflow.runtime.user_context import resolve_organization_id
+from deerflow.tools.exec_seat_tools import announce_to_exec
+
+router = APIRouter(prefix="/api/ceo", tags=["ceo"])
+
+_ORG_ADMIN_ROLES = ("owner", "admin")
+# Matches deerflow.exec_seats.budget's trailing-week window, so the roster's
+# burn figure is the same number that would pause the seat.
+_BUDGET_WINDOW = timedelta(days=7)
+# The only two Team Board channels the CEO Desk's "Live #exec and #fleet
+# feeds" item (e14) names. #exec is a default channel every workspace
+# already has (DEFAULT_TEAM_CHANNELS); #fleet is not, so it may not exist
+# yet -- see CeoFeedResponse.exists.
+_FEED_CHANNEL_SLUGS = ("exec", "fleet")
+
+
+class BoardDraftAwaitingApproval(BaseModel):
+    thread_id: str
+    client_id: str | None
+    kind: str
+    subject: str
+    status: str
+    draft_body: str | None
+    updated_at: str
+
+
+class SeatAwaitingRatification(BaseModel):
+    seat_id: str
+    seat: str
+    agent_name: str
+    claimed_by_user_id: str | None
+    created_at: str
+
+
+class NeedsMyYesResponse(BaseModel):
+    board_drafts: list[BoardDraftAwaitingApproval]
+    seat_ratifications: list[SeatAwaitingRatification]
+
+
+class SeatRosterEntry(BaseModel):
+    seat_id: str
+    seat: str
+    agent_name: str
+    kpi: str
+    status: str
+    weekly_token_budget: int
+    burn_this_week: int
+    paused: bool
+
+
+class SeatRosterResponse(BaseModel):
+    seats: list[SeatRosterEntry]
+
+
+class SeatActionResponse(BaseModel):
+    seat_id: str
+    seat: str
+    agent_name: str
+    status: str
+
+
+class DailyDigest(BaseModel):
+    digest_text: str
+    shipped_count: int
+    stuck_count: int
+    needs_my_yes_drafts: int
+    needs_my_yes_ratifications: int
+    created_at: str
+
+
+class DailyDigestResponse(BaseModel):
+    digest: DailyDigest | None
+
+
+class CeoFeedMessage(BaseModel):
+    id: str
+    author_user_id: str
+    author_display_name: str
+    body: str
+    created_at: str
+
+
+class CeoFeedResponse(BaseModel):
+    channel: str
+    # False only for #fleet before an owner/admin has created it once from
+    # the Team Board (see team_board_tools.py's identical gap).
+    exists: bool
+    messages: list[CeoFeedMessage]
+
+
+class CeoFeedPostRequest(BaseModel):
+    body: str = Field(..., min_length=1, max_length=4000)
+
+
+async def _is_active_org_admin(user_id: str) -> bool:
+    """Whether *user_id* is an active owner/admin of the caller's active organization.
+
+    Mirrors ``board.py``'s helper of the same name.
+    """
+    organization_id = resolve_organization_id()
+    if organization_id is None:
+        return False
+    # Lazy import: resolved at call time so a test's
+    # ``monkeypatch.setattr("deerflow.persistence.engine.get_session_factory", ...)``
+    # takes effect, matching ``board.py``.
+    from deerflow.persistence.engine import get_session_factory
+
+    session_factory = get_session_factory()
+    if session_factory is None:
+        return False
+    stmt = select(OrganizationMemberRow.user_id).where(
+        OrganizationMemberRow.organization_id == organization_id,
+        OrganizationMemberRow.user_id == user_id,
+        OrganizationMemberRow.status == "active",
+        OrganizationMemberRow.role.in_(_ORG_ADMIN_ROLES),
+    )
+    async with session_factory() as session:
+        return (await session.execute(stmt)).scalars().first() is not None
+
+
+async def _require_admin(request: Request) -> str:
+    user = await get_current_user_from_request(request)
+    user_id = str(user.id)
+    if not await _is_active_org_admin(user_id):
+        raise HTTPException(status_code=403, detail="The CEO Desk is for an organization owner/admin only")
+    return user_id
+
+
+def _seat_not_found() -> HTTPException:
+    return HTTPException(status_code=404, detail="No such seat claim in this organization")
+
+
+async def _require_staff_admin(request: Request, config: AppConfig) -> str:
+    """Gate the #exec/#fleet feed routes.
+
+    f189 review: the feed routes reused the Team Board's "create the default
+    set on GET" pattern (list_team_channels does the same) without that
+    router's own ``momentum_staff_only`` gate, so any owner/admin of *any*
+    organization -- including a client's own workspace -- could call GET and
+    have ``ensure_default_channels()`` write Team Board channels into it,
+    something ``momentum_internal.py`` says must never happen ("a client
+    never sees these surfaces even as the owner of their own workspace").
+    Gating on staff first (404 for anyone outside the agency workspace, same
+    as ``/api/team``) also closes the suspected gap where an admin who also
+    holds a ``client_contact`` assignment could read #exec: staff status
+    itself already excludes that assignment (see ``is_momentum_staff``).
+    Staff but not owner/admin still gets the CEO Desk's usual 403.
+    """
+    _, user_id, role = await require_momentum_staff(request, config)
+    if role not in _ORG_ADMIN_ROLES:
+        raise HTTPException(status_code=403, detail="The CEO Desk is for an organization owner/admin only")
+    return user_id
+
+
+def _normalize_feed_slug(slug: str) -> str:
+    return slug.strip().lstrip("#").strip().lower()
+
+
+def _invalid_feed_channel() -> HTTPException:
+    return HTTPException(status_code=404, detail="Only the #exec and #fleet feeds are available here")
+
+
+async def _resolve_author_display_names(author_user_ids: set[str], caller_user_id: str) -> dict[str, str]:
+    """Name each feed message's author for display (f193).
+
+    The caller's own id is always "You". Anyone else is looked up directly by
+    id -- not filtered to current, active staff the way ``/api/team/members``
+    is, since a genuinely unlisted or former human author (left the org,
+    disabled) must still show their own name rather than falling through to
+    the generic fallback -- and named by the local part of their email. An id
+    with no matching user row at all (a fleet agent's signing user id) falls
+    back to "Momentum" rather than implying a departed human.
+    """
+    names = {caller_user_id: "You"}
+    remaining = {uid for uid in author_user_ids if uid != caller_user_id}
+    if remaining:
+        from deerflow.persistence.engine import get_session_factory
+
+        session_factory = get_session_factory()
+        if session_factory is not None:
+            stmt = select(UserRow.id, UserRow.email).where(UserRow.id.in_(remaining))
+            async with session_factory() as session:
+                rows = (await session.execute(stmt)).all()
+            for uid, email in rows:
+                local = email.split("@")[0] if email else ""
+                names[str(uid)] = local or email
+    for uid in remaining:
+        names.setdefault(uid, "Momentum")
+    return names
+
+
+async def _find_feed_channel(team_repo, slug: str) -> dict | None:
+    """Resolve *slug* (already validated against ``_FEED_CHANNEL_SLUGS``) within
+    the caller's organization, creating the defaults first so #exec always
+    resolves. #fleet has no default and may not exist yet.
+    """
+    if slug == "exec":
+        await team_repo.ensure_default_channels()
+    for row in await team_repo.list_channels():
+        if row["slug"] == slug:
+            return row
+    return None
+
+
+@router.get("/needs-my-yes", response_model=NeedsMyYesResponse)
+@require_permission("ceo", "read")
+async def get_needs_my_yes(request: Request) -> NeedsMyYesResponse:
+    """A ``drafted`` thread needs an Approve; an ``approved`` one still needs its
+    explicit Send (``assert_can_reply``'s own separate owner action) -- both stay
+    in the queue, with Momo's draft body attached, so a yes doesn't require a trip
+    to the Board.
+    """
+    await _require_admin(request)
+    board_repo = get_board_repo(request)
+    seat_repo = get_agent_seat_repo(request)
+    drafts = await board_repo.list_threads(status=BoardThreadStatus.DRAFTED)
+    approved = await board_repo.list_threads(status=BoardThreadStatus.APPROVED)
+    claims = await seat_repo.list_seats(status=AgentSeatStatus.CLAIMED)
+    threads_awaiting_action = [*drafts, *approved]
+    board_drafts = []
+    for t in threads_awaiting_action:
+        messages = await board_repo.list_messages(t["id"]) or []
+        board_drafts.append(
+            BoardDraftAwaitingApproval(
+                thread_id=t["id"],
+                client_id=t.get("client_id"),
+                kind=t["kind"],
+                subject=t.get("subject", ""),
+                status=t["status"],
+                draft_body=latest_momo_draft_body(messages),
+                updated_at=t.get("updated_at", ""),
+            )
+        )
+    return NeedsMyYesResponse(
+        board_drafts=board_drafts,
+        seat_ratifications=[
+            SeatAwaitingRatification(
+                seat_id=s["id"],
+                seat=s["seat"],
+                agent_name=s["agent_name"],
+                claimed_by_user_id=s.get("claimed_by_user_id"),
+                created_at=s.get("created_at", ""),
+            )
+            for s in claims
+        ],
+    )
+
+
+@router.get("/seats", response_model=SeatRosterResponse)
+@require_permission("ceo", "read")
+async def get_seat_roster(request: Request) -> SeatRosterResponse:
+    await _require_admin(request)
+    seat_repo = get_agent_seat_repo(request)
+    seats = await seat_repo.list_seats()
+    since = datetime.now(UTC) - _BUDGET_WINDOW
+    entries = [
+        SeatRosterEntry(
+            seat_id=s["id"],
+            seat=s["seat"],
+            agent_name=s["agent_name"],
+            kpi=s.get("kpi", ""),
+            status=s["status"],
+            weekly_token_budget=s.get("weekly_token_budget", 0),
+            burn_this_week=await seat_repo.token_burn_since(organization_id=s["organization_id"], agent_name=s["agent_name"], since=since),
+            paused=s.get("paused_at") is not None,
+        )
+        for s in seats
+    ]
+    return SeatRosterResponse(seats=entries)
+
+
+@router.post("/seats/{seat_id}/ratify", response_model=SeatActionResponse)
+@require_permission("ceo", "write")
+async def ratify_seat(seat_id: str, request: Request) -> SeatActionResponse:
+    """One-tap confirm of a claimed seat from the needs-my-yes queue.
+
+    Mirrors ``deerflow.tools.exec_seat_tools.exec_ratify_seat``'s rules, minus
+    the ``actor_is_ceo`` path: an HTTP caller has no agent identity to check,
+    so ratifying here is always the organization-owner/admin path
+    ``assert_can_ratify`` already grants (``_require_admin`` has confirmed
+    that by the time this runs). The self-ratification refusal still applies:
+    the admin who claimed the seat cannot also be the one who confirms it.
+    """
+    user_id = await _require_admin(request)
+    seat_repo = get_agent_seat_repo(request)
+    seat = await seat_repo.get_seat(seat_id)
+    if seat is None:
+        raise _seat_not_found()
+    if seat.get("claimed_by_user_id") is not None and seat["claimed_by_user_id"] == user_id:
+        await record_audit_event(request, action="ceo.seat.ratify", outcome="denied", actor_user_id=user_id, organization_id=resolve_organization_id(), target_type="agent_seat", target_id=seat_id)
+        raise HTTPException(status_code=403, detail="An admin cannot ratify a seat they claimed themselves; ratification requires an independent actor.")
+    try:
+        # actor_is_owner is always True here: _require_admin has already
+        # confirmed it, and an HTTP caller has no agent identity for the
+        # actor_is_ceo path, so SeatAuthorizationError can never fire.
+        assert_can_ratify(seat["status"], actor_is_ceo=False, actor_is_owner=True)
+    except SeatTransitionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    ratified = await seat_repo.patch_seat(seat_id, status=AgentSeatStatus.RATIFIED, ratified_by_user_id=user_id)
+    if ratified is None:
+        raise _seat_not_found()
+    await record_audit_event(request, action="ceo.seat.ratify", outcome="success", actor_user_id=user_id, organization_id=resolve_organization_id(), target_type="agent_seat", target_id=seat_id)
+    # Best-effort, matches exec_ratify_seat's own #exec announcement wording;
+    # a missing channel or storage hiccup must never undo the ratification
+    # that already persisted above.
+    await announce_to_exec(f"ratified {ratified['seat']} for {ratified['agent_name']} (model: {ratified.get('model_family') or 'muse'}) via CEO Desk")
+    return SeatActionResponse(seat_id=ratified["id"], seat=ratified["seat"], agent_name=ratified["agent_name"], status=ratified["status"])
+
+
+@router.post("/seats/{seat_id}/reopen", response_model=SeatActionResponse)
+@require_permission("ceo", "write")
+async def reopen_seat(seat_id: str, request: Request) -> SeatActionResponse:
+    """One-tap veto of a claimed or ratified seat from the needs-my-yes queue.
+
+    Owner/admin-only override (EXECUTIVE.md rule 4), mirroring
+    ``deerflow.tools.exec_seat_tools.exec_reopen_seat``: ``_require_admin``
+    has already confirmed the caller before this runs, so ``assert_can_reopen``
+    is always called with ``actor_is_owner=True``.
+    """
+    user_id = await _require_admin(request)
+    seat_repo = get_agent_seat_repo(request)
+    seat = await seat_repo.get_seat(seat_id)
+    if seat is None:
+        raise _seat_not_found()
+    try:
+        assert_can_reopen(seat["status"], actor_is_owner=True)
+    except SeatTransitionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    reopened = await seat_repo.patch_seat(seat_id, status=AgentSeatStatus.REOPENED)
+    if reopened is None:
+        raise _seat_not_found()
+    await record_audit_event(request, action="ceo.seat.reopen", outcome="success", actor_user_id=user_id, organization_id=resolve_organization_id(), target_type="agent_seat", target_id=seat_id)
+    # Best-effort, matches exec_reopen_seat's own #exec announcement wording.
+    await announce_to_exec(f"reopened {reopened['seat']} (was held by {reopened['agent_name']}) via CEO Desk")
+    return SeatActionResponse(seat_id=reopened["id"], seat=reopened["seat"], agent_name=reopened["agent_name"], status=reopened["status"])
+
+
+@router.get("/digest", response_model=DailyDigestResponse)
+@require_permission("ceo", "read")
+async def get_digest(request: Request) -> DailyDigestResponse:
+    """The most recent generated daily digest, or ``None`` before the first one runs.
+
+    Read-only: this endpoint never generates a digest itself, only reads
+    what the background sweep (``deerflow.ceo_desk.digest.run_ceo_desk_digest``,
+    gated by ``config.ceo_desk.digest_enabled``) has already recorded.
+    """
+    await _require_admin(request)
+    digest_repo = get_ceo_desk_digest_repo(request)
+    latest = await digest_repo.latest_digest()
+    if latest is None:
+        return DailyDigestResponse(digest=None)
+    return DailyDigestResponse(
+        digest=DailyDigest(
+            digest_text=latest.get("digest_text", ""),
+            shipped_count=latest.get("shipped_count", 0),
+            stuck_count=latest.get("stuck_count", 0),
+            needs_my_yes_drafts=latest.get("needs_my_yes_drafts", 0),
+            needs_my_yes_ratifications=latest.get("needs_my_yes_ratifications", 0),
+            created_at=latest.get("created_at", ""),
+        )
+    )
+
+
+@router.get("/channels/{slug}/messages", response_model=CeoFeedResponse)
+@require_permission("ceo", "read")
+async def get_feed_messages(slug: str, request: Request, limit: int = 200, config: AppConfig = Depends(get_config)) -> CeoFeedResponse:
+    """Read the #exec or #fleet Team Board feed from the CEO Desk itself.
+
+    Reuses ``TeamBoardRepository`` directly rather than routing through
+    ``/api/team``, but gated exactly the same way that router is
+    (``momentum_staff_only``/``require_momentum_staff``) plus the CEO Desk's
+    own owner/admin requirement on top -- these feeds show the agency's own
+    #exec/#fleet chatter, never a client workspace's (f189).
+    """
+    user_id = await _require_staff_admin(request, config)
+    normalized = _normalize_feed_slug(slug)
+    if normalized not in _FEED_CHANNEL_SLUGS:
+        raise _invalid_feed_channel()
+    bounded_limit = max(1, min(int(limit), 500))
+    team_repo = get_team_board_repo(request)
+    channel = await _find_feed_channel(team_repo, normalized)
+    if channel is None:
+        return CeoFeedResponse(channel=normalized, exists=False, messages=[])
+    messages = await team_repo.list_messages(channel["id"], limit=bounded_limit) or []
+    names = await _resolve_author_display_names({m["author_user_id"] for m in messages}, user_id)
+    return CeoFeedResponse(
+        channel=normalized,
+        exists=True,
+        messages=[CeoFeedMessage(id=m["id"], author_user_id=m["author_user_id"], author_display_name=names.get(m["author_user_id"], "Momentum"), body=m.get("body", ""), created_at=m.get("created_at", "")) for m in messages],
+    )
+
+
+@router.post("/channels/{slug}/messages", response_model=CeoFeedMessage, status_code=201)
+@require_permission("ceo", "write")
+async def post_feed_message(slug: str, body: CeoFeedPostRequest, request: Request, config: AppConfig = Depends(get_config)) -> CeoFeedMessage:
+    """Reply into #exec or #fleet from the CEO Desk, authored as the signed-in admin.
+
+    Staff-gated exactly like ``get_feed_messages`` above (f189). #exec always
+    exists (a default channel); #fleet does not until an owner/admin creates
+    it once from the Team Board, matching ``team_board_tools.py``'s identical
+    gap for the fleet-agent tools.
+    """
+    user_id = await _require_staff_admin(request, config)
+    normalized = _normalize_feed_slug(slug)
+    if normalized not in _FEED_CHANNEL_SLUGS:
+        raise _invalid_feed_channel()
+    text = body.body.strip()
+    if not text:
+        raise HTTPException(status_code=422, detail="Message is empty")
+    team_repo = get_team_board_repo(request)
+    channel = await _find_feed_channel(team_repo, normalized)
+    if channel is None:
+        raise HTTPException(status_code=404, detail=f"No #{normalized} channel in this organization yet. Create it once from the Team Board.")
+    posted = await team_repo.add_message(channel["id"], author_user_id=user_id, body=text)
+    if posted is None:
+        raise HTTPException(status_code=404, detail=f"No #{normalized} channel in this organization yet.")
+    await record_audit_event(request, action="ceo.feed.post", outcome="success", actor_user_id=user_id, organization_id=resolve_organization_id(), target_type="team_channel", target_id=channel["id"])
+    # The poster is always the signed-in caller, so their own display name is
+    # always "You" here -- no lookup needed.
+    return CeoFeedMessage(id=posted["id"], author_user_id=posted["author_user_id"], author_display_name="You", body=posted.get("body", ""), created_at=posted.get("created_at", ""))

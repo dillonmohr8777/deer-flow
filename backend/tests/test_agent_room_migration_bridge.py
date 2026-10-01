@@ -16,12 +16,16 @@ ROOM = "0040_agent_room_messages"
 LANE = "0046_organization_entitlements"
 MERGE = "0047_merge_agent_room_exec"
 PREVIOUS = "0039_team_board_academy"
+# The single head as of queue item e14's ceo_desk_digests migration. Chains
+# straight after MERGE, so MERGE's own parent-edge assertions below stay
+# valid; only "what's the current head" moves when a new migration lands.
+HEAD = "0048_ceo_desk_digests"
 
 
 def test_merge_preserves_both_published_parent_edges():
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")
     script = ScriptDirectory.from_config(_get_alembic_config(engine))
-    assert script.get_heads() == [MERGE]
+    assert script.get_heads() == [HEAD]
     assert script.get_revision(ROOM).down_revision == PREVIOUS
     assert script.get_revision("0040_agent_seats").down_revision == PREVIOUS
     assert set(script.get_revision(MERGE).down_revision) == {ROOM, LANE}
@@ -54,7 +58,7 @@ async def test_existing_history_upgrades_and_preserves_owner_rows(tmp_path, orig
         # Exercise the actual application bootstrap, not a stamp shortcut.
         await bootstrap_schema(engine, backend="sqlite")
         async with engine.connect() as conn:
-            assert (await conn.execute(sa.text("SELECT version_num FROM alembic_version"))).scalar_one() == MERGE
+            assert (await conn.execute(sa.text("SELECT version_num FROM alembic_version"))).scalar_one() == HEAD
             assert (await conn.execute(sa.text("SELECT * FROM users WHERE id='retained-owner'"))).mappings().one() == user_before
             assert (await conn.execute(sa.text("SELECT * FROM agent_room_messages"))).mappings().all() == room_before
             tables = await conn.run_sync(lambda sync: set(sa.inspect(sync).get_table_names()))
@@ -74,7 +78,7 @@ async def test_empty_bootstrap_has_room_and_executive_schema(tmp_path):
     try:
         await bootstrap_schema(engine, backend="sqlite")
         async with engine.connect() as conn:
-            assert (await conn.execute(sa.text("SELECT version_num FROM alembic_version"))).scalar_one() == MERGE
+            assert (await conn.execute(sa.text("SELECT version_num FROM alembic_version"))).scalar_one() == HEAD
             tables = await conn.run_sync(lambda sync: set(sa.inspect(sync).get_table_names()))
             assert {"agent_room_messages", "agent_seats", "hired_agents", "organization_entitlements"} <= tables
     finally:
