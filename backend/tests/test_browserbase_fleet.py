@@ -672,6 +672,51 @@ def test_reconcile_unbound_native_run_rejects_run_created_well_after_the_start_w
     assert target.ledger.native_ownership(token) is None
 
 
+def test_reconcile_unbound_native_run_accepts_run_created_just_inside_the_widened_window(tmp_path):
+    """`_START_TIMEOUT_SECONDS` must be the http client's four timeout phases (connect/write/read/pool)
+    summed to 40s, not one phase's 10s value -- httpx bounds each phase independently, not the request
+    as a whole. A run created 39s later (just inside the new, wider ceiling) is still provably this
+    reservation's own; the single-phase assumption would have wrongly refused it at this point. The
+    bound is hardcoded here (not read back from the module) so a regression to the old 10s value, or
+    to a non-summed client timeout, fails this test instead of silently redefining its own target."""
+    from deerflow.community.browser_automation.browserbase_fleet import reconcile_unbound_native_run
+
+    target = native_fleet(tmp_path)
+    token, created = _unbound_reservation(target)
+
+    class Claimable:
+        project_id = "fake-project"
+
+        async def agent_run(self, run_id):
+            return {"runId": run_id, "status": "COMPLETED", "sessionId": "session-1", "agentId": AGENT, "createdAt": created + 39}
+
+        async def retrieve(self, session_id):
+            return {"id": session_id, "status": "COMPLETED", "projectId": self.project_id}
+
+    asyncio.run(reconcile_unbound_native_run(Claimable(), target, token, RUN))
+    ownership = target.ledger.native_ownership(token)
+    assert ownership == {"reservation_id": token, "run_id": RUN, "agent_id": AGENT, "project_id": "fake-project"}
+
+
+def test_reconcile_unbound_native_run_rejects_run_created_just_past_the_widened_window(tmp_path):
+    """One second past the 40s summed timeout ceiling plus 5s clock skew (46s total) is outside any
+    window `start_agent_run` could actually still have been in flight for."""
+    from deerflow.community.browser_automation.browserbase_fleet import reconcile_unbound_native_run
+
+    target = native_fleet(tmp_path)
+    token, created = _unbound_reservation(target)
+
+    class Claimable:
+        project_id = "fake-project"
+
+        async def agent_run(self, run_id):
+            return {"runId": run_id, "status": "COMPLETED", "sessionId": "session-1", "agentId": AGENT, "createdAt": created + 46}
+
+    with pytest.raises(FleetBlocked, match="ownership"):
+        asyncio.run(reconcile_unbound_native_run(Claimable(), target, token, RUN))
+    assert target.ledger.native_ownership(token) is None
+
+
 def test_reconcile_unbound_native_run_rejects_a_mismatched_variables_echo_even_inside_the_window(tmp_path):
     """A `variables.reservation_id` that names a different reservation is affirmative proof the run
     belongs to someone else's token -- it must be refused outright, never papered over by a `createdAt`

@@ -32,9 +32,20 @@ _AGENT_BUSY = {"PENDING", "RUNNING", "PAUSED"}
 _AGENT_POLL_SECONDS = 10
 _AGENT_STOP_GRACE_SECONDS = 180
 _CLOCK_SKEW_SECONDS = 5
-# Mirrors main()'s BrowserbaseAPI http client timeout: the longest a start_agent_run call can be
-# in flight before our own client gives up, bounding how late a run it actually created can appear.
-_START_TIMEOUT_SECONDS = 10
+# httpx.Timeout bounds each phase (connect/write/read/pool) independently, not the request as a
+# whole, so the longest `start_agent_run` can be in flight before our client gives up is their sum,
+# not any single phase value -- matches the client built in `_run_named_job_worker` below.
+_START_CONNECT_TIMEOUT_SECONDS = 10.0
+_START_WRITE_TIMEOUT_SECONDS = 10.0
+_START_READ_TIMEOUT_SECONDS = 10.0
+_START_POOL_TIMEOUT_SECONDS = 10.0
+_START_HTTP_TIMEOUT = httpx.Timeout(
+    connect=_START_CONNECT_TIMEOUT_SECONDS,
+    write=_START_WRITE_TIMEOUT_SECONDS,
+    read=_START_READ_TIMEOUT_SECONDS,
+    pool=_START_POOL_TIMEOUT_SECONDS,
+)
+_START_TIMEOUT_SECONDS = _START_CONNECT_TIMEOUT_SECONDS + _START_WRITE_TIMEOUT_SECONDS + _START_READ_TIMEOUT_SECONDS + _START_POOL_TIMEOUT_SECONDS
 # A raw epoch number above this is almost certainly milliseconds, not seconds (seconds this large
 # would be centuries past any real run); refuse to guess rather than misread it as the far future.
 _EPOCH_SECONDS_CEILING = 1e11
@@ -644,7 +655,7 @@ async def _run_named_job_worker(config_path: Path, job_id: str, *, operator_id: 
     if dry_run or fleet.jobs[job_id].workflow in {"local_draft", "report_retrieval"}:
         return await asyncio.to_thread(lambda: asyncio.run(fleet.run(job_id, str(uuid4()), None, dry_run=dry_run, report_reader=report_reader)))
     key = await asyncio.to_thread(existing_api_key)
-    async with httpx.AsyncClient(timeout=10, follow_redirects=False, trust_env=False) as http:
+    async with httpx.AsyncClient(timeout=_START_HTTP_TIMEOUT, follow_redirects=False, trust_env=False) as http:
         # Fleet uses a worker loop so its shared SQLite lock never blocks Gateway IO.
         api = BrowserbaseAPI(key, config["project_id"], http)
         return await fleet.run(job_id, str(uuid4()), api)
