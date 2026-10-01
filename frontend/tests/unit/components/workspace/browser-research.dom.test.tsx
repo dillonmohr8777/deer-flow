@@ -298,6 +298,50 @@ describe("Browser research workspace", () => {
     expect(document.activeElement).toBe(field);
   });
 
+  it("re-tapping a capture whose read failed retries it and never arms a later steal", async () => {
+    mocks.list.mockResolvedValue({ data: [DETAIL] });
+    mocks.read
+      .mockRejectedValueOnce(new Error("not_found"))
+      .mockRejectedValueOnce(new Error("not_found"));
+    render(<BrowserResearchWorkspace />, { wrapper: Wrapper });
+    const row = await screen.findByRole("button", {
+      name: /^Official docs Captured/,
+    });
+    fireEvent.click(row);
+    await screen.findByText("This capture no longer exists.");
+    // The natural retry: tap it again. It reads again and fails again.
+    fireEvent.click(row);
+    await waitFor(() => expect(mocks.read).toHaveBeenCalledTimes(2));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const field = screen.getByLabelText<HTMLTextAreaElement>(
+      "Public HTTPS URLs, one per line",
+    );
+    field.focus();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Refresh saved captures" }),
+    );
+    await screen.findByRole("heading", { level: 3, name: "Official docs" });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(document.activeElement).toBe(field);
+  });
+
+  it("re-tapping a capture whose read failed opens it when the retry succeeds", async () => {
+    mocks.list.mockResolvedValue({ data: [DETAIL] });
+    mocks.read.mockRejectedValueOnce(new Error("not_found"));
+    render(<BrowserResearchWorkspace />, { wrapper: Wrapper });
+    const row = await screen.findByRole("button", {
+      name: /^Official docs Captured/,
+    });
+    fireEvent.click(row);
+    await screen.findByText("This capture no longer exists.");
+    fireEvent.click(row);
+    const title = await screen.findByRole("heading", {
+      level: 3,
+      name: "Official docs",
+    });
+    await waitFor(() => expect(document.activeElement).toBe(title));
+  });
+
   it("a stop or download notice shows only on the capture it is about", async () => {
     const other = { ...DETAIL, id: "other-run", title: "Other docs" };
     mocks.list.mockResolvedValue({ data: [DETAIL, other] });

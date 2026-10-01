@@ -486,6 +486,13 @@ export function BrowserResearchWorkspace() {
                                   return;
                                 }
                                 bringReceipt.current = item.id;
+                                if (selected === item.id) {
+                                  // Re-tapping a capture whose read failed is
+                                  // a retry: pair the reveal with this fetch,
+                                  // which disarms it again if it fails.
+                                  void run.refetch();
+                                  return;
+                                }
                                 setSelected(item.id);
                               }}
                             >

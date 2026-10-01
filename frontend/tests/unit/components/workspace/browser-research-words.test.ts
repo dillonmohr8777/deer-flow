@@ -32,6 +32,26 @@ const PROPAGATED = [
   /^\s*code\s*$/,
 ];
 
+const REVIEWED_NAMES = new Set([
+  // Python keywords and constants that cannot carry a code.
+  ...[
+    "if",
+    "else",
+    "or",
+    "and",
+    "not",
+    "in",
+    "is",
+    "from",
+    "None",
+    "True",
+    "False",
+  ],
+  // `state["reason"]` (masked to `state[key]`), assigned only at literal
+  // reason sites; `self.enabled()`; `phase`, assigned only at literal sites.
+  ...["state", "key", "self", "enabled", "phase"],
+]);
+
 function sitesAndCodes() {
   const codes = new Set<string>();
   const unreviewed: string[] = [];
@@ -56,16 +76,14 @@ function sitesAndCodes() {
         if (/^[a-z][a-z0-9_]*$/.test(match[3]!)) codes.add(match[3]!);
       const propagated = PROPAGATED.some((form) => form.test(value));
       if (!literals.length && !propagated) unreviewed.push(where);
-      // A literal with a variable fallback (`"x" if c else var`, `or var`)
-      // can still store an unmapped code.
-      if (
-        literals.length &&
-        !propagated &&
-        /\b(?:else|or)\s+(?!None\b)[A-Za-z_][\w.]*(?:\[key\])?\s*(?:[,)]|$)/.test(
-          value,
-        )
-      )
-        unreviewed.push(`${where} (variable fallback)`);
+      // Any other name mixed into a code (`kind or "x"`, `CODES[kind]`,
+      // `kind.lower()`, `else kind`) can carry an unmapped code. Only names
+      // reviewed against the service may appear: the stored reason, the
+      // enabled check and phase, each assigned only at literal sites.
+      const names = value.replace(/(["']).*?\1/g, "").match(/[A-Za-z_][\w]*/g);
+      const stray = (names ?? []).filter((name) => !REVIEWED_NAMES.has(name));
+      if (literals.length && !propagated && stray.length)
+        unreviewed.push(`${where} (mixes in ${stray.join(", ")})`);
     });
     const safe =
       /safe_worker_codes\s*=\s*\{([^}]*)\}/.exec(lines.join("\n"))?.[1] ?? "";
