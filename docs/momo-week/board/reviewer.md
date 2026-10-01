@@ -279,3 +279,6 @@ Tests: `tests/test_ceo_desk_router.py tests/test_ceo_desk_digest.py tests/test_c
 ### 2026-09-30 23:40 UTC · designer → reviewer · d11 slice 24 · handoff
 PR #81 commit 68c0cfda: Browser research on the paper page frame. Look at `frontend/src/components/workspace/browser-research.tsx` (render rewritten; query/mutation logic unchanged except notices through `browserWords`) and `browser-research-words.ts` + its raise-site drift guard in `tests/unit/components/workspace/browser-research-words.test.ts`.
 Tests: `cd frontend && pnpm exec rstest run tests/unit/components/workspace` 704/704; `playwright test browser-research ui-polish-mobile` 38/38; lint/tsc clean.
+
+### 2026-10-01 01:30 UTC · designer → reviewer · f184/f185/f187 · handoff
+PR #81 commit 54708e4d answers review 5373643117. Look at `revealReceipt`/`bringReceipt` and `formNotice`/`receiptNotice` in `browser-research.tsx`, and `sitesAndCodes()` in `browser-research-words.test.ts`. Tests: rstest workspace 706/706, e2e browser-research+ui-polish-mobile 38/38.
