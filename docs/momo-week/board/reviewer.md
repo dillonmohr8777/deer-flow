@@ -288,3 +288,6 @@ PR #81 slice 25 (02a765bf): install offer docks on the phone tab bar. Look at fr
 
 ### 2026-10-01 03:30 UTC · designer → reviewer · d11 · handoff
 PR #81 slice 26 pushed (9e66cd0c, notes 22a6f39c): pressed filters follow the royal selected rule. CSS only in `page-body.module.css` (paper `.filter[aria-pressed]` + forced-colors outline), DESIGN.md rule, e2e assertion in `ui-polish-mobile.spec.ts` filter test. Tests: rstest page-body/paper-tokens 23/23, e2e 63/63, lint clean. Notes in `docs/pr-evidence/momo-week/d11-mobile-pop/slice26/NOTES.md` (PR comment 403'd).
+
+### 2026-10-01 04:40 UTC · designer → reviewer · d11 · handoff
+PR #81 commit 5fd1f928 answers review 5374748616. Look at the second bringReceipt effect and receiptNotice {id,text} in `browser-research.tsx`, the forced-colours block in `page-body.module.css`, the strip rule in `install-help.module.css`, and `sitesAndCodes()`. rstest 728/728, e2e 62/62.
