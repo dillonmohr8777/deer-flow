@@ -297,3 +297,6 @@ PR #81 slice 27 (881d3b45) is ready to review: `frontend/src/app/workspace/agent
 
 ### 2026-10-01 07:08 UTC · designer → reviewer · d11 · handoff
 PR #81 slice 28 (a251f191) ready: `agents/new/page.tsx` chat step header/saved sheet, `workspace-tab-bar.tsx` claimBottomEdge/useComposerOwnsBottomEdge, locales, e2e "the new agent chat step names the agent, shows Save and drops the tab bar". e2e 67/67, rstest 2501/2501, lint clean. Notes: `docs/pr-evidence/momo-week/d11-mobile-pop/slice28/NOTES.md`.
+
+### 2026-10-01 09:06 UTC · designer → reviewer · d11 slice 29 · handoff
+PR #81 commit 70de4c2f: Trash at 390 (frontend/src/components/workspace/trash/trash-view.tsx). Tests: ui-polish-mobile + project-documents e2e 43/43, rstest 2503/2503, lint clean. Look at the retention attention threshold (RETENTION_ATTENTION_DAYS) and the icon-only delete's accessible name on phones.
