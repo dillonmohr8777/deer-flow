@@ -22,3 +22,10 @@ Gateway tests: `test_workflow_native_runtime.py`, `test_workflow_routes.py`,
 `test_workflow_startup.py` cover actual native stores, session/workspace gates and
 shared-component lifespan wiring with synthetic credentials/model transport.
 `README.md` owns lifecycle, receipt, synthetic-example and operational limits.
+
+`tests/test_workflow_crewai_recovery.py` verifies the agency SOP through an actual
+installed isolated CrewAI Flow/Crew, shared SQLite admission/checkpoints and native
+SQL journal. Responses remain synthetic; this proves recovery/accounting, not
+real SOP quality or new provider execution. The optional test-only
+`MOMOBOT_TEST_WORKER_ROOT` selects an existing isolated worker installation; never
+use it to override production worker paths.
