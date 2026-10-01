@@ -84,15 +84,24 @@ only proof trusted. If the start call itself fails (timeout, 5xx, an ambiguous
 4xx) or returns a run ID the ledger never parses, no local `native_run`/
 `started.json` record is written at all, but the reservation is not
 permanently lost. An operator reads the run back from the provider directly
-(by agent and time) and calls
-`reconcile_unbound_native_run(api, ledger, token, run_id, agent_id)`, which
-binds ownership once the run proves it from documented AgentRun fields: either
-a `variables` echo matching this token, or `agentId` matching the job's own
-agent together with `createdAt` falling at or after this reservation's own
-`created` time (minus a small clock-skew allowance) -- `reserve()` refuses a
-second reservation while this one is uncertain, and the account-busy check
-refuses a start while any run is active, so at most one run for this agent
-could exist in that window. Elapsed time alone or a supplied run ID alone
+(by time) and calls
+`reconcile_unbound_native_run(api, fleet, token, run_id)`, which binds
+ownership once the run proves it from documented AgentRun fields: either a
+`variables` echo matching this token, or `agentId` matching the reservation's
+own job -- read from the job's own config, never a caller-supplied argument,
+so a run read back for the wrong job can't be laundered in by also passing its
+agent id -- together with `createdAt` falling inside the window
+`start_agent_run`'s own http client could still have been in flight: at or
+after this reservation's own `created` time (minus clock skew) and at or
+before `created` plus the request timeout (plus clock skew). `reserve()`
+refuses a second reservation while this one is uncertain, and the
+account-busy check refuses a start while any run is active, so at most one run
+for this agent could exist in that window. A `variables` echo naming a
+*different* reservation is treated as proof the run belongs to someone else,
+and is refused outright even if its timestamp would otherwise fall in range. A
+`createdAt` given in milliseconds, or as a naive (timezone-less) string, is
+never guessed at -- both are refused rather than silently misread as seconds
+or as the host's own local time. Elapsed time alone or a supplied run ID alone
 still never establishes ownership. Once bound, it finishes the reservation
 immediately if the run is already terminal, otherwise `reconcile_native_run`
 finishes it once polling later shows it terminal. A start call that confirms

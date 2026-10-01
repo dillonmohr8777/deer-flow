@@ -588,23 +588,46 @@ def _unbound_reservation(target):
     return token, row["created"]
 
 
-def test_reconcile_unbound_native_run_rejects_wrong_agent(tmp_path):
-    """Only documented AgentRun fields prove ownership (no `metadata`, which the "Run an agent"
-    reference does not list): a run for a different agent is never accepted regardless of anything
-    else it reports."""
+OTHER_AGENT = "00000000-0000-4000-8000-00000000b2e1"
+
+
+def test_parse_epoch_seconds_rejects_millisecond_scale_numbers():
+    """A millisecond epoch (~1000x a real epoch-seconds value) used to be read as raw seconds, landing
+    far in the future instead of being refused -- numbers past the ceiling now return None."""
+    from deerflow.community.browser_automation.browserbase_fleet import _parse_epoch_seconds
+
+    assert _parse_epoch_seconds(time.time() * 1000) is None
+    assert _parse_epoch_seconds(time.time()) is not None
+
+
+def test_parse_epoch_seconds_rejects_naive_datetime_strings():
+    """A naive ISO 8601 string (no `Z`, no UTC offset) used to parse to a real timestamp via the host's
+    own local timezone; it now returns None regardless of the host's timezone."""
+    from deerflow.community.browser_automation.browserbase_fleet import _parse_epoch_seconds
+
+    assert _parse_epoch_seconds("2026-10-01T12:00:00") is None
+    assert _parse_epoch_seconds("2026-10-01T12:00:00Z") is not None
+    assert _parse_epoch_seconds("2026-10-01T12:00:00+00:00") is not None
+
+
+def test_reconcile_unbound_native_run_derives_agent_from_job_not_a_caller_argument(tmp_path):
+    """The expected agent comes from the reservation's own job config, never a caller-supplied
+    argument (there is none to spoof): a run genuinely belonging to a different job's real,
+    provisioned agent is never accepted for this reservation regardless of anything else it reports."""
     from deerflow.community.browser_automation.browserbase_fleet import reconcile_unbound_native_run
 
     target = native_fleet(tmp_path)
     token, _created = _unbound_reservation(target)
+    assert target.jobs["seo-audit"].agent_id == AGENT
 
     class Claimable:
         project_id = "fake-project"
 
         async def agent_run(self, run_id):
-            return {"runId": run_id, "status": "COMPLETED", "sessionId": "session-1", "agentId": "wrong-agent", "createdAt": time.time() + 10}
+            return {"runId": run_id, "status": "COMPLETED", "sessionId": "session-1", "agentId": OTHER_AGENT, "createdAt": time.time() + 1}
 
     with pytest.raises(FleetBlocked, match="identity"):
-        asyncio.run(reconcile_unbound_native_run(Claimable(), target.ledger, token, RUN, AGENT))
+        asyncio.run(reconcile_unbound_native_run(Claimable(), target, token, RUN))
     assert target.ledger.native_ownership(token) is None
     assert target.ledger.status()[0]["state"] == "uncertain"
 
@@ -625,15 +648,56 @@ def test_reconcile_unbound_native_run_rejects_run_created_before_reservation(tmp
             return {"runId": run_id, "status": "COMPLETED", "sessionId": "session-1", "agentId": AGENT, "createdAt": created - 1000}
 
     with pytest.raises(FleetBlocked, match="ownership"):
-        asyncio.run(reconcile_unbound_native_run(Claimable(), target.ledger, token, RUN, AGENT))
+        asyncio.run(reconcile_unbound_native_run(Claimable(), target, token, RUN))
+    assert target.ledger.native_ownership(token) is None
+
+
+def test_reconcile_unbound_native_run_rejects_run_created_well_after_the_start_window(tmp_path):
+    """No upper bound used to exist on `createdAt`, so a run from a day later -- long after
+    `start_agent_run`'s own http client could still have been in flight -- was wrongly accepted as
+    proof. The window is now bounded by the request timeout plus clock skew."""
+    from deerflow.community.browser_automation.browserbase_fleet import reconcile_unbound_native_run
+
+    target = native_fleet(tmp_path)
+    token, created = _unbound_reservation(target)
+
+    class Claimable:
+        project_id = "fake-project"
+
+        async def agent_run(self, run_id):
+            return {"runId": run_id, "status": "COMPLETED", "sessionId": "session-1", "agentId": AGENT, "createdAt": created + 86400}
+
+    with pytest.raises(FleetBlocked, match="ownership"):
+        asyncio.run(reconcile_unbound_native_run(Claimable(), target, token, RUN))
+    assert target.ledger.native_ownership(token) is None
+
+
+def test_reconcile_unbound_native_run_rejects_a_mismatched_variables_echo_even_inside_the_window(tmp_path):
+    """A `variables.reservation_id` that names a different reservation is affirmative proof the run
+    belongs to someone else's token -- it must be refused outright, never papered over by a `createdAt`
+    that happens to land inside the start window (previously: a mismatched echo was silently treated as
+    no echo at all, falling through to the time check alone)."""
+    from deerflow.community.browser_automation.browserbase_fleet import reconcile_unbound_native_run
+
+    target = native_fleet(tmp_path)
+    token, created = _unbound_reservation(target)
+
+    class Claimable:
+        project_id = "fake-project"
+
+        async def agent_run(self, run_id):
+            return {"runId": run_id, "status": "COMPLETED", "sessionId": "session-1", "agentId": AGENT, "createdAt": created + 1, "variables": {"reservation_id": "some-other-reservation"}}
+
+    with pytest.raises(FleetBlocked, match="different reservation"):
+        asyncio.run(reconcile_unbound_native_run(Claimable(), target, token, RUN))
     assert target.ledger.native_ownership(token) is None
 
 
 def test_reconcile_unbound_native_run_claims_by_agent_and_window(tmp_path):
     """No `native_run` row was ever bound (start_agent_run failed before `bind_native_run` could run),
-    so the operator-supplied run id and agent are proven from documented AgentRun fields: matching
-    `agentId` plus a `createdAt` at or after this reservation's own `created` time -- never a bare
-    elapsed-time guess, and never the undocumented `metadata` field the old proof relied on."""
+    so the operator-supplied run id is proven from documented AgentRun fields: matching the job's own
+    `agentId` plus a `createdAt` inside the start window -- never a bare elapsed-time guess, and never
+    the undocumented `metadata` field the old proof relied on."""
     from deerflow.community.browser_automation.browserbase_fleet import reconcile_native_run, reconcile_unbound_native_run
 
     target = native_fleet(tmp_path)
@@ -644,19 +708,19 @@ def test_reconcile_unbound_native_run_claims_by_agent_and_window(tmp_path):
         status = "RUNNING"
 
         async def agent_run(self, run_id):
-            return {"runId": run_id, "status": self.status, "sessionId": "session-1", "agentId": AGENT, "createdAt": created + 10}
+            return {"runId": run_id, "status": self.status, "sessionId": "session-1", "agentId": AGENT, "createdAt": created + 1}
 
         async def retrieve(self, session_id):
             return {"id": session_id, "status": "COMPLETED", "projectId": self.project_id}
 
     api = Claimable()
-    asyncio.run(reconcile_unbound_native_run(api, target.ledger, token, RUN, AGENT))
+    asyncio.run(reconcile_unbound_native_run(api, target, token, RUN))
     ownership = target.ledger.native_ownership(token)
     assert ownership == {"reservation_id": token, "run_id": RUN, "agent_id": AGENT, "project_id": "fake-project"}
     assert target.ledger.status()[0]["state"] == "uncertain"  # still running; not finished yet
 
     with pytest.raises(FleetBlocked, match="already bound"):
-        asyncio.run(reconcile_unbound_native_run(api, target.ledger, token, RUN, AGENT))
+        asyncio.run(reconcile_unbound_native_run(api, target, token, RUN))
 
     # Now that ownership is bound, the regular reconcile path finishes it.
     api.status = "COMPLETED"
@@ -680,7 +744,7 @@ def test_reconcile_unbound_native_run_accepts_echoed_variables_without_window(tm
         async def agent_run(self, run_id):
             return {"runId": run_id, "status": "RUNNING", "sessionId": "session-1", "agentId": AGENT, "createdAt": "not-a-timestamp", "variables": {"reservation_id": token}}
 
-    asyncio.run(reconcile_unbound_native_run(Claimable(), target.ledger, token, RUN, AGENT))
+    asyncio.run(reconcile_unbound_native_run(Claimable(), target, token, RUN))
     ownership = target.ledger.native_ownership(token)
     assert ownership == {"reservation_id": token, "run_id": RUN, "agent_id": AGENT, "project_id": "fake-project"}
 
