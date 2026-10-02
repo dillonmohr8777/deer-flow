@@ -21,6 +21,12 @@ loader runs were both removed.
 Needs, outside git: `.env`, `frontend/.env`, `extensions_config.json`, and the
 `<project>_gateway-data` volume (holds the DB, `.jwt_secret`, service credentials).
 
+## Optional model connections
+
+The [Infatoshi GLM connection](infatoshi-glm/README.md) provides a disabled
+self-hosted model profile, TabbyAPI template, and bounded tool-parser acceptance
+probe. It requires a separately available GPU server and does not alter defaults.
+
 ## Back up
 
 ```powershell

@@ -1,0 +1,28 @@
+{
+  "models": [
+    {
+      "name": "infatoshi-glm-5.3-exl3",
+      "display_name": "Infatoshi GLM-5.3 EXL3 (experimental)",
+      "description": "Self-hosted exact EXL3 checkpoint; activate only after acceptance probe.",
+      "use": "langchain_openai:ChatOpenAI",
+      "model": "GLM-5.3-UNCENSORED-EXL3-3.0bpw",
+      "base_url": "$INFATOSHI_TABBY_BASE_URL",
+      "api_key": "$INFATOSHI_TABBY_API_KEY",
+      "use_responses_api": false,
+      "max_tokens": 4096,
+      "context_window": 65536,
+      "request_timeout": 180.0,
+      "max_retries": 0,
+      "temperature": 0.7,
+      "supports_vision": false,
+      "supports_thinking": false,
+      "supports_reasoning_effort": false,
+      "request_admission": {
+        "requests_per_minute": 2,
+        "group": "infatoshi-glm-experimental",
+        "max_queue_size": 2,
+        "max_wait_seconds": 60
+      }
+    }
+  ]
+}
