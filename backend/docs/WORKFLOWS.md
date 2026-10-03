@@ -245,3 +245,18 @@ Agno adapter. It activates no production Control Plane, new serving platform,
 distributed queue or cloud scheduler; those capabilities remain unverified.
 Compare adapters on the same held-out input and verify artifacts and actual
 usage, keeping unknown cost unavailable and live output/install evidence separate.
+
+## Optional native full HAI route
+
+`MOMOBOT_WORKFLOW_MODEL_ROUTE=hai-glm-5.3-uncensored` is an explicit server selector for the fixed HTTPS HAI Responses origin and full `glm-5.3-uncensored` alias. Absence preserves OpenAI; unknown selectors fail. HAI is native LangGraph and Low only, with strict schema, bounded output, provider storage disabled, no retries, proxies, redirects or fallback. The protected launcher must bind the existing `HAI_API_KEY` transiently; keys never reach framework children.
+
+The injected original-owner provider-admission callback must reconcile and reserve the existing JPY allowance before I/O. Production startup has no such bridge, so this capability remains unavailable even when a key exists. Native attempts reserve first; denial, timeout, cancellation and ambiguous provider outcomes retain holds and reject automatic replay. Selected identity is checkpoint/job/request bound; mismatched served identity fails and retains truthful per-model usage. Actual billed cost remains unavailable without provider evidence.
+
+The optional generic LangChain HAI profile is an offline qualification fixture only. It does not share native currency admission and must stay outside serving configuration. Keep the existing base/default model configuration for native-only use. Mocked SDK wire serialization and synthetic planner/maker/checker output do not prove live HAI strict-schema acceptance or useful Momo output.
+
+
+## Disabled original-owner JPY bridge
+
+The startup-only infrastructure extra `workflow_hai_budget_bridge` can supply the native HAI guard only after its original-owner evidence is accepted. The prepared setting is exactly `enabled: false`. It creates no budget per run or restart. Source `app/gateway/workflow_hai_budget.py` requires the exact original qualification150 or real-work-comparison300JPY ledger, immutable original prefix/inode pins, primary rate evidence, fresh protected billing/account readbacks, related original-owner ledger evidence and a finite owner/workflow/expiry mapping. A pinned user-source record is an operator attestation; independently review the original acceptance before activation. Unknown allocation or a foreign/unauthenticated native owner remains held.
+
+The only supported activity plan conservatively retains the full source-approved observed billing total plus separately unresolved HAI holds from the pinned related owner ledger in the same original ledger without attributing overlap or releasing prior holds. Per-call bounds use the actual SDK Responses wire payload bytes plus the original16384-token allowance, exact output ceiling, primary600/1000JPY-per-million rates and JPY1margin. Compatible JSONnumeric holds use the original `flock`; accepted usage audits reserve zero additional JPY and explicitly preserve unknown billed cost and all holds. Cancellation drains the bounded lock worker before returning. Tests `test_brainforge_hai_budget.py` prove synthetic admission/cancellation/replay and SDK3wire hashing, not live native strict-schema acceptance.

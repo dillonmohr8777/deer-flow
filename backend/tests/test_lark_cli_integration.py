@@ -834,13 +834,24 @@ def test_concurrent_lark_skill_reinstalls_serialize_across_processes(monkeypatch
 
     monkeypatch.setattr(lark_cli, "_extract_lark_skills", _slow_extract)
     processes = [context.Process(target=_install) for _ in range(2)]
-    for process in processes:
-        process.start()
-    for process in processes:
-        process.join(timeout=10)
-
-    assert [process.exitcode for process in processes] == [0, 0]
-    child_results = [results.get(timeout=2) for _ in processes]
+    try:
+        for process in processes:
+            process.start()
+        # Drain first: a full pipe blocks the queue feeder and child exit.
+        child_results = [results.get(timeout=10) for _ in processes]
+        for process in processes:
+            process.join(timeout=10)
+        assert [process.exitcode for process in processes] == [0, 0]
+    finally:
+        for process in processes:
+            if process.is_alive():
+                process.terminate()
+                process.join(timeout=2)
+                if process.is_alive():
+                    process.kill()
+                    process.join(timeout=2)
+        results.close()
+        results.join_thread()
     assert all(error is None for _installed, _digest, error in child_results), child_results
     assert child_results[0][:2] == child_results[1][:2]
     assert max_active.value == 1

@@ -143,3 +143,7 @@ Gateway lifespan with an isolated native runtime context and verify that it
 passes shared components to the workflow service and closes that service before
 runtime teardown. Credential resolution and model outputs are synthetic in all
 these tests; they do not establish a live provider result or installed runtime.
+
+## Optional fixed native HAI route
+
+Gateway may select the full HAI route explicitly for native LangGraph. Planner, maker and independent checker use Low; model identity remains bound through checkpoint and durable job state. A route change rejects resume. The package imports no Gateway provider or credentials. Original-owner JPY admission and real strict-schema provider acceptance remain required; token ceilings and synthetic acceptance are narrower evidence. See the Gateway workflow guide.

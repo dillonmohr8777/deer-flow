@@ -33,3 +33,5 @@ SQL journal. Responses remain synthetic; this proves recovery/accounting, not
 real SOP quality or new provider execution. The optional test-only
 `MOMOBOT_TEST_WORKER_ROOT` selects an existing isolated worker installation; never
 use it to override production worker paths.
+
+Native model identity is server selected and checkpoint bound. The default/legacy identity remains OpenAI; an opt-in HAI run must use Low for planner, supervisor plan reviewer, maker and checker and cannot change provider on resume. Keep this package provider-neutral: Gateway owns its protected route, original currency admission and actual model/usage receipts. Synthetic HAI tests do not authorize real dispatch.

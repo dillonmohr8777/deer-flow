@@ -952,13 +952,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         from app.gateway.workflow_service import WorkflowService
 
         if WorkflowService.enabled():
-            from app.gateway.workflow_adapters import WorkflowModelAdapter
             from app.gateway.workflow_authority import workflow_actor_authorized
+            from app.gateway.workflow_hai_budget import create_workflow_model_adapter
 
             app.state.workflow_service = WorkflowService(
                 get_paths().base_dir / "workflows.sqlite",
                 checkpointer=app.state.checkpointer,
-                adapter=WorkflowModelAdapter(),
+                adapter=create_workflow_model_adapter(startup_config),
                 browser_service=getattr(app.state, "browserbase_service", None),
                 run_manager=app.state.run_manager,
                 thread_store=app.state.thread_store,

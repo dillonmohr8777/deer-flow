@@ -21,6 +21,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal, overload
 
+from app.gateway.workflow_adapters import HAI_MODEL, HAI_ROUTE, MODEL
 from deerflow.runtime.runs.manager import RunStartOutcome
 from deerflow.runtime.runs.schemas import DisconnectMode, RunStatus
 from deerflow.runtime.user_context import WorkspaceStorageContext, reset_current_user, reset_storage_context, set_current_user, set_storage_context
@@ -100,6 +101,12 @@ class WorkflowService:
         self.checkpointer, self.adapter, self.browser_service = checkpointer, adapter, browser_service
         self.run_manager, self.thread_store, self.authority, self.engine = run_manager, thread_store, authority, engine
         self.event_store = event_store
+        self.model_route = getattr(adapter, "route", "openai")
+        if self.model_route not in {"openai", HAI_ROUTE}:
+            raise ValueError("workflow_model_route_invalid")
+        self.model = HAI_MODEL if self.model_route == HAI_ROUTE else MODEL
+        if getattr(adapter, "model", self.model) != self.model:
+            raise ValueError("workflow_model_route_invalid")
         self.limits = dict(LIMITS)
         self.tasks: dict[str, asyncio.Task] = {}
         self.pump_task: asyncio.Task | None = None
@@ -284,6 +291,12 @@ class WorkflowService:
                 data["usage"]["input_tokens"] += result["usage"]["input_tokens"]
                 data["usage"]["output_tokens"] += result["usage"]["output_tokens"]
                 data["usage"]["unknown_model_calls"] = max(0, data["usage"].get("unknown_model_calls", 1) - 1)
+                # Missing served identity is recorded separately, never charged
+                # to the requested provider/model as if it were verified.
+                by_model = data.setdefault("_usage_by_model", {})
+                bucket = by_model.setdefault(result["model"], {"input_tokens": 0, "output_tokens": 0})
+                for key in ("input_tokens", "output_tokens"):
+                    bucket[key] += result["usage"][key]
                 costs = [json.loads(row[0])["usage"].get("cost") for row in db.execute("SELECT result FROM workflow_attempts WHERE run_id=? AND state='complete'", (run_id,))]
                 data["usage"]["cost"] = sum(costs) if costs and all(isinstance(cost, (int, float)) and not isinstance(cost, bool) for cost in costs) else None
                 self._save(db, data)
@@ -403,7 +416,10 @@ class WorkflowService:
         except (KeyError, ValueError, TypeError):
             raise WorkflowServiceError("input_invalid", 422) from None
         definition_data = _definition_dict(definition)
-        fingerprint = hashlib.sha256(_json([workflow_id, inputs, framework] + ([{"supervisor": True}] if supervisor else [])).encode()).hexdigest()
+        admission_identity = [workflow_id, inputs, framework] + ([{"supervisor": True}] if supervisor else [])
+        if self.model_route != "openai":
+            admission_identity.append(self.model_route)
+        fingerprint = hashlib.sha256(_json(admission_identity).encode()).hexdigest()
         now = _now()
         data = {
             "id": str(uuid.uuid4()),
@@ -430,6 +446,7 @@ class WorkflowService:
             "_definition_hash": hashlib.sha256(_json(definition_data).encode()).hexdigest(),
             "_resume": False,
             "_resumes": 0,
+            "_model_route": self.model_route,
         }
         data, _created = await self._storage("admit", data, idempotency_key, fingerprint, self.limits)
         self._wake()
@@ -445,11 +462,17 @@ class WorkflowService:
         if self.authority is not None and not await self.authority(data["_actor"], data["_organization"], data["_storage_user"]):
             raise WorkflowServiceError("owner_authorization_changed", 403)
 
+    def _bound_model(self, data: dict) -> str:
+        route = data.get("_model_route", "openai")
+        if route != self.model_route:
+            raise WorkflowServiceError("model_route_changed", 409)
+        return self.model
+
     async def _model(self, data: dict, **kwargs):
         await self._authorize(data)
         if self.closing:
             raise asyncio.CancelledError
-        if kwargs.get("model") != "gpt-6.1-sol" or kwargs.get("effort") not in ("low", "medium", "high"):
+        if kwargs.get("model") != self._bound_model(data) or kwargs.get("effort") not in ("low", "medium", "high"):
             raise WorkflowServiceError("model_policy_denied", 403)
         if len(_json(kwargs).encode()) > 160 * 1024:
             raise WorkflowServiceError("model_context_too_large", 413)
@@ -477,7 +500,17 @@ class WorkflowService:
                 raise WorkflowServiceError(previous["error"], 502)
             return previous
         try:
-            result = await self.adapter.call(**kwargs, framework=data["framework"], max_output_tokens=reserve, input_token_limit=reserve_input)
+            options = {}
+            if self.model_route == HAI_ROUTE:
+                options["provider_admission_context"] = {
+                    "owner_scope": data["_scope"],
+                    "actor": data["_actor"],
+                    "organization": data["_organization"],
+                    "storage_user": data["_storage_user"],
+                    "run_id": data["id"],
+                    "workflow_id": data["workflow_id"],
+                }
+            result = await self.adapter.call(**kwargs, framework=data["framework"], max_output_tokens=reserve, input_token_limit=reserve_input, **options)
         except Exception as error:
             usage = getattr(error, "usage", None)
             code = getattr(error, "code", "provider_request_failed")
@@ -486,12 +519,14 @@ class WorkflowService:
             if isinstance(usage, dict) and all(type(usage.get(key)) is int and usage[key] >= 0 for key in ("input_tokens", "output_tokens")):
                 failed = {
                     "output": {},
-                    "model": kwargs["model"],
+                    "model": (getattr(error, "served_model", None) or "unverified-provider-model") if code == "provider_model_mismatch" else kwargs["model"],
                     "effort": kwargs["effort"],
                     "usage": {**usage, "cost": None},
                     "error": code,
                     "_journal_context": {"run_id": latest.get("native_run_id"), "thread_id": latest.get("thread_id")},
                 }
+                if code == "provider_model_mismatch":
+                    failed.update(requested_model=kwargs["model"], served_model=getattr(error, "served_model", None), model_identity_verified=False)
                 stored = await self._storage("finish_call", data["id"], data["_scope"], call_id, failed)
                 await self._journal_model(stored, failed, kwargs)
             raise WorkflowServiceError(code, 502) from None
@@ -520,6 +555,8 @@ class WorkflowService:
             options = {}
             extension = os.environ.get("MOMOBOT_STAGEHAND_EXTENSION_ID", "")
             if extension:
+                if self.model_route == HAI_ROUTE:
+                    raise WorkflowServiceError("provider_framework_unverified", 503)
                 from app.gateway.workflow_adapters import browser_runner
 
                 async def runner(connect_url, pages, *, session_id):
@@ -565,7 +602,7 @@ class WorkflowService:
             thread_id,
             "lead_agent",
             user_id=native_user,
-            model_name="gpt-6.1-sol",
+            model_name=self._bound_model(data),
             on_disconnect=DisconnectMode.continue_,
             metadata={"workflow_id": data["workflow_id"], "workflow_job_id": data["id"]},
             kwargs={"input": {"workflow_id": data["workflow_id"]}},
@@ -578,6 +615,7 @@ class WorkflowService:
             if await run_manager.try_start(record.run_id) != RunStartOutcome.started:
                 raise WorkflowServiceError("native_run_cancelled", 409)
             baseline = {key: data["usage"].get(key, 0) for key in ("model_calls", "input_tokens", "output_tokens")}
+            baseline["by_model"] = json.loads(_json(data.get("_usage_by_model", {})))
             await self._storage("patch", data["id"], data["_scope"], {"native_run_id": record.run_id, "thread_id": thread_id, "_native_usage_start": baseline, "_native_storage_user": native_user})
             data.update(native_run_id=record.run_id, thread_id=thread_id, _native_usage_start=baseline, _native_storage_user=native_user)
             await self._journal(data, "run.start", "trace", {"chain": "momo_workflow", "workflow_id": data["workflow_id"], "framework": data["framework"]}, unique=True)
@@ -654,6 +692,15 @@ class WorkflowService:
         state = RunStatus.success if status == "completed" else RunStatus.interrupted if status in ("cancelled", "interrupted") else RunStatus.error
         baseline = data.get("_native_usage_start", {})
         usage = {key: max(0, data["usage"][key] - baseline.get(key, 0)) for key in ("model_calls", "input_tokens", "output_tokens")}
+        model_usage = {}
+        for model, totals in data.get("_usage_by_model", {}).items():
+            previous = baseline.get("by_model", {}).get(model, {})
+            delta = {key: max(0, totals[key] - previous.get(key, 0)) for key in ("input_tokens", "output_tokens")}
+            if any(delta.values()):
+                model_usage[model] = delta
+        if not model_usage:
+            model = HAI_MODEL if data.get("_model_route") == HAI_ROUTE else MODEL
+            model_usage[model] = {"input_tokens": usage["input_tokens"], "output_tokens": usage["output_tokens"]}
         await run_manager.update_run_completion(
             record.run_id,
             status=state.value,
@@ -662,7 +709,7 @@ class WorkflowService:
             total_tokens=usage["input_tokens"] + usage["output_tokens"],
             llm_call_count=usage["model_calls"],
             last_ai_message=_json(data.get("output"))[:16000],
-            token_usage_by_model={"gpt-6.1-sol": {"input_tokens": usage["input_tokens"], "output_tokens": usage["output_tokens"]}},
+            token_usage_by_model=model_usage,
         )
         await run_manager.set_status_if_not_cancelled(record.run_id, state, error=error, stop_reason="workflow_" + status)
         await self._journal(
@@ -679,6 +726,7 @@ class WorkflowService:
             if current["status"] != "running":
                 return
             await self._authorize(data)
+            model = self._bound_model(data)
             definition = get_workflow(data["workflow_id"])
             if hashlib.sha256(_json(_definition_dict(definition)).encode()).hexdigest() != data["_definition_hash"]:
                 raise WorkflowServiceError("workflow_revision_changed", 409)
@@ -698,6 +746,7 @@ class WorkflowService:
                     event=lambda name, status, **details: self._event(data, name, status, **details),
                     resume=data.get("_resume", False),
                     supervisor=data.get("supervisor", False),
+                    **({"model": model} if model != MODEL else {}),
                 )
             if result.get("accepted") is not True:
                 raise WorkflowServiceError("acceptance_failed", 422)
