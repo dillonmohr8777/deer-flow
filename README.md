@@ -18,6 +18,12 @@ https://github.com/user-attachments/assets/a8bcadc4-e040-4cf2-8fda-dd768b999c18
 
 ## Official Website
 
+### MomoBot Brain Forge workflow
+
+The optional [Brain Forge Slack workflow](backend/app/channels/BRAINFORGE.md) runs an explicitly scoped `@bot brief` request against reviewed, hash-pinned work sources. It retrieves the full thread, saves a private protected readback receipt and returns recorded counts without calling a model or modifying canonical work. It is disabled by default and requires an existing authenticated Slack runtime binding.
+
+This first workflow has local failure and restart tests. Live Slack delivery, unattended operation and shared-host durability require separate runtime verification.
+
 Learn more and see **real demos** on our [**official website**](https://deerflow.tech).
 The landing-page case studies open as allowlisted, read-only showcases without requiring a sign-in.
 

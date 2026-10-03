@@ -6,11 +6,13 @@ import asyncio
 import html
 import logging
 import re
+import threading
 from typing import Any
 
 from markdown_to_mrkdwn import SlackMarkdownConverter
 
 from app.channels.base import Channel
+from app.channels.brainforge_runtime import BrainForgeRuntime
 from app.channels.commands import is_known_channel_command
 from app.channels.connection_identity import attach_connection_identity
 from app.channels.message_bus import InboundMessageType, InboundReservation, MessageBus, OutboundMessage, ResolvedAttachment
@@ -100,6 +102,11 @@ class SlackChannel(Channel):
         self._connection_web_clients: dict[str, tuple[str, Any]] = {}
         configured_bot_user_id = config.get("bot_user_id")
         self._bot_user_id = str(configured_bot_user_id).lstrip("@") if configured_bot_user_id else None
+        self._brainforge: BrainForgeRuntime | None = None
+        self._brainforge_config = config.get("brain_forge") or {}
+        self._brainforge_drain_lock = threading.Lock()
+        self._brainforge_drain_token = None
+        self._brainforge_drain_wakeup = False
 
     async def start(self) -> None:
         if self._running:
@@ -129,6 +136,16 @@ class SlackChannel(Channel):
             return
 
         await self._initialize_operator_web_client(str(bot_token))
+        if self._brainforge_config.get("enabled") is True:
+            try:
+                self._brainforge = await asyncio.to_thread(BrainForgeRuntime, self, self._brainforge_config)
+                await self._brainforge.validate_transport()
+            except Exception:
+                if self._brainforge:
+                    await self._brainforge.close()
+                    self._brainforge = None
+                logger.error("Brain Forge start blocked: reviewed scope, source pins or runtime binding unavailable")
+                return
         self._socket_client = SocketModeClient(
             app_token=app_token,
             web_client=self._web_client,
@@ -138,19 +155,36 @@ class SlackChannel(Channel):
         self._socket_client.socket_mode_request_listeners.append(self._on_socket_event)
 
         self._open_threadsafe_future_intake()
+        if self._brainforge:
+            try:
+                await asyncio.to_thread(self._socket_client.connect)
+            except Exception:
+                await self._brainforge.close()
+                self._brainforge = None
+                await asyncio.to_thread(self._socket_client.close)
+                self._socket_client = None
+                logger.error("Brain Forge Slack transport connection failed")
+                return
         self._running = True
-        self.bus.subscribe_outbound(self._on_outbound)
+        if not self._brainforge:
+            self.bus.subscribe_outbound(self._on_outbound)
 
         # Start socket mode in background thread
-        asyncio.get_event_loop().run_in_executor(None, self._socket_client.connect)
+        if not self._brainforge:
+            asyncio.get_event_loop().run_in_executor(None, self._socket_client.connect)
+        else:
+            self._wake_brainforge()
         logger.info("Slack channel started")
 
     async def stop(self) -> None:
         self._running = False
         self.bus.unsubscribe_outbound(self._on_outbound)
         await self._close_and_drain_threadsafe_futures()
+        if self._brainforge:
+            await self._brainforge.close()
+            self._brainforge = None
         if self._socket_client:
-            self._socket_client.close()
+            await asyncio.to_thread(self._socket_client.close)
             self._socket_client = None
         logger.info("Slack channel stopped")
 
@@ -297,6 +331,16 @@ class SlackChannel(Channel):
         if not self._running:
             return
         try:
+            if self._brainforge:
+                admitted = None
+                if req.type == "events_api":
+                    event = req.payload.get("event", {})
+                    admitted = self._brainforge.prepare(event, team_id=req.payload.get("team_id") or req.payload.get("team") or event.get("team"))
+                # Rejected events are acknowledged but never sent to the paid dispatcher.
+                client.send_socket_mode_response(self._SocketModeResponse(envelope_id=req.envelope_id))
+                if admitted and self._loop and self._loop.is_running():
+                    self._wake_brainforge()
+                return
             # Acknowledge the event
             response = self._SocketModeResponse(envelope_id=req.envelope_id)
             client.send_socket_mode_response(response)
@@ -323,6 +367,37 @@ class SlackChannel(Channel):
 
         except Exception:
             logger.exception("Error processing Slack event")
+
+    def _wake_brainforge(self) -> None:
+        """Coalesce SDK bursts into one tracked durable-receipt drain."""
+        if not self._loop or not self._loop.is_running():
+            return
+        with self._brainforge_drain_lock:
+            self._brainforge_drain_wakeup = True
+            if self._brainforge_drain_token is not None:
+                return
+            token = object()
+            self._brainforge_drain_token = token
+        scheduled = self._submit_threadsafe_coroutine(self._drain_brainforge(token), self._loop, name="brainforge_drain", msg_id="receipts")
+        if not scheduled:
+            with self._brainforge_drain_lock:
+                if self._brainforge_drain_token is token:
+                    self._brainforge_drain_token = None
+
+    async def _drain_brainforge(self, token: object) -> None:
+        try:
+            while self._running and self._brainforge:
+                with self._brainforge_drain_lock:
+                    self._brainforge_drain_wakeup = False
+                processed = await self._brainforge.recover()
+                with self._brainforge_drain_lock:
+                    if processed < 100 and not self._brainforge_drain_wakeup:
+                        self._brainforge_drain_token = None
+                        return
+        finally:
+            with self._brainforge_drain_lock:
+                if self._brainforge_drain_token is token:
+                    self._brainforge_drain_token = None
 
     def _handle_message_event(self, event: dict, *, team_id: str | None = None) -> None:
         # Ignore bot messages
