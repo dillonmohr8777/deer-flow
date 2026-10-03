@@ -51,6 +51,21 @@ The cached value is reused for both the blocking (`runs.wait`) and streaming (`_
 
 **Configuration** (`config.yaml` -> `channels`):
 
+Brain Forge offline setup stays in `brainforge_cli prepare/check`, backed by
+`brainforge_setup.py`: create only new private disabled candidate fragments,
+reject duplicate keys, symlink/overlapping paths and existing output, and reuse
+the workflow's exact pin validation without executing its builder. Pins remain
+candidate/unreviewed. Never log configuration or credential values. The checks
+report missing bindings and only environment-name presence; local readiness is
+not live readiness. Preserve optional project configuration. `/connect` binds
+identity while Brain Forge is disabled but does not provision its encrypted
+token. The shared connection repository uses the optional stable protected
+`CHANNEL_CONNECTIONS_ENCRYPTION_KEY`; absent keys leave identity-only mode.
+All Gateway workers require the same key and a restart after changes. Missing
+per-connection credentials fail closed; do not introduce a global-token fallback.
+Use the existing protected host path for credential provisioning and verify
+effective channel/runtime overrides, persistent storage and a canary separately.
+
 **Brain Forge scoped Slack pilot:** `slack.brain_forge.enabled: true` selects a deterministic read-only brief path instead of the model dispatcher. See [BRAINFORGE.md](BRAINFORGE.md). Exact team, bot, user and channel-to-client pins are mandatory; aggregate `__owner__` routes require the separately configured Slack owner. Persisted tenant binding is required by default, with an explicit expected backend owner and no operator-token fallback for missing credentials. The SDK callback saves metadata-only SQLite admission before ACK; full thread retrieval and pinned brief execution run off the event loop. Only recorded count projections reach Slack. The private source brief remains in owner-controlled artifact storage. Transport receipts are not a canonical work queue. Fenced `uncertain` state is persisted before a single outbound attempt and never automatically replayed. Failed work requires explicit bounded retry; restart recovery reads cursor pages of at most 100 queued/expired receipts, advances past held rows, excludes exhausted attempts, and revalidates route, requester and provider text. The coalesced drain continues based on page coverage rather than successful-work count. One channel-owned timer wakes at the next retryable live lease expiry (including expiry during a scan) and is cancelled on shutdown; it never retries uncertain sends or scans Slack channels periodically. Do not claim live delivery from unit tests or local artifact readback. Use focused `test_brainforge_*.py` checks; real-builder integration checks need `BRAINFORGE_BRIEF_SOURCE` pointing at the existing reviewed brief source, which is not duplicated here.
 
 - `langgraph_url` - LangGraph-compatible Gateway API base URL (default: `http://localhost:8001/api`)

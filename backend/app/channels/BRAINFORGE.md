@@ -28,6 +28,73 @@ state.
 
 ## Operator configuration
 
+### Offline configuration preparation
+
+Use the existing CLI from `backend/` to prepare a new private fragment. These
+commands never merge into a live config, enable a channel, run the brief builder,
+call a provider, provision credentials, or start a service:
+
+```sh
+python -m app.channels.brainforge_cli prepare \
+  --brief-source /reviewed/cloud-daily-brief \
+  --canonical-root /readonly/client-operations \
+  --storage-root /private/brainforge \
+  --out /private/brainforge/candidate.yaml
+python -m app.channels.brainforge_cli check --fragment /private/brainforge/candidate.yaml
+```
+
+Optional `--bindings /private/bindings.json` accepts only `team_id`,
+`bot_user_id`, `allowed_users`, `channel_clients`, `owner_user_id`, and
+`connection_owner_id`. Supply exact non-secret IDs, not tokens or credentials.
+Without this file, fields stay empty and the candidate is still written;
+exit status **1** reports incomplete local configuration. Status **0** means
+only that local fields and matching hashes validated. Rejected input, duplicate
+JSON/YAML keys, unsafe paths, existing output, or drift return **2**. Reports
+contain readiness flags and missing field names, never configuration values.
+
+Prepared fragments set `enabled: false`, `require_connection: true`, and
+`source_pin_status: candidate_unreviewed`. Hashes for the three brief modules and
+two canonical files are captured candidates, not reviewed acceptance or a
+latest-state claim. `check` reuses the workflow's pin validator without running
+the builder and confirms exact active registry routes. An existing optional
+`workflow.project` is preserved and validated through the current compiler.
+New candidates allocate distinct artifact directories; no ledger is created.
+Existing files are never overwritten. Output stays outside source trees;
+symlink traversal is rejected. POSIX storage is private and the fragment is
+created with mode 0600. Existing public directories are rejected, not chmodded.
+
+This is a fragment for a reviewed merge into the existing configuration, not a
+replacement for the complete config or `channels` section. It intentionally
+omits Slack transport enablement, bot/app tokens, and `channel_connections`
+settings. Preparation never performs that merge or changes saved runtime settings.
+
+### Binding sequence and remaining host checks
+
+After source review, use the existing normal Slack `/connect` flow while Brain
+Forge remains disabled. `channels.slack`, `channel_connections.enabled`, and
+`channel_connections.slack.enabled` must be configured on the existing Gateway
+with persistent connection storage. Check effective configuration: saved
+`runtime_config.json` settings can override or disable Slack after a YAML merge.
+Unset `$ENV` references can fail the global config loader even in a disabled
+branch; the generated candidate uses empty binding fields instead.
+
+The identity connection alone does **not** provision a per-connection encrypted
+access token. The reviewed host-only provisioning path must populate the
+correct owner/workspace credential row. There is no new public provisioning
+endpoint and no operator-token fallback. Both the channel worker and connection
+router use the optional protected `CHANNEL_CONNECTIONS_ENCRYPTION_KEY`; use one
+stable identical key across Gateway workers and restart them after key changes.
+Without a key, repositories remain identity-only and Brain Forge fails closed
+when bound credentials are unavailable. Do not regenerate a key to make an
+existing encrypted row appear configured.
+
+Offline `check` reports only environment-variable name presence for
+`SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN`, and `CHANNEL_CONNECTIONS_ENCRYPTION_KEY`;
+it never reads or validates their values. Presence does not establish a valid
+key, a usable encrypted token, live owner binding, Socket Mode connectivity,
+persistent-host readiness, or a verified canary. Those remain explicitly
+unverified until checked through the existing protected host workflow.
+
 Configure the existing `channels.slack.brain_forge` branch. This example is
 deliberately disabled and contains placeholders, not usable identity or pins:
 
