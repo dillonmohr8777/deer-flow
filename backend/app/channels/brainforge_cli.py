@@ -49,14 +49,19 @@ def verify(receipt_path: str, expected_sha256: str, config: dict) -> dict:
     return {"status": "verified_private_readback", "receiptSha256": expected_sha256, "projectVerified": project is not None, "slackDeliveryVerified": False, "runtimeExecuted": False}
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=("preflight", "build", "verify"))
+def main(argv: list[str] | None = None) -> None:
+    argv = sys.argv[1:] if argv is None else argv
+    if argv and argv[0] in {"prepare", "check"}:
+        from app.channels.brainforge_setup import main as setup_main
+
+        raise SystemExit(setup_main(argv))
+    parser = argparse.ArgumentParser(description=__doc__, epilog="Offline configuration: prepare --help or check --help. These subcommands use their own options and do not require --config.")
+    parser.add_argument("command", choices=("prepare", "check", "preflight", "build", "verify"))
     parser.add_argument("--config", required=True)
     parser.add_argument("--client-id", default="__owner__")
     parser.add_argument("--receipt")
     parser.add_argument("--expected-sha256")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     config = json.loads(Path(args.config).read_text(encoding="utf-8"))
     if args.command == "verify":
         if not args.receipt or not args.expected_sha256:
