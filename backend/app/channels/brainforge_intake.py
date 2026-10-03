@@ -23,21 +23,22 @@ from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any
+from typing import Any, TypeGuard
 
 _ID = re.compile(r"[A-Z][A-Z0-9]{1,127}\Z")
 _TS = re.compile(r"[0-9]{1,20}\.[0-9]{1,12}\Z")
 _CLIENT = re.compile(r"[a-z0-9][a-z0-9_-]{0,199}\Z")
 _HASH = re.compile(r"[a-f0-9]{64}\Z")
 _CREDENTIAL = re.compile(
-    r"\b(?:password|passwd|api[_ -]?key|access[_ -]?token|refresh[_ -]?token|client[_ -]?secret|one[_ -]?time[_ -]?(?:code|password)|otp)\s*[:=]\s*\S+"
+    r"\b(?:password|passwd|api[_ -]?key|access[_ -]?token|refresh[_ -]?token|client[_ -]?secret|one[_ -]?time[_ -]?(?:code|password)|otp)[\"']?\s*[:=]\s*\S+"
     r"|\b(?:xox[baprs]-|xapp-|sk-(?:proj-)?)[A-Za-z0-9_-]{8,}|-----BEGIN [A-Z ]*PRIVATE KEY-----"
-    r"|\bAuthorization\s*:\s*Bearer\s+\S+|\bAKIA[A-Z0-9]{16}\b|\bgh[pousr]_[A-Za-z0-9]{20,}",
+    r"|\bAuthorization\s*:\s*Bearer\s+\S+|\bAKIA[A-Z0-9]{16}\b|\bgh[pousr]_[A-Za-z0-9]{20,}"
+    r"|\b(?:hai|xpl)_[A-Za-z0-9_-]{12,}",
     re.IGNORECASE,
 )
 
 
-def _valid(value: Any, pattern: re.Pattern[str]) -> bool:
+def _valid(value: Any, pattern: re.Pattern[str]) -> TypeGuard[str]:
     return isinstance(value, str) and pattern.fullmatch(value) is not None
 
 

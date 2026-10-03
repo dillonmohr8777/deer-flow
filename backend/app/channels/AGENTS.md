@@ -1,5 +1,7 @@
 ### IM Channels System (`app/channels/`)
 
+`brainforge_project.py` compiles a private unified project when the brief workflow has an optional `project` configuration. Pin CONTROL from the same canonical root, an exported native catalog, reviewed lane inputs and every JavaScript file in the reviewed research program tree. Native requests remain unsent; source text never grants authority. `brainforge_cli.py` builds local previews and independently verifies the bound private artifacts. Keep real catalogs, evidence, client inputs, model receipts and budgets outside this public checkout. Cover source drift, inactive/unresolved routes, schema and credential boundaries and artifact tampering in `test_brainforge_project.py` / `test_brainforge_workflow.py`. Do not substitute a new collector or reservation ledger for an unrecovered original.
+
 Bridges external messaging platforms (Feishu, Slack, Telegram, Discord, DingTalk, GitHub) to the DeerFlow agent via Gateway's LangGraph-compatible API.
 
 **Architecture**: Channels communicate with Gateway through the `langgraph-sdk` HTTP client (same as the frontend), ensuring threads are created and managed server-side. The internal SDK client injects process-local internal auth plus a matching CSRF cookie/header pair so Gateway accepts state-changing thread/run requests from channel workers without relying on browser session cookies.

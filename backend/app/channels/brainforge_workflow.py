@@ -69,6 +69,14 @@ class BrainForgeBriefWorkflow:
         self.output = Path(config["artifact_root"]).resolve()
         self.module_hashes = dict(config["brief_source_hashes"])
         self.source_hashes = dict(config["source_hashes"])
+        self.project = None
+        if config.get("project") is not None:
+            from app.channels.brainforge_project import BrainForgeProjectCompiler
+
+            project_config = config["project"]
+            if Path(project_config["control"]["path"]).absolute() != self.canonical / "CONTROL.md":
+                raise ValueError("project CONTROL pin must belong to the same canonical source tree")
+            self.project = BrainForgeProjectCompiler(project_config)
         # Artifact writes must never land in either authoritative source tree.
         if self.output.is_relative_to(self.canonical) or self.output.is_relative_to(self.source):
             raise ValueError("artifact storage must be outside source trees")
@@ -130,6 +138,27 @@ class BrainForgeBriefWorkflow:
             "nonterminal": sum(n for status, n in statuses.items() if status not in {"done", "cancelled"}),
             "unresolvedRoutes": sum(row.get("routingResolution") != "resolved_exact_registry_id" for row in items),
         }
+        project_proof = None
+        if self.project is not None:
+            project = self.project.compile(snap, client_id=client_id)
+            project_raw = (json.dumps(project, sort_keys=True, indent=2, allow_nan=False) + "\n").encode()
+            project_path = job_dir / ("project-" + proof["manifestSha256"] + ".json")
+            with os.fdopen(os.open(project_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "wb") as stream:
+                stream.write(project_raw)
+                stream.flush()
+                os.fsync(stream.fileno())
+            if project_path.read_bytes() != project_raw:
+                raise ValueError("unified project readback failed")
+            project_proof = {
+                "path": str(project_path),
+                "sha256": _digest(project_raw),
+                "requestsPrepared": project["requestCount"],
+                "sent": False,
+                "controlSha256": self.project.config["control"]["sha256"],
+                "catalogSha256": self.project.config["catalog"]["sha256"],
+                "laneStates": {lane: row["status"] for lane, row in project["lanes"].items()},
+            }
+            counts["projectRequestsPrepared"] = project["requestCount"]
         self.validate()
         receipt = {
             "kind": "brain_forge_read_only_workflow_receipt",
@@ -150,6 +179,8 @@ class BrainForgeBriefWorkflow:
             "owner": "existing Chief; no canonical mutation",
             "cost": "zero provider calls",
         }
+        if project_proof is not None:
+            receipt["project"] = project_proof
         raw = (json.dumps(receipt, sort_keys=True, indent=2) + "\n").encode()
         # Unique filename avoids overwriting an earlier proof on a recovery run.
         receipt_path = job_dir / ("workflow-" + proof["manifestSha256"] + ".json")
@@ -172,4 +203,15 @@ class BrainForgeBriefWorkflow:
                 f"Receipt SHA256: {_digest(raw)}",
             ]
         )
+        if project_proof is not None:
+            text = "\n".join(
+                [
+                    "Brain Forge private project prepared.",
+                    f"Recorded route: {client_id}; queue revision {proof['sourceQueueRevision']}.",
+                    f"Work items: {len(items)}; open: {counts['nonterminal']}; unresolved routes: {counts['unresolvedRoutes']}.",
+                    f"Native workflow requests prepared: {project_proof['requestsPrepared']}; sent: 0.",
+                    "Pinned snapshot; source acceptance and runtime execution remain unverified.",
+                    f"Receipt SHA256: {_digest(raw)}",
+                ]
+            )
         return BriefResult(text, str(receipt_path), _digest(raw), proof["artifactSha256"], proof["sourceQueueRevision"], counts)

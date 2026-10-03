@@ -22,6 +22,8 @@ https://github.com/user-attachments/assets/a8bcadc4-e040-4cf2-8fda-dd768b999c18
 
 The optional [Brain Forge Slack workflow](backend/app/channels/BRAINFORGE.md) runs an explicitly scoped `@bot brief` request against reviewed, hash-pinned work sources. It retrieves the full thread, saves a private protected readback receipt and returns recorded counts without calling a model or modifying canonical work. It is disabled by default and requires an existing authenticated Slack runtime binding.
 
+The optional private project compiler joins the brief with reviewed research and existing Momo workflow requests for offers, SEO, social, CRM, reporting, developer blockers and security review. A single protected receipt binds the source brief and project artifact. `python -m app.channels.brainforge_cli` provides local preflight, build and independent readback; compiled requests remain unsent until the existing authenticated workflow service admits them. See the [unified project configuration](backend/app/channels/BRAINFORGE.md#unified-private-project).
+
 Restart recovery scans receipts in bounded cursor pages so held or stale routes
 cannot hide later eligible work. A single channel-owned expiry timer revisits live
 claims after their leases expire, including on otherwise quiet channels. Shutdown

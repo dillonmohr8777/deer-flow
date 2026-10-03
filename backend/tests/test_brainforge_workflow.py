@@ -191,6 +191,38 @@ class BrainForgeWorkflowTests(unittest.TestCase):
         self.assertFalse(Path(self.config["artifact_root"]).exists())
 
     @unittest.skipUnless(BRIEF_SOURCE_AVAILABLE, INTEGRATION_SOURCE_REASON)
+    def test_unified_project_is_bound_to_receipt_and_independent_readback(self) -> None:
+        from app.channels.brainforge_cli import verify
+
+        control = self.root / "CONTROL.md"
+        control.write_text("Synthetic canonical owner rules", encoding="utf-8")
+        catalog = self.base / "catalog.json"
+        catalog.write_text(json.dumps({"workflows": []}), encoding="utf-8")
+        self.config["project"] = {
+            "control": {"path": str(control), "sha256": digest(control)},
+            "catalog": {"path": str(catalog), "sha256": digest(catalog)},
+            "inputs": {},
+            "research": None,
+            "collector": {"total_budget_usd": 16, "ledger": None},
+        }
+        result = self.run_workflow()
+        self.assertEqual(result.counts["projectRequestsPrepared"], 0)
+        self.assertLessEqual(len(result.text.splitlines()), 6)
+        receipt = json.loads(Path(result.receipt_path).read_text(encoding="utf-8"))
+        project_path = Path(receipt["project"]["path"])
+        self.assertEqual(digest(project_path), receipt["project"]["sha256"])
+        self.assertEqual(stat.S_IMODE(project_path.stat().st_mode), 0o600)
+        self.assertTrue(verify(result.receipt_path, result.receipt_sha256, self.config)["projectVerified"])
+        project_path.write_text('{"tampered": true}', encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "source drift"):
+            verify(result.receipt_path, result.receipt_sha256, self.config)
+
+    def test_project_control_must_be_from_same_canonical_tree(self) -> None:
+        self.config["project"] = {"control": {"path": str(self.base / "different/CONTROL.md"), "sha256": "a" * 64}}
+        with self.assertRaisesRegex(ValueError, "same canonical"):
+            workflow.BrainForgeBriefWorkflow(self.config)
+
+    @unittest.skipUnless(BRIEF_SOURCE_AVAILABLE, INTEGRATION_SOURCE_REASON)
     def test_duplicate_and_missing_work_ids_rejected_by_real_builder(self) -> None:
         for missing in (False, True):
             with self.subTest(missing=missing):

@@ -106,3 +106,58 @@ requires separate operational acceptance and the existing approval boundaries.
 Keep deployment receipts, actual source revisions and hashes, workspace/user
 identifiers, private repository references and client evidence outside this
 public repository. Record them in the existing private evidence workflow.
+
+## Unified private project
+
+An optional `workflow.project` configuration joins the protected daily brief,
+reviewed research handoff and native marketing/engineering workflow requests
+in one private `project-<manifest-hash>.json` artifact. The workflow receipt binds
+its hash together with the brief manifest. The Slack projection remains at most
+six lines and contains counts, source limitations and the receipt hash.
+
+The compiler uses the existing native workflow identifiers for research,
+offers, SEO, social, CRM, reporting, developer dependencies and security review.
+Export the catalog from the reviewed existing Momo source and pin the complete
+JSON artifact; this source export does not prove the installed catalog. Each
+reviewed lane packet contains only `clientId` and `inputs`. Its scope must equal
+the requested exact client route; inactive and unknown routes are held. The
+compiler applies the native closed input schema and prepares exact JSON bodies
+and idempotency hashes for `/api/workflows/runs`. It does not call that endpoint.
+Set `project.native_request_supervisor: false` when the reviewed installed API
+accepts only `workflow_id`, `inputs` and `framework`; that mode preserves the
+existing native maker/checker contract without claiming the later plan-review
+supervisor. The default `true` prepares the newer four-field API request.
+Missing inputs remain `needs_reviewed_inputs`; no facts, metrics or owners are
+filled in to make a lane appear ready.
+
+Supply `project.control` as a path/hash for `CONTROL.md` from the same canonical
+root, `project.catalog` as a path/hash, and `project.inputs` as a lane-to-pinned-
+packet mapping. `project.research`, when provided, supplies the existing reviewed
+research CLI, absolute Node runtime, `source_root`, every JavaScript file's pin
+in `source_files`, and the reviewed-evidence path/hash. The CLI runs with
+`--no-network`, a restricted environment, a deadline and bounded output. Personal
+research requests remain scoped to `__owner__`. Source changes before or during
+compilation reject the result.
+
+`project.collector.total_budget_usd` preserves the original one-time $16 pilot.
+Its optional `ledger` is a reference to the original pinned ledger; missing
+ledger identity remains unresolved and paid dispatch stays disabled. Never
+create a replacement ledger, a new allowance or another scheduler. The model
+route and serving acceptance are separate from deterministic project compilation.
+
+Run from `backend/` against a private configuration file:
+
+```sh
+python -m app.channels.brainforge_cli preflight --config /private/project.json
+python -m app.channels.brainforge_cli build --config /private/project.json --client-id __owner__
+python -m app.channels.brainforge_cli verify --config /private/project.json \
+  --receipt /private/artifacts/<job>/workflow-<hash>.json --expected-sha256 <independent-receipt-hash>
+```
+
+Local builds identify themselves as owner previews and do not establish a Slack
+trigger. Verification reruns protected brief readback, checks artifact confinement,
+and regenerates the project against the same pins before accepting saved bytes.
+No transport, model, canonical write, live authentication or deployment is
+performed by these commands. Runtime admission still belongs to the existing
+owner, workspace scope, entitlement and reconciled finite allowance; accepted
+output requires independent artifact review and terminal verification.
