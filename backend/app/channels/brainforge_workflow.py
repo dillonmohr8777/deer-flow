@@ -6,15 +6,15 @@ Only count projections reach Slack; the source brief stays in private storage.
 
 from __future__ import annotations
 
-from collections import Counter
-from dataclasses import dataclass
 import hashlib
 import json
 import os
-from pathlib import Path
 import re
 import subprocess
 import sys
+from collections import Counter
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 BRIEF_MODULES = frozenset({"daily_brief.py", "checkpoint.py", "brief_items.py"})
@@ -90,7 +90,11 @@ class BrainForgeBriefWorkflow:
         _private_directory(job_dir)
         build = subprocess.run(
             [sys.executable, "-B", "-s", str(self.source / "daily_brief.py"), "build", "--root", str(self.canonical), "--out", str(job_dir)],
-            capture_output=True, text=True, timeout=45, check=False, env={"PATH": os.defpath, "LANG": "C.UTF-8"},
+            capture_output=True,
+            text=True,
+            timeout=45,
+            check=False,
+            env={"PATH": os.defpath, "LANG": "C.UTF-8"},
         )
         if build.returncode:
             raise ValueError("existing brief build failed; no completion claimed")
@@ -103,7 +107,10 @@ class BrainForgeBriefWorkflow:
         # The existing read path checks source drift and snapshot/brief tampering.
         read = subprocess.run(
             [sys.executable, "-B", "-s", str(self.source / "daily_brief.py"), "read", "--manifest", str(manifest_path), "--expected-manifest-sha256", proof["manifestSha256"]],
-            capture_output=True, timeout=30, check=False, env={"PATH": os.defpath, "LANG": "C.UTF-8"},
+            capture_output=True,
+            timeout=30,
+            check=False,
+            env={"PATH": os.defpath, "LANG": "C.UTF-8"},
         )
         if read.returncode or _digest(read.stdout) != proof["artifactSha256"]:
             raise ValueError("protected brief readback failed")
@@ -153,14 +160,16 @@ class BrainForgeBriefWorkflow:
         if receipt_path.read_bytes() != raw:
             raise ValueError("workflow receipt readback failed")
         line = ", ".join(f"{key}: {value}" for key, value in statuses.items()) or "no recorded items"
-        text = "\n".join([
-            "Brain Forge verified work brief",
-            f"Recorded route: {client_id}; queue revision {proof['sourceQueueRevision']}.",
-            f"Work items: {len(items)}; nonterminal: {counts['nonterminal']}; unresolved routes: {counts['unresolvedRoutes']}.",
-            f"Recorded status totals: {line}.",
-            f"Source revision: {proof['sourceHead'] or 'unknown'}.",
-            "Freshness: pinned source snapshot. Chief source reconciliation remains open; this isn't a latest-state claim.",
-            "Full private brief saved and protected readback passed. No queue change or provider call.",
-            f"Receipt SHA256: {_digest(raw)}",
-        ])
+        text = "\n".join(
+            [
+                "Brain Forge verified work brief",
+                f"Recorded route: {client_id}; queue revision {proof['sourceQueueRevision']}.",
+                f"Work items: {len(items)}; nonterminal: {counts['nonterminal']}; unresolved routes: {counts['unresolvedRoutes']}.",
+                f"Recorded status totals: {line}.",
+                f"Source revision: {proof['sourceHead'] or 'unknown'}.",
+                "Freshness: pinned source snapshot. Chief source reconciliation remains open; this isn't a latest-state claim.",
+                "Full private brief saved and protected readback passed. No queue change or provider call.",
+                f"Receipt SHA256: {_digest(raw)}",
+            ]
+        )
         return BriefResult(text, str(receipt_path), _digest(raw), proof["artifactSha256"], proof["sourceQueueRevision"], counts)

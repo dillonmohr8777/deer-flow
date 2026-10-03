@@ -3,9 +3,9 @@
 import asyncio
 import importlib
 import sys
+import unittest
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
-import unittest
 from unittest.mock import AsyncMock, Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -28,7 +28,13 @@ class BrainForgeSlackTests(unittest.IsolatedAsyncioTestCase):
         self.channel._loop = asyncio.get_running_loop()
         self.channel._running = True
         self.channel._SocketModeResponse = lambda **kwargs: kwargs
-        self.channel._brainforge = SimpleNamespace(prepare=Mock(return_value=SimpleNamespace(message_ts="100.001")), recover=AsyncMock(return_value=0))
+        self.channel._brainforge = SimpleNamespace(
+            prepare=Mock(return_value=SimpleNamespace(message_ts="100.001")),
+            recover=AsyncMock(return_value=0),
+            recovery_has_more=False,
+            next_recovery_delay=AsyncMock(return_value=None),
+            close=AsyncMock(),
+        )
         self.submissions = []
 
         def submit(coroutine, *args, **kwargs):
@@ -39,6 +45,8 @@ class BrainForgeSlackTests(unittest.IsolatedAsyncioTestCase):
         self.addCleanup(self.close_submissions)
 
     def close_submissions(self):
+        if self.channel._brainforge_recovery_timer:
+            self.channel._brainforge_recovery_timer.cancel()
         for coroutine, _ in self.submissions:
             coroutine.close()
 
@@ -91,10 +99,42 @@ class BrainForgeSlackTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_full_page_continues_without_task_fanout(self):
         self.channel._wake_brainforge()
-        self.channel._brainforge.recover = AsyncMock(side_effect=[100, 0])
+        pages = iter([True, False])
+
+        async def recover():
+            self.channel._brainforge.recovery_has_more = next(pages)
+            # Full pages can be entirely held; processed count must not stop scanning.
+            return 0
+
+        self.channel._brainforge.recover = AsyncMock(side_effect=recover)
         await self.channel._drain_brainforge(self.channel._brainforge_drain_token)
         self.assertEqual(self.channel._brainforge.recover.await_count, 2)
         self.assertEqual(len(self.submissions), 1)
+
+    async def test_live_claim_schedules_one_expiry_wakeup_without_an_inbound_event(self):
+        self.channel._brainforge.next_recovery_delay.return_value = 200
+        self.channel._wake_brainforge()
+        loop = asyncio.get_running_loop()
+        handle = Mock()
+        with patch.object(loop, "call_later", return_value=handle) as later:
+            await self.channel._drain_brainforge(self.channel._brainforge_drain_token)
+        later.assert_called_once_with(200, self.channel._retry_brainforge_lease)
+        self.assertIs(self.channel._brainforge_recovery_timer, handle)
+        later.call_args.args[1]()
+        self.assertIsNone(self.channel._brainforge_recovery_timer)
+        self.assertEqual(len(self.submissions), 2)
+        self.channel._brainforge.next_recovery_delay.return_value = None
+        await self.channel._drain_brainforge(self.channel._brainforge_drain_token)
+        self.assertIsNone(self.channel._brainforge_recovery_timer)
+
+    async def test_stop_cancels_expiry_wakeup_and_late_callback_cannot_dispatch(self):
+        timer = Mock()
+        self.channel._brainforge_recovery_timer = timer
+        await self.channel.stop()
+        timer.cancel.assert_called_once()
+        self.channel._retry_brainforge_lease()
+        self.assertEqual(self.submissions, [])
+        self.assertIsNone(self.channel._brainforge_recovery_timer)
 
     async def test_drain_exception_releases_worker_fence(self):
         self.channel._wake_brainforge()
@@ -107,6 +147,7 @@ class BrainForgeSlackTests(unittest.IsolatedAsyncioTestCase):
         def fail_submit(coroutine, *args, **kwargs):
             coroutine.close()
             return False
+
         self.channel._submit_threadsafe_coroutine = fail_submit
         self.channel._wake_brainforge()
         self.assertIsNone(self.channel._brainforge_drain_token)

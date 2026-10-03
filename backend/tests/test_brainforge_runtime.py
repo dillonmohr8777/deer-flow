@@ -97,9 +97,14 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
 
     def make_runtime(self, channel=None, **changes):
         config = {
-            "team_id": "T123", "bot_user_id": "U999", "allowed_users": ["U123"],
-            "channel_clients": {"C123": "synthetic-client"}, "owner_user_id": "U123",
-            "require_connection": False, "ledger_path": str(Path(self.temp.name) / "receipts.sqlite"), "workflow": {},
+            "team_id": "T123",
+            "bot_user_id": "U999",
+            "allowed_users": ["U123"],
+            "channel_clients": {"C123": "synthetic-client"},
+            "owner_user_id": "U123",
+            "require_connection": False,
+            "ledger_path": str(Path(self.temp.name) / "receipts.sqlite"),
+            "workflow": {},
             **changes,
         }
         with patch("app.channels.brainforge_runtime.BrainForgeBriefWorkflow", return_value=self.workflow):
@@ -228,6 +233,60 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await runtime.recover(), 0)
         self.assertEqual(self.client.read_calls, [])
         self.assertEqual(self.client.send_calls, [])
+
+    async def test_skipped_page_does_not_starve_current_route_or_fetch_old_routes(self):
+        runtime = self.make_runtime()
+        for index in range(100):
+            stamp = f"{200 + index}.000001"
+            runtime.ledger.enqueue("T123", "COLD", stamp, client_id="old-client", thread_ts=stamp, payload_sha256="a" * 64, user_id="U123")
+        runtime.prepare(request(), team_id="T123")
+        self.assertEqual(await runtime.recover(), 0)
+        self.assertTrue(runtime.recovery_has_more)
+        self.assertEqual(self.client.read_calls, [])
+        self.assertEqual(await runtime.recover(), 1)
+        self.assertFalse(runtime.recovery_has_more)
+        self.assertEqual(len(self.workflow.calls), 1)
+        self.assertEqual(len(self.client.send_calls), 1)
+        self.assertEqual(runtime.ledger.get("T123", "COLD", "200.000001")["state"], "queued")
+        # A new sweep can revisit held rows, but never sends the delivered row twice.
+        self.assertEqual(await runtime.recover(), 0)
+        self.assertEqual(await runtime.recover(), 0)
+        self.assertEqual(len(self.client.send_calls), 1)
+
+    async def test_exhausted_claims_never_fetch_or_keep_drain_alive(self):
+        runtime = self.make_runtime()
+        runtime.prepare(request(), team_id="T123")
+        for clock in [100, 102, 104]:
+            self.assertIsNotNone(runtime.ledger.claim("T123", "C123", "100.000002", now=clock, lease_seconds=1))
+        self.assertEqual(await runtime.recover(), 0)
+        self.assertFalse(runtime.recovery_has_more)
+        self.assertIsNone(await runtime.next_recovery_delay())
+        self.assertEqual(self.client.read_calls, [])
+        self.assertEqual(self.client.send_calls, [])
+
+    async def test_live_claim_returns_expiry_then_recovers_without_a_new_event(self):
+        runtime = self.make_runtime()
+        runtime.prepare(request(), team_id="T123")
+        runtime.ledger.claim("T123", "C123", "100.000002", now=1000, lease_seconds=300)
+        with patch("time.time", return_value=1100):
+            self.assertEqual(await runtime.recover(), 0)
+            self.assertEqual(await runtime.next_recovery_delay(), 200)
+        self.assertEqual(self.client.read_calls, [])
+        with patch("time.time", return_value=1301):
+            self.assertEqual(await runtime.recover(), 1)
+            self.assertIsNone(await runtime.next_recovery_delay())
+        self.assertEqual(len(self.client.send_calls), 1)
+
+    async def test_lease_expiring_during_scan_still_requests_another_sweep(self):
+        runtime = self.make_runtime()
+        runtime.prepare(request(), team_id="T123")
+        runtime.ledger.claim("T123", "C123", "100.000002", now=1000, lease_seconds=300)
+        with patch("time.time", return_value=1100):
+            self.assertEqual(await runtime.recover(), 0)
+        with patch("time.time", return_value=1301):
+            self.assertEqual(await runtime.next_recovery_delay(), 0)
+            self.assertEqual(await runtime.recover(), 1)
+            self.assertIsNone(await runtime.next_recovery_delay())
 
 
 if __name__ == "__main__":

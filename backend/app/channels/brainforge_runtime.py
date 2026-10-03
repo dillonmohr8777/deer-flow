@@ -43,6 +43,9 @@ class BrainForgeRuntime:
         self.workflow = BrainForgeBriefWorkflow(config["workflow"])
         self.ledger = IntakeLedger(config["ledger_path"])
         self._slots = asyncio.Semaphore(1)
+        self._recovery_cursor = 0
+        self.recovery_has_more = False
+        self._recovery_deadline: float | None = None
 
     async def validate_transport(self) -> None:
         auth = _response(await asyncio.to_thread(self.channel._web_client.auth_test))
@@ -68,9 +71,13 @@ class BrainForgeRuntime:
         if admitted is None:
             return None
         inserted = self.ledger.enqueue(
-            admitted.team_id, admitted.channel_id, admitted.message_ts,
-            client_id=admitted.client_id, thread_ts=admitted.thread_ts,
-            payload_sha256=_payload_hash(admitted), user_id=admitted.user_id,
+            admitted.team_id,
+            admitted.channel_id,
+            admitted.message_ts,
+            client_id=admitted.client_id,
+            thread_ts=admitted.thread_ts,
+            payload_sha256=_payload_hash(admitted),
+            user_id=admitted.user_id,
         )
         return admitted if inserted else None
 
@@ -94,6 +101,7 @@ class BrainForgeRuntime:
     async def _thread(self, client: Any, *, channel: str, root: str, event: str):
         async def fetch_page(**kwargs):
             return _response(await asyncio.to_thread(client.conversations_replies, **kwargs))
+
         return await hydrate_thread(fetch_page, team_id=self.policy.team_id, channel_id=channel, thread_ts=root, event_ts=event)
 
     async def run(self, event: AdmittedEvent) -> None:
@@ -115,11 +123,18 @@ class BrainForgeRuntime:
                     return
                 # SDK retry middleware can otherwise retry an ambiguous POST.
                 client.retry_handlers = []
-                response = _response(await asyncio.to_thread(
-                    client.chat_postMessage, channel=event.channel_id, thread_ts=event.thread_ts,
-                    text=result.text, mrkdwn=False, unfurl_links=False, unfurl_media=False,
-                    client_msg_id=str(uuid.uuid5(uuid.NAMESPACE_URL, f"brainforge:{event.team_id}:{event.channel_id}:{event.message_ts}")),
-                ))
+                response = _response(
+                    await asyncio.to_thread(
+                        client.chat_postMessage,
+                        channel=event.channel_id,
+                        thread_ts=event.thread_ts,
+                        text=result.text,
+                        mrkdwn=False,
+                        unfurl_links=False,
+                        unfurl_media=False,
+                        client_msg_id=str(uuid.uuid5(uuid.NAMESPACE_URL, f"brainforge:{event.team_id}:{event.channel_id}:{event.message_ts}")),
+                    )
+                )
                 if response.get("ok") is True and response.get("ts"):
                     await asyncio.to_thread(self.ledger.delivered, claim, response["ts"])
             except asyncio.CancelledError:
@@ -132,9 +147,15 @@ class BrainForgeRuntime:
 
     async def recover(self) -> int:
         """Bounded restart readback: only queued or expired claims may resume."""
-        rows = await asyncio.to_thread(self.ledger.pending, 100, eligible_only=True)
+        if self._recovery_cursor == 0:
+            # Keep this deadline even if it expires while later pages are scanned.
+            self._recovery_deadline = await asyncio.to_thread(self.ledger.next_claim_expiry)
+        rows = await asyncio.to_thread(self.ledger.pending, 100, eligible_only=True, after_rowid=self._recovery_cursor)
+        self.recovery_has_more = len(rows) == 100
         processed = 0
         for row in rows:
+            # Advance over held/stale rows without modifying or replaying them.
+            self._recovery_cursor = row["receipt_rowid"]
             if row["state"] not in {"queued", "claimed"} or (row["state"] == "claimed" and (row["lease_until"] or 0) > time.time()):
                 continue
             user = row.get("user_id")
@@ -150,7 +171,15 @@ class BrainForgeRuntime:
                 if not context.complete:
                     continue
                 original = next(message for message in context.messages if message["ts"] == identity.message_ts)
-                event = {"type": "message", "channel": identity.channel_id, "user": original["user"], "ts": identity.message_ts, "thread_ts": identity.thread_ts, "text": original["text"], "channel_type": "im" if identity.channel_id.startswith("D") else "channel"}
+                event = {
+                    "type": "message",
+                    "channel": identity.channel_id,
+                    "user": original["user"],
+                    "ts": identity.message_ts,
+                    "thread_ts": identity.thread_ts,
+                    "text": original["text"],
+                    "channel_type": "im" if identity.channel_id.startswith("D") else "channel",
+                }
                 admitted = self._admit(event, identity.team_id)
                 if admitted and _payload_hash(admitted) == row["payload_sha256"]:
                     await self.run(admitted)
@@ -158,7 +187,16 @@ class BrainForgeRuntime:
             except Exception:
                 # Missing access/changed identity is a held receipt, not a retry loop.
                 continue
+        if not self.recovery_has_more:
+            self._recovery_cursor = 0
         return processed
+
+    async def next_recovery_delay(self) -> float | None:
+        deadline = await asyncio.to_thread(self.ledger.next_claim_expiry)
+        if self._recovery_deadline is not None:
+            deadline = min(deadline, self._recovery_deadline) if deadline is not None else self._recovery_deadline
+        self._recovery_deadline = None
+        return max(0.0, deadline - time.time()) if deadline is not None else None
 
     async def close(self) -> None:
         await asyncio.to_thread(self.ledger.close)

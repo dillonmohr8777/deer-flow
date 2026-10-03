@@ -107,6 +107,7 @@ class SlackChannel(Channel):
         self._brainforge_drain_lock = threading.Lock()
         self._brainforge_drain_token = None
         self._brainforge_drain_wakeup = False
+        self._brainforge_recovery_timer: asyncio.TimerHandle | None = None
 
     async def start(self) -> None:
         if self._running:
@@ -178,6 +179,9 @@ class SlackChannel(Channel):
 
     async def stop(self) -> None:
         self._running = False
+        if self._brainforge_recovery_timer:
+            self._brainforge_recovery_timer.cancel()
+            self._brainforge_recovery_timer = None
         self.bus.unsubscribe_outbound(self._on_outbound)
         await self._close_and_drain_threadsafe_futures()
         if self._brainforge:
@@ -389,15 +393,27 @@ class SlackChannel(Channel):
             while self._running and self._brainforge:
                 with self._brainforge_drain_lock:
                     self._brainforge_drain_wakeup = False
-                processed = await self._brainforge.recover()
+                await self._brainforge.recover()
+                has_more = self._brainforge.recovery_has_more
+                delay = None if has_more else await self._brainforge.next_recovery_delay()
                 with self._brainforge_drain_lock:
-                    if processed < 100 and not self._brainforge_drain_wakeup:
+                    if not has_more and not self._brainforge_drain_wakeup:
+                        if self._brainforge_recovery_timer:
+                            self._brainforge_recovery_timer.cancel()
+                            self._brainforge_recovery_timer = None
+                        if self._running and delay is not None:
+                            self._brainforge_recovery_timer = asyncio.get_running_loop().call_later(delay, self._retry_brainforge_lease)
                         self._brainforge_drain_token = None
                         return
         finally:
             with self._brainforge_drain_lock:
                 if self._brainforge_drain_token is token:
                     self._brainforge_drain_token = None
+
+    def _retry_brainforge_lease(self) -> None:
+        self._brainforge_recovery_timer = None
+        if self._running and self._brainforge:
+            self._wake_brainforge()
 
     def _handle_message_event(self, event: dict, *, team_id: str | None = None) -> None:
         # Ignore bot messages

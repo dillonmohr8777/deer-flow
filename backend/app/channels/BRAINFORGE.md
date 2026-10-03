@@ -76,6 +76,20 @@ prove the saved result, not across-host persistence.
 
 ## Verification and recovery
 
+Restart recovery scans at most 100 queued or expired-claim receipts per page.
+The cursor advances over held or changed-route rows without modifying them;
+one coalesced drain follows additional pages even when the previous page ran
+no workflow. Attempt-exhausted receipts are excluded before pagination. Each
+eligible request still requires exact current route, requester, thread and
+payload-hash readback before execution.
+
+A single channel-owned timer wakes the existing drain at the next retryable
+live claim's lease expiry. A restart before expiry therefore does not require
+a new Slack message to recover that claim. Deadlines that expire during a scan
+trigger a fresh sweep. Shutdown cancels the timer before draining workers and
+closing the ledger. This is lease recovery, not a periodic channel scanner;
+held and uncertain deliveries never create retry timers.
+
 Run the focused `test_brainforge_*` tests from `backend/`, using the existing
 test environment. Run a real pinned build/readback before transport rollout.
 Changed source hashes block consumption: ask the existing source owner to

@@ -101,10 +101,12 @@ class HydrationTests(unittest.IsolatedAsyncioTestCase):
         return result, calls
 
     async def test_real_pagination_parent_event_order_and_refs(self):
-        result, calls = await self.hydrate([
-            {"ok": True, "messages": [message("100.000001")], "response_metadata": {"next_cursor": "next"}},
-            {"ok": True, "messages": [message("100.000002"), message("100.000001")]},
-        ])
+        result, calls = await self.hydrate(
+            [
+                {"ok": True, "messages": [message("100.000001")], "response_metadata": {"next_cursor": "next"}},
+                {"ok": True, "messages": [message("100.000002"), message("100.000001")]},
+            ]
+        )
         self.assertTrue(result.complete)
         self.assertEqual([row["ts"] for row in result.messages], ["100.000001", "100.000002"])
         self.assertEqual(calls[1]["cursor"], "next")
@@ -210,7 +212,10 @@ class LedgerTests(unittest.TestCase):
         descriptor = os.open(legacy, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         os.close(descriptor)
         with sqlite3.connect(legacy) as db:
-            db.execute("CREATE TABLE receipts (team_id TEXT, channel_id TEXT, message_ts TEXT, client_id TEXT, thread_ts TEXT, payload_sha256 TEXT, state TEXT, attempts INTEGER, token TEXT, lease_until REAL, remote_ts TEXT, PRIMARY KEY(team_id,channel_id,message_ts))")
+            db.execute(
+                "CREATE TABLE receipts (team_id TEXT, channel_id TEXT, message_ts TEXT, client_id TEXT, thread_ts TEXT, payload_sha256 TEXT, "
+                "state TEXT, attempts INTEGER, token TEXT, lease_until REAL, remote_ts TEXT, PRIMARY KEY(team_id,channel_id,message_ts))"
+            )
             db.execute("INSERT INTO receipts VALUES (?,?,?,?,?,?,'queued',0,NULL,NULL,NULL)", self.key + ("synthetic-client", "100.000001", self.payload_hash))
         ledger = IntakeLedger(legacy)
         try:
@@ -278,6 +283,21 @@ class LedgerTests(unittest.TestCase):
             self.assertTrue(self.ledger.failed(claim, now=101))
             self.assertEqual(self.ledger.retry(*self.key), attempt < 3)
         self.assertIsNone(self.ledger.claim(*self.key, now=102))
+
+    def test_pending_cursor_is_bounded_and_attempt_exhaustion_is_ineligible(self):
+        for clock in [100, 102, 104]:
+            self.ledger.claim(*self.key, now=clock, lease_seconds=1)
+        self.assertEqual(self.ledger.pending(eligible_only=True), [])
+        self.assertIsNone(self.ledger.next_claim_expiry())
+        for index in range(3):
+            stamp = f"400.{index:06d}"
+            self.ledger.enqueue("T123", "C123", stamp, client_id="synthetic-client", thread_ts=stamp, payload_sha256=self.payload_hash, user_id="U123")
+        first = self.ledger.pending(2, eligible_only=True)
+        second = self.ledger.pending(2, eligible_only=True, after_rowid=first[-1]["receipt_rowid"])
+        self.assertEqual([row["message_ts"] for row in first + second], [f"400.{index:06d}" for index in range(3)])
+        for bad in [-1, True, "2"]:
+            with self.assertRaises(ValueError):
+                self.ledger.pending(eligible_only=True, after_rowid=bad)
 
     def test_two_database_handles_have_one_claim_winner(self):
         other = IntakeLedger(self.path)

@@ -13,14 +13,13 @@ import hashlib
 import importlib.util
 import json
 import os
-from pathlib import Path
 import shutil
 import stat
 import sys
 import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
-
 
 MODULE_PATH = Path(__file__).resolve().parents[1] / "app/channels/brainforge_workflow.py"
 SPEC = importlib.util.spec_from_file_location("brainforge_workflow_under_test", MODULE_PATH)
@@ -94,9 +93,7 @@ class BrainForgeWorkflowTests(unittest.TestCase):
         return {name: digest(self.root / name) for name in workflow.SOURCE_FILES}
 
     def run_workflow(self, client: str = "__owner__"):
-        return workflow.BrainForgeBriefWorkflow(self.config).run(
-            job_key="synthetic test job", client_id=client, thread_sha256=THREAD_HASH
-        )
+        return workflow.BrainForgeBriefWorkflow(self.config).run(job_key="synthetic test job", client_id=client, thread_sha256=THREAD_HASH)
 
     @unittest.skipUnless(BRIEF_SOURCE_AVAILABLE, INTEGRATION_SOURCE_REASON)
     def test_owner_receipt_real_readback_private_output_and_unchanged_inputs(self) -> None:
@@ -211,6 +208,7 @@ class BrainForgeWorkflowTests(unittest.TestCase):
         original_run = workflow.subprocess.run
         for target in ("brief", "snapshot"):
             with self.subTest(target=target):
+
                 def mutate_then_read(args, **kwargs):
                     if "read" in args:
                         manifest_path = Path(args[args.index("--manifest") + 1])
