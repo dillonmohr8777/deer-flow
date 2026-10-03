@@ -98,7 +98,7 @@ def _make_connection_repo(connection_config: ChannelConnectionsConfig | None):
         return None
 
     try:
-        from deerflow.persistence.channel_connections import ChannelConnectionRepository
+        from app.channels.connection_repository import create_channel_connection_repository
         from deerflow.persistence.engine import get_session_factory
     except Exception:
         logger.exception("Failed to import channel connection repository")
@@ -108,7 +108,7 @@ def _make_connection_repo(connection_config: ChannelConnectionsConfig | None):
     if session_factory is None:
         logger.warning("Channel connections are enabled but database persistence is not available")
         return None
-    return ChannelConnectionRepository(session_factory)
+    return create_channel_connection_repository(session_factory)
 
 
 class ChannelService:

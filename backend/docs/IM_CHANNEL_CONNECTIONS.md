@@ -459,7 +459,20 @@ Connection records live in SQL tables under `deerflow.persistence.channel_connec
 - `channel_connections`: owner user, provider identity, workspace/guild/team, status, metadata.
 - `channel_oauth_states`: one-time connect codes and Telegram deep-link state.
 - `channel_conversations`: connection-scoped IM conversation to DeerFlow thread mapping.
-- `channel_credentials`: reserved for future provider-token flows, not used by the local/private binding flow.
+- `channel_credentials`: encrypted per-connection provider tokens. The normal
+  local/private `/connect` flow does not populate this table. Credential-required
+  workflows such as Brain Forge need a separately provisioned exact-owner row.
+
+The channel service and Gateway connection repository both use the optional
+protected `CHANNEL_CONNECTIONS_ENCRYPTION_KEY` environment variable. Without a
+nonblank key, identity binding still works but credential writes are refused
+and credential reads return unavailable. Configure one stable key across the
+Gateway workers and restart after changing that configuration; existing
+repositories keep their original cipher. No key is generated, rotated, logged,
+or derived from Slack/provider tokens. A changed key cannot decrypt existing
+rows. This does not add a credential-provisioning endpoint: provision through a
+reviewed trusted host workflow with exact owner/workspace identity, and never
+put token or encryption-key values in command arguments, logs, or chat.
 
 Incoming messages that resolve to a connection carry `connection_id`, `owner_user_id`, and `workspace_id`. `ChannelManager` uses `owner_user_id` as the DeerFlow run user id and preserves the raw platform user id as `channel_user_id`.
 
