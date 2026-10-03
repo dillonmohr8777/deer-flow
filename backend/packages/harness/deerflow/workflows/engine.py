@@ -24,6 +24,7 @@ from deerflow.workflows.catalog import MAX_OUTPUT_BYTES, WorkflowDefinition, val
 from deerflow.workflows.errors import WorkflowCallbackError, WorkflowInputError, WorkflowOutputError, WorkflowResumeError, WorkflowReviewError
 
 MODEL = "gpt-6.1-sol"
+SERVER_MODELS = {MODEL, "glm-5.3-uncensored"}
 MAX_MODEL_CALLS = 5
 MAX_SUPERVISOR_MODEL_CALLS = 6
 MAX_PROMPT_BYTES = 131_072
@@ -67,6 +68,7 @@ class WorkflowState(TypedDict, total=False):
     scope_sha: str
     framework: str
     supervisor: bool
+    model: str
     inputs: dict
     workers: dict
     model_calls: int
@@ -88,12 +90,12 @@ def _text(limit: int = 1500) -> dict:
     return {"type": "string", "minLength": 1, "maxLength": limit}
 
 
-def _plan_schema(definition: WorkflowDefinition) -> dict:
+def _plan_schema(definition: WorkflowDefinition, *, low_only: bool = False) -> dict:
     return _closed(
         {
             "approach": {"type": "array", "items": _text(), "minItems": 1, "maxItems": 5},
             "producer_role": {"type": "string", "enum": [f"{definition.category}_specialist", "general_specialist"]},
-            "effort": {"type": "string", "enum": ["low", "medium", "high"]},
+            "effort": {"type": "string", "enum": ["low"] if low_only else ["low", "medium", "high"]},
             "browser_needed": {"type": "boolean", "const": definition.requires_browser},
         }
     )
@@ -127,8 +129,8 @@ def _validate_output(schema: dict, output: Any) -> dict:
     return copy.deepcopy(output)
 
 
-def _validate_receipt(result: Any, *, effort: str) -> None:
-    if not isinstance(result, dict) or result.get("model") != MODEL or result.get("effort") != effort:
+def _validate_receipt(result: Any, *, effort: str, model: str = MODEL) -> None:
+    if not isinstance(result, dict) or result.get("model") != model or result.get("effort") != effort:
         raise WorkflowCallbackError("workflow_model_receipt_invalid")
     usage = result.get("usage")
     if not isinstance(usage, dict):
@@ -201,14 +203,14 @@ class WorkflowEngine:
             raise ValueError("workflow_checkpointer_required")
         self.checkpointer = checkpointer
 
-    async def execute(self, definition, inputs, *, run_id, scope: str, framework: str, model_call, browser_call, event, resume=False, supervisor=False) -> dict:
+    async def execute(self, definition, inputs, *, run_id, scope: str, framework: str, model_call, browser_call, event, resume=False, supervisor=False, model: str = MODEL) -> dict:
         admitted = validate_inputs(definition, inputs)
         if type(supervisor) is not bool:
             raise WorkflowInputError("workflow_supervisor_mode_invalid")
-        if not isinstance(run_id, str) or not re.fullmatch(r"[A-Za-z0-9._:-]{1,128}", run_id) or not isinstance(scope, str) or not 1 <= len(scope) <= 2048 or framework not in FRAMEWORKS:
+        if not isinstance(run_id, str) or not re.fullmatch(r"[A-Za-z0-9._:-]{1,128}", run_id) or not isinstance(scope, str) or not 1 <= len(scope) <= 2048 or framework not in FRAMEWORKS or model not in SERVER_MODELS:
             raise WorkflowInputError("workflow_execution_identity_invalid")
         namespace = "momo-workflow:" + digest([scope, run_id])
-        identity: WorkflowState = {"schema_version": 1, "scope_sha": digest(scope), "definition_id": definition.id, "definition_sha": digest(definition.model_dump()), "input_sha": digest(admitted), "framework": framework}
+        identity: WorkflowState = {"schema_version": 1, "scope_sha": digest(scope), "definition_id": definition.id, "definition_sha": digest(definition.model_dump()), "input_sha": digest(admitted), "framework": framework, "model": model}
         config: RunnableConfig = {"configurable": {"thread_id": namespace}, "recursion_limit": 20}
 
         async def journal(name, status, **detail):
@@ -221,14 +223,14 @@ class WorkflowEngine:
             workers = copy.deepcopy(state.get("workers", {}))
             worker = workers.setdefault(role, {"id": "wf_" + digest([namespace, role])[:32], "history": []})
             call_id = "wc_" + digest([namespace, step, state.get("revision", 0)])
-            await journal(step, "running", worker_id=worker["id"], model=MODEL, effort=effort)
+            await journal(step, "running", worker_id=worker["id"], model=model, effort=effort)
             try:
-                result = await model_call(worker_id=worker["id"], role=role, prompt=prompt, output_schema=schema, effort=effort, model=MODEL, continuation=copy.deepcopy(worker["history"][-4:]), call_id=call_id)
+                result = await model_call(worker_id=worker["id"], role=role, prompt=prompt, output_schema=schema, effort=effort, model=model, continuation=copy.deepcopy(worker["history"][-4:]), call_id=call_id)
             except asyncio.CancelledError:
                 raise
             except Exception:
                 raise WorkflowCallbackError("workflow_model_call_failed") from None
-            _validate_receipt(result, effort=effort)
+            _validate_receipt(result, effort=effort, model=model)
             output = _validate_output(schema, result.get("output"))
             brief = (
                 prompt
@@ -296,7 +298,7 @@ class WorkflowEngine:
                 "Do not send, publish, purchase, change budgets, or invent facts.\n"
                 f"Acceptance: {canonical_bytes(definition.acceptance).decode()}\nAdmitted context: {source_context(state)}"
             )
-            output, writes = await call(state, "plan", "planner", prompt, _plan_schema(definition), "low")
+            output, writes = await call(state, "plan", "planner", prompt, _plan_schema(definition, low_only=model != MODEL), "low")
             return {**writes, "plan": output}
 
         async def draft(state):
@@ -328,7 +330,7 @@ class WorkflowEngine:
                 f"Bind your decision to output_sha256={plan_hash}.\nPlan: {canonical_bytes(state['plan']).decode()}\n"
                 f"Criteria: {canonical_bytes(definition.acceptance).decode()}\nAdmitted context: {source_context(state)}"
             )
-            output, writes = await call(state, "review_plan", "plan_reviewer", prompt, _review_schema(definition, plan_hash), "medium")
+            output, writes = await call(state, "review_plan", "plan_reviewer", prompt, _review_schema(definition, plan_hash), "low" if model != MODEL else "medium")
             names = [check["criterion"] for check in output["checks"]]
             if len(set(names)) != len(definition.acceptance) or set(names) != set(definition.acceptance):
                 raise WorkflowReviewError("workflow_plan_review_criteria_incomplete")
@@ -347,7 +349,7 @@ class WorkflowEngine:
                 f"Criteria: {canonical_bytes(definition.acceptance).decode()}\nCandidate: {canonical_bytes(state['draft']).decode()}\n"
                 f"Admitted context: {source_context(state)}"
             )
-            output, writes = await call(state, "verify", "verifier", prompt, _review_schema(definition, output_hash), "medium")
+            output, writes = await call(state, "verify", "verifier", prompt, _review_schema(definition, output_hash), "low" if model != MODEL else "medium")
             names = [check["criterion"] for check in output["checks"]]
             if len(set(names)) != len(definition.acceptance) or set(names) != set(definition.acceptance):
                 raise WorkflowReviewError("workflow_review_criteria_incomplete")
@@ -384,7 +386,7 @@ class WorkflowEngine:
             snapshot = await graph.aget_state(config)
             existing = snapshot.values
             if existing:
-                if any(existing.get(key) != value for key, value in identity.items()) or existing.get("supervisor", False) != supervisor:
+                if any(existing.get(key, MODEL if key == "model" else None) != value for key, value in identity.items()) or existing.get("supervisor", False) != supervisor:
                     raise WorkflowResumeError("workflow_checkpoint_identity_mismatch")
                 if not snapshot.next and existing.get("accepted"):
                     return {"output": existing["draft"], "evidence": existing["evidence"], "accepted": True}
