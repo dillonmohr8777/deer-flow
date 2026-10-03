@@ -6,6 +6,8 @@ const path = require("node:path");
 const crypto = require("node:crypto");
 const { execFileSync } = require("node:child_process");
 const { packager } = require("@electron/packager");
+const manifest = require("../package.json");
+const { releaseSigning, validateSourceRevision, publicReleaseMetadata } = require("../src/release-config.cjs");
 
 const root = path.resolve(__dirname, "..");
 
@@ -16,6 +18,14 @@ function run(command, args) {
 
 async function main() {
   if (process.platform !== "darwin" || process.arch !== "arm64") throw new Error("This build targets Apple Silicon macOS.");
+  const signing = releaseSigning(process.env);
+  const revision = validateSourceRevision(run("git", ["-C", root, "rev-parse", "HEAD"]));
+  const dirty = Boolean(run("git", ["-C", root, "status", "--porcelain", "--", ".", "../frontend/public/icons/icon-512.png"]));
+  if (signing.mode === "developer-id" && dirty) throw new Error("Developer ID releases require committed desktop and icon sources.");
+  if (signing.identity) {
+    const identities = run("security", ["find-identity", "-v", "-p", "codesigning"]);
+    if (!identities.includes(`"${signing.identity}"`)) throw new Error("Configured Developer ID signing identity is unavailable.");
+  }
   const releaseRoot = process.env.MOMOBOT_RELEASE_DIR || path.join(os.homedir(), "Documents/Codex/momobot-openai-app-release");
   const stamp = new Date().toISOString().replace(/[:.]/gu, "-");
   const destination = path.join(releaseRoot, `build-${stamp}`);
@@ -37,44 +47,61 @@ async function main() {
     dir: root,
     name: "MomoBot",
     appBundleId: "com.momentum.momobot.openai",
-    appVersion: "0.1.0",
+    appVersion: manifest.version,
     platform: "darwin",
     arch: "arm64",
-    electronVersion: require("../package.json").devDependencies.electron,
+    electronVersion: manifest.devDependencies.electron,
+    ...(signing.identity ? { osxSign: { identity: signing.identity, continueOnError: false, optionsForFile: () => ({ hardenedRuntime: true }) } } : {}),
     out: destination,
     icon,
     asar: true,
     prune: true,
     overwrite: false,
-    ignore: [/^\/\.build(?:\/|$)/u, /^\/tests(?:\/|$)/u, /^\/scripts(?:\/|$)/u, /^\/out(?:\/|$)/u, /^\/README\.md$/u, /^\/package-lock\.json$/u],
+    ignore: (candidate) => Boolean(candidate) && !/^\/(?:src|ui|assets|node_modules)(?:\/|$)/u.test(candidate) && !/^\/(?:package\.json|LICENSE)$/u.test(candidate),
     extendInfo: {
       NSMicrophoneUsageDescription: "MomoBot uses your microphone only when you start voice input in your workspace.",
     },
   });
   const appPath = path.join(bundleDirectory, "MomoBot.app");
-  // An ad-hoc signature validates this local build's integrity; it is not a
-  // Developer ID signature and does not certify it for external distribution.
-  run("codesign", ["--force", "--deep", "--sign", "-", appPath]);
+  if (signing.mode === "ad-hoc") run("codesign", ["--force", "--deep", "--sign", "-", appPath]);
   run("codesign", ["--verify", "--deep", "--strict", appPath]);
   const zipPath = path.join(destination, "MomoBot-mac-arm64.zip");
   const dmgPath = path.join(destination, "MomoBot-mac-arm64.dmg");
   run("ditto", ["-c", "-k", "--sequesterRsrc", "--keepParent", appPath, zipPath]);
   run("hdiutil", ["create", "-volname", "MomoBot", "-srcfolder", bundleDirectory, "-format", "UDZO", dmgPath]);
+  if (signing.profile) {
+    // Existing Keychain profile only; no password, API key, or certificate is exported.
+    const appResult = JSON.parse(run("xcrun", ["notarytool", "submit", zipPath, "--keychain-profile", signing.profile, "--wait", "--output-format", "json"]));
+    if (appResult.status !== "Accepted") throw new Error("Application notarization was not accepted.");
+    run("xcrun", ["stapler", "staple", appPath]);
+    run("xcrun", ["stapler", "validate", appPath]);
+    // Replace only artifacts created in this new build directory with stapled contents.
+    await fs.unlink(zipPath);
+    await fs.unlink(dmgPath);
+    run("ditto", ["-c", "-k", "--sequesterRsrc", "--keepParent", appPath, zipPath]);
+    run("hdiutil", ["create", "-volname", "MomoBot", "-srcfolder", bundleDirectory, "-format", "UDZO", dmgPath]);
+    run("codesign", ["--sign", signing.identity || "", "--timestamp", dmgPath]);
+    const dmgResult = JSON.parse(run("xcrun", ["notarytool", "submit", dmgPath, "--keychain-profile", signing.profile, "--wait", "--output-format", "json"]));
+    if (dmgResult.status !== "Accepted") throw new Error("Disk image notarization was not accepted.");
+    run("xcrun", ["stapler", "staple", dmgPath]);
+    run("xcrun", ["stapler", "validate", dmgPath]);
+    run("spctl", ["--assess", "--type", "execute", appPath]);
+  }
   /** @type {Record<string,string>} */
   const checksums = {};
-  const artifact = {
+  for (const file of [zipPath, dmgPath]) checksums[path.basename(file)] = crypto.createHash("sha256").update(await fs.readFile(file)).digest("hex");
+  const artifact = publicReleaseMetadata({
+    version: manifest.version,
     builtAt: new Date().toISOString(),
-    appPath,
-    zipPath,
-    dmgPath,
-    platform: "darwin-arm64",
-    electron: require("../package.json").devDependencies.electron,
-    signing: "ad-hoc local signature; no Developer ID identity; not notarized",
-    apiCredentialsBundled: false,
-    sha256: checksums,
-  };
-  for (const file of [zipPath, dmgPath]) artifact.sha256[path.basename(file)] = crypto.createHash("sha256").update(await fs.readFile(file)).digest("hex");
+    electron: manifest.devDependencies.electron,
+    revision,
+    dirty,
+    signing: signing.mode === "developer-id" ? "Developer ID signed; Apple notarized; app and DMG tickets stapled and validated" : "ad-hoc local signature; not notarized",
+    checksums,
+  });
   await fs.writeFile(path.join(destination, "release.json"), `${JSON.stringify(artifact, null, 2)}\n`);
+  await fs.writeFile(path.join(destination, "build-paths.json"), `${JSON.stringify({ appPath, zipPath, dmgPath }, null, 2)}\n`, { mode: 0o600 });
+  await fs.writeFile(path.join(destination, "SHA256SUMS"), Object.entries(checksums).map(([filename, digest]) => `${digest}  ${filename}\n`).join(""));
   process.stdout.write(`${JSON.stringify(artifact, null, 2)}\n`);
 }
 

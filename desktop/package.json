@@ -1,9 +1,9 @@
 {
   "name": "momobot-openai-desktop",
   "productName": "MomoBot",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
-  "description": "MomoBot desktop workspace for the OpenAI agent runtime.",
+  "description": "MomoBot desktop app for the existing private Momentum agency.",
   "main": "src/main.cjs",
   "scripts": {
     "start": "electron .",

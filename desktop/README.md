@@ -1,6 +1,6 @@
 # MomoBot desktop
 
-This Apple Silicon macOS application opens the MomoBot OpenAI workspace in a persistent, isolated Electron session. It packages the interface shell, not the MomoBot backend or an OpenAI API key. First launch asks for the workspace URL; the default is `http://127.0.0.1:3040/workspace/openai`, the local reviewed application entry. A hosted workspace must use HTTPS. The MomoBot menu's Connection command changes the endpoint later.
+This Apple Silicon macOS application opens the existing MomoBot private agency in a persistent, isolated Electron session. It packages the interface shell, not the MomoBot backend or an OpenAI API key. First launch asks for the workspace URL; the default is `http://127.0.0.1:2030/workspace`, the original local private agency entry. A hosted workspace must use HTTPS. The MomoBot menu's Connection command changes the endpoint later.
 
 The shell has context isolation, renderer sandboxing, web security, no Node integration, no preload bridge, and exact-origin navigation. External HTTPS links require an explicit in-app confirmation before opening in the system browser. Unknown protocols and camera/notification permissions are blocked. Same-origin microphone input may request native macOS consent when the website asks for audio. Sign in through the workspace's password/MFA form; this shell does not import browser cookies. SSO redirects to other origins are treated as external links, so browser SSO does not transfer a completed session into this app.
 
@@ -27,6 +27,8 @@ npm run package:mac
 
 The packaging script reuses the exact existing `frontend/public/icons/icon-512.png` artwork to generate an ICNS. It creates `.app`, ZIP, DMG, checksums, and `release.json` in a new timestamped directory under `~/Documents/Codex/momobot-openai-app-release`; it does not overwrite an earlier release. Set `MOMOBOT_RELEASE_DIR` to choose another output root.
 
-Electron is pinned to `44.5.0`, the latest available npm stable version verified during the build. GitHub had announced `44.5.1`, but npm returned 404 for that exact package version, so an unavailable version is not used.
+Electron is pinned to `44.5.0` through the existing lockfile. This release keeps that tested runtime.
 
-The generated build has an ad-hoc integrity signature. It has no Developer ID signature and has not been notarized. Normal external macOS distribution still requires an installed Apple Developer ID identity and notarization. No signing identities or iPhone SDK were installed during this task.
+By default, packaging uses an ad-hoc local integrity signature and does not claim notarization. For trusted distribution, set both `MOMOBOT_SIGNING_IDENTITY` to an existing Developer ID Application identity name and `MOMOBOT_NOTARY_PROFILE` to an existing notarytool Keychain profile name. Partial or malformed configuration fails before building. This path signs through Electron Packager, requires Apple acceptance, staples and validates tickets on the app and DMG, and assesses the app with Gatekeeper. No raw signing credentials enter the package or release metadata.
+
+`release.json` contains public metadata and artifact basenames only; `SHA256SUMS` verifies ZIP and DMG. `build-paths.json` is a local private locator receipt and must not be uploaded. The package includes only runtime source, UI, exact assets and package metadata. See [distribution instructions](../docs/MOMOBOT_DESKTOP_DISTRIBUTION.md) for publishing boundaries.
