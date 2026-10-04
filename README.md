@@ -2444,6 +2444,13 @@ contain no API keys. See [release setup](docs/MOMOBOT_APP_RELEASE.md),
 
 The workflow, hosted crew and browser rooms retain session-only admission, owner/workspace fences and uncertain-call holds alongside the existing private Agent Room and native startup controls. Integration preserves the current migration graph; deployment and accepted output still require their own runtime evidence.
 
+Brain Forge adds a scoped, opt-in Slack `brief` workflow backed by the existing
+private daily-brief builder and read-only canonical sources. The offline
+`brainforge_cli prepare` and `check` commands create and validate a disabled
+configuration candidate. Exact owner binding, encrypted connection credentials,
+source acceptance and an authorized live canary remain separate host checks;
+see [Brain Forge setup](backend/app/channels/BRAINFORGE.md).
+
 The opt-in **Workflows** room at `/workspace/workflows` adds 120 concrete recipes:
 100 Momentum marketing, operations and development tasks plus 20 personal
 writing, music, research, coding and administration tasks. Each recipe has a
