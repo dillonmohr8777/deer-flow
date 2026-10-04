@@ -20,7 +20,7 @@ async function main() {
   if (process.platform !== "darwin" || process.arch !== "arm64") throw new Error("This build targets Apple Silicon macOS.");
   const signing = releaseSigning(process.env);
   const revision = validateSourceRevision(run("git", ["-C", root, "rev-parse", "HEAD"]));
-  const dirty = Boolean(run("git", ["-C", root, "status", "--porcelain", "--", ".", "../frontend/public/icons/icon-512.png"]));
+  const dirty = Boolean(run("git", ["-C", root, "status", "--porcelain", "--", "."]));
   if (signing.mode === "developer-id" && dirty) throw new Error("Developer ID releases require committed desktop and icon sources.");
   if (signing.identity) {
     const identities = run("security", ["find-identity", "-v", "-p", "codesigning"]);
@@ -30,7 +30,7 @@ async function main() {
   const stamp = new Date().toISOString().replace(/[:.]/gu, "-");
   const destination = path.join(releaseRoot, `build-${stamp}`);
   const iconset = path.join(root, ".build/MomoBot.iconset");
-  const iconSource = path.resolve(root, "../frontend/public/icons/icon-512.png");
+  const iconSource = path.join(root, "branding/momobot-design-c-v1.png");
   const assets = path.join(root, "assets");
   await fs.mkdir(iconset, { recursive: true });
   await fs.mkdir(assets, { recursive: true });

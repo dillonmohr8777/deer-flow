@@ -2442,6 +2442,11 @@ contain no API keys. See [release setup](docs/MOMOBOT_APP_RELEASE.md),
 [OpenAI lifecycle](backend/docs/MOMOBOT_OPENAI_LIFECYCLE.md), and
 [Browserbase configuration](backend/docs/BROWSERBASE_APP.md).
 
+MomoBot desktop 0.2.1 uses the official Design C headshot for its macOS icon and
+connection screen. The exact artwork and generation provenance live in
+[desktop branding](desktop/branding/SOURCES.md); web/PWA branding has its own
+deployment state.
+
 The workflow, hosted crew and browser rooms retain session-only admission, owner/workspace fences and uncertain-call holds alongside the existing private Agent Room and native startup controls. Integration preserves the current migration graph; deployment and accepted output still require their own runtime evidence.
 
 Brain Forge adds a scoped, opt-in Slack `brief` workflow backed by the existing

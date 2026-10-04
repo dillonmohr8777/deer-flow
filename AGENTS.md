@@ -254,6 +254,12 @@ operations idempotent. PWA offline caches contain generic public assets only.
 The separate `desktop/` Electron shell has no native renderer bridge. See
 `docs/MOMOBOT_APP_RELEASE.md` for lifecycle and release checks.
 
+Desktop branding uses the immutable Design C PNG in `desktop/branding/`, with
+provenance in its `SOURCES.md`. Packaging derives the native connection icon and
+standard ICNS resolutions from those bytes. Keep desktop source/lock versions
+aligned; a desktop-only release does not change backend/Helm versions or activate
+the private agency. Web/PWA assets retain their separate source and deploy checks.
+
 The offline backend suite includes actual isolated framework handoffs. Its CI
 shards install the frozen sibling worker environments and Node builds before
 pytest; preserve the real availability, relay and cleanup assertions. Worker
