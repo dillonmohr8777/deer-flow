@@ -201,12 +201,10 @@ startup gate rejects process-local memory and JSONL event stores when
 - Thread-scoped run creation accepts an optional `Idempotency-Key` header on create, stream, and wait. Gateway hashes the caller key with the authenticated owner and `thread_id` before passing it to `RunManager`, whose persistence index is process-wide; never pass an unscoped external key to that index. The same scoped key is shared across `/runs`, `/runs/stream`, and `/runs/wait`; a reused admission whose stored `input` or `assistant_id` differs from the retry returns 409. `/wait` must not treat `task is None` as completion: `store_only` records without a cross-process bridge return durable `status`/`error` instead of serializing the current checkpoint; otherwise wait on the bridge. An idempotent reuse must not serialize the latest thread checkpoint as this run's result, since a later run on the same thread may have advanced the head, so reused `/wait` returns durable `status`/`error`. Capture that reuse decision before awaiting completion; `idempotency_reused` is sticky on the shared cached record and an overlapping retry must not suppress the original creating request's checkpoint. After observing completion, refresh store-backed `status`/`error` before returning them — a hydrated peer record still holds admission-time fields. A creating-endpoint retry of a terminal record whose stream is gone emits SSE `gap`/`stream_replay_gap` with `recovery: reload_durable_state` rather than a bare `end`; observer joins of that same record still emit `end`. That gap is opt-in via `sse_consumer(..., emit_gap_on_missing_stream=True)` from thread-scoped `/runs/stream` on reuse — not keyed off `apply_on_disconnect` or the sticky `idempotency_reused` flag. Default `sse_consumer` callers, including stateless `/api/runs/stream`, still emit `end`. A reused still-running `store_only` record on a process-local bridge returns 409 from `/stream` with no `Retry-After`, matching `join`. Missing headers preserve ordinary non-idempotent admission. Stateless `/api/runs/*` stays outside this contract since a request without an explicit thread creates a fresh temporary thread before admission.
 - The goal-continuation evaluation loop for thread-scoped runs is fully specified in [RunManager / RunStore contract](../../docs/RUN_STORE_CONTRACT.md).
 
-Proxied through nginx: `/api/langgraph/*` → Gateway LangGraph-compatible runtime, all other `/api/*` → Gateway REST APIs.
-
-**Thread lifecycle**: Before changing branching, regeneration, edit replay, or
-archive/search behavior, read [Thread lifecycle invariants](../../docs/THREAD_LIFECYCLE.md).
-It owns lineage and settled-checkpoint rules, legacy fallback boundaries, archive
-filtering before pagination, owner isolation, and activity-time preservation.
+Nginx routes `/api/langgraph/*` to LangGraph runtime; other `/api/*` to REST.
+Before branching, regeneration, edit replay or archive/search changes, read
+[Thread lifecycle](../../docs/THREAD_LIFECYCLE.md): lineage, settled checkpoints,
+legacy fallbacks, archive filtering before pagination, owner isolation and activity time.
 
 Capability installation IDs must be unique for MCP create/replace/state writes.
 Single-server DELETE keeps schema validation but allows residual identity
@@ -252,3 +250,6 @@ accepted output or installation; billed cost remains unknown unless receipted.
 Details and scoped tests: [WORKFLOWS.md](../../docs/WORKFLOWS.md).
 
 HAI stays disabled; see WORKFLOWS.md.
+
+Pure unsent `jevbox_evidence.py`: trusted admission, no JSON authority or dispatch;
+see [contract](../../docs/JEVBOX_EVIDENCE.md).
