@@ -248,7 +248,7 @@ These apply repo-wide; module guides own the module-specific detail.
 ## MomoBot app surfaces
 
 Opt-in OpenAI and Browserbase adapters belong in Gateway, not the harness.
-Private SQLite receipts track ownership/admission, not another client registry.
+Private SQLite receipts track ownership/admission, not a client registry.
 Keep credentials server-side and paid operations idempotent. PWA offline caches
 hold generic public assets only. The `desktop/` Electron shell has no native
 renderer bridge; see `desktop/AGENTS.md` for branding/source checks and
