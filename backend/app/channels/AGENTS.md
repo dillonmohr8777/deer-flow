@@ -80,6 +80,12 @@ The cached value is reused for both the blocking (`runs.wait`) and streaming (`_
 
 Brain Forge is an opt-in path of the existing Slack adapter. Persist exact scoped admission before ACK, retain owner/connection/thread gates and delivery-ambiguity holds, and keep canonical registry/queue/CONTROL read-only. The optional project compiler binds reviewed research/native request packets to the same private brief receipt; it does not dispatch. Keep private evidence and secrets outside source. See [BRAINFORGE.md](BRAINFORGE.md).
 
+`brainforge_research_handoff.py` reads pinned original-pilot proposals and complete
+review-selected source posts into the existing native research schema. Run the
+original producer only upstream; compilation/readback never imports it, opens
+its ledger or writes research artifacts. Preserve the reviewed-JS default and
+reject mixed modes, research overrides, source drift and credential-shaped data.
+
 `brainforge_cli prepare` and `check` delegate to `brainforge_setup.py` without
 builder, transport or live-config mutation. Candidate pins are unreviewed;
 preparation keeps the feature disabled and requires a connection. Both the

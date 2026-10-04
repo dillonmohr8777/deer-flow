@@ -2451,6 +2451,11 @@ configuration candidate. Exact owner binding, encrypted connection credentials,
 source acceptance and an authorized live canary remain separate host checks;
 see [Brain Forge setup](backend/app/channels/BRAINFORGE.md).
 
+The original research pilot's pinned proposals and whole reviewed evidence can
+join that same private brief/project receipt through an offline adapter. It
+prepares native research inputs without collecting, spending or dispatching;
+client marketing facts and useful resulting output still require their review.
+
 The opt-in **Workflows** room at `/workspace/workflows` adds 120 concrete recipes:
 100 Momentum marketing, operations and development tasks plus 20 personal
 writing, music, research, coding and administration tasks. Each recipe has a
