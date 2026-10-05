@@ -16,6 +16,7 @@ class ModelConfig(BaseModel):
 
     name: str = Field(..., description="Unique name for the model")
     request_admission: RequestAdmissionConfig | None = Field(default=None, description="Opt-in process-local RPM pacing. Changing an active group's policy requires a process restart.")
+    admission_route: str | None = Field(default=None, description="Paid-route admission key (see models/paid_admission.py). Unset infers openrouter.ai only; anything else is denied. Set `local` explicitly for $0 models.")
     display_name: str | None = Field(..., default_factory=lambda: None, description="Display name for the model")
     description: str | None = Field(..., default_factory=lambda: None, description="Description for the model")
     use: str = Field(
