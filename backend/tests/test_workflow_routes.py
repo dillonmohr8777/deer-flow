@@ -167,6 +167,47 @@ async def test_jevbox_preparation_route_is_unavailable_without_binding(api):
     assert response.json()["detail"] == "preparation_unavailable"
 
 
+async def test_jevbox_status_is_read_only_scope_bound_and_available_when_execution_is_disabled(api):
+    await jevbox_owner_scope(api)
+    raw, context = jevbox_route_case()
+    del raw
+    api.app.state.jevbox_preparation_binding = JevboxPreparationBinding(context)
+    api.app.state.workflow_service = None
+    headers = {**session_headers(), "X-Expected-User-Id": ALICE}
+    response = await api.client.get("/api/workflows/jevbox/status", headers=headers)
+    assert response.status_code == 200
+    assert set(response.json()) == {"owner_scope", "preparation_available", "current_review", "dispatch_enabled"}
+    assert response.json()["preparation_available"] is True
+    assert response.json()["current_review"] is True
+    assert response.json()["dispatch_enabled"] is False
+    assert response.headers["cache-control"] == "private, no-store"
+    assert api.adapter.calls == []
+    assert (await api.client.get("/api/workflows/status", headers=headers)).status_code == 503
+    cross_workspace = await api.client.get(
+        "/api/workflows/jevbox/status",
+        headers={**session_headers(organization="org-b"), "X-Expected-User-Id": ALICE},
+    )
+    assert cross_workspace.status_code == 200
+    assert cross_workspace.json()["preparation_available"] is False
+    assert cross_workspace.json()["current_review"] is False
+    assert set(cross_workspace.json()) == set(response.json())
+
+
+async def test_jevbox_status_requires_actor_fence_and_marks_expired_review(api):
+    await jevbox_owner_scope(api)
+    raw, context = jevbox_route_case(expires=datetime.now(UTC) - timedelta(seconds=1))
+    del raw
+    api.app.state.jevbox_preparation_binding = JevboxPreparationBinding(context)
+    headers = session_headers()
+    stale = await api.client.get("/api/workflows/jevbox/status", headers={**headers, "X-Expected-User-Id": BOB})
+    assert stale.status_code == 409 and stale.json()["detail"] == "workspace_scope_changed"
+    expired = await api.client.get("/api/workflows/jevbox/status", headers={**headers, "X-Expected-User-Id": ALICE})
+    assert expired.status_code == 200
+    assert expired.json()["preparation_available"] is True
+    assert expired.json()["current_review"] is False
+    assert expired.json()["dispatch_enabled"] is False
+
+
 async def test_jevbox_preparation_route_uses_authenticated_scope_and_never_calls_workflow_service(api):
     scope = await jevbox_owner_scope(api)
     raw, context = jevbox_route_case()

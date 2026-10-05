@@ -85,6 +85,37 @@ async def catalog(request: Request):
     return {"workflows": [definition.model_dump() if hasattr(definition, "model_dump") else dict(definition) for definition in definitions], "total": len(definitions)}
 
 
+@router.get("/jevbox/status")
+@require_permission("runs", "read")
+async def jevbox_preparation_status(request: Request):
+    """Return only scope-bound preparation availability metadata."""
+    actor, organization, storage, scope = _identity(request)
+    if not hmac.compare_digest(request.headers.get("X-Expected-User-Id", "").encode(), actor.encode()):
+        raise HTTPException(409, detail="workspace_scope_changed")
+    binding = getattr(request.app.state, "jevbox_preparation_binding", None)
+    if not isinstance(binding, JevboxPreparationBinding):
+        return {
+            "owner_scope": scope,
+            "preparation_available": False,
+            "current_review": False,
+            "dispatch_enabled": False,
+        }
+    context = binding.context
+    available = (actor, organization, storage) == (
+        context.actor_user_id,
+        context.momo_organization_id,
+        context.storage_user_id,
+    )
+    now = datetime.now(UTC)
+    current_review = bool(available and context.expected_reviewed_at <= now <= context.review_expires_at)
+    return {
+        "owner_scope": scope,
+        "preparation_available": bool(available),
+        "current_review": current_review,
+        "dispatch_enabled": False,
+    }
+
+
 async def _bounded_body(request: Request) -> bytes:
     length = request.headers.get("content-length")
     if length is not None:

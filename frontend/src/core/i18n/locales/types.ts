@@ -1687,4 +1687,34 @@ export interface Translations {
       addError: string;
     };
   };
+
+  workflowPreparation: {
+    title: string;
+    description: string;
+    tag: string;
+    checking: string;
+    statusFailed: string;
+    refresh: string;
+    unavailable: string;
+    expired: string;
+    uploadHint: string;
+    fileLabel: string;
+    fileSizeInvalid: string;
+    selectedFile: (name: string, bytes: number) => string;
+    preparing: string;
+    prepare: string;
+    clear: string;
+    limitations: string;
+    unsent: string;
+    synthetic: string;
+    reviewed: string;
+    brief: string;
+    question: string;
+    sources: string;
+    context: string;
+    sourceReview: string;
+    scopeChanged: string;
+    reviewExpired: string;
+    failed: string;
+  };
 }

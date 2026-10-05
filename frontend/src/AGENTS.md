@@ -242,3 +242,15 @@ The optional plan-review checkbox submits `supervisor: true` only when selected.
 It is locked with the admitted inputs during an uncertain request. Run detail
 shows the persisted mode and existing `review_plan` timeline events; this never
 raises the server budget or treats model acceptance as owner approval.
+
+The optional Jevbox reviewed-source pane queries preparation metadata independently
+of paid workflow availability. Read the selected UI workspace and the server's
+actual owner scope separately; a null UI selection can represent the owner's
+nonnull private organization. Keep packet and proposal text in component memory,
+never query caches or browser storage. Upload exact File bytes through the shared
+CSRF fetcher; do not parse and serialize the packet again. Validate bounded closed
+responses, source hashes and false execution flags before displaying plain text.
+Match backend text limits with Unicode code points and transport limits with
+UTF-8 bytes. Scope/status failures and expired reviews must hide previews
+immediately, clear files, abort owned requests and ignore late completions.
+Preparing a proposal must not call run creation or enable paid execution.
