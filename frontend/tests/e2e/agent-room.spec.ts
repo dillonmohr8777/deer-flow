@@ -3,6 +3,79 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 import { mockLangGraphAPI } from "./utils/mock-api";
 
 const ROOM_PATH = "/workspace/desk/agent-room";
+
+// Resolve the actual rendered colours, including OKLCH and transparent parents.
+// This catches a light-treatment selector winning after dark mode is selected.
+async function roomTextContrast(page: Page) {
+  return page.evaluate(() => {
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = 1;
+    const context = canvas.getContext("2d")!;
+    const rgba = (color: string) => {
+      context.clearRect(0, 0, 1, 1);
+      context.fillStyle = color;
+      context.fillRect(0, 0, 1, 1);
+      return [...context.getImageData(0, 0, 1, 1).data];
+    };
+    const mix = (front: number[], back: number[]) => {
+      const alpha = front[3]! / 255;
+      return front
+        .slice(0, 3)
+        .map((v, i) => v * alpha + back[i]! * (1 - alpha));
+    };
+    const luminance = (color: number[]) => {
+      const linear = color.map((v) => {
+        const s = v / 255;
+        return s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+      });
+      return linear[0]! * 0.2126 + linear[1]! * 0.7152 + linear[2]! * 0.0722;
+    };
+    return [
+      ...document.querySelectorAll(
+        "main h1,main h2,main h3,main p,main time,main label,main span,main strong,main textarea,main button,main a,main input",
+      ),
+    ]
+      .filter(
+        (element) =>
+          element.getClientRects().length > 0 &&
+          (element.textContent?.trim() || element.tagName === "TEXTAREA"),
+      )
+      .map((element) => {
+        const parents: Element[] = [];
+        for (
+          let parent: Element | null = element;
+          parent;
+          parent = parent.parentElement
+        )
+          parents.unshift(parent);
+        let background = [255, 255, 255];
+        let parentBackground = background;
+        for (const parent of parents) {
+          parentBackground = background;
+          background = mix(
+            rgba(getComputedStyle(parent).backgroundColor),
+            background,
+          );
+        }
+        let foreground = mix(rgba(getComputedStyle(element).color), background);
+        const opacity = Number(getComputedStyle(element).opacity);
+        foreground = foreground.map(
+          (v, i) => v * opacity + parentBackground[i]! * (1 - opacity),
+        );
+        background = background.map(
+          (v, i) => v * opacity + parentBackground[i]! * (1 - opacity),
+        );
+        const a = luminance(foreground),
+          b = luminance(background);
+        return {
+          text: element.textContent?.trim().slice(0, 70) ?? "textarea",
+          foreground,
+          background,
+          ratio: (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05),
+        };
+      });
+  });
+}
 const MESSAGE = {
   id: "review-message",
   user_id: "default",
@@ -83,6 +156,60 @@ async function expectTouchTarget(locator: Locator) {
   expect(box, "visible touch target").not.toBeNull();
   expect(box!.height).toBeGreaterThanOrEqual(44);
   expect(box!.width).toBeGreaterThanOrEqual(44);
+}
+
+for (const theme of ["light", "dark"]) {
+  for (const width of [390, 768, 1440]) {
+    test(`paper room text stays readable in ${theme} at ${width}px`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 900 });
+      await page.addInitScript(
+        (theme) => localStorage.setItem("theme", theme),
+        theme,
+      );
+      await mockRoom(page);
+      await page.goto(ROOM_PATH);
+      await expect(
+        page.getByRole("heading", { name: "Agent Room" }),
+      ).toBeVisible();
+      await expect(page.locator("html")).toHaveAttribute(
+        "data-treatment",
+        "paper",
+      );
+      const readings = await roomTextContrast(page);
+      expect(readings.length).toBeGreaterThan(15);
+      expect(readings.filter((reading) => reading.ratio < 4.5)).toEqual([]);
+    });
+  }
+  for (const treatment of ["classic", "current", "space", "future", "retro"]) {
+    test(`${treatment} room text stays readable in ${theme}`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: 390, height: 900 });
+      await page.addInitScript(
+        ({ theme, treatment }) => {
+          localStorage.setItem("theme", theme);
+          localStorage.setItem(
+            "momentum:appearance:v1:default",
+            JSON.stringify({ treatment, motion: false }),
+          );
+        },
+        { theme, treatment },
+      );
+      await mockRoom(page);
+      await page.goto(ROOM_PATH);
+      await expect(
+        page.getByRole("heading", { name: "Agent Room" }),
+      ).toBeVisible();
+      await expect(page.locator("html")).toHaveAttribute(
+        "data-treatment",
+        treatment,
+      );
+      const readings = await roomTextContrast(page);
+      expect(readings.filter((reading) => reading.ratio < 4.5)).toEqual([]);
+    });
+  }
 }
 
 for (const width of [390, 768, 1440]) {

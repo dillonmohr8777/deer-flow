@@ -65,6 +65,10 @@
 :root:not(.dark) [data-workspace-shell][data-treatment="retro"] {
   --background: var(--retro-navy);
   --foreground: var(--retro-cream);
+  --status-ok: var(--retro-ok);
+  --status-active: var(--retro-amber);
+  --status-attention: var(--retro-amber);
+  --status-danger: var(--retro-danger);
   --card: var(--retro-navy-hi);
   --card-foreground: var(--retro-cream);
   --popover: var(--retro-navy-hi);

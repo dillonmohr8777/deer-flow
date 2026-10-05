@@ -12,6 +12,7 @@ from typing import Any, Literal
 from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 
+from app.channels.connection_repository import create_channel_connection_repository
 from app.channels.runtime_config_store import (
     ChannelRuntimeConfigStore,
     apply_runtime_connection_config,
@@ -222,7 +223,7 @@ def _get_repository(request: Request, config: ChannelConnectionsConfig) -> Chann
     if sf is None:
         raise HTTPException(status_code=503, detail="Channel connection persistence is not available")
 
-    repo = ChannelConnectionRepository(sf)
+    repo = create_channel_connection_repository(sf)
     request.app.state.channel_connection_repo = repo
     return repo
 

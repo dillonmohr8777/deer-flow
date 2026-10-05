@@ -559,3 +559,7 @@ See the [LICENSE](../LICENSE) file in the project root.
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines.
+
+## Brain Forge private project
+
+The opt-in existing Slack brief workflow can bind a private daily brief and reviewed native workflow requests to one protected receipt. It performs no model call or canonical write. Review [BRAINFORGE.md](app/channels/BRAINFORGE.md) before configuring accepted sources and the existing owner connection. The fixed native HAI route is opt-in and unavailable without original-owner currency admission; provider qualification and source tests do not establish live output. See [WORKFLOWS.md](docs/WORKFLOWS.md).

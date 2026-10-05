@@ -238,3 +238,7 @@ Only reported available frameworks can execute. Interrupted resume preserves
 the original run budget. Completion is separate from acceptance; accepted
 artifact downloads must match their durable byte count and SHA-256. Anonymous
 and static pages make no workflow API calls. Example inputs are synthetic.
+The optional plan-review checkbox submits `supervisor: true` only when selected.
+It is locked with the admitted inputs during an uncertain request. Run detail
+shows the persisted mode and existing `review_plan` timeline events; this never
+raises the server budget or treats model acceptance as owner approval.

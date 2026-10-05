@@ -4,7 +4,7 @@ The private standby shipped `0040_agent_room_messages` directly after
 `0039_team_board_academy`; the lane independently shipped `0040_agent_seats`
 after the same parent and continues through `0046_organization_entitlements`.
 Keep both historical parent edges intact. `0047_merge_agent_room_exec` is the
-single no-DDL merge head joining the two histories; Alembic must execute the
+no-DDL merge revision joining the two histories; Alembic must execute the
 missing branch on upgrade from either side. Never repair this by stamping,
 resetting, or reparenting the shipped room revision. The original room table
 and its owner-scoped handoffs must survive. Tests live in
@@ -196,3 +196,12 @@ on installs that never enabled it. The convention is:
 - `persistence/bootstrap.py` — `bootstrap_schema(engine, backend=...)`, the three-branch provisioning decision, locked revision validation, and the narrow 0019 forward-compatibility exception
 - `extensions/loader.py::load_extensions` — registers each spec's `table_prefix` with `register_extension_table_prefix()`
 - Tests: `tests/test_persistence_bootstrap.py` (branches), `tests/test_persistence_bootstrap_concurrency.py` (concurrency), `tests/test_persistence_bootstrap_regression.py` (issue #3682), `tests/test_persistence_migrations_env.py` (filter, including extension-owned tables), `tests/test_extension_loader.py::TestTablePrefixRegistration` (spec-to-filter wiring), `tests/blocking_io/test_persistence_bootstrap.py` (asyncio.to_thread anchor), `tests/test_migration_0004_run_ownership_dedupe.py` + `tests/test_migration_0007_scheduled_run_active_dedupe.py` (dedupe-before-unique-index pre-steps), `tests/test_migration_0025_repair_run_change_seq.py` (issue #5516 skipped-revision heal)
+
+`0048_repair_audit_events` follows `0047_merge_agent_room_exec`. It repairs
+managed databases whose old empty bootstrap stamped head without registering
+`audit_events`: create only the missing 0033-shaped table/four indexes, preserve
+existing audit rows and every other table, and refuse incompatible partial
+shapes, including indexes outside the four frozen 0033 names. Do not replay 0033, restamp, or call create_all on a managed database.
+Downgrade retains append-only history because ancestor 0033 owns the schema.
+Tests: `tests/test_migration_0048_repair_audit_events.py`, plus the isolated
+fresh-process `test_persistence_bootstrap_audit_registration.py` regression.

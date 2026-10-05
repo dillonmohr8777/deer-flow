@@ -40,6 +40,9 @@ export function WorkflowRunDetail({
             : ""}
         </p>
         <p className="text-muted-foreground text-xs break-all">Run {run.id}</p>
+        {run.supervisor && (
+          <p className="text-sm">Plan approval required before drafting.</p>
+        )}
       </div>
       {run.status === "interrupted" && (
         <p className="text-sm">

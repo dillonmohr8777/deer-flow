@@ -70,6 +70,7 @@ export interface WorkflowRun {
   workflow_id: string;
   title: string;
   framework: WorkflowFramework;
+  supervisor?: boolean;
   status:
     | "queued"
     | "running"
@@ -110,6 +111,7 @@ export interface WorkflowInput {
   workflow_id: string;
   inputs: Record<string, unknown>;
   framework: WorkflowFramework;
+  supervisor?: boolean;
 }
 export function isWorkflowActive(status: string): boolean {
   return status === "queued" || status === "running";

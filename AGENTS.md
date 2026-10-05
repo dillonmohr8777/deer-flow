@@ -247,11 +247,11 @@ These apply repo-wide; module guides own the module-specific detail.
 
 ## MomoBot app surfaces
 
-The opt-in hosted OpenAI and public Browserbase adapters live in Gateway,
-not the harness. Their private SQLite receipts record ownership and admission,
-not another client registry. Keep provider credentials server-side and paid
-operations idempotent. PWA offline caches contain generic public assets only.
-The separate `desktop/` Electron shell has no native renderer bridge. See
+Opt-in OpenAI and Browserbase adapters belong in Gateway, not the harness.
+Private SQLite receipts track ownership/admission, not a client registry.
+Keep credentials server-side and paid operations idempotent. PWA offline caches
+hold generic public assets only. The `desktop/` Electron shell has no native
+renderer bridge; see `desktop/AGENTS.md` for branding/source checks and
 `docs/MOMOBOT_APP_RELEASE.md` for lifecycle and release checks.
 
 The offline backend suite includes actual isolated framework handoffs. Its CI

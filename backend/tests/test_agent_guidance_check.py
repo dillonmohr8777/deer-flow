@@ -10,6 +10,7 @@ CHECKER_PATH = REPO_ROOT / "scripts" / "check_agent_guidance.py"
 EXPECTED_GUIDANCE_PATHS = {
     "AGENTS.md",
     "backend/AGENTS.md",
+    "desktop/AGENTS.md",
     "backend/tests/AGENTS.md",
     "frontend/AGENTS.md",
     "backend/app/gateway/AGENTS.md",
@@ -27,6 +28,7 @@ EXPECTED_GUIDANCE_PATHS = {
     "backend/packages/harness/deerflow/fleet/AGENTS.md",
     "backend/packages/harness/deerflow/runtime/AGENTS.md",
     "backend/packages/harness/deerflow/workflows/AGENTS.md",
+    "workers/AGENTS.md",
     "workers/agno-team/AGENTS.md",
     "backend/packages/harness/deerflow/sandbox/AGENTS.md",
     "backend/packages/harness/deerflow/mcp/AGENTS.md",
