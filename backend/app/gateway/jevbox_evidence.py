@@ -200,7 +200,9 @@ def prepare_jevbox_evidence(packet_bytes: bytes, *, admission: TrustedJevboxPrep
         raise JevboxEvidenceError("packet_pin_mismatch")
     try:
         packet = _object(json.loads(packet_bytes.decode("utf-8"), object_pairs_hook=_pairs, parse_constant=_nonfinite), _PACKET_KEYS)
-    except (UnicodeDecodeError, json.JSONDecodeError, RecursionError):
+    except JevboxEvidenceError:
+        raise
+    except (UnicodeDecodeError, ValueError, RecursionError):
         raise JevboxEvidenceError("packet_json_invalid") from None
     try:
         packet_text = _compact(packet)

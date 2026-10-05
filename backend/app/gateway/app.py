@@ -702,6 +702,20 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     config = get_gateway_config()
     logger.info(f"Starting API Gateway on {config.host}:{config.port}")
 
+    # The Jevbox preparation route is disabled unless a strict, bounded
+    # startup-owned binding is explicitly configured. Never log its path or
+    # contents, and fail startup closed when an opted-in binding is invalid.
+    from app.gateway.jevbox_preparation_binding import (
+        JevboxPreparationBindingError,
+        load_optional_jevbox_preparation_binding,
+    )
+
+    try:
+        app.state.jevbox_preparation_binding = await asyncio.to_thread(load_optional_jevbox_preparation_binding)
+    except JevboxPreparationBindingError:
+        logger.error("Jevbox preparation binding rejected; startup stopped")
+        raise RuntimeError("Jevbox preparation binding invalid") from None
+
     from deerflow.skills.projection import ensure_public_skill_projection
 
     public_projection_ready = await asyncio.to_thread(ensure_public_skill_projection, app_config=startup_config)

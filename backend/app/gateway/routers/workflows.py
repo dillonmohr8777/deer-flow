@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+from datetime import UTC, datetime
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
@@ -12,6 +13,8 @@ from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.gateway.authz import get_auth_context, require_permission
+from app.gateway.jevbox_evidence import MAX_PACKET_BYTES, JevboxEvidenceError, prepare_jevbox_evidence
+from app.gateway.jevbox_preparation_binding import JevboxPreparationBinding
 from app.gateway.paid_run_entitlement import require_paid_run_entitlement
 from app.gateway.workflow_service import WorkflowService, WorkflowServiceError
 
@@ -80,6 +83,53 @@ async def catalog(request: Request):
 
     definitions = list_workflows()
     return {"workflows": [definition.model_dump() if hasattr(definition, "model_dump") else dict(definition) for definition in definitions], "total": len(definitions)}
+
+
+async def _bounded_body(request: Request) -> bytes:
+    length = request.headers.get("content-length")
+    if length is not None:
+        if not length.isascii() or not length.isdigit():
+            raise HTTPException(400, detail="content_length_invalid")
+        try:
+            declared = int(length)
+        except ValueError:
+            raise HTTPException(400, detail="content_length_invalid") from None
+        if declared > MAX_PACKET_BYTES:
+            raise HTTPException(413, detail="packet_too_large")
+    chunks: list[bytes] = []
+    size = 0
+    async for chunk in request.stream():
+        size += len(chunk)
+        if size > MAX_PACKET_BYTES:
+            raise HTTPException(413, detail="packet_too_large")
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
+@router.post("/jevbox/prepare")
+@require_permission("runs", "read")
+async def prepare_jevbox(request: Request):
+    """Return an unsent proposal from one pinned review; never create a run."""
+    binding = getattr(request.app.state, "jevbox_preparation_binding", None)
+    if type(binding) is not JevboxPreparationBinding:
+        raise HTTPException(404, detail="preparation_unavailable")
+    actor, organization, storage, _scope = _owner(request)
+    context = binding.context
+    if (actor, organization, storage) != (
+        context.actor_user_id,
+        context.momo_organization_id,
+        context.storage_user_id,
+    ):
+        raise HTTPException(403, detail="preparation_scope_mismatch")
+    if request.headers.get("content-type", "").split(";", 1)[0].strip().lower() != "application/json":
+        raise HTTPException(415, detail="application_json_required")
+    packet = await _bounded_body(request)
+    try:
+        return prepare_jevbox_evidence(packet, admission=context, now=datetime.now(UTC))
+    except JevboxEvidenceError as error:
+        code = str(error)
+        status_code = 409 if code == "review_not_current" else 422
+        raise HTTPException(status_code, detail=code) from None
 
 
 @router.post("/runs")

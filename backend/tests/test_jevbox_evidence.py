@@ -122,6 +122,14 @@ def test_same_review_has_stable_body_hash_and_idempotency_key(evidence):
     assert first["origin"]["packetSha256"] == hashlib.sha256(encode(packet)).hexdigest()
 
 
+def test_oversized_json_integer_keeps_fixed_packet_error(evidence):
+    _packet, admission = evidence
+    raw = b'{"schema_version":' + b"1" * 5000 + b"}"
+    reviewed = replace(admission, expected_packet_sha256=hashlib.sha256(raw).hexdigest())
+    with pytest.raises(JevboxEvidenceError, match="^packet_json_invalid$"):
+        prepare_jevbox_evidence(raw, admission=reviewed, now=NOW)
+
+
 def test_preparation_performs_no_file_network_subprocess_or_ledger_io(evidence, monkeypatch):
     packet, admission = evidence
 

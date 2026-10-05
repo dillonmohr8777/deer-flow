@@ -2,8 +2,12 @@
 
 import asyncio
 import functools
+import hashlib
 import importlib.util
+import json
 import sys
+from dataclasses import replace
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -20,6 +24,8 @@ from app.gateway import authz, paid_run_entitlement
 from app.gateway.auth.config import AuthConfig
 from app.gateway.auth_middleware import AuthMiddleware
 from app.gateway.csrf_middleware import CSRFMiddleware
+from app.gateway.jevbox_evidence import MAX_PACKET_BYTES, TrustedJevboxPreparationContext
+from app.gateway.jevbox_preparation_binding import JevboxPreparationBinding
 from app.gateway.routers.thread_runs import router as native_runs_router
 from app.gateway.routers.threads import router as native_threads_router
 from app.gateway.routers.workflows import router
@@ -81,6 +87,157 @@ async def scope_headers(value, actor="alice", organization="org-a"):
     assert state.status_code == 200
     assert state.headers["cache-control"] == "private, no-store"
     return {**headers, "X-Expected-Workflow-Scope": state.json()["owner_scope"], "Idempotency-Key": "synthetic-http-task"}
+
+
+def jevbox_route_case(*, actor=ALICE, expires=None, reviewed_by="synthetic-reviewer", packet_reviewed_by=None):
+    now = datetime.now(UTC)
+    text = "Synthetic source excerpt."
+    source_hash = hashlib.sha256(b"synthetic original bytes").hexdigest()
+    packet = {
+        "schema_version": 1,
+        "kind": "jevbox_reviewed_evidence",
+        "provider": "jevbox",
+        "purpose": "owner_research_draft",
+        "evidence_mode": "synthetic",
+        "scope": {"owner_id": actor, "momo_organization_id": "org-a", "jevbox_organization_id": "synthetic-jev-org", "source_client_id": "synthetic-client", "document_ids": ["synthetic-doc"]},
+        "reviewed_at": now.isoformat(),
+        "reviewed_by": packet_reviewed_by or reviewed_by,
+        "research_question": "What does this synthetic excerpt say?",
+        "coverage": "One synthetic excerpt only.",
+        "sources": [
+            {
+                "document_id": "synthetic-doc",
+                "passage_id": "synthetic-passage",
+                "title": "Synthetic source",
+                "locator": "jevbox:synthetic-doc:synthetic-passage",
+                "source_as_of": now.isoformat(),
+                "retrieved_at": now.isoformat(),
+                "source_sha256": source_hash,
+                "text_sha256": hashlib.sha256(text.encode()).hexdigest(),
+                "text": text,
+                "untrusted": True,
+            }
+        ],
+    }
+    raw = json.dumps(packet, separators=(",", ":")).encode()
+    context = TrustedJevboxPreparationContext(
+        actor_user_id=actor,
+        owner_user_id=actor,
+        storage_user_id=actor,
+        momo_organization_id="org-a",
+        jevbox_organization_id="synthetic-jev-org",
+        source_client_id="synthetic-client",
+        document_ids=("synthetic-doc",),
+        source_pins=(("synthetic-doc", source_hash),),
+        expected_packet_sha256=hashlib.sha256(raw).hexdigest(),
+        expected_reviewed_by=reviewed_by,
+        expected_reviewed_at=now,
+        review_expires_at=expires or now + timedelta(minutes=5),
+        owner_scope_active=True,
+    )
+    return raw, context
+
+
+def jevbox_session_headers(scope, actor="alice"):
+    return {**session_headers(actor), "X-Expected-Workflow-Scope": scope, "Content-Type": "application/json"}
+
+
+class _ChunkedBody(httpx.AsyncByteStream):
+    def __init__(self, size: int):
+        self.size = size
+
+    async def __aiter__(self):
+        yield b"x" * self.size
+
+    async def aclose(self):
+        return None
+
+
+async def jevbox_owner_scope(api):
+    async with api.factory() as session:
+        await session.execute(update(OrganizationRow).where(OrganizationRow.id == "org-a").values(storage_user_id=ALICE))
+        await session.commit()
+    return (await scope_headers(api))["X-Expected-Workflow-Scope"]
+
+
+async def test_jevbox_preparation_route_is_unavailable_without_binding(api):
+    scope = await jevbox_owner_scope(api)
+    response = await api.client.post("/api/workflows/jevbox/prepare", headers=jevbox_session_headers(scope), content=b"{}")
+    assert response.status_code == 404
+    assert response.json()["detail"] == "preparation_unavailable"
+
+
+async def test_jevbox_preparation_route_uses_authenticated_scope_and_never_calls_workflow_service(api):
+    scope = await jevbox_owner_scope(api)
+    raw, context = jevbox_route_case()
+    api.app.state.jevbox_preparation_binding = JevboxPreparationBinding(context)
+    api.app.state.workflow_service = object()
+    response = await api.client.post("/api/workflows/jevbox/prepare", headers=jevbox_session_headers(scope), content=raw)
+    assert response.status_code == 200
+    result = response.json()
+    assert result["status"] == "prepared_request" and result["ownerScope"] is None
+    assert result["sent"] is False and result["dispatchEnabled"] is False and result["networkCalls"] == 0
+    assert api.adapter.calls == []
+
+
+async def test_jevbox_preparation_route_rejects_cross_scope_context_before_adapter(api):
+    scope = await jevbox_owner_scope(api)
+    raw, context = jevbox_route_case(actor=BOB)
+    api.app.state.jevbox_preparation_binding = JevboxPreparationBinding(context)
+    response = await api.client.post("/api/workflows/jevbox/prepare", headers=jevbox_session_headers(scope), content=raw)
+    assert response.status_code == 403 and response.json()["detail"] == "preparation_scope_mismatch"
+    assert api.adapter.calls == []
+
+
+async def test_jevbox_preparation_route_rejects_duplicate_json_and_oversize(api):
+    scope = await jevbox_owner_scope(api)
+    raw, context = jevbox_route_case()
+    duplicate = raw.replace(b'{"schema_version":1,', b'{"schema_version":1,"schema_version":1,', 1)
+    api.app.state.jevbox_preparation_binding = JevboxPreparationBinding(replace(context, expected_packet_sha256=hashlib.sha256(duplicate).hexdigest()))
+    duplicate_response = await api.client.post("/api/workflows/jevbox/prepare", headers=jevbox_session_headers(scope), content=duplicate)
+    assert duplicate_response.status_code == 422 and duplicate_response.json()["detail"] == "duplicate_json_key"
+    oversized = await api.client.post("/api/workflows/jevbox/prepare", headers=jevbox_session_headers(scope), content=b" " * (MAX_PACKET_BYTES + 1))
+    assert oversized.status_code == 413 and oversized.json()["detail"] == "packet_too_large"
+    assert api.adapter.calls == []
+
+
+async def test_jevbox_preparation_route_bounds_actual_stream_and_keeps_csrf_boundary(api):
+    scope = await jevbox_owner_scope(api)
+    _raw, context = jevbox_route_case()
+    api.app.state.jevbox_preparation_binding = JevboxPreparationBinding(context)
+    headers = jevbox_session_headers(scope)
+    headers["Content-Length"] = "1"
+    claimed_short = await api.client.post("/api/workflows/jevbox/prepare", headers=headers, content=b"x" * (MAX_PACKET_BYTES + 1))
+    assert claimed_short.status_code == 413 and claimed_short.json()["detail"] == "packet_too_large"
+    chunked_headers = jevbox_session_headers(scope)
+    chunked = await api.client.send(httpx.Request("POST", "http://synthetic.test/api/workflows/jevbox/prepare", headers=chunked_headers, content=_ChunkedBody(MAX_PACKET_BYTES + 1)))
+    assert chunked.status_code == 413 and chunked.json()["detail"] == "packet_too_large"
+    bad_csrf = dict(jevbox_session_headers(scope))
+    bad_csrf["X-CSRF-Token"] = "wrong"
+    rejected = await api.client.post("/api/workflows/jevbox/prepare", headers=bad_csrf, content=b"{}")
+    assert rejected.status_code == 403
+    malformed_length = dict(jevbox_session_headers(scope))
+    malformed_length["Content-Length"] = "-1"
+    rejected_length = await api.client.post("/api/workflows/jevbox/prepare", headers=malformed_length, content=b"{}")
+    assert rejected_length.status_code == 400 and rejected_length.json()["detail"] == "content_length_invalid"
+    missing_media_type = dict(jevbox_session_headers(scope))
+    del missing_media_type["Content-Type"]
+    rejected_type = await api.client.post("/api/workflows/jevbox/prepare", headers=missing_media_type, content=b"{}")
+    assert rejected_type.status_code == 415 and rejected_type.json()["detail"] == "application_json_required"
+    assert api.adapter.calls == []
+
+
+async def test_jevbox_preparation_route_rejects_expired_review_and_forged_review_pin(api):
+    scope = await jevbox_owner_scope(api)
+    raw, context = jevbox_route_case(expires=datetime.now(UTC) - timedelta(seconds=1))
+    api.app.state.jevbox_preparation_binding = JevboxPreparationBinding(context)
+    expired = await api.client.post("/api/workflows/jevbox/prepare", headers=jevbox_session_headers(scope), content=raw)
+    assert expired.status_code == 409 and expired.json()["detail"] == "review_not_current"
+    forged, forged_context = jevbox_route_case(packet_reviewed_by="attacker-reviewer")
+    api.app.state.jevbox_preparation_binding = JevboxPreparationBinding(forged_context)
+    forged_response = await api.client.post("/api/workflows/jevbox/prepare", headers=jevbox_session_headers(scope), content=forged)
+    assert forged_response.status_code == 422 and forged_response.json()["detail"] == "review_pin_mismatch"
+    assert api.adapter.calls == []
 
 
 @pytest_asyncio.fixture(params=["memory", "sqlite"])
