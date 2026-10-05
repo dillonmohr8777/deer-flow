@@ -59,14 +59,14 @@ def test_the_dry_run_is_accepted_and_the_receipt_says_what_happened(pack, tmp_pa
     out = tmp_path / "out"
     assert json.loads((out / "deploy.json").read_text(encoding="utf-8"))["performed"] is False
     assert json.loads((out / "post.json").read_text(encoding="utf-8"))["performed"] is False
-    assert rendered_figures((out / "report.html").read_text(encoding="utf-8")) == FIGURES
+    assert rendered_figures((out / "report.html").read_text(encoding="utf-8")) == {"ga4_sessions": "4821", "gsc_clicks": "612", "meta_spend_usd": "0", "gbp_calls": "unavailable"}
 
 
 def test_a_missing_figure_is_unavailable_and_never_zero(pack, tmp_path):
     run_task(dry_spec(pack, tmp_path), weekly_reports_worker(qa_probe=measuring_probe), receipts=ReceiptLog(tmp_path / "r.jsonl"))
     report = (tmp_path / "out" / "report.html").read_text(encoding="utf-8")
-    assert "<th scope='row'>gbp_calls</th><td>unavailable</td>" in report
-    assert "<th scope='row'>meta_spend_usd</th><td>0</td>" in report  # a real zero stays zero
+    assert '<th scope="row">gbp_calls</th><td>unavailable</td>' in report
+    assert '<th scope="row">meta_spend_usd</th><td>0</td>' in report  # a real zero stays zero
 
 
 def test_qa_fails_closed_when_no_probe_measured_the_three_widths(pack, tmp_path):

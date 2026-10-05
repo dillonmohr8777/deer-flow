@@ -14,7 +14,9 @@ Honesty rules baked into the checks, not the prompt:
 
 from __future__ import annotations
 
+import html
 import json
+import re
 from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
@@ -25,7 +27,9 @@ from .verify import FileExistsCheck, HttpStatusCheck, JudgeCheck, PredicateCheck
 
 WIDTHS = (390, 768, 1440)
 UNAVAILABLE = "unavailable"
-FIGURES_MARKER = '<script type="application/json" id="figures">'
+# One row of the rendered report. Read back by `rendered_figures`, which is how
+# the judge sees what a human would see rather than what the worker claims.
+_ROW_RE = re.compile(r'<th scope="row">(.*?)</th><td>(.*?)</td>')
 
 OUTPUT_FIELDS: Mapping[str, type] = {
     "report": str,
@@ -51,16 +55,21 @@ def read_source_pack(path: str | Path) -> dict[str, Any]:
     return pack
 
 
+def display_value(value: Any) -> str:
+    """What the report shows for one figure. Missing is never zero."""
+    return UNAVAILABLE if value is None else str(value)
+
+
 def render_report(path: Path, *, client_id: str, week: str, figures: Mapping[str, Any]) -> None:
-    """Write the report. The embedded JSON block is what the judge reads."""
-    rows = []
-    for key in sorted(figures):
-        value = figures[key]
-        shown = UNAVAILABLE if value is None else value
-        rows.append(f"<tr><th scope='row'>{key}</th><td>{shown}</td></tr>")
-    rendered = {k: (None if figures[k] is None else figures[k]) for k in sorted(figures)}
+    """Write the client-facing report.
+
+    Everything interpolated is HTML-escaped: the figure keys come from a source
+    pack file, which is data, not markup.
+    """
+    rows = "".join(f'<tr><th scope="row">{html.escape(key)}</th><td>{html.escape(display_value(figures[key]))}</td></tr>' for key in sorted(figures))
+    title = html.escape(f"Weekly report {client_id} {week}")
     path.write_text(
-        f"<!doctype html>\n<title>Weekly report {client_id} {week}</title>\n<h1>Weekly report — {client_id} — {week}</h1>\n<table>{''.join(rows)}</table>\n{FIGURES_MARKER}{json.dumps(rendered, sort_keys=True)}</script>\n",
+        f"<!doctype html>\n<title>{title}</title>\n<h1>{title}</h1>\n<table>{rows}</table>\n",
         encoding="utf-8",
     )
 
@@ -175,20 +184,9 @@ def _side_effects_done(spec: TaskSpec, output: RunOutput) -> tuple[bool, str]:
     return True, "deployed and posted"
 
 
-def rendered_figures(report_text: str) -> dict[str, Any] | None:
-    """Pull the embedded figures block out of a rendered report."""
-    start = report_text.find(FIGURES_MARKER)
-    if start < 0:
-        return None
-    start += len(FIGURES_MARKER)
-    end = report_text.find("</script>", start)
-    if end < 0:
-        return None
-    try:
-        block = json.loads(report_text[start:end])
-    except ValueError:
-        return None
-    return block if isinstance(block, dict) else None
+def rendered_figures(report_text: str) -> dict[str, str]:
+    """What the rendered report actually displays, key -> shown value."""
+    return {html.unescape(key): html.unescape(value) for key, value in _ROW_RE.findall(report_text)}
 
 
 def source_pack_judge(source_pack: str | Path) -> Callable[[str], dict[str, Any]]:
@@ -202,18 +200,15 @@ def source_pack_judge(source_pack: str | Path) -> Callable[[str], dict[str, Any]
     """
 
     def judge(prompt: str) -> dict[str, Any]:
-        pack = read_source_pack(source_pack)
+        source = read_source_pack(source_pack)["figures"]
         shown = rendered_figures(prompt)
-        if shown is None:
-            return {"verdict": "refuted", "why": "the report has no readable figures block"}
-        source = pack["figures"]
+        if not shown:
+            return {"verdict": "refuted", "why": "the report shows no figures at all"}
         if set(shown) != set(source):
             return {"verdict": "refuted", "why": f"rendered figures do not match the source pack keys: {sorted(set(shown) ^ set(source))}"}
-        wrong = sorted(k for k, v in shown.items() if v != source[k])
+        wrong = sorted(key for key, value in shown.items() if value != display_value(source[key]))
         if wrong:
             return {"verdict": "refuted", "why": f"the rendered report shows figures that are not in the source pack: {wrong}"}
-        if UNAVAILABLE not in prompt and any(v is None for v in source.values()):
-            return {"verdict": "refuted", "why": "an unavailable figure is not marked unavailable in the report"}
         return {"verdict": "upheld", "why": "every rendered figure traces to the client source pack"}
 
     return judge

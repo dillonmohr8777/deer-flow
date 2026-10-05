@@ -150,6 +150,18 @@ class PredicateCheck:
         return CheckResult(self.name, self.layer, bool(ok), _clip(detail))
 
 
+def _neutralize(text: str) -> str:
+    """Strip framework authority tokens out of untrusted evidence text.
+
+    Evidence files are written by a worker that may have read the open web, so
+    their text is data, not instruction. Reuses the harness primitive the
+    agent middlewares already apply to remote tool results.
+    """
+    from deerflow.agents.middlewares.input_sanitization_middleware import neutralize_untrusted_tags  # noqa: PLC0415 - keeps this module cheap to import
+
+    return neutralize_untrusted_tags(text)
+
+
 def judge_prompt(spec: TaskSpec, output: RunOutput) -> str:
     """The refutation prompt: spec, stop rule, output and the evidence itself."""
     lines = [
@@ -161,7 +173,7 @@ def judge_prompt(spec: TaskSpec, output: RunOutput) -> str:
         f"Stop rule: {spec.stop_rule or '(none stated)'}",
         f"Declared inputs: {canonical_json(dict(spec.inputs))}",
         "",
-        f"Worker output: {canonical_json(dict(output.output))}",
+        f"Worker output: {_neutralize(canonical_json(dict(output.output)))}",
         f"Worker claimed done: {output.done}",
         "",
         "Evidence files:",
@@ -173,7 +185,7 @@ def judge_prompt(spec: TaskSpec, output: RunOutput) -> str:
         except OSError as exc:
             lines.append(f"(unreadable: {exc})")
             continue
-        lines.append(text[:EVIDENCE_TEXT_LIMIT])
+        lines.append(_neutralize(text[:EVIDENCE_TEXT_LIMIT]))
         if len(text) > EVIDENCE_TEXT_LIMIT:
             lines.append("(truncated)")
     lines += [

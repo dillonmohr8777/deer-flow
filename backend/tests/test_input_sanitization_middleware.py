@@ -283,6 +283,20 @@ _EXEMPT_BLOCK_TAGS = {
     # Documentation artifact: appears only in this middleware's own explanatory
     # comment describing the tag pattern, not emitted into any prompt.
     "tag",
+    # Plain HTML structure rendered into a client-facing report file on disk by
+    # deerflow/taskharness/weekly_reports.py. The framework never emits these as
+    # authority context, so forging one grants no trusted context; blocking them
+    # would also escape ordinary HTML a user legitimately pastes. That report's
+    # text does reach a model (the harness judge prompt embeds its evidence
+    # files), but it goes through neutralize_untrusted_tags first -- which is
+    # exactly this denylist -- so the defense applies there without these inert
+    # structural tags joining it.
+    "h1",
+    "table",
+    "td",
+    "th",
+    "title",
+    "tr",
 }
 
 
