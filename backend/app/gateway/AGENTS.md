@@ -250,3 +250,5 @@ rendered public snapshots expose no live target-origin interaction. Provider
 keys and `MOMOBOT_STAGEHAND_EXTENSION_ID` are Gateway-only. Availability is not
 accepted output or installation; billed cost remains unknown unless receipted.
 Details and scoped tests: [WORKFLOWS.md](../../docs/WORKFLOWS.md).
+
+HAI stays disabled; see WORKFLOWS.md.

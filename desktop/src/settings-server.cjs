@@ -87,7 +87,7 @@ async function startSettingsServer({ getEndpoint, getFailure, getExternal, onCon
       }
       const token = `<input type="hidden" name="nonce" value="${nonce}">`;
       let title = "Your workspace, on your Mac.";
-      let content = `<p>Connect to your MomoBot workspace. Your OpenAI key stays on the server.</p><form action="/connect" method="post">${token}<label for="endpoint">Workspace URL</label><input id="endpoint" type="url" name="endpoint" value="${escapeHTML(getEndpoint())}" autocomplete="url" required><p class="hint">HTTPS for hosted workspaces. Local development can use localhost.</p><button type="submit">Connect to MomoBot</button></form>`;
+      let content = `<p>Connect to your MomoBot workspace. Your agency credentials stay on the server.</p><form action="/connect" method="post">${token}<label for="endpoint">Workspace URL</label><input id="endpoint" type="url" name="endpoint" value="${escapeHTML(getEndpoint())}" autocomplete="url" required><p class="hint">HTTPS for hosted workspaces. Local development can use localhost.</p><button type="submit">Connect to MomoBot</button></form>`;
       if (url.pathname === "/error") {
         title = "Your workspace couldn't connect.";
         content = `<p>${escapeHTML(getFailure())}</p><p class="endpoint">${escapeHTML(getEndpoint())}</p><form action="/retry" method="post">${token}<button type="submit">Try again</button></form><p><a href="/">Change workspace URL</a></p>`;

@@ -175,7 +175,7 @@ app.whenReady().then(async () => {
   });
   window.webContents.on("did-navigate", (_event, url, status) => {
     if (status >= 400 && !url.startsWith(settings.origin)) {
-      failure = `The workspace returned HTTP ${status}. Check that the OpenAI workspace is installed on this server.`;
+      failure = `The workspace returned HTTP ${status}. Check that the MomoBot workspace is installed on this server.`;
       showLocal("/error");
     }
   });

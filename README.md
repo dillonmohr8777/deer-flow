@@ -2442,7 +2442,24 @@ contain no API keys. See [release setup](docs/MOMOBOT_APP_RELEASE.md),
 [OpenAI lifecycle](backend/docs/MOMOBOT_OPENAI_LIFECYCLE.md), and
 [Browserbase configuration](backend/docs/BROWSERBASE_APP.md).
 
+MomoBot desktop 0.2.1 uses the official Design C headshot for its macOS icon and
+connection screen. The exact artwork and generation provenance live in
+[desktop branding](desktop/branding/SOURCES.md); web/PWA branding has its own
+deployment state.
+
 The workflow, hosted crew and browser rooms retain session-only admission, owner/workspace fences and uncertain-call holds alongside the existing private Agent Room and native startup controls. Integration preserves the current migration graph; deployment and accepted output still require their own runtime evidence.
+
+Brain Forge adds a scoped, opt-in Slack `brief` workflow backed by the existing
+private daily-brief builder and read-only canonical sources. The offline
+`brainforge_cli prepare` and `check` commands create and validate a disabled
+configuration candidate. Exact owner binding, encrypted connection credentials,
+source acceptance and an authorized live canary remain separate host checks;
+see [Brain Forge setup](backend/app/channels/BRAINFORGE.md).
+
+The original research pilot's pinned proposals and whole reviewed evidence can
+join that same private brief/project receipt through an offline adapter. It
+prepares native research inputs without collecting, spending or dispatching;
+client marketing facts and useful resulting output still require their review.
 
 The opt-in **Workflows** room at `/workspace/workflows` adds 120 concrete recipes:
 100 Momentum marketing, operations and development tasks plus 20 personal

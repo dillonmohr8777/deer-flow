@@ -99,9 +99,9 @@ ENV LANG=C.UTF-8
 ENV LC_ALL=C.UTF-8
 ENV PYTHONIOENCODING=utf-8
 
-# Python's platform MIME lookup needs the standard registry to classify XHTML
-# and other active document types consistently with non-minimal installations.
-RUN apt-get update && apt-get install -y --no-install-recommends media-types \
+# MIME lookup needs the standard registry to classify active document types.
+# The read-only Brain Forge checkpoint invokes Git for recorded source identity.
+RUN apt-get update && apt-get install -y --no-install-recommends media-types git \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy Node.js runtime from builder (provides npx for MCP servers)
