@@ -565,3 +565,5 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines.
 The opt-in existing Slack brief workflow can bind a private daily brief and reviewed native workflow requests to one protected receipt. It performs no model call or canonical write. Review [BRAINFORGE.md](app/channels/BRAINFORGE.md) before configuring accepted sources and the existing owner connection. The fixed native HAI route is opt-in and unavailable without original-owner currency admission; provider qualification and source tests do not establish live output. See [WORKFLOWS.md](docs/WORKFLOWS.md).
 
 The separate [reviewed Jevbox evidence adapter](docs/JEVBOX_EVIDENCE.md) prepares unsent owner research drafts from bounded hash-pinned snapshots. It adds no retrieval, HTTP route, provider admission or native dispatch; supplied packet scope never authenticates its caller.
+
+When OIDC has a configured public callback URL, start login on that callback host. Localhost entry redirects there before state/PKCE cookies are issued, allowing the system browser to return the cookie on callback. Desktop browser-to-app session transfer remains a separate integration.
