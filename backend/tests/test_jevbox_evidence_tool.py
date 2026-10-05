@@ -33,6 +33,7 @@ DOCS = {
 class FakeJevbox:
     def __init__(self, *, login_status: int = 200, docs: dict | None = None, aliases: dict | None = None, fail: int | None = None):
         self.requests: list[str] = []
+        self.origins: list[str | None] = []
         self.login_status = login_status
         self.docs = DOCS if docs is None else docs
         self.aliases = aliases or {}
@@ -40,6 +41,7 @@ class FakeJevbox:
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
         self.requests.append(request.url.path)
+        self.origins.append(request.headers.get("Origin"))
         if request.url.path == "/api/auth/sign-in/email":
             return httpx.Response(self.login_status, json={})
         if self.fail:
@@ -183,3 +185,12 @@ def test_tool_assembles_from_config_with_only_model_safe_arguments():
     tool = next(t for t in get_available_tools(include_mcp=False, app_config=config) if t.name == "jevbox_evidence")
     assert set(tool.tool_call_schema.model_fields) == {"client_id", "query"}
     assert PASSWORD not in tool.description and AUTHORIZED_A not in tool.description
+
+
+def test_origin_override_is_sent_for_container_base_urls():
+    fake = FakeJevbox()
+    settings = _settings()
+    settings.base_url = "http://host.docker.internal:4310"
+    settings.origin = "http://localhost:4310"
+    assert _retrieve(fake, settings=settings).status == "ok"
+    assert set(fake.origins) == {"http://localhost:4310"}

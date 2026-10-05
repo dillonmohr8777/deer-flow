@@ -40,6 +40,9 @@ class JevboxSettings(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     base_url: AnyHttpUrl = Field(default="http://localhost:4310")
+    # Jevbox rejects sign-in unless Origin equals its APP_ORIGIN. Set this when
+    # base_url differs from it (e.g. host.docker.internal from a container).
+    origin: AnyHttpUrl | None = None
     email: SecretStr | None = None
     password: SecretStr | None = None
     timeout: float = Field(default=10, gt=0, le=60)
@@ -123,7 +126,8 @@ def retrieve_evidence(
         return EvidenceResult("unavailable", "credentials not configured")
 
     base = str(settings.base_url).rstrip("/")
-    headers = {"Origin": base, "Referer": base + "/", "X-Jevbox-Request": "1", "Accept": "application/json"}
+    origin = str(settings.origin or settings.base_url).rstrip("/")
+    headers = {"Origin": origin, "Referer": origin + "/", "X-Jevbox-Request": "1", "Accept": "application/json"}
     passages: list[Passage] = []
     review: list[tuple[str, str, str]] = []
     try:

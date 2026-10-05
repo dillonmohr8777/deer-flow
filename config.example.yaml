@@ -831,6 +831,7 @@ tools:
   #   group: web
   #   use: deerflow.community.jevbox.tools:jevbox_evidence_tool
   #   base_url: http://host.docker.internal:4310  # Docker: backend-reachable URL
+  #   origin: http://localhost:4310  # Must equal Jevbox APP_ORIGIN or sign-in returns 403
   #   email: $JEVBOX_EMAIL
   #   password: $JEVBOX_PASSWORD
   #   namespaces:

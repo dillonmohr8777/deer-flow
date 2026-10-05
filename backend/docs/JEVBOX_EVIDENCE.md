@@ -154,6 +154,8 @@ a reviewer can carry selected passages into the preparation adapter.
   and a response whose `id` differs from the requested ID is rejected.
 - **Agent binding.** A fleet agent stamped with `client_id` may only query that
   namespace. A failure to load the agent's config denies the call.
+- **Origin.** Jevbox rejects sign-in (403) unless `Origin` equals its
+  `APP_ORIGIN`; set `origin` when `base_url` is a container-reachable host.
 - **$0 only.** Owner email/password session reads, local keyword ranking. Jevbox
   search/answer endpoints queue paid runs and are not called.
 - **Supporting, not a dependency.** Connection failure, sign-in failure, 5xx or
