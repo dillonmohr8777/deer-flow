@@ -466,6 +466,10 @@
   border-color: var(--strong);
   border-radius: 2px;
 }
+/* The rule above outranks .agent[aria-pressed]; selected is royal. */
+.root[data-treatment="paper"] .agent[aria-pressed="true"] {
+  border-color: var(--blue);
+}
 .agent:global(.pinned)::before,
 .topologyLead:global(.pinned)::before {
   top: -7px;
@@ -502,6 +506,40 @@
   }
   .root[data-treatment="paper"] .agent:nth-child(3n) {
     translate: 0 6px;
+  }
+}
+/* Phones: the dispatch board and the team lie straight on the desk, as the
+   Desk page's sections do. A framed panel around framed slips and cards was
+   a box in a box, and took 34px of a 390px screen from the paper. */
+@media (max-width: 640px) {
+  .root[data-treatment="paper"] .onDesk {
+    border: 0;
+    background: none;
+    padding: 0;
+  }
+}
+/* A phone-width team: the specialists stand as a two-column sticker sheet,
+   Momo on top and big enough to read, the even column set lower like the
+   wider layouts. Below 320px they fall back to one row each. */
+@container topology (min-width: 320px) and (max-width: 439.98px) {
+  .root[data-treatment="paper"] .topologyRoster {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px 12px;
+    padding-bottom: 14px;
+  }
+  .root[data-treatment="paper"] .agent {
+    grid-template-columns: minmax(0, 1fr);
+    align-content: start;
+    justify-items: start;
+    gap: 8px;
+    padding: 12px;
+  }
+  .root[data-treatment="paper"] .agentMomo {
+    width: 64px;
+    height: 64px;
+  }
+  .root[data-treatment="paper"] .agent:nth-child(even) {
+    translate: 0 14px;
   }
 }
 /* Three working squares: one strip of three 22px frames, the lit square

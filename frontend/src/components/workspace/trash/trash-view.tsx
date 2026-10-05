@@ -1,6 +1,6 @@
 "use client";
 
-import { LoaderIcon, RotateCcw, Trash2 } from "lucide-react";
+import { FolderIcon, RotateCcw, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -18,6 +18,7 @@ import {
   EmptyState,
   ErrorState,
   pageStyles,
+  StatusTag,
   WorkingState,
 } from "@/components/workspace/page-body";
 import { useI18n } from "@/core/i18n/hooks";
@@ -45,10 +46,20 @@ function errorToastMessage(error: unknown, fallback: string): string {
 /** Remaining whole days of the retention window (spec §8.3); the effective
  * window comes from ``GET /api/projects/config`` — expired rows are swept
  * server-side. */
-function retentionDaysLeft(trashedAt: string, retentionDays: number): number {
+export function retentionDaysLeft(
+  trashedAt: string,
+  retentionDays: number,
+  now = Date.now(),
+): number {
   const expiresAt = new Date(trashedAt).getTime() + retentionDays * 86_400_000;
-  return Math.max(0, Math.ceil((expiresAt - Date.now()) / 86_400_000));
+  const left = expiresAt - now;
+  // Under a day is "Less than a day left" (0), not a rounded-up "1 day".
+  return left < 86_400_000 ? 0 : Math.ceil(left / 86_400_000);
 }
+
+/** Days left at or under which a row says so as an attention tag: the
+ * document is about to be deleted for good. */
+export const RETENTION_ATTENTION_DAYS = 3;
 
 /**
  * Trash view (spec §9): trashed shelf documents with their origin project
@@ -71,7 +82,7 @@ export function TrashView() {
 
   return (
     <div className="mx-auto flex w-full max-w-(--container-width-lg) flex-col gap-6 p-4 pt-8 pb-28 sm:p-6 sm:pt-10 sm:pb-28">
-      <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
+      <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
         <div className="min-w-0 flex-1 basis-72">
           <h1 className="text-2xl font-semibold">{t.trash.title}</h1>
           <p className={cn(pageStyles.lede, "mt-1")}>
@@ -82,7 +93,7 @@ export function TrashView() {
           <Button
             variant="outline"
             size="sm"
-            className="text-destructive hover:text-destructive"
+            className="text-destructive hover:text-destructive max-sm:h-11"
             onClick={() => setEmptyConfirmOpen(true)}
             data-testid="trash-empty-button"
           >
@@ -90,7 +101,7 @@ export function TrashView() {
             {t.trash.emptyTrash}
           </Button>
         )}
-      </div>
+      </header>
 
       {trashQuery.isError ? (
         <ErrorState
@@ -99,6 +110,7 @@ export function TrashView() {
             <Button
               variant="outline"
               size="sm"
+              className="max-sm:h-11"
               onClick={() => void trashQuery.refetch()}
             >
               {t.trash.retry}
@@ -113,10 +125,13 @@ export function TrashView() {
         </EmptyState>
       ) : (
         <>
+          {/* Phones: each document is a paper slip on the desk, as Agents,
+              Chats and Scheduled tasks are. */}
           <ul
             className={cn(
               "flex w-full flex-col divide-y border-y",
               pageStyles.rows,
+              pageStyles.slips,
             )}
           >
             {documents.map((document) => (
@@ -138,7 +153,7 @@ export function TrashView() {
               <Button
                 variant="ghost"
                 size="sm"
-                className="text-xs"
+                className="text-xs max-sm:min-h-11"
                 disabled={trashQuery.isFetchingNextPage}
                 onClick={() => void trashQuery.fetchNextPage()}
                 data-testid="trash-load-more"
@@ -287,35 +302,53 @@ function TrashDocumentRow({
     );
   };
 
+  const daysLeft = retentionDaysLeft(document.trashed_at, retentionDays);
+  const projectName = document.trash_origin?.project_name;
+  const retention =
+    daysLeft <= RETENTION_ATTENTION_DAYS ? (
+      <StatusTag tone="attention">{t.trash.retentionLeft(daysLeft)}</StatusTag>
+    ) : (
+      <span>{t.trash.retentionLeft(daysLeft)}</span>
+    );
+
   return (
-    <li className="flex flex-wrap items-center gap-x-3 gap-y-2 py-3">
-      <span className="text-muted-foreground shrink-0">
+    <li className="flex flex-wrap items-center gap-x-3 gap-y-2 py-3 max-sm:px-4 max-sm:py-3.5">
+      <span className="text-muted-foreground shrink-0 self-start pt-0.5">
         {getFileIcon(document.name, "size-5")}
       </span>
       <div className="flex min-w-0 flex-1 basis-48 flex-col gap-0.5">
-        <span className="truncate text-sm font-bold">{document.name}</span>
-        <span className="text-muted-foreground flex flex-wrap gap-x-1.5 text-xs">
+        {/* The name is the document: up to two lines, never cut mid-word
+            to one line of a long file name. */}
+        <span
+          className="line-clamp-2 text-sm font-bold [overflow-wrap:anywhere]"
+          title={document.name}
+        >
+          {document.name}
+        </span>
+        <span className="text-muted-foreground flex flex-wrap items-center gap-x-1.5 text-xs">
           <span>
-            {t.trash.originProject(
-              document.trash_origin?.project_name ?? t.trash.unknownProject,
-            )}
+            {projectName
+              ? t.trash.originProject(projectName)
+              : t.trash.unknownProject}
           </span>
           <span aria-hidden="true">·</span>
           <span className={pageStyles.figure}>
             {formatArtifactBytes(document.size_bytes)}
           </span>
-          <span aria-hidden="true">·</span>
-          <span>
-            {t.trash.retentionLeft(
-              retentionDaysLeft(document.trashed_at, retentionDays),
-            )}
-          </span>
         </span>
       </div>
-      <div className="flex shrink-0 items-center gap-1">
+      {/* Time left stands beside the actions it argues for. On phones this
+          is the slip's foot line, time left on the left and the actions at
+          44px on the right, as Desk slips read; the irreversible delete is
+          an icon there, still behind its confirmation. */}
+      <div className="flex shrink-0 items-center gap-1 max-sm:basis-full max-sm:pl-8">
+        <span className="text-muted-foreground mr-auto text-xs sm:mr-3">
+          {retention}
+        </span>
         <Button
           variant="outline"
           size="sm"
+          className="max-sm:h-11 max-sm:px-4"
           disabled={restoreDocument.isPending}
           onClick={() => restore()}
         >
@@ -325,11 +358,12 @@ function TrashDocumentRow({
         <Button
           variant="ghost"
           size="sm"
-          className="text-destructive hover:text-destructive"
+          className="text-destructive hover:text-destructive max-sm:size-11 max-sm:p-0"
           onClick={onPurge}
+          title={t.trash.deletePermanently}
         >
           <Trash2 className="size-4" />
-          {t.trash.deletePermanently}
+          <span className="max-sm:sr-only">{t.trash.deletePermanently}</span>
         </Button>
       </div>
 
@@ -367,12 +401,7 @@ function RestoreProjectPicker({
   const projectsQuery = useProjects("active");
   const projects = projectsQuery.data ?? [];
   if (projectsQuery.isLoading) {
-    return (
-      <div className="text-muted-foreground flex items-center gap-2 p-2 text-sm">
-        <LoaderIcon className="size-4 animate-spin" />
-        {t.common.loading}
-      </div>
-    );
+    return <WorkingState label={t.common.loading} />;
   }
   if (projects.length === 0) {
     return (
@@ -380,18 +409,21 @@ function RestoreProjectPicker({
     );
   }
   return (
-    <div className="flex max-h-80 flex-col gap-1 overflow-auto">
+    // A ruled list of the places it can go, so each name reads as a choice.
+    <ul className="flex max-h-80 flex-col divide-y overflow-auto border-y">
       {projects.map((project) => (
-        <Button
-          key={project.id}
-          variant="ghost"
-          className="justify-start"
-          disabled={isPending}
-          onClick={() => onPick(project.id)}
-        >
-          <span className="truncate">{project.name}</span>
-        </Button>
+        <li key={project.id}>
+          <Button
+            variant="ghost"
+            className="h-11 w-full justify-start rounded-none"
+            disabled={isPending}
+            onClick={() => onPick(project.id)}
+          >
+            <FolderIcon className="text-muted-foreground size-4" />
+            <span className="truncate">{project.name}</span>
+          </Button>
+        </li>
       ))}
-    </div>
+    </ul>
   );
 }

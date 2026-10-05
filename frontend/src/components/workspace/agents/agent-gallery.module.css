@@ -1,0 +1,27 @@
+/*
+ * Phones: each agent is its own paper slip on the desk, the way Desk results
+ * and dispatch slips are, with Chat across the slip's foot at thumb reach.
+ * The 64px Momo is sized in agent-card.tsx. Wider screens keep the hairline
+ * roster.
+ */
+@media (max-width: 39.99rem) {
+  .roster {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin-top: 1rem;
+  }
+
+  /* Doubled so the full hairline beats the shared lighter row rule. */
+  .roster.roster > li {
+    padding: 1rem;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 2px 5px 3px 6px;
+    box-shadow: 0 1px 0 color-mix(in srgb, var(--foreground) 10%, transparent);
+  }
+
+  .roster.roster > li:nth-child(even) {
+    border-radius: 5px 2px 6px 3px;
+  }
+}

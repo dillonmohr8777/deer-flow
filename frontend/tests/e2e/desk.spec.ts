@@ -50,7 +50,13 @@ async function mockWorkspace(
     desk,
     fresh = false,
     boardThreads = [],
-  }: { desk: boolean; fresh?: boolean; boardThreads?: BoardThreadFixture[] },
+    lastError = null,
+  }: {
+    desk: boolean;
+    fresh?: boolean;
+    boardThreads?: BoardThreadFixture[];
+    lastError?: string | null;
+  },
 ) {
   mockLangGraphAPI(page, {
     scheduledTasks: fresh
@@ -66,6 +72,7 @@ async function mockWorkspace(
             next_run_at: at(16),
             last_run_at: at(-3),
             last_thread_id: "thread-cos",
+            last_error: lastError,
           },
           {
             ...TASK,
@@ -242,6 +249,103 @@ test.describe("Desk, the owner-only home", () => {
       desk.getByText("No agents on this instance yet"),
     ).toBeVisible();
     await expect(desk.getByText("No model calls yet")).toBeVisible();
+  });
+
+  test.describe("on a phone", () => {
+    test.use({
+      viewport: { width: 390, height: 844 },
+      isMobile: true,
+      hasTouch: true,
+      userAgent:
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+    });
+
+    test("a Today slip puts its time under the title, and a failure folds its corner", async ({
+      page,
+    }) => {
+      await mockWorkspace(page, {
+        desk: true,
+        lastError: "Google Ads token expired, reconnect the account",
+      });
+      await page.goto("/workspace/desk");
+
+      const today = page.locator("section[aria-labelledby='desk-today'] li");
+      await expect(today).toHaveCount(1, { timeout: 15_000 });
+      const slip = today.first();
+      const title = slip.getByText("Chief of Staff", { exact: true });
+      const when = slip.getByText(/\d:\d\d [AP]M$/);
+      const reason = slip.getByText("Google Ads token expired", {
+        exact: false,
+      });
+      const link = slip.getByRole("link", { name: /Open receipt/ });
+
+      const [t, w, r, l] = await Promise.all(
+        [title, when, reason, link].map((el) => el.boundingBox()),
+      );
+      // Title, then when, then the reason, then the foot line.
+      expect(w!.y).toBeGreaterThanOrEqual(t!.y + t!.height - 1);
+      expect(r!.y).toBeGreaterThanOrEqual(w!.y + w!.height - 1);
+      expect(l!.y).toBeGreaterThanOrEqual(r!.y + r!.height - 1);
+      // The reason is a real failure, so it reads in danger.
+      await expect(reason).toHaveCSS("color", "rgb(154, 43, 60)");
+      // The torn corner: a clipped slip and a kraft flap in the corner.
+      await expect(slip).toHaveAttribute("data-failed", "true");
+      expect(
+        await slip.evaluate((el) => getComputedStyle(el).clipPath),
+      ).toContain("polygon");
+      const flap = slip.locator("[aria-hidden='true']").first();
+      await expect(flap).toBeVisible();
+      await expect(flap).toHaveCSS("background-color", "rgb(216, 195, 160)");
+    });
+
+    test("an agent row leads with its Momo and folds into three lines", async ({
+      page,
+    }) => {
+      await mockWorkspace(page, { desk: true });
+      await page.goto("/workspace/desk");
+
+      const rows = page.locator("section[aria-labelledby='desk-agents'] li");
+      await expect(rows).toHaveCount(2, { timeout: 15_000 });
+      // The client reporter wears the canon client-success Momo.
+      await expect(
+        rows.nth(1).locator("img[src='/momentum/momos/client-success.svg']"),
+      ).toBeVisible();
+
+      const row = rows.first();
+      const face = row.locator("[data-size]");
+      const name = row.getByText("Chief of Staff", { exact: true });
+      const model = name.locator("xpath=following-sibling::*[1]");
+      const next = row.getByText(/^Next /);
+      const receipt = row.getByRole("link", { name: /Open receipt/ });
+      const [f, n, m, x, r, box] = await Promise.all(
+        [face, name, model, next, receipt, row].map((el) => el.boundingBox()),
+      );
+      // The face holds a left column; the words sit right of it.
+      expect(n!.x).toBeGreaterThanOrEqual(f!.x + f!.width);
+      // Model and next run share the second line; the receipt is below it.
+      expect(Math.abs(m!.y - x!.y)).toBeLessThan(4);
+      expect(m!.y).toBeGreaterThanOrEqual(n!.y + n!.height - 1);
+      expect(r!.y + r!.height / 2).toBeGreaterThan(m!.y + m!.height);
+      // Three lines, not the four stacked lines it was (116px).
+      expect(box!.height).toBeLessThanOrEqual(96);
+      // The receipt link is a 44px target without growing the row.
+      expect(r!.height).toBeGreaterThanOrEqual(44);
+    });
+
+    test("a result that did not fail keeps its corner", async ({ page }) => {
+      await mockWorkspace(page, { desk: true });
+      await page.goto("/workspace/desk");
+
+      const slip = page
+        .locator("section[aria-labelledby='desk-today'] li")
+        .first();
+      await expect(slip.getByText("Ready for review")).toBeVisible({
+        timeout: 15_000,
+      });
+      expect(await slip.evaluate((el) => getComputedStyle(el).clipPath)).toBe(
+        "none",
+      );
+    });
   });
 
   test("shows a count of threads waiting on the owner's approval, on the Desk and in the sidebar", async ({

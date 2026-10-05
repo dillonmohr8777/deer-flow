@@ -73,7 +73,7 @@ import {
   projectIdOfThread,
   titleOfThread,
 } from "@/core/threads/utils";
-import { formatCompactStamp } from "@/core/utils/datetime";
+import { formatCompactStamp, toDateTimeAttr } from "@/core/utils/datetime";
 import { env } from "@/env";
 import { isIMEComposing } from "@/lib/ime";
 
@@ -280,7 +280,10 @@ export function ThreadSidebarItem({
                 data-testid="thread-row-meta"
               >
                 {stamp && thread.updated_at && (
-                  <time className="tabular-nums" dateTime={thread.updated_at}>
+                  <time
+                    className="tabular-nums"
+                    dateTime={toDateTimeAttr(thread.updated_at)}
+                  >
                     {stamp}
                   </time>
                 )}

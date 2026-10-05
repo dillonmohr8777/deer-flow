@@ -13,10 +13,22 @@ export function schemaType(schema: InputSchema): string {
     ? (type.find((value) => value !== "null") ?? "string")
     : (type ?? "string");
 }
+// Words a snake_case field name loses when it is only capitalised.
+const LABEL_WORDS: Record<string, string> = {
+  url: "URL",
+  urls: "URLs",
+  kpis: "KPIs",
+  seo: "SEO",
+  a11y: "accessibility",
+};
 export function fieldLabel(name: string, schema: InputSchema): string {
   return (
     schema.title ??
-    name.replaceAll("_", " ").replace(/^./, (letter) => letter.toUpperCase())
+    name
+      .split("_")
+      .map((word) => LABEL_WORDS[word] ?? word)
+      .join(" ")
+      .replace(/^./, (letter) => letter.toUpperCase())
   );
 }
 export function exampleDraft(

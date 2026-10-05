@@ -260,7 +260,14 @@ export function MessageListItem({
             "z-20 opacity-0 transition-opacity delay-200 duration-300 group-focus-within/conversation-message:opacity-100 group-hover/conversation-message:opacity-100 [@media(hover:none)]:opacity-100",
           )}
         >
-          <div className="pointer-events-auto flex gap-1">
+          {/* Phones: 44px targets, pulled out by their inset so the glyphs
+              line up with the message's edge. */}
+          <div
+            className={cn(
+              "pointer-events-auto flex gap-1 max-sm:gap-0",
+              isHuman ? "max-sm:-mr-3.5" : "max-sm:-ml-3.5",
+            )}
+          >
             <CopyButton clipboardData={copyData} />
             {canEdit && isHuman && onEditAndRegenerate && !isEditing && (
               <Tooltip content={t.common.editAndRerun}>

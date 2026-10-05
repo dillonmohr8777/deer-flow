@@ -22,8 +22,12 @@ const mocks = rs.hoisted(() => ({
 rs.mock("@/core/auth/AuthProvider", () => ({
   useAuth: () => ({ user: mocks.user }),
 }));
-rs.mock("@/components/ui/sidebar", () => ({
-  SidebarTrigger: () => <button aria-label="Toggle sidebar" />,
+rs.mock("@/components/workspace/workspace-container", () => ({
+  WorkspaceContainer: ({ children }: PropsWithChildren) => (
+    <div>{children}</div>
+  ),
+  WorkspaceHeader: () => <div />,
+  WorkspaceBody: ({ children }: PropsWithChildren) => <main>{children}</main>,
 }));
 rs.mock("@/core/browserbase/api", () => ({
   getBrowserbaseStatus: mocks.status,
@@ -144,9 +148,7 @@ describe("Browser research workspace", () => {
         screen.getByRole("button", { name: "Capture pages" }),
       ).toBeDefined(),
     );
-    expect(
-      screen.queryByText("Capture completed · captured evidence retrieved"),
-    ).toBeNull();
+    expect(screen.queryByText(/page saved/)).toBeNull();
     expect(mocks.read).not.toHaveBeenCalled();
     expect(mocks.handOff).not.toHaveBeenCalled();
   });
@@ -181,9 +183,7 @@ describe("Browser research workspace", () => {
         screen.getByRole("button", { name: "Capture pages" }),
       ).toBeDefined(),
     );
-    expect(
-      screen.queryByText("Capture completed · captured evidence retrieved"),
-    ).toBeNull();
+    expect(screen.queryByText(/page saved/)).toBeNull();
     expect(mocks.handOff).not.toHaveBeenCalled();
     expect(mocks.read).not.toHaveBeenCalled();
   });
@@ -196,7 +196,10 @@ describe("Browser research workspace", () => {
     const { unmount } = render(<BrowserResearchWorkspace />, {
       wrapper: Wrapper,
     });
-    await screen.findByText("unverified_quota");
+    await screen.findByText(
+      "Browser minutes could not be checked, so captures are paused until they can be.",
+    );
+    expect(screen.queryByText("unverified_quota")).toBeNull();
     fireEvent.change(screen.getByLabelText("Public HTTPS URLs, one per line"), {
       target: { value: "https://openai.com" },
     });
@@ -223,16 +226,15 @@ describe("Browser research workspace", () => {
     mocks.list.mockResolvedValue({ data: [DETAIL] });
     render(<BrowserResearchWorkspace />, { wrapper: Wrapper });
     fireEvent.click(
-      await screen.findByRole("button", { name: "Official docs completed" }),
+      await screen.findByRole("button", { name: /^Official docs Captured/ }),
     );
-    await screen.findByText("Capture completed · captured evidence retrieved");
+    await screen.findByText(/1 page saved/);
     expect(screen.getByText(DETAIL.pages[0]!.text).textContent).toBe(
       DETAIL.pages[0]!.text,
     );
     expect(document.querySelector("script")).toBeNull();
-    expect(
-      screen.getByText(/Run browser minutes unavailable/).textContent,
-    ).toContain("Cost unavailable");
+    expect(screen.getByText("Not recorded")).toBeDefined();
+    expect(screen.getByText("Not priced")).toBeDefined();
     fireEvent.click(screen.getByRole("button", { name: "Download evidence" }));
     await waitFor(() =>
       expect(mocks.handOff).toHaveBeenCalledWith(
@@ -241,6 +243,150 @@ describe("Browser research workspace", () => {
       ),
     );
     expect(mocks.create).not.toHaveBeenCalled();
+  });
+
+  it("re-tapping the open capture never steals focus on a later refresh", async () => {
+    mocks.list.mockResolvedValue({ data: [DETAIL] });
+    render(<BrowserResearchWorkspace />, { wrapper: Wrapper });
+    const row = await screen.findByRole("button", {
+      name: /^Official docs Captured/,
+    });
+    fireEvent.click(row);
+    const title = await screen.findByRole("heading", {
+      level: 3,
+      name: "Official docs",
+    });
+    await waitFor(() => expect(document.activeElement).toBe(title));
+    // Re-tap the open capture, then go and type in the form.
+    fireEvent.click(row);
+    expect(document.activeElement).toBe(title);
+    const field = screen.getByLabelText<HTMLTextAreaElement>(
+      "Public HTTPS URLs, one per line",
+    );
+    field.focus();
+    mocks.read.mockResolvedValue({
+      ...DETAIL,
+      updated_at: "2026-09-30T00:00:00Z",
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Refresh saved captures" }),
+    );
+    await waitFor(() =>
+      expect(mocks.read.mock.calls.length).toBeGreaterThan(1),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(document.activeElement).toBe(field);
+  });
+
+  it("a failed read drops the pending reveal, so a later refetch never steals focus", async () => {
+    mocks.list.mockResolvedValue({ data: [DETAIL] });
+    mocks.read.mockRejectedValueOnce(new Error("not_found"));
+    render(<BrowserResearchWorkspace />, { wrapper: Wrapper });
+    fireEvent.click(
+      await screen.findByRole("button", { name: /^Official docs Captured/ }),
+    );
+    await screen.findByText("This capture no longer exists.");
+    const field = screen.getByLabelText<HTMLTextAreaElement>(
+      "Public HTTPS URLs, one per line",
+    );
+    field.focus();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Refresh saved captures" }),
+    );
+    await screen.findByRole("heading", { level: 3, name: "Official docs" });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(document.activeElement).toBe(field);
+  });
+
+  it("re-tapping a capture whose read failed retries it and never arms a later steal", async () => {
+    mocks.list.mockResolvedValue({ data: [DETAIL] });
+    mocks.read
+      .mockRejectedValueOnce(new Error("not_found"))
+      .mockRejectedValueOnce(new Error("not_found"));
+    render(<BrowserResearchWorkspace />, { wrapper: Wrapper });
+    const row = await screen.findByRole("button", {
+      name: /^Official docs Captured/,
+    });
+    fireEvent.click(row);
+    await screen.findByText("This capture no longer exists.");
+    // The natural retry: tap it again. It reads again and fails again.
+    fireEvent.click(row);
+    await waitFor(() => expect(mocks.read).toHaveBeenCalledTimes(2));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const field = screen.getByLabelText<HTMLTextAreaElement>(
+      "Public HTTPS URLs, one per line",
+    );
+    field.focus();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Refresh saved captures" }),
+    );
+    await screen.findByRole("heading", { level: 3, name: "Official docs" });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(document.activeElement).toBe(field);
+  });
+
+  it("re-tapping a capture whose read failed opens it when the retry succeeds", async () => {
+    mocks.list.mockResolvedValue({ data: [DETAIL] });
+    mocks.read.mockRejectedValueOnce(new Error("not_found"));
+    render(<BrowserResearchWorkspace />, { wrapper: Wrapper });
+    const row = await screen.findByRole("button", {
+      name: /^Official docs Captured/,
+    });
+    fireEvent.click(row);
+    await screen.findByText("This capture no longer exists.");
+    fireEvent.click(row);
+    const title = await screen.findByRole("heading", {
+      level: 3,
+      name: "Official docs",
+    });
+    await waitFor(() => expect(document.activeElement).toBe(title));
+  });
+
+  it("a stop or download notice shows only on the capture it is about", async () => {
+    const other = { ...DETAIL, id: "other-run", title: "Other docs" };
+    mocks.list.mockResolvedValue({ data: [DETAIL, other] });
+    mocks.read.mockImplementation((id: string) =>
+      Promise.resolve(id === other.id ? other : DETAIL),
+    );
+    render(<BrowserResearchWorkspace />, { wrapper: Wrapper });
+    fireEvent.click(
+      await screen.findByRole("button", { name: /^Official docs Captured/ }),
+    );
+    await screen.findByRole("heading", { level: 3, name: "Official docs" });
+    // A's download fails while A is open: the reason shows in A's receipt.
+    mocks.read.mockRejectedValueOnce(new Error("not_found"));
+    fireEvent.click(screen.getByRole("button", { name: "Download evidence" }));
+    const notice = await screen.findByText("This capture no longer exists.");
+    expect(notice.closest('[aria-label="Capture evidence"]')).not.toBeNull();
+    // Start another download on A, switch to B, then let A's download fail.
+    let rejectDownload: (error: Error) => void = () => undefined;
+    // Only A's next read (the download) waits; B reads normally.
+    mocks.read.mockImplementation((id: string) =>
+      id === other.id
+        ? Promise.resolve(other)
+        : new Promise((_, reject) => {
+            rejectDownload = reject;
+          }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Download evidence" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /^Other docs Captured/ }),
+    );
+    await screen.findByRole("heading", { level: 3, name: "Other docs" });
+    rejectDownload(new Error("not_found"));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(screen.queryByText("This capture no longer exists.")).toBeNull();
+  });
+
+  it("shows a rejected capture's reason inside the form", async () => {
+    mocks.list.mockResolvedValue({ data: [{ ...DETAIL, id: "older" }] });
+    mocks.create.mockRejectedValueOnce(new Error("owner_busy"));
+    render(<BrowserResearchWorkspace />, { wrapper: Wrapper });
+    await fillAndSubmit();
+    const alert = await screen.findByText(
+      /A capture is already queued or running\. Wait for it to finish\./,
+    );
+    expect(alert.closest("#capture-form")).not.toBeNull();
   });
 
   it("reuses the admission receipt after an unconfirmed transport failure", async () => {
@@ -256,7 +402,7 @@ describe("Browser research workspace", () => {
         .hasAttribute("disabled"),
     ).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: "Retry same request" }));
-    await screen.findByText("Capture completed · captured evidence retrieved");
+    await screen.findByText(/1 page saved/);
     expect(mocks.create).toHaveBeenCalledTimes(2);
     expect(mocks.create.mock.calls[0]).toEqual(mocks.create.mock.calls[1]);
     expect(mocks.create.mock.calls[0]?.[1]).toMatch(/^[0-9a-f-]{36}$/);
@@ -272,15 +418,19 @@ describe("Browser research workspace", () => {
     });
     render(<BrowserResearchWorkspace />, { wrapper: Wrapper });
     fireEvent.click(
-      await screen.findByRole("button", { name: "Official docs running" }),
+      await screen.findByRole("button", { name: /^Official docs Working/ }),
     );
     await screen.findByText("No page evidence has been retrieved.");
-    expect(screen.queryByText(/captured evidence retrieved/)).toBeNull();
+    expect(screen.queryByText(/page saved/)).toBeNull();
+    // Nothing to download is no button, not a disabled one; the stored code
+    // reads as a sentence, never as public_destination_rejected.
     expect(
-      screen
-        .getByRole("button", { name: "Download evidence" })
-        .hasAttribute("disabled"),
-    ).toBe(true);
+      screen.queryByRole("button", { name: "Download evidence" }),
+    ).toBeNull();
+    expect(screen.queryByText("public_destination_rejected")).toBeNull();
+    expect(
+      screen.getByText("The capture could not be completed."),
+    ).toBeDefined();
     expect(
       screen
         .getByRole("button", { name: "Capture pages" })

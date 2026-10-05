@@ -140,6 +140,52 @@ async def test_real_graph_acceptance_populates_native_usage_owned_thread_and_jou
         await service.aclose()
 
 
+async def test_workflow_service_error_from_a_model_call_keeps_its_own_code(tmp_path, monkeypatch):
+    # engine.py wraps every model_call failure in WorkflowCallbackError("workflow_model_call_failed");
+    # _run() must still recover the real WorkflowServiceError code from the chain, not the wrapper's.
+    monkeypatch.setenv("MOMOBOT_WORKFLOWS_ENABLED", "true")
+    store, events, manager, threads = runtime()
+    adapter = SyntheticAdapter()
+    service = service_at(tmp_path / "native.sqlite", saver=InMemorySaver(), adapter=adapter, manager=manager, threads=threads, events=events)
+    await service.start()
+    try:
+
+        async def budget_exhausted(data, **kwargs):
+            raise WorkflowServiceError("run_token_budget_exhausted", 429)
+
+        service._model = budget_exhausted
+        admitted = await create(service)
+        await drain(service)
+        result = await service.snapshot("synthetic-owner-scope", admitted["id"])
+        assert result["status"] == "failed" and result["error"] == "run_token_budget_exhausted"
+        assert not adapter.calls
+    finally:
+        await service.aclose()
+
+
+async def test_plain_model_call_exception_still_stores_workflow_model_call_failed(tmp_path, monkeypatch):
+    # With no WorkflowServiceError anywhere in the chain, fall back to the outermost
+    # (WorkflowCallbackError) code, not the innermost provider exception's.
+    monkeypatch.setenv("MOMOBOT_WORKFLOWS_ENABLED", "true")
+    store, events, manager, threads = runtime()
+    adapter = SyntheticAdapter()
+    service = service_at(tmp_path / "native.sqlite", saver=InMemorySaver(), adapter=adapter, manager=manager, threads=threads, events=events)
+    await service.start()
+    try:
+
+        async def broken(data, **kwargs):
+            raise RuntimeError("provider-private-secret-data-must-not-appear-in-error")
+
+        service._model = broken
+        admitted = await create(service)
+        await drain(service)
+        result = await service.snapshot("synthetic-owner-scope", admitted["id"])
+        assert result["status"] == "failed" and result["error"] == "workflow_model_call_failed"
+        assert not adapter.calls
+    finally:
+        await service.aclose()
+
+
 async def test_queue_cancel_before_execution_has_no_native_or_paid_admission(tmp_path, monkeypatch):
     monkeypatch.setenv("MOMOBOT_WORKFLOWS_ENABLED", "true")
     store, events, manager, threads = runtime()

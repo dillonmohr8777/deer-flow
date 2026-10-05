@@ -35,6 +35,7 @@ import {
   type TeamChannel,
   type TeamMember,
 } from "@/core/team";
+import { toDateTimeAttr } from "@/core/utils/datetime";
 import { cn } from "@/lib/utils";
 
 import {
@@ -247,7 +248,7 @@ function Channel({
                       </span>
                       <time
                         className={styles.stamp}
-                        dateTime={message.created_at}
+                        dateTime={toDateTimeAttr(message.created_at)}
                       >
                         {formatStamp(message.created_at)}
                       </time>

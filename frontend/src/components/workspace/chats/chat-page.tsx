@@ -33,7 +33,10 @@ import {
 import { ThreadArchiveStatus } from "@/components/workspace/thread-archive-status";
 import { ThreadBackgroundTasks } from "@/components/workspace/thread-background-tasks";
 import { ThreadExtensionActions } from "@/components/workspace/thread-extension-actions";
-import { ThreadScheduledTasksLink } from "@/components/workspace/thread-scheduled-tasks-link";
+import {
+  ThreadScheduledTasksLink,
+  threadScheduledTasksHref,
+} from "@/components/workspace/thread-scheduled-tasks-link";
 import { ThreadSubagentBatches } from "@/components/workspace/thread-subagent-batches";
 import { ThreadTitle } from "@/components/workspace/thread-title";
 import { TodoList } from "@/components/workspace/todo-list";
@@ -488,7 +491,7 @@ export default function ChatPage() {
                   <ProjectAffiliationBadge projectId={affiliatedProjectId} />
                 )}
               </div>
-              <div className="flex shrink-0 items-center gap-1 sm:gap-2">
+              <div className="flex shrink-0 items-center gap-0 sm:gap-2">
                 {!isNewThread &&
                   !isMock &&
                   env.NEXT_PUBLIC_STATIC_WEBSITE_ONLY !== "true" && (
@@ -520,7 +523,14 @@ export default function ChatPage() {
                 )}
                 <SidecarTrigger />
                 {browserEnabled && <BrowserTrigger />}
-                <ExportTrigger threadId={threadId} />
+                <ExportTrigger
+                  threadId={threadId}
+                  scheduledTasksHref={
+                    !isNewThread && !isMock
+                      ? threadScheduledTasksHref(threadId)
+                      : undefined
+                  }
+                />
                 <ThreadExtensionActions threadId={threadId} />
                 <ArtifactTrigger />
               </div>
@@ -592,14 +602,18 @@ export default function ChatPage() {
                     : "relative shrink-0 pb-[max(1.75rem,env(safe-area-inset-bottom))]",
                 )}
               >
-                {/* Welcome lifts the composer toward the middle; the min()
-                    stops short screens from pushing the Momo and its line
-                    up under the header. */}
+                {/* From sm, welcome lifts the composer toward the middle;
+                    the min() stops short screens from pushing the Momo and
+                    its line up under the header (430px: the composer with
+                    its tool row). Phones keep it low, at thumb reach above
+                    the starters and the tab bar, so the field and the
+                    starters sit where the thumb already is. --tab-bar-h is
+                    the phone tab bar (workspace-mobile.css). */}
                 <div
                   className={cn(
                     "relative w-full",
                     isWelcomeMode &&
-                      "-translate-y-[min(calc(50vh_-_100px),calc(100vh_-_560px))] sm:-translate-y-[min(calc(50vh_-_96px),calc(100vh_-_430px))]",
+                      "-translate-y-2 sm:-translate-y-[min(calc(50vh_-_96px_-_var(--tab-bar-h)/2),calc(100vh_-_430px_-_var(--tab-bar-h)))]",
                     isWelcomeMode
                       ? "max-w-(--container-width-sm)"
                       : "max-w-(--container-width-md)",
@@ -660,7 +674,15 @@ export default function ChatPage() {
                       extraHeader={
                         isWelcomeMode &&
                         !hasGoal &&
-                        !hasTodos && <Welcome mode={settings.context.mode} />
+                        !hasTodos && (
+                          // A phone in landscape (440px tall or less) has
+                          // no room above the composer for the greeting, so
+                          // the placeholder says what to write on its own.
+                          <Welcome
+                            className="max-sm:[@media(max-height:440px)]:hidden"
+                            mode={settings.context.mode}
+                          />
+                        )
                       }
                       disabled={
                         isMock ||

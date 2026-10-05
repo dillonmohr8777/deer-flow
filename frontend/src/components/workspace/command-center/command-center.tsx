@@ -41,7 +41,7 @@ import {
 import { useModels } from "@/core/models/hooks";
 import { useSubagents } from "@/core/subagents";
 import { pathOfThread } from "@/core/threads/utils";
-import { formatCompactStamp } from "@/core/utils/datetime";
+import { toDateTimeAttr, formatCompactStamp } from "@/core/utils/datetime";
 
 import { AgentTopology } from "./agent-topology";
 import { useWorkspaceAppearance } from "./appearance-provider";
@@ -417,7 +417,7 @@ export function CommandCenter() {
                       <>
                         <time
                           className={styles.metaStamp}
-                          dateTime={run.created_at}
+                          dateTime={toDateTimeAttr(run.created_at)}
                         >
                           {stamp}
                         </time>{" "}
@@ -467,7 +467,10 @@ export function CommandCenter() {
   );
 
   const team = (
-    <section className={styles.team} aria-labelledby="team-heading">
+    <section
+      className={`${styles.team} ${styles.onDesk}`}
+      aria-labelledby="team-heading"
+    >
       <div className={styles.sectionHead}>
         <div>
           <h2 id="team-heading">Your agent team</h2>
@@ -736,7 +739,7 @@ export function CommandCenter() {
                 startPath={startPath}
                 onShowAll={() => setView("Jobs")}
                 hasMore={Boolean(activityRuns.data?.has_more)}
-                panelClassName={styles.jobs}
+                panelClassName={`${styles.jobs} ${styles.onDesk}`}
                 headClassName={styles.sectionHead}
               />
             ) : (

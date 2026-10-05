@@ -707,9 +707,9 @@ class WorkflowService:
             await self._native_finish(record, final, final["status"], final.get("error"))
         except Exception as error:
             cause = error
-            while not isinstance(cause, WorkflowServiceError) and cause.__cause__ is not None:
+            while cause is not None and not isinstance(cause, WorkflowServiceError):
                 cause = cause.__cause__
-            code = getattr(cause, "code", "workflow_execution_failed")
+            code = getattr(cause if cause is not None else error, "code", "workflow_execution_failed")
             if not isinstance(code, str) or not re.fullmatch(r"[a-z0-9_]{1,80}", code):
                 code = "workflow_execution_failed"
             final = await self._storage("terminal", data["id"], data["_scope"], {"status": "failed", "accepted": False, "error": code})

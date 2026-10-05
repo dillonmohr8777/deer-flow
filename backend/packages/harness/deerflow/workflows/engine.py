@@ -220,8 +220,8 @@ class WorkflowEngine:
                 result = await model_call(worker_id=worker["id"], role=role, prompt=prompt, output_schema=schema, effort=effort, model=MODEL, continuation=copy.deepcopy(worker["history"][-4:]), call_id=call_id)
             except asyncio.CancelledError:
                 raise
-            except Exception:
-                raise WorkflowCallbackError("workflow_model_call_failed") from None
+            except Exception as error:
+                raise WorkflowCallbackError("workflow_model_call_failed") from error
             _validate_receipt(result, effort=effort)
             output = _validate_output(schema, result.get("output"))
             brief = (

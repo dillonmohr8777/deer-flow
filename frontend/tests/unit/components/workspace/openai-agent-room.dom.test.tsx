@@ -23,8 +23,12 @@ rs.mock("@/core/auth/AuthProvider", () => ({
     user: { id: "owner-one", permissions: ["runs:create", "runs:cancel"] },
   }),
 }));
-rs.mock("@/components/ui/sidebar", () => ({
-  SidebarTrigger: () => <button aria-label="Toggle sidebar" />,
+rs.mock("@/components/workspace/workspace-container", () => ({
+  WorkspaceContainer: ({ children }: PropsWithChildren) => (
+    <div>{children}</div>
+  ),
+  WorkspaceHeader: () => <div />,
+  WorkspaceBody: ({ children }: PropsWithChildren) => <main>{children}</main>,
 }));
 rs.mock("@/core/openai-agents/api", () => ({
   getOpenAIAgentStatus: mocks.status,
@@ -132,7 +136,7 @@ describe("Agent room workspace fencing", () => {
         }),
     );
     render(<OpenAIAgentRoom />, { wrapper: Wrapper });
-    await screen.findByText("Your sessions will appear here.");
+    await screen.findByText(/Your sessions will appear here/);
     fireEvent.change(screen.getByLabelText("Task for the crew"), {
       target: { value: "Private task" },
     });

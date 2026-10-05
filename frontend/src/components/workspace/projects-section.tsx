@@ -286,16 +286,17 @@ export function ProjectsSection() {
 
   return (
     <SidebarGroup>
-      <SidebarGroupLabel className="justify-between pr-1">
+      <SidebarGroupLabel className="justify-between pr-1 max-sm:h-11">
         <span>{t.projects.title}</span>
         {/* Icon-only controls: each gets a tooltip on hover and keyboard
-            focus (title attributes never showed on focus), 40px targets. */}
+            focus (title attributes never showed on focus), 40px targets;
+            44px on phones, where the label grows to hold them. */}
         <span className="flex items-center gap-0.5">
           <Tooltip content={displayModeLabel}>
             <Button
               variant="ghost"
               size="icon"
-              className="-my-1 size-10 [&>svg]:size-4"
+              className="-my-1 size-10 max-sm:my-0 max-sm:size-11 [&>svg]:size-4"
               aria-label={displayModeLabel}
               onClick={() =>
                 setSettings(
@@ -312,7 +313,7 @@ export function ProjectsSection() {
             <Button
               variant="ghost"
               size="icon"
-              className="-my-1 size-10 [&>svg]:size-4"
+              className="-my-1 size-10 max-sm:my-0 max-sm:size-11 [&>svg]:size-4"
               aria-label={t.projects.newProject}
               onClick={() => setCreateDialogOpen(true)}
               data-testid="projects-new-project-button"
@@ -324,7 +325,7 @@ export function ProjectsSection() {
             <Button
               variant="ghost"
               size="icon"
-              className="-my-1 size-10 [&>svg]:size-4"
+              className="-my-1 size-10 max-sm:my-0 max-sm:size-11 [&>svg]:size-4"
               aria-label={t.trash.title}
               asChild
               data-testid="projects-trash-link"

@@ -377,7 +377,7 @@ export function InputBox({
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();
   const [modelDialogOpen, setModelDialogOpen] = useState(false);
-  const { models } = useModels();
+  const { models, isLoading: modelsLoading } = useModels();
   const { user } = useAuth();
   const { thread, isMock } = useThread();
   const { attachments, textInput } = usePromptInputController();
@@ -1484,6 +1484,17 @@ export function InputBox({
   const isComposerDisabled = disabled === true;
   const isMockThread = isMock === true;
   const composerLocked = isComposerDisabled || polishingInput;
+  // No resolved model (none configured, or easy mode) means no picker: an
+  // empty 44px button has no name to read and costs the phone a row.
+  const showModelPicker =
+    context.experience_mode !== "easy" && Boolean(selectedModel);
+  // The phone footer's row split is decided while models load too, so the
+  // composer does not grow a row (and move Send) when they arrive.
+  const modelPickerRow =
+    showModelPicker || (context.experience_mode !== "easy" && modelsLoading);
+  const composerPlaceholder = isWelcomeMode
+    ? t.inputBox.placeholder
+    : t.inputBox.replyPlaceholder;
   // A denied runs:cancel role sees a disabled stop affordance, not a removed
   // one — the composer must still show that a turn is in flight.
   const stopDenied = status === "streaming" && !canStopStreaming;
@@ -2496,11 +2507,11 @@ export function InputBox({
                 onRemove={clearSelectedSlashSkill}
               />
               <span
-                aria-label={t.inputBox.placeholder}
+                aria-label={t.inputBox.messageLabel}
                 aria-multiline="true"
                 contentEditable={!composerLocked}
                 data-empty={textInput.value.length === 0}
-                data-placeholder={t.inputBox.placeholder}
+                data-placeholder={composerPlaceholder}
                 data-slot="input-group-control"
                 onBlur={() => setTextareaFocused(false)}
                 onCompositionEnd={() => {
@@ -2513,7 +2524,7 @@ export function InputBox({
                 onInput={handleInlineSkillInput}
                 onKeyDown={handleInlineSkillKeyDown}
                 onPaste={handleInlineSkillPaste}
-                aria-placeholder={t.inputBox.placeholder}
+                aria-placeholder={composerPlaceholder}
                 ref={inlineSkillTextRef}
                 role="textbox"
                 suppressContentEditableWarning
@@ -2533,7 +2544,8 @@ export function InputBox({
                 context.experience_mode === "easy" && "text-base!",
               )}
               disabled={composerLocked}
-              placeholder={t.inputBox.placeholder}
+              placeholder={composerPlaceholder}
+              aria-label={t.inputBox.messageLabel}
               autoFocus={autoFocus}
               defaultValue={initialValue}
               onBlur={() => setTextareaFocused(false)}
@@ -2544,11 +2556,20 @@ export function InputBox({
             />
           )}
         </div>
-        <PromptInputFooter className="flex flex-wrap gap-2 sm:flex-nowrap">
-          {/* Phones: the tools take a full row and the model and Send the
-              next, at the right edge by the thumb, so the composer stays
-              two rows tall. */}
-          <PromptInputTools className="min-w-0 flex-1 basis-full flex-wrap sm:basis-auto">
+        <PromptInputFooter className="flex flex-wrap gap-2 sm:flex-nowrap max-sm:[&_button]:min-h-11 max-sm:[&_button]:min-w-11">
+          {/* Phones: with a model picker the tools take a full row and the
+              model and Send the next, at the right edge by the thumb. With
+              no picker Send shares the tools' row, so the composer is not
+              a row taller for one button. Every footer control keeps the
+              44px phone touch floor (DESIGN.md, Phones); the tools row is
+              pulled out by that inset so its first glyph meets the text
+              edge. */}
+          <PromptInputTools
+            className={cn(
+              "min-w-0 flex-1 flex-wrap max-sm:-ml-3.5",
+              modelPickerRow && "basis-full sm:basis-auto",
+            )}
+          >
             <AddAttachmentsButton
               className="px-2!"
               disabled={composerLocked}
@@ -2917,7 +2938,7 @@ export function InputBox({
                 {goalObjectiveCounter.length}/{goalObjectiveCounter.max}
               </span>
             )}
-            {context.experience_mode !== "easy" && (
+            {showModelPicker && (
               <ModelPicker
                 open={modelDialogOpen}
                 onOpenChange={setModelDialogOpen}
@@ -3090,13 +3111,18 @@ function StarterPrompts({
     <div
       role="group"
       aria-label={t.inputBox.startersLabel}
-      className="flex w-full max-w-full flex-wrap items-center justify-center gap-2 px-4 pt-2 sm:px-0"
+      className="flex w-full max-w-full flex-wrap items-center justify-center gap-2 pt-2 max-[374px]:flex-nowrap max-[374px]:justify-start max-[374px]:overflow-x-auto max-[374px]:[contain:inline-size] max-sm:[@media(max-height:440px)]:hidden"
       data-chat-starters=""
     >
+      {/* Paper tags, not pills: chips cut at 2px (DESIGN.md), and 44px tall
+          on phones, where they sit at thumb reach under the composer. Below
+          375px they would wrap three rows high and lift the welcome under
+          the header, so they run as one sideways rail instead. A landscape
+          phone (440px tall or less) drops them so the field stays in view. */}
       {(starters ?? t.inputBox.starters).map((starter) => (
         <Suggestion
           key={starter.label}
-          className="paper-card text-foreground text-xs sm:text-sm"
+          className="paper-card text-foreground min-h-11 shrink-0 rounded-[2px] text-sm sm:min-h-0"
           suggestion={starter.label}
           onClick={() => {
             textInput.setInput(starter.prompt);

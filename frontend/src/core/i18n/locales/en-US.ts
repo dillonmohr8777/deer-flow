@@ -163,6 +163,7 @@ export const enUS: Translations = {
     export: "Export",
     exportAsMarkdown: "Export as Markdown",
     exportAsJSON: "Export as JSON",
+    chatActions: "Chat actions",
     exportSuccess: "Conversation exported",
     exportFailed: "Failed to export conversation.",
     regenerate: "Regenerate",
@@ -325,7 +326,9 @@ export const enUS: Translations = {
 
   // Input Box
   inputBox: {
-    placeholder: "How can I assist you today?",
+    placeholder: "Describe the job and what done looks like",
+    replyPlaceholder: "Reply, or give the next step",
+    messageLabel: "Message",
     disclaimer: "Agents can make mistakes. Check the record.",
     createSkillPrompt:
       "We're going to build a new skill step by step with `skill-creator`. To start, what do you want this skill to do?",
@@ -532,6 +535,8 @@ export const enUS: Translations = {
     instructionsByteCount: (used, max) => `${used} / ${max} bytes`,
     instructionsTooLong: (max) =>
       `Instructions are over the ${max}-byte limit. Shorten them to save.`,
+    briefMissing: "No brief yet. Add one under Instructions.",
+    archivedLede: "Restore it in Settings to start a new chat.",
     instructionsSaved: "Saved",
     instructionsSaveFailed: "Failed to save instructions",
     documentsShelf: "Shelf",
@@ -594,7 +599,7 @@ export const enUS: Translations = {
     loadFailed: "Couldn't load trash",
     retry: "Try again",
     originProject: (projectName) => `from ${projectName}`,
-    unknownProject: "Unknown project",
+    unknownProject: "Project not recorded",
     retentionLeft: (days) =>
       days <= 0
         ? "Less than a day left"
@@ -846,7 +851,7 @@ export const enUS: Translations = {
       loadFailed: "Couldn't load run history.",
       retry: "Retry history",
     },
-    runTrigger: { scheduled: "scheduled", manual: "manual" },
+    runTrigger: { scheduled: "Scheduled", manual: "Manual" },
     runStatus: {
       queued: "Queued",
       launching: "Launching",
@@ -900,13 +905,15 @@ export const enUS: Translations = {
       "Are you sure you want to delete this agent? This action can't be undone.",
     deleteSuccess: "Agent deleted",
     newChat: "New chat",
-    createPageTitle: "Design your Agent",
+    createPageTitle: "Design your agent",
     createPageSubtitle:
       "Describe the agent you want, and we will shape it together in conversation.",
-    nameStepTitle: "Name your new Agent",
+    nameStepTitle: "Name your new agent",
     nameStepHint:
-      "Letters, digits and hyphens only, stored lowercase (for example code-reviewer)",
-    nameStepPlaceholder: "e.g. code-reviewer",
+      "Letters, digits and hyphens only. It is stored in lowercase.",
+    nameStepPlaceholder: "for example, seo-auditor",
+    nameStepNext:
+      "Next, you describe the job in a chat and MomoBot drafts the agent with you. It is saved when you say so.",
     nameStepContinue: "Continue",
     nameStepInvalidError: "Invalid name. Use only letters, digits and hyphens.",
     nameStepAlreadyExistsError: "An agent with this name already exists",
@@ -922,16 +929,17 @@ export const enUS: Translations = {
     saving: "Saving agent...",
     saveRequested:
       "Save requested. MomoBot is generating and saving an initial version now.",
-    saveHint:
-      "You can save this agent at any time from the top-right menu, even if this is only a first draft.",
+    chatStepEyebrow: "New agent",
+    chatStepPlaceholder:
+      "Describe the job this agent does and what done looks like",
+    chatStepSaved: "Saved",
     saveCommandMessage:
       "Please save this custom agent now based on everything we've discussed so far. Treat this as my explicit confirmation to save. If some details are still missing, make reasonable assumptions, generate a concise first SOUL.md in English, and call setup_agent immediately without asking me for more confirmation.",
     agentCreatedPendingRefresh:
       "The agent was created, but MomoBot couldn't load it yet. Please refresh this page in a moment.",
-    more: "More actions",
-    agentCreated: "Agent created!",
+    agentCreated: "{name} is in your Agents, ready for its first job.",
     startChatting: "Start chatting",
-    backToGallery: "Back to Gallery",
+    backToGallery: "Back to Agents",
     settings: "Agent settings",
     settingsTitle: "Agent settings",
     settingsDisplayName: "Display name",
@@ -1001,6 +1009,7 @@ export const enUS: Translations = {
 
   // Chats
   chats: {
+    lede: "Every conversation with the team, newest first.",
     deleteChat: "Delete chat",
     deleteConfirm: (title) =>
       `Delete “${title}”? This will delete the conversation and its files. This action can't be undone.`,
@@ -1019,12 +1028,24 @@ export const enUS: Translations = {
       "Archiving keeps messages and files. Running and scheduled tasks continue.",
     undoArchive: "Undo",
     noArchivedChats: "No archived chats",
+    noArchivedChatsHint:
+      "Chats you archive from Recent wait here with their messages and files, ready to restore.",
+    backToRecentChats: "Back to Recent chats",
+    loadingChats: "Loading your chats",
     noMatchingChats: "No matching chats in the loaded conversations",
-    loadChatsFailed: "Failed to load conversations",
-    retryLoadChats: "Retry",
+    loadChatsFailed: "Couldn't load your chats",
+    retryLoadChats: "Try again",
     searchChats: "Search chats",
     branchLabel: (title, parentTitle) => `${title}, branch of ${parentTitle}`,
     loadMoreToSearch: "Load more to search older conversations",
+    dayGroups: {
+      pinned: "Pinned",
+      today: "Today",
+      yesterday: "Yesterday",
+      lastWeek: "Last 7 days",
+      earlierIn: (month) => `Earlier in ${month}`,
+      undated: "Date not recorded",
+    },
     loadingMore: "Loading more...",
     loadOlderChats: "Load older chats",
     pinChat: "Pin chat",
