@@ -64,3 +64,5 @@ created keep signing in after their invitation is used, because the gate only
 applies to creating a user.
 
 The PAT scope catalog includes Board, Team and Academy permissions. Scopes still intersect the owner's permissions; unlisted routes remain denied by `_PAT_ROUTE_RULES`, regardless of those scopes. Do not add route admission through a scope-catalog change.
+
+OIDC initiation redirects to the configured callback authority before minting state/PKCE cookies. Compare host and effective callback port, not the internal ASGI scheme behind TLS termination. Never auto-link an existing local owner by email. Regression: `tests/test_oidc_canonical_start.py`.
