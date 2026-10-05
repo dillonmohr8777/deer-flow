@@ -16,6 +16,9 @@ const mocks = rs.hoisted(() => ({
   } as { id: string; permissions: string[] } | null,
   static: false,
   status: rs.fn(),
+  workspaceProjection: rs.fn(),
+  preparationStatus: rs.fn(),
+  prepareEvidence: rs.fn(),
   catalog: rs.fn(),
   list: rs.fn(),
   read: rs.fn(),
@@ -38,6 +41,9 @@ rs.mock("@/core/browserbase/api", () => ({
 }));
 rs.mock("@/core/workflows/api", () => ({
   getWorkflowStatus: mocks.status,
+  getWorkflowWorkspaceProjection: mocks.workspaceProjection,
+  getJevboxPreparationStatus: mocks.preparationStatus,
+  prepareJevboxEvidence: mocks.prepareEvidence,
   getWorkflowCatalog: mocks.catalog,
   listWorkflowRuns: mocks.list,
   getWorkflowRun: mocks.read,
@@ -53,6 +59,7 @@ rs.mock("@/core/workflows/api", () => ({
 }));
 
 import { WorkflowRoom } from "@/components/workspace/workflows/workflow-room";
+import { I18nProvider } from "@/core/i18n/context";
 import { type WorkflowRun } from "@/core/workflows/types";
 
 import {
@@ -73,7 +80,11 @@ function Wrapper({ children }: PropsWithChildren) {
       }),
   );
   if (!clients.includes(client)) clients.push(client);
-  return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+  return (
+    <I18nProvider initialLocale="en-US">
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    </I18nProvider>
+  );
 }
 async function chooseAndRun() {
   fireEvent.click(
@@ -94,6 +105,22 @@ beforeEach(() => {
   };
   mocks.static = false;
   mocks.status.mockResolvedValue(WORKFLOW_STATUS);
+  mocks.workspaceProjection.mockResolvedValue({
+    activeWorkspaceId: "workspace-one",
+  });
+  mocks.preparationStatus.mockResolvedValue({
+    owner_scope: "a".repeat(64),
+    preparation_available: false,
+    current_review: false,
+    dispatch_enabled: false,
+  });
+  mocks.prepareEvidence.mockResolvedValue({
+    brief: '{"execution_authorized":false}',
+    researchQuestion: "Which dates are shown?",
+    sourceExcerpts: "Synthetic source\nbody",
+    knowledgeContext: "No canonical adoption or dispatch authority.",
+    evidenceMode: "synthetic",
+  });
   mocks.catalog.mockResolvedValue({ workflows: WORKFLOW_FIXTURES, total: 100 });
   mocks.list.mockResolvedValue({ runs: [] });
   mocks.read.mockResolvedValue(WORKFLOW_RUN);
@@ -105,6 +132,176 @@ afterEach(() => {
 });
 
 describe("Workflow room behavior", () => {
+  it("shows the preparation-only pane while workflow execution status is unavailable", async () => {
+    mocks.status.mockRejectedValue(new Error("not_enabled"));
+    mocks.workspaceProjection.mockResolvedValue({
+      activeWorkspaceId: "workspace-one",
+    });
+    render(<WorkflowRoom />, { wrapper: Wrapper });
+    await screen.findByText("Workflow execution is disabled.");
+    expect(
+      await screen.findByRole("heading", { name: "Reviewed source draft" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        "No reviewed source binding is available in this workspace.",
+      ),
+    ).toBeTruthy();
+    expect(mocks.create).not.toHaveBeenCalled();
+  });
+
+  it("uploads the selected file for a bounded unsent preview without creating a paid workflow run", async () => {
+    mocks.preparationStatus.mockResolvedValue({
+      owner_scope: "a".repeat(64),
+      preparation_available: true,
+      current_review: true,
+      dispatch_enabled: false,
+    });
+    render(<WorkflowRoom />, { wrapper: Wrapper });
+    const file = new File(['{"reviewed":true}\n'], "reviewed.json", {
+      type: "application/json",
+    });
+    fireEvent.change(await screen.findByLabelText("Reviewed JSON file"), {
+      target: { files: [file] },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Prepare unsent draft" }),
+    );
+    await screen.findByText("Which dates are shown?");
+    expect(mocks.prepareEvidence).toHaveBeenCalledWith(
+      file,
+      "a".repeat(64),
+      { ownerId: "owner-one", workspaceId: "workspace-one" },
+      expect.any(AbortSignal),
+    );
+    expect(mocks.create).not.toHaveBeenCalled();
+    expect(
+      screen.getByText(
+        "This prepares an unsent draft. Paid research remains off.",
+      ),
+    ).toBeTruthy();
+  });
+
+  it("hides an existing proposal immediately when the preparation status refresh fails", async () => {
+    mocks.preparationStatus.mockResolvedValue({
+      owner_scope: "a".repeat(64),
+      preparation_available: true,
+      current_review: true,
+      dispatch_enabled: false,
+    });
+    render(<WorkflowRoom />, { wrapper: Wrapper });
+    const file = new File(['{"reviewed":true}'], "reviewed.json", {
+      type: "application/json",
+    });
+    fireEvent.change(await screen.findByLabelText("Reviewed JSON file"), {
+      target: { files: [file] },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Prepare unsent draft" }),
+    );
+    await screen.findByText("Which dates are shown?");
+    mocks.preparationStatus.mockRejectedValue(
+      new Error("workspace_unavailable"),
+    );
+    fireEvent.click(
+      screen.getAllByRole("button", { name: "Refresh status" })[0]!,
+    );
+    await screen.findByText(
+      "Could not confirm the reviewed source status. Refresh and try again.",
+    );
+    await waitFor(() =>
+      expect(screen.queryByText("Which dates are shown?")).toBeNull(),
+    );
+  });
+
+  it("clears a prepared proposal when a refreshed review is no longer current", async () => {
+    mocks.preparationStatus.mockResolvedValue({
+      owner_scope: "a".repeat(64),
+      preparation_available: true,
+      current_review: true,
+      dispatch_enabled: false,
+    });
+    render(<WorkflowRoom />, { wrapper: Wrapper });
+    const file = new File(['{"reviewed":true}'], "reviewed.json", {
+      type: "application/json",
+    });
+    fireEvent.change(await screen.findByLabelText("Reviewed JSON file"), {
+      target: { files: [file] },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Prepare unsent draft" }),
+    );
+    await screen.findByText("Which dates are shown?");
+    mocks.preparationStatus.mockResolvedValue({
+      owner_scope: "a".repeat(64),
+      preparation_available: true,
+      current_review: false,
+      dispatch_enabled: false,
+    });
+    fireEvent.click(
+      screen.getAllByRole("button", { name: "Refresh status" })[0]!,
+    );
+    await screen.findByText(
+      "The source review is expired. A current owner-reviewed file is required.",
+    );
+    expect(screen.queryByText("Which dates are shown?")).toBeNull();
+  });
+
+  it("aborts and discards a late preparation response after the owner changes", async () => {
+    mocks.preparationStatus.mockResolvedValue({
+      owner_scope: "a".repeat(64),
+      preparation_available: true,
+      current_review: true,
+      dispatch_enabled: false,
+    });
+    let settle: (value: unknown) => void = () => undefined;
+    mocks.prepareEvidence.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          settle = resolve;
+        }),
+    );
+    const { rerender } = render(<WorkflowRoom />, { wrapper: Wrapper });
+    const file = new File(['{"reviewed":true}'], "reviewed.json", {
+      type: "application/json",
+    });
+    fireEvent.change(await screen.findByLabelText("Reviewed JSON file"), {
+      target: { files: [file] },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Prepare unsent draft" }),
+    );
+    await waitFor(() => expect(mocks.prepareEvidence).toHaveBeenCalledTimes(1));
+    const signal = mocks.prepareEvidence.mock.calls[0]?.[3] as AbortSignal;
+    mocks.user = { id: "owner-two", permissions: ["runs:read"] };
+    mocks.workspaceProjection.mockResolvedValue({
+      activeWorkspaceId: "workspace-two",
+    });
+    mocks.preparationStatus.mockResolvedValue({
+      owner_scope: "b".repeat(64),
+      preparation_available: false,
+      current_review: false,
+      dispatch_enabled: false,
+    });
+    rerender(<WorkflowRoom />);
+    await waitFor(() => expect(signal.aborted).toBe(true));
+    settle({
+      brief: "late private proposal",
+      researchQuestion: "Which dates are shown?",
+      sourceExcerpts: "Synthetic source body",
+      knowledgeContext: "No canonical adoption.",
+      evidenceMode: "synthetic",
+    });
+    await waitFor(() =>
+      expect(mocks.preparationStatus).toHaveBeenCalledWith(
+        "owner-two",
+        expect.any(AbortSignal),
+      ),
+    );
+    expect(screen.queryByText("Which dates are shown?")).toBeNull();
+    expect(screen.queryByText("late private proposal")).toBeNull();
+  });
+
   it("opts into plan review and retains that mode when admission is uncertain", async () => {
     mocks.create.mockRejectedValueOnce(new Error("provider_outcome_unknown"));
     render(<WorkflowRoom />, { wrapper: Wrapper });

@@ -11,6 +11,7 @@ EXPECTED_GUIDANCE_PATHS = {
     "AGENTS.md",
     "backend/AGENTS.md",
     "backend/tests/AGENTS.md",
+    "desktop/AGENTS.md",
     "frontend/AGENTS.md",
     "backend/app/gateway/AGENTS.md",
     "backend/app/gateway/auth/AGENTS.md",

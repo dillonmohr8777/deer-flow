@@ -97,3 +97,16 @@ effective channel/runtime overrides, persistent storage and a canary separately.
 - See [backend/docs/GITHUB_AGENTS.md](../../docs/GITHUB_AGENTS.md) for the architecture diagrams: webhook → fan-out → `InboundMessage` dispatch, `preferred_thread_id = UUID5(repo, number, agent_name)` thread determinism, mention-handle precedence chain, GH token lifecycle via `GH_TOKEN`/`GITHUB_TOKEN` per-call `extra_env`, and the narrow `ConflictError` (HTTP 409) thread-create race recovery.
 
 Brain Forge is an opt-in path of the existing Slack adapter. Persist exact scoped admission before ACK, retain owner/connection/thread gates and delivery-ambiguity holds, and keep canonical registry/queue/CONTROL read-only. The optional project compiler binds reviewed research/native request packets to the same private brief receipt; it does not dispatch. Keep private evidence and secrets outside source. See [BRAINFORGE.md](BRAINFORGE.md).
+
+`brainforge_research_handoff.py` reads pinned original-pilot proposals and complete
+review-selected source posts into the existing native research schema. Run the
+original producer only upstream; compilation/readback never imports it, opens
+its ledger or writes research artifacts. Preserve the reviewed-JS default and
+reject mixed modes, research overrides, source drift and credential-shaped data.
+
+`brainforge_cli prepare` and `check` delegate to `brainforge_setup.py` without
+builder, transport or live-config mutation. Candidate pins are unreviewed;
+preparation keeps the feature disabled and requires a connection. Both the
+service and Gateway router construct credential repositories through
+`connection_repository.py`, which reads only the optional protected host
+`CHANNEL_CONNECTIONS_ENCRYPTION_KEY` and never generates or rotates a key.

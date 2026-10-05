@@ -2,6 +2,14 @@ import { fetch } from "@/core/api/fetcher";
 import { getBackendBaseURL } from "@/core/config";
 
 import {
+  JEVBOX_MAX_PROPOSAL_BYTES,
+  parseJevboxPreparationStatus,
+  parseJevboxProposal,
+  validatePreparationUpload,
+  type JevboxPreparationStatus,
+  type JevboxProposalPreview,
+} from "./jevbox-preparation";
+import {
   type WorkflowDefinition,
   type WorkflowInput,
   type WorkflowRun,
@@ -43,6 +51,168 @@ async function json<T>(path: string, init?: RequestInit): Promise<T> {
 }
 function headers(scope: string): Record<string, string> {
   return { "X-Expected-Workflow-Scope": scope };
+}
+
+async function checkedJsonResponse<T>(
+  response: Response,
+  limit: number,
+): Promise<T> {
+  if (!response.ok) {
+    throw new WorkflowApiError(
+      response.status === 409
+        ? "workspace_scope_changed"
+        : "preparation_request_failed",
+      response.status,
+    );
+  }
+  if (
+    response.redirected ||
+    response.headers
+      .get("content-type")
+      ?.split(";")[0]
+      ?.trim()
+      .toLowerCase() !== "application/json"
+  )
+    throw new WorkflowApiError("invalid_workflow_response", 502);
+  const declared = response.headers.get("content-length");
+  if (
+    declared !== null &&
+    (!/^\d+$/.test(declared) || Number(declared) > limit)
+  )
+    throw new WorkflowApiError("invalid_workflow_response", 502);
+  if (!response.body)
+    throw new WorkflowApiError("invalid_workflow_response", 502);
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  try {
+    while (true) {
+      const next = await reader.read();
+      if (next.done) break;
+      size += next.value.byteLength;
+      if (size > limit)
+        throw new WorkflowApiError("invalid_workflow_response", 502);
+      chunks.push(new Uint8Array(next.value));
+    }
+  } finally {
+    await reader.cancel().catch(() => undefined);
+    reader.releaseLock();
+  }
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.length;
+  }
+  try {
+    return JSON.parse(
+      new TextDecoder("utf-8", { fatal: true }).decode(bytes),
+    ) as T;
+  } catch {
+    throw new WorkflowApiError("invalid_workflow_response", 502);
+  }
+}
+
+async function jevboxRequest(
+  path: string,
+  init: RequestInit,
+  limit: number,
+): Promise<unknown> {
+  const response = await fetch(`${getBackendBaseURL()}/api/workflows${path}`, {
+    ...init,
+    cache: "no-store",
+  });
+  return checkedJsonResponse(response, limit);
+}
+
+export interface WorkflowWorkspaceProjection {
+  activeWorkspaceId: string | null;
+}
+
+function isWorkspaceProjection(value: unknown): value is {
+  active_workspace_id: string | null;
+  workspaces: { id: string; name: string; role: string }[];
+} {
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    Array.isArray(value) ||
+    Object.keys(value).sort().join(",") !== "active_workspace_id,workspaces"
+  )
+    return false;
+  const projection = value as Record<string, unknown>;
+  return (
+    (projection.active_workspace_id === null ||
+      (typeof projection.active_workspace_id === "string" &&
+        /^[A-Za-z0-9_-]{1,128}$/.test(projection.active_workspace_id))) &&
+    Array.isArray(projection.workspaces) &&
+    projection.workspaces.length <= 256 &&
+    projection.workspaces.every(
+      (workspace) =>
+        typeof workspace === "object" &&
+        workspace !== null &&
+        !Array.isArray(workspace) &&
+        Object.keys(workspace).sort().join(",") === "id,name,role" &&
+        typeof (workspace as Record<string, unknown>).id === "string" &&
+        /^[A-Za-z0-9_-]{1,128}$/.test((workspace as { id: string }).id) &&
+        typeof (workspace as Record<string, unknown>).name === "string" &&
+        Array.from((workspace as { name: string }).name).length <= 256 &&
+        typeof (workspace as Record<string, unknown>).role === "string" &&
+        (workspace as { role: string }).role.length <= 32,
+    )
+  );
+}
+
+export async function getWorkflowWorkspaceProjection(
+  signal?: AbortSignal,
+): Promise<WorkflowWorkspaceProjection> {
+  const response = await fetch(`${getBackendBaseURL()}/api/workspaces`, {
+    signal,
+    cache: "no-store",
+  });
+  const value = await checkedJsonResponse<unknown>(response, 16_000);
+  if (!isWorkspaceProjection(value))
+    throw new WorkflowApiError("invalid_workflow_response", 502);
+  return { activeWorkspaceId: value.active_workspace_id };
+}
+
+export async function getJevboxPreparationStatus(
+  actor: string,
+  signal?: AbortSignal,
+): Promise<JevboxPreparationStatus> {
+  const value = await jevboxRequest(
+    "/jevbox/status",
+    { signal, headers: { "X-Expected-User-Id": actor } },
+    4096,
+  );
+  return parseJevboxPreparationStatus(value);
+}
+
+export async function prepareJevboxEvidence(
+  file: File,
+  scope: string,
+  expected: { ownerId: string; workspaceId: string | null },
+  signal?: AbortSignal,
+): Promise<JevboxProposalPreview> {
+  validatePreparationUpload(file);
+  const fileBytes = await file.arrayBuffer();
+  if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+  const packetHash = Array.from(
+    new Uint8Array(await crypto.subtle.digest("SHA-256", fileBytes)),
+    (byte) => byte.toString(16).padStart(2, "0"),
+  ).join("");
+  const value = await jevboxRequest(
+    "/jevbox/prepare",
+    {
+      method: "POST",
+      signal,
+      headers: { ...headers(scope), "Content-Type": "application/json" },
+      body: file,
+    },
+    JEVBOX_MAX_PROPOSAL_BYTES,
+  );
+  if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+  return parseJevboxProposal(value, { ...expected, packetSha256: packetHash });
 }
 export function getWorkflowStatus(
   actor: string,
