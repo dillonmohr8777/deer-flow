@@ -7,7 +7,7 @@ const crypto = require("node:crypto");
 const { execFileSync } = require("node:child_process");
 const { packager } = require("@electron/packager");
 const manifest = require("../package.json");
-const { releaseSigning, validateSourceRevision, publicReleaseMetadata } = require("../src/release-config.cjs");
+const { releaseSigning, notaryAuthArgs, validateSourceRevision, publicReleaseMetadata } = require("../src/release-config.cjs");
 
 const root = path.resolve(__dirname, "..");
 
@@ -51,7 +51,7 @@ async function main() {
     platform: "darwin",
     arch: "arm64",
     electronVersion: manifest.devDependencies.electron,
-    ...(signing.identity ? { osxSign: { identity: signing.identity, continueOnError: false, optionsForFile: () => ({ hardenedRuntime: true }) } } : {}),
+    ...(signing.identity ? { osxSign: { identity: signing.identity, continueOnError: false, optionsForFile: () => ({ hardenedRuntime: true, entitlements: path.join(root, "build/entitlements.mac.plist") }) } } : {}),
     out: destination,
     icon,
     asar: true,
@@ -69,9 +69,10 @@ async function main() {
   const dmgPath = path.join(destination, "MomoBot-mac-arm64.dmg");
   run("ditto", ["-c", "-k", "--sequesterRsrc", "--keepParent", appPath, zipPath]);
   run("hdiutil", ["create", "-volname", "MomoBot", "-srcfolder", bundleDirectory, "-format", "UDZO", dmgPath]);
-  if (signing.profile) {
-    // Existing Keychain profile only; no password, API key, or certificate is exported.
-    const appResult = JSON.parse(run("xcrun", ["notarytool", "submit", zipPath, "--keychain-profile", signing.profile, "--wait", "--output-format", "json"]));
+  if (signing.mode === "developer-id") {
+    // Credentials arrive via env (API key path) or an existing Keychain profile; nothing is exported or logged.
+    const auth = notaryAuthArgs(signing);
+    const appResult = JSON.parse(run("xcrun", ["notarytool", "submit", zipPath, ...auth, "--wait", "--output-format", "json"]));
     if (appResult.status !== "Accepted") throw new Error("Application notarization was not accepted.");
     run("xcrun", ["stapler", "staple", appPath]);
     run("xcrun", ["stapler", "validate", appPath]);
@@ -81,7 +82,7 @@ async function main() {
     run("ditto", ["-c", "-k", "--sequesterRsrc", "--keepParent", appPath, zipPath]);
     run("hdiutil", ["create", "-volname", "MomoBot", "-srcfolder", bundleDirectory, "-format", "UDZO", dmgPath]);
     run("codesign", ["--sign", signing.identity || "", "--timestamp", dmgPath]);
-    const dmgResult = JSON.parse(run("xcrun", ["notarytool", "submit", dmgPath, "--keychain-profile", signing.profile, "--wait", "--output-format", "json"]));
+    const dmgResult = JSON.parse(run("xcrun", ["notarytool", "submit", dmgPath, ...auth, "--wait", "--output-format", "json"]));
     if (dmgResult.status !== "Accepted") throw new Error("Disk image notarization was not accepted.");
     run("xcrun", ["stapler", "staple", dmgPath]);
     run("xcrun", ["stapler", "validate", dmgPath]);
