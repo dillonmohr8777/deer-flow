@@ -822,6 +822,21 @@ tools:
   #   group: knowledge
   #   use: deerflow.community.ragflow.tools:list_knowledge_bases_tool
 
+  # Jevbox research library (read-only, $0 owner-session reads; never calls
+  # Jevbox search/answer). Each client may only see its listed document IDs;
+  # fleet agents stamped with a client_id can only query their own namespace.
+  # If Jevbox is down the tool returns "Jevbox library unavailable" and the task
+  # continues. See backend/docs/JEVBOX_EVIDENCE.md.
+  # - name: jevbox_evidence
+  #   group: web
+  #   use: deerflow.community.jevbox.tools:jevbox_evidence_tool
+  #   base_url: http://host.docker.internal:4310  # Docker: backend-reachable URL
+  #   email: $JEVBOX_EMAIL
+  #   password: $JEVBOX_PASSWORD
+  #   namespaces:
+  #     example-client:
+  #       - 00000000-0000-0000-0000-000000000000  # Jevbox document ID
+
   # LightRAG knowledge retrieval (read-only). Alternative provider for the same
   # knowledge_search tool; uncomment this entry instead of the RAGFlow one —
   # duplicate names keep the first entry, so configure exactly one. Requires

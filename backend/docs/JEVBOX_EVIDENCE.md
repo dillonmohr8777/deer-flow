@@ -139,3 +139,26 @@ Ruff/format in `backend/`. Native acceptance additionally needs installed
 source, normal original-owner app authentication, verified scoped Jevbox source
 readback, one independently reviewed useful workflow artifact and its matching
 saved byte-count/SHA256 receipt.
+
+## Agent retrieval tool (`jevbox_evidence`)
+
+`deerflow/community/jevbox/tools.py` is the live retrieve-to-evidence-review
+step. The model passes `client_id` and `query`; it returns `[J#]` passages with
+`jevbox:<document_id>:<passage_id>` locators and an accepted/rejected reason for
+every bound document. Those locators match the packet `locator` format above, so
+a reviewer can carry selected passages into the preparation adapter.
+
+- **Namespace allowlist.** `namespaces` in the tool's `config.yaml` entry maps a
+  client ID to exact Jevbox document IDs. Only those IDs are requested
+  (`GET /api/resources/:id`); every result is filtered again against the list,
+  and a response whose `id` differs from the requested ID is rejected.
+- **Agent binding.** A fleet agent stamped with `client_id` may only query that
+  namespace. A failure to load the agent's config denies the call.
+- **$0 only.** Owner email/password session reads, local keyword ranking. Jevbox
+  search/answer endpoints queue paid runs and are not called.
+- **Supporting, not a dependency.** Connection failure, sign-in failure, 5xx or
+  missing config returns `Jevbox library unavailable (...)`; the tool never raises.
+
+Tests: `tests/test_jevbox_evidence_tool.py` (offline fake Jevbox, including the
+negative cross-client cases) and `tests/test_jevbox_evidence_tool_live.py`
+(opt-in, read-only against a real instance).
