@@ -279,11 +279,11 @@ def _demo() -> int:
 
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
-        pack = root / "bar-crawl-usa-20260928.json"
+        pack = root / "example-client-20260928.json"
         pack.write_text(
             json.dumps(
                 {
-                    "client": "bar-crawl-usa",
+                    "client": "example-client",
                     "week": "2026-09-28..2026-10-04",
                     "figures": {"ga4_sessions": 4821, "gsc_clicks": 612, "meta_spend_usd": 0, "gbp_calls": None},
                 },
@@ -298,7 +298,7 @@ def _demo() -> int:
 
         receipts = ReceiptLog(root / "receipts.jsonl")
         spec = weekly_reports_spec(
-            "bar-crawl-usa",
+            "example-client",
             source_pack=pack,
             out_dir=root / "out",
             week="2026-09-28..2026-10-04",

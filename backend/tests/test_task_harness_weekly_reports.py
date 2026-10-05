@@ -24,8 +24,8 @@ WEEK = "2026-09-28..2026-10-04"
 
 @pytest.fixture
 def pack(tmp_path) -> Path:
-    path = tmp_path / "bar-crawl-usa.json"
-    path.write_text(json.dumps({"client": "bar-crawl-usa", "week": WEEK, "figures": FIGURES}, sort_keys=True), encoding="utf-8")
+    path = tmp_path / "example-client.json"
+    path.write_text(json.dumps({"client": "example-client", "week": WEEK, "figures": FIGURES}, sort_keys=True), encoding="utf-8")
     return path
 
 
@@ -35,7 +35,7 @@ def measuring_probe(_report: Path, width: int) -> dict[str, Any]:
 
 def dry_spec(pack: Path, tmp_path: Path, **kwargs):
     return weekly_reports_spec(
-        "bar-crawl-usa",
+        "example-client",
         source_pack=pack,
         out_dir=tmp_path / "out",
         week=WEEK,
@@ -118,8 +118,8 @@ def test_a_worker_that_reports_figures_not_in_the_pack_fails_the_deterministic_c
 
 def test_another_clients_source_pack_is_refused(pack, tmp_path):
     other = tmp_path / "omega.json"
-    other.write_text(json.dumps({"client": "omega-landscape", "week": WEEK, "figures": FIGURES}), encoding="utf-8")
-    spec = weekly_reports_spec("bar-crawl-usa", source_pack=other, out_dir=tmp_path / "out", week=WEEK, judge=source_pack_judge(other), max_retries=0)
+    other.write_text(json.dumps({"client": "other-client", "week": WEEK, "figures": FIGURES}), encoding="utf-8")
+    spec = weekly_reports_spec("example-client", source_pack=other, out_dir=tmp_path / "out", week=WEEK, judge=source_pack_judge(other), max_retries=0)
     receipt = run_task(spec, weekly_reports_worker(qa_probe=measuring_probe), receipts=ReceiptLog(tmp_path / "r.jsonl"))
     assert receipt.ok is False
     assert "source_pack_client_mismatch" in receipt.reason
@@ -127,13 +127,13 @@ def test_another_clients_source_pack_is_refused(pack, tmp_path):
 
 def test_a_live_run_without_injected_callables_cannot_deploy_or_post(pack, tmp_path):
     spec = weekly_reports_spec(
-        "bar-crawl-usa",
+        "example-client",
         source_pack=pack,
         out_dir=tmp_path / "out",
         week=WEEK,
         judge=source_pack_judge(pack),
         dry_run=False,
-        deployed_url="https://reports.example.test/bar-crawl-usa",
+        deployed_url="https://reports.example.test/example-client",
         http_fetch=lambda _u, _t: 200,
         max_retries=0,
     )
@@ -144,13 +144,13 @@ def test_a_live_run_without_injected_callables_cannot_deploy_or_post(pack, tmp_p
 
 def test_a_live_spec_claims_the_installed_layer(pack, tmp_path):
     spec = weekly_reports_spec(
-        "bar-crawl-usa",
+        "example-client",
         source_pack=pack,
         out_dir=tmp_path / "out",
         week=WEEK,
         judge=source_pack_judge(pack),
         dry_run=False,
-        deployed_url="https://reports.example.test/bar-crawl-usa",
+        deployed_url="https://reports.example.test/example-client",
         http_fetch=lambda _u, _t: 200,
         route="openrouter",
         cap_micro=2_000,
@@ -158,7 +158,7 @@ def test_a_live_spec_claims_the_installed_layer(pack, tmp_path):
     )
     worker = weekly_reports_worker(
         qa_probe=measuring_probe,
-        deploy=lambda _r: {"performed": True, "url": "https://reports.example.test/bar-crawl-usa"},
+        deploy=lambda _r: {"performed": True, "url": "https://reports.example.test/example-client"},
         post=lambda _r: {"performed": True, "channel": "#momentum-reports"},
     )
     receipt = run_task(spec, worker, receipts=ReceiptLog(tmp_path / "r.jsonl"), gate=FakeGate())
@@ -170,11 +170,11 @@ def test_a_live_spec_claims_the_installed_layer(pack, tmp_path):
 
 def test_a_live_spec_needs_a_url_to_check():
     with pytest.raises(HarnessError, match="live_run_requires_deployed_url"):
-        weekly_reports_spec("bar-crawl-usa", source_pack="x.json", out_dir=".", week=WEEK, judge=lambda _p: {}, dry_run=False)
+        weekly_reports_spec("example-client", source_pack="x.json", out_dir=".", week=WEEK, judge=lambda _p: {}, dry_run=False)
 
 
 def test_a_missing_source_pack_fails_the_run_rather_than_inventing_zeros(tmp_path):
-    spec = weekly_reports_spec("bar-crawl-usa", source_pack=tmp_path / "gone.json", out_dir=tmp_path / "out", week=WEEK, judge=lambda _p: {"verdict": "upheld"}, max_retries=0)
+    spec = weekly_reports_spec("example-client", source_pack=tmp_path / "gone.json", out_dir=tmp_path / "out", week=WEEK, judge=lambda _p: {"verdict": "upheld"}, max_retries=0)
     receipt = run_task(spec, weekly_reports_worker(qa_probe=measuring_probe), receipts=ReceiptLog(tmp_path / "r.jsonl"))
     assert receipt.ok is False
     assert "source_pack_unreadable" in receipt.reason
@@ -182,5 +182,5 @@ def test_a_missing_source_pack_fails_the_run_rather_than_inventing_zeros(tmp_pat
 
 def test_the_second_week_is_a_different_unit_of_work(pack, tmp_path):
     a = dry_spec(pack, tmp_path)
-    b = weekly_reports_spec("bar-crawl-usa", source_pack=pack, out_dir=tmp_path / "out", week="2026-10-05..2026-10-11", judge=source_pack_judge(pack))
+    b = weekly_reports_spec("example-client", source_pack=pack, out_dir=tmp_path / "out", week="2026-10-05..2026-10-11", judge=source_pack_judge(pack))
     assert a.run_key != b.run_key

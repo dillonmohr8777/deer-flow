@@ -48,7 +48,7 @@ def always_ok(name: str = "ok", layer: str = "accepted") -> PredicateCheck:
 
 
 def spec_with(*checks, **kwargs) -> TaskSpec:
-    base = {"id": "t1", "client_id": "bar-crawl-usa", "goal": "do the thing", "stop_rule": "checks pass"}
+    base = {"id": "t1", "client_id": "example-client", "goal": "do the thing", "stop_rule": "checks pass"}
     base.update(kwargs)
     return TaskSpec(checks=tuple(checks), **base)
 
@@ -345,7 +345,7 @@ def test_the_judge_fails_a_run_whose_deterministic_checks_are_all_green(tmp_path
 
     spec = TaskSpec(
         id="report",
-        client_id="bar-crawl-usa",
+        client_id="example-client",
         goal="report the GA4 session count for the week",
         stop_rule="figures present and traceable",
         checks=(
