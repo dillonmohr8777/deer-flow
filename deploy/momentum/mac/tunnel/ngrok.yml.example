@@ -1,0 +1,29 @@
+# ngrok agent config for https://momobot.needmomentum.com -> nginx on 127.0.0.1:2026.
+# Copy to ~/momobot-prod/secrets/ngrok.yml (mode 600) and put the authtoken in it.
+# Never commit the real file. Validate with: ngrok config check --config <file>
+version: 3
+agent:
+  authtoken: PASTE_NGROK_AUTHTOKEN_HERE   # from the ngrok dashboard; keep in Bitwarden
+endpoints:
+  - name: momobot
+    url: https://momobot.needmomentum.com
+    upstream:
+      url: http://127.0.0.1:2026
+    traffic_policy:
+      on_http_request:
+        # The Gateway's API schema pages are not for the public internet.
+        - expressions:
+            - "req.url.path.startsWith('/docs') || req.url.path.startsWith('/redoc') || req.url.path == '/openapi.json'"
+          actions:
+            - type: custom-response
+              config: { status_code: 404, content: "not found" }
+        # Coarse flood guard per client IP; the Gateway's own login throttle still applies.
+        - actions:
+            - type: rate-limit
+              config:
+                name: per-ip-300-per-minute
+                algorithm: sliding_window
+                capacity: 300
+                rate: 60s
+                bucket_key:
+                  - conn.client_ip

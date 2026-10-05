@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Keeps the ngrok tunnel for momobot.needmomentum.com up. NOT in ../launchd/ on purpose:
+     install-launchd.sh loads everything in that folder. Render and load by hand after
+     Dillon approves:
+       sed -e "s|__DEPLOY__|$HOME/momobot-prod|g" this.plist > ~/Library/LaunchAgents/com.momentum.momobot.tunnel.plist
+       launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.momentum.momobot.tunnel.plist -->
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.momentum.momobot.tunnel</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/opt/homebrew/bin/ngrok</string>
+    <string>start</string><string>momobot</string>
+    <string>--config</string><string>__DEPLOY__/secrets/ngrok.yml</string>
+    <string>--log</string><string>stdout</string>
+  </array>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>ThrottleInterval</key><integer>30</integer>
+  <key>StandardOutPath</key><string>__DEPLOY__/logs/tunnel.log</string>
+  <key>StandardErrorPath</key><string>__DEPLOY__/logs/tunnel.log</string>
+</dict>
+</plist>

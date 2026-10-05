@@ -75,3 +75,20 @@ Redirect URI: `https://dillons-mac-mini.tailade026.ts.net/api/v1/auth/callback/g
 `auth.oidc` block from `../vps/README.md` with that origin as
 `frontend_base_url`, `auto_create_requires_invitation: true`, and the consent
 screen in Testing.
+
+## Custom public host (momobot.needmomentum.com) through an ngrok tunnel
+
+Tailscale Funnel only serves `*.ts.net` names, so a custom domain needs a
+tunnel that terminates TLS for it. Files in `tunnel/` (nothing here is loaded
+by `install-launchd.sh`):
+
+| File | Role |
+|---|---|
+| `tunnel/ngrok.yml.example` | Agent config: endpoint `https://momobot.needmomentum.com` to `127.0.0.1:2026`, 404 for `/docs` `/redoc` `/openapi.json`, per-IP rate limit. Real copy lives in `~/momobot-prod/secrets/ngrok.yml` (600). |
+| `tunnel/com.momentum.momobot.tunnel.plist` | launchd job (RunAtLoad, KeepAlive) for the agent. Render `__DEPLOY__` and bootstrap by hand. |
+| `tunnel/set-public-host.sh` | Dry-run by default; `--apply` backs up and rewrites `frontend_base_url`, the Google `redirect_uri` and `MOMOBOT_DOMAIN`. Rollback is the same script with the ts.net host. |
+
+Cutover order: DNS CNAME, Google OAuth additions, tunnel up and verified with
+`curl --resolve`, then `set-public-host.sh --apply` and `restart.sh`. The
+deployed image must include 82096993e (OIDC state cookie on the callback host)
+or sign-in started from any other host will fail.
