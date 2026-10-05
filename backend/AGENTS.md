@@ -256,6 +256,18 @@ then appends a short evidence checklist. The prompt preserves unmet criteria as
 This is propagation into the stamped agent instructions; it does not change
 scheduled-task or subagent completion statuses or create an acceptance gate.
 
+### Momo task harness
+
+`deerflow/taskharness/` is the thin `spec -> worker -> verifier -> receipt`
+wrapper a client workflow is written in: bounded retries, stop on evidence,
+append-only receipts naming the layer reached (prepared/tested/installed/
+accepted/billed). It is independent of `deerflow/workflows/` (the durable
+LangGraph kernel) and owns no graph, scheduler or adapter registry. Paid routes
+go through the `BudgetGate` interface, whose production implementation is the
+admission gate; the default gate refuses any nonzero amount. Read
+[its guide](packages/harness/deerflow/taskharness/AGENTS.md) before changing
+the layer rules, the idempotency check or the swarm guards.
+
 ## Development Workflow
 
 ### Test-Driven Development (TDD) — MANDATORY
