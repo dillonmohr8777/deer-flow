@@ -227,6 +227,8 @@ def create_chat_model(name: str | None = None, thinking_enabled: bool = False, *
             # forward unknown kwargs into the completion request payload.
             "pricing",
             "request_admission",
+            # Paid-route admission metadata (read by paid_admission, never a client kwarg).
+            "admission_route",
         },
     )
     # Layer per-caller sampling overrides (e.g. a custom agent's temperature /
@@ -362,4 +364,9 @@ def create_chat_model(name: str | None = None, thinking_enabled: bool = False, *
             existing_callbacks = model_instance.callbacks or []
             model_instance.callbacks = [*existing_callbacks, *callbacks]
             logger.debug(f"Tracing attached to model '{name}' with providers={len(callbacks)}")
+    # Fail-closed paid-route admission (reserve before call, settle from usage).
+    # Default ON; MOMO_ADMISSION_GATE=off disables. See models/paid_admission.py.
+    from deerflow.models.paid_admission import attach_admission
+
+    attach_admission(model_instance, model_config, effective_model_settings)
     return model_instance
