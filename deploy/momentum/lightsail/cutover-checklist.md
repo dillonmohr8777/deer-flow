@@ -40,4 +40,5 @@ under the same number. `[D]` means Dillon runs it and it needs his live yes
 
 - [ ] Box: `migrate-data.sh server-export` (stops, Slack off, writes `return-*.tgz`); skip if the box is unreachable
 - [ ] Mac: `scp` it back, `migrate-data.sh mac-restore FILE`, `migrate-data.sh mac-slack-on`, `mac/restart.sh`
+- [ ] Box unreachable? Stop the Lightsail instance BEFORE `mac-slack-on` (its Slack is still on, and two Socket Mode connections double-reply)
 - [ ] DNS or team URL points back at the Mac; Slack is on in exactly one place
