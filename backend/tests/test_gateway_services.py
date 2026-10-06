@@ -2309,6 +2309,64 @@ def test_inject_authenticated_user_context_computes_momentum_staff_not_client_su
     assert config2["context"]["momentum_staff"] is True
 
 
+@pytest.mark.parametrize("staff_result", [True, False])
+def test_start_run_wires_the_real_is_momentum_staff_result(_stub_app_config, staff_result):
+    """f87(a): ``inject_authenticated_user_context`` trusts whatever
+    ``momentum_staff`` value it is handed (proven above), but nothing
+    previously checked that ``start_run`` itself computes that value from the
+    real ``is_momentum_staff`` check rather than dropping the kwarg (silently
+    defaulting to ``False``) or hardcoding a constant. Patch the check both
+    ways and confirm the run context tracks it, with a forged opposite value
+    in both ``body.config`` sections proving the server value always wins."""
+    import asyncio
+    from unittest.mock import AsyncMock, patch
+
+    from app.gateway.services import start_run
+
+    async def _scenario():
+        request, _run_store, thread_store = _make_start_run_persistence_context()
+        await thread_store.create("thread-momentum-staff-wiring", user_id="u1", metadata={})
+        request.state = SimpleNamespace(auth_source="session", user=SimpleNamespace(id="u1", system_role="user"))
+        forged = not staff_result
+        body = SimpleNamespace(
+            assistant_id="lead_agent",
+            input={"messages": [{"role": "human", "content": "hi"}]},
+            metadata={},
+            config={
+                "context": {"momentum_staff": forged},
+                "configurable": {"momentum_staff": forged},
+            },
+            context=None,
+            on_disconnect="cancel",
+            multitask_strategy="reject",
+            stream_mode=None,
+            stream_subgraphs=False,
+            interrupt_before=None,
+            interrupt_after=None,
+        )
+        captured: dict[str, object] = {}
+
+        async def fake_run_agent(*args, **kwargs):
+            captured["config"] = kwargs["config"]
+
+        staff_check = AsyncMock(return_value=staff_result)
+        with (
+            patch("app.gateway.services.resolve_agent_factory", return_value=object()),
+            patch("app.gateway.services.run_agent", side_effect=fake_run_agent),
+            patch("app.gateway.services.is_momentum_staff", staff_check),
+        ):
+            record = await start_run(body, "thread-momentum-staff-wiring", request)
+            await record.task
+
+        return captured["config"], staff_check
+
+    config, staff_check = asyncio.run(_scenario())
+
+    staff_check.assert_awaited_once()
+    assert config["context"]["momentum_staff"] is staff_result
+    assert "momentum_staff" not in config.get("configurable", {})
+
+
 async def _capture_start_run_graph_input(body, *, auth_source=None):
     from types import SimpleNamespace
     from unittest.mock import patch
