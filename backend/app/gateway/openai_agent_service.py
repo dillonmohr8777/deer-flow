@@ -35,7 +35,9 @@ MAX_ACTIVE_SESSIONS = 3
 MAX_OWNER_ADMISSIONS_24H = 16
 WATCHDOG_LEASE_SECONDS = 60
 WATCHDOG_WARNING_THROTTLE_SECONDS = 300
+UNBOUND_RESOLUTION_MARGIN_SECONDS = 60
 _TERMINAL = {"completed", "failed", "cancelled"}
+_DEFINITE_REJECTION_EXCLUDED_STATUS_CODES = {408, 409}
 try:
     _SDK_VERSION = importlib.metadata.version("openai")
 except importlib.metadata.PackageNotFoundError:
@@ -102,6 +104,20 @@ def _check_owner_admissions(db: sqlite3.Connection, owner: str) -> None:
     ).fetchone()[0]
     if count >= MAX_OWNER_ADMISSIONS_24H:
         raise AgentServiceError("owner_admission_limit")
+
+
+def _is_definite_create_rejection(error: BaseException) -> bool:
+    # A 4xx the SDK surfaces as a structured API error (not a timeout/conflict,
+    # both of which leave whether the provider acted ambiguous) means the
+    # request never dispatched: safe to settle without waiting on the provider.
+    from openai import APIStatusError
+
+    return isinstance(error, APIStatusError) and 400 <= error.status_code < 500 and error.status_code not in _DEFINITE_REJECTION_EXCLUDED_STATUS_CODES
+
+
+def _unbound_create_is_stale(row: dict[str, Any]) -> bool:
+    created = datetime.fromisoformat(row["created_at"]).timestamp()
+    return time.time() - created >= TURN_TIMEOUT_SECONDS + UNBOUND_RESOLUTION_MARGIN_SECONDS
 
 
 def _item_subagent(item: dict[str, Any]) -> str | None:
@@ -311,11 +327,47 @@ class OpenAIAgentService:
                 operation = db.execute("SELECT * FROM operations WHERE session_id=? AND idem=?", (session_id, args[2])).fetchone()
                 return dict(operation) if operation else None
             if action == "bind":
+                # Never resurrect a row already settled failed: a late-arriving
+                # provider match (or a slow create() landing after the watchdog
+                # dead-letters it) must not undo a definitive dead-letter
+                # outcome. Report whether this actually matched a row so the
+                # caller can reconcile the now-orphaned remote session instead
+                # of silently losing track of it.
+                provider_id, status = args[2:]
+                cursor = db.execute("UPDATE sessions SET provider_id=?,status=?,updated_at=?,last_error=NULL WHERE id=? AND status!='failed'", (provider_id, status, _now(), session_id))
+                matched = cursor.rowcount > 0
+                updated = dict(db.execute("SELECT * FROM sessions WHERE id=?", (session_id,)).fetchone())
+                deadline_row = db.execute("SELECT state FROM deadlines WHERE session_id=?", (session_id,)).fetchone()
+                return {**updated, "deadline_pending": deadline_row is not None and deadline_row["state"] in {"claimed", "cancel_requested"}}, matched
+            elif action == "force_bind":
+                # Reconciliation fallback when the guarded "bind" above was
+                # refused and cancelling the now-real remote session also
+                # failed: bind anyway so a live, billable session stays
+                # tracked and supervised rather than orphaned, and give it a
+                # fresh deadline since its old one may already be settled.
                 provider_id, status = args[2:]
                 db.execute("UPDATE sessions SET provider_id=?,status=?,updated_at=?,last_error=NULL WHERE id=?", (provider_id, status, _now(), session_id))
+                db.execute(
+                    """INSERT INTO deadlines(session_id,expires_at,state) VALUES (?,?,?)
+                    ON CONFLICT(session_id) DO UPDATE SET expires_at=excluded.expires_at,state='waiting',lease_expires_at=NULL""",
+                    (session_id, time.time() + TURN_TIMEOUT_SECONDS, "waiting"),
+                )
             elif action == "unknown":
                 code = args[2]
                 db.execute("UPDATE sessions SET status='unknown',last_error=?,updated_at=? WHERE id=?", (code, _now(), session_id))
+            elif action == "fail_unbound":
+                # A create that never reached the provider (confirmed rejection,
+                # or a confirmed-empty provider-side search long past the create
+                # deadline): terminal and off the active-session count for good,
+                # unlike "unknown" which keeps a row in limbo indefinitely. Guard
+                # against a concurrent late bind: never clobber a row that is
+                # already provider-bound back into failed, and only settle the
+                # deadline when the sessions row actually settled too -- else a
+                # row a concurrent bind just made live loses watchdog coverage.
+                code = args[2]
+                cursor = db.execute("UPDATE sessions SET status='failed',last_error=?,updated_at=? WHERE id=? AND provider_id IS NULL", (code, _now(), session_id))
+                if cursor.rowcount:
+                    db.execute("UPDATE deadlines SET state='settled',lease_expires_at=NULL WHERE session_id=?", (session_id,))
             elif action == "deadline_sent":
                 expires_at, lease_expires_at = args[2:]
                 db.execute(
@@ -404,13 +456,16 @@ class OpenAIAgentService:
                 metadata={"momo_local_session": row["id"], "momo_owner_scope": _hash(owner)},
             )
         except BaseException as error:
+            if not isinstance(error, asyncio.CancelledError) and _is_definite_create_rejection(error):
+                await asyncio.shield(self._storage("fail_unbound", row["id"], owner, "provider_rejected_request"))
+                raise AgentServiceError("provider_rejected_request", 422) from None
             await asyncio.shield(self._storage("unknown", row["id"], owner, "provider_outcome_unknown"))
             if isinstance(error, asyncio.CancelledError):
                 raise
             raise AgentServiceError("provider_outcome_unknown", 502) from None
         remote = _dict(session)
         try:
-            await self._storage("bind", row["id"], owner, remote["id"], remote["status"])
+            _, matched = await self._storage("bind", row["id"], owner, remote["id"], remote["status"])
         except BaseException:
             # Known remote resource: attempt cleanup before reporting local failure.
             # If cleanup fails, recover by server-created metadata; never redispatch.
@@ -423,18 +478,53 @@ class OpenAIAgentService:
             except Exception:
                 pass
             raise
+        if not matched:
+            # The row was already settled failed by the time this (genuinely
+            # real, now billable) session came back -- e.g. the watchdog
+            # dead-lettered it while this create() was still in flight.
+            # Reconcile instead of leaving an untracked orphan.
+            await self._reconcile_unmatched_bind(client, row["id"], owner, remote["id"], remote["status"])
         return await self.snapshot(owner, row["id"])
+
+    async def _reconcile_unmatched_bind(self, client, session_id: str, owner: str, remote_id: str, remote_status: str) -> None:
+        # A guarded "bind" was refused because the local row was already
+        # settled terminal. A genuinely real remote session now exists with
+        # nothing local pointing at it. Prefer cancelling it, since the row
+        # is already final; if that fails, fall back to tracking it as
+        # active (with a fresh deadline) rather than losing it untracked.
+        try:
+            await asyncio.shield(client.beta.agents.sessions.delete(remote_id))
+        except Exception:
+            await asyncio.shield(self._storage("force_bind", session_id, owner, remote_id, remote_status))
 
     async def snapshot(self, owner: str, session_id: str):
         row = await self._storage("get", session_id, owner)
         client = self._client()
         try:
             if not row["provider_id"]:
+                if row["status"] == "failed":
+                    # Already settled dead-lettered: no provider work left, and
+                    # re-listing here is exactly the window a late-arriving
+                    # provider match could otherwise resurrect this row through.
+                    return {**_summary(row), "turn": None, "items": [], "artifacts": [], "required_actions": [], "usage": None, "operation_pending": False, "history_truncated": False}
                 candidates, more = await self._pages(client.beta.agents.sessions.list(limit=100))
                 matches = [item for item in candidates if item.get("metadata", {}).get("momo_local_session") == session_id and item.get("metadata", {}).get("momo_owner_scope") == _hash(owner)]
                 if len(matches) != 1 or more:
+                    if not matches and not more and _unbound_create_is_stale(row):
+                        # A complete, confirmed-empty search well past the create
+                        # deadline: the provider never created a matching session.
+                        # Settle for good instead of re-listing forever.
+                        row = await self._storage("fail_unbound", session_id, owner, "provider_create_not_found")
+                        return {**_summary(row), "turn": None, "items": [], "artifacts": [], "required_actions": [], "usage": None, "operation_pending": False, "history_truncated": False}
                     return {**_summary(row), "turn": None, "items": [], "artifacts": [], "required_actions": [], "usage": None, "operation_pending": True, "history_truncated": more}
-                row = await self._storage("bind", session_id, owner, matches[0]["id"], matches[0]["status"])
+                row, matched = await self._storage("bind", session_id, owner, matches[0]["id"], matches[0]["status"])
+                if not matched:
+                    # Lost a race: the row was settled failed between our
+                    # "get" above and this bind (e.g. a concurrent watchdog
+                    # dead-letter). Reconcile the now-orphaned match instead
+                    # of continuing with a stale/null provider_id.
+                    await self._reconcile_unmatched_bind(client, session_id, owner, matches[0]["id"], matches[0]["status"])
+                    return await self.snapshot(owner, session_id)
             provider_id = row["provider_id"]
             remote = _dict(await client.beta.agents.sessions.retrieve(provider_id))
             turns, turns_more = await self._pages(client.beta.agents.sessions.turns.list(provider_id, order="desc", limit=100))

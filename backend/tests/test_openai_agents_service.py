@@ -5,13 +5,21 @@ import contextlib
 import logging
 import sqlite3
 import time
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
+import httpx
 import pytest
+from openai import APIStatusError
 
 from app.gateway import openai_agent_service as agent_service
 from app.gateway.openai_agent_service import AgentServiceError, OpenAIAgentService
+
+
+def _api_status_error(status_code: int) -> APIStatusError:
+    response = httpx.Response(status_code, request=httpx.Request("POST", "https://api.openai.com/v1/agents/sessions"))
+    return APIStatusError("rejected", response=response, body=None)
 
 
 class FakePage:
@@ -20,6 +28,22 @@ class FakePage:
 
     def has_next_page(self):
         return False
+
+
+class EndlessEmptyPage:
+    """A provider list page that never completes: always another page, no matches.
+
+    Exercises the `not more` guard on the stale-settle path: a search that is
+    truncated at MAX_PAGES has not actually confirmed zero matches.
+    """
+
+    data: list = []
+
+    def has_next_page(self):
+        return True
+
+    async def get_next_page(self):
+        return self
 
 
 class FakeClient:
@@ -88,6 +112,177 @@ async def test_unknown_creation_is_not_retried_and_errors_are_redacted(setup):
     client.session["metadata"] = {}
     await service.create("alice", "Task", "Task", "same")
     assert client.beta.agents.sessions.create.await_count == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status_code", [400, 401, 429])
+async def test_definite_4xx_create_rejection_settles_failed_and_frees_the_slot(setup, status_code):
+    service, client = setup
+    original_side_effect = client.beta.agents.sessions.create.side_effect
+    client.beta.agents.sessions.create.side_effect = _api_status_error(status_code)
+    with pytest.raises(AgentServiceError, match="provider_rejected_request") as error:
+        await service.create("alice", "Task", "Task", "rejected")
+    assert error.value.status_code == 422
+    rows = await service.list_sessions("alice")
+    assert rows[0]["status"] == "failed"
+    # A confirmed, never-dispatched create must not permanently occupy an
+    # active-session slot: all MAX_ACTIVE_SESSIONS real sessions still fit.
+    client.beta.agents.sessions.create.side_effect = original_side_effect
+    for index in range(agent_service.MAX_ACTIVE_SESSIONS):
+        client.session.update(id=f"ok_{index}", status="in_progress")
+        await service.create("alice", "Task", "Task", f"ok_{index}")
+    with pytest.raises(AgentServiceError, match="active_session_limit"):
+        await service.create("alice", "Task", "Task", "overflow")
+    assert client.beta.agents.sessions.list.await_count == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status_code", [408, 409])
+async def test_ambiguous_4xx_create_rejection_stays_unknown(setup, status_code):
+    service, client = setup
+    client.beta.agents.sessions.create.side_effect = _api_status_error(status_code)
+    with pytest.raises(AgentServiceError, match="provider_outcome_unknown"):
+        await service.create("alice", "Task", "Task", "ambiguous")
+    rows = await service.list_sessions("alice")
+    assert rows[0]["status"] == "unknown"
+
+
+@pytest.mark.asyncio
+async def test_stale_unbound_creates_settle_failed_and_stop_relisting(setup):
+    service, client = setup
+    original_side_effect = client.beta.agents.sessions.create.side_effect
+    client.beta.agents.sessions.list.side_effect = lambda **kwargs: FakePage([])
+    client.beta.agents.sessions.create.side_effect = RuntimeError("provider response lost")
+    for index in range(3):
+        with pytest.raises(AgentServiceError, match="provider_outcome_unknown"):
+            await service.create("alice", "Task", "Task", f"lost_{index}")
+    stale_created_at = datetime.fromtimestamp(time.time() - agent_service.TURN_TIMEOUT_SECONDS - agent_service.UNBOUND_RESOLUTION_MARGIN_SECONDS - 10, UTC).isoformat()
+    with sqlite3.connect(service.path) as db:
+        db.execute("UPDATE sessions SET created_at=?", (stale_created_at,))
+        db.execute("UPDATE deadlines SET expires_at=0")
+    await service.enforce_deadlines()
+    rows = await service.list_sessions("alice")
+    assert len(rows) == 3
+    assert all(row["status"] == "failed" for row in rows)
+    assert client.beta.agents.sessions.list.await_count == 3
+    # Settled rows drop out of the unbound-due scan: no further relisting.
+    await service.enforce_deadlines()
+    assert client.beta.agents.sessions.list.await_count == 3
+    # The three failed creates no longer occupy active-session slots.
+    client.beta.agents.sessions.create.side_effect = original_side_effect
+    await service.create("alice", "Task", "Task", "finally_ok")
+    assert client.beta.agents.sessions.create.await_count == 4
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status_code", [500, 502, 503])
+async def test_5xx_create_rejection_stays_unknown(setup, status_code):
+    # Guards the `< 500` boundary in _is_definite_create_rejection: a 5xx means
+    # the provider may have processed the request, so it must stay ambiguous,
+    # never a confirmed "failed" (which would risk masking a billable session).
+    service, client = setup
+    client.beta.agents.sessions.create.side_effect = _api_status_error(status_code)
+    with pytest.raises(AgentServiceError, match="provider_outcome_unknown"):
+        await service.create("alice", "Task", "Task", "servererror")
+    rows = await service.list_sessions("alice")
+    assert rows[0]["status"] == "unknown"
+
+
+@pytest.mark.asyncio
+async def test_stale_unbound_create_with_truncated_search_stays_unknown(setup):
+    # Guards the `not more` condition in snapshot()'s stale-settle branch: a
+    # search truncated at MAX_PAGES has not confirmed zero matches, so even a
+    # very stale row must stay ambiguous instead of settling "failed" (which
+    # would orphan a session that exists past page MAX_PAGES).
+    service, client = setup
+    client.beta.agents.sessions.create.side_effect = RuntimeError("provider response lost")
+    with pytest.raises(AgentServiceError, match="provider_outcome_unknown"):
+        await service.create("alice", "Task", "Task", "lost")
+    client.beta.agents.sessions.list.side_effect = lambda **kwargs: EndlessEmptyPage()
+    stale_created_at = datetime.fromtimestamp(time.time() - agent_service.TURN_TIMEOUT_SECONDS - agent_service.UNBOUND_RESOLUTION_MARGIN_SECONDS - 10, UTC).isoformat()
+    with sqlite3.connect(service.path) as db:
+        db.execute("UPDATE sessions SET created_at=?", (stale_created_at,))
+        db.execute("UPDATE deadlines SET expires_at=0")
+    await service.enforce_deadlines()
+    rows = await service.list_sessions("alice")
+    assert rows[0]["status"] == "unknown"
+
+
+@pytest.mark.asyncio
+async def test_failed_unbound_row_is_not_relisted_or_resurrected_by_a_late_match(setup):
+    # A row already dead-lettered "failed" must stay that way even if a
+    # matching provider session shows up later (list-endpoint lag): re-listing
+    # and binding it would resurrect a row the watchdog has already stopped
+    # watching (its deadline is "settled"), leaking an unsupervised session.
+    service, client = setup
+    client.beta.agents.sessions.create.side_effect = _api_status_error(400)
+    with pytest.raises(AgentServiceError, match="provider_rejected_request"):
+        await service.create("alice", "Task", "Task", "rejected")
+    session_id = (await service.list_sessions("alice"))[0]["id"]
+    client.session.update(id="late_arrival", status="in_progress", metadata={"momo_local_session": session_id, "momo_owner_scope": agent_service._hash("alice")})
+    result = await service.snapshot("alice", session_id)
+    assert result["status"] == "failed"
+    assert client.beta.agents.sessions.list.await_count == 0
+    rows = await service.list_sessions("alice")
+    assert rows[0]["status"] == "failed"
+
+
+@pytest.mark.asyncio
+async def test_slow_create_landing_after_dead_letter_is_cancelled_not_orphaned(setup):
+    # A create() whose sessions.create() call is slow enough that the
+    # watchdog dead-letters the row (provider_id still NULL) before it
+    # returns must not leave the real, now-billable session untracked once
+    # it finally lands: the guarded "bind" silently no-ops, so the caller
+    # must reconcile (here: cancel it) instead of just dropping the result.
+    service, client = setup
+    entered, release = asyncio.Event(), asyncio.Event()
+
+    async def slow_create(**kwargs):
+        entered.set()
+        await release.wait()
+        return client.session
+
+    client.beta.agents.sessions.create.side_effect = slow_create
+    client.beta.agents.sessions.list.side_effect = lambda **kwargs: FakePage([])
+    pending = asyncio.create_task(service.create("alice", "Task", "Task", "slow"))
+    await entered.wait()
+
+    session_id = (await service.list_sessions("alice"))[0]["id"]
+    stale_created_at = datetime.fromtimestamp(time.time() - agent_service.TURN_TIMEOUT_SECONDS - agent_service.UNBOUND_RESOLUTION_MARGIN_SECONDS - 10, UTC).isoformat()
+    with sqlite3.connect(service.path) as db:
+        db.execute("UPDATE sessions SET created_at=?", (stale_created_at,))
+        db.execute("UPDATE deadlines SET expires_at=0")
+    await service.enforce_deadlines()
+    assert (await service.list_sessions("alice"))[0]["status"] == "failed"
+
+    release.set()
+    await pending
+
+    # The late-landing real session must be reconciled (cancelled, here,
+    # since the fake client's delete always succeeds), never silently lost.
+    client.beta.agents.sessions.delete.assert_awaited_once_with("sess_remote")
+    rows = await service.list_sessions("alice")
+    assert rows[0]["status"] == "failed"
+    assert rows[0]["id"] == session_id
+
+
+@pytest.mark.asyncio
+async def test_fail_unbound_does_not_settle_deadline_of_a_row_already_bound(setup):
+    # If a concurrent bind wins the race first (row is live, provider-bound),
+    # a losing fail_unbound call must not settle its deadline -- otherwise a
+    # session that is genuinely still running loses watchdog coverage for
+    # good (its deadline state never matches the "due" query again).
+    service, client = setup
+    client.turns = [{"id": "root", "status": "in_progress", "subagent_id": None}]
+    client.session["status"] = "in_progress"
+    row = await service.create("alice", "Task", "Task", "create")
+    assert row["status"] == "in_progress"
+    await service._storage("fail_unbound", row["id"], "alice", "provider_create_not_found")
+    with sqlite3.connect(service.path) as db:
+        deadline_state = db.execute("SELECT state FROM deadlines WHERE session_id=?", (row["id"],)).fetchone()[0]
+    assert deadline_state == "waiting"
+    rows = await service.list_sessions("alice")
+    assert rows[0]["status"] == "in_progress"
 
 
 @pytest.mark.asyncio
