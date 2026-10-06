@@ -246,6 +246,15 @@ describe("InviteSettingsPage success", () => {
     expect(screen.queryByLabelText(t.linkLabel)).toBeNull();
     expect(document.body.innerHTML).not.toContain(TOKEN);
   });
+
+  it("announces success and moves focus to the link", async () => {
+    mount();
+    await fillAndSubmit();
+    const link = await screen.findByLabelText(t.linkLabel);
+    await waitFor(() => expect(document.activeElement).toBe(link));
+    const status = screen.getByRole("status");
+    expect(status.textContent).toBe(t.successTitle("new@example.com"));
+  });
 });
 
 describe("InviteSettingsPage failures", () => {
@@ -274,6 +283,20 @@ describe("InviteSettingsPage failures", () => {
     mount();
     await fillAndSubmit("not-an-email");
     expect(await screen.findByText(t.errors.invalidEmail)).toBeTruthy();
+  });
+
+  it("marks the email input invalid and describes it by the error", async () => {
+    createResponse = async () =>
+      jsonResponse(422, {
+        detail: [{ loc: ["body", "email"], msg: "bad", type: "value_error" }],
+      });
+    mount();
+    await fillAndSubmit("not-an-email");
+    const error = await screen.findByText(t.errors.invalidEmail);
+    const input = asInput(screen.getByLabelText(t.emailLabel));
+    expect(input.getAttribute("aria-invalid")).toBe("true");
+    expect(input.getAttribute("aria-describedby")).toBe(error.id);
+    expect(error.id).toBeTruthy();
   });
 
   it("shows the conflict message on a 409", async () => {
