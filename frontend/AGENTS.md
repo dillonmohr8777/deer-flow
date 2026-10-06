@@ -389,3 +389,7 @@ Phone touch overrides belong to the workspace header, Background work, room
 composer and phone-only sidebar scope; do not modify generated UI primitives or
 desktop density. `tests/e2e/agent-room.spec.ts` covers readback, failed-post draft
 retention, the private gate and 390/768/1440 geometry with mocked APIs.
+
+## Approvals inbox (`/workspace/approvals`)
+
+List/detail page over `GET/PATCH/POST /api/approvals` (`src/core/approvals/`, `src/components/workspace/approvals/`). It reuses the Board's two-pane layout module. Edits save through `PATCH` and Approve is disabled while the form is dirty, so what is approved is always what was saved. Slack and email get typed fields; ad changes and other types edit as JSON. Keys the form does not show are preserved on save.

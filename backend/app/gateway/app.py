@@ -19,6 +19,7 @@ from app.gateway.routers import (
     admin,
     agent_room,
     agents,
+    approvals,
     artifacts,
     assistants_compat,
     auth,
@@ -1409,6 +1410,9 @@ This gateway provides runtime endpoints for agent runs plus custom endpoints for
     app.include_router(clients.router)
     # Momo Board API (client posts/tickets/concerns/DMs) is mounted at /api/board
     app.include_router(board.router)
+
+    # Approvals inbox (agent-proposed outbound actions) is mounted at /api/approvals
+    app.include_router(approvals.router)
     # Momentum-internal, staff only (private instance + staff role, else 404):
     # team channels at /api/team and the AI Academy at /api/academy
     app.include_router(team_board.router)
