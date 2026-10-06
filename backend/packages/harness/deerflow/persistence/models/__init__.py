@@ -17,6 +17,7 @@ there is no matching entity directory.
 from deerflow.persistence.academy.model import AcademyProgressRow
 from deerflow.persistence.agent_room.model import AgentRoomMessageRow
 from deerflow.persistence.agents.model import AgentRow
+from deerflow.persistence.approvals.model import PendingActionRow
 from deerflow.persistence.audit_events.model import AuditEventRow
 from deerflow.persistence.board.model import BoardMessageRow, BoardThreadRow
 from deerflow.persistence.channel_connections.model import (
@@ -55,6 +56,7 @@ __all__ = [
     "AgentRow",
     "AgentSeatRow",
     "AuditEventRow",
+    "PendingActionRow",
     "BoardMessageRow",
     "BoardThreadRow",
     "ChannelConnectionRow",

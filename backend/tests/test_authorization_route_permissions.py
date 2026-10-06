@@ -103,6 +103,8 @@ async def test_route_permissions_disabled_preserves_all_permissions(monkeypatch)
         Permissions.TEAM_WRITE,
         Permissions.ACADEMY_READ,
         Permissions.ACADEMY_WRITE,
+        Permissions.APPROVALS_READ,
+        Permissions.APPROVALS_WRITE,
     ]
     cached.assert_not_called()
 
@@ -131,6 +133,8 @@ async def test_route_permissions_use_async_provider_and_trusted_principal(monkey
         Permissions.TEAM_WRITE,
         Permissions.ACADEMY_READ,
         Permissions.ACADEMY_WRITE,
+        Permissions.APPROVALS_READ,
+        Permissions.APPROVALS_WRITE,
     ]
     assert [(request.resource, request.action, request.target) for request in provider.requests] == [
         ("route", "read", Permissions.THREADS_READ),
@@ -151,6 +155,8 @@ async def test_route_permissions_use_async_provider_and_trusted_principal(monkey
         ("route", "write", Permissions.TEAM_WRITE),
         ("route", "read", Permissions.ACADEMY_READ),
         ("route", "write", Permissions.ACADEMY_WRITE),
+        ("route", "read", Permissions.APPROVALS_READ),
+        ("route", "write", Permissions.APPROVALS_WRITE),
     ]
     principal = provider.requests[0].principal
     assert principal.user_id == "user-123"
@@ -185,6 +191,8 @@ async def test_route_permissions_fail_closed_denies_only_the_failed_permission(m
         Permissions.TEAM_WRITE,
         Permissions.ACADEMY_READ,
         Permissions.ACADEMY_WRITE,
+        Permissions.APPROVALS_READ,
+        Permissions.APPROVALS_WRITE,
     ]
 
 
@@ -214,6 +222,8 @@ async def test_route_permissions_fail_open_allows_the_failed_permission(monkeypa
         Permissions.TEAM_WRITE,
         Permissions.ACADEMY_READ,
         Permissions.ACADEMY_WRITE,
+        Permissions.APPROVALS_READ,
+        Permissions.APPROVALS_WRITE,
     ]
 
 
@@ -243,6 +253,8 @@ async def test_route_permissions_fail_open_allows_the_failed_permission(monkeypa
                 Permissions.TEAM_WRITE,
                 Permissions.ACADEMY_READ,
                 Permissions.ACADEMY_WRITE,
+                Permissions.APPROVALS_READ,
+                Permissions.APPROVALS_WRITE,
             ],
         ),
     ],
