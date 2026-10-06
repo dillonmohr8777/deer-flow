@@ -14,6 +14,7 @@ import {
   Radio,
   Globe,
   ListChecks,
+  ShieldCheck,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -111,6 +112,17 @@ export function WorkspaceNavChatList() {
             )}
           </SidebarMenuItem>
         )}
+        <SidebarMenuItem>
+          <SidebarMenuButton
+            isActive={pathname === "/workspace/approvals"}
+            asChild
+          >
+            <Link className="text-muted-foreground" href="/workspace/approvals">
+              <ShieldCheck />
+              <span>Approvals</span>
+            </Link>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
         {/* Momentum staff only: the agency's own workspace plus a staff role. */}
         {internalEnabled && (
           <SidebarMenuItem>

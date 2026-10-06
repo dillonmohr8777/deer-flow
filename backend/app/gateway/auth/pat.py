@@ -45,6 +45,8 @@ PAT_ALLOWED_SCOPES: frozenset[str] = frozenset(
         "team:write",
         "academy:read",
         "academy:write",
+        "approvals:read",
+        "approvals:write",
     }
 )
 

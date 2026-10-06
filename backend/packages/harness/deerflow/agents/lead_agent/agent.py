@@ -563,6 +563,11 @@ def build_middlewares(
         )
     )
 
+    # Last reviewer edits for this agent's client (approvals inbox), shown to the drafting model.
+    from deerflow.agents.middlewares.client_corrections_middleware import ClientCorrectionsMiddleware
+
+    middlewares.append(ClientCorrectionsMiddleware(agent_name))
+
     # Deterministically load a full SKILL.md when the user starts the turn with
     # /skill-name. This keeps the base system prompt metadata-only while giving
     # explicit user activation priority over model-side relevance guessing.

@@ -413,8 +413,11 @@ See `docs/` directory for detailed documentation:
 - [PATH_EXAMPLES.md](docs/PATH_EXAMPLES.md) - Path types and usage
 - [summarization.md](docs/summarization.md) - Context summarization
 - [plan_mode_usage.md](docs/plan_mode_usage.md) - Plan mode with TodoList
-
 - Agency workflow templates (`deerflow/scheduler/workflow_templates.py`) are data only, with no client data. `backend/scripts/seed_scheduled_workflows.py` creates them as paused tasks, idempotent by title, and never touches `scheduler.enabled`.
+
+## Approvals inbox (`/api/approvals`)
+
+Agents propose outbound actions with `propose_action`; nothing executes before an org owner/admin approves (compare-and-set, exactly-once). Proposals and edited approvals are fact-checked (contradicted claims are refused), and edits are recorded per client in `client_corrections`, whose last 10 entries `ClientCorrectionsMiddleware` injects. Detail: [docs/APPROVALS_INBOX.md](docs/APPROVALS_INBOX.md). Tests: `tests/test_approvals_inbox.py`, `tests/test_client_memory.py`.
 
 ## Fact checker (`verify_claims`)
 

@@ -109,6 +109,11 @@ class FactCheckReport:
         return {"gate": self.gate, "counts": counts, "claims": [asdict(c) for c in self.claims]}
 
 
+def draft_text(title: str, payload: object) -> str:
+    """The exact text a reviewer approves: the title plus every string payload value."""
+    return "\n".join(v for v in (title, *payload.values()) if isinstance(v, str)) if isinstance(payload, dict) else title
+
+
 def _num(s: str, suffix: str | None = None) -> tuple[float, float]:
     """Parse '1,234.5' (+ optional k/m) -> (value, rounding tolerance)."""
     s = s.replace(",", "")

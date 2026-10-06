@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 def _run_evidence(runtime: Runtime) -> list[Evidence]:
     """Successful tool outputs from this run (tool results are the run's evidence)."""
     out = []
-    for m in (runtime.state or {}).get("messages", []):
+    for m in (getattr(runtime, "state", None) or {}).get("messages", []):
         if isinstance(m, ToolMessage) and m.name != "verify_claims" and m.status != "error" and isinstance(m.content, str):
             out.append(Evidence(m.name or f"tool:{m.tool_call_id}", m.content))
     return out

@@ -16,13 +16,14 @@ from deerflow.persistence.bootstrap import _get_alembic_config, bootstrap_schema
 
 PREVIOUS = "0047_merge_agent_room_exec"
 REPAIR = "0048_repair_audit_events"
+HEAD = "0051_client_corrections"  # later revisions chain after the repair; their table is outside this test
 INDEXES = {"ix_audit_events_occurred_at", "ix_audit_events_action", "ix_audit_events_organization_id", "ix_audit_events_actor_user_id"}
 
 
 def preserved_snapshot(db):
     with sqlite3.connect(db) as conn:
-        schema = conn.execute("SELECT type,name,tbl_name,sql FROM sqlite_master WHERE tbl_name NOT IN ('audit_events','alembic_version') ORDER BY type,name,tbl_name").fetchall()
-        tables = [r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT IN ('audit_events','alembic_version') ORDER BY name")]
+        schema = conn.execute("SELECT type,name,tbl_name,sql FROM sqlite_master WHERE tbl_name NOT IN ('audit_events','pending_actions','client_corrections','alembic_version') ORDER BY type,name,tbl_name").fetchall()
+        tables = [r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT IN ('audit_events','pending_actions','client_corrections','alembic_version') ORDER BY name")]
         rows = {table: conn.execute('SELECT * FROM "' + table + '"').fetchall() for table in tables}
         return schema, rows
 
@@ -31,7 +32,7 @@ def assert_audit_shape(db):
     with sqlite3.connect(db) as conn:
         assert {r[1] for r in conn.execute("PRAGMA table_info(audit_events)")} == {"id", "occurred_at", "actor_user_id", "organization_id", "action", "target_type", "target_id", "outcome", "ip", "user_agent", "details"}
         assert {r[1] for r in conn.execute("PRAGMA index_list(audit_events)") if not r[1].startswith("sqlite_autoindex_")} == INDEXES
-        assert conn.execute("SELECT version_num FROM alembic_version").fetchone() == (REPAIR,)
+        assert conn.execute("SELECT version_num FROM alembic_version").fetchone() == (HEAD,)
 
 
 @pytest.mark.asyncio
@@ -39,7 +40,8 @@ async def test_repair_is_a_single_forward_successor():
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")
     try:
         script = ScriptDirectory.from_config(_get_alembic_config(engine))
-        assert script.get_heads() == [REPAIR]
+        assert script.get_heads() == [HEAD]
+        assert script.get_revision("0049_pending_actions").down_revision == REPAIR
         assert script.get_revision(REPAIR).down_revision == PREVIOUS
         parents = script.get_revision(PREVIOUS).down_revision
         assert isinstance(parents, tuple)
