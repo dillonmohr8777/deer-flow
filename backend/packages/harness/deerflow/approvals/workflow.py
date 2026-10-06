@@ -13,6 +13,7 @@ needs the IM channel service the harness must not import).
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Literal, Protocol
 
@@ -21,6 +22,16 @@ STATUSES = ("pending", "approved", "rejected", "executed", "failed")
 MAX_PAYLOAD_BYTES = 20_000
 
 ActionType = Literal["slack_message", "email", "ad_change", "other"]
+
+# Action types contributed by extensions: name -> validator(target, payload). Startup-only.
+_EXTENSION_TYPES: dict[str, Callable[[str, dict[str, Any]], None]] = {}
+
+
+def register_action_type(name: str, validator: Callable[[str, dict[str, Any]], None]) -> None:
+    """Let an extension add an approval action type. Raise ``InvalidPayloadError`` from ``validator`` to refuse a payload."""
+    if name in ACTION_TYPES or len(name) > 32:
+        raise ValueError(f"Cannot register action type {name!r}")
+    _EXTENSION_TYPES[name] = validator
 
 
 class InvalidPayloadError(ValueError):
@@ -34,7 +45,7 @@ def _text(payload: dict[str, Any], key: str) -> str:
 
 def validate_payload(action_type: str, target: str, payload: Any) -> None:
     """Reject a proposal that could never execute, at propose *and* edit time."""
-    if action_type not in ACTION_TYPES:
+    if action_type not in ACTION_TYPES and action_type not in _EXTENSION_TYPES:
         raise InvalidPayloadError(f"Unknown action type {action_type!r}")
     if not isinstance(payload, dict):
         raise InvalidPayloadError("Payload must be an object")
@@ -52,6 +63,8 @@ def validate_payload(action_type: str, target: str, payload: Any) -> None:
             raise InvalidPayloadError("An email needs a target address")
         if not _text(payload, "subject") or not _text(payload, "body"):
             raise InvalidPayloadError("An email needs payload.subject and payload.body")
+    elif action_type in _EXTENSION_TYPES:
+        _EXTENSION_TYPES[action_type](target, payload)
 
 
 @dataclass(frozen=True)

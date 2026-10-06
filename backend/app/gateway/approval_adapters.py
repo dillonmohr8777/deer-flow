@@ -64,8 +64,16 @@ ADAPTERS: dict[str, ActionAdapter] = {
 }
 
 
+# Adapters contributed by extensions (see ``deerflow.approvals.register_action_type``). Startup-only.
+_EXTENSION_ADAPTERS: dict[str, ActionAdapter] = {}
+
+
+def register_adapter(action_type: str, adapter: ActionAdapter) -> None:
+    _EXTENSION_ADAPTERS[action_type] = adapter
+
+
 async def execute_approved(action: dict[str, Any]) -> AdapterOutcome:
-    adapter = ADAPTERS.get(action["action_type"])
+    adapter = ADAPTERS.get(action["action_type"]) or _EXTENSION_ADAPTERS.get(action["action_type"])
     if adapter is None:
         return AdapterOutcome("failed", error=f"No adapter for {action['action_type']!r}")
     try:
