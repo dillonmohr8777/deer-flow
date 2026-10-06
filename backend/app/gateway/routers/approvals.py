@@ -9,6 +9,7 @@ adapter, so a double click or two reviewers can never send twice.
 
 from __future__ import annotations
 
+import logging
 from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException, Query, Request
@@ -20,8 +21,10 @@ from app.gateway.deps import get_current_user_from_request, get_pending_action_r
 from app.gateway.routers.clients import _is_active_org_admin
 from deerflow.approvals import InvalidPayloadError
 from deerflow.factcheck import Evidence, draft_text, verify_draft
+from deerflow.persistence.approvals.corrections import ClientCorrectionRepository
 from deerflow.runtime.user_context import resolve_organization_id
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/approvals", tags=["approvals"])
 
 ActionStatus = Literal["pending", "approved", "rejected", "executed", "failed"]
@@ -127,6 +130,14 @@ async def _recheck_if_edited(repo, row: dict) -> None:
         await repo.set_fact_check(row["id"], new)
 
 
+async def _record_correction(repo, approved: dict, reviewer: str) -> None:
+    """Keep what the reviewer changed so later drafts for this client learn from it. Never blocks the approval."""
+    try:
+        await ClientCorrectionRepository(repo.session_factory).record_for_approval(approved, approver=reviewer)
+    except Exception:
+        logger.warning("could not record client correction for %s", approved.get("id"), exc_info=True)
+
+
 @router.post("/{action_id}/approve", response_model=ApprovalResponse)
 @require_permission("approvals", "write")
 async def approve_action(action_id: str, request: Request) -> ApprovalResponse:
@@ -140,6 +151,7 @@ async def approve_action(action_id: str, request: Request) -> ApprovalResponse:
     if approved is None:
         raise HTTPException(status_code=409, detail="This action was already decided")
     await _audit(request, "approvals.approved", reviewer, action_id, "success", {"action_type": approved["action_type"], "target": approved["target"]})
+    await _record_correction(repo, approved, reviewer)
     outcome = await execute_approved(approved)
     settled = await repo.record_outcome(action_id, status=outcome.status, result=outcome.detail, error=outcome.error)
     await _audit(request, "approvals.executed", reviewer, action_id, "success" if outcome.status != "failed" else "failure", {"status": outcome.status, "error": outcome.error})
