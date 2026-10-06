@@ -95,7 +95,7 @@ def build_message(row: dict[str, Any], cfg: ApprovalsDmConfig) -> tuple[str, lis
 def settled_blocks(blocks: list[dict[str, Any]], status_line: str) -> list[dict[str, Any]]:
     """Replace the buttons with a status line so a decided item can't be clicked again."""
     kept = [b for b in blocks if b.get("type") != "actions"]
-    return [*kept, {"type": "context", "elements": [{"type": "mrkdwn", "text": _esc(status_line)}]}]
+    return [*kept, {"type": "context", "elements": [{"type": "mrkdwn", "text": re.sub(r"&lt;@(\w+)&gt;", r"<@\1>", _esc(status_line))}]}]
 
 
 @dataclass(frozen=True)
