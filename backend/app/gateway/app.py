@@ -30,6 +30,7 @@ from app.gateway.routers import (
     channel_connections,
     channels,
     clients,
+    command_center,
     console,
     cost_router,
     features,
@@ -1362,6 +1363,7 @@ This gateway provides runtime endpoints for agent runs plus custom endpoints for
     # Console API (cross-thread observability) is mounted at /api/console
     app.include_router(console.router)
     app.include_router(cost_router.router)
+    app.include_router(command_center.router)
 
     # MCP API is mounted at /api/mcp
     app.include_router(capabilities.router)
