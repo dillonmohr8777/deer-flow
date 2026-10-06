@@ -30,7 +30,6 @@ const AUTH_DISABLED_PERMISSIONS = [
   "academy:write",
   "approvals:read",
   "approvals:write",
-  "approvals:propose",
 ];
 
 test.describe("auth-disabled contract (real backend)", () => {
