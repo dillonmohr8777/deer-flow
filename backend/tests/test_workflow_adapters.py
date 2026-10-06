@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import os
 import shutil
 import sys
 from types import SimpleNamespace
@@ -135,10 +136,18 @@ def test_worker_environment_does_not_inherit_keys_or_auth(monkeypatch):
     assert env["OTEL_SDK_DISABLED"] == "true"
 
 
+def _skip_if_worker_missing(adapter, framework):
+    # CI installs every worker (backend-unit-tests.yml), so a missing one must still fail there.
+    # Locally the workers are an opt-in build, so skip instead of failing.
+    if not os.environ.get("CI") and adapter.capabilities()[framework]["detail"] == "worker_not_installed":
+        pytest.skip(f"{framework} worker is not built in this checkout")
+
+
 @pytest.mark.parametrize("framework", ["mastra", "crewai", "deepagents", "agno", "agentkit"])
 @pytest.mark.asyncio
 async def test_installed_real_framework_uses_one_native_handoff(framework):
     adapter = WorkflowModelAdapter(client=Client())
+    _skip_if_worker_missing(adapter, framework)
     assert adapter.capabilities()[framework]["available"], adapter.capabilities()[framework]
     result = await adapter.call(**request(framework=framework))
     assert result["output"] == {"answer": "Useful result"}
@@ -166,6 +175,7 @@ async def test_subprocess_cancel_reaps_worker():
             await asyncio.Event().wait()
 
     adapter = WorkflowModelAdapter(client=WaitingClient())
+    _skip_if_worker_missing(adapter, "mastra")
     task = asyncio.create_task(adapter.call(**request(framework="mastra")))
     await asyncio.wait_for(gate.wait(), 15)
     task.cancel()

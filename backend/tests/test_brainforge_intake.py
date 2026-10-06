@@ -171,7 +171,7 @@ class HydrationTests(unittest.IsolatedAsyncioTestCase):
 
 class LedgerTests(unittest.TestCase):
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory()
+        self.temp = tempfile.TemporaryDirectory(dir=Path(tempfile.gettempdir()).resolve())
         self.path = Path(self.temp.name) / "receipts.sqlite"
         self.ledger = IntakeLedger(self.path)
         self.key = ("T123", "C123", "100.000002")

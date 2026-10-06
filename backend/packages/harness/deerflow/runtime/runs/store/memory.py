@@ -274,6 +274,18 @@ class MemoryRunStore(RunStore):
         results.sort(key=lambda r: r["created_at"])
         return results
 
+    async def usage_by_model_since(self, since):
+        out: dict[str, dict[str, int]] = {}
+        for r in self._runs.values():
+            if r.get("operation_kind", "run") != "run" or datetime.fromisoformat(r["created_at"]) < since:
+                continue
+            per_model = r.get("token_usage_by_model") or {r.get("model_name") or "unknown": {"input_tokens": r.get("total_input_tokens", 0), "output_tokens": r.get("total_output_tokens", 0)}}
+            for model, u in per_model.items():
+                b = out.setdefault(model, {"input_tokens": 0, "output_tokens": 0})
+                b["input_tokens"] += u.get("input_tokens", 0)
+                b["output_tokens"] += u.get("output_tokens", 0)
+        return out
+
     async def aggregate_tokens_by_thread(self, thread_id: str, *, include_active: bool = False, user_id: str | None = None) -> dict[str, Any]:
         statuses = ("success", "error", "running") if include_active else ("success", "error")
         # Use the thread index for an O(runs-in-thread) lookup instead of
