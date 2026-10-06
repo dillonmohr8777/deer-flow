@@ -1,0 +1,58 @@
+#cloud-config
+# Lightsail user data for the MomoBot prod box (Ubuntu 24.04, x86_64, Xlarge:
+# 4 vCPU / 16 GB / 320 GB). Dillon passes it with
+#   aws lightsail create-instances ... --user-data file://cloud-init.yaml
+# (RUNBOOK step 2). Before that, replace the two REPLACE_ME values below.
+#
+# This only PREPARES the box: Docker, AWS CLI, swap, the repo clone, the
+# systemd units. It does not start MomoBot: the secrets (SSM) and the data
+# (migrate-data.sh) are not there yet. After first boot, SSH in and run
+# bootstrap.sh (RUNBOOK step 5). No secrets belong in this file.
+#
+# If /var/log/cloud-init-output.log shows this never ran (Lightsail launch
+# scripts are normally plain shell), SSH in and run the same commands by hand;
+# every step is idempotent.
+package_update: true
+package_upgrade: true
+packages: [ca-certificates, curl, git, jq, unzip, gnupg, python3]
+
+users:
+  - default
+  - name: momobot
+    system: true
+    shell: /usr/sbin/nologin
+    home: /opt/momobot
+
+write_files:
+  - path: /etc/momobot/bootstrap.env
+    permissions: "0644"          # no secrets: names, domain, branch
+    content: |
+      # Branch, tag or full sha to deploy. Prod runs from the release branch.
+      MOMOBOT_REF=codex/momo-oct5-release-20261005
+      MOMOBOT_DOMAIN=momobot.needmomentum.com
+      MOMOBOT_ACME_EMAIL=REPLACE_ME
+      MOMOBOT_SSM_PATH=/momobot/prod
+      MOMOBOT_BACKUP_BUCKET=REPLACE_ME
+      AWS_DEFAULT_REGION=us-east-2
+
+runcmd:
+  # 4 GB swap: the frontend image build is the memory spike on a 16 GB box.
+  - [bash, -c, "[ -f /swapfile ] || (fallocate -l 4G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile && echo '/swapfile none swap sw 0 0' >> /etc/fstab)"]
+  # Docker Engine + compose plugin from Docker's apt repo.
+  - [bash, -c, "command -v docker >/dev/null || (install -m 0755 -d /etc/apt/keyrings && curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc && chmod a+r /etc/apt/keyrings/docker.asc && echo \"deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo $VERSION_CODENAME) stable\" > /etc/apt/sources.list.d/docker.list && apt-get update && apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin)"]
+  - [systemctl, enable, --now, docker]
+  - [usermod, -aG, docker, momobot]
+  - [usermod, -aG, docker, ubuntu]
+  # AWS CLI v2 (x86_64).
+  - [bash, -c, "command -v aws >/dev/null || (cd /tmp && curl -fsSL https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip -o awscli.zip && unzip -q awscli.zip && ./aws/install)"]
+  # Repo (public, no registry needed). Checkout of MOMOBOT_REF is bootstrap.sh's job.
+  - [bash, -c, "mkdir -p /opt/momobot /var/log/momobot && ([ -d /opt/momobot/src/.git ] || git clone https://github.com/dillonmohr8777/deer-flow.git /opt/momobot/src)"]
+  - [bash, -c, ". /etc/momobot/bootstrap.env && git -C /opt/momobot/src fetch origin && (git -C /opt/momobot/src checkout -B \"$MOMOBOT_REF\" \"origin/$MOMOBOT_REF\" 2>/dev/null || git -C /opt/momobot/src checkout --detach \"$MOMOBOT_REF\")"]
+  - [mkdir, -p, /opt/momobot/import]
+  - [chown, -R, "ubuntu:momobot", /opt/momobot/import]   # scp lands here as ubuntu; src stays root-owned (root runs git and compose)
+  - [chmod, "0770", /opt/momobot/import]
+  - [chmod, "0755", /opt/momobot]
+  # Units are installed here and enabled by bootstrap.sh; they refuse to start
+  # until .env and config.yaml exist (ConditionPathExists).
+  - [bash, -c, "install -m 644 /opt/momobot/src/deploy/momentum/lightsail/systemd/momobot* /etc/systemd/system/ && systemctl daemon-reload || echo 'lightsail kit not on this ref yet: bootstrap.sh installs the units'"]
+  - [bash, -c, "echo 'cloud-init done' > /var/log/momobot/cloud-init.done"]
