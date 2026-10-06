@@ -370,7 +370,7 @@ Interaction-sensitive changes must follow [policy](docs/RUN_INTERACTION_POLICY.m
 
 ### Cost Router
 
-`cost_router` config (`deerflow/runtime/cost_router.py`) routes `context.task_class` to a model, refuses runs over a route's USD cap or on an unpriced model, and always blocks the denylist (`meta/muse-*`). Spend: `GET /api/cost-router/spend`.
+`cost_router` config (`deerflow/runtime/cost_router.py`) routes `context.task_class` to a model, refuses runs over a route's USD cap or on an unpriced model, and always blocks the denylist (`meta/muse-*`). Spend: `GET /api/cost-router/spend`. `GET /api/command-center/board` (admin) feeds the Live Board: admission ledger, `DEER_FLOW_HOME/agency-evals`, lobby notes (`MOMO_LOBBY_NOTES_DIR`). Missing source: `available: false`, never 0.
 
 ### Context Summarization
 

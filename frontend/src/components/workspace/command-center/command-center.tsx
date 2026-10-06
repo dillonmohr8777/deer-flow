@@ -51,6 +51,7 @@ import {
   WorkflowsView,
 } from "./business-views";
 import { DispatchBoard } from "./dispatch-board";
+import { LiveBoard } from "./live-board";
 import { modelDisplayName } from "./model-label";
 import { MomentumGlyph } from "./momentum-glyph";
 import {
@@ -90,6 +91,7 @@ export function runTokens(
 }
 const tabs = [
   "Mission Control",
+  "Live Board",
   "Agent Studio",
   "Jobs",
   "Workflows",
@@ -116,6 +118,8 @@ const PREVIEW_NOTES: Partial<Record<View, string>> = {
 
 /** Each view says what it holds; the brand line belongs to Mission Control. */
 const VIEW_LEDES: Record<Exclude<View, "Mission Control">, string> = {
+  "Live Board":
+    "Spend, approvals, agents, evals and the lobby, each tile read from its own source.",
   "Agent Studio": "Your lead agent and the specialists it can hand work to.",
   Jobs: "Every recorded run, newest first, with its receipt.",
   Workflows: "Scheduled work and where each definition stands.",
@@ -759,6 +763,9 @@ export function CommandCenter() {
         ) : null}
         {view === "Agent Studio" ? (
           <div className={styles.studio}>{team}</div>
+        ) : null}
+        {view === "Live Board" ? (
+          <LiveBoard canReadRuns={canReadRuns} agentLabel={agentLabel} />
         ) : null}
         {view === "Jobs" ? jobList : null}
         {view === "Workflows" ? <WorkflowsView /> : null}
