@@ -255,3 +255,5 @@ Pure unsent `jevbox_evidence.py`: trusted admission, no JSON authority or dispat
 see [contract](../../docs/JEVBOX_EVIDENCE.md).
 
 OIDC start redirects to the callback host, see [notes](../../docs/OIDC_CALLBACK_HOST.md).
+
+SDK review grants are host-only; default off. No HTTP or paid activation.

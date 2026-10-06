@@ -362,3 +362,5 @@ the admitted group keeps its records on success or completes rollback on failure
 This is a store-local guarantee, not a change to RunJournal cancellation policy or
 JSONL's single-process deployment constraint. Regression coverage is in
 `tests/test_jsonl_event_store_cancellation.py`.
+
+SDK: read [SDK.md](SDK.md).

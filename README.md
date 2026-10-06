@@ -2520,3 +2520,5 @@ an exact private backup. Explicit owner settings, authentication, signing secret
 provider budgets and development defaults are preserved. The private Gateway
 rejects an omitted journal setting; previous memory-only pilot events remain
 historical. See the exact invocation in [private setup](docs/MOMOBOT_APP_RELEASE.md).
+
+Optional Momentum integration: [synthetic offline SDK review worker](examples/momentum-sdk-review/README.md). Disabled by default; does not perform live client work or inference.
