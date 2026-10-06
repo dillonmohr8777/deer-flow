@@ -32,7 +32,7 @@ cp "$DEPLOY/config.yaml" "$DEPLOY/extensions_config.json" "$STAGE/"
 tar czf "$DEPLOY/backup-$stamp.tgz" -C "$STAGE" .
 trap 'rm -f "$DEPLOY/backup-$stamp.tgz"; cleanup' EXIT
 
-aws s3 cp "$DEPLOY/backup-$stamp.tgz" "s3://$MOMOBOT_BACKUP_BUCKET/nightly/momobot-$stamp.tgz" --only-show-errors
+aws s3 cp "$DEPLOY/backup-$stamp.tgz" "s3://$MOMOBOT_BACKUP_BUCKET/nightly/momobot-$stamp.tgz" --sse AES256 --only-show-errors
 # Read-back check: the object exists and the size matches.
 local_size="$(stat -c %s "$DEPLOY/backup-$stamp.tgz")"
 remote_size="$(aws s3api head-object --bucket "$MOMOBOT_BACKUP_BUCKET" --key "nightly/momobot-$stamp.tgz" --query ContentLength --output text)"
