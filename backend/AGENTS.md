@@ -414,3 +414,5 @@ See `docs/` directory for detailed documentation:
 - [PATH_EXAMPLES.md](docs/PATH_EXAMPLES.md) - Path types and usage
 - [summarization.md](docs/summarization.md) - Context summarization
 - [plan_mode_usage.md](docs/plan_mode_usage.md) - Plan mode with TodoList
+
+- Agency workflow templates (`deerflow/scheduler/workflow_templates.py`) are data only, with no client data. `backend/scripts/seed_scheduled_workflows.py` creates them as paused tasks, idempotent by title, and never touches `scheduler.enabled`.
