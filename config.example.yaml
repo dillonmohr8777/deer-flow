@@ -2840,6 +2840,10 @@ run_ownership:
 #     bot_token: $SLACK_BOT_TOKEN     # xoxb-...
 #     app_token: $SLACK_APP_TOKEN     # xapp-... (Socket Mode)
 #     allowed_users: []               # empty = allow all; can also be a single Slack user ID string, e.g. U123456, but list form is recommended
+#     approvals_dm:                   # DM new approvals-inbox items with Approve / Edit / Skip buttons (needs im:write + Interactivity)
+#       enabled: false
+#       user_ids: []                  # Slack user IDs who receive the DM and may press the buttons
+#       base_url: http://127.0.0.1:2026  # Command Center URL used for the item link
 #
 #   telegram:
 #     enabled: false
