@@ -194,3 +194,13 @@ def test_origin_override_is_sent_for_container_base_urls():
     settings.origin = "http://localhost:4310"
     assert _retrieve(fake, settings=settings).status == "ok"
     assert set(fake.origins) == {"http://localhost:4310"}
+
+
+def test_filler_words_do_not_outrank_the_precise_passage():
+    long_filler = "the and for how what when where which with from that this " * 30 + "parking"
+    docs = {
+        AUTHORIZED_A: _doc(AUTHORIZED_A, "filler.md", long_filler),
+        AUTHORIZED_B: _doc(AUTHORIZED_B, "precise.md", "Wristband pickup and parking rules."),
+    }
+    result = _retrieve(FakeJevbox(docs=docs), query="how what when where wristband pickup parking")
+    assert result.passages[0].document_id == AUTHORIZED_B

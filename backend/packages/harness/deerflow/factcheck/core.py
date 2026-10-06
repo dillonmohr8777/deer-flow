@@ -292,3 +292,20 @@ def verify_draft(draft: str, evidence: list[Evidence], judge: Callable[[str, lis
         c.verdict, c.reason, c.evidence = (SUPPORTED, "named source present in evidence", hit.source) if hit else (UNSUPPORTED, "named source not among run evidence", None)
         report.claims.append(c)
     return report
+
+
+_EVIDENCE_KEEP, _EVIDENCE_ITEMS = 8_000, 20
+
+
+def check_for_filing(title: str, payload: object, evidence: list[Evidence]) -> tuple[str | None, dict | None, str]:
+    """Fact-check a proposal at enqueue: ``(refusal, fact_check_to_store, gate)``.
+
+    A contradicted claim returns the refusal text and files nothing. The evidence is kept
+    (bounded) in ``fact_check`` so approving an edited payload can be re-checked later.
+    """
+    report = verify_draft(draft_text(title, payload), evidence)
+    if report.blocked:
+        bad = [c for c in report.to_dict()["claims"] if c["verdict"] == "contradicted"]
+        return "; ".join(f'"{c["text"]}" ({c["reason"]})' for c in bad), None, report.gate
+    kept = [{"source": e.source, "text": e.text[:_EVIDENCE_KEEP]} for e in evidence[:_EVIDENCE_ITEMS]]
+    return None, ({**report.to_dict(), "evidence": kept} if report.claims else None), report.gate
