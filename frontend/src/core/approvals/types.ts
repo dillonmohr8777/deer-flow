@@ -2,6 +2,7 @@ export type ApprovalActionType =
   | "slack_message"
   | "email"
   | "ad_change"
+  | "deploy_report"
   | "other";
 
 export type ApprovalStatus =
