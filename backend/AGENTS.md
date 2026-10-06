@@ -422,3 +422,5 @@ Agents never send outbound actions themselves: the builtin `propose_action` tool
 ## Fact checker (`verify_claims`)
 
 Built-in tool backed by the pure module `deerflow/factcheck/core.py`: extracts numeric, date and named-source claims from an outbound draft and checks each against run evidence (successful tool outputs plus caller-supplied `evidence`). Verdicts: supported (with pointer), contradicted, unsupported, unverifiable. Gate: any contradicted -> `block`, any unsupported/unverifiable -> `flag`, else `pass`. Rules: missing data is never 0, "up/down X%" needs before/after values from one source, platform labels must match the evidence's source. Deterministic first; a model judge runs only for ambiguous claims and only when `use_model=true`. Integrators (e.g. approvals) call `verify_draft(draft, evidence).to_dict()` and refuse to enqueue when `gate == "block"`. Tests: `tests/test_factcheck.py`.
+
+- Agency workflow templates (`deerflow/scheduler/workflow_templates.py`) are data only, with no client data. `backend/scripts/seed_scheduled_workflows.py` creates them as paused tasks, idempotent by title, and never touches `scheduler.enabled`.
