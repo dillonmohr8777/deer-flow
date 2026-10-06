@@ -373,6 +373,10 @@ multi-step tasks: one `in_progress` task, real-time updates. See
 
 Interaction-sensitive changes must follow [policy](docs/RUN_INTERACTION_POLICY.md).
 
+### Cost Router
+
+`cost_router` config (`deerflow/runtime/cost_router.py`) routes `context.task_class` to a model, refuses runs over a route's USD cap or on an unpriced model, and always blocks the denylist (`meta/muse-*`). Spend: `GET /api/cost-router/spend`.
+
 ### Context Summarization
 
 Automatic conversation summarization when approaching token limits:
