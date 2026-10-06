@@ -1,0 +1,8 @@
+[Unit]
+Description=MomoBot nightly backup to S3
+After=momobot.service
+
+[Service]
+Type=oneshot
+UMask=0077
+ExecStart=/opt/momobot/src/deploy/momentum/lightsail/backup.sh
