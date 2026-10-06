@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 
 from langchain.tools import tool
 from langchain_core.messages import ToolMessage
@@ -14,12 +15,24 @@ from deerflow.tools.types import Runtime
 logger = logging.getLogger(__name__)
 
 
+# Library passages labelled as unchecked drafts (e.g. the Reddit AI Research collection)
+# must not count as evidence: their numbers and URLs were never verified.
+_UNVERIFIED_LABEL = "STATUS: UNVERIFIED DRAFT"
+_PASSAGE_START = re.compile(r"\n(?=\[J\d+\] )")
+
+
+def _drop_unverified_passages(content: str) -> str:
+    if _UNVERIFIED_LABEL not in content:
+        return content
+    return "\n".join(part for part in _PASSAGE_START.split(content) if _UNVERIFIED_LABEL not in part)
+
+
 def _run_evidence(runtime: Runtime) -> list[Evidence]:
     """Successful tool outputs from this run (tool results are the run's evidence)."""
     out = []
     for m in (getattr(runtime, "state", None) or {}).get("messages", []):
         if isinstance(m, ToolMessage) and m.name != "verify_claims" and m.status != "error" and isinstance(m.content, str):
-            out.append(Evidence(m.name or f"tool:{m.tool_call_id}", m.content))
+            out.append(Evidence(m.name or f"tool:{m.tool_call_id}", _drop_unverified_passages(m.content)))
     return out
 
 
