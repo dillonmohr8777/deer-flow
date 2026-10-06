@@ -19,11 +19,12 @@ Two callers share this pipeline:
 Behavior-preservation bridge: the pre-extraction upload tests pin this
 pipeline by patching collaborators on the ``routers.uploads`` module
 namespace (``ensure_uploads_dir``, ``get_sandbox_provider``,
-``_get_upload_limits``, ``_auto_convert_documents_enabled``,
-``convert_file_to_markdown``, the low-level file machinery). The service
-therefore resolves every collaborator through that module object at call
-time (:func:`_uploads`) instead of importing the names directly, so those
-patches keep binding to the one pipeline both callers use.
+``get_initialized_sandbox_provider``, ``_get_upload_limits``,
+``_auto_convert_documents_enabled``, ``convert_file_to_markdown``, the
+low-level file machinery). The service therefore resolves every collaborator
+through that module object at call time (:func:`_uploads`) instead of
+importing the names directly, so those patches keep binding to the one
+pipeline both callers use.
 """
 
 from __future__ import annotations
@@ -111,6 +112,21 @@ def _uploads() -> Any:
     return uploads
 
 
+def _configured_thread_data_mounts(app_config: AppConfig) -> bool | None:
+    """Return AIO mount behavior only when config proves it without provider construction."""
+    sandbox_config = getattr(app_config, "sandbox", None)
+    if getattr(sandbox_config, "use", None) != "deerflow.community.aio_sandbox:AioSandboxProvider":
+        return None
+
+    override = getattr(sandbox_config, "thread_data_mounts", None)
+    if override is not None:
+        return bool(override)
+
+    # AIO defaults to the local container backend when no provisioner is set;
+    # that backend bind-mounts each thread's user-data directories.
+    return not bool(getattr(sandbox_config, "provisioner_url", None))
+
+
 class UnsafeFilenameError(ValueError):
     """The display filename could not be normalized/claimed; ordinary behavior skips it."""
 
@@ -188,9 +204,20 @@ class ThreadUploadIngestionService:
         self._uploads_dir = await run_file_io(uploads.ensure_uploads_dir, self._thread_id, user_id=self._user_id)
         listing = await run_file_io(uploads.list_files_in_dir, self._uploads_dir)
         self._seen_filenames.update(entry["filename"] for entry in listing["files"])
-        sandbox_provider = uploads.get_sandbox_provider()
-        self._sync_to_sandbox = not uploads._uses_thread_data_mounts(sandbox_provider)
+        # Reuse a live provider's capability when one already exists. On cold
+        # start, avoid constructing AIO for the positively configured mounted
+        # case: its backend constructor may perform startup-only Docker checks,
+        # although this upload needs no sandbox acquisition or sync.
+        sandbox_provider = uploads.get_initialized_sandbox_provider()
+        uses_thread_data_mounts = uploads._uses_thread_data_mounts(sandbox_provider) if sandbox_provider is not None else _configured_thread_data_mounts(self._config)
+        if uses_thread_data_mounts is None:
+            sandbox_provider = uploads.get_sandbox_provider()
+            uses_thread_data_mounts = uploads._uses_thread_data_mounts(sandbox_provider)
+
+        self._sync_to_sandbox = not uses_thread_data_mounts
         if self._sync_to_sandbox:
+            if sandbox_provider is None:
+                sandbox_provider = uploads.get_sandbox_provider()
             self._sandbox_lease = await uploads.try_acquire_sandbox_for_request(
                 self._request,
                 sandbox_provider,
