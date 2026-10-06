@@ -9,9 +9,9 @@ from deerflow.config.agents_config import AgentConfig
 
 FLEET = Path(__file__).parents[2] / "fleet"
 EXPECTED = {
-    "senior-software-engineer": "openrouter-luna",
-    "data-migration-engineer": "openrouter-luna",
-    "analytics-engineer": "openrouter-luna",
+    "senior-software-engineer": "openrouter-muse-spark-contributor",
+    "data-migration-engineer": "openrouter-muse-spark-contributor",
+    "analytics-engineer": "openrouter-muse-spark-contributor",
     "independent-verifier": "openrouter-luna",
     "fleet-scout": "openrouter-muse-spark-contributor",
     "fleet-builder": "openrouter-muse-spark-contributor",
