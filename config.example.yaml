@@ -110,7 +110,7 @@ token_budget:
 # context.model_name wins over routing. Spend = recorded token usage x prices,
 # per UTC day and month. A model with no price is refused, never treated as free.
 # The denylist applies even when enabled is false. Read spend (admin only):
-# GET /api/cost-router/spend. PRICES BELOW ARE PLACEHOLDERS: set your real rates.
+# GET /api/cost-router/spend. Add your real prices before enabling.
 # cost_router:
 #   enabled: true
 #   default_route: drafting
@@ -118,10 +118,9 @@ token_budget:
 #     bulk:     {model: gpt-6-luna,  daily_cap_usd: 20, monthly_cap_usd: 300}   # bulk and research
 #     drafting: {model: sonnet-5,    daily_cap_usd: 40, monthly_cap_usd: 600}
 #     review:   {model: opus-5,      daily_cap_usd: 40, monthly_cap_usd: 600}
-#   prices:            # USD per million tokens, keyed by model name or provider model id
-#     gpt-6-luna: {input_per_mtok: 0.0, output_per_mtok: 0.0}   # placeholder
-#     sonnet-5:   {input_per_mtok: 0.0, output_per_mtok: 0.0}   # placeholder
-#     opus-5:     {input_per_mtok: 0.0, output_per_mtok: 0.0}   # placeholder
+#   prices:            # USD per million tokens, keyed by model name or provider model id.
+#     # Left empty on purpose: an unpriced model is refused, so add real rates before enabling, e.g.
+#     # gpt-6-luna: {input_per_mtok: <rate>, output_per_mtok: <rate>}
 #   denylist: ["meta/muse-*"]   # default; Meta restricted Muse on this account
 
 # ============================================================================
