@@ -5,8 +5,21 @@ from deerflow.approvals.workflow import (
     ActionAdapter,
     AdapterOutcome,
     InvalidPayloadError,
+    notify_created,
     register_action_type,
+    register_created_hook,
+    unregister_created_hook,
     validate_payload,
 )
 
-__all__ = ["ACTION_TYPES", "ActionAdapter", "AdapterOutcome", "InvalidPayloadError", "register_action_type", "validate_payload"]
+__all__ = [
+    "ACTION_TYPES",
+    "ActionAdapter",
+    "AdapterOutcome",
+    "InvalidPayloadError",
+    "notify_created",
+    "register_action_type",
+    "register_created_hook",
+    "unregister_created_hook",
+    "validate_payload",
+]
