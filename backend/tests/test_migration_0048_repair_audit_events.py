@@ -16,14 +16,14 @@ from deerflow.persistence.bootstrap import _get_alembic_config, bootstrap_schema
 
 PREVIOUS = "0047_merge_agent_room_exec"
 REPAIR = "0048_repair_audit_events"
-HEAD = "0050_pending_action_fact_check"  # later revisions chain after the repair; their table is outside this test
+HEAD = "0051_client_corrections"  # later revisions chain after the repair; their table is outside this test
 INDEXES = {"ix_audit_events_occurred_at", "ix_audit_events_action", "ix_audit_events_organization_id", "ix_audit_events_actor_user_id"}
 
 
 def preserved_snapshot(db):
     with sqlite3.connect(db) as conn:
-        schema = conn.execute("SELECT type,name,tbl_name,sql FROM sqlite_master WHERE tbl_name NOT IN ('audit_events','pending_actions','alembic_version') ORDER BY type,name,tbl_name").fetchall()
-        tables = [r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT IN ('audit_events','pending_actions','alembic_version') ORDER BY name")]
+        schema = conn.execute("SELECT type,name,tbl_name,sql FROM sqlite_master WHERE tbl_name NOT IN ('audit_events','pending_actions','client_corrections','alembic_version') ORDER BY type,name,tbl_name").fetchall()
+        tables = [r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT IN ('audit_events','pending_actions','client_corrections','alembic_version') ORDER BY name")]
         rows = {table: conn.execute('SELECT * FROM "' + table + '"').fetchall() for table in tables}
         return schema, rows
 

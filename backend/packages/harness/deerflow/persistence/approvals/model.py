@@ -44,3 +44,22 @@ class PendingActionRow(Base):
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now, onupdate=_utc_now)
+
+
+class ClientCorrectionRow(Base):
+    """One reviewer edit to an agent's proposal, kept so later drafts for the same client start closer to what gets approved."""
+
+    __tablename__ = "client_corrections"
+    __table_args__ = (Index("ix_client_corrections_user_client_created", "user_id", "client_key", "created_at"),)
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[str] = mapped_column(String(64))
+    organization_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    client_key: Mapped[str] = mapped_column(String(160))
+    action_type: Mapped[str] = mapped_column(String(32))
+    approval_id: Mapped[str] = mapped_column(String(64))
+    original: Mapped[dict] = mapped_column(JSON, default=dict)
+    edited: Mapped[dict] = mapped_column(JSON, default=dict)
+    summary: Mapped[str] = mapped_column(Text, default="")
+    approver: Mapped[str] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)

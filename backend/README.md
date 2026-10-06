@@ -566,4 +566,4 @@ The opt-in existing Slack brief workflow can bind a private daily brief and revi
 
 The separate [reviewed Jevbox evidence adapter](docs/JEVBOX_EVIDENCE.md) prepares unsent owner research drafts from bounded hash-pinned snapshots. It adds no retrieval, HTTP route, provider admission or native dispatch; supplied packet scope never authenticates its caller.
 
-When OIDC has a configured public callback URL, start login on that callback host. Localhost entry redirects there before state/PKCE cookies are issued, allowing the system browser to return the cookie on callback. Desktop browser-to-app session transfer remains a separate integration.
+When OIDC has a configured public callback URL, start login on that callback host. Localhost entry redirects there before state/PKCE cookies are issued, allowing the system browser to return the cookie on callback. Desktop browser-to-app session transfer remains a separate integration. Compare host and effective callback port, not the internal ASGI scheme behind TLS termination. Never auto-link an existing local owner by email. Regression: `tests/test_oidc_canonical_start.py`.

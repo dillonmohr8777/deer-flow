@@ -37,6 +37,10 @@ class PendingActionRepository:
     def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
         self._sf = session_factory
 
+    @property
+    def session_factory(self) -> async_sessionmaker[AsyncSession]:
+        return self._sf
+
     @staticmethod
     def _scope(stmt: Any, user_id: str) -> Any:
         stmt = stmt.where(PendingActionRow.user_id == user_id)
