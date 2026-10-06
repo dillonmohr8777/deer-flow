@@ -84,7 +84,7 @@ class FakeWorkflow:
 
 class RuntimeTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        self.temp = tempfile.TemporaryDirectory()
+        self.temp = tempfile.TemporaryDirectory(dir=Path(tempfile.gettempdir()).resolve())
         self.client = FakeClient()
         self.channel = FakeChannel(self.client)
         self.workflow = FakeWorkflow()
