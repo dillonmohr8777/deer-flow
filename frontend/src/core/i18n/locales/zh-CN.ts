@@ -404,6 +404,11 @@ export const zhCN: Translations = {
         prompt:
           "起草 [客户] 本月的报告：成果、花费和下一步。凡是无法核实的数字都要标出来。",
       },
+      {
+        label: "规划一个大项目",
+        prompt:
+          "为 [客户] 规划一个大项目：从多个角度进行思考，找出风险和盲点，整理出一份计划供我审阅。",
+      },
     ],
     pleaseWaitStreaming: "请等待当前响应完成。",
     stopStreamingUnavailable: "你的角色无权停止正在运行的回合。",
@@ -1116,6 +1121,13 @@ export const zhCN: Translations = {
     writeFile: "写入文件",
     clickToViewContent: "点击查看文件内容",
     writeTodos: "更新 To-do 列表",
+    deliberation: "运行研判小组",
+    deliberationConsensus: "共识",
+    deliberationContradictions: "分歧",
+    deliberationUniqueInsights: "独特见解",
+    deliberationBlindSpots: "盲点",
+    deliberationPartialPanel: (answered, total, droppedModels) =>
+      `${total} 名研判成员中有 ${answered} 名给出了回答(未回应:${droppedModels})`,
     skillInstallTooltip: "安装技能并使其可在 MomoBot 中使用",
     browserNavigate: (url: string) => `在浏览器中打开 ${url}`,
     browserNavigateGeneric: "在浏览器中打开页面",

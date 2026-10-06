@@ -147,17 +147,51 @@ class BoardRepository:
             result = await session.execute(stmt)
             return [_message_to_dict(r) for r in result.scalars()]
 
-    async def add_message(self, thread_id: str, *, author_kind: str, body: str, author_user_id: str | None = None) -> dict | None:
-        """Append one message; ``None`` for a missing/foreign thread."""
+    async def thread_ids_with_delivered_message(self, thread_ids: list[str]) -> set[str]:
+        """Which of *thread_ids* have ever carried a message stamped ``delivered_at``.
+
+        Used to gate a tool-created thread's visibility to a non-admin
+        (queue item f157, rounds 2-3): neither the thread's *current* status
+        nor a message's ``author_kind`` is a safe signal on its own. Status
+        fails because an org admin can ``PATCH`` it to ``new``/``triaged``/
+        ``closed`` at any time (``board.py``'s workflow-only guard blocks only
+        ``drafted``/``approved``/``replied``), which can make a still-unapproved
+        or a since-superseded draft look "approved" by status alone.
+        ``author_kind == "owner"`` fails because ``add_board_message`` lets
+        any org admin post an ``owner``-authored *internal note* on a thread
+        (e.g. review feedback on a still-unapproved draft) -- that is not the
+        same thing as content actually shipping to the client. Only
+        ``send_board_reply`` ever stamps ``delivered_at``, so its mere
+        existence -- not the thread's status, not any message's author kind --
+        is the one tamper-proof signal that something on this thread actually
+        shipped.
+        """
+        if not thread_ids:
+            return set()
+        stmt = select(BoardMessageRow.thread_id).where(BoardMessageRow.thread_id.in_(thread_ids), BoardMessageRow.delivered_at.is_not(None)).distinct()
+        async with self._sf() as session:
+            result = await session.execute(stmt)
+            return set(result.scalars())
+
+    async def add_message(self, thread_id: str, *, author_kind: str, body: str, author_user_id: str | None = None, delivered: bool = False) -> dict | None:
+        """Append one message; ``None`` for a missing/foreign thread.
+
+        *delivered* stamps ``delivered_at`` -- only ``send_board_reply``
+        should ever pass ``True`` (f172): it is the one caller whose message
+        actually ships to the client, as opposed to an admin's own internal
+        note or an unapproved momo draft.
+        """
         if await self.get_thread(thread_id) is None:
             return None
+        now = datetime.now(UTC)
         row = BoardMessageRow(
             id=uuid.uuid4().hex,
             thread_id=thread_id,
             author_kind=author_kind,
             author_user_id=author_user_id,
             body=body,
-            created_at=datetime.now(UTC),
+            created_at=now,
+            delivered_at=now if delivered else None,
         )
         async with self._sf() as session:
             session.add(row)

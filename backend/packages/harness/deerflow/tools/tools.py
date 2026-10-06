@@ -152,14 +152,15 @@ def get_available_tools(
     if not getattr(knowledge_base_config, "enabled", False):
         tool_configs = [tool for tool in tool_configs if tool.group != "knowledge"]
 
-    # Team-board, agent-seat, and hiring tools are opt-in the same way:
-    # ``groups=None`` (no agent config, or an agent config that never sets
-    # ``tool_groups``) otherwise means "every configured group", which would
-    # hand the Momentum staff Team Board, EXECUTIVE.md seat mutations, and
-    # hire/retire to the default agent. An agent that explicitly lists
-    # "team"/"exec"/"hire" in its own ``tool_groups`` still gets it.
+    # Team-board, agent-seat, hiring, and deliberation tools are opt-in the
+    # same way: ``groups=None`` (no agent config, or an agent config that
+    # never sets ``tool_groups``) otherwise means "every configured group",
+    # which would hand the Momentum staff Team Board, EXECUTIVE.md seat
+    # mutations, hire/retire, and the Fusion deliberation panel to the
+    # default agent. An agent that explicitly lists
+    # "team"/"exec"/"hire"/"deliberate" in its own ``tool_groups`` still gets it.
     if groups is None:
-        tool_configs = [tool for tool in tool_configs if tool.group not in ("team", "exec", "hire")]
+        tool_configs = [tool for tool in tool_configs if tool.group not in ("team", "exec", "hire", "deliberate")]
 
     # Do not expose host bash by default when LocalSandboxProvider is active.
     if not is_host_bash_allowed(config):

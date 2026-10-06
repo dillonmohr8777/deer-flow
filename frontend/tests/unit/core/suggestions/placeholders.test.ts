@@ -7,7 +7,7 @@ import { findSuggestionTemplatePlaceholder } from "@/core/suggestions/placeholde
 describe("empty-thread starter prompts", () => {
   test("each carries a placeholder the composer selects and guards", () => {
     for (const locale of [enUS, zhCN]) {
-      expect(locale.inputBox.starters).toHaveLength(3);
+      expect(locale.inputBox.starters).toHaveLength(4);
       for (const starter of locale.inputBox.starters) {
         expect(
           findSuggestionTemplatePlaceholder(starter.prompt),
@@ -24,6 +24,19 @@ describe("empty-thread starter prompts", () => {
       start: 3,
       end: 7,
     });
+  });
+
+  // f159: these starters show on the default new-chat composer, which has
+  // no `tool_groups` and so never loads `draft_board_thread`/`deliberate` --
+  // a prompt that promises a board-thread draft would leave the model only
+  // able to improvise or falsely claim it drafted one.
+  test("never promises a board-thread draft, which the default agent can't make", () => {
+    for (const locale of [enUS, zhCN]) {
+      for (const starter of locale.inputBox.starters) {
+        expect(starter.prompt).not.toContain("board thread");
+        expect(starter.prompt).not.toContain("看板帖子");
+      }
+    }
   });
 });
 

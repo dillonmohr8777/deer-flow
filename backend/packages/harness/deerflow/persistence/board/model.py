@@ -75,3 +75,8 @@ class BoardMessageRow(Base):
     author_user_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     body: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
+    # Stamped only by `send_board_reply` -- never by an admin's own note via
+    # `add_board_message`, even though both write `author_kind="owner"` (f172).
+    # This, not `author_kind`, is the tamper-proof "actually shipped to the
+    # client" signal `_require_thread_access`/`list_board_messages` rely on.
+    delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

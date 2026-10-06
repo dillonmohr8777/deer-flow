@@ -17,13 +17,13 @@ from typing import Any
 import httpx
 import pytest
 from fastapi import FastAPI
-from org_isolation_fixtures import ORG_S, USER_A, USER_B, USER_C, auth_headers, org_world  # noqa: F401
+from org_isolation_fixtures import ORG_S, USER_A, USER_B, USER_C, acting_as, auth_headers, org_world  # noqa: F401
 
 from app.gateway.auth_middleware import AuthMiddleware
 from app.gateway.routers import board, clients
 from deerflow.persistence.audit_events import AuditEventRepository
 from deerflow.persistence.board import BoardRepository
-from deerflow.persistence.board.model import BoardThreadRow
+from deerflow.persistence.board.model import BoardThreadRow, BoardThreadStatus
 from deerflow.persistence.clients import ClientRepository
 from deerflow.persistence.fleet import FleetBindingRepository
 from deerflow.persistence.organizations.model import OrganizationMemberRow
@@ -519,3 +519,297 @@ async def test_urgency_and_summary_hidden_from_non_admin(org_world, monkeypatch)
         a_get = await client.get(f"/api/board/threads/{tid}", headers=headers_a)
         assert a_get.json()["urgency"] == "urgent"
         assert a_get.json()["summary"] == "INTERNAL: client is angry, churn risk."
+
+
+async def test_momo_only_draft_thread_is_invisible_until_approved(org_world):  # noqa: F811
+    """f157: ``draft_board_thread`` (the fleet-agent tool, e13) writes straight
+    through ``BoardRepository`` with ``created_by_user_id=None`` -- no human
+    ever saw or approved it yet. A client_contact must see neither the
+    thread nor its body until an owner approves and sends it; a normal
+    owner-created thread (``created_by_user_id`` set) stays visible the
+    whole time, since the client already knows it exists -- only its
+    still-unapproved momo message stays hidden.
+    """
+    session_factory = org_world
+    app = _build_app(session_factory)
+    board_repo = app.state.board_repo
+    headers_a = auth_headers(USER_A, ORG_S)  # owner
+
+    await _add_plain_member(session_factory, USER_D, ORG_S)
+    headers_d = auth_headers(USER_D, ORG_S)
+
+    async with _client(app) as client:
+        acme = await _create_client(client, headers_a, "Acme")
+        cid = acme["id"]
+        assign = await client.post(f"/api/clients/{cid}/assignments", json={"user_id": USER_D, "role": "client_contact"}, headers=headers_a)
+        assert assign.status_code == 201
+
+        # Mirrors `_draft_board_thread_impl`'s own write sequence exactly --
+        # a tool call has no acting HTTP user, so it goes straight to the
+        # repository rather than through `draft_board_reply`. `acting_as`
+        # supplies the org context a real tool call gets from its run
+        # (`BoardRepository` resolves `organization_id` from that context,
+        # not from `created_by_user_id`, which the tool explicitly leaves `None`).
+        with acting_as(USER_A, ORG_S):
+            tool_thread = await board_repo.create_thread(client_id=cid, kind="post", subject="Plan", created_by_user_id=None)
+            tid = tool_thread["id"]
+            await board_repo.add_message(tid, author_kind="momo", author_user_id=None, body="INTERNAL DRAFT BODY")
+            await board_repo.patch_thread(tid, status=BoardThreadStatus.DRAFTED)
+
+        # Before approval: invisible on every non-admin read path.
+        d_list = await client.get("/api/board/threads", headers=headers_d)
+        assert tid not in [t["id"] for t in d_list.json()["threads"]]
+        assert (await client.get(f"/api/board/threads/{tid}", headers=headers_d)).status_code == 404
+        assert (await client.get(f"/api/board/threads/{tid}/messages", headers=headers_d)).status_code == 404
+
+        # The owner sees it throughout, tool-created or not.
+        a_list = await client.get("/api/board/threads", headers=headers_a)
+        assert tid in [t["id"] for t in a_list.json()["threads"]]
+        a_messages = (await client.get(f"/api/board/threads/{tid}/messages", headers=headers_a)).json()["messages"]
+        assert any(m["body"] == "INTERNAL DRAFT BODY" for m in a_messages)
+
+        approved = await client.post(f"/api/board/threads/{tid}/approve", headers=headers_a)
+        assert approved.status_code == 200, approved.text
+        replied = await client.post(f"/api/board/threads/{tid}/reply", json={"body": "INTERNAL DRAFT BODY"}, headers=headers_a)
+        assert replied.status_code == 200, replied.text
+
+        # After approve+reply: visible, with the sent message readable.
+        d_list_after = await client.get("/api/board/threads", headers=headers_d)
+        assert tid in [t["id"] for t in d_list_after.json()["threads"]]
+        d_messages = (await client.get(f"/api/board/threads/{tid}/messages", headers=headers_d)).json()["messages"]
+        assert any(m["author_kind"] == "owner" and m["body"] == "INTERNAL DRAFT BODY" for m in d_messages)
+
+
+async def test_owner_created_thread_hides_the_momo_message_even_after_reply(org_world):  # noqa: F811
+    """A thread a client_contact's own owner created (``created_by_user_id`` set)
+    stays listed and readable throughout -- they already know it exists --
+    but a ``momo``-authored message is never shown to a non-admin, approved
+    or not (f157 round 2): the client instead reads what was actually sent,
+    which ``send_board_reply`` always writes as a separate ``owner`` message.
+    """
+    session_factory = org_world
+    app = _build_app(session_factory)
+    headers_a = auth_headers(USER_A, ORG_S)  # owner
+
+    await _add_plain_member(session_factory, USER_D, ORG_S)
+    headers_d = auth_headers(USER_D, ORG_S)
+
+    async with _client(app) as client:
+        acme = await _create_client(client, headers_a, "Acme")
+        assign = await client.post(f"/api/clients/{acme['id']}/assignments", json={"user_id": USER_D, "role": "client_contact"}, headers=headers_a)
+        assert assign.status_code == 201
+
+        created = await client.post("/api/board/threads", json={"client_id": acme["id"], "subject": "T"}, headers=headers_a)
+        tid = created.json()["id"]
+        drafted = await client.post(f"/api/board/threads/{tid}/draft", json={"body": "Here's a fix for that."}, headers=headers_a)
+        assert drafted.status_code == 200, drafted.text
+
+        # The thread itself is visible (a human -- the owner -- made it)...
+        d_get = await client.get(f"/api/board/threads/{tid}", headers=headers_d)
+        assert d_get.status_code == 200
+        # ...but the unapproved momo draft is not.
+        d_messages = (await client.get(f"/api/board/threads/{tid}/messages", headers=headers_d)).json()["messages"]
+        assert not any(m["author_kind"] == "momo" for m in d_messages)
+
+        assert (await client.post(f"/api/board/threads/{tid}/approve", headers=headers_a)).status_code == 200
+        assert (await client.post(f"/api/board/threads/{tid}/reply", json={"body": "Here's a fix for that."}, headers=headers_a)).status_code == 200
+
+        d_messages_after = (await client.get(f"/api/board/threads/{tid}/messages", headers=headers_d)).json()["messages"]
+        assert not any(m["author_kind"] == "momo" for m in d_messages_after)
+        assert any(m["author_kind"] == "owner" and m["body"] == "Here's a fix for that." for m in d_messages_after)
+
+
+async def test_tool_draft_rejected_by_closing_never_becomes_visible(org_world):  # noqa: F811
+    """f157 round 2: status is not a safe proxy for "approved" -- an admin can
+    ``PATCH`` a thread straight to ``closed`` from ``drafted`` (only
+    ``drafted``/``approved``/``replied`` are workflow-only), which would have
+    made the old status-set check treat a *rejected* tool draft as delivered.
+    No ``owner`` message was ever written, so it must stay invisible.
+    """
+    session_factory = org_world
+    app = _build_app(session_factory)
+    board_repo = app.state.board_repo
+    headers_a = auth_headers(USER_A, ORG_S)  # owner
+
+    await _add_plain_member(session_factory, USER_D, ORG_S)
+    headers_d = auth_headers(USER_D, ORG_S)
+
+    async with _client(app) as client:
+        acme = await _create_client(client, headers_a, "Acme")
+        cid = acme["id"]
+        assign = await client.post(f"/api/clients/{cid}/assignments", json={"user_id": USER_D, "role": "client_contact"}, headers=headers_a)
+        assert assign.status_code == 201
+
+        with acting_as(USER_A, ORG_S):
+            tool_thread = await board_repo.create_thread(client_id=cid, kind="post", subject="Plan", created_by_user_id=None)
+            tid = tool_thread["id"]
+            await board_repo.add_message(tid, author_kind="momo", author_user_id=None, body="INTERNAL DRAFT BODY")
+            await board_repo.patch_thread(tid, status=BoardThreadStatus.DRAFTED)
+
+        # The owner rejects it outright by closing it -- never approves or replies.
+        closed = await client.patch(f"/api/board/threads/{tid}", json={"status": "closed"}, headers=headers_a)
+        assert closed.status_code == 200, closed.text
+
+        d_list = await client.get("/api/board/threads", headers=headers_d)
+        assert tid not in [t["id"] for t in d_list.json()["threads"]]
+        assert (await client.get(f"/api/board/threads/{tid}", headers=headers_d)).status_code == 404
+        assert (await client.get(f"/api/board/threads/{tid}/messages", headers=headers_d)).status_code == 404
+
+
+async def test_an_admin_internal_note_never_counts_as_delivered(org_world):  # noqa: F811
+    """f172: ``add_board_message`` writes ``author_kind="owner"`` for any org
+    admin's own message -- e.g. an internal note like "tweak para 2 before
+    approving" left on a still-unapproved tool draft. That must never be
+    confused with ``send_board_reply`` actually delivering content: a
+    client_contact must still see neither the thread nor the momo body.
+    """
+    session_factory = org_world
+    app = _build_app(session_factory)
+    board_repo = app.state.board_repo
+    headers_a = auth_headers(USER_A, ORG_S)  # owner
+
+    await _add_plain_member(session_factory, USER_D, ORG_S)
+    headers_d = auth_headers(USER_D, ORG_S)
+
+    async with _client(app) as client:
+        acme = await _create_client(client, headers_a, "Acme")
+        cid = acme["id"]
+        assign = await client.post(f"/api/clients/{cid}/assignments", json={"user_id": USER_D, "role": "client_contact"}, headers=headers_a)
+        assert assign.status_code == 201
+
+        with acting_as(USER_A, ORG_S):
+            tool_thread = await board_repo.create_thread(client_id=cid, kind="post", subject="SECRET PLAN: raise prices 40%", created_by_user_id=None)
+            tid = tool_thread["id"]
+            await board_repo.add_message(tid, author_kind="momo", author_user_id=None, body="INTERNAL DRAFT BODY")
+            await board_repo.patch_thread(tid, status=BoardThreadStatus.DRAFTED)
+
+        # The owner leaves an internal note on the still-unapproved draft --
+        # never approves or replies.
+        note = await client.post(f"/api/board/threads/{tid}/messages", json={"body": "tweak para 2 before approving"}, headers=headers_a)
+        assert note.status_code == 201, note.text
+        assert note.json()["author_kind"] == "owner"
+
+        assert tid not in [t["id"] for t in (await client.get("/api/board/threads", headers=headers_d)).json()["threads"]]
+        assert (await client.get(f"/api/board/threads/{tid}", headers=headers_d)).status_code == 404
+        assert (await client.get(f"/api/board/threads/{tid}/messages", headers=headers_d)).status_code == 404
+
+
+async def test_an_admin_internal_note_stays_hidden_even_after_the_thread_is_delivered(org_world):  # noqa: F811
+    """f175: ``list_board_messages`` dropped only ``author_kind == "momo"`` --
+    once the thread becomes visible (a real reply ships), an owner's own
+    earlier internal note (also ``author_kind == "owner"``, but never
+    delivered) rode along for free just by sharing that author kind with the
+    delivered reply. The note must stay hidden forever; only the delivered
+    reply should ever reach the client.
+    """
+    session_factory = org_world
+    app = _build_app(session_factory)
+    board_repo = app.state.board_repo
+    headers_a = auth_headers(USER_A, ORG_S)  # owner
+
+    await _add_plain_member(session_factory, USER_D, ORG_S)
+    headers_d = auth_headers(USER_D, ORG_S)
+
+    async with _client(app) as client:
+        acme = await _create_client(client, headers_a, "Acme")
+        cid = acme["id"]
+        assign = await client.post(f"/api/clients/{cid}/assignments", json={"user_id": USER_D, "role": "client_contact"}, headers=headers_a)
+        assert assign.status_code == 201
+
+        with acting_as(USER_A, ORG_S):
+            tool_thread = await board_repo.create_thread(client_id=cid, kind="post", subject="Plan", created_by_user_id=None)
+            tid = tool_thread["id"]
+            await board_repo.add_message(tid, author_kind="momo", author_user_id=None, body="Here's the plan.")
+            await board_repo.patch_thread(tid, status=BoardThreadStatus.DRAFTED)
+
+        note = await client.post(f"/api/board/threads/{tid}/messages", json={"body": "INTERNAL: churn risk, soften para 2"}, headers=headers_a)
+        assert note.status_code == 201, note.text
+
+        assert (await client.post(f"/api/board/threads/{tid}/approve", headers=headers_a)).status_code == 200
+        assert (await client.post(f"/api/board/threads/{tid}/reply", json={"body": "Here's the plan."}, headers=headers_a)).status_code == 200
+
+        d_messages = (await client.get(f"/api/board/threads/{tid}/messages", headers=headers_d)).json()["messages"]
+        bodies = [m["body"] for m in d_messages]
+        assert "INTERNAL: churn risk, soften para 2" not in bodies
+        assert bodies == ["Here's the plan."]
+
+
+async def test_a_superseded_draft_never_leaks_even_after_the_next_one_ships(org_world):  # noqa: F811
+    """f157 round 2: draft A -> triaged -> draft B -> approve -> reply must
+    show the client only B's sent content, never A's earlier, superseded
+    draft body -- a per-thread "is this thread approved" flag would leak A.
+    """
+    session_factory = org_world
+    app = _build_app(session_factory)
+    headers_a = auth_headers(USER_A, ORG_S)  # owner
+
+    await _add_plain_member(session_factory, USER_D, ORG_S)
+    headers_d = auth_headers(USER_D, ORG_S)
+
+    async with _client(app) as client:
+        acme = await _create_client(client, headers_a, "Acme")
+        assign = await client.post(f"/api/clients/{acme['id']}/assignments", json={"user_id": USER_D, "role": "client_contact"}, headers=headers_a)
+        assert assign.status_code == 201
+
+        created = await client.post("/api/board/threads", json={"client_id": acme["id"], "subject": "T"}, headers=headers_a)
+        tid = created.json()["id"]
+
+        drafted_a = await client.post(f"/api/board/threads/{tid}/draft", json={"body": "Draft A -- do not send."}, headers=headers_a)
+        assert drafted_a.status_code == 200, drafted_a.text
+
+        # Never approved: the owner walks it back to `triaged` and redrafts.
+        back_to_triaged = await client.patch(f"/api/board/threads/{tid}", json={"status": "triaged"}, headers=headers_a)
+        assert back_to_triaged.status_code == 200, back_to_triaged.text
+
+        drafted_b = await client.post(f"/api/board/threads/{tid}/draft", json={"body": "Draft B -- the real one."}, headers=headers_a)
+        assert drafted_b.status_code == 200, drafted_b.text
+        assert (await client.post(f"/api/board/threads/{tid}/approve", headers=headers_a)).status_code == 200
+        assert (await client.post(f"/api/board/threads/{tid}/reply", json={"body": "Draft B -- the real one."}, headers=headers_a)).status_code == 200
+
+        d_messages = (await client.get(f"/api/board/threads/{tid}/messages", headers=headers_d)).json()["messages"]
+        assert all(m["author_kind"] != "momo" for m in d_messages)  # never the raw momo draft, A or B
+        bodies = [m["body"] for m in d_messages]
+        assert "Draft A -- do not send." not in bodies
+        assert bodies.count("Draft B -- the real one.") == 1  # only the owner's sent copy
+
+
+async def test_a_new_draft_after_replying_never_leaks_while_pending(org_world):  # noqa: F811
+    """f157 round 2: replied -> triaged -> draft -> closed must never expose
+    the new, never-approved draft, even though the thread was fully
+    delivered once already (an earlier bug would have read "ever delivered"
+    as "everything on it is delivered").
+    """
+    session_factory = org_world
+    app = _build_app(session_factory)
+    headers_a = auth_headers(USER_A, ORG_S)  # owner
+
+    await _add_plain_member(session_factory, USER_D, ORG_S)
+    headers_d = auth_headers(USER_D, ORG_S)
+
+    async with _client(app) as client:
+        acme = await _create_client(client, headers_a, "Acme")
+        assign = await client.post(f"/api/clients/{acme['id']}/assignments", json={"user_id": USER_D, "role": "client_contact"}, headers=headers_a)
+        assert assign.status_code == 201
+
+        created = await client.post("/api/board/threads", json={"client_id": acme["id"], "subject": "T"}, headers=headers_a)
+        tid = created.json()["id"]
+        assert (await client.post(f"/api/board/threads/{tid}/draft", json={"body": "First reply."}, headers=headers_a)).status_code == 200
+        assert (await client.post(f"/api/board/threads/{tid}/approve", headers=headers_a)).status_code == 200
+        assert (await client.post(f"/api/board/threads/{tid}/reply", json={"body": "First reply."}, headers=headers_a)).status_code == 200
+
+        # Confirmed delivered once -- the client can already see the first reply.
+        assert any(m["body"] == "First reply." and m["author_kind"] == "owner" for m in (await client.get(f"/api/board/threads/{tid}/messages", headers=headers_d)).json()["messages"])
+
+        back_to_triaged = await client.patch(f"/api/board/threads/{tid}", json={"status": "triaged"}, headers=headers_a)
+        assert back_to_triaged.status_code == 200, back_to_triaged.text
+        new_draft = await client.post(f"/api/board/threads/{tid}/draft", json={"body": "Second, unsent draft."}, headers=headers_a)
+        assert new_draft.status_code == 200, new_draft.text
+        closed = await client.patch(f"/api/board/threads/{tid}", json={"status": "closed"}, headers=headers_a)
+        assert closed.status_code == 200, closed.text
+
+        # The thread stays visible (it was genuinely delivered once)...
+        assert (await client.get(f"/api/board/threads/{tid}", headers=headers_d)).status_code == 200
+        # ...but the new, never-approved draft is never in the client's messages.
+        d_bodies = [m["body"] for m in (await client.get(f"/api/board/threads/{tid}/messages", headers=headers_d)).json()["messages"]]
+        assert "Second, unsent draft." not in d_bodies
+        assert "First reply." in d_bodies

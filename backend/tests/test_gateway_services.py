@@ -2309,6 +2309,30 @@ def test_inject_authenticated_user_context_computes_momentum_staff_not_client_su
     assert config2["context"]["momentum_staff"] is True
 
 
+def test_inject_authenticated_user_context_strips_client_supplied_deliberate_owner_override():
+    """f142(c) test gap: ``deliberate_owner_override`` (queue item e13's Fusion
+    panel client-data override) is server-owned with no producer yet -- a
+    client-supplied copy in either ``body.context`` or
+    ``body.config.configurable`` must never survive
+    ``inject_authenticated_user_context``, the same treatment ``momentum_staff``
+    already gets. Before this key was added to
+    ``_SERVER_OWNED_RUNTIME_CONTEXT_KEYS``, both forged copies survived
+    untouched."""
+    from types import SimpleNamespace
+
+    from app.gateway.services import build_run_config, inject_authenticated_user_context
+
+    config = build_run_config("thread-1", None, None)
+    config["context"] = {"deliberate_owner_override": True}
+    config["configurable"]["deliberate_owner_override"] = True
+    request = SimpleNamespace(state=SimpleNamespace(user=SimpleNamespace(id="auth-user-42")))
+
+    inject_authenticated_user_context(config, request)
+
+    assert "deliberate_owner_override" not in config["context"]
+    assert "deliberate_owner_override" not in config["configurable"]
+
+
 async def _capture_start_run_graph_input(body, *, auth_source=None):
     from types import SimpleNamespace
     from unittest.mock import patch
