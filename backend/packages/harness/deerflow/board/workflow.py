@@ -54,3 +54,16 @@ def assert_can_reply(current_status: str, *, actor_is_owner: bool) -> None:
         raise BoardOwnerRequiredError("Only an organization owner/admin may send a reply")
     if current_status not in _REPLY_FROM:
         raise BoardTransitionError(f"Cannot send a reply from status {current_status!r}")
+
+
+def latest_momo_draft_body(messages: list[dict]) -> str | None:
+    """The body of the most recent ``momo``-authored message in *messages*, or ``None``.
+
+    Shared by ``board.py``'s own reply-verbatim check and ``ceo_desk.py``'s
+    needs-my-yes queue, which both need "what did Momo actually draft" from
+    an already-fetched message list.
+    """
+    for message in reversed(messages):
+        if message["author_kind"] == "momo":
+            return message.get("body")
+    return None

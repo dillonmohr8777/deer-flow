@@ -79,6 +79,7 @@ def test_features_reports_agents_api_enabled() -> None:
         },
         "desk": {"enabled": False},
         "momentum_internal": {"enabled": False},
+        "ceo": {"enabled": False},
     }
 
 
@@ -102,6 +103,7 @@ def test_features_reports_agents_api_disabled() -> None:
         },
         "desk": {"enabled": False},
         "momentum_internal": {"enabled": False},
+        "ceo": {"enabled": False},
     }
 
 
@@ -298,3 +300,24 @@ def test_momentum_internal_is_staff_in_the_configured_workspace_only(monkeypatch
         role, user_id = role.split(":", 1)
     with TestClient(_app_as(role, organization_id, internal_enabled=internal_enabled, user_id=user_id)) as client:
         assert client.get("/api/features").json()["momentum_internal"] == {"enabled": expected}
+
+
+@pytest.mark.parametrize(
+    ("role", "expected"),
+    [
+        ("owner", True),
+        ("admin", True),
+        ("member", False),
+        ("client", False),
+        (None, False),
+    ],
+)
+def test_ceo_desk_feature_is_owner_admin_only(role, expected) -> None:
+    """Mirrors ``/api/ceo``'s own owner/admin gate, not Desk's system_role check."""
+    with TestClient(_app_as(role, "org-momentum", internal_enabled=False)) as client:
+        assert client.get("/api/features").json()["ceo"] == {"enabled": expected}
+
+
+def test_ceo_desk_feature_is_off_with_no_active_organization() -> None:
+    with TestClient(_app_as(None, None, internal_enabled=False)) as client:
+        assert client.get("/api/features").json()["ceo"] == {"enabled": False}

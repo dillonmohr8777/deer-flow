@@ -14,7 +14,7 @@ from app.gateway.browser_capability import browser_capability
 from app.gateway.conversation_access import conversation_references_enabled
 from app.gateway.deps import get_config, is_admin_user
 from app.gateway.knowledge_scope_admission import RAGFLOW_KNOWLEDGE_SEARCH_PROVIDER
-from app.gateway.momentum_internal import is_momentum_staff
+from app.gateway.momentum_internal import ADMIN_ROLES, is_momentum_staff
 from app.gateway.run_models import MAX_CONVERSATION_REFERENCES
 from deerflow.config.app_config import AppConfig
 from deerflow.subagents.capacity import configured_subagent_max_running
@@ -77,6 +77,12 @@ class MomentumInternalFeature(BaseModel):
     enabled: bool = Field(..., description="Whether the caller is staff in the agency's own workspace, so Team and Academy are shown")
 
 
+class CeoDeskFeature(BaseModel):
+    """Availability of the owner/admin-only CEO Desk."""
+
+    enabled: bool = Field(..., description="Whether the caller is an owner/admin of their active organization, so the CEO Desk is shown")
+
+
 class FeaturesResponse(BaseModel):
     """Frontend-facing feature availability flags."""
 
@@ -88,6 +94,7 @@ class FeaturesResponse(BaseModel):
     knowledge_base: KnowledgeBaseFeature
     desk: DeskFeature
     momentum_internal: MomentumInternalFeature
+    ceo: CeoDeskFeature
 
 
 @router.get(
@@ -133,6 +140,11 @@ async def list_features(request: Request, config: AppConfig = Depends(get_config
         # from config) plus a staff role in it. The routes behind it enforce
         # the same predicate.
         momentum_internal=MomentumInternalFeature(enabled=await is_momentum_staff(request, config)),
+        # Same owner/admin definition `/api/ceo`'s own routes enforce
+        # (deerflow.persistence organization membership role, stamped onto
+        # request.state by AuthMiddleware), not the system_role Desk reads.
+        # Fails closed for an anonymous or role-less caller.
+        ceo=CeoDeskFeature(enabled=getattr(request.state, "organization_role", None) in ADMIN_ROLES),
     )
 
 
