@@ -43,7 +43,7 @@ deer-flow/
 │   │           │   ├── builtins/      # general-purpose, bash agents
 │   │           │   ├── executor.py    # Background execution engine
 │   │           │   └── registry.py    # Agent registry
-│   │           ├── tools/builtins/    # Built-in tools (present_files, ask_clarification, view_image, review_skill_package)
+│   │           ├── tools/builtins/    # Built-in tools (present_files, ask_clarification, view_image, review_skill_package, verify_claims)
 │   │           ├── mcp/               # MCP integration (tools, cache, client)
 │   │           ├── integrations/      # Managed first-party integration installers (e.g. Lark CLI skill pack)
 │   │           ├── extensions/        # Python plugin loader, registry, placement, and isolation
@@ -418,3 +418,7 @@ See `docs/` directory for detailed documentation:
 ## Approvals inbox (`/api/approvals`)
 
 Agents never send outbound actions themselves: the builtin `propose_action` tool (`deerflow/tools/builtins/propose_action_tool.py`) files a `pending_actions` row (migration `0049_pending_actions`, model/repo in `persistence/approvals/`, vocabulary and payload validation in `deerflow/approvals/workflow.py`). Types: `slack_message`, `email`, `ad_change`, `other`. Rows are scoped by storage `user_id` plus the active organization (a foreign row is a 404); edit/approve/reject additionally need an active org owner/admin. Every transition is a compare-and-set `UPDATE ... WHERE status = <expected>`, so only the caller that wins `pending -> approved` runs the adapter (`app/gateway/approval_adapters.py`): exactly-once, and nothing executes before approval. Slack posts as the configured bot through the IM channel service with no footer; email, ad_change and other are stubs that leave the row `approved` with `execution_result.state == "ready_to_send"` (no live writes). Approvals and execution outcomes are audited (`approvals.approved/executed/rejected`). A crash between approve and the adapter leaves an `approved` row with no result; there is no retry endpoint yet. Tests: `tests/test_approvals_inbox.py`.
+
+## Fact checker (`verify_claims`)
+
+Built-in tool backed by the pure module `deerflow/factcheck/core.py`: extracts numeric, date and named-source claims from an outbound draft and checks each against run evidence (successful tool outputs plus caller-supplied `evidence`). Verdicts: supported (with pointer), contradicted, unsupported, unverifiable. Gate: any contradicted -> `block`, any unsupported/unverifiable -> `flag`, else `pass`. Rules: missing data is never 0, "up/down X%" needs before/after values from one source, platform labels must match the evidence's source. Deterministic first; a model judge runs only for ambiguous claims and only when `use_model=true`. Integrators (e.g. approvals) call `verify_draft(draft, evidence).to_dict()` and refuse to enqueue when `gate == "block"`. Tests: `tests/test_factcheck.py`.

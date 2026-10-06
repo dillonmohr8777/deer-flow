@@ -27,6 +27,7 @@ from deerflow.tools.builtins import (
     propose_action,
     review_skill_package,
     task_tool,
+    verify_claims_tool,
     view_image_tool,
 )
 from deerflow.tools.mcp_metadata import tag_mcp_tool
@@ -39,6 +40,7 @@ BUILTIN_TOOLS = [
     ask_clarification_tool,
     review_skill_package,
     propose_action,
+    verify_claims_tool,
 ]
 
 SUBAGENT_TOOLS = [
