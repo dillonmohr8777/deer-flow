@@ -43,7 +43,7 @@ deer-flow/
 │   │           │   ├── builtins/      # general-purpose, bash agents
 │   │           │   ├── executor.py    # Background execution engine
 │   │           │   └── registry.py    # Agent registry
-│   │           ├── tools/builtins/    # Built-in tools (present_files, ask_clarification, view_image, review_skill_package)
+│   │           ├── tools/builtins/    # Built-in tools (present_files, ask_clarification, view_image, review_skill_package, verify_claims)
 │   │           ├── mcp/               # MCP integration (tools, cache, client)
 │   │           ├── integrations/      # Managed first-party integration installers (e.g. Lark CLI skill pack)
 │   │           ├── extensions/        # Python plugin loader, registry, placement, and isolation
@@ -416,3 +416,7 @@ See `docs/` directory for detailed documentation:
 - [plan_mode_usage.md](docs/plan_mode_usage.md) - Plan mode with TodoList
 
 - Agency workflow templates (`deerflow/scheduler/workflow_templates.py`) are data only, with no client data. `backend/scripts/seed_scheduled_workflows.py` creates them as paused tasks, idempotent by title, and never touches `scheduler.enabled`.
+
+## Fact checker (`verify_claims`)
+
+Built-in tool backed by the pure module `deerflow/factcheck/core.py`: extracts numeric, date and named-source claims from an outbound draft and checks each against run evidence (successful tool outputs plus caller-supplied `evidence`). Verdicts: supported (with pointer), contradicted, unsupported, unverifiable. Gate: any contradicted -> `block`, any unsupported/unverifiable -> `flag`, else `pass`. Rules: missing data is never 0, "up/down X%" needs before/after values from one source, platform labels must match the evidence's source. Deterministic first; a model judge runs only for ambiguous claims and only when `use_model=true`. Integrators (e.g. approvals) call `verify_draft(draft, evidence).to_dict()` and refuse to enqueue when `gate == "block"`. Tests: `tests/test_factcheck.py`.
