@@ -123,6 +123,11 @@ class PendingActionRepository:
             values["title"] = title[:255]
         return await self._transition(action_id, uid, "pending", **values)
 
+    async def set_fact_check(self, action_id: str, fact_check: dict | None, *, user_id: str | None | _AutoSentinel = AUTO) -> dict | None:
+        """Replace the stored fact check of a still-pending action (used when an edit changes the claims)."""
+        uid = resolve_user_id(user_id, method_name="PendingActionRepository.set_fact_check")
+        return await self._transition(action_id, uid, "pending", fact_check=fact_check)
+
     async def decide(self, action_id: str, *, approve: bool, decided_by: str, user_id: str | None | _AutoSentinel = AUTO) -> dict | None:
         uid = resolve_user_id(user_id, method_name="PendingActionRepository.decide")
         return await self._transition(

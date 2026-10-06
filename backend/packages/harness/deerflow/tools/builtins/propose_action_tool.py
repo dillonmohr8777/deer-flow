@@ -14,6 +14,8 @@ from langchain.tools import tool
 from deerflow.runtime.user_context import DEFAULT_USER_ID, resolve_runtime_user_id
 from deerflow.tools.types import Runtime
 
+_EVIDENCE_KEEP, _EVIDENCE_ITEMS = 8_000, 20
+
 
 @tool(parse_docstring=True)
 async def propose_action(
@@ -44,16 +46,17 @@ async def propose_action(
     session_factory = get_session_factory()
     if session_factory is None:
         return "The approvals inbox is unavailable (no database configured)."
-    from deerflow.factcheck import verify_draft
+    from deerflow.factcheck import draft_text, verify_draft
     from deerflow.tools.builtins.verify_claims_tool import _run_evidence
 
     # Claim-check the exact text the human will approve, against this run's tool outputs.
-    draft = "\n".join(v for v in (title, *payload.values()) if isinstance(v, str)) if isinstance(payload, dict) else title
-    report = verify_draft(draft, _run_evidence(runtime))
+    evidence = _run_evidence(runtime)
+    report = verify_draft(draft_text(title, payload), evidence)
     if report.blocked:
         bad = [c for c in report.to_dict()["claims"] if c["verdict"] == "contradicted"]
         return "Not filed: the draft contradicts evidence from this run: " + "; ".join(f'"{c["text"]}" ({c["reason"]})' for c in bad) + ". Fix or remove those claims and call propose_action again."
-    fact_check = report.to_dict() if report.claims else None
+    # The evidence is kept (bounded) so approving an edited payload can be re-checked later without this run.
+    fact_check = {**report.to_dict(), "evidence": [{"source": e.source, "text": e.text[:_EVIDENCE_KEEP]} for e in evidence[:_EVIDENCE_ITEMS]]} if report.claims else None
     context = runtime.context if isinstance(runtime.context, dict) else {}
     thread_id, run_id, agent = (context.get(k) for k in ("thread_id", "run_id", "agent_name"))
     try:

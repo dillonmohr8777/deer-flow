@@ -315,3 +315,41 @@ async def test_migration_single_head_and_downgrade_roundtrip(tmp_path):
         assert "pending_actions" in tables()
     finally:
         await engine.dispose()
+
+
+# --- re-check on approve with edits ------------------------------------------
+
+
+async def _edit_then_approve(org_world, original, edited, *messages):  # noqa: F811
+    await _fc_propose(org_world, original, *messages)
+    row = (await _rows(org_world))[0]
+    async with _http(_app(org_world)) as client:
+        h = auth_headers(USER_A)
+        await client.patch(f"/api/approvals/{row['id']}", json={"payload": {"text": edited}}, headers=h)
+        resp = await client.post(f"/api/approvals/{row['id']}/approve", headers=h)
+        page = (await client.get(f"/api/approvals/{row['id']}", headers=h)).json()
+    return resp, page
+
+
+@pytest.mark.asyncio
+async def test_edit_that_contradicts_evidence_is_refused(org_world, slack):  # noqa: F811
+    resp, page = await _edit_then_approve(org_world, "Google Ads showed 537 queries.", "We reviewed 537 Reddit Ads queries.", _EVIDENCE)
+    assert resp.status_code == 422 and "contradicts" in resp.json()["detail"]
+    assert page["status"] == "pending" and slack.sent == []
+
+
+@pytest.mark.asyncio
+async def test_edit_with_unsupported_claim_updates_flag_and_approves(org_world, slack):  # noqa: F811
+    resp, page = await _edit_then_approve(org_world, "Google Ads showed 537 queries.", "Google Ads showed 537 queries. Open rate was 55%.", _EVIDENCE)
+    assert resp.status_code == 200
+    assert page["fact_check"]["gate"] == "flag" and "evidence" not in page["fact_check"]
+    assert any(c["verdict"] == "unsupported" for c in page["fact_check"]["claims"])
+    assert len(slack.sent) == 1
+
+
+@pytest.mark.asyncio
+async def test_unedited_approve_skips_recheck(org_world, slack):  # noqa: F811
+    await _fc_propose(org_world, "Google Ads showed 537 queries.", _EVIDENCE)
+    row = (await _rows(org_world))[0]
+    async with _http(_app(org_world)) as client:
+        assert (await client.post(f"/api/approvals/{row['id']}/approve", headers=auth_headers(USER_A))).status_code == 200
