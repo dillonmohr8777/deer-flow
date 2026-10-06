@@ -354,12 +354,7 @@ Outlines use ATX syntax (1–6 hashes, space/tab separator, ≤3 leading spaces)
 - Supports: PDF, PPT, Excel, Word documents (converted via `markitdown`)
 - Rejects directories before copying to keep uploads all-or-nothing
 - One conversion worker per request when called from an active event loop
-- Files stored in thread-isolated directories under the resolving user's bucket (`users/{user_id}/threads/{thread_id}/user-data/uploads`). For IM channels the owner is threaded explicitly via the `user_id=` kwarg (see IM Channels → Owner-scoped file storage); HTTP/embedded callers resolve it from `get_effective_user_id()`
-- Duplicate filenames within one request get `_N` suffixes to prevent overwrites.
-- Gateway HTTP uploads stage bytes as `.upload-*.part` files and atomically replace the destination only after size validation. These staging files are hidden from upload listings, agent upload context, and sandbox listing/search tools, and swept on Gateway startup if a hard crash leaves one behind.
-- Gateway HTTP upload/list/delete handlers offload filesystem work through `deerflow.utils.file_io.run_file_io`, a dedicated ContextVar-preserving file IO executor. Non-mounted sandbox uploads acquire sandboxes with `SandboxProvider.acquire_async()` and offload `read_bytes()` plus `sandbox.update_file()` together.
-- Mounted uploads skip sandbox acquire/sync. AIO remote/provisioner requires accurate `sandbox.thread_data_mounts: true`; omission keeps backend auto-detection.
-- `UploadsMiddleware` caps outline titles at 200 characters and previews at 2000 including markers. Titles use `original_user_content`, not upload-prefixed content; attachment-only titles use a sanitized, bounded filename or count.
+- Upload storage, staging, executor and middleware caps: see [docs/UPLOADS_AND_VIEW_IMAGE.md](docs/UPLOADS_AND_VIEW_IMAGE.md).
 
 See [docs/FILE_UPLOAD.md](docs/FILE_UPLOAD.md) for details.
 
@@ -394,7 +389,7 @@ See [docs/summarization.md](docs/summarization.md) for details.
 For models with `supports_vision: true`:
 - `ViewImageMiddleware` processes images in conversation
 - `view_image_tool` added to agent's toolset
-- Images are converted to base64 and appended to the model request as a hidden message carrying both a reserved ID prefix and a server-owned metadata marker; Gateway strips that marker from untrusted input, and the middleware requires both identifiers to recognize its own message. The middleware injects inside `wrap_model_call`, so the payload never enters graph state: checkpoints retain only lightweight `viewed_images` metadata, while client-chosen IDs survive. It also sweeps its own message out of every request before rebuilding it, so a payload stranded in an older checkpoint by an interrupted run stops being resent
+- `view_image` injects a hidden, server-marked message inside `wrap_model_call`; details in [docs/UPLOADS_AND_VIEW_IMAGE.md](docs/UPLOADS_AND_VIEW_IMAGE.md).
 
 ## Code Style
 
