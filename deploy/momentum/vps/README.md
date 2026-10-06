@@ -8,8 +8,9 @@ and is never merged into this instance.
 
 | File | Role |
 |---|---|
-| `compose.public.yaml` | Overlay: Caddy on 80/443 with automatic TLS for `$MOMOBOT_DOMAIN`, proxying to nginx. nginx's own port stays on loopback. |
+| `compose.public.yaml` | Overlay: Caddy on 80/443 with automatic TLS for `$MOMOBOT_DOMAIN`, proxying to nginx. nginx's own port stays on loopback. Fixed compose subnet, nginx and Caddy at fixed addresses with the realip include, `AUTH_TRUSTED_PROXIES` for the Gateway (f23). |
 | `Caddyfile` | The public site: HTTPS, HSTS, no response buffering (streaming works). |
+| `nginx-realip.conf` | Trust `X-Forwarded-For` only from Caddy's fixed compose address, the only place that traffic can arrive from (f23). |
 | `restart.sh` | Start or restart: base compose + dood + `compose.momentum.yaml` + Postgres + public overlay. `--what-if` prints the merged config and changes nothing. Never builds. |
 | `health.sh` | Docker, loopback UI, `/health/ready`, the public URL, and a backup receipt under 26 h. One JSON line per run to `/var/log/momobot/health.jsonl`; exit 1 means look. |
 | `backup.sh` | Nightly encrypted backup via `../offsite_backup.py`, with the snapshot image taken from `MOMENTUM_GATEWAY_IMAGE` in `.env` so it always exists on this server; also `pg_dump`s the live Postgres container (detected from `POSTGRES_PASSWORD` in `.env`) into its own encrypted file, since users/threads/checkpoints/run_events live there, not in the gateway volume. |

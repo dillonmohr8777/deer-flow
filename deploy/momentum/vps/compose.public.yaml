@@ -9,6 +9,12 @@
 # ${BIND_HOST:-127.0.0.1}), so health checks and SSH tunnels still work and
 # nothing else is reachable from outside. Every published port names its bind
 # address explicitly (test_compose_default_bind_host.py's rule).
+#
+# f23 (login rate limit keyed on the proxy): the compose network gets a fixed
+# subnet so nginx can trust X-Forwarded-For only from Caddy's fixed address
+# (the only other container that talks to it), and the Gateway trusts
+# X-Real-IP only from nginx's fixed address. Same shape as the Mac Funnel
+# overlay (deploy/momentum/mac/), with Caddy standing in for tailscaled.
 services:
   caddy:
     image: caddy:2-alpine
@@ -30,19 +36,50 @@ services:
     depends_on:
       - nginx
     networks:
-      - deer-flow
+      deer-flow:
+        ipv4_address: 172.30.27.5
 
   nginx:
     restart: unless-stopped
+    volumes:
+      - ${MOMOBOT_REALIP_CONF:?run via deploy/momentum/vps/restart.sh}:/etc/nginx/momentum-realip.conf:ro
+    # Same as the base command plus the realip include, kept on the http {
+    # line: compose turns a \n in this folded string into a real newline,
+    # which broke sed. The grep makes a failed injection stop nginx instead of
+    # silently serving with one shared rate-limit bucket.
+    command: >
+      sh -c "cp /etc/nginx/nginx.conf.template /etc/nginx/nginx.conf
+      && sed -i 's|^http {$$|http { include /etc/nginx/momentum-realip.conf;|' /etc/nginx/nginx.conf
+      && grep -q 'include /etc/nginx/momentum-realip.conf;' /etc/nginx/nginx.conf
+      && nginx -g 'daemon off;'"
+    networks:
+      deer-flow:
+        ipv4_address: 172.30.27.10
   # The gateway and frontend images are built or loaded on purpose (README
   # step 3) and never pushed anywhere: a missing tag must fail as "missing",
   # not as a confusing registry pull error.
   gateway:
     restart: unless-stopped
     pull_policy: never
+    environment:
+      # Only nginx may vouch for a client address (X-Real-IP).
+      - AUTH_TRUSTED_PROXIES=172.30.27.10/32
   frontend:
     restart: unless-stopped
     pull_policy: never
+
+networks:
+  deer-flow:
+    ipam:
+      config:
+        - subnet: 172.30.27.0/24
+          gateway: 172.30.27.1
+          # postgres/redis/frontend/gateway attach with no static address and
+          # get one auto-assigned from the whole subnet starting at .2 --
+          # without this, one of them could land on .5 or .10 before Caddy
+          # or nginx starts and take the address a static container needs.
+          # Keep every static ipv4_address below .128, out of this range.
+          ip_range: 172.30.27.128/25
 
 volumes:
   caddy-data:

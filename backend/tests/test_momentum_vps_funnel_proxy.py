@@ -1,13 +1,15 @@
-"""f23 on the Mac Funnel deploy: one internet client's failed logins must not
+"""f23 on the VPS/Caddy deploy: one internet client's failed logins must not
 lock out everyone else.
 
-Chain: browser -> Tailscale Funnel (tailscaled sets X-Forwarded-For to the
-client) -> 127.0.0.1:2026 -> nginx (arrives from the compose network gateway)
--> Gateway (arrives from nginx). The Gateway keys its login limiter on the TCP
-peer unless that peer is in AUTH_TRUSTED_PROXIES, in which case it takes
-nginx's X-Real-IP. Without the overlay every request would share nginx's
-bucket; these tests pin the overlay's addresses to each other and drive the
-real login route from nginx's address.
+Chain: browser -> Caddy (public 80/443, terminates TLS, sets X-Forwarded-For
+to the real client since nothing sits in front of it) -> nginx (arrives from
+Caddy's fixed compose address) -> Gateway (arrives from nginx). The Gateway
+keys its login limiter on the TCP peer unless that peer is in
+AUTH_TRUSTED_PROXIES, in which case it takes nginx's X-Real-IP. Without the
+overlay every request would share nginx's bucket; these tests pin the
+overlay's addresses to each other and drive the real login route from
+nginx's address. Same shape as test_momentum_mac_funnel_proxy.py, with Caddy
+standing in for tailscaled.
 """
 
 from __future__ import annotations
@@ -23,16 +25,16 @@ from fastapi import FastAPI
 
 from app.gateway.routers import auth as auth_router
 
-MAC_DIR = pathlib.Path(__file__).resolve().parents[2] / "deploy" / "momentum" / "mac"
+VPS_DIR = pathlib.Path(__file__).resolve().parents[2] / "deploy" / "momentum" / "vps"
 
 
 def _overlay() -> dict:
-    return yaml.safe_load((MAC_DIR / "compose.funnel.yaml").read_text(encoding="utf-8"))
+    return yaml.safe_load((VPS_DIR / "compose.public.yaml").read_text(encoding="utf-8"))
 
 
 def _realip_directives() -> dict[str, list[str]]:
     directives: dict[str, list[str]] = {}
-    for raw in (MAC_DIR / "nginx-realip.conf").read_text(encoding="utf-8").splitlines():
+    for raw in (VPS_DIR / "nginx-realip.conf").read_text(encoding="utf-8").splitlines():
         line = raw.split("#", 1)[0].strip()
         if not line:
             continue
@@ -45,28 +47,30 @@ def _addresses() -> tuple[ipaddress.IPv4Network, ipaddress.IPv4Address, ipaddres
     overlay = _overlay()
     ipam = overlay["networks"]["deer-flow"]["ipam"]["config"][0]
     subnet = ipaddress.ip_network(ipam["subnet"])
-    network_gateway = ipaddress.ip_address(ipam["gateway"])
+    caddy_ip = ipaddress.ip_address(overlay["services"]["caddy"]["networks"]["deer-flow"]["ipv4_address"])
     nginx_ip = ipaddress.ip_address(overlay["services"]["nginx"]["networks"]["deer-flow"]["ipv4_address"])
     env = dict(item.split("=", 1) for item in overlay["services"]["gateway"]["environment"])
-    return subnet, network_gateway, nginx_ip, env["AUTH_TRUSTED_PROXIES"]
+    return subnet, caddy_ip, nginx_ip, env["AUTH_TRUSTED_PROXIES"]
 
 
 def test_overlay_trusts_exactly_one_hop_at_each_layer():
-    subnet, network_gateway, nginx_ip, trusted = _addresses()
-    assert network_gateway in subnet and nginx_ip in subnet and nginx_ip != network_gateway
+    subnet, caddy_ip, nginx_ip, trusted = _addresses()
+    assert caddy_ip in subnet and nginx_ip in subnet and nginx_ip != caddy_ip
 
-    # redis/frontend/gateway attach to this network with no static address,
-    # so Docker auto-assigns them one from ip_range. If that range weren't
-    # carved out away from nginx's static address, one of them could start
-    # before nginx and take the address the trust chain above depends on.
+    # postgres/redis/frontend/gateway attach to this network with no static
+    # address, so Docker auto-assigns them one from ip_range. If that range
+    # weren't carved out away from the static addresses, one of them could
+    # start before Caddy or nginx and take the address a static container
+    # needs, and the trust chain above would key on the wrong container.
     ipam = _overlay()["networks"]["deer-flow"]["ipam"]["config"][0]
     ip_range = ipaddress.ip_network(ipam["ip_range"])
+    assert caddy_ip not in ip_range
     assert nginx_ip not in ip_range
 
     directives = _realip_directives()
-    # nginx believes X-Forwarded-For only from the host side of the bridge
-    # (tailscaled's connections), never from another container.
-    assert directives["set_real_ip_from"] == [str(network_gateway)]
+    # nginx believes X-Forwarded-For only from Caddy's fixed address, never
+    # from another container on the compose network.
+    assert directives["set_real_ip_from"] == [str(caddy_ip)]
     assert directives["real_ip_header"] == ["X-Forwarded-For"]
     assert directives["real_ip_recursive"] == ["off"]
 
@@ -74,16 +78,18 @@ def test_overlay_trusts_exactly_one_hop_at_each_layer():
     assert [ipaddress.ip_network(entry.strip()) for entry in trusted.split(",")] == [ipaddress.ip_network(f"{nginx_ip}/32")]
 
 
-def test_overlay_publishes_nothing_beyond_the_base_loopback_port():
+def test_overlay_publishes_only_caddys_public_ports():
     overlay = _overlay()
     for name, service in overlay["services"].items():
-        assert "ports" not in service, f"{name} must not publish a port in the Funnel overlay"
+        if name == "caddy":
+            continue
+        assert "ports" not in service, f"{name} must not publish a port in the public overlay"
     command = overlay["services"]["nginx"]["command"]
     # The include is verified before nginx starts, so a failed injection
     # fails closed instead of serving with one shared bucket.
     assert "include /etc/nginx/momentum-realip.conf;" in command
     # Compose turns a "\\n" in this string into a real newline, which broke
-    # the sed on first deploy (nginx restart-looped, failing closed).
+    # the sed on the Mac overlay's first deploy (nginx restart-looped).
     assert "\\n" not in command
     assert re.search(r"grep -q 'include /etc/nginx/momentum-realip\.conf;'", command)
 
