@@ -18,9 +18,10 @@ from pydantic import BaseModel, Field
 from app.gateway.approval_adapters import execute_approved
 from app.gateway.authz import require_permission
 from app.gateway.deps import get_current_user_from_request, get_pending_action_repo, record_audit_event
+from app.gateway.internal_auth import get_trusted_internal_owner_user_id
 from app.gateway.routers.clients import _is_active_org_admin
 from deerflow.approvals import InvalidPayloadError
-from deerflow.factcheck import Evidence, draft_text, verify_draft
+from deerflow.factcheck import Evidence, check_for_filing, draft_text, verify_draft
 from deerflow.persistence.approvals.corrections import ClientCorrectionRepository
 from deerflow.runtime.user_context import resolve_organization_id
 
@@ -61,6 +62,25 @@ class ApprovalEditRequest(BaseModel):
     payload: dict[str, Any] | None = None
 
 
+class EvidenceIn(BaseModel):
+    source: str = Field(max_length=255)
+    text: str = Field(max_length=20_000)
+
+
+class LoopFilingRequest(BaseModel):
+    """A draft the Client Loop already made (Gmail/Slack draft exists) and wants reviewed here."""
+
+    client: str = Field(min_length=1, max_length=128)
+    action_type: Literal["slack_message", "email", "ad_change", "other"]
+    title: str = Field(max_length=255)
+    target: str = Field(max_length=512)
+    payload: dict[str, Any]
+    source_link: str = Field(default="", max_length=1024)
+    draft_ref: dict[str, Any] | str | None = None
+    thread: str | None = Field(default=None, max_length=128)
+    evidence: list[EvidenceIn] = Field(default_factory=list, max_length=20)
+
+
 def _not_found() -> HTTPException:
     return HTTPException(status_code=404, detail="Approval not found")
 
@@ -88,6 +108,28 @@ async def _audit(request: Request, action: str, actor: str, action_id: str, outc
 async def list_approvals(request: Request, status: ActionStatus | None = None, limit: int = Query(default=100, ge=1, le=200)) -> ApprovalListResponse:
     rows = await get_pending_action_repo(request).list(status=status, limit=limit)
     return ApprovalListResponse(approvals=[_out(r) for r in rows])
+
+
+@router.post("/propose", response_model=ApprovalResponse, status_code=201)
+@require_permission("approvals", "propose")
+async def file_loop_action(body: LoopFilingRequest, request: Request) -> ApprovalResponse:
+    """File a pending action for the delegation's owner. Internal delegated callers only; never sends.
+
+    Same validation and fact check as the ``propose_action`` tool, with the caller's source text as evidence.
+    The row stays pending until an owner/admin approves, edits or rejects it in the inbox.
+    """
+    if get_trusted_internal_owner_user_id(request) is None:
+        raise HTTPException(status_code=403, detail="Only an internal caller with an approvals delegation can file actions this way.")
+    refusal, fact_check, _gate = check_for_filing(body.title, body.payload, [Evidence(e.source, e.text) for e in body.evidence])
+    if refusal:
+        raise HTTPException(status_code=422, detail=f"The draft contradicts its own sources: {refusal}.")
+    payload = {**body.payload, "loop": {"client": body.client, "source_link": body.source_link, "draft_ref": body.draft_ref}}
+    try:
+        row = await get_pending_action_repo(request).create(action_type=body.action_type, target=body.target, payload=payload, title=body.title, thread_id=body.thread, agent_name=body.client, fact_check=fact_check)
+    except InvalidPayloadError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    await _audit(request, "approvals.proposed", str(request.state.actor_user_id), row["id"], "success", {"action_type": body.action_type, "client": body.client})
+    return _out(row)
 
 
 @router.get("/{action_id}", response_model=ApprovalResponse)
