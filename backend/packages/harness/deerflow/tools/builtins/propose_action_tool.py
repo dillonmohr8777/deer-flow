@@ -7,7 +7,7 @@ a human edits and approves it there, and only then does an executor run.
 from __future__ import annotations
 
 import json
-from typing import Any, Literal
+from typing import Any
 
 from langchain.tools import tool
 
@@ -20,7 +20,7 @@ _EVIDENCE_KEEP, _EVIDENCE_ITEMS = 8_000, 20
 @tool(parse_docstring=True)
 async def propose_action(
     runtime: Runtime,
-    action_type: Literal["slack_message", "email", "ad_change", "other"],
+    action_type: str,
     title: str,
     target: str,
     payload: dict[str, Any],
@@ -31,7 +31,8 @@ async def propose_action(
     After calling this, tell the user it is waiting for approval; never claim it was sent.
 
     Args:
-        action_type: slack_message (target = Slack channel id, payload.text), email (target = recipient address, payload.subject and payload.body), ad_change (target = account/campaign, payload = the exact change), or other.
+        action_type: slack_message (target = Slack channel id, payload.text), email (target = recipient address, payload.subject and payload.body), ad_change (target = account/campaign, payload = the exact change), other,
+            or an extension type such as deploy_report.
         title: One-line summary the reviewer sees in the inbox.
         target: Where it goes: a Slack channel id, an email address, or an ad account/campaign.
         payload: The exact content to send or apply. The reviewer may edit it before approving.

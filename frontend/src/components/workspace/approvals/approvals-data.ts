@@ -17,6 +17,7 @@ export const TYPE_LABEL: Record<ApprovalActionType, string> = {
   slack_message: "Slack message",
   email: "Email",
   ad_change: "Ad change",
+  deploy_report: "Report deploy",
   other: "Other",
 };
 
