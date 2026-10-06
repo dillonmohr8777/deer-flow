@@ -23,11 +23,13 @@ from app.gateway.routers.clients import _is_active_org_admin
 from deerflow.approvals import InvalidPayloadError
 from deerflow.factcheck import Evidence, check_for_filing, draft_text, verify_draft
 from deerflow.persistence.approvals.corrections import ClientCorrectionRepository
+from deerflow.persistence.organizations.delegation import OrganizationDelegationRepository
 from deerflow.runtime.user_context import resolve_organization_id
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/approvals", tags=["approvals"])
 
+LOOP_FILING_SCOPE = "approvals:propose"
 ActionStatus = Literal["pending", "approved", "rejected", "executed", "failed"]
 
 
@@ -111,21 +113,24 @@ async def list_approvals(request: Request, status: ActionStatus | None = None, l
 
 
 @router.post("/propose", response_model=ApprovalResponse, status_code=201)
-@require_permission("approvals", "propose")
 async def file_loop_action(body: LoopFilingRequest, request: Request) -> ApprovalResponse:
     """File a pending action for the delegation's owner. Internal delegated callers only; never sends.
 
     Same validation and fact check as the ``propose_action`` tool, with the caller's source text as evidence.
     The row stays pending until an owner/admin approves, edits or rejects it in the inbox.
     """
-    if get_trusted_internal_owner_user_id(request) is None:
-        raise HTTPException(status_code=403, detail="Only an internal caller with an approvals delegation can file actions this way.")
+    # No route permission exists for this: the delegation itself must carry the ``approvals:propose`` scope,
+    # which is not a user or PAT permission, so no browser session, PAT or other delegation can file this way.
+    repo = get_pending_action_repo(request)
+    delegation_id = getattr(request.state, "delegation_id", None)
+    if get_trusted_internal_owner_user_id(request) is None or await OrganizationDelegationRepository(repo.session_factory).resolve_delegation_by_id(delegation_id, scope=LOOP_FILING_SCOPE) is None:
+        raise HTTPException(status_code=403, detail="Only an internal caller with an approvals:propose delegation can file actions this way.")
     refusal, fact_check, _gate = check_for_filing(body.title, body.payload, [Evidence(e.source, e.text) for e in body.evidence])
     if refusal:
         raise HTTPException(status_code=422, detail=f"The draft contradicts its own sources: {refusal}.")
     payload = {**body.payload, "loop": {"client": body.client, "source_link": body.source_link, "draft_ref": body.draft_ref}}
     try:
-        row = await get_pending_action_repo(request).create(action_type=body.action_type, target=body.target, payload=payload, title=body.title, thread_id=body.thread, agent_name=body.client, fact_check=fact_check)
+        row = await repo.create(action_type=body.action_type, target=body.target, payload=payload, title=body.title, thread_id=body.thread, agent_name=body.client, fact_check=fact_check)
     except InvalidPayloadError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     await _audit(request, "approvals.proposed", str(request.state.actor_user_id), row["id"], "success", {"action_type": body.action_type, "client": body.client})
