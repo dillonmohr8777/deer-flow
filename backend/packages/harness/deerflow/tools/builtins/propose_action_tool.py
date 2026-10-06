@@ -44,6 +44,16 @@ async def propose_action(
     session_factory = get_session_factory()
     if session_factory is None:
         return "The approvals inbox is unavailable (no database configured)."
+    from deerflow.factcheck import verify_draft
+    from deerflow.tools.builtins.verify_claims_tool import _run_evidence
+
+    # Claim-check the exact text the human will approve, against this run's tool outputs.
+    draft = "\n".join(v for v in (title, *payload.values()) if isinstance(v, str)) if isinstance(payload, dict) else title
+    report = verify_draft(draft, _run_evidence(runtime))
+    if report.blocked:
+        bad = [c for c in report.to_dict()["claims"] if c["verdict"] == "contradicted"]
+        return "Not filed: the draft contradicts evidence from this run: " + "; ".join(f'"{c["text"]}" ({c["reason"]})' for c in bad) + ". Fix or remove those claims and call propose_action again."
+    fact_check = report.to_dict() if report.claims else None
     context = runtime.context if isinstance(runtime.context, dict) else {}
     thread_id, run_id, agent = (context.get(k) for k in ("thread_id", "run_id", "agent_name"))
     try:
@@ -55,8 +65,9 @@ async def propose_action(
             thread_id=thread_id if isinstance(thread_id, str) else None,
             run_id=run_id if isinstance(run_id, str) else None,
             agent_name=agent if isinstance(agent, str) else None,
+            fact_check=fact_check,
             user_id=user_id,
         )
     except InvalidPayloadError as exc:
         return f"Not filed: {exc}. Fix the proposal and call propose_action again."
-    return json.dumps({"status": "pending_approval", "id": row["id"], "note": "Waiting for the owner to approve in the Approvals inbox. Nothing has been sent."})
+    return json.dumps({"status": "pending_approval", "id": row["id"], "fact_check_gate": report.gate, "note": "Waiting for the owner to approve in the Approvals inbox. Nothing has been sent."})

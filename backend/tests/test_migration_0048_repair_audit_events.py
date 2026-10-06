@@ -16,7 +16,7 @@ from deerflow.persistence.bootstrap import _get_alembic_config, bootstrap_schema
 
 PREVIOUS = "0047_merge_agent_room_exec"
 REPAIR = "0048_repair_audit_events"
-HEAD = "0049_pending_actions"  # later revisions chain after the repair; their table is outside this test
+HEAD = "0050_pending_action_fact_check"  # later revisions chain after the repair; their table is outside this test
 INDEXES = {"ix_audit_events_occurred_at", "ix_audit_events_action", "ix_audit_events_organization_id", "ix_audit_events_actor_user_id"}
 
 
@@ -41,7 +41,7 @@ async def test_repair_is_a_single_forward_successor():
     try:
         script = ScriptDirectory.from_config(_get_alembic_config(engine))
         assert script.get_heads() == [HEAD]
-        assert script.get_revision(HEAD).down_revision == REPAIR
+        assert script.get_revision("0049_pending_actions").down_revision == REPAIR
         assert script.get_revision(REPAIR).down_revision == PREVIOUS
         parents = script.get_revision(PREVIOUS).down_revision
         assert isinstance(parents, tuple)

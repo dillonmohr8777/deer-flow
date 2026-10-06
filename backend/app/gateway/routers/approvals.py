@@ -41,6 +41,7 @@ class ApprovalResponse(BaseModel):
     decided_at: str | None = None
     executed_at: str | None = None
     execution_result: dict[str, Any] | None = None
+    fact_check: dict[str, Any] | None = None
     error: str | None = None
     created_at: str
     updated_at: str

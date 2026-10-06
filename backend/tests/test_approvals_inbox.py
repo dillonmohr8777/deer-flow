@@ -14,6 +14,7 @@ import pytest
 from alembic import command
 from alembic.script import ScriptDirectory
 from fastapi import FastAPI
+from langchain_core.messages import ToolMessage
 from org_isolation_fixtures import ORG_S, USER_A, USER_B, USER_C, acting_as, auth_headers, org_world  # noqa: F401
 from sqlalchemy.ext.asyncio import create_async_engine
 
@@ -239,6 +240,56 @@ async def test_propose_action_tool_refuses_anonymous(org_world):  # noqa: F811
     assert "authenticated" in out
 
 
+# --- fact check at enqueue ---------------------------------------------------
+
+_EVIDENCE = ToolMessage(content='{"channel": "Google Ads", "queries": 537, "ctr": 3.5}', name="google_ads_search_terms", tool_call_id="c1")
+
+
+def _fc_runtime(*messages):
+    return SimpleNamespace(context={"user_id": USER_A, "thread_id": "t-1"}, config={}, state={"messages": list(messages)})
+
+
+async def _fc_propose(org_world, text, *messages):  # noqa: F811
+    out = await propose_action.coroutine(runtime=_fc_runtime(*messages), **{**SLACK, "payload": {"text": text}})
+    rows = await _rows(org_world)
+    return out, rows
+
+
+async def _rows(org_world):  # noqa: F811
+    with acting_as(USER_A):
+        return await PendingActionRepository(org_world).list()
+
+
+@pytest.mark.asyncio
+async def test_contradicted_claim_refuses_the_proposal(org_world, slack):  # noqa: F811
+    out, rows = await _fc_propose(org_world, "We reviewed 537 Reddit Ads queries.", _EVIDENCE)
+    assert out.startswith("Not filed") and "537" in out and "call propose_action again" in out
+    assert rows == []
+
+
+@pytest.mark.asyncio
+async def test_unsupported_claim_is_filed_and_flagged(org_world, slack):  # noqa: F811
+    out, rows = await _fc_propose(org_world, "The new ad hit a 55% CTR.")
+    assert json.loads(out)["fact_check_gate"] == "flag"
+    fc = rows[0]["fact_check"]
+    assert fc["gate"] == "flag" and fc["claims"][0]["verdict"] == "unsupported"
+    assert rows[0]["status"] == "pending"
+
+
+@pytest.mark.asyncio
+async def test_supported_claim_is_filed_with_evidence_pointer(org_world, slack):  # noqa: F811
+    out, rows = await _fc_propose(org_world, "Google Ads showed 537 queries.", _EVIDENCE)
+    assert json.loads(out)["fact_check_gate"] == "pass"
+    claim = rows[0]["fact_check"]["claims"][0]
+    assert claim["verdict"] == "supported" and "google_ads_search_terms" in claim["evidence"]
+
+
+@pytest.mark.asyncio
+async def test_no_claims_stores_no_fact_check(org_world, slack):  # noqa: F811
+    _, rows = await _fc_propose(org_world, "hello team")
+    assert rows[0]["fact_check"] is None
+
+
 # --- migration ---------------------------------------------------------------
 
 
@@ -257,6 +308,7 @@ async def test_migration_single_head_and_downgrade_roundtrip(tmp_path):
 
         await asyncio.to_thread(command.upgrade, cfg, "0049_pending_actions")
         assert "pending_actions" in tables()
+        await asyncio.to_thread(command.upgrade, cfg, "0050_pending_action_fact_check")
         await asyncio.to_thread(command.downgrade, cfg, "0048_repair_audit_events")
         assert "pending_actions" not in tables()
         await asyncio.to_thread(command.upgrade, cfg, "head")

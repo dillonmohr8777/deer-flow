@@ -55,6 +55,7 @@ class PendingActionRepository:
         thread_id: str | None = None,
         run_id: str | None = None,
         agent_name: str | None = None,
+        fact_check: dict | None = None,
         user_id: str | None | _AutoSentinel = AUTO,
     ) -> dict:
         uid = resolve_user_id(user_id, method_name="PendingActionRepository.create")
@@ -72,6 +73,7 @@ class PendingActionRepository:
             thread_id=thread_id,
             run_id=run_id,
             agent_name=agent_name,
+            fact_check=fact_check,
         )
         async with self._sf() as session:
             session.add(row)
