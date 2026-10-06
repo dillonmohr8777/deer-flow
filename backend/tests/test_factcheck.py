@@ -90,3 +90,19 @@ def test_tool_harvests_run_tool_outputs_and_extra_evidence():
     assert out["gate"] == "block"
     out = json.loads(verify_claims_tool.func(runtime=runtime, draft="537 Google Ads queries and 9 leads", evidence=[{"source": "crm", "text": "leads: 9"}]))
     assert out["gate"] == "pass"
+
+
+def test_unverified_draft_library_passages_are_not_evidence():
+    jevbox_out = (
+        "Jevbox evidence for client 'reddit-ai-research' (2 cited passages).\n"
+        "[J1] Reddit AI Research - Unverified - Ads.md - jevbox:d1:node-2-passage-1 (sha256 aaa)\n"
+        "STATUS: UNVERIFIED DRAFT. Sources model-recalled, not checked.\nAnswer: Reddit Ads CTR averages 55%.\n"
+        "[J2] Reddit AI Research - Verified - Ads.md - jevbox:d2:node-3-passage-1 (sha256 bbb)\n"
+        "STATUS: VERIFIED. Answer: Reddit Ads returned 12 leads.\n"
+        "\nEvidence review:\n- d1: accepted"
+    )
+    runtime = SimpleNamespace(state={"messages": [ToolMessage(content=jevbox_out, name="jevbox_evidence", tool_call_id="t1")]})
+    unsourced = json.loads(verify_claims_tool.func(runtime=runtime, draft="Reddit Ads CTR was 55%"))
+    assert unsourced["counts"]["supported"] == 0 and unsourced["gate"] != "pass"
+    verified = json.loads(verify_claims_tool.func(runtime=runtime, draft="Reddit Ads returned 12 leads"))
+    assert verified["counts"]["supported"] >= 1

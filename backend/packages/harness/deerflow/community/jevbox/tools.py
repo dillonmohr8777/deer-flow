@@ -34,6 +34,14 @@ TOOL_NAME = "jevbox_evidence"
 UNAVAILABLE = "Jevbox library unavailable"
 _ID = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
 _WORD = re.compile(r"[a-z0-9]{3,}")
+# Filler words carry no signal: counting them let long passages outrank the precise one.
+_STOP = frozenset(
+    (
+        "the and for are but not you all can had her was one our out has have been does did how what when "
+        "where which who why with from that this these those into than then they them their will would could "
+        "should about after before over under between across your its any "
+    ).split()
+)
 
 
 class JevboxSettings(BaseModel):
@@ -91,8 +99,10 @@ def _walk_passages(nodes: list[Any]):
 
 
 def _score(query_terms: set[str], text: str) -> int:
+    """Distinct query terms matched dominate; repeats only break ties."""
     words = _WORD.findall(text.lower())
-    return sum(1 for word in words if word in query_terms)
+    distinct = len(query_terms.intersection(words))
+    return distinct * 1000 + min(sum(1 for word in words if word in query_terms), 999) if distinct else 0
 
 
 def _get(client: httpx.Client, path: str) -> httpx.Response:
@@ -118,7 +128,7 @@ def retrieve_evidence(
     allowed = [doc for doc in settings.namespaces.get(client_id, []) if _ID.fullmatch(doc)]
     if not allowed:
         return EvidenceResult("denied", "no Jevbox documents are bound to this client namespace")
-    terms = set(_WORD.findall((query or "").lower()))
+    terms = set(_WORD.findall((query or "").lower())) - _STOP
     if not terms:
         return EvidenceResult("denied", "query has no searchable terms")
     email, password = _secret(settings.email), _secret(settings.password)
