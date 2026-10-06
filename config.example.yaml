@@ -782,6 +782,7 @@ tool_groups:
   - name: knowledge
   - name: team
   - name: exec
+  - name: ads
 
 # ============================================================================
 # Tools Configuration
@@ -1203,6 +1204,16 @@ tools:
   #   # safesearch: strict
   #   # spellcheck: true
   #   # api_key: $BRAVE_SEARCH_API_KEY  # Optional explicit env-var reference
+
+  # Read-only ad platform tools (Google Ads GAQL, Meta Insights). Credentials are
+  # per user, in {DEER_FLOW_HOME}/users/<user_id>/integrations/ads/credentials.json
+  # (chmod 600); see backend/packages/harness/deerflow/community/ads/AGENTS.md.
+  # - name: google_ads_report
+  #   group: ads
+  #   use: deerflow.community.ads.google:google_ads_report_tool
+  # - name: meta_ads_insights
+  #   group: ads
+  #   use: deerflow.community.ads.meta:meta_ads_insights_tool
 
   # File operations tools
   - name: ls
