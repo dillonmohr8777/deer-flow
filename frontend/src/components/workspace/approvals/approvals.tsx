@@ -299,6 +299,38 @@ function ApprovalDetail({ approval }: { approval: Approval }) {
         </div>
       )}
 
+      {approval.fact_check?.claims.length ? (
+        <section aria-label="Fact check" className={styles.field}>
+          <p className={pageStyles.eyebrow}>
+            Fact check
+            {approval.fact_check.gate === "pass" ? " (all claims sourced)" : ""}
+          </p>
+          <ul>
+            {approval.fact_check.claims.map((claim) => (
+              <li key={claim.id}>
+                <StatusTag
+                  tone={claim.verdict === "supported" ? "ok" : "attention"}
+                >
+                  {claim.verdict === "supported"
+                    ? "Sourced"
+                    : claim.verdict === "unverifiable"
+                      ? "Couldn't verify"
+                      : "Unsourced"}
+                </StatusTag>{" "}
+                {claim.text}
+                <span className={boardStyles.muted}>
+                  {claim.evidence
+                    ? ` Source: ${claim.evidence}`
+                    : claim.reason
+                      ? ` ${claim.reason}`
+                      : ""}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
       {approval.execution_result?.note ? (
         <p className={styles.note}>{asText(approval.execution_result.note)}</p>
       ) : null}

@@ -121,6 +121,51 @@ describe("ApprovalsBody", () => {
     });
   });
 
+  it("shows fact-check flags next to claims, with the source when supported", () => {
+    mocks.rows = [
+      approval({
+        fact_check: {
+          gate: "flag",
+          counts: { supported: 1, unsupported: 1 },
+          claims: [
+            {
+              id: 1,
+              text: "The new ad hit a 55% CTR.",
+              raw: "55%",
+              kind: "pct",
+              verdict: "unsupported",
+              reason: "no evidence in this run",
+              evidence: null,
+              conflicting: null,
+            },
+            {
+              id: 2,
+              text: "Google Ads showed 537 queries.",
+              raw: "537",
+              kind: "plain",
+              verdict: "supported",
+              reason: "",
+              evidence: "google_ads_search_terms",
+              conflicting: null,
+            },
+          ],
+        },
+      }),
+    ];
+    render(<ApprovalsBody />);
+    fireEvent.click(screen.getByText("Tell the team"));
+    expect(screen.getByText("Unsourced")).toBeTruthy();
+    expect(screen.getByText(/The new ad hit a 55% CTR/)).toBeTruthy();
+    expect(screen.getByText("Sourced")).toBeTruthy();
+    expect(screen.getByText(/Source: google_ads_search_terms/)).toBeTruthy();
+  });
+
+  it("shows no fact-check section without claims", () => {
+    render(<ApprovalsBody />);
+    fireEvent.click(screen.getByText("Tell the team"));
+    expect(screen.queryByLabelText("Fact check")).toBeNull();
+  });
+
   it("rejects", () => {
     render(<ApprovalsBody />);
     fireEvent.click(screen.getByText("Tell the team"));

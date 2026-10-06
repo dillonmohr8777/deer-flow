@@ -37,6 +37,10 @@ class PendingActionRepository:
     def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
         self._sf = session_factory
 
+    @property
+    def session_factory(self) -> async_sessionmaker[AsyncSession]:
+        return self._sf
+
     @staticmethod
     def _scope(stmt: Any, user_id: str) -> Any:
         stmt = stmt.where(PendingActionRow.user_id == user_id)
@@ -55,6 +59,7 @@ class PendingActionRepository:
         thread_id: str | None = None,
         run_id: str | None = None,
         agent_name: str | None = None,
+        fact_check: dict | None = None,
         user_id: str | None | _AutoSentinel = AUTO,
     ) -> dict:
         uid = resolve_user_id(user_id, method_name="PendingActionRepository.create")
@@ -72,6 +77,7 @@ class PendingActionRepository:
             thread_id=thread_id,
             run_id=run_id,
             agent_name=agent_name,
+            fact_check=fact_check,
         )
         async with self._sf() as session:
             session.add(row)
@@ -120,6 +126,11 @@ class PendingActionRepository:
         if title is not None:
             values["title"] = title[:255]
         return await self._transition(action_id, uid, "pending", **values)
+
+    async def set_fact_check(self, action_id: str, fact_check: dict | None, *, user_id: str | None | _AutoSentinel = AUTO) -> dict | None:
+        """Replace the stored fact check of a still-pending action (used when an edit changes the claims)."""
+        uid = resolve_user_id(user_id, method_name="PendingActionRepository.set_fact_check")
+        return await self._transition(action_id, uid, "pending", fact_check=fact_check)
 
     async def decide(self, action_id: str, *, approve: bool, decided_by: str, user_id: str | None | _AutoSentinel = AUTO) -> dict | None:
         uid = resolve_user_id(user_id, method_name="PendingActionRepository.decide")

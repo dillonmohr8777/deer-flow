@@ -9,6 +9,7 @@ adapter, so a double click or two reviewers can never send twice.
 
 from __future__ import annotations
 
+import logging
 from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException, Query, Request
@@ -19,8 +20,11 @@ from app.gateway.authz import require_permission
 from app.gateway.deps import get_current_user_from_request, get_pending_action_repo, record_audit_event
 from app.gateway.routers.clients import _is_active_org_admin
 from deerflow.approvals import InvalidPayloadError
+from deerflow.factcheck import Evidence, draft_text, verify_draft
+from deerflow.persistence.approvals.corrections import ClientCorrectionRepository
 from deerflow.runtime.user_context import resolve_organization_id
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/approvals", tags=["approvals"])
 
 ActionStatus = Literal["pending", "approved", "rejected", "executed", "failed"]
@@ -41,6 +45,7 @@ class ApprovalResponse(BaseModel):
     decided_at: str | None = None
     executed_at: str | None = None
     execution_result: dict[str, Any] | None = None
+    fact_check: dict[str, Any] | None = None
     error: str | None = None
     created_at: str
     updated_at: str
@@ -61,7 +66,10 @@ def _not_found() -> HTTPException:
 
 
 def _out(row: dict) -> ApprovalResponse:
-    return ApprovalResponse(**{k: row.get(k) for k in ApprovalResponse.model_fields})
+    out = {k: row.get(k) for k in ApprovalResponse.model_fields}
+    if out["fact_check"]:  # stored run evidence is for re-checks only, not for the page
+        out["fact_check"] = {k: v for k, v in out["fact_check"].items() if k != "evidence"}
+    return ApprovalResponse(**out)
 
 
 async def _require_reviewer(request: Request) -> str:
@@ -107,17 +115,43 @@ async def edit_approval(action_id: str, body: ApprovalEditRequest, request: Requ
     return _out(row)
 
 
+async def _recheck_if_edited(repo, row: dict) -> None:
+    """Fact-check an edited payload before it is approved: contradicted refuses, unsupported updates the stored flag."""
+    if row["status"] != "pending" or row["payload"] == row["original_payload"]:
+        return
+    stored = row.get("fact_check") or {}
+    evidence = [Evidence(str(e.get("source", "")), str(e.get("text", ""))) for e in stored.get("evidence", []) if isinstance(e, dict)]
+    report = verify_draft(draft_text(row["title"], row["payload"]), evidence)
+    if report.blocked:
+        bad = [c for c in report.to_dict()["claims"] if c["verdict"] == "contradicted"]
+        raise HTTPException(status_code=422, detail="The edited text contradicts evidence from the original run: " + "; ".join(f'"{c["text"]}" ({c["reason"]})' for c in bad) + ". Fix or remove those claims, then approve again.")
+    new = {**report.to_dict(), "evidence": stored.get("evidence", [])} if report.claims else None
+    if new != row.get("fact_check"):
+        await repo.set_fact_check(row["id"], new)
+
+
+async def _record_correction(repo, approved: dict, reviewer: str) -> None:
+    """Keep what the reviewer changed so later drafts for this client learn from it. Never blocks the approval."""
+    try:
+        await ClientCorrectionRepository(repo.session_factory).record_for_approval(approved, approver=reviewer)
+    except Exception:
+        logger.warning("could not record client correction for %s", approved.get("id"), exc_info=True)
+
+
 @router.post("/{action_id}/approve", response_model=ApprovalResponse)
 @require_permission("approvals", "write")
 async def approve_action(action_id: str, request: Request) -> ApprovalResponse:
     reviewer = await _require_reviewer(request)
     repo = get_pending_action_repo(request)
-    if await repo.get(action_id) is None:
+    current = await repo.get(action_id)
+    if current is None:
         raise _not_found()
+    await _recheck_if_edited(repo, current)
     approved = await repo.decide(action_id, approve=True, decided_by=reviewer)
     if approved is None:
         raise HTTPException(status_code=409, detail="This action was already decided")
     await _audit(request, "approvals.approved", reviewer, action_id, "success", {"action_type": approved["action_type"], "target": approved["target"]})
+    await _record_correction(repo, approved, reviewer)
     outcome = await execute_approved(approved)
     settled = await repo.record_outcome(action_id, status=outcome.status, result=outcome.detail, error=outcome.error)
     await _audit(request, "approvals.executed", reviewer, action_id, "success" if outcome.status != "failed" else "failure", {"status": outcome.status, "error": outcome.error})
