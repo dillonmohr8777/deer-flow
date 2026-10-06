@@ -782,6 +782,7 @@ tool_groups:
   - name: knowledge
   - name: team
   - name: exec
+  - name: ads
 
 # ============================================================================
 # Tools Configuration
@@ -821,6 +822,22 @@ tools:
   # - name: list_knowledge_bases
   #   group: knowledge
   #   use: deerflow.community.ragflow.tools:list_knowledge_bases_tool
+
+  # Jevbox research library (read-only, $0 owner-session reads; never calls
+  # Jevbox search/answer). Each client may only see its listed document IDs;
+  # fleet agents stamped with a client_id can only query their own namespace.
+  # If Jevbox is down the tool returns "Jevbox library unavailable" and the task
+  # continues. See backend/docs/JEVBOX_EVIDENCE.md.
+  # - name: jevbox_evidence
+  #   group: web
+  #   use: deerflow.community.jevbox.tools:jevbox_evidence_tool
+  #   base_url: http://host.docker.internal:4310  # Docker: backend-reachable URL
+  #   origin: http://localhost:4310  # Must equal Jevbox APP_ORIGIN or sign-in returns 403
+  #   email: $JEVBOX_EMAIL
+  #   password: $JEVBOX_PASSWORD
+  #   namespaces:
+  #     example-client:
+  #       - 00000000-0000-0000-0000-000000000000  # Jevbox document ID
 
   # LightRAG knowledge retrieval (read-only). Alternative provider for the same
   # knowledge_search tool; uncomment this entry instead of the RAGFlow one —
@@ -1203,6 +1220,16 @@ tools:
   #   # safesearch: strict
   #   # spellcheck: true
   #   # api_key: $BRAVE_SEARCH_API_KEY  # Optional explicit env-var reference
+
+  # Read-only ad platform tools (Google Ads GAQL, Meta Insights). Credentials are
+  # per user, in {DEER_FLOW_HOME}/users/<user_id>/integrations/ads/credentials.json
+  # (chmod 600); see backend/packages/harness/deerflow/community/ads/AGENTS.md.
+  # - name: google_ads_report
+  #   group: ads
+  #   use: deerflow.community.ads.google:google_ads_report_tool
+  # - name: meta_ads_insights
+  #   group: ads
+  #   use: deerflow.community.ads.meta:meta_ads_insights_tool
 
   # File operations tools
   - name: ls
