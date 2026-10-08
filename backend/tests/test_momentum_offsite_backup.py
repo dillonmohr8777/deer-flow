@@ -226,3 +226,72 @@ def test_restore_refuses_to_follow_a_planted_symlink(monkeypatch, tmp_path):
 def test_backup_unit_sets_umask_0077():
     unit = (REPO_ROOT / "deploy" / "momentum" / "vps" / "systemd" / "momobot-backup.service").read_text(encoding="utf-8")
     assert "UMask=0077" in unit
+
+
+def test_snapshot_source_mount_allows_wal_shared_memory(monkeypatch, tmp_path):
+    module = _load_module(monkeypatch, tmp_path, with_postgres=False)
+    commands = []
+    fake_run = _fake_run_factory()
+
+    def record_run(cmd, *args, **kwargs):
+        commands.append(cmd)
+        return fake_run(cmd, *args, **kwargs)
+
+    monkeypatch.setattr(module.subprocess, "run", record_run)
+    module.backup()
+    snapshot = next(cmd for cmd in commands if "/tmp/backup.py" in cmd)
+    mounts = [snapshot[i + 1] for i, arg in enumerate(snapshot) if arg == "--mount"]
+    assert "type=volume,source=test-volume,target=/source" in mounts
+    assert not any("target=/source," in mount for mount in mounts)
+    assert any("target=/tmp/backup.py,readonly" in mount for mount in mounts)
+
+
+def test_online_snapshot_includes_uncheckpointed_wal(monkeypatch, tmp_path):
+    import runpy
+    import sqlite3
+
+    source = tmp_path / "source"
+    target = tmp_path / "backup"
+    source.mkdir()
+    target.mkdir()
+    database = source / "live.sqlite"
+    writer = sqlite3.connect(database)
+    try:
+        assert writer.execute("PRAGMA journal_mode=WAL").fetchone()[0] == "wal"
+        writer.execute("PRAGMA wal_autocheckpoint=0")
+        writer.execute("CREATE TABLE events (value TEXT)")
+        writer.commit()
+        writer.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        writer.execute("INSERT INTO events VALUES ('committed in WAL')")
+        writer.commit()
+        assert database.with_name("live.sqlite-wal").stat().st_size > 0
+        (source / "ordinary.txt").write_text("copied", encoding="utf-8")
+
+        real_path = Path
+
+        def mounted_path(value):
+            return {"/source": source, "/backup": target}.get(value, real_path(value))
+
+        real_connect = sqlite3.connect
+        source_connections = []
+
+        def connect(value, *args, **kwargs):
+            if kwargs.get("uri"):
+                source_connections.append(str(value))
+                assert str(value).endswith("?mode=ro")
+            return real_connect(value, *args, **kwargs)
+
+        monkeypatch.setattr("pathlib.Path", mounted_path)
+        monkeypatch.setattr(sqlite3, "connect", connect)
+        runpy.run_path(str(REPO_ROOT / "deploy/momentum/backup_volume.py"))
+        assert source_connections
+        with real_connect(target / "live.sqlite") as restored:
+            assert restored.execute("SELECT value FROM events").fetchall() == [("committed in WAL",)]
+            assert restored.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+        assert not (target / "live.sqlite-wal").exists()
+        assert not (target / "live.sqlite-shm").exists()
+        assert (target / "ordinary.txt").read_text(encoding="utf-8") == "copied"
+        receipt = json.loads((target / ".deployment-backup-receipt.json").read_text(encoding="utf-8"))
+        assert receipt["databases"]["live.sqlite"]["rows"]["events"] == 1
+    finally:
+        writer.close()
