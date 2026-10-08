@@ -1,4 +1,6 @@
 import errno
+import shlex
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -170,7 +172,7 @@ class TestReadOnlyPath:
                 PathMapping(container_path="/mnt/skills/public/demo", local_path=str(view.parent), read_only=True),
             ],
         )
-        sandbox.execute_command("python -c \"from pathlib import Path; Path(r'/mnt/skills/public/demo/SKILL.md').write_text('MUTATED\\n', encoding='utf-8')\"")
+        sandbox.execute_command(f"{shlex.quote(sys.executable)} -c \"from pathlib import Path; Path(r'/mnt/skills/public/demo/SKILL.md').write_text('MUTATED\\n', encoding='utf-8')\"")
         assert source.read_text(encoding="utf-8") == "ORIGINAL\n"
         assert view.read_text(encoding="utf-8") == "MUTATED\n"
 
