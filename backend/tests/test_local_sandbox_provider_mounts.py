@@ -1,5 +1,7 @@
 import errno
 import shlex
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -9,6 +11,29 @@ import pytest
 
 from deerflow.sandbox.local.local_sandbox import LocalSandbox, PathMapping
 from deerflow.sandbox.local.local_sandbox_provider import LocalSandboxProvider
+
+
+def _python_command(shell, script, executable):
+    if LocalSandbox._is_powershell(shell):
+        # A quoted path is a string in PowerShell; & invokes it as a command.
+        def quote(value):
+            return "'" + value.replace("'", "''") + "'"
+
+        return f"& {quote(executable)} -c {quote(script)}"
+    if LocalSandbox._is_cmd_shell(shell):
+        # Keep /c's command from starting with a quote: cmd otherwise strips
+        # the outermost quotes when both the executable and script are quoted.
+        return "call " + subprocess.list2cmdline([executable, "-c", script])
+    return shlex.join([executable, "-c", script])
+
+
+@pytest.mark.parametrize("shell", ["pwsh.exe", "powershell.exe"])
+def test_python_command_invokes_quoted_powershell_executable(shell):
+    assert _python_command(shell, "print('it works')", r"C:\Program Files\Python\python.exe") == "& 'C:\\Program Files\\Python\\python.exe' -c 'print(''it works'')'"
+
+
+def test_python_command_uses_cmd_executable_quoting():
+    assert _python_command("cmd.exe", "print('it works')", r"C:\Program Files\Python\python.exe") == 'call "C:\\Program Files\\Python\\python.exe" -c "print(\'it works\')"'
 
 
 def _symlink_to(target, link, *, target_is_directory=False):
@@ -155,7 +180,13 @@ class TestReadOnlyPath:
             sandbox.write_file("/mnt/skills/new_file.py", "content")
         assert exc_info.value.errno == errno.EROFS
 
-    def test_bash_write_to_projected_copy_does_not_mutate_source(self, tmp_path):
+    @pytest.mark.parametrize("shell_kind", ["default", "powershell"])
+    def test_bash_write_to_projected_copy_does_not_mutate_source(self, tmp_path, monkeypatch, shell_kind):
+        if shell_kind == "powershell":
+            shell = next((found for name in ("pwsh", "powershell") if (found := shutil.which(name))), None)
+            if shell is None:
+                pytest.skip("PowerShell is not installed; the default platform shell is tested separately")
+            monkeypatch.setattr(LocalSandbox, "_get_shell", staticmethod(lambda: shell))
         source = tmp_path / "canonical" / "SKILL.md"
         view = tmp_path / "skills_view" / "public" / "demo" / "SKILL.md"
         source.parent.mkdir(parents=True)
@@ -172,7 +203,9 @@ class TestReadOnlyPath:
                 PathMapping(container_path="/mnt/skills/public/demo", local_path=str(view.parent), read_only=True),
             ],
         )
-        sandbox.execute_command(f"{shlex.quote(sys.executable)} -c \"from pathlib import Path; Path(r'/mnt/skills/public/demo/SKILL.md').write_text('MUTATED\\n', encoding='utf-8')\"")
+        script = "from pathlib import Path; Path(r'/mnt/skills/public/demo/SKILL.md').write_text('MUTATED\\n', encoding='utf-8')"
+        output = sandbox.execute_command(_python_command(sandbox._get_shell(), script, sys.executable))
+        assert "Exit Code:" not in output, output
         assert source.read_text(encoding="utf-8") == "ORIGINAL\n"
         assert view.read_text(encoding="utf-8") == "MUTATED\n"
 
