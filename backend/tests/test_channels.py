@@ -11655,3 +11655,33 @@ def test_streaming_chat_never_publishes_hidden_memory_context(monkeypatch):
         assert [m.text for m in outbound_received] == ["All green. ▉", "All green."]
 
     _run(go())
+
+
+class TestSlackBareMention:
+    """A bare @MomoBot used to be dropped silently; allowed users now get a prompt back."""
+
+    @staticmethod
+    def _channel(allowed):
+        from app.channels.slack import SlackChannel
+
+        bus = MessageBus()
+        bus.publish_inbound = AsyncMock()
+        channel = SlackChannel(bus=bus, config={"allowed_users": allowed})
+        channel._bot_user_id = "UBOT"
+        channel._send_empty_mention_reply = MagicMock()
+        return channel
+
+    def test_bare_mention_from_allowed_user_gets_prompt_reply(self):
+        channel = self._channel(["U1"])
+        channel._handle_message_event({"type": "app_mention", "user": "U1", "text": "<@UBOT>", "channel": "C1", "ts": "1.0"})
+        channel._send_empty_mention_reply.assert_called_once_with("C1", "1.0")
+
+    def test_bare_mention_in_thread_replies_in_that_thread(self):
+        channel = self._channel(["U1"])
+        channel._handle_message_event({"type": "app_mention", "user": "U1", "text": "<@UBOT> ", "channel": "C1", "ts": "2.0", "thread_ts": "1.0"})
+        channel._send_empty_mention_reply.assert_called_once_with("C1", "1.0")
+
+    def test_bare_mention_from_other_user_is_ignored(self):
+        channel = self._channel(["U1"])
+        channel._handle_message_event({"type": "app_mention", "user": "U2", "text": "<@UBOT>", "channel": "C1", "ts": "1.0"})
+        channel._send_empty_mention_reply.assert_not_called()
