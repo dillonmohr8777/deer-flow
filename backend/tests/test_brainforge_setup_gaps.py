@@ -70,7 +70,7 @@ class SetupGapsTests(unittest.TestCase):
 
     def test_credential_shaped_binding_rejected(self):
         bad = dict(self.bindings)
-        bad["team_id"] = ("xoxb-" + "synthetic-test-value")
+        bad["team_id"] = "xoxb-" + "synthetic-test-value"
         self.binding_file.write_text(json.dumps(bad))
         with self.assertRaisesRegex(setup.SetupError, "credential_shaped_binding_rejected"):
             self.prepare()
