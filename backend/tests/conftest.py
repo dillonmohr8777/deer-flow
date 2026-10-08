@@ -7,12 +7,18 @@ issues when unit-testing lightweight config/registry code in isolation.
 from __future__ import annotations
 
 import importlib.util
+import os
 import sys
+import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
+
+# macOS temp dirs sit under the /var -> /private/var symlink; Brain Forge's
+# path checks correctly reject symlinked roots, so fixtures need the real path.
+tempfile.tempdir = os.path.realpath(tempfile.gettempdir())
 
 # Make 'app' and 'deerflow' importable from any working directory
 sys.path.insert(0, str(Path(__file__).parent.parent))

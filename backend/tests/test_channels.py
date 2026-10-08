@@ -8167,6 +8167,30 @@ class TestChannelService:
 
         assert service._config == {"telegram": {"enabled": False}}
 
+    @pytest.mark.parametrize(
+        ("channels", "connections", "expect_warning"),
+        [
+            ({"slack": {"enabled": True}}, None, True),
+            ({"slack": {"enabled": True}}, {"enabled": True}, False),
+            ({"slack": {"enabled": False}}, None, False),
+        ],
+    )
+    def test_from_app_config_warns_when_enabled_channel_has_no_channel_connections(self, monkeypatch, caplog, channels, connections, expect_warning):
+        from app.channels.service import ChannelService
+        from deerflow.config.channel_connections_config import ChannelConnectionsConfig
+
+        monkeypatch.delenv("DEER_FLOW_AUTH_DISABLED", raising=False)
+        app_config = SimpleNamespace(
+            model_extra={"channels": channels},
+            channel_connections=ChannelConnectionsConfig.model_validate(connections) if connections else None,
+        )
+        monkeypatch.setattr("app.channels.service._make_connection_repo", lambda _config: None)
+
+        with caplog.at_level("WARNING", logger="app.channels.service"):
+            ChannelService.from_app_config(app_config)
+
+        assert any("channel_connections.enabled is false" in record.getMessage() for record in caplog.records) is expect_warning
+
     def test_from_app_config_does_not_create_runtime_channels_from_channel_connections(
         self,
         monkeypatch,
