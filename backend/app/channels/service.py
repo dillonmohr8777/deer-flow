@@ -482,7 +482,7 @@ class ChannelService:
         try:
             from deerflow.reflection import resolve_class
 
-            channel_cls = resolve_class(import_path, base_class=None)
+            channel_cls: Callable[..., Channel] = resolve_class(import_path, base_class=None)
         except Exception:
             logger.exception("Failed to import channel class")
             return False
