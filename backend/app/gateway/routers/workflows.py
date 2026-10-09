@@ -28,7 +28,7 @@ class WorkflowRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     workflow_id: str = Field(min_length=1, max_length=100, pattern=r"^[a-z0-9_-]+$")
     inputs: dict = Field(default_factory=dict)
-    framework: Literal["langgraph", "crewai", "mastra", "deepagents", "agno", "agentkit"] = "langgraph"
+    framework: Literal["langgraph", "crewai", "mastra", "deepagents", "agno", "agentkit", "claude_sdk"] = "langgraph"
     supervisor: bool = Field(default=False, strict=True)
 
 
