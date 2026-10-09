@@ -72,6 +72,8 @@ def _public(data: dict) -> dict:
     if isinstance(result.get("usage"), dict):
         result["usage"] = {**result["usage"]}
         result["usage"]["complete"] = result["usage"].get("unknown_model_calls", 0) == 0
+        if result.get("cost_is_estimate") is True:
+            result["usage"]["cost_is_estimate"] = True
     return result
 
 
@@ -293,6 +295,8 @@ class WorkflowService:
                     raise WorkflowServiceError("attempt_state_conflict", 409)
                 data["usage"]["input_tokens"] += result["usage"]["input_tokens"]
                 data["usage"]["output_tokens"] += result["usage"]["output_tokens"]
+                if data.get("framework") == "claude_sdk":
+                    data["cost_is_estimate"] = True
                 data["usage"]["unknown_model_calls"] = max(0, data["usage"].get("unknown_model_calls", 1) - 1)
                 # Missing served identity is recorded separately, never charged
                 # to the requested provider/model as if it were verified.

@@ -25,6 +25,7 @@ SOURCE_WORKFLOW = "manuscript-line-edit"
 MAX_RESPONSE = 256 * 1024
 MAX_BUDGET = 0.03
 MAX_CALLS = 3
+MAX_ATTEMPTS = 1
 HTTP_DEADLINE = 95
 SHA = re.compile(r"[0-9a-f]{64}\Z")
 
@@ -66,7 +67,7 @@ class ClaudeSDKBridge:
             )
         except ValueError:
             pass
-        self.configuration_sha256 = hashlib.sha256(_json([self.url, str(self.receipts), MODEL, MAX_BUDGET, MAX_CALLS, SOURCE_WORKFLOW]).encode()).hexdigest()
+        self.configuration_sha256 = hashlib.sha256(_json([self.url, str(self.receipts), MODEL, MAX_BUDGET, MAX_CALLS, SOURCE_WORKFLOW, {"max_attempts": MAX_ATTEMPTS}]).encode()).hexdigest()
 
     def capability(self) -> dict:
         available = self.enabled and self.safe_url and bool(self._token) and self.receipts is not None
@@ -119,7 +120,7 @@ class ClaudeSDKBridge:
         )
         if len(brief.encode()) > 16000 or len(brief.encode()) > data["input_token_limit"]:
             raise AdapterError("claude_sdk_context_too_large")
-        payload = {"job_id": job_id, "brief": brief, "allowed_tools": [], "max_budget_usd": MAX_BUDGET, "data_class": "synthetic", "timeout_seconds": 90}
+        payload = {"job_id": job_id, "brief": brief, "allowed_tools": [], "max_budget_usd": MAX_BUDGET, "data_class": "synthetic", "timeout_seconds": 90, "max_attempts": MAX_ATTEMPTS}
         raw = _json(payload).encode()
         if len(raw) > 24000:
             raise AdapterError("claude_sdk_context_too_large")

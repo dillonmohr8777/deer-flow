@@ -36,7 +36,7 @@ def context():
     return dict(owner_scope="owner", run_id="run", workflow_id=SOURCE_WORKFLOW, source_sha256="b" * 64)
 
 
-def response(job, output=None, tools_used=None):
+def response(job, output=None, tools_used=None, usage=None):
     value = dict(
         job_id=job["job_id"],
         ok=True,
@@ -61,6 +61,8 @@ def response(job, output=None, tools_used=None):
         value["result"]["text"] = json.dumps(output)
     if tools_used is not None:
         value["tools_used"] = tools_used
+    if usage is not None:
+        value["usage"] = usage
     row = {key: val for key, val in value.items() if key != "result"}
     row.update(at="synthetic-time", event="finished", policy_hash="e" * 64, output_sha256=hashlib.sha256(json.dumps(value["result"], sort_keys=True).encode()).hexdigest())
     raw = (json.dumps(row) + "\n").encode()
@@ -107,6 +109,7 @@ async def test_stable_scoped_job_no_tools_and_rich_receipt(monkeypatch):
     result = await adapter.call(**request(), provider_admission_context=context())
     assert jobs[0]["allowed_tools"] == [] and jobs[0]["data_class"] == "synthetic"
     assert jobs[0]["max_budget_usd"] == 0.03
+    assert jobs[0]["max_attempts"] == 1
     assert result["output"] == {"answer": "Synthetic result"}
     assert result["usage"]["input_tokens"] == 15
     assert result["sdk_receipt"]["source_sha256"] == context()["source_sha256"]
@@ -358,3 +361,70 @@ async def test_driver_captures_only_bounded_synthetic_response_without_headers(t
     assert sidecar["sha256"] == hashlib.sha256(output).hexdigest()
     with pytest.raises(RuntimeError, match="requires_synthetic"):
         await transport.handle_async_request(httpx.Request("POST", req.url, json={"job_id": job_id, "allowed_tools": [], "data_class": "private"}))
+
+
+@pytest.mark.parametrize("failure_kind, expected", [("schema", "claude_sdk_output_schema_invalid"), ("tokens", "provider_token_limit_exceeded")])
+@pytest.mark.asyncio
+async def test_first_known_failure_labels_snapshot_and_native_end_cost_estimate(tmp_path, monkeypatch, failure_kind, expected):
+    from langgraph.store.memory import InMemoryStore
+
+    from deerflow.persistence.thread_meta.memory import MemoryThreadMetaStore
+    from deerflow.runtime.events.store.memory import MemoryRunEventStore
+    from deerflow.runtime.runs.manager import RunManager
+    from deerflow.runtime.runs.store.memory import MemoryRunStore
+
+    calls = []
+
+    def handler(req):
+        job = json.loads(req.content)
+        assert job["max_attempts"] == 1
+        calls.append(job)
+        usage = dict(input_tokens=10, output_tokens=5000 if failure_kind == "tokens" else 6, cache_creation_input_tokens=2, cache_read_input_tokens=3)
+        return httpx.Response(200, json=response(job, output={"answer": "Not the requested planner schema"}, usage=usage))
+
+    bridge = configured(monkeypatch, handler)
+    monkeypatch.setenv("MOMOBOT_WORKFLOWS_ENABLED", "true")
+    events, store = MemoryRunEventStore(), MemoryRunStore()
+    service = WorkflowService(
+        tmp_path / "jobs.sqlite",
+        checkpointer=InMemorySaver(),
+        adapter=WorkflowModelAdapter(claude_sdk=bridge),
+        run_manager=RunManager(store=store, event_store=events),
+        thread_store=MemoryThreadMetaStore(InMemoryStore()),
+        event_store=events,
+    )
+    await service.start()
+    definition = get_workflow(SOURCE_WORKFLOW)
+    try:
+        created = await service.create("owner", definition.id, definition.example_inputs, "claude_sdk", "failure", actor="actor", organization=None, storage_user="actor")
+        if service.pump_task:
+            await service.pump_task
+        await asyncio.gather(*service.tasks.values())
+        final = await service.snapshot("owner", created["id"])
+        assert final["status"] == "failed" and final["error"] == expected
+        assert len(calls) == final["usage"]["model_calls"] == 1
+        assert final["cost_is_estimate"] is True
+        assert final["usage"]["cost_is_estimate"] is True
+        assert final["usage"]["cost"] == 0.002 and final["usage"]["complete"] is True
+        assert not final.get("sdk_receipts") and not final.get("artifact")
+        journal = await events.list_events(final["thread_id"], final["native_run_id"])
+        end = next(row for row in journal if row["event_type"] == "run.end")
+        assert end["content"]["usage"]["cost"] == 0.002
+        assert end["content"]["usage"]["cost_is_estimate"] is True
+    finally:
+        await service.aclose()
+
+
+@pytest.mark.asyncio
+async def test_legacy_worker_rejects_new_one_attempt_contract_without_fallback(monkeypatch):
+    requests = []
+
+    def handler(req):
+        job = json.loads(req.content)
+        requests.append(job)
+        assert job["max_attempts"] == 1
+        return httpx.Response(200, json={"ok": False, "error": "invalid_job_fields", "cost_usd": 0.0, "cost_known": True})
+
+    with pytest.raises(AdapterError, match="claude_sdk_receipt_shape_invalid"):
+        await configured(monkeypatch, handler).call(request(), context())
+    assert len(requests) == 1

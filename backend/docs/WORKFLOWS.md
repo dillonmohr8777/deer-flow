@@ -27,10 +27,12 @@ accepted output. Literal loopback, disabled environment proxies, no redirects,
 a 95-second total HTTP deadline and bounded request/response sizes apply.
 
 Each logical job admits at most three worker requests, each with a $0.03 SDK
-budget and a 90-second worker deadline. The worker may internally attempt a
-separate Sonnet correction; any multi-attempt or wrong-model response fails
-closed as uncertain. Such a failure retains Gateway's reservation and cannot
-automatically retry. Successful receipts require exactly one actual observed
+budget, a 90-second worker deadline and `max_attempts:1`. A compatible worker
+must enforce that field before inference and suppress its optional Sonnet
+correction. Older workers reject the extra field before inference; Gateway
+fails closed without a compatibility fallback or retry. The one-attempt
+protocol is included in the pinned configuration hash. Any multi-attempt or
+wrong-model response remains uncertain and reserved. Successful receipts require exactly one actual observed
 `claude-haiku-5-5` model, known finite estimated cost, complete token fields,
 no external tools, a terminal/session receipt and readback of the **exact
 JSONL line and matching metadata/output hash** from the worker ledger. Ledger
@@ -71,6 +73,8 @@ production adapter; it allows a failed proof to be audited without guessing
 or another automatic paid request. Shape, JSON, schema, ledger and token errors
 are reported separately with fixed safe codes; proven known-cost schema/token
 failures retain actual usage in Gateway's terminal receipt.
+Known failed SDK costs carry `cost_is_estimate:true` in both the failed snapshot
+and native run-end usage, including a failure on the very first call.
 It sends no external tools or messages and never enables a production Gateway.
 
 The production Gateway and worker may run in separate container namespaces.
