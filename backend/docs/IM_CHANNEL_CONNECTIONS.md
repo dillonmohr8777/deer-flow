@@ -371,6 +371,8 @@ When `channel_connections.enabled` and `require_bound_identity` are true, auth-e
 
 Upgrade note: existing auth-enabled deployments that already have `channel_connections.enabled: true` will start rejecting ordinary unbound IM messages after this field is introduced because `require_bound_identity` defaults to true. Legacy operator-owned/open-bot deployments that intentionally allow unbound platform users to create DeerFlow runs should set `require_bound_identity: false` before upgrading and restart the service.
 
+An auth-enabled deployment with an enabled IM channel but `channel_connections.enabled: false` cannot run anything: the Gateway refuses every message with `403 Internal calls require an active organization delegation`. `ChannelService` logs a startup warning naming the channels when it sees that combination.
+
 ## Connect Flow
 
 Telegram:
