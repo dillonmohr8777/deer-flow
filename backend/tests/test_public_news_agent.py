@@ -1,11 +1,12 @@
 """Public-news assembly keeps tool guards and excludes owner context."""
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 import yaml
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_core.tools import tool
 
@@ -33,7 +34,8 @@ def test_public_news_assembly_has_only_public_tools_and_no_private_context(monke
     app = AppConfig.model_validate(yaml.safe_load((Path(__file__).parents[2] / "config.example.yaml").read_text()))
     app = AppConfig.model_validate({**app.model_dump(), "models": [ModelConfig(name="offline", use="langchain_openai:ChatOpenAI", model="offline").model_dump()]})
     app.summarization.enabled = False
-    persona = AgentConfig(name="ai-tech-news", tool_names=["web_search", "web_fetch"], memory_enabled=False, self_update_enabled=False, skills=[], mcp_plugins=[], allowed_subagents=[], knowledge_scope={"version": 1, "mode": "disabled"})
+    persona = AgentConfig(name="ai-tech-news", tool_names=["web_search", "web_fetch"], memory_enabled=False, self_update_enabled=False, skills=[], mcp_plugins=[], allowed_subagents=[])
+    assert persona.knowledge_scope is None
     monkeypatch.setattr(agent, "load_agent_config", lambda *a, **kw: persona)
     monkeypatch.setattr(agent, "create_chat_model", lambda **kw: OfflineModel())
     monkeypatch.setattr(agent, "_resolve_model_name", lambda *a, **kw: app.models[0].name)
@@ -65,6 +67,11 @@ def test_public_news_assembly_has_only_public_tools_and_no_private_context(monke
     assert set(assembly.graph.nodes["tools"].bound.tools_by_name) == {"web_search", "web_fetch"}
     names = {type(m).__name__ for m in captured["middleware"]}
     assert "SkillToolPolicyMiddleware" in names
+    ceiling = next(m for m in captured["middleware"] if type(m).__name__ == "SkillToolPolicyMiddleware")
+    for forbidden in dangerous:
+        request = SimpleNamespace(tool_call={"name": forbidden, "id": "synthetic-call", "args": {}}, state={}, runtime=SimpleNamespace(context={}))
+        denied = ceiling.wrap_tool_call(request, lambda request: pytest.fail("private tool executed"))
+        assert denied.status == "error"
     assert not names & {"UploadsMiddleware", "DynamicContextMiddleware", "ClientCorrectionsMiddleware", "DurableContextMiddleware", "MemoryMiddleware", "SandboxMiddleware", "TodoMiddleware", "TitleMiddleware"}
     assert "PUBLIC_NEWS_PERSONA" in captured["system_prompt"]
     assert "<user_profile>" not in captured["system_prompt"]
@@ -77,3 +84,29 @@ def test_missing_public_agent_fails_closed(monkeypatch):
     monkeypatch.setattr(agent, "load_agent_config", lambda *a, **kw: None)
     with pytest.raises(ValueError, match="readback|provisioned"):
         agent._assemble_lead_agent({"context": {"public_news_channel": True, "agent_name": "ai-tech-news"}}, app_config=app)
+
+
+@pytest.mark.parametrize("scope", [{"version": 1, "mode": "all"}, {"version": 1, "mode": "selected", "dataset_ids": ["synthetic-private-dataset"]}])
+def test_public_news_private_enabled_knowledge_scope_fails_closed(monkeypatch, scope):
+    from deerflow.agents.lead_agent import agent
+
+    app = AppConfig.model_validate(yaml.safe_load((Path(__file__).parents[2] / "config.example.yaml").read_text()))
+    persona = AgentConfig(name="ai-tech-news", tool_names=["web_search", "web_fetch"], memory_enabled=False, self_update_enabled=False, skills=[], mcp_plugins=[], allowed_subagents=[], knowledge_scope=scope)
+    monkeypatch.setattr(agent, "load_agent_config", lambda *a, **kw: persona)
+    monkeypatch.setattr(agent, "create_chat_model", lambda **kw: pytest.fail("model constructed before private scope rejection"))
+    with pytest.raises(ValueError, match="disable private knowledge"):
+        agent._assemble_lead_agent({"context": {"public_news_channel": True, "agent_name": "ai-tech-news"}}, app_config=app)
+
+
+def test_gateway_admission_accepts_omitted_scope_without_provider_lookup(monkeypatch):
+    from app.gateway import knowledge_scope_admission
+
+    persona = AgentConfig(name="ai-tech-news", tool_names=["web_search", "web_fetch"], memory_enabled=False, self_update_enabled=False, skills=[], mcp_plugins=[], allowed_subagents=[])
+    assert persona.knowledge_scope is None
+    monkeypatch.setattr(knowledge_scope_admission, "assistant_supports_knowledge_scope", lambda **kw: pytest.fail("unneeded provider lookup rejects omitted scope"))
+    message = HumanMessage(content="synthetic public news question")
+    graph_input = {"messages": [message]}
+    execution_scope = knowledge_scope_admission.admit_message_knowledge_scope(graph_input, assistant_id="lead_agent", app_config=SimpleNamespace(knowledge_base=SimpleNamespace(enabled=False)), agent_config=persona)
+    assert execution_scope is None
+    assert graph_input["messages"][0] is message
+    assert "knowledge_scope" not in message.additional_kwargs

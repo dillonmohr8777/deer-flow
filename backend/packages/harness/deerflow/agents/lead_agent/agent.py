@@ -1004,7 +1004,7 @@ def _assemble_lead_agent(config: RunnableConfig, *, app_config: AppConfig) -> Le
             raise ValueError("Public news requires its provisioned personal-owner agent")
         if set(agent_config.tool_names or []) != {"web_search", "web_fetch"} or agent_config.memory_enabled is not False or agent_config.self_update_enabled is not False:
             raise ValueError("Public news agent permissions do not match the reviewed ceiling")
-        if agent_config.skills != [] or agent_config.mcp_plugins != [] or agent_config.allowed_subagents != [] or agent_config.knowledge_scope is None or agent_config.knowledge_scope.mode != "disabled":
+        if agent_config.skills != [] or agent_config.mcp_plugins != [] or agent_config.allowed_subagents != [] or (agent_config.knowledge_scope is not None and agent_config.knowledge_scope.mode != "disabled"):
             raise ValueError("Public news agent must disable private knowledge and integrations")
         requested_subagent_enabled = False
         is_plan_mode = False
