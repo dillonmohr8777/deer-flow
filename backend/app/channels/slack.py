@@ -345,6 +345,19 @@ class SlackChannel(Channel):
         except Exception:
             logger.exception("[Slack] failed to send running reply in channel=%s", channel_id)
 
+    def _send_empty_mention_reply(self, channel_id: str, thread_ts: str) -> None:
+        """Answer a bare @mention so the user knows to put the ask in the same message (called from SDK thread)."""
+        if not self._web_client:
+            return
+        try:
+            self._web_client.chat_postMessage(
+                channel=channel_id,
+                text="Hey, what do you need? Mention me with the ask in the same message.",
+                thread_ts=thread_ts,
+            )
+        except Exception:
+            logger.exception("[Slack] failed to send empty-mention reply in channel=%s", channel_id)
+
     def _on_socket_event(self, client, req) -> None:
         """Called by slack-sdk for each Socket Mode event."""
         if not self._running:
@@ -497,6 +510,8 @@ class SlackChannel(Channel):
         if event.get("type") == "app_mention":
             text = _strip_leading_slack_bot_mention(text, self._bot_user_id)
         if not text:
+            if event.get("type") == "app_mention" and (not self._allowed_users or user_id in self._allowed_users):
+                self._send_empty_mention_reply(event.get("channel", ""), event.get("thread_ts") or event.get("ts", ""))
             return
 
         connect_code = self._pending_connect_code(text)
