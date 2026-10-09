@@ -1,8 +1,8 @@
-### Gateway API (`app/gateway/`)
+### Gateway
 
-Agent Room preserves actor/admin isolation; read [its contract](../../docs/AGENT_ROOM.md).
-`supervisor` is a strict boolean, default off; persist and bind it to idempotency
-and resume. Preserve shared budgets and uncertain-admission holds.
+Read [security](../../docs/SECURITY_HARDENING.md).
+
+Agent Room: keep actor/admin isolation, shared budgets, uncertain-admission holds; read [contract](../../docs/AGENT_ROOM.md). Bind persisted `supervisor` (strict boolean, default off) to idempotency/resume.
 
 Capability Center's `business` adapter uses bundled credential fields and normal
 MCP connections. Permit only the exact isolated launcher and credential key set

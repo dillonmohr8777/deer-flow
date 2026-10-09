@@ -2191,6 +2191,21 @@ See [backend/docs/TUI.md](backend/docs/TUI.md) for the full guide.
 
 ## ⚠️ Security Notice
 
+Browser screenshots and captures create fresh files without following output
+symlinks or overwriting earlier captures. Secure capture writes require no-follow
+directory operations; unsupported platforms return an error. Public web-tool
+URL screening also rejects shared-address and IPv6 site-local networks unless
+the operator explicitly enables private targets. Page-derived browser results
+receive the same framework-tag neutralization as fetched pages and MCP results;
+this reduces structural injection and does not replace tool authorization.
+
+Custom-agent/profile and memory management enforce the authenticated caller's
+thread permissions: reads require `threads:read`, writes require `threads:write`,
+and deletions require `threads:delete`. An enabled private workspace or a valid
+internal delegation does not widen token scopes. Run-only scheduled workers and
+the default IM channel worker cannot erase saved memory. Unexpected MCP config
+failures return generic errors and omit credential-bearing exception text.
+
 ### Improper Deployment May Introduce Security Risks
 
 DeerFlow has key high-privilege capabilities including **system command execution, resource operations, and business logic invocation**, and is designed by default to be **deployed in a local trusted environment (accessible only via the 127.0.0.1 loopback interface)**. If you deploy the agent in untrusted environments — such as LAN networks, public cloud servers, or other multi-endpoint accessible environments — without strict security measures, it may introduce security risks, including:

@@ -8,11 +8,12 @@ from collections.abc import Callable
 from urllib.parse import urlparse
 
 _BLOCKED_HOSTNAMES = {"localhost", "metadata.google.internal"}
+type IPAddress = ipaddress.IPv4Address | ipaddress.IPv6Address
 
 
-def resolve_host_addresses(hostname: str) -> list[ipaddress._BaseAddress]:
+def resolve_host_addresses(hostname: str) -> list[IPAddress]:
     """Resolve a hostname to all IP addresses for SSRF screening."""
-    addresses: list[ipaddress._BaseAddress] = []
+    addresses: list[IPAddress] = []
     try:
         infos = socket.getaddrinfo(hostname, None)
     except (socket.gaierror, UnicodeError):
@@ -26,9 +27,9 @@ def resolve_host_addresses(hostname: str) -> list[ipaddress._BaseAddress]:
     return addresses
 
 
-def is_blocked_address(address: ipaddress._BaseAddress) -> bool:
+def is_blocked_address(address: IPAddress) -> bool:
     """Return True for addresses web tools should not reach by default."""
-    return address.is_private or address.is_loopback or address.is_link_local or address.is_reserved or address.is_multicast or address.is_unspecified
+    return not address.is_global or getattr(address, "is_site_local", False) or address.is_private or address.is_loopback or address.is_link_local or address.is_reserved or address.is_multicast or address.is_unspecified
 
 
 def validate_public_http_url(
@@ -36,7 +37,7 @@ def validate_public_http_url(
     *,
     allow_private_addresses: bool = False,
     action: str = "fetch",
-    resolver: Callable[[str], list[ipaddress._BaseAddress]] | None = None,
+    resolver: Callable[[str], list[IPAddress]] | None = None,
 ) -> str | None:
     """Validate an http(s) URL before a server-side web tool fetches it.
 

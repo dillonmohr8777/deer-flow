@@ -5,10 +5,11 @@ import logging
 import re
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
+from app.gateway.authz import resource_permission_dependency
 from deerflow.agents.memory.manager import get_memory_manager
 from deerflow.config.agents_api_config import get_agents_api_config
 from deerflow.config.agents_config import (
@@ -29,7 +30,7 @@ from deerflow.persistence.organizations.model import OrganizationMemberRow
 from deerflow.runtime.user_context import get_effective_actor_user_id, get_effective_user_id, resolve_organization_id
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/api", tags=["agents"])
+router = APIRouter(prefix="/api", tags=["agents"], dependencies=[Depends(resource_permission_dependency("threads"))])
 
 _ORG_ADMIN_ROLES = ("owner", "admin")
 

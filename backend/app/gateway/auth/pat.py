@@ -137,19 +137,15 @@ _PAT_ROUTE_RULES: tuple[tuple[frozenset[str], re.Pattern[str]], ...] = (
 # /api/agents/check`` stays denied (name-availability probe, not needed by
 # the script), and agent delete/update plus scheduled-task delete/trigger/
 # runs stay PAT-denied until a script actually needs them. Every admitted
-# route here is already gated by ``threads``/``runs`` permissions already in
-# ``PAT_ALLOWED_SCOPES`` (scheduled-tasks) or by no ``@require_permission``
-# at all (agents), so no scope-enum change is needed alongside this route
-# widening.
+# route here is gated by ``threads``/``runs`` permissions already in
+# ``PAT_ALLOWED_SCOPES``: scheduled tasks use their endpoint checks and custom
+# agents use the router's method-sensitive permission dependency.
 #
 # Kept in a SEPARATE tuple, gated behind ``config.private_workspace.enabled``
 # (default false -- see ``deerflow.config.app_config.PrivateWorkspaceConfig``),
-# not merged into ``_PAT_ROUTE_RULES`` above. ``POST /api/agents`` carries no
-# ``@require_permission`` at all, so on a client-facing MomoBot a leaked
-# client PAT holding nothing but ``threads:read`` could otherwise create
-# persistent custom agents and schedule them to run unattended -- catastrophic
-# on the app every real client logs into, harmless on the owner-only private
-# workspace these routes exist for. Master review, 2026-09-24 (PR #14).
+# not merged into ``_PAT_ROUTE_RULES`` above. Route admission never grants an
+# action: even in a private or shared workspace, a read-only PAT cannot create
+# persistent agents. Agent writes require ``threads:write`` independently.
 _PRIVATE_WORKSPACE_PAT_ROUTE_RULES: tuple[tuple[frozenset[str], re.Pattern[str]], ...] = (
     (frozenset({"GET"}), re.compile(r"^/api/fleet/templates$")),
     (frozenset({"GET", "POST"}), re.compile(r"^/api/agents$")),

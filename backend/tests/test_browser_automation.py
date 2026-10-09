@@ -50,6 +50,15 @@ def _snapshot() -> PageSnapshot:
     )
 
 
+@pytest.fixture(autouse=True)
+def _offline_public_dns(monkeypatch):
+    """Browser provider tests use fake clients and must not perform live DNS."""
+    import ipaddress
+
+    module = "browser_automation" if "automation" in __name__ else "browserless"
+    monkeypatch.setattr(f"deerflow.community.{module}.tools._resolve_host_addresses", lambda _: [ipaddress.ip_address("93.184.216.34")])
+
+
 class TestSnapshotRendering:
     def test_snapshot_lists_elements_by_ref(self):
         rendered = _snapshot().render()
