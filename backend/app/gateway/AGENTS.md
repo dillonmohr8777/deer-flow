@@ -1,5 +1,10 @@
 ### Gateway API (`app/gateway/`)
 
+`public_news_channel` is internal runtime context only. Forward it through the
+authenticated internal channel boundary so assembly applies the managed public
+tool/privacy ceiling, and strip it from external request config. Direct assembly
+tests alone do not prove this boundary or sandbox-free Slack execution.
+
 Agent Room preserves actor/admin isolation; read [its contract](../../docs/AGENT_ROOM.md).
 `supervisor` is a strict boolean, default off; persist and bind it to idempotency
 and resume. Preserve shared budgets and uncertain-admission holds.
