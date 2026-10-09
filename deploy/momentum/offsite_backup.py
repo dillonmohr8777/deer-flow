@@ -119,8 +119,10 @@ def backup() -> dict:
     tmp = f"deer-flow-offsite-{stamp}"
     docker("volume", "create", tmp)
     try:
+        # SQLite opens databases mode=ro, but may need to create/update WAL
+        # shared-memory sidecars, so the source filesystem must be writable.
         snap = docker("run", "--rm", "--network", "none",
-                      "--mount", f"type=volume,source={VOLUME},target=/source,readonly",
+                      "--mount", f"type=volume,source={VOLUME},target=/source",
                       "--mount", f"type=volume,source={tmp},target=/backup",
                       "--mount", f"type=bind,source={HERE / 'backup_volume.py'},target=/tmp/backup.py,readonly",
                       "--entrypoint", "python", IMAGE, "/tmp/backup.py")
