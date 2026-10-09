@@ -1,3 +1,15 @@
+### Browser Capture Writes
+
+`capture_output.write_capture_output` walks absolute directory components using
+no-follow directory descriptors, then exclusively creates a fresh regular file.
+Both dangling and existing symlinks count as filename collisions; directories
+and ancestors may never be symlinks. Use this helper for explicit screenshots,
+Browserless captures and hidden progress frames, never `Path.write_bytes` or an
+`exists()`-then-write sequence. Existing captures retain their bytes, including
+hard-linked files. Unsupported platforms fail closed until a secure native
+handle implementation exists. Tests use canonical real temporary paths rather
+than macOS `/var` aliases.
+
 ### Message Text Extraction
 
 `message_content_to_text` takes raw message content and treats `None` as empty

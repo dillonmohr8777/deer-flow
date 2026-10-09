@@ -4,7 +4,7 @@ import threading
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-from fastapi import FastAPI
+from _router_auth_helpers import make_authed_test_app
 from fastapi.testclient import TestClient
 
 from app.gateway.routers import memory
@@ -34,7 +34,7 @@ def _sample_memory(facts: list[dict] | None = None) -> dict:
 
 
 def test_export_memory_route_returns_current_memory() -> None:
-    app = FastAPI()
+    app = make_authed_test_app()
     app.include_router(memory.router)
     exported_memory = _sample_memory(facts=[{"id": "fact_export", "content": "User prefers concise responses.", "category": "preference", "confidence": 0.9, "createdAt": "2026-03-20T00:00:00Z", "source": "thread-1"}])
 
@@ -69,7 +69,7 @@ def test_get_memory_route_offloads_manager_call_from_event_loop() -> None:
 
 
 def test_export_memory_route_preserves_source_error() -> None:
-    app = FastAPI()
+    app = make_authed_test_app()
     app.include_router(memory.router)
     exported_memory = _sample_memory(
         facts=[
@@ -98,7 +98,7 @@ def test_export_memory_route_preserves_source_error() -> None:
 
 
 def test_import_memory_route_returns_imported_memory() -> None:
-    app = FastAPI()
+    app = make_authed_test_app()
     app.include_router(memory.router)
     imported_memory = _sample_memory(facts=[{"id": "fact_import", "content": "User works on DeerFlow.", "category": "context", "confidence": 0.87, "createdAt": "2026-03-20T00:00:00Z", "source": "manual"}])
 
@@ -112,7 +112,7 @@ def test_import_memory_route_returns_imported_memory() -> None:
 
 
 def test_import_route_without_agent_name_persists_default_bucket_markdown(tmp_path) -> None:
-    app = FastAPI()
+    app = make_authed_test_app()
     app.include_router(memory.router)
     manager = DeerMem(backend_config={"storage_path": str(tmp_path)})
     imported_memory = _sample_memory(
@@ -142,7 +142,7 @@ def test_import_route_without_agent_name_persists_default_bucket_markdown(tmp_pa
 
 
 def test_import_memory_route_preserves_source_error() -> None:
-    app = FastAPI()
+    app = make_authed_test_app()
     app.include_router(memory.router)
     imported_memory = _sample_memory(
         facts=[
@@ -171,7 +171,7 @@ def test_import_memory_route_preserves_source_error() -> None:
 
 
 def test_clear_memory_route_returns_cleared_memory() -> None:
-    app = FastAPI()
+    app = make_authed_test_app()
     app.include_router(memory.router)
     mock_mgr = MagicMock()
     mock_mgr.clear_memory.return_value = _sample_memory()
@@ -186,7 +186,7 @@ def test_clear_memory_route_returns_cleared_memory() -> None:
 
 
 def test_create_memory_fact_route_returns_updated_memory() -> None:
-    app = FastAPI()
+    app = make_authed_test_app()
     app.include_router(memory.router)
     updated_memory = _sample_memory(facts=[{"id": "fact_new", "content": "User prefers concise code reviews.", "category": "preference", "confidence": 0.88, "createdAt": "2026-03-20T00:00:00Z", "source": "manual"}])
 
@@ -200,7 +200,7 @@ def test_create_memory_fact_route_returns_updated_memory() -> None:
 
 
 def test_create_memory_fact_route_maps_conflict_to_409() -> None:
-    app = FastAPI()
+    app = make_authed_test_app()
     app.include_router(memory.router)
     mock_mgr = MagicMock()
     mock_mgr.create_fact.side_effect = MemoryConflictError("stale write")
@@ -214,7 +214,7 @@ def test_create_memory_fact_route_maps_conflict_to_409() -> None:
 
 
 def test_create_memory_fact_route_maps_duplicate_to_409() -> None:
-    app = FastAPI()
+    app = make_authed_test_app()
     app.include_router(memory.router)
     mock_mgr = MagicMock()
     mock_mgr.create_fact.side_effect = ValueError("Duplicate fact")
@@ -228,7 +228,7 @@ def test_create_memory_fact_route_maps_duplicate_to_409() -> None:
 
 
 def test_get_memory_route_maps_corruption_to_stable_500() -> None:
-    app = FastAPI()
+    app = make_authed_test_app()
     app.include_router(memory.router)
     mock_mgr = MagicMock()
     mock_mgr.get_memory.side_effect = MemoryCorruptionError("private path and parser detail")
@@ -242,7 +242,7 @@ def test_get_memory_route_maps_corruption_to_stable_500() -> None:
 
 
 def test_delete_memory_fact_route_returns_updated_memory() -> None:
-    app = FastAPI()
+    app = make_authed_test_app()
     app.include_router(memory.router)
     updated_memory = _sample_memory(facts=[{"id": "fact_keep", "content": "User likes Python", "category": "preference", "confidence": 0.9, "createdAt": "2026-03-20T00:00:00Z", "source": "thread-1"}])
 
@@ -256,7 +256,7 @@ def test_delete_memory_fact_route_returns_updated_memory() -> None:
 
 
 def test_delete_memory_fact_route_returns_404_for_missing_fact() -> None:
-    app = FastAPI()
+    app = make_authed_test_app()
     app.include_router(memory.router)
     mock_mgr = MagicMock()
     mock_mgr.delete_fact.side_effect = KeyError("fact_missing")
@@ -268,7 +268,7 @@ def test_delete_memory_fact_route_returns_404_for_missing_fact() -> None:
 
 
 def test_update_memory_fact_route_returns_updated_memory() -> None:
-    app = FastAPI()
+    app = make_authed_test_app()
     app.include_router(memory.router)
     updated_memory = _sample_memory(facts=[{"id": "fact_edit", "content": "User prefers spaces", "category": "workflow", "confidence": 0.91, "createdAt": "2026-03-20T00:00:00Z", "source": "manual"}])
 
@@ -283,7 +283,7 @@ def test_update_memory_fact_route_returns_updated_memory() -> None:
 
 def test_settings_fact_crud_without_agent_name_uses_default_agent(tmp_path) -> None:
     """The current Settings API sends no agent_name; it must remain usable."""
-    app = FastAPI()
+    app = make_authed_test_app()
     app.include_router(memory.router)
     memory_path = tmp_path / "users" / "alice" / "memory.json"
     memory_path.parent.mkdir(parents=True)
@@ -339,7 +339,7 @@ def test_settings_fact_crud_without_agent_name_uses_default_agent(tmp_path) -> N
 
 
 def test_update_memory_fact_route_preserves_omitted_fields() -> None:
-    app = FastAPI()
+    app = make_authed_test_app()
     app.include_router(memory.router)
     updated_memory = _sample_memory(facts=[{"id": "fact_edit", "content": "User prefers spaces", "category": "preference", "confidence": 0.8, "createdAt": "2026-03-20T00:00:00Z", "source": "manual"}])
 
@@ -363,7 +363,7 @@ def test_update_memory_fact_route_preserves_omitted_fields() -> None:
 
 
 def test_update_memory_fact_route_returns_404_for_missing_fact() -> None:
-    app = FastAPI()
+    app = make_authed_test_app()
     app.include_router(memory.router)
     mock_mgr = MagicMock()
     mock_mgr.update_fact.side_effect = KeyError("fact_missing")
@@ -375,7 +375,7 @@ def test_update_memory_fact_route_returns_404_for_missing_fact() -> None:
 
 
 def test_update_memory_fact_route_returns_specific_error_for_invalid_confidence() -> None:
-    app = FastAPI()
+    app = make_authed_test_app()
     app.include_router(memory.router)
     mock_mgr = MagicMock()
     mock_mgr.update_fact.side_effect = ValueError("confidence")
@@ -524,7 +524,7 @@ def _unsupported_manager() -> MagicMock:
 
 
 def test_get_memory_route_returns_501_for_unsupported_backend() -> None:
-    app = FastAPI()
+    app = make_authed_test_app()
     app.include_router(memory.router)
     with patch("app.gateway.routers.memory.get_memory_manager", return_value=_unsupported_manager()):
         with TestClient(app) as client:
@@ -534,7 +534,7 @@ def test_get_memory_route_returns_501_for_unsupported_backend() -> None:
 
 
 def test_export_memory_route_returns_501_for_unsupported_backend() -> None:
-    app = FastAPI()
+    app = make_authed_test_app()
     app.include_router(memory.router)
     with patch("app.gateway.routers.memory.get_memory_manager", return_value=_unsupported_manager()):
         with TestClient(app) as client:
@@ -543,7 +543,7 @@ def test_export_memory_route_returns_501_for_unsupported_backend() -> None:
 
 
 def test_memory_status_route_returns_501_for_unsupported_backend() -> None:
-    app = FastAPI()
+    app = make_authed_test_app()
     app.include_router(memory.router)
     cfg = SimpleNamespace(
         enabled=True,
@@ -563,7 +563,7 @@ def test_memory_status_route_returns_501_for_unsupported_backend() -> None:
 
 
 def test_clear_memory_route_returns_501_for_unsupported_backend() -> None:
-    app = FastAPI()
+    app = make_authed_test_app()
     app.include_router(memory.router)
     with patch("app.gateway.routers.memory.get_memory_manager", return_value=_unsupported_manager()):
         with TestClient(app) as client:
@@ -572,7 +572,7 @@ def test_clear_memory_route_returns_501_for_unsupported_backend() -> None:
 
 
 def test_import_memory_route_returns_501_for_unsupported_backend() -> None:
-    app = FastAPI()
+    app = make_authed_test_app()
     app.include_router(memory.router)
     with patch("app.gateway.routers.memory.get_memory_manager", return_value=_unsupported_manager()):
         with TestClient(app) as client:
@@ -583,7 +583,7 @@ def test_import_memory_route_returns_501_for_unsupported_backend() -> None:
 def test_reload_memory_route_returns_501_when_read_also_unsupported() -> None:
     """reload falls back to get_memory; if both raise (minimal backend), the
     fallback surfaces 501 instead of a raw 500 from the uncaught raise."""
-    app = FastAPI()
+    app = make_authed_test_app()
     app.include_router(memory.router)
     with patch("app.gateway.routers.memory.get_memory_manager", return_value=_unsupported_manager()):
         with TestClient(app) as client:

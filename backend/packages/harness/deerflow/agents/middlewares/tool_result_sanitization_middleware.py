@@ -60,6 +60,12 @@ _REMOTE_CONTENT_TOOL_NAMES: frozenset[str] = frozenset(
         "web_search",
         "image_search",
         "web_capture",
+        "browser_navigate",
+        "browser_snapshot",
+        "browser_click",
+        "browser_type",
+        "browser_get_text",
+        "browser_back",
     }
 )
 
