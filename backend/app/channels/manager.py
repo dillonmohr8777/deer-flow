@@ -1739,6 +1739,14 @@ class ChannelManager:
             else:
                 run_config["recursion_limit"] = max(run_config.get("recursion_limit", 100), policy.default_recursion_limit)
 
+        # Public news routing cannot be widened by user preferences or /agent state.
+        public_news = msg.channel_name == "slack" and msg.chat_id == "C04HXSVN2CS" and msg_metadata.get("team_id") == "T066HGS7N"
+        run_context["public_news_channel"] = public_news
+        if public_news:
+            assistant_id = "lead_agent"
+            _apply_explicit_agent_choice(run_config, run_context, "ai-tech-news")
+            run_context.update({"subagent_enabled": False, "is_bootstrap": False, "is_plan_mode": False})
+
         return assistant_id, run_config, run_context
 
     async def _apply_channel_policy(self, msg: InboundMessage, run_context: dict[str, Any]) -> ChannelRunPolicy | None:

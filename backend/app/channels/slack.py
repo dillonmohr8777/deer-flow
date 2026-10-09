@@ -504,14 +504,8 @@ class SlackChannel(Channel):
             reservation = self._reserve_inbound(inbound)
             if reservation is None:
                 return
-            if policy.get("mentions_and_threads_only") is True:
-                self._engaged_threads[engagement_key] = None
-                if len(self._engaged_threads) > 256:
-                    self._engaged_threads.pop(next(iter(self._engaged_threads)))
-            # Acknowledge with an eyes reaction
-            self._add_reaction(channel_id, event.get("ts", thread_ts), "eyes")
-            # Send "running" reply first (fire-and-forget from SDK thread)
-            self._send_running_reply(channel_id, thread_ts)
+            if globally_allowed:
+                self._acknowledge_inbound(inbound)
             try:
                 if self._connection_repo is None:
                     # Reservation bounds callbacks scheduled from the SDK
@@ -543,9 +537,23 @@ class SlackChannel(Channel):
             if inbound.metadata.get("requires_personal_connection") and not (inbound.connection_id and inbound.owner_user_id and inbound.workspace_id == team_id):
                 logger.warning("Slack channel member has no personal workspace binding")
                 return
+            if inbound.metadata.get("requires_personal_connection"):
+                self._acknowledge_inbound(inbound)
             self._commit_reserved_inbound(reservation, inbound)
         finally:
             reservation.release()
+
+    def _acknowledge_inbound(self, inbound) -> None:
+        """Acknowledge only after expanded participants have a personal binding."""
+        team_id = str(inbound.metadata.get("team_id") or "")
+        policy = self._channel_policies.get(f"{team_id}:{inbound.chat_id}", {}) if isinstance(self._channel_policies, dict) else {}
+        if isinstance(policy, dict) and policy.get("mentions_and_threads_only") is True:
+            key = (team_id, inbound.chat_id, str(inbound.thread_ts))
+            self._engaged_threads[key] = None
+            if len(self._engaged_threads) > 256:
+                self._engaged_threads.pop(next(iter(self._engaged_threads)))
+        self._add_reaction(inbound.chat_id, inbound.metadata.get("message_id") or inbound.thread_ts, "eyes")
+        self._send_running_reply(inbound.chat_id, inbound.thread_ts)
 
     async def _attach_connection_identity(self, inbound, *, team_id: str | None = None):
         workspace_id = str(team_id or inbound.metadata.get("team_id") or "")
