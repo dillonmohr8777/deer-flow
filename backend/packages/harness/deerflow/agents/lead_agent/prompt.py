@@ -1089,6 +1089,7 @@ def apply_prompt_template(
     memory_enabled: bool = True,
     interaction_policy: RunInteractionPolicy | None = None,
     experience_mode: str | None = None,
+    public_channel: bool = False,
 ) -> str:
     interaction_policy = interaction_policy or RunInteractionPolicy.interactive()
     # Include subagent section only if enabled (from runtime parameter)
@@ -1160,8 +1161,8 @@ def apply_prompt_template(
     deferred_tools_section = get_deferred_tools_prompt_section(deferred_names=deferred_names)
 
     # Build ACP agent section only if ACP agents are configured
-    acp_section = _build_acp_section(app_config=app_config)
-    custom_mounts_section = _build_custom_mounts_section(app_config=app_config)
+    acp_section = "" if public_channel else _build_acp_section(app_config=app_config)
+    custom_mounts_section = "" if public_channel else _build_custom_mounts_section(app_config=app_config)
     acp_and_mounts_section = "\n".join(section for section in (acp_section, custom_mounts_section) if section)
 
     # Gate the "Skill First" instruction on the deferred discovery path:
@@ -1183,10 +1184,10 @@ def apply_prompt_template(
         clarification_system=interaction_policy.clarification_system,
         clarification_reminder=interaction_policy.clarification_reminder,
         experience_mode_section=_build_experience_mode_section(experience_mode, interaction_policy),
-        user_profile_section=_build_user_profile_section(user_id),
+        user_profile_section="" if public_channel else _build_user_profile_section(user_id),
         agent_name=agent_name or "DeerFlow 2.0",
         soul=get_agent_soul(agent_name, user_id=user_id),
-        self_update_section=_build_self_update_section(agent_name),
+        self_update_section="" if public_channel else _build_self_update_section(agent_name),
         skills_section=skills_section,
         deferred_tools_section=deferred_tools_section,
         mcp_routing_hints_section=mcp_routing_hints_section,

@@ -1,5 +1,11 @@
 ### Agent System
 
+For the managed public-news profile, omitted `knowledge_scope` means no private
+knowledge integration. It passes Gateway admission without requiring a knowledge
+provider. Explicit enabled scopes remain forbidden by assembly. Provision the
+profile without a scope when its provider does not implement that contract; an
+explicit disabled scope can still be rejected by provider admission.
+
 **Lead Agent** (`packages/harness/deerflow/agents/lead_agent/agent.py`):
 - `make_lead_agent(config: RunnableConfig)` is the published `langgraph.json`
   entry point; preserve its signature and bare-graph return type.
