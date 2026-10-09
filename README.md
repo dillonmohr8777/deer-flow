@@ -20,6 +20,15 @@ https://github.com/user-attachments/assets/a8bcadc4-e040-4cf2-8fda-dd768b999c18
 
 ### MomoBot Brain Forge workflow
 
+The default-off [Claude SDK synthetic workflow pilot](backend/docs/WORKFLOWS.md#opt-in-claude-sdk-synthetic-pilot)
+routes one exact fictional line-edit fixture through the existing isolated
+localhost SDK worker while retaining Gateway ownership, native bookkeeping,
+durable paid-attempt admission and artifact acceptance. It permits no external
+tools/private jobs and verifies actual worker model/usage and the receipt
+journal's exact hash before acceptance. A separate explicit acceptance driver
+checks isolated native state and artifacts; it does not install or enable the
+route in production.
+
 The optional [Brain Forge Slack workflow](backend/app/channels/BRAINFORGE.md) runs an explicitly scoped `@bot brief` request against reviewed, hash-pinned work sources. It retrieves the full thread, saves a private protected readback receipt and returns recorded counts without calling a model or modifying canonical work. It is disabled by default and requires an existing authenticated Slack runtime binding.
 
 The optional private project compiler joins the brief with reviewed research and existing Momo workflow requests for offers, SEO, social, CRM, reporting, developer blockers and security review. A single protected receipt binds the source brief and project artifact. `python -m app.channels.brainforge_cli` provides local preflight, build and independent readback; compiled requests remain unsent until the existing authenticated workflow service admits them. See the [unified project configuration](backend/app/channels/BRAINFORGE.md#unified-private-project).
