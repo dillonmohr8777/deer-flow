@@ -687,6 +687,8 @@ Momo's managed AI-news persona uses only public web search and fetch tools and
 omits private knowledge scope. This keeps news requests usable when the selected
 provider has no knowledge integration. Choose a private model route for Slack
 channels containing client discussions, even when the channel is named for news.
+The authenticated channel gateway preserves that restricted profile through run
+admission; ordinary external requests cannot enable its internal mode flag.
 
 DeerFlow supports receiving tasks from messaging apps. Channels auto-start when configured — no public IP required for any of them.
 

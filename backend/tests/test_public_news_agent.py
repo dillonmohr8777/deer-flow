@@ -61,7 +61,15 @@ def test_public_news_assembly_has_only_public_tools_and_no_private_context(monke
         return real_create(**kwargs)
 
     monkeypatch.setattr(agent, "create_agent", capture)
-    config = {"context": {"public_news_channel": True, "agent_name": "ai-tech-news", "user_id": "synthetic-owner", "subagent_enabled": True, "is_plan_mode": True}}
+    # Exercise the actual Gateway admission boundary, not a hand-built factory
+    # config: runtime-only keys must survive an authenticated internal caller.
+    from app.gateway.services import merge_run_context_overrides
+
+    body_context = {"public_news_channel": True, "channel_name": "slack", "agent_name": "ai-tech-news", "user_id": "synthetic-owner", "subagent_enabled": True, "is_plan_mode": True}
+    config = {}
+    merge_run_context_overrides(config, body_context, internal=True)
+    assert config["context"]["public_news_channel"] is True
+    assert "public_news_channel" not in config["configurable"]
     assembly = agent._assemble_lead_agent(config, app_config=app)
     assert {t.name for t in captured["tools"]} == {"web_search", "web_fetch"}
     assert set(assembly.graph.nodes["tools"].bound.tools_by_name) == {"web_search", "web_fetch"}
@@ -110,3 +118,18 @@ def test_gateway_admission_accepts_omitted_scope_without_provider_lookup(monkeyp
     assert execution_scope is None
     assert graph_input["messages"][0] is message
     assert "knowledge_scope" not in message.additional_kwargs
+
+
+def test_external_public_news_flag_cannot_trigger_public_assembly():
+    from app.gateway.services import merge_run_context_overrides, strip_internal_context_keys
+    from deerflow.agents.lead_agent.agent import _get_runtime_config
+
+    # HTTP callers can supply both legacy configurable keys and raw context.
+    # The strip boundary must remove both before whitelisted body.context merge.
+    config = {"configurable": {"public_news_channel": True}, "context": {"public_news_channel": True}}
+    strip_internal_context_keys(config)
+    merge_run_context_overrides(config, {"public_news_channel": True, "channel_name": "slack", "agent_name": "ai-tech-news"}, internal=False)
+    assert "public_news_channel" not in config["configurable"]
+    assert "public_news_channel" not in config["context"]
+    assert "channel_name" not in config["context"]
+    assert _get_runtime_config(config).get("public_news_channel") is not True
