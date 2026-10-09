@@ -742,6 +742,27 @@ def build_middlewares(
     # ClarificationMiddleware should always be last
     middlewares.append(ClarificationMiddleware())
 
+    if _get_runtime_config(config).get("public_news_channel") is True:
+        # Public replies cannot inherit owner profiles, files, client corrections,
+        # projects, or recalled context. Existing tool ceilings, authorization,
+        # sanitization and spending/response guards remain in the chain.
+        public_safe = {
+            "InputSanitizationMiddleware",
+            "ToolOutputBudgetMiddleware",
+            "ToolResultSanitizationMiddleware",
+            "ToolErrorHandlingMiddleware",
+            "SkillToolPolicyMiddleware",
+            "GuardrailMiddleware",
+            "SystemMessageCoalescingMiddleware",
+            "TerminalResponseMiddleware",
+            "ModelLengthFinishReasonMiddleware",
+            "SafetyFinishReasonMiddleware",
+            "LoopDetectionMiddleware",
+            "TokenUsageMiddleware",
+            "TokenBudgetMiddleware",
+        }
+        return [item for item in middlewares if type(item).__name__ in public_safe]
+
     # Extension contributions are merged only here, once the full stack exists.
     # Doing it inside build_lead_runtime_middlewares() would place
     # MODEL_PHYSICAL contributions above the lead-specific middlewares appended
@@ -977,6 +998,16 @@ def _assemble_lead_agent(config: RunnableConfig, *, app_config: AppConfig) -> Le
         if agent_name and agent_config is None:
             raise ValueError("Existing agent config readback is unavailable")
     tool_names = getattr(agent_config, "tool_names", None)
+    public_news_channel = cfg.get("public_news_channel") is True
+    if public_news_channel:
+        if is_bootstrap or agent_name != "ai-tech-news" or agent_config is None:
+            raise ValueError("Public news requires its provisioned personal-owner agent")
+        if set(agent_config.tool_names or []) != {"web_search", "web_fetch"} or agent_config.memory_enabled is not False or agent_config.self_update_enabled is not False:
+            raise ValueError("Public news agent permissions do not match the reviewed ceiling")
+        if agent_config.skills != [] or agent_config.mcp_plugins != [] or agent_config.allowed_subagents != [] or (agent_config.knowledge_scope is not None and agent_config.knowledge_scope.mode != "disabled"):
+            raise ValueError("Public news agent must disable private knowledge and integrations")
+        requested_subagent_enabled = False
+        is_plan_mode = False
     memory_enabled = getattr(agent_config, "memory_enabled", True) is not False
     # Keep compatibility with lightweight AgentConfig-shaped objects used by
     # integrations that predate caller-level subagent restrictions.
@@ -1288,6 +1319,7 @@ def _assemble_lead_agent(config: RunnableConfig, *, app_config: AppConfig) -> Le
         agent_name=agent_name,
         available_skills=available_skills,
         app_config=resolved_app_config,
+        public_channel=public_news_channel,
         deferred_names=setup.deferred_names,
         mcp_routing_hints_section=mcp_routing_hints_section,
         user_id=resolved_user_id,
