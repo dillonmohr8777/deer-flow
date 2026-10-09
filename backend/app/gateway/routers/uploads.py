@@ -345,6 +345,9 @@ def _auto_convert_documents_enabled(app_config: AppConfig) -> bool:
 
 
 @router.post("", response_model=UploadResponse)
+# Upload-before-create (with GET /limits and /list) is the one thread surface open to a
+# row-less id: new chats attach files before the thread exists, and every read or write
+# stays in the caller's own storage bucket. Ownerless and foreign rows still answer 404.
 @require_permission("threads", "write", owner_check=True, require_existing=False)
 async def upload_files(
     thread_id: ThreadId,

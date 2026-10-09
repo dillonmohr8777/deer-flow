@@ -1,5 +1,21 @@
 ### Schema Migrations (`packages/harness/deerflow/persistence/migrations/`)
 
+The private standby shipped `0040_agent_room_messages` directly after
+`0039_team_board_academy`; the lane independently shipped `0040_agent_seats`
+after the same parent and continues through `0046_organization_entitlements`.
+Keep both historical parent edges intact. `0047_merge_agent_room_exec` is the
+no-DDL merge revision joining the two histories; Alembic must execute the
+missing branch on upgrade from either side. Never repair this by stamping,
+resetting, or reparenting the shipped room revision. The original room table
+and its owner-scoped handoffs must survive. Tests live in
+`tests/test_agent_room_migration_bridge.py` and run the actual bootstrap from
+0039, deployed room0040, lane0046, and an empty database. A future PR such as
+the still-unmerged board approval migration must join the resulting graph
+deliberately rather than creating a second head. Rollback to an old image
+requires its verified pre-upgrade database snapshot after all writers are
+quiet; do not mistake this merge revision's no-op downgrade for proof that
+an arbitrary cross-branch downgrade preserves data.
+
 Organization backfill must distinguish a NULL optional run reference from a non-NULL reference whose run is missing. Missing referenced runs remain quarantined for both batches and MCP tasks. The deployed September 20 upgrade was audited to contain zero such rows before applying this correction to future backfills.
 
 DeerFlow's application tables (`runs`, `threads_meta`, `feedback`, `users`, `run_events`, plus the four `channel_*` tables) are owned by alembic via a **hybrid bootstrap** strategy. LangGraph's checkpointer tables (`checkpoints`, `checkpoint_blobs`, `checkpoint_writes`, `checkpoint_migrations`) live in the same database but are owned by LangGraph and excluded from alembic's view via `migrations/_env_filters.py::include_object`.
@@ -28,7 +44,8 @@ The empty-DB path keeps using `create_all` because `Base.metadata` is the only a
 `0023_run_change_seq` → `0023_user_preferences` →
 `0024_project_documents` → `0025_repair_run_change_seq` →
 two branches (`0026_organization_foundation` → `0027_organization_backfill`,
-and `0026_mcp_task_lease_tokens`) → `0028_merge_org_mcp` (current head). The merge
+and `0026_mcp_task_lease_tokens`) → `0028_merge_org_mcp` → `0029_shared_workspace` →
+`0030_workspace_branding` → `0031_org_rebackfill` (current head). The merge
 preserves both deployed revision histories without re-parenting either. The preference
 revision adds a separate owner/key table with a cascading users foreign key and
 does not alter users; the project-documents revision adds a new owner-scoped
@@ -172,6 +189,19 @@ on installs that never enabled it. The convention is:
 - `migrations/versions/0027_organization_backfill.py` — creates deterministic private organization/owner membership rows for existing users and stamps only resource rows whose owner and parent relationships prove that private organization. Orphaned, mismatched-owner, and conflicting rows remain nullable-organization quarantine. Its downgrade clears only matching deterministic private stamps and identities; it deliberately leaves 0026 schema and unrelated organization rows intact.
 - `migrations/versions/0026_mcp_task_lease_tokens.py` — chains after `0025_repair_run_change_seq` and adds nullable `mcp_tasks.lease_token` / `notification_lease_token` columns so every poll, cancel, and notification mutation can be fenced to the exact claim generation
 - `migrations/versions/0028_merge_org_mcp.py` — joins the organization and MCP lease branches without schema operations. Both ancestries must execute before the single merge head is stamped.
+- `migrations/versions/0036_user_mfa.py` — creates `user_mfa` (TOTP secret encrypted at rest, `enabled_at`, hashed recovery codes as JSON), FK-cascaded on `users.id` delete; chains after `0034_clients`. New table, so the bootstrap forward-compat floor is unchanged.
+- `migrations/versions/0037_pat_organization.py` — adds nullable, indexed `personal_access_tokens.organization_id` (chains after `0036_user_mfa`) and backfills existing rows to their owner's deterministic private organization, mirroring `0031_org_rebackfill`'s "stamp only into an already-active organization naming that user (or no one) as storage principal, create nothing" rule. A row whose owner has no such organization keeps NULL quarantine. Additive nullable column, so the bootstrap forward-compat floor is unchanged.
+- `migrations/versions/0038_board_threads.py` — creates the Momo Board `board_threads` and `board_messages` tables (current head, chains after `0037_pat_organization`): client posts/tickets/concerns/DMs with an organization/client-scoped `kind`/`status` vocabulary (`deerflow.persistence.board.model`), no DB-level foreign key on `organization_id`/`client_id` by design, matching `clients`. New tables, so the bootstrap forward-compat floor is unchanged.
+- `migrations/versions/0031_org_rebackfill.py`: data only. Stamps NULL `organization_id` rows with 0027's parent rules (a verbatim copy of its stamping block) but creates no organization or membership, because 0027's identity loop would make each shared workspace's storage principal its active owner. It stamps only into existing active organizations whose storage principal is the owner or NULL, filtered in Python because a SQL `NOT IN` over the nullable `storage_user_id` matches nothing; it never rewrites a non-NULL stamp and logs how many rows each table keeps in NULL quarantine. The downgrade is a no-op: its stamps are indistinguishable from dual-write stamps and valid at 0030. Quiesce writers first (bootstrap's lock is process-local) and keep the pre-deploy backup, since a no-op downgrade cannot repair a wrong stamp.
 - `persistence/bootstrap.py` — `bootstrap_schema(engine, backend=...)`, the three-branch provisioning decision, locked revision validation, and the narrow 0019 forward-compatibility exception
 - `extensions/loader.py::load_extensions` — registers each spec's `table_prefix` with `register_extension_table_prefix()`
 - Tests: `tests/test_persistence_bootstrap.py` (branches), `tests/test_persistence_bootstrap_concurrency.py` (concurrency), `tests/test_persistence_bootstrap_regression.py` (issue #3682), `tests/test_persistence_migrations_env.py` (filter, including extension-owned tables), `tests/test_extension_loader.py::TestTablePrefixRegistration` (spec-to-filter wiring), `tests/blocking_io/test_persistence_bootstrap.py` (asyncio.to_thread anchor), `tests/test_migration_0004_run_ownership_dedupe.py` + `tests/test_migration_0007_scheduled_run_active_dedupe.py` (dedupe-before-unique-index pre-steps), `tests/test_migration_0025_repair_run_change_seq.py` (issue #5516 skipped-revision heal)
+
+`0048_repair_audit_events` follows `0047_merge_agent_room_exec`. It repairs
+managed databases whose old empty bootstrap stamped head without registering
+`audit_events`: create only the missing 0033-shaped table/four indexes, preserve
+existing audit rows and every other table, and refuse incompatible partial
+shapes, including indexes outside the four frozen 0033 names. Do not replay 0033, restamp, or call create_all on a managed database.
+Downgrade retains append-only history because ancestor 0033 owns the schema.
+Tests: `tests/test_migration_0048_repair_audit_events.py`, plus the isolated
+fresh-process `test_persistence_bootstrap_audit_registration.py` regression.

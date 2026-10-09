@@ -241,10 +241,25 @@ class AgentConfig(BaseModel):
     # Disable every memory path for stateless execution-oriented agents while
     # preserving the global memory configuration for all other agents.
     memory_enabled: bool = True
+    # Operator-controlled opt-out for fixed-purpose custom agents. Existing
+    # agents retain self-update unless the owner explicitly disables it.
+    self_update_enabled: bool = True
+    # Optional owner-controlled ceiling across configured, builtin and late
+    # middleware tools. None preserves the existing catalog; [] denies all.
+    tool_names: list[str] | None = None
     # Optional binding to GitHub repositories so this agent can respond to
     # webhook events from the gateway dispatcher. None means "no GitHub
     # integration", which is the case for every existing agent.
     github: GitHubAgentConfig | None = None
+    # Fleet template binding (Momentum fleet feature, POST
+    # /api/clients/{client_id}/agents). Stamped once at creation time by that
+    # route and never edited afterward, so, like ``github``, these stay
+    # outside MANAGED_AGENT_CONFIG_FIELDS: preserve_non_managed_fields()
+    # carries them forward untouched on every later PATCH /api/agents/{name}.
+    # None on every hand-authored or pre-fleet agent.
+    client_id: str | None = None
+    template_id: str | None = None
+    template_version: str | None = None
 
 
 # Fields explicitly managed by agent-update surfaces. Anything else declared
@@ -268,6 +283,8 @@ MANAGED_AGENT_CONFIG_FIELDS: frozenset[str] = frozenset(
         "thinking_enabled",
         "reasoning_effort",
         "memory_enabled",
+        "self_update_enabled",
+        "tool_names",
     }
 )
 

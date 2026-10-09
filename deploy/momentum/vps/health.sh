@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# Health check for always-on MomoBot. The Linux counterpart of health.ps1:
+# Docker reachable, the UI and /health/ready answer on loopback, the public
+# HTTPS address answers, and the newest encrypted backup receipt is fresh.
+# Appends one JSON line per run and exits 1 when anything is wrong.
+set -uo pipefail
+
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+PORT="${PORT:-2026}"
+DOMAIN="${MOMOBOT_DOMAIN:-$("$REPO/deploy/momentum/vps/dotenv-get.sh" "${MOMOBOT_ENV_FILE:-$REPO/.env}" MOMOBOT_DOMAIN)}"
+BACKUP_DIR="${MOMOBOT_BACKUP_DEST:-/srv/momobot/backups}"
+MAX_BACKUP_AGE_HOURS="${MOMOBOT_MAX_BACKUP_AGE_HOURS:-26}"
+LOG="${MOMOBOT_HEALTH_LOG:-/var/log/momobot/health.jsonl}"
+
+probe() { curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$1" 2>/dev/null || echo 000; }
+
+docker_ok=false; main=000; ready=000; public=000; backup_age=null
+if docker info >/dev/null 2>&1; then
+  docker_ok=true
+  main="$(probe "http://127.0.0.1:$PORT/")"
+  ready="$(probe "http://127.0.0.1:$PORT/health/ready")"
+fi
+[[ -n "$DOMAIN" ]] && public="$(probe "https://$DOMAIN/health")"
+
+# The newest receipt must be fresh AND say PASS: offsite_backup.py writes a
+# receipt even when its restore check fails (f25).
+newest="$(ls -1t "$BACKUP_DIR"/*.receipt.json 2>/dev/null | head -1 || true)"
+backup_pass=false
+if [[ -n "$newest" ]]; then
+  # GNU stat (Linux) first, BSD stat (the Mac) second.
+  mtime="$(stat -c %Y "$newest" 2>/dev/null || stat -f %m "$newest" 2>/dev/null || echo "")"
+  [[ -n "$mtime" ]] && backup_age=$(( ( $(date +%s) - mtime ) / 3600 ))
+  # Top-level "state" only: a grep for the string anywhere in the file also
+  # matches the nested snapshot/postgres receipts, which can say PASS while
+  # the overall backup (and the top-level state this receipt is named for) FAILed.
+  [[ "$(python3 -c 'import json,sys
+try:
+    print(json.load(open(sys.argv[1])).get("state"))
+except Exception:
+    print("")' "$newest" 2>/dev/null)" == "PASS" ]] && backup_pass=true
+fi
+
+ok=false
+if $docker_ok && [[ "$main" == 200 && "$ready" == 200 ]] \
+  && { [[ -z "$DOMAIN" ]] || [[ "$public" == 200 ]]; } \
+  && [[ "$backup_age" != null ]] && (( backup_age <= MAX_BACKUP_AGE_HOURS )) && $backup_pass; then
+  ok=true
+fi
+
+# HTTP codes are strings: a failed probe is "000", and a bare 000 isn't valid JSON.
+# UTC ISO-8601 that both GNU and BSD date print (BSD date has no -Is).
+line="$(printf '{"at":"%s","docker":%s,"main":"%s","ready":"%s","public":"%s","backupAgeHours":%s,"backupPass":%s,"ok":%s}' \
+  "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$docker_ok" "$main" "$ready" "$public" "$backup_age" "$backup_pass" "$ok")"
+mkdir -p "$(dirname "$LOG")"
+echo "$line" >> "$LOG"
+echo "$line"
+$ok

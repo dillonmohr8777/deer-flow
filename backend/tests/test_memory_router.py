@@ -393,9 +393,11 @@ def _internal_owner_request(owner_user_id: str) -> SimpleNamespace:
     from app.gateway.internal_auth import INTERNAL_OWNER_USER_ID_HEADER_NAME, INTERNAL_SYSTEM_ROLE
     from deerflow.runtime.user_context import DEFAULT_USER_ID
 
+    # AuthMiddleware stamps delegation_id and the storage principal only after
+    # verifying the caller's delegation; the header alone is never honored.
     return SimpleNamespace(
         headers={INTERNAL_OWNER_USER_ID_HEADER_NAME: owner_user_id},
-        state=SimpleNamespace(user=SimpleNamespace(id=DEFAULT_USER_ID, system_role=INTERNAL_SYSTEM_ROLE)),
+        state=SimpleNamespace(user=SimpleNamespace(id=DEFAULT_USER_ID, system_role=INTERNAL_SYSTEM_ROLE), delegation_id="dlg-test", storage_user_id=owner_user_id),
     )
 
 

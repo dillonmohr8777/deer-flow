@@ -17,6 +17,12 @@ class PersonalAccessTokenRow(Base):
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     user_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    # The organization active when the token was minted (M3 isolation gate,
+    # migration 0037_pat_organization). Nullable like every other
+    # organization-scoped column: NULL is the pre-migration quarantine
+    # marker for a row the backfill could not prove. See
+    # ``persistence/AGENTS.md`` "Organization isolation (M3)".
+    organization_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     name: Mapped[str] = mapped_column(String(128), nullable=False)
     # SHA-256 hex digest of the ``dfp_…`` token. The raw token exists only in
     # the create response and is never persisted or logged. The named unique

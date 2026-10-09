@@ -58,7 +58,7 @@ from langchain.agents.middleware.types import ModelCallResult, ModelRequest, Mod
 from langchain_core.messages import HumanMessage, RemoveMessage, SystemMessage
 from langgraph.runtime import Runtime
 
-from deerflow.projects.context import build_project_context_message, is_project_context_message, pinned_project_snapshot, project_context_insertion_index, render_documents_block, render_project_block
+from deerflow.projects.context import build_project_context_message, is_project_context_message, pinned_project_snapshot, project_context_insertion_index, render_documents_block, render_evidence_citation_instructions, render_project_block
 from deerflow.runtime.context_keys import CURRENT_RUN_PRE_EXISTING_MESSAGE_IDS_KEY
 from deerflow.runtime.user_context import resolve_runtime_user_id
 from deerflow.utils.messages import INJECTED_USER_MESSAGE_ID_SUFFIX, ORIGINAL_USER_CONTENT_KEY, strip_injected_user_message_id_suffix
@@ -728,6 +728,9 @@ class DynamicContextMiddleware(AgentMiddleware):
         message carries the ``<project>`` block plus, for a nonempty shelf,
         the bounded ``<documents>`` index appended after ``</project>`` — both
         rendered fresh from the pinned snapshot on every model call (§7.2).
+        A nonempty shelf also appends the evidence-check citation instruction
+        (verify_quote pilot, backend/AGENTS.md) after the ``<documents>``
+        index, so it renders only when there are project documents to cite.
         The message is placed immediately before the genuine current-run user
         message and is never returned as a state update, so checkpoints and
         ``state["messages"]`` never contain it. Returns the rendered block
@@ -744,7 +747,13 @@ class DynamicContextMiddleware(AgentMiddleware):
             return request.override(messages=messages), None, None
         max_entries, max_bytes = self._shelf_index_limits()
         documents_block = render_documents_block(snapshot, max_entries=max_entries, max_bytes=max_bytes)
-        block = project_block if documents_block is None else f"{project_block}\n{documents_block}"
+        citation_instructions = render_evidence_citation_instructions(documents_block)
+        parts = [project_block]
+        if documents_block is not None:
+            parts.append(documents_block)
+        if citation_instructions is not None:
+            parts.append(citation_instructions)
+        block = "\n".join(parts)
         index = project_context_insertion_index(messages, runtime)
         run_id = None
         context = getattr(runtime, "context", None)

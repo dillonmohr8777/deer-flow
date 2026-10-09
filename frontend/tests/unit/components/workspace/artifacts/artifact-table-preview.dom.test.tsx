@@ -62,9 +62,9 @@ describe("ArtifactTablePreview", () => {
     ];
     mount();
     expect(screen.getByText("Preview of first 200 rows")).toBeTruthy();
-    expect(screen.getByText("1–50 of preview")).toBeTruthy();
+    expect(screen.getByText("1 to 50 of preview")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Next page" }));
-    expect(screen.getByText("51–100 of preview")).toBeTruthy();
+    expect(screen.getByText("51 to 100 of preview")).toBeTruthy();
     expect(screen.getByRole("cell", { name: "51" })).toBeTruthy();
     expect(screen.queryByRole("cell", { name: "1" })).toBeNull();
   });

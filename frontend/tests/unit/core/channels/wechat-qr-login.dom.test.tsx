@@ -237,7 +237,7 @@ it("asks for the phone pairing code and shows a rejected code inline", async () 
   fireEvent.click(screen.getByRole("button", { name: "Continue connecting" }));
   expect(
     await screen.findByText(
-      "The code did not match. Check the digits on your phone and try again.",
+      "The code didn't match. Check the digits on your phone and try again.",
     ),
   ).toBeTruthy();
   expect(pollWechatQRLogin).toHaveBeenLastCalledWith(
@@ -326,7 +326,7 @@ it.each([
         ).toBe("");
         expect(
           screen.getByText(
-            "The code did not match. Check the digits on your phone and try again.",
+            "The code didn't match. Check the digits on your phone and try again.",
           ),
         ).toBeTruthy();
       } else {

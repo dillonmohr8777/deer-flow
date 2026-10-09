@@ -40,12 +40,10 @@ import {
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
-  SidebarMenu,
   SidebarMenuAction,
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import { MomentumGlyph } from "@/components/workspace/command-center/momentum-glyph";
 import { ConversationExtensionActions } from "@/components/workspace/conversation-extension-actions";
 import { getAPIClient } from "@/core/api";
 import { useAuth } from "@/core/auth/AuthProvider";
@@ -75,6 +73,7 @@ import {
   projectIdOfThread,
   titleOfThread,
 } from "@/core/threads/utils";
+import { formatCompactStamp } from "@/core/utils/datetime";
 import { env } from "@/env";
 import { isIMEComposing } from "@/lib/ime";
 
@@ -94,13 +93,16 @@ export function ThreadSidebarItem({
   isActive,
   branchEntry,
   recentThreadId,
+  projectName,
 }: {
   thread: AgentThread;
   isActive: boolean;
   branchEntry?: ThreadBranchEntry | undefined;
   recentThreadId?: string | undefined;
+  /** Shown on the identifier line; omit where the row already sits under its project. */
+  projectName?: string | undefined;
 }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const { user } = useAuth();
   const canDeleteThreads = hasPermission(user, PERMISSIONS.THREADS_DELETE);
   const requestDelete = useThreadDeleteDialog();
@@ -223,19 +225,26 @@ export function ThreadSidebarItem({
   const branchLabel = parentTitle
     ? t.chats.branchLabel(title, parentTitle)
     : undefined;
+  const stamp = formatCompactStamp(thread.updated_at, locale);
 
   return (
     <SidebarMenuItem className="group/side-menu-item">
-      <SidebarMenuButton isActive={isActive} asChild>
+      {/* Two title lines plus a date/project line: recent prompts often share
+          an opening, so one truncated line could not tell them apart. */}
+      <SidebarMenuButton
+        isActive={isActive}
+        asChild
+        className="h-auto min-h-8 items-start py-1.5"
+      >
         <Link
           aria-label={branchLabel}
-          className="text-muted-foreground min-w-0 whitespace-nowrap group-hover/side-menu-item:overflow-hidden"
+          className="group/thread-link text-muted-foreground min-w-0 whitespace-nowrap group-hover/side-menu-item:overflow-hidden"
           data-branch-depth={
             branchEntry && branchEntry.depth > 0 ? branchEntry.depth : undefined
           }
           data-branch-parent-id={branchEntry?.parentThread?.thread_id}
           href={pathOfThread(thread)}
-          title={branchLabel}
+          title={branchLabel ?? title}
         >
           {branchEntry && branchEntry.depth > 0 && (
             <span
@@ -249,10 +258,8 @@ export function ThreadSidebarItem({
               {branchEntry.isLastSibling ? "└─" : "├─"}
             </span>
           )}
-          <MomentumGlyph
-            className="size-4 shrink-0"
-            seed={`thread:${thread.thread_id}`}
-          />
+          {/* Icons only where they carry meaning: channel source and pinned.
+              A per-thread glyph read as one identical dark dot at 16px. */}
           <ThreadChannelIcon source={channelSource} />
           {pinned && (
             <Pin
@@ -260,7 +267,28 @@ export function ThreadSidebarItem({
               className="text-muted-foreground size-3.5 shrink-0"
             />
           )}
-          <span className="min-w-0 truncate">{title}</span>
+          <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+            <span
+              className="line-clamp-2 leading-snug break-words whitespace-normal group-focus-visible/thread-link:line-clamp-none"
+              data-testid="thread-row-title"
+            >
+              {title}
+            </span>
+            {(stamp ?? projectName) && (
+              <span
+                className="text-muted-foreground truncate text-xs leading-4 font-medium"
+                data-testid="thread-row-meta"
+              >
+                {stamp && thread.updated_at && (
+                  <time className="tabular-nums" dateTime={thread.updated_at}>
+                    {stamp}
+                  </time>
+                )}
+                {stamp && projectName && <span aria-hidden="true"> · </span>}
+                {projectName}
+              </span>
+            )}
+          </span>
           {channelSource && (
             <span
               className="bg-muted text-muted-foreground ml-auto inline-flex h-5 max-w-14 shrink-0 items-center rounded-md px-1.5 text-[10px] font-medium"
@@ -426,12 +454,37 @@ export function RecentChatList() {
   // data) yields `null` → exclude nothing (fail-visible), and a thread whose
   // project id is unknown to both lists stays here too. TanStack dedupes
   // these shared queries with `GroupedProjectList`.
-  // The discovery queries only feed that grouped-mode filter; in the default
-  // flat mode the results are read by nobody, so keep the two project round
-  // trips off the page load (`GroupedProjectList` fetches these same keys
+  // In the default flat mode the discovery queries only name projects on the
+  // row identifier line, so they stay off the page load unless a loaded
+  // thread belongs to a project (`GroupedProjectList` fetches these same keys
   // when grouped mode is on, and TanStack dedupes the observers).
-  const activeProjectsQuery = useProjects("active", { enabled: grouped });
-  const archivedProjectsQuery = useProjects("archived", { enabled: grouped });
+  const threadListModel = useMemo(
+    () => buildThreadListModel(infiniteThreads?.pages ?? []),
+    [infiniteThreads?.pages],
+  );
+  const anyThreadInProject = useMemo(
+    () =>
+      threadListModel.threads.some(
+        (thread) => projectIdOfThread(thread) !== null,
+      ),
+    [threadListModel.threads],
+  );
+  const activeProjectsQuery = useProjects("active", {
+    enabled: grouped || anyThreadInProject,
+  });
+  const archivedProjectsQuery = useProjects("archived", {
+    enabled: grouped || anyThreadInProject,
+  });
+  const projectNames = useMemo(
+    () =>
+      new Map(
+        [
+          ...(activeProjectsQuery.data ?? []),
+          ...(archivedProjectsQuery.data ?? []),
+        ].map((project) => [project.id, project.name]),
+      ),
+    [activeProjectsQuery.data, archivedProjectsQuery.data],
+  );
   const knownProjectIds = useMemo(() => {
     const activeProjects = activeProjectsQuery.data;
     const archivedProjects = archivedProjectsQuery.data;
@@ -452,10 +505,6 @@ export function RecentChatList() {
     archivedProjectsQuery.data,
     archivedProjectsQuery.isError,
   ]);
-  const threadListModel = useMemo(
-    () => buildThreadListModel(infiniteThreads?.pages ?? []),
-    [infiniteThreads?.pages],
-  );
   const { threads } = threadListModel;
   const displayedThreads = useMemo(() => {
     if (
@@ -536,51 +585,52 @@ export function RecentChatList() {
           : t.sidebar.demoChats}
       </SidebarGroupLabel>
       <SidebarGroupContent className="group-data-[collapsible=icon]:pointer-events-none group-data-[collapsible=icon]:-mt-8 group-data-[collapsible=icon]:opacity-0">
-        <SidebarMenu>
-          {/* Keep pagination at the old list boundary when this switches to virtual rows. */}
-          <div
-            className="flex w-full flex-col gap-1"
-            style={{ overflowAnchor: "none" }}
-          >
-            <VirtualThreadList
-              estimateSize={36}
-              gap={4}
-              items={branchList.threads}
-              scrollParentSelector='[data-sidebar="content"]'
-              renderItem={(thread) => (
-                <ThreadSidebarItem
-                  key={thread.thread_id}
-                  thread={thread}
-                  isActive={pathOfThread(thread) === pathname}
-                  branchEntry={branchList.entriesById.get(thread.thread_id)}
-                  recentThreadId={threads[0]?.thread_id}
-                />
-              )}
-            />
-            {hasNextPage && threadListModel.canLoadMore && (
-              <>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="mx-2 my-1 w-[calc(100%-1rem)] justify-center text-xs"
-                  onClick={() => void fetchNextPage()}
-                  disabled={isFetchingNextPage}
-                  data-testid="recent-chat-list-load-more"
-                >
-                  {isFetchingNextPage
-                    ? t.chats.loadingMore
-                    : t.chats.loadOlderChats}
-                </Button>
-                <div
-                  ref={sentinelRef}
-                  aria-hidden="true"
-                  className="h-px w-full"
-                  data-testid="recent-chat-list-sentinel"
-                />
-              </>
+        {/* The rows are the list (role="list"); pagination sits after it
+            rather than inside a <ul>, which may only hold <li> children. */}
+        <div
+          className="flex w-full min-w-0 flex-col gap-1"
+          style={{ overflowAnchor: "none" }}
+        >
+          <VirtualThreadList
+            role="list"
+            estimateSize={52}
+            gap={4}
+            items={branchList.threads}
+            scrollParentSelector='[data-sidebar="content"]'
+            renderItem={(thread) => (
+              <ThreadSidebarItem
+                key={thread.thread_id}
+                thread={thread}
+                isActive={pathOfThread(thread) === pathname}
+                branchEntry={branchList.entriesById.get(thread.thread_id)}
+                recentThreadId={threads[0]?.thread_id}
+                projectName={projectNames.get(projectIdOfThread(thread) ?? "")}
+              />
             )}
-          </div>
-        </SidebarMenu>
+          />
+          {hasNextPage && threadListModel.canLoadMore && (
+            <>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="mx-2 my-1 w-[calc(100%-1rem)] justify-center text-xs"
+                onClick={() => void fetchNextPage()}
+                disabled={isFetchingNextPage}
+                data-testid="recent-chat-list-load-more"
+              >
+                {isFetchingNextPage
+                  ? t.chats.loadingMore
+                  : t.chats.loadOlderChats}
+              </Button>
+              <div
+                ref={sentinelRef}
+                aria-hidden="true"
+                className="h-px w-full"
+                data-testid="recent-chat-list-sentinel"
+              />
+            </>
+          )}
+        </div>
       </SidebarGroupContent>
     </SidebarGroup>
   );

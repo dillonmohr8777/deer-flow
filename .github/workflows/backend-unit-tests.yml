@@ -105,6 +105,37 @@ jobs:
         working-directory: backend
         run: uv sync --group dev --extra postgres
 
+      # The offline suite exercises real credential-free framework handoffs.
+      # Every shard needs their isolated runtimes because pytest-split assigns
+      # those integration cases across the matrix. Do not skip their assertions.
+      - name: Set up isolated worker Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24.21.0'
+          cache: npm
+          cache-dependency-path: |
+            workers/browser-teams/package-lock.json
+            workers/inngest-team/package-lock.json
+
+      - name: Install isolated Python workers from frozen locks
+        run: |
+          uv python install 3.13
+          uv sync --project workers/browser-teams/python --python 3.13 --frozen
+          uv sync --project workers/agno-team --python 3.13 --frozen
+
+      - name: Install and build isolated browser and Mastra workers
+        working-directory: workers/browser-teams
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm run build
+          npm run check
+
+      - name: Install isolated AgentKit worker
+        working-directory: workers/inngest-team
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm run check
+
       - name: Run unit tests of backend (shard ${{ matrix.shard }} of 4)
         working-directory: backend
         env:

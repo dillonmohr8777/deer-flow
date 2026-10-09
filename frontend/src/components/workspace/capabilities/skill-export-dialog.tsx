@@ -176,7 +176,7 @@ export default function SkillExportDialog({
                         {file.type === "directory" ? "/" : ""}
                       </span>
                       <span className="text-muted-foreground shrink-0 tabular-nums">
-                        {file.type === "file" ? bytes(file.size) : "—"}
+                        {file.type === "file" ? bytes(file.size) : "N/A"}
                       </span>
                     </li>
                   ))}

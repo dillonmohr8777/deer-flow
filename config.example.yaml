@@ -104,6 +104,26 @@ token_budget:
   hard_stop_threshold: 1.0      # Force stop at 100% of the budget
 
 # ============================================================================
+# Cost Router — task class to model, USD caps, price table, denylist
+# ============================================================================
+# A run picks its route with context.task_class (or default_route). An explicit
+# context.model_name wins over routing. Spend = recorded token usage x prices,
+# per UTC day and month. A model with no price is refused, never treated as free.
+# The denylist applies even when enabled is false. Read spend (admin only):
+# GET /api/cost-router/spend. Add your real prices before enabling.
+# cost_router:
+#   enabled: true
+#   default_route: drafting
+#   routes:
+#     bulk:     {model: gpt-6-luna,  daily_cap_usd: 20, monthly_cap_usd: 300}   # bulk and research
+#     drafting: {model: sonnet-5,    daily_cap_usd: 40, monthly_cap_usd: 600}
+#     review:   {model: opus-5,      daily_cap_usd: 40, monthly_cap_usd: 600}
+#   prices:            # USD per million tokens, keyed by model name or provider model id.
+#     # Left empty on purpose: an unpriced model is refused, so add real rates before enabling, e.g.
+#     # gpt-6-luna: {input_per_mtok: <rate>, output_per_mtok: <rate>}
+#   denylist: ["meta/muse-*"]   # default; Meta restricted Muse on this account
+
+# ============================================================================
 # Recursion Limits
 # ============================================================================
 # A run's recursion_limit caps the number of LangGraph super-steps (each is at
@@ -780,6 +800,9 @@ tool_groups:
   - name: bash
   - name: browser
   - name: knowledge
+  - name: team
+  - name: exec
+  - name: ads
 
 # ============================================================================
 # Tools Configuration
@@ -819,6 +842,22 @@ tools:
   # - name: list_knowledge_bases
   #   group: knowledge
   #   use: deerflow.community.ragflow.tools:list_knowledge_bases_tool
+
+  # Jevbox research library (read-only, $0 owner-session reads; never calls
+  # Jevbox search/answer). Each client may only see its listed document IDs;
+  # fleet agents stamped with a client_id can only query their own namespace.
+  # If Jevbox is down the tool returns "Jevbox library unavailable" and the task
+  # continues. See backend/docs/JEVBOX_EVIDENCE.md.
+  # - name: jevbox_evidence
+  #   group: web
+  #   use: deerflow.community.jevbox.tools:jevbox_evidence_tool
+  #   base_url: http://host.docker.internal:4310  # Docker: backend-reachable URL
+  #   origin: http://localhost:4310  # Must equal Jevbox APP_ORIGIN or sign-in returns 403
+  #   email: $JEVBOX_EMAIL
+  #   password: $JEVBOX_PASSWORD
+  #   namespaces:
+  #     example-client:
+  #       - 00000000-0000-0000-0000-000000000000  # Jevbox document ID
 
   # LightRAG knowledge retrieval (read-only). Alternative provider for the same
   # knowledge_search tool; uncomment this entry instead of the RAGFlow one —
@@ -1202,6 +1241,16 @@ tools:
   #   # spellcheck: true
   #   # api_key: $BRAVE_SEARCH_API_KEY  # Optional explicit env-var reference
 
+  # Read-only ad platform tools (Google Ads GAQL, Meta Insights). Credentials are
+  # per user, in {DEER_FLOW_HOME}/users/<user_id>/integrations/ads/credentials.json
+  # (chmod 600); see backend/packages/harness/deerflow/community/ads/AGENTS.md.
+  # - name: google_ads_report
+  #   group: ads
+  #   use: deerflow.community.ads.google:google_ads_report_tool
+  # - name: meta_ads_insights
+  #   group: ads
+  #   use: deerflow.community.ads.meta:meta_ads_insights_tool
+
   # File operations tools
   - name: ls
     group: file:read
@@ -1235,6 +1284,48 @@ tools:
   - name: bash
     group: bash
     use: deerflow.sandbox.tools:bash_tool
+
+  # Momentum staff Team Board (e.g. #fleet): read/post to a channel that
+  # already exists. Scoped to the run's organization; posts are signed
+  # with the agent's name. Give this group only to agents that should talk
+  # to the rest of the team — it carries repo/public information only,
+  # never client data, so keep it off any agent whose model lane must not
+  # see private data before also seeing a private channel.
+  - name: team_read_messages
+    group: team
+    use: deerflow.tools.team_board_tools:team_read_messages
+
+  - name: team_post_message
+    group: team
+    use: deerflow.tools.team_board_tools:team_post_message
+
+  # Momentum agent seats (EXECUTIVE.md titles): claim, ratify, and owner
+  # veto. Announces every mutation to #exec. Give this group only to
+  # agents that are part of the titles-and-hiring process -- it is
+  # Momentum-staff-only just like the team group.
+  - name: exec_claim_seat
+    group: exec
+    use: deerflow.tools.exec_seat_tools:exec_claim_seat
+
+  - name: exec_ratify_seat
+    group: exec
+    use: deerflow.tools.exec_seat_tools:exec_ratify_seat
+
+  - name: exec_reopen_seat
+    group: exec
+    use: deerflow.tools.exec_seat_tools:exec_reopen_seat
+
+  # EXECUTIVE.md Hiring: any titled employee (or one of its own active
+  # hires) may hire and retire its own reports, no approval needed. Give
+  # this group only to agents that are part of the titles-and-hiring
+  # process -- it is Momentum-staff-only, like the team and exec groups.
+  - name: hire_report
+    group: hire
+    use: deerflow.tools.hire_tools:hire_report
+
+  - name: retire_report
+    group: hire
+    use: deerflow.tools.hire_tools:retire_report
 
 # ============================================================================
 # Tool Search Configuration (Deferred Tool Loading)
@@ -2271,6 +2362,24 @@ agents_api:
   enabled: false
 
 # ============================================================================
+# Private Workspace
+# ============================================================================
+# true only on the owner's private instance: it turns on the Desk home
+# (/workspace/desk) and the PAT-callable fleet/agents/scheduled-task creation
+# routes (backend/app/gateway/auth/pat.py). Every client-facing MomoBot
+# leaves this false.
+private_workspace:
+  enabled: false
+
+# Momentum-internal surfaces: Team channels (/workspace/team) and the AI
+# Academy (/workspace/academy). Shown only to owners, admins and members of
+# the workspaces listed by slug here -- the agency's own workspace. Never list
+# a client workspace; client workspaces on the same instance get 404.
+momentum_internal:
+  enabled: false
+  organization_slugs: []
+
+# ============================================================================
 # Skill Self-Evolution Configuration
 # ============================================================================
 # Allow the agent to autonomously create and improve skills in skills/custom/.
@@ -2731,6 +2840,10 @@ run_ownership:
 #     bot_token: $SLACK_BOT_TOKEN     # xoxb-...
 #     app_token: $SLACK_APP_TOKEN     # xapp-... (Socket Mode)
 #     allowed_users: []               # empty = allow all; can also be a single Slack user ID string, e.g. U123456, but list form is recommended
+#     approvals_dm:                   # DM new approvals-inbox items with Approve / Edit / Skip buttons (needs im:write + Interactivity)
+#       enabled: false
+#       user_ids: []                  # Slack user IDs who receive the DM and may press the buttons
+#       base_url: http://127.0.0.1:2026  # Command Center URL used for the item link
 #
 #   telegram:
 #     enabled: false
@@ -2907,6 +3020,28 @@ run_ownership:
 #           skills: {allow: []}      # no skills visible in the listing
 authorization:
   enabled: false
+  # Shared-workspace invitations (create, inspect, accept) answer 403 while
+  # true; existing memberships are unaffected. Default: true.
+  # invitations_frozen: true
+
+# ============================================================================
+# M4 Entitlement Gate (docs/momo-week/m4-entitlement.md)
+# ============================================================================
+# Server-side evaluator for paid mutations (runs.create, runs.cancel,
+# projects.max, ...). Off by default: every active member of an organization
+# can do everything, matching today's behavior. Do not flip to true until
+# every organization has a backfilled organization_entitlements row for
+# each gate key (design §4) -- a missing row denies, it does not mean
+# "unlimited".
+entitlements:
+  enabled: false
+  # fail_closed: true
+  # grace_period_seconds: 300
+  # default_limits:
+  #   projects_max: null
+  #   workflows_max: null
+  #   brands_max: null
+  #   repair_minutes_monthly: null
 
 # ============================================================================
 # Circuit Breaker Configuration
@@ -3047,6 +3182,40 @@ authorization:
 #         # Security features (enabled by default):
 #         pkce_enabled: true               # PKCE (S256) for authorization code flow
 #         nonce_enabled: true              # Nonce validation in ID tokens
+#
+#       # Sign in with Google (Google Workspace or plain Google accounts).
+#       # Google's discovery endpoint is issuer + /.well-known/openid-configuration,
+#       # so the plain OIDC issuer below is all that is needed; there are no
+#       # endpoint overrides to set. See backend/docs/AUTH_DESIGN.md for the
+#       # Google Cloud console steps that produce the client id/secret.
+#       google:
+#         display_name: Google
+#         issuer: https://accounts.google.com
+#         client_id: $GOOGLE_OAUTH_CLIENT_ID
+#         client_secret: $GOOGLE_OAUTH_CLIENT_SECRET
+#         # redirect_uri: https://deerflow.example.com/api/v1/auth/callback/google
+#         scopes:
+#           - openid
+#           - email
+#           - profile
+#         token_endpoint_auth_method: client_secret_post
+#
+#         auto_create_users: true
+#         # Only create an account on first Google sign-in when that verified
+#         # email holds a pending workspace invitation (not used, not expired,
+#         # sent by a still-active owner/admin). Anyone else gets the same
+#         # refusal as auto_create_users: false. Accounts it created keep
+#         # signing in after their invitation is used. Default: false.
+#         auto_create_requires_invitation: true
+#         require_verified_email: true
+#         # Restrict sign-in to a Google Workspace domain (leave unset to allow
+#         # any Google account, including personal gmail.com addresses):
+#         # allowed_email_domains:
+#         #   - example.com
+#         admin_emails: []
+#
+#         pkce_enabled: true
+#         nonce_enabled: true
 
 # --- Plugins ----------------------------------------------------------------
 # Extension packages, loaded once at startup in the order listed here. Each

@@ -3,8 +3,10 @@ import { useQuery } from "@tanstack/react-query";
 import {
   fetchBrowserControlEnabled,
   fetchConversationReferencesCapability,
+  fetchDeskEnabled,
   fetchKnowledgeBaseFeature,
   fetchMcpTasksEnabled,
+  fetchMomentumInternalEnabled,
   fetchSubagentBatchesCapability,
 } from "./api";
 
@@ -81,4 +83,27 @@ export function useKnowledgeBaseEnabled() {
     scopeSelectionEnabled: data?.scopeSelectionEnabled ?? false,
     isLoading: isPending,
   };
+}
+
+export function useDeskEnabled() {
+  const { data, isPending } = useQuery({
+    queryKey: ["features", "desk"],
+    queryFn: fetchDeskEnabled,
+    staleTime: 0,
+    refetchOnMount: true,
+    retry: false,
+  });
+  return { enabled: data ?? false, isLoading: isPending };
+}
+
+/** Team channels and AI Academy: staff in the agency's own workspace only. */
+export function useMomentumInternalEnabled() {
+  const { data, isPending } = useQuery({
+    queryKey: ["features", "momentum_internal"],
+    queryFn: fetchMomentumInternalEnabled,
+    staleTime: 0,
+    refetchOnMount: true,
+    retry: false,
+  });
+  return { enabled: data ?? false, isLoading: isPending };
 }

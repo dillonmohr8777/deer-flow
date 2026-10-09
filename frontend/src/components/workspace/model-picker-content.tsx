@@ -40,13 +40,37 @@ function orderedModels(projection: ModelChoiceProjection): readonly Model[] {
   return [...projection.favorites, ...projection.others];
 }
 
-function ModelDetails({ model }: { model: Model }) {
+/**
+ * Display names can repeat (two routes to one model). Rows stay distinct for
+ * screen readers and sight with "1 of 2", never with the routing slug. Counted
+ * in API order so favoriting a row does not renumber it.
+ */
+function repeatedNameOrdinals(models: readonly Model[]) {
+  const totals = new Map<string, number>();
+  for (const model of models) {
+    totals.set(model.display_name, (totals.get(model.display_name) ?? 0) + 1);
+  }
+  const seen = new Map<string, number>();
+  const ordinals = new Map<string, { position: number; total: number }>();
+  for (const model of models) {
+    const total = totals.get(model.display_name) ?? 1;
+    if (total < 2) continue;
+    const position = (seen.get(model.display_name) ?? 0) + 1;
+    seen.set(model.display_name, position);
+    ordinals.set(model.name, { position, total });
+  }
+  return ordinals;
+}
+
+function ModelDetails({ model, ordinal }: { model: Model; ordinal?: string }) {
   return (
     <span className="flex min-w-0 flex-1 flex-col text-left">
       <span className="truncate text-xs">{model.display_name}</span>
-      <span className="text-muted-foreground truncate text-[10px] leading-4">
-        {model.model}
-      </span>
+      {ordinal ? (
+        <span className="text-muted-foreground truncate text-[11px] leading-4">
+          {ordinal}
+        </span>
+      ) : null}
     </span>
   );
 }
@@ -71,6 +95,7 @@ export function ModelPickerContent({
     [favorites.names, models],
   );
   const visibleModels = useMemo(() => orderedModels(projection), [projection]);
+  const ordinals = useMemo(() => repeatedNameOrdinals(models), [models]);
 
   const focusInitialModel = useCallback(() => {
     const preferredModel =
@@ -173,6 +198,13 @@ export function ModelPickerContent({
           {groupModels.map((model) => {
             const isFavorite = favorites.names.includes(model.name);
             const isCurrent = model.name === selectedModelName;
+            const repeat = ordinals.get(model.name);
+            const ordinal = repeat
+              ? t.modelPicker.repeatedName(repeat.position, repeat.total)
+              : undefined;
+            const label = ordinal
+              ? `${model.display_name}, ${ordinal}`
+              : model.display_name;
             return (
               <li
                 key={model.name}
@@ -188,7 +220,7 @@ export function ModelPickerContent({
                   }}
                   type="button"
                   className="focus-visible:ring-ring flex min-w-0 flex-1 items-center gap-2 rounded-l-sm px-2 py-1.5 outline-none focus-visible:ring-2"
-                  aria-label={`${model.display_name} (${model.name})`}
+                  aria-label={label}
                   aria-current={isCurrent ? "true" : undefined}
                   data-model-picker-option="true"
                   data-current-model={isCurrent ? "true" : undefined}
@@ -201,7 +233,7 @@ export function ModelPickerContent({
                   onClick={() => onModelSelect(model.name)}
                   onKeyDown={(event) => handleRowKeyDown(event, model.name)}
                 >
-                  <ModelDetails model={model} />
+                  <ModelDetails model={model} ordinal={ordinal} />
                   {isCurrent ? (
                     <CheckIcon aria-hidden="true" className="size-4 shrink-0" />
                   ) : null}
@@ -222,10 +254,7 @@ export function ModelPickerContent({
                       "size-8 shrink-0 rounded-l-none",
                       isFavorite && "text-amber-500",
                     )}
-                    aria-label={t.modelPicker.favoriteModel(
-                      model.display_name,
-                      model.name,
-                    )}
+                    aria-label={t.modelPicker.favoriteModel(label)}
                     aria-pressed={isFavorite}
                     disabled={isLoading || !favorites.canEdit}
                     onFocus={() => {
@@ -251,6 +280,9 @@ export function ModelPickerContent({
     );
   };
 
+  // max-h carries a fallback for the frame before Radix measures the
+  // available height: without it the list is unbounded when focus lands on
+  // the current model, so nothing scrolls it into view once bounded.
   return (
     <PopoverPrimitive.Portal>
       <PopoverPrimitive.Content
@@ -260,7 +292,7 @@ export function ModelPickerContent({
         align="end"
         sideOffset={8}
         collisionPadding={8}
-        className="bg-popover text-popover-foreground data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 z-50 flex max-h-[min(20rem,var(--radix-popover-content-available-height))] w-72 max-w-[calc(100vw-1rem)] origin-(--radix-popover-content-transform-origin) flex-col overflow-hidden rounded-md border shadow-md outline-none"
+        className="bg-popover text-popover-foreground data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 z-50 flex max-h-[min(20rem,var(--radix-popover-content-available-height,20rem))] w-72 max-w-[calc(100vw-1rem)] origin-(--radix-popover-content-transform-origin) flex-col overflow-hidden rounded-md border shadow-md outline-none"
         onOpenAutoFocus={(event) => {
           event.preventDefault();
           focusInitialModel();

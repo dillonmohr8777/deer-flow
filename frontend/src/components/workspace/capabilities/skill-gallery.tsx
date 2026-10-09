@@ -19,16 +19,15 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import {
-  Empty,
-  EmptyContent,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "@/components/ui/empty";
 import { Switch } from "@/components/ui/switch";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  EmptyState,
+  ErrorState,
+  FilterGroup,
+  pageStyles,
+  StatusTag,
+  WorkingState,
+} from "@/components/workspace/page-body";
 import { useAuth } from "@/core/auth/AuthProvider";
 import { useI18n } from "@/core/i18n/hooks";
 import {
@@ -43,9 +42,13 @@ import {
 } from "@/core/skills/hooks";
 import type { Skill } from "@/core/skills/type";
 import { env } from "@/env";
+import { cn } from "@/lib/utils";
 
-import { CapabilityCard, CapabilityIcon } from "./capability-card";
+import { CapabilityIcon } from "./capability-card";
+import { PluginRow } from "./plugin-directory";
 import { presentSkill } from "./skill-presentation";
+
+type SkillFilter = "public" | "community" | "custom" | "all";
 
 const SkillExportDialog = dynamic(() => import("./skill-export-dialog"), {
   ssr: false,
@@ -53,21 +56,27 @@ const SkillExportDialog = dynamic(() => import("./skill-export-dialog"), {
 
 export function SkillGallery({ query = "" }: { query?: string } = {}) {
   const { t } = useI18n();
-  const { skills, isLoading, error } = useSkills();
+  const { skills, isLoading, error, refetch } = useSkills();
   const adminRequired =
     error instanceof SkillRequestError && error.isAdminRequired;
   return (
     <div>
       {isLoading ? (
-        <div className="text-muted-foreground text-sm">{t.common.loading}</div>
+        <WorkingState label={t.common.loading} />
       ) : adminRequired ? (
-        <div className="text-muted-foreground text-sm">
+        <EmptyState momo="verifier">
           {t.settings.skills.adminRequired}
-        </div>
+        </EmptyState>
       ) : error ? (
-        <div>
-          {t.common.error} {error.message}
-        </div>
+        <ErrorState
+          message={t.capabilities.skillsLoadFailed}
+          detail={error.message}
+          action={
+            <Button size="sm" variant="outline" onClick={() => void refetch()}>
+              {t.common.tryAgain}
+            </Button>
+          }
+        />
       ) : (
         <SkillList skills={skills} query={query} />
       )}
@@ -89,7 +98,7 @@ function SkillList({ skills, query }: { skills: Skill[]; query: string }) {
   const { user } = useAuth();
   const isAdmin = user?.system_role === "admin";
   const [exportName, setExportName] = useState<string | null>(null);
-  const [filter, setFilter] = useState<string>("public");
+  const [filter, setFilter] = useState<SkillFilter>("public");
   const { mutate: enableSkill, isPending: isEnabling } = useEnableSkill();
   const [selectedSkill, setSelectedSkill] = useState<Skill | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -183,27 +192,25 @@ function SkillList({ skills, query }: { skills: Skill[]; query: string }) {
         </p>
       </div>
       <header className="mt-2 flex flex-wrap items-center justify-between gap-3">
-        <Tabs value={filter} onValueChange={setFilter}>
-          <TabsList className="bg-muted/50 h-9 rounded-lg">
-            <TabsTrigger value="public" className="rounded-md px-3 text-xs">
-              {t.capabilities.builtin}
-            </TabsTrigger>
-            <TabsTrigger value="community" className="rounded-md px-3 text-xs">
-              {t.capabilities.community}
-            </TabsTrigger>
-            <TabsTrigger value="custom" className="rounded-md px-3 text-xs">
-              {t.capabilities.custom}
-            </TabsTrigger>
-            <TabsTrigger value="all" className="rounded-md px-3 text-xs">
-              {t.capabilities.allSkills}
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
+        <FilterGroup
+          label={t.capabilities.availableSkills}
+          value={filter}
+          onChange={setFilter}
+          options={[
+            { value: "public", label: t.capabilities.builtin },
+            { value: "community", label: t.capabilities.community },
+            { value: "custom", label: t.capabilities.custom },
+            { value: "all", label: t.capabilities.allSkills },
+          ]}
+        />
         <div className="flex gap-2">
+          {/* The visible button opens this; it stays out of the Tab order. */}
           <input
             ref={fileInputRef}
             type="file"
             accept=".skill"
+            aria-label={t.settings.skills.installFromFile}
+            tabIndex={-1}
             disabled={isArchiveUploadDisabled}
             className="sr-only"
             onChange={handleSkillArchive}
@@ -233,93 +240,96 @@ function SkillList({ skills, query }: { skills: Skill[]; query: string }) {
       </header>
       {query.trim() &&
       (filter === "community" || filteredSkills.length === 0) ? (
-        <div className="text-muted-foreground py-20 text-center text-sm">
-          {t.capabilities.noResults}
+        <div role="status">
+          <EmptyState momo="research" title={t.capabilities.noResults}>
+            {t.capabilities.noResultsHint}
+          </EmptyState>
         </div>
       ) : filter === "community" ? (
-        <Empty className="mt-5 rounded-2xl border border-dashed py-20">
-          <EmptyHeader>
-            <EmptyMedia variant="icon">
-              <SparklesIcon />
-            </EmptyMedia>
-            <EmptyTitle>{t.capabilities.communityTitle}</EmptyTitle>
-            <EmptyDescription>
-              {t.capabilities.communityDescription}
-            </EmptyDescription>
-          </EmptyHeader>
-          {isAdmin && (
-            <EmptyContent>
+        <EmptyState
+          momo="builder"
+          title={t.capabilities.communityTitle}
+          action={
+            isAdmin ? (
               <Button
                 variant="outline"
+                size="sm"
                 disabled={isArchiveUploadDisabled}
                 onClick={() => fileInputRef.current?.click()}
               >
                 <UploadIcon />
                 {t.settings.skills.installFromFile}
               </Button>
-            </EmptyContent>
-          )}
-        </Empty>
+            ) : undefined
+          }
+        >
+          {t.capabilities.communityDescription}
+        </EmptyState>
       ) : filteredSkills.length === 0 ? (
-        <EmptySkill onCreateSkill={handleCreateSkill} />
+        <EmptyState
+          momo="builder"
+          title={t.settings.skills.emptyTitle}
+          action={
+            <Button size="sm" onClick={handleCreateSkill}>
+              {t.settings.skills.emptyButton}
+            </Button>
+          }
+        >
+          {t.settings.skills.emptyDescription}
+        </EmptyState>
       ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <div
+          className={cn(
+            "grid grid-cols-1 gap-x-10 lg:grid-cols-2",
+            pageStyles.rows,
+          )}
+        >
           {filteredSkills.map((skill) => {
             const presentation = presentSkill(skill, locale);
             return (
-              <CapabilityCard
-                key={skill.name}
-                name={presentation.title}
-                description={presentation.description}
-                label={sourceLabel(skill)}
-                icon={
-                  <CapabilityIcon
-                    name={skill.name}
-                    skill
-                    icon={presentation.icon}
-                  />
-                }
-                status={
-                  <>
-                    <span
-                      className={
-                        skill.enabled
-                          ? "size-1.5 rounded-full bg-emerald-500"
-                          : "bg-muted-foreground/40 size-1.5 rounded-full"
-                      }
+              <div key={skill.name} className="min-w-0 border-b">
+                <PluginRow
+                  name={presentation.title}
+                  description={presentation.description}
+                  label={
+                    <>
+                      <StatusTag tone={skill.enabled ? "ok" : "idle"}>
+                        {skill.enabled
+                          ? t.capabilities.enabled
+                          : t.capabilities.disabled}
+                      </StatusTag>
+                      <span className={pageStyles.chip}>
+                        {sourceLabel(skill)}
+                      </span>
+                    </>
+                  }
+                  icon={
+                    <CapabilityIcon
+                      name={skill.name}
+                      skill
+                      icon={presentation.icon}
                     />
-                    {skill.enabled
-                      ? t.capabilities.enabled
-                      : t.capabilities.disabled}
-                  </>
-                }
-                onDetails={() => setSelectedSkill(skill)}
-                detailsLabel={`${t.capabilities.details} ${presentation.title}`}
-              >
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 text-xs"
-                  onClick={() => setSelectedSkill(skill)}
+                  }
+                  onDetails={() => setSelectedSkill(skill)}
+                  detailsLabel={`${t.capabilities.details} ${presentation.title}`}
                 >
-                  {t.capabilities.details}
-                </Button>
-                <Switch
-                  aria-label={`${t.capabilities.skillEnabled} ${skill.name}`}
-                  checked={skill.enabled}
-                  disabled={
-                    env.NEXT_PUBLIC_STATIC_WEBSITE_ONLY === "true" ||
-                    !isAdmin ||
-                    isEnabling
-                  }
-                  onCheckedChange={(enabled) =>
-                    enableSkill(
-                      { skillName: skill.name, enabled },
-                      { onError: (error) => toast.error(error.message) },
-                    )
-                  }
-                />
-              </CapabilityCard>
+                  <Switch
+                    aria-label={`${t.capabilities.skillEnabled} ${skill.name}`}
+                    checked={skill.enabled}
+                    disabled={
+                      env.NEXT_PUBLIC_STATIC_WEBSITE_ONLY === "true" ||
+                      !isAdmin ||
+                      isEnabling
+                    }
+                    onCheckedChange={(enabled) =>
+                      enableSkill(
+                        { skillName: skill.name, enabled },
+                        { onError: (error) => toast.error(error.message) },
+                      )
+                    }
+                  />
+                </PluginRow>
+              </div>
             );
           })}
         </div>
@@ -373,25 +383,5 @@ function SkillList({ skills, query }: { skills: Skill[]; query: string }) {
         </DialogContent>
       </Dialog>
     </div>
-  );
-}
-
-function EmptySkill({ onCreateSkill }: { onCreateSkill: () => void }) {
-  const { t } = useI18n();
-  return (
-    <Empty>
-      <EmptyHeader>
-        <EmptyMedia variant="icon">
-          <SparklesIcon />
-        </EmptyMedia>
-        <EmptyTitle>{t.settings.skills.emptyTitle}</EmptyTitle>
-        <EmptyDescription>
-          {t.settings.skills.emptyDescription}
-        </EmptyDescription>
-      </EmptyHeader>
-      <EmptyContent>
-        <Button onClick={onCreateSkill}>{t.settings.skills.emptyButton}</Button>
-      </EmptyContent>
-    </Empty>
   );
 }

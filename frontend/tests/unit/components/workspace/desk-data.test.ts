@@ -1,0 +1,242 @@
+import { describe, expect, it } from "@rstest/core";
+
+import {
+  groupByDepartment,
+  hasUrgentAfterHoursApproval,
+  isAfterHoursET,
+  receiptPath,
+  recentOutputs,
+  summarizeTasks,
+  tasksOfBindings,
+  tasksOfTemplate,
+  threadsWaitingApproval,
+} from "@/components/workspace/desk/desk-data";
+import type { BoardThread } from "@/core/board/types";
+import type { FleetAgentBinding, FleetTemplate } from "@/core/fleet/types";
+import type { ScheduledTask } from "@/core/scheduled-tasks/types";
+
+const NOW = Date.parse("2026-09-24T16:00:00Z");
+
+function task(patch: Partial<ScheduledTask>): ScheduledTask {
+  return {
+    id: "task-1",
+    thread_id: null,
+    context_mode: "fresh_thread_per_run",
+    assistant_id: "chief-of-staff",
+    title: "Chief of Staff",
+    prompt: "Brief",
+    schedule_type: "cron",
+    schedule_spec: { cron: "30 8 * * 1-5" },
+    timezone: "America/New_York",
+    status: "enabled",
+    next_run_at: null,
+    last_run_at: null,
+    last_run_id: null,
+    last_thread_id: null,
+    last_error: null,
+    run_count: 0,
+    created_at: "2026-09-20T00:00:00Z",
+    updated_at: "2026-09-20T00:00:00Z",
+    ...patch,
+  };
+}
+
+function template(id: string): FleetTemplate {
+  return {
+    id,
+    version: "1",
+    name: id,
+    description: "",
+    model: "openrouter-opus-5.5",
+    skills: [],
+    tool_groups: [],
+    mcp_plugins: [],
+    schedule: { cron: "0 9 * * 1", timezone: "America/New_York" },
+    acceptance_criteria: [],
+  };
+}
+
+describe("desk data", () => {
+  it("summarizes a fresh instance as never run and not scheduled", () => {
+    expect(summarizeTasks([])).toEqual({
+      next: null,
+      paused: false,
+      last: null,
+      lastStatus: "none",
+    });
+  });
+
+  it("takes the earliest live next run and the latest run's outcome", () => {
+    const soon = task({ id: "a", next_run_at: "2026-09-25T12:30:00Z" });
+    const paused = task({
+      id: "b",
+      status: "paused",
+      next_run_at: "2026-09-24T17:00:00Z",
+    });
+    const failedLast = task({
+      id: "c",
+      next_run_at: "2026-09-28T12:30:00Z",
+      last_run_at: "2026-09-24T12:30:00Z",
+      last_error: "provider timeout",
+    });
+    const older = task({ id: "d", last_run_at: "2026-09-23T12:30:00Z" });
+    const summary = summarizeTasks([soon, paused, failedLast, older]);
+    expect(summary.next?.id).toBe("a");
+    expect(summary.last?.id).toBe("c");
+    expect(summary.lastStatus).toBe("failed");
+    expect(summarizeTasks([paused]).paused).toBe(true);
+    expect(summarizeTasks([task({ status: "running" })]).lastStatus).toBe(
+      "running",
+    );
+  });
+
+  it("lists only the last 24 hours of finished work, newest first", () => {
+    const fresh = task({
+      id: "fresh",
+      last_run_at: "2026-09-24T12:30:00Z",
+      last_thread_id: "t1",
+    });
+    const newer = task({
+      id: "newer",
+      last_run_at: "2026-09-24T15:00:00Z",
+      last_thread_id: "t2",
+    });
+    const stale = task({
+      id: "stale",
+      last_run_at: "2026-09-23T12:00:00Z",
+      last_thread_id: "t3",
+    });
+    const running = task({
+      id: "running",
+      status: "running",
+      last_run_at: "2026-09-24T15:30:00Z",
+      last_thread_id: "t4",
+    });
+    expect(
+      recentOutputs([fresh, stale, running, newer], NOW).map((t) => t.id),
+    ).toEqual(["newer", "fresh"]);
+  });
+
+  it("matches owner agents and client-stamped copies to their template", () => {
+    const tasks = [
+      task({ id: "owner", assistant_id: "client-reporter" }),
+      task({ id: "stamped", assistant_id: "acme-client-reporter" }),
+      task({ id: "other", assistant_id: "revenue-ops" }),
+    ];
+    expect(tasksOfTemplate("client-reporter", tasks).map((t) => t.id)).toEqual([
+      "owner",
+      "stamped",
+    ]);
+    const binding = { scheduled_task_id: "other" } as FleetAgentBinding;
+    expect(tasksOfBindings([binding], tasks).map((t) => t.id)).toEqual([
+      "other",
+    ]);
+  });
+
+  it("groups the roster by department and keeps unknown templates", () => {
+    const groups = groupByDepartment([
+      template("brain-curator"),
+      template("chief-of-staff"),
+      template("custom-thing"),
+    ]);
+    expect(groups.map((g) => g.department)).toEqual([
+      "Command",
+      "Knowledge",
+      "Other",
+    ]);
+  });
+
+  it("links a receipt to the agent's thread, or nowhere before a run", () => {
+    expect(receiptPath(task({}))).toBeNull();
+    expect(receiptPath(task({ last_thread_id: "thread-9" }))).toBe(
+      "/workspace/agents/chief-of-staff/chats/thread-9",
+    );
+    expect(
+      receiptPath(task({ assistant_id: "lead_agent", last_thread_id: "t" })),
+    ).toBe("/workspace/chats/t");
+  });
+});
+
+function boardThread(patch: Partial<BoardThread>): BoardThread {
+  return {
+    id: "t1",
+    client_id: "acme",
+    kind: "ticket",
+    status: "drafted",
+    subject: "Site is down",
+    urgency: null,
+    summary: null,
+    created_by_user_id: "client-1",
+    created_at: "2026-09-20T00:00:00Z",
+    updated_at: "2026-09-20T00:00:00Z",
+    ...patch,
+  };
+}
+
+describe("owner alerts (e4)", () => {
+  it("flags 2am and 11pm ET as after hours, and noon and 9am ET as within business hours", () => {
+    // 2026-09-24 is EDT (UTC-4): 06:00Z = 02:00 ET, 16:00Z = 12:00 ET.
+    expect(isAfterHoursET(new Date("2026-09-24T06:00:00Z"))).toBe(true);
+    expect(isAfterHoursET(new Date("2026-09-25T03:00:00Z"))).toBe(true); // 23:00 ET
+    expect(isAfterHoursET(new Date("2026-09-24T16:00:00Z"))).toBe(false);
+    expect(isAfterHoursET(new Date("2026-09-24T13:00:00Z"))).toBe(false); // 09:00 ET
+  });
+
+  it("treats 8am ET as business hours and 8pm ET as already after hours", () => {
+    expect(isAfterHoursET(new Date("2026-09-24T12:00:00Z"))).toBe(false); // 08:00 ET
+    expect(isAfterHoursET(new Date("2026-09-24T11:59:00Z"))).toBe(true); // 07:59 ET
+    expect(isAfterHoursET(new Date("2026-09-25T00:00:00Z"))).toBe(true); // 20:00 ET
+    expect(isAfterHoursET(new Date("2026-09-24T23:59:00Z"))).toBe(false); // 19:59 ET
+  });
+
+  it("also computes correctly in EST (winter, UTC-5), not just EDT", () => {
+    // 2026-01-15 is EST (UTC-5): 07:00Z = 02:00 ET, 17:00Z = 12:00 ET.
+    expect(isAfterHoursET(new Date("2026-01-15T07:00:00Z"))).toBe(true); // 02:00 ET
+    expect(isAfterHoursET(new Date("2026-01-15T17:00:00Z"))).toBe(false); // 12:00 ET
+    expect(isAfterHoursET(new Date("2026-01-15T13:00:00Z"))).toBe(false); // 08:00 ET
+    expect(isAfterHoursET(new Date("2026-01-16T01:00:00Z"))).toBe(true); // 20:00 ET
+  });
+
+  it("only counts drafted threads as waiting on the owner's approval", () => {
+    const threads = [
+      boardThread({ id: "a", status: "drafted" }),
+      boardThread({ id: "b", status: "new" }),
+      boardThread({ id: "c", status: "approved" }),
+      boardThread({ id: "d", status: "drafted" }),
+    ];
+    expect(threadsWaitingApproval(threads).map((t) => t.id)).toEqual([
+      "a",
+      "d",
+    ]);
+  });
+
+  it("flags an urgent waiting thread after hours, never during business hours", () => {
+    const urgentWaiting = [boardThread({ urgency: "urgent" })];
+    expect(
+      hasUrgentAfterHoursApproval(
+        urgentWaiting,
+        new Date("2026-09-24T06:00:00Z"), // 02:00 ET
+      ),
+    ).toBe(true);
+    expect(
+      hasUrgentAfterHoursApproval(
+        urgentWaiting,
+        new Date("2026-09-24T16:00:00Z"), // 12:00 ET
+      ),
+    ).toBe(false);
+  });
+
+  it("never flags after hours without an urgent thread actually waiting", () => {
+    const now = new Date("2026-09-24T06:00:00Z"); // 02:00 ET, after hours
+    expect(
+      hasUrgentAfterHoursApproval([boardThread({ urgency: "high" })], now),
+    ).toBe(false);
+    expect(
+      hasUrgentAfterHoursApproval(
+        [boardThread({ urgency: "urgent", status: "new" })],
+        now,
+      ),
+    ).toBe(false);
+    expect(hasUrgentAfterHoursApproval([], now)).toBe(false);
+  });
+});

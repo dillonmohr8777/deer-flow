@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import { isStaticWebsiteOnly } from "../static-mode";
 
 import { AUTH_DISABLED_USER, isAuthDisabledMode } from "./auth-disabled-user";
-import { AUTH_REQUEST_TIMEOUT_MS } from "./constants";
+import { ACCESS_TOKEN_COOKIE_NAME, AUTH_REQUEST_TIMEOUT_MS } from "./constants";
 import { getGatewayConfig } from "./gateway-config";
 import { STATIC_WEBSITE_USER } from "./static-user";
 import { type AuthResult, userSchema } from "./types";
@@ -28,7 +28,7 @@ export async function getServerSideUser(): Promise<AuthResult> {
   }
 
   const cookieStore = await cookies();
-  const sessionCookie = cookieStore.get("access_token");
+  const sessionCookie = cookieStore.get(ACCESS_TOKEN_COOKIE_NAME);
 
   let internalGatewayUrl: string;
   try {
@@ -71,7 +71,7 @@ export async function getServerSideUser(): Promise<AuthResult> {
 
   try {
     const res = await fetch(`${internalGatewayUrl}/api/v1/auth/me`, {
-      headers: { Cookie: `access_token=${sessionCookie.value}` },
+      headers: { Cookie: `${ACCESS_TOKEN_COOKIE_NAME}=${sessionCookie.value}` },
       cache: "no-store",
       signal: controller.signal,
     });

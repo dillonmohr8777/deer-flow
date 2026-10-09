@@ -18,6 +18,7 @@ from starlette.responses import JSONResponse
 from starlette.types import ASGIApp
 
 from app.gateway.auth.errors import AuthErrorCode, AuthErrorResponse
+from app.gateway.auth.session_cookie import ACCESS_TOKEN_COOKIE_NAME
 from app.gateway.auth_disabled import (
     AUTH_SOURCE_AUTH_DISABLED,
     AUTH_SOURCE_INTERNAL,
@@ -27,8 +28,15 @@ from app.gateway.auth_disabled import (
     is_auth_disabled,
 )
 from app.gateway.authz import AuthContext, resolve_route_permissions
-from app.gateway.internal_auth import INTERNAL_AUTH_HEADER_NAME, get_internal_user, is_valid_internal_auth_token
+from app.gateway.internal_auth import (
+    INTERNAL_AUTH_HEADER_NAME,
+    INTERNAL_DELEGATION_ID_HEADER_NAME,
+    INTERNAL_OWNER_USER_ID_HEADER_NAME,
+    get_internal_user,
+    is_valid_internal_auth_token,
+)
 from app.gateway.request_path import get_request_route_path
+from deerflow.persistence.organizations.delegation import ActiveDelegation
 from deerflow.persistence.organizations.resolution import ActiveOrganization, storage_user_id_for_organization
 from deerflow.runtime.user_context import (
     WorkspaceStorageContext,
@@ -51,6 +59,21 @@ _WORKSPACE_AUTH_EXEMPT_PREFIXES: tuple[str, ...] = (
 # Kept for callers/tests that imported the original single-prefix seam.
 _WORKSPACE_AUTH_EXEMPT_PREFIX = "/api/v1/auth/"
 
+# Personal access tokens are themselves an organization-scoped resource (M3,
+# migration 0037_pat_organization): unlike genuine credential-management
+# routes (login, password change, MFA, invitations -- which must stay pinned
+# to the actor's identity regardless of any cookie), PAT create/list/revoke
+# is carved out of the blanket ``/api/v1/auth/`` exemption above so the
+# session's active organization (the workspace-selection cookie) selects
+# which organization a PAT is minted for, listed from, or revoked in -- the
+# same ``organization_for_write`` treatment every other M3 resource gets.
+# This is safe precisely because organization selection is fail-closed
+# (``active_organization_for_user`` re-verifies active membership before any
+# row is stamped or returned): a stale/forged cookie naming an organization
+# the caller cannot prove membership in 403s the whole request rather than
+# widening it.
+_PAT_MANAGEMENT_PREFIX = "/api/v1/auth/pats"
+
 # Paths that never require authentication.
 _PUBLIC_PATH_PREFIXES: tuple[str, ...] = (
     "/health",
@@ -69,6 +92,10 @@ _PUBLIC_PATH_PREFIXES: tuple[str, ...] = (
 _PUBLIC_EXACT_PATHS: frozenset[str] = frozenset(
     {
         "/api/v1/auth/login/local",
+        # The caller holds only the single-use challenge from login/local's
+        # mfa_required response, not a session yet -- the challenge itself
+        # (signed, short-lived, attempt-limited) is the auth boundary here.
+        "/api/v1/auth/login/mfa",
         "/api/v1/auth/register",
         "/api/v1/auth/logout",
         "/api/v1/auth/setup-status",
@@ -120,16 +147,36 @@ async def _resolve_active_private_organization_id(user_id: str) -> str | None:
         return await active_private_organization_for_user(session, user_id)
 
 
+_DELEGATION_REQUIRED_DETAIL = "Internal calls require an active organization delegation"
+
+
+async def _resolve_internal_delegation(delegation_id: str | None) -> ActiveDelegation | None:
+    """Resolve an internal caller's delegation by id; ``None`` denies."""
+    if not delegation_id:
+        return None
+    from deerflow.persistence.engine import get_session_factory
+    from deerflow.persistence.organizations.delegation import OrganizationDelegationRepository
+
+    session_factory = get_session_factory()
+    if session_factory is None:
+        raise RuntimeError("organization authorization requires a configured database")
+    return await OrganizationDelegationRepository(session_factory).resolve_delegation_by_id(delegation_id)
+
+
 def _workspace_selection_for_request(request: Request, auth_source: str) -> str | None:
     """Return a cookie-selected organization only for browser session calls.
 
-    Credential-management routes and PAT requests always stay on the actor's
-    private organization. This prevents an ambient browser cookie from
-    widening a bearer-token request or changing account/PAT semantics.
+    Credential-management routes always stay on the actor's private
+    organization, preventing an ambient browser cookie from widening a
+    bearer-token request or changing account semantics. PAT management
+    (``/api/v1/auth/pats``) is carved out of that exemption: a PAT is itself
+    an organization-scoped resource, so its active organization is selected
+    the same way every other M3 resource's is (see ``_PAT_MANAGEMENT_PREFIX``).
     """
     if auth_source != AUTH_SOURCE_SESSION:
         return None
-    if any(get_request_route_path(request).startswith(prefix) for prefix in _WORKSPACE_AUTH_EXEMPT_PREFIXES):
+    path = get_request_route_path(request)
+    if not path.startswith(_PAT_MANAGEMENT_PREFIX) and any(path.startswith(prefix) for prefix in _WORKSPACE_AUTH_EXEMPT_PREFIXES):
         return None
     selected = request.cookies.get(WORKSPACE_COOKIE_NAME)
     return selected.strip() if selected and selected.strip() else None
@@ -163,23 +210,39 @@ class AuthMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         internal_user = None
+        delegation: ActiveDelegation | None = None
         if is_valid_internal_auth_token(request.headers.get(INTERNAL_AUTH_HEADER_NAME)):
-            # Extract the channel owner user ID from the trusted header.
-            # When present, the synthetic internal user carries the actual
-            # owner identity so that get_effective_user_id() and per-user
-            # filesystem paths (custom skills, memory, thread data) resolve
-            # to the IM channel user instead of falling back to "default".
-            from app.gateway.internal_auth import INTERNAL_OWNER_USER_ID_HEADER_NAME
-
-            owner_user_id = request.headers.get(INTERNAL_OWNER_USER_ID_HEADER_NAME)
-            if owner_user_id:
-                owner_user_id = owner_user_id.strip()
-            internal_user = get_internal_user(owner_user_id=owner_user_id or None)
+            owner_user_id = (request.headers.get(INTERNAL_OWNER_USER_ID_HEADER_NAME) or "").strip() or None
+            if is_auth_disabled():
+                # Operator override of all authentication (dev/E2E only):
+                # keep the legacy synthetic identity.
+                internal_user = get_internal_user(owner_user_id=owner_user_id)
+            else:
+                # Contract section 4: an internal token (plus an owner header)
+                # is never enough by itself. The caller names its delegation;
+                # it must be active, unexpired, owned by an active member of an
+                # active organization, and name the same owner as the header.
+                delegation_id = (request.headers.get(INTERNAL_DELEGATION_ID_HEADER_NAME) or "").strip() or None
+                try:
+                    delegation = await _resolve_internal_delegation(delegation_id)
+                except Exception:
+                    logger.exception("Could not resolve the delegation of an internal request")
+                    return JSONResponse(status_code=503, content={"detail": "Organization authorization is unavailable"})
+                if delegation is None or (owner_user_id is not None and owner_user_id != delegation.owner_user_id):
+                    logger.warning(
+                        "Rejected internal call without a matching active delegation: path=%s delegation_id=%s owner_header=%s",
+                        get_request_route_path(request),
+                        "present" if delegation_id else "missing",
+                        "present" if owner_user_id else "missing",
+                    )
+                    return JSONResponse(status_code=403, content={"detail": _DELEGATION_REQUIRED_DETAIL})
+                internal_user = get_internal_user(owner_user_id=delegation.owner_user_id)
 
         auth_source = AUTH_SOURCE_SESSION
-        access_token = request.cookies.get("access_token")
+        access_token = request.cookies.get(ACCESS_TOKEN_COOKIE_NAME)
         authorization = request.headers.get("authorization")
         pat_scopes: frozenset[str] = frozenset()
+        pat_organization_id: str | None = None
 
         # Non-public path: require session cookie
         if internal_user is not None:
@@ -196,16 +259,29 @@ class AuthMiddleware(BaseHTTPMiddleware):
             # so it stays ahead of the Bearer check (a stray Authorization
             # header from a proxy must not 401 an E2E sandbox).
             from app.gateway.auth.pat import authenticate_pat, is_pat_allowed_route
+            from deerflow.config.app_config import get_app_config
 
             try:
-                user, pat_scopes = await authenticate_pat(request.app, authorization)
+                user, pat_scopes, pat_organization_id = await authenticate_pat(request.app, authorization)
             except HTTPException as exc:
                 return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
             # Default-deny route boundary (#5041 review P1-1): scopes only
             # constrain @require_permission routes, so any route outside the
             # explicit PAT policy is closed to PAT callers outright — an
             # all-scopes token must not reach undecorated mutation routes.
-            if not is_pat_allowed_route(request.method, get_request_route_path(request)):
+            # private_workspace.enabled additionally gates the fleet/agents/
+            # scheduled-task routes (PR #14 review): false on every
+            # client-facing MomoBot, so a leaked client PAT cannot create a
+            # persistent custom agent or schedule it to run unattended. Fails
+            # closed (disabled) on any config-resolution error -- a missing
+            # or malformed config.yaml must never crash authenticated
+            # requests, and "closed" here means the strictest, safest policy
+            # anyway.
+            try:
+                private_workspace_enabled = get_app_config().private_workspace.enabled
+            except Exception:
+                private_workspace_enabled = False
+            if not is_pat_allowed_route(request.method, get_request_route_path(request), private_workspace_enabled=private_workspace_enabled):
                 return JSONResponse(
                     status_code=403,
                     content={"detail": "PAT credentials are not permitted on this route"},
@@ -252,12 +328,21 @@ class AuthMiddleware(BaseHTTPMiddleware):
         # JWT-decode + DB-lookup pipeline a second time per request).
         request.state.user = user
         request.state.auth_source = auth_source
-        organization: ActiveOrganization | None = None
+        organization: ActiveOrganization | None = delegation.organization if delegation is not None else None
         if auth_source in {AUTH_SOURCE_SESSION, AUTH_SOURCE_PAT}:
+            # A PAT is pinned to the organization active when it was minted
+            # (its own stamped ``organization_id``, migration
+            # 0037_pat_organization) — never to a workspace-selection cookie,
+            # which only ever applies to interactive sessions. This is what
+            # stops a PAT minted in one organization from acting in another
+            # even if the bearer request carries a stale/forged workspace
+            # cookie, and what makes a since-revoked membership in that
+            # organization fail closed below (organization is None -> 403).
+            selected_organization_id = pat_organization_id if auth_source == AUTH_SOURCE_PAT else _workspace_selection_for_request(request, auth_source)
             try:
                 organization = await _resolve_active_workspace(
                     str(user.id),
-                    _workspace_selection_for_request(request, auth_source),
+                    selected_organization_id,
                 )
             except Exception:
                 logger.exception("Could not resolve organization authorization for authenticated request")
@@ -265,7 +350,8 @@ class AuthMiddleware(BaseHTTPMiddleware):
             if organization is None:
                 return JSONResponse(status_code=403, content={"detail": "Active organization membership required"})
         organization_id = organization.id if organization is not None else None
-        actor_user_id = str(user.id)
+        # A delegated internal call acts as its owner, never the synthetic user.
+        actor_user_id = delegation.owner_user_id if delegation is not None else str(user.id)
         storage_user_id = actor_user_id
         organization_role = None
         if organization is not None:
@@ -278,6 +364,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         request.state.organization_role = organization_role
         request.state.actor_user_id = actor_user_id
         request.state.storage_user_id = storage_user_id
+        request.state.delegation_id = delegation.id if delegation is not None else None
         permissions = await resolve_route_permissions(
             user,
             is_internal=auth_source == AUTH_SOURCE_INTERNAL,
@@ -288,6 +375,9 @@ class AuthMiddleware(BaseHTTPMiddleware):
             # them, and role changes / authorization policy stay authoritative
             # because they were resolved fresh from the owning user above.
             permissions = [permission for permission in permissions if permission in pat_scopes]
+        if delegation is not None:
+            # A delegation narrows route permissions exactly like PAT scopes.
+            permissions = [permission for permission in permissions if permission in delegation.scopes]
         request.state.auth = AuthContext(
             user=user,
             permissions=permissions,

@@ -11,6 +11,7 @@ import hashlib
 import logging
 import secrets
 from datetime import UTC, datetime, timedelta
+from typing import Literal
 from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
@@ -19,14 +20,15 @@ from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 
 from app.gateway.auth import create_access_token
-from app.gateway.auth.password import hash_password_async, verify_password_async
+from app.gateway.auth.password import hash_password_async
 from app.gateway.auth.session_cookie import ACCESS_TOKEN_COOKIE_NAME, set_session_cookie
 from app.gateway.auth_disabled import AUTH_SOURCE_AUTH_DISABLED, AUTH_SOURCE_INTERNAL, AUTH_SOURCE_PAT, AUTH_SOURCE_SESSION
-from app.gateway.csrf_middleware import is_secure_request
-from app.gateway.deps import get_current_user_from_request
+from app.gateway.csrf_middleware import CSRF_COOKIE_NAME, CSRF_HEADER_NAME, is_secure_request
+from app.gateway.deps import get_current_user_from_request, record_audit_event
 from deerflow.persistence.engine import get_session_factory
 from deerflow.persistence.organizations.identity import private_organization_id, private_organization_slug
 from deerflow.persistence.organizations.invitation import InvitationRow
+from deerflow.persistence.organizations.invitation_policy import active_shared_workspace_member, invitation_issuer_is_active
 from deerflow.persistence.organizations.model import OrganizationMemberRow, OrganizationRow
 from deerflow.persistence.user.model import UserRow
 
@@ -35,14 +37,24 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/auth/invitations", tags=["auth"])
 
 _INVITATION_TTL = timedelta(hours=48)
-_SHARED_MEMBER_ROLES = ("owner", "admin")
 
 
 class CreateInvitationRequest(BaseModel):
+    """``role`` is the membership the invitation grants. "member" is least
+    privilege (no member management, no org settings -- see the
+    SHARED_WORKSPACE_ADMIN_ROLES (invitation_policy.py) / _EDIT_ROLES
+    allowlists) and is the default; "admin" stays available when the inviter
+    explicitly chooses it. "client" is for a client's own people joining the
+    agency workspace: the same access as "member" everywhere except that it
+    is never staff, so Momentum-internal surfaces (Team, AI Academy) stay
+    hidden from them even before they are given a client assignment.
+    """
+
     model_config = ConfigDict(extra="forbid")
 
     organization_id: str = Field(min_length=1, max_length=64)
     email: EmailStr
+    role: Literal["member", "admin", "client"] = "member"
 
     @field_validator("email")
     @classmethod
@@ -57,7 +69,12 @@ class InvitationTokenRequest(BaseModel):
 
 
 class AcceptInvitationRequest(InvitationTokenRequest):
-    password: str = Field(min_length=1, max_length=1024)
+    # Only a new recipient uses this: it becomes the new account's password
+    # and still has to pass the 12-character / not-common rule, so empty
+    # never creates anything. An existing account (password or SSO) never
+    # accepts with a credential here; it signs in first and accepts with its
+    # own browser session, and any password it sends is ignored.
+    password: str = Field(default="", max_length=1024)
 
 
 class CreateInvitationResponse(BaseModel):
@@ -72,6 +89,10 @@ class InspectInvitationResponse(BaseModel):
     email: str
     workspace_name: str
     expires_at: datetime
+    # True when the invited email already has an account, which then signs
+    # in (however it signs in) and accepts with its session. Deliberately
+    # nothing about *how* it signs in: that is not the token holder's
+    # business, and the inviter can read this response too.
     requires_login: bool
 
 
@@ -106,30 +127,19 @@ def _forbidden(detail: str = "Invitation is invalid or no longer available") -> 
     return HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=detail)
 
 
-async def _active_shared_workspace_member(session, organization_id: str, user_id: str):
-    organization = await session.scalar(
-        select(OrganizationRow).where(
-            OrganizationRow.id == organization_id,
-            OrganizationRow.status == "active",
-            OrganizationRow.storage_user_id.is_not(None),
-        )
-    )
-    if organization is None:
-        return None, None
-    member = await session.scalar(
-        select(OrganizationMemberRow).where(
-            OrganizationMemberRow.organization_id == organization_id,
-            OrganizationMemberRow.user_id == user_id,
-            OrganizationMemberRow.status == "active",
-            OrganizationMemberRow.role.in_(_SHARED_MEMBER_ROLES),
-        )
-    )
-    return organization, member
+def _csrf_double_submit_matches(request: Request) -> bool:
+    """The double-submit check CSRFMiddleware skips on this CSRF-exempt route.
 
-
-async def _invitation_issuer_is_active(session, invitation: InvitationRow) -> bool:
-    _organization, member = await _active_shared_workspace_member(session, invitation.organization_id, invitation.created_by)
-    return member is not None
+    ``/accept`` has to stay exempt at the middleware so a brand-new recipient,
+    who has no session and so no ``csrf_token`` cookie yet, can accept. When
+    the handler acts on an *existing* session instead, that is a state change
+    riding ambient cookies, so it requires the pair here itself.
+    """
+    cookie_token = request.cookies.get(CSRF_COOKIE_NAME)
+    header_token = request.headers.get(CSRF_HEADER_NAME)
+    if not cookie_token or not header_token:
+        return False
+    return secrets.compare_digest(cookie_token.encode("utf-8"), header_token.encode("utf-8"))
 
 
 async def _authenticated_session_user_id(request: Request) -> str | None:
@@ -179,6 +189,17 @@ def _set_workspace_session(response: Response, request: Request, user_id: str, t
     )
 
 
+_INVITATIONS_FROZEN_DETAIL = "Workspace invitations are paused while workspace isolation is upgraded. Existing members keep their access."
+
+
+def _refuse_if_frozen() -> None:
+    """Decision 1: no new invitations and no acceptance of existing tokens."""
+    from app.gateway.authz import _get_route_authorization_config
+
+    if _get_route_authorization_config().invitations_frozen:
+        raise HTTPException(status_code=403, detail=_INVITATIONS_FROZEN_DETAIL)
+
+
 def _no_store(response: Response) -> None:
     response.headers["Cache-Control"] = "no-store"
     response.headers["Pragma"] = "no-cache"
@@ -187,6 +208,7 @@ def _no_store(response: Response) -> None:
 @router.post("", response_model=CreateInvitationResponse, status_code=status.HTTP_201_CREATED)
 async def create_invitation(body: CreateInvitationRequest, request: Request, response: Response) -> CreateInvitationResponse:
     _no_store(response)
+    _refuse_if_frozen()
     actor = await get_current_user_from_request(request)
     actor_id = str(actor.id)
     token = secrets.token_urlsafe(32)
@@ -196,7 +218,7 @@ async def create_invitation(body: CreateInvitationRequest, request: Request, res
 
     async with _session_factory()() as session:
         async with session.begin():
-            organization, member = await _active_shared_workspace_member(session, body.organization_id, actor_id)
+            organization, member = await active_shared_workspace_member(session, body.organization_id, actor_id)
             if organization is None or member is None:
                 raise HTTPException(status_code=403, detail="Only an active workspace owner or admin can invite members")
             session.add(
@@ -205,7 +227,7 @@ async def create_invitation(body: CreateInvitationRequest, request: Request, res
                     token_hash=_token_hash(token),
                     organization_id=organization.id,
                     email=str(body.email).lower(),
-                    role="admin",
+                    role=body.role,
                     created_by=actor_id,
                     expires_at=expires_at,
                     created_at=now,
@@ -213,6 +235,9 @@ async def create_invitation(body: CreateInvitationRequest, request: Request, res
                 )
             )
 
+    await record_audit_event(
+        request, action="invitation.created", outcome="success", actor_user_id=actor_id, organization_id=organization.id, target_type="invitation", target_id=invitation_id, details={"email": str(body.email).lower(), "role": body.role}
+    )
     return CreateInvitationResponse(
         id=invitation_id,
         token=token,
@@ -225,6 +250,7 @@ async def create_invitation(body: CreateInvitationRequest, request: Request, res
 @router.post("/inspect", response_model=InspectInvitationResponse)
 async def inspect_invitation(body: InvitationTokenRequest, response: Response) -> InspectInvitationResponse:
     _no_store(response)
+    _refuse_if_frozen()
     now = _now()
     async with _session_factory()() as session:
         invitation = await session.scalar(select(InvitationRow).where(InvitationRow.token_hash == _token_hash(body.token)))
@@ -237,7 +263,7 @@ async def inspect_invitation(body: InvitationTokenRequest, response: Response) -
                 OrganizationRow.storage_user_id.is_not(None),
             )
         )
-        if organization is None or not await _invitation_issuer_is_active(session, invitation):
+        if organization is None or not await invitation_issuer_is_active(session, invitation):
             raise _forbidden()
         existing = await _find_user_by_email(session, invitation.email)
 
@@ -252,16 +278,24 @@ async def inspect_invitation(body: InvitationTokenRequest, response: Response) -
 @router.post("/accept", response_model=AcceptInvitationResponse)
 async def accept_invitation(body: AcceptInvitationRequest, request: Request, response: Response) -> AcceptInvitationResponse:
     _no_store(response)
-    from app.gateway.routers.auth import _check_rate_limit, _get_client_ip, _record_login_failure, _record_login_success
+    _refuse_if_frozen()
+    from app.gateway.routers.auth import _check_rate_limit, _get_client_ip, _record_login_success
 
     client_ip = _get_client_ip(request)
     await _check_rate_limit(client_ip)
     now = _now()
     token_digest = _token_hash(body.token)
     session_factory = _session_factory()
+    # Resolve the caller's browser session before the write transaction
+    # opens: verifying a cookie reads the users table, and doing that while
+    # this request holds the invitation row's write lock would contend with
+    # it (SQLite) for nothing.
+    session_user_id = await _authenticated_session_user_id(request)
     user_id: str | None = None
     token_version = 0
     organization_id: str | None = None
+    invitation_id: str | None = None
+    granted_role: str | None = None
 
     try:
         async with session_factory() as session:
@@ -296,24 +330,34 @@ async def accept_invitation(body: AcceptInvitationRequest, request: Request, res
                 )
                 # Recheck the inviter at consumption time.  A pending token
                 # does not survive removal/demotion of its issuer.
-                if organization is None or not await _invitation_issuer_is_active(session, invitation):
+                if organization is None or not await invitation_issuer_is_active(session, invitation):
                     raise _forbidden()
                 organization_id = organization.id
+                invitation_id = invitation.id
 
                 existing = await _find_user_by_email(session, invitation.email)
                 if existing is not None:
+                    # Sign in, then accept. An existing account (password or
+                    # SSO) never accepts with a credential in this body: a
+                    # password here would be a login that hands out a session
+                    # cookie without the account's MFA step. Its own verified
+                    # browser session already went through password + MFA or
+                    # SSO, so that is the only proof taken. Raising here rolls
+                    # back the reservation above, so the token stays usable.
+                    if session_user_id != existing.id:
+                        raise HTTPException(
+                            status_code=403,
+                            detail="Sign in with the invited email's existing account before accepting this invitation",
+                        )
+                    if not _csrf_double_submit_matches(request):
+                        raise HTTPException(
+                            status_code=403,
+                            # Reopening the link re-runs /inspect, whose
+                            # response issues a fresh csrf_token cookie.
+                            detail="Security check failed (CSRF). Reopen the invite link and try again.",
+                        )
                     user_id = existing.id
                     token_version = existing.token_version
-                    if existing.oauth_provider is not None or existing.password_hash is None:
-                        session_user_id = await _authenticated_session_user_id(request)
-                        if session_user_id != existing.id:
-                            raise HTTPException(
-                                status_code=403,
-                                detail="Sign in with the invited email's existing account before accepting this invitation",
-                            )
-                    elif not await verify_password_async(body.password, existing.password_hash):
-                        await _record_login_failure(client_ip)
-                        raise _forbidden("The current account password is incorrect")
                 else:
                     _validate_new_password(body.password)
                     user_id = str(uuid4())
@@ -358,20 +402,24 @@ async def accept_invitation(body: AcceptInvitationRequest, request: Request, res
                     {"organization_id": organization_id, "user_id": user_id},
                 )
                 if workspace_member is None:
+                    granted_role = invitation.role or "member"
                     session.add(
                         OrganizationMemberRow(
                             organization_id=organization_id,
                             user_id=user_id,
-                            role=invitation.role or "admin",
+                            role=granted_role,
                             status="active",
                             created_at=now,
                             updated_at=now,
                         )
                     )
                 elif workspace_member.role != "owner":
-                    workspace_member.role = invitation.role or "admin"
+                    granted_role = invitation.role or "member"
+                    workspace_member.role = granted_role
                     workspace_member.status = "active"
                     workspace_member.updated_at = now
+                else:
+                    granted_role = "owner"
     except IntegrityError:
         logger.info("Workspace invitation acceptance conflicted with an existing account or membership")
         raise HTTPException(status_code=409, detail="This invitation could not be accepted; retry from the invitation page") from None
@@ -379,6 +427,7 @@ async def accept_invitation(body: AcceptInvitationRequest, request: Request, res
     assert user_id is not None and organization_id is not None
     _record_login_success(client_ip)
     _set_workspace_session(response, request, user_id, token_version, organization_id)
+    await record_audit_event(request, action="invitation.accepted", outcome="success", actor_user_id=user_id, organization_id=organization_id, target_type="invitation", target_id=invitation_id, details={"role": granted_role})
     return AcceptInvitationResponse(workspace_id=organization_id)
 
 
@@ -387,16 +436,19 @@ async def revoke_invitation(invitation_id: str, request: Request) -> Response:
     actor = await get_current_user_from_request(request)
     actor_id = str(actor.id)
     now = _now()
+    revoked_organization_id: str | None = None
     async with _session_factory()() as session:
         async with session.begin():
             invitation = await session.get(InvitationRow, invitation_id)
             if invitation is None or invitation.consumed_at is not None:
                 raise HTTPException(status_code=404, detail="Pending invitation not found")
-            organization, member = await _active_shared_workspace_member(session, invitation.organization_id, actor_id)
+            organization, member = await active_shared_workspace_member(session, invitation.organization_id, actor_id)
             if organization is None or member is None:
                 raise HTTPException(status_code=403, detail="Only an active workspace owner or admin can revoke invitations")
             invitation.consumed_at = now
             invitation.updated_at = now
+            revoked_organization_id = organization.id
+    await record_audit_event(request, action="invitation.revoked", outcome="success", actor_user_id=actor_id, organization_id=revoked_organization_id, target_type="invitation", target_id=invitation_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

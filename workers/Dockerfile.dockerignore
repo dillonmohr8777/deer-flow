@@ -1,0 +1,24 @@
+# This private image receives only source, manifests and frozen lockfiles.
+# Host environments, credentials, receipts and generated output never enter it.
+**
+!workers/browser-teams/package.json
+!workers/browser-teams/package-lock.json
+!workers/browser-teams/tsconfig.json
+!workers/browser-teams/src/*.ts
+!workers/browser-teams/test/*.ts
+!workers/browser-teams/python/pyproject.toml
+!workers/browser-teams/python/uv.lock
+!workers/browser-teams/python/worker.py
+!workers/agno-team/pyproject.toml
+!workers/agno-team/uv.lock
+!workers/agno-team/worker.py
+!workers/inngest-team/package.json
+!workers/inngest-team/package-lock.json
+!workers/inngest-team/worker.js
+!backend/scripts/verify_workflow_workers.py
+**/.venv
+**/node_modules
+**/dist
+**/.env
+**/.env.*
+**/.deer-flow

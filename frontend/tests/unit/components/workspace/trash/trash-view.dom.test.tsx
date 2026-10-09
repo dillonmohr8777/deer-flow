@@ -245,7 +245,7 @@ describe("TrashView", () => {
     render(<TrashView />, { wrapper: Wrapper });
     fireEvent.click(screen.getByRole("button", { name: /Delete permanently/ }));
     expect(
-      screen.getByText(/will be permanently deleted. This cannot be undone./),
+      screen.getByText(/will be permanently deleted. This can't be undone./),
     ).toBeDefined();
     expect(mocks.purgeMutate).not.toHaveBeenCalled();
     fireEvent.click(
@@ -265,7 +265,7 @@ describe("TrashView", () => {
     fireEvent.click(screen.getByTestId("trash-empty-button"));
     expect(
       screen.getByText(
-        "2 documents will be permanently deleted. This cannot be undone.",
+        "2 documents will be permanently deleted. This can't be undone.",
       ),
     ).toBeDefined();
     expect(mocks.emptyMutate).not.toHaveBeenCalled();
@@ -294,7 +294,7 @@ describe("TrashView", () => {
     fireEvent.click(screen.getByTestId("trash-empty-button"));
     expect(
       screen.getByText(
-        "5 documents will be permanently deleted. This cannot be undone.",
+        "5 documents will be permanently deleted. This can't be undone.",
       ),
     ).toBeDefined();
   });

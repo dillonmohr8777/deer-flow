@@ -47,6 +47,11 @@ class LocalAuthProvider(AuthProvider):
         if not await verify_password_async(password, user.password_hash):
             return None
 
+        if user.disabled_at is not None:
+            # Checked after password verification so a disabled account does
+            # not reveal its status to a caller who guessed the email alone.
+            return None
+
         if needs_rehash(user.password_hash):
             try:
                 user.password_hash = await hash_password_async(password)

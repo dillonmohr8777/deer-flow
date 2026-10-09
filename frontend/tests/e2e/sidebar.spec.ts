@@ -98,10 +98,10 @@ test.describe("Sidebar navigation", () => {
     };
 
     await expectInsideViewport(
-      page.getByRole("heading", { name: "你好，欢迎回来！", exact: true }),
+      page.getByText("要让团队接手什么工作？").first(),
     );
     await expectInsideViewport(page.getByRole("textbox").first());
-    await expectInsideViewport(page.locator("[data-slot='suggestions-list']"));
+    await expectInsideViewport(page.locator("[data-chat-starters]"));
 
     const mobileSidebarTrigger = page
       .locator("[data-sidebar='trigger']:visible")

@@ -7,9 +7,11 @@ No API credentials or network access are needed.
 
 import asyncio
 import json
+import socket
 from types import SimpleNamespace
 
 import httpx
+import httpx2
 import pytest
 from fastapi import HTTPException
 from langchain_core.messages import HumanMessage, ToolMessage
@@ -40,23 +42,40 @@ def store(tmp_path, monkeypatch):
     return ManagedModelStore()
 
 
+@pytest.fixture(autouse=True)
+def forbid_real_provider_network(monkeypatch):
+    """Fail closed if a future SDK bypasses either mocked HTTP client boundary."""
+
+    def blocked(*_args, **_kwargs):
+        raise AssertionError("Offline managed-model test attempted real DNS/socket IO")
+
+    monkeypatch.setattr(socket, "getaddrinfo", blocked)
+    monkeypatch.setattr(socket.socket, "connect", blocked)
+    monkeypatch.setattr(socket.socket, "connect_ex", blocked)
+
+
+def _http_module(request):
+    return httpx2 if isinstance(request, httpx2.Request) else httpx
+
+
 @pytest.fixture
 def provider(monkeypatch):
     """Inspect outbound HTTP and feed split SSE frames into the real SDK."""
     state = SimpleNamespace(requests=[], mode="tool", status=200, exception=None)
 
     async def send(client, request, **kwargs):
+        http = _http_module(request)
         body = json.loads(request.content)
         state.requests.append((request, body))
         if state.exception is not None:
             raise state.exception
         if state.status != 200:
-            return httpx.Response(state.status, request=request, json={"error": {"message": f"Provider failure containing {_KEY}", "type": "invalid_request_error"}})
+            return http.Response(state.status, request=request, json={"error": {"message": f"Provider failure containing {_KEY}", "type": "invalid_request_error"}})
         if request.headers.get("authorization") != f"Bearer {_KEY}":
-            return httpx.Response(401, request=request, json={"error": {"message": "Authentication failed", "type": "authentication_error"}})
+            return http.Response(401, request=request, json={"error": {"message": "Authentication failed", "type": "authentication_error"}})
         thinking = body.get("thinking", {}).get("type", "enabled") == "enabled"
         if request.url.host == "api.deepseek.com" and thinking and body.get("tool_choice") not in (None, "auto", "none"):
-            return httpx.Response(400, request=request, json={"error": {"message": "Thinking mode does not support this tool_choice", "type": "invalid_request_error"}})
+            return http.Response(400, request=request, json={"error": {"message": "Thinking mode does not support this tool_choice", "type": "invalid_request_error"}})
         deltas = [{"role": "assistant", "content": ""}]
         if thinking:
             deltas.extend([{"reasoning_content": "Checking "}, {"reasoning_content": "connection."}])
@@ -73,9 +92,10 @@ def provider(monkeypatch):
         chunks = [{"id": "chat-test", "object": "chat.completion.chunk", "created": 1, "model": body["model"], "choices": [{"index": 0, "delta": delta, "finish_reason": None}]} for delta in deltas]
         chunks.append({"id": "chat-test", "object": "chat.completion.chunk", "created": 1, "model": body["model"], "choices": [{"index": 0, "delta": {}, "finish_reason": finish}]})
         content = "".join(f"data: {json.dumps(chunk)}\n\n" for chunk in chunks) + "data: [DONE]\n\n"
-        return httpx.Response(200, request=request, headers={"content-type": "text/event-stream"}, content=content.encode())
+        return http.Response(200, request=request, headers={"content-type": "text/event-stream"}, content=content.encode())
 
     monkeypatch.setattr(httpx.AsyncClient, "send", send)
+    monkeypatch.setattr(httpx2.AsyncClient, "send", send)
     return state
 
 
@@ -88,7 +108,7 @@ async def test_probe_uses_non_thinking_bounded_streaming_tool_request(store, pro
     assert result == {"ok": True, "message": "success"}
     assert len(provider.requests) == 1
     request, body = provider.requests[0]
-    assert request.url == httpx.URL(base_url.rstrip("/") + "/chat/completions")
+    assert str(request.url) == str(httpx.URL(base_url.rstrip("/") + "/chat/completions"))
     assert body["model"] == model_id
     assert body["stream"] is True
     assert body["thinking"] == {"type": "disabled"}
@@ -257,24 +277,27 @@ async def test_new_draft_without_key_does_not_use_environment_credentials(store,
 
 @pytest.mark.asyncio
 async def test_stream_failure_after_valid_tool_chunks_is_not_success(store, provider, monkeypatch):
-    send = httpx.AsyncClient.send
-
-    class InterruptedStream(httpx.AsyncByteStream):
-        async def __aiter__(self):
-            yield self.content
-            raise httpx.ReadError("private upstream stream failure")
-
-        def __init__(self, content):
-            self.content = content
+    sends = {http: http.AsyncClient.send for http in (httpx, httpx2)}
 
     async def interrupted(client, request, **kwargs):
-        response = await send(client, request, **kwargs)
+        http = _http_module(request)
+        response = await sends[http](client, request, **kwargs)
         if response.status_code == 200:
+
+            class InterruptedStream(http.AsyncByteStream):
+                def __init__(self, content):
+                    self.content = content
+
+                async def __aiter__(self):
+                    yield self.content
+                    raise http.ReadError("private upstream stream failure")
+
             content = response.content.replace(b"data: [DONE]\n\n", b"")
-            return httpx.Response(200, request=request, headers=response.headers, stream=InterruptedStream(content))
+            return http.Response(200, request=request, headers=response.headers, stream=InterruptedStream(content))
         return response
 
     monkeypatch.setattr(httpx.AsyncClient, "send", interrupted)
+    monkeypatch.setattr(httpx2.AsyncClient, "send", interrupted)
     result = await router.test_model(_ADMIN, router.SaveModelRequest(config=_profile()))
     assert result == {"ok": False, "message": "connection_failed"}
     assert len(provider.requests) == 1

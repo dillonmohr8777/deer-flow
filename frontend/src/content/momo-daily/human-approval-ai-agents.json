@@ -1,0 +1,75 @@
+{
+  "title": "Why does human approval still matter when AI agents do the work?",
+  "dek": "AI agents can draft, research and check their own work, but the final yes should still belong to a person.",
+  "slug": "human-approval-ai-agents",
+  "date": "2026-09-27",
+  "author": { "name": "Dillon Mohr", "title": "AI Marketing Director" },
+  "keywords": [
+    "human approval",
+    "AI agents",
+    "human in the loop",
+    "AI oversight"
+  ],
+  "summary": "Human approval still matters because AI agents can be confidently wrong, and some mistakes, a wrong client claim, a bad send, an overspend, are expensive to undo. A person reviewing the final draft catches what the agent could not see about the real world.",
+  "section": "Quality",
+  "hero": {
+    "src": "/momentum/daily/art/human-approval-ai-agents.webp",
+    "alt": "A 1930s pulp noir illustration of Momo the robot mascot as a newspaper editor at a cluttered desk, one arm raised holding a large blank rubber stamp"
+  },
+  "status": "draft",
+  "body": [
+    {
+      "heading": "What does an AI agent actually get wrong?",
+      "paragraphs": [
+        "Not usually grammar or tone. Agents are good at those. What they get wrong is context they were never given: a client's promotion ended last week, a competitor changed its pricing, a phrase that reads fine in general but is wrong for this specific customer.",
+        "An agent can also sound completely confident while being wrong. It does not pause and say it is unsure the way a careful person might. That confidence is useful when the agent is right and dangerous when it is not, which is exactly why a second set of eyes matters before anything goes out.",
+        "This is not a flaw unique to AI. A new hire on their first week can make the same kind of confident mistake, missing context nobody handed them yet. The difference is speed: an agent can produce that confident, wrong output far faster than a person, so the review step has to keep pace with that speed rather than lag behind it."
+      ]
+    },
+    {
+      "heading": "What kind of work actually needs a human check?",
+      "paragraphs": [
+        "Not everything needs the same level of review. Internal research and early drafts can move fast with light checking, since a mistake there costs almost nothing to fix. The bar rises sharply the closer work gets to something hard to undo: an email sent to a client's list, a live ad campaign, a public social post, a payment.",
+        "A simple test works well: if this were wrong, how hard would it be to take back. A typo in an internal note is nothing. A factual error in a client's newsletter, already sent, is a real problem. Match the review to the risk, not to a blanket rule that treats every draft the same.",
+        "It also helps to name who does that review, not just that a review happens. Leaving approval as an unassigned step means it gets skipped on a busy day. Assigning it to a specific person for each client keeps the check real instead of theoretical."
+      ]
+    },
+    {
+      "heading": "Does this slow down the whole point of using agents?",
+      "paragraphs": [
+        "Less than people expect. The agent still does the slow part: the research, the first draft, the resizing, the fact gathering. A person is reviewing a finished piece of work, not starting from a blank page. That review can take minutes instead of the hours the draft itself would have taken to produce by hand.",
+        "The speed gain is real even with a human check at the end. What changes is where the person's time goes: less time producing, more time judging, which is the part of the work that actually needs a human."
+      ]
+    },
+    {
+      "heading": "What makes a review fast instead of a bottleneck?",
+      "paragraphs": [
+        "A good handoff from the agent. A draft that shows its sources, states what it assumed, and flags anything it was unsure about lets a person check the right things quickly instead of re-researching from scratch. A draft with no explanation forces the reviewer to redo the agent's work just to trust it.",
+        "Clear rules about what needs approval also help. When everyone knows that client sends, spend and public posts always wait for a person, nobody is guessing whether this particular draft needs a look. The rule is set once, and it applies every time.",
+        "Trust in the agent's track record still matters, but it should change how carefully a person reads a draft, not whether they read it at all. An agent that has been reliable for months earns a faster review. It has not earned a skipped one."
+      ]
+    },
+    {
+      "heading": "So what should a small business actually do?",
+      "paragraphs": [
+        "Write down which actions always need a human yes: sending to a client, spending money, publishing publicly, changing a live campaign. Everything on that list waits for a person, no exceptions, no matter how good the agent's track record has been.",
+        "For everything else, let the agents move, and check the results on a normal schedule rather than watching every step. That balance, fast where mistakes are cheap, careful where they are not, is what makes AI agents genuinely useful instead of just fast. Find more of these plain rules on The Momo Daily.",
+        "Revisit the list occasionally as the work changes. A new type of campaign, a new client with stricter requirements, or a new agent taking on unfamiliar work is a reason to check whether the approval rule still fits, not a reason to assume the old rule still covers it."
+      ]
+    }
+  ],
+  "faq": [
+    {
+      "question": "Should every AI generated draft go through human review?",
+      "answer": "Not with the same intensity. Low risk internal drafts can move with light checking. Anything that spends money or reaches a client publicly should always get a full human review before it goes out."
+    },
+    {
+      "question": "Does human review cancel out the speed benefit of using AI agents?",
+      "answer": "No. The agent still handles the slow research and drafting work. A person reviewing a finished draft usually takes minutes, not the hours the draft itself would have taken to write from scratch."
+    },
+    {
+      "question": "What is the simplest rule for deciding what needs approval?",
+      "answer": "Ask how hard the action would be to undo. A typo in an internal note costs nothing. A wrong claim already sent to a client's inbox is expensive, so anything in that category always waits for a person."
+    }
+  ]
+}

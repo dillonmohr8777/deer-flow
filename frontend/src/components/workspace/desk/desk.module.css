@@ -1,0 +1,179 @@
+/*
+ * Desk: the owner's private home. Layout only. Colour comes from the
+ * shell's semantic tokens, which paper.css maps to the paper palette, and
+ * from the shared page-body parts (sheet, rows, eyebrow, chip, status).
+ */
+
+.frame {
+  display: flex;
+  flex-direction: column;
+  gap: 2.5rem;
+  width: 100%;
+  max-width: 72rem;
+  margin-inline: auto;
+  padding: 2rem 1rem 7rem;
+}
+
+@media (min-width: 40rem) {
+  .frame {
+    padding: 2.5rem 1.5rem 7rem;
+  }
+}
+
+.section {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.sectionHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.25rem 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.sectionHead h2 {
+  font-size: 1.375rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.sectionMeta {
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+}
+
+/* Today: drafts beside the approvals notice on wide screens. */
+.today {
+  display: grid;
+  gap: 1.25rem;
+}
+
+@media (min-width: 64rem) {
+  .today {
+    grid-template-columns: minmax(0, 1fr) 19rem;
+    align-items: start;
+  }
+}
+
+.notice {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 1rem;
+  font-size: 0.875rem;
+  line-height: 1.5rem;
+}
+
+.notice h3 {
+  font-weight: 700;
+}
+
+/*
+ * One row per record at every width. Cells have fixed bases so they line
+ * up as columns on desktop; on phones the name takes the line and the
+ * self-describing cells wrap under it.
+ */
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 1.25rem;
+  padding: 0.75rem 0;
+  font-size: 0.875rem;
+}
+
+.name {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 15rem;
+  flex-direction: column;
+}
+
+.name > :first-child {
+  overflow: hidden;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sub {
+  overflow: hidden;
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cell {
+  min-width: 0;
+  flex: 0 1 12rem;
+}
+
+.wide {
+  flex: 1 1 16rem;
+}
+
+.link {
+  flex: 0 0 auto;
+  color: var(--primary);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.muted {
+  color: var(--muted-foreground);
+}
+
+/* Agents: the department names a column on wide screens. */
+.group {
+  display: grid;
+  gap: 0 1.5rem;
+}
+
+@media (min-width: 64rem) {
+  .group {
+    grid-template-columns: 8.5rem minmax(0, 1fr);
+  }
+
+  .group > :first-child {
+    padding-top: 1rem;
+  }
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.table th,
+.table td {
+  padding: 0.625rem 0.75rem 0.625rem 0;
+  border-bottom: 1px solid var(--border);
+  text-align: right;
+}
+
+.table :is(th, td):first-child {
+  text-align: left;
+}
+
+.table thead th {
+  color: var(--muted-foreground);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.table tfoot td {
+  border-bottom: 0;
+  font-weight: 700;
+}

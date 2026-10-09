@@ -30,6 +30,7 @@ class User(BaseModel):
     # Auth lifecycle
     needs_setup: bool = Field(default=False, description="True when a reset account must complete setup")
     token_version: int = Field(default=0, description="Incremented on password change to invalidate old JWTs")
+    disabled_at: datetime | None = Field(default=None, description="Set by an admin disable action; a disabled user cannot log in or keep a session")
 
 
 class UserResponse(BaseModel):
@@ -44,3 +45,4 @@ class UserResponse(BaseModel):
         None,
         description=("Effective route permissions granted to this credential (RFC #4063 Phase 4). Only GET /api/v1/auth/me resolves them; credential-creation responses leave it None."),
     )
+    mfa_enabled: bool = Field(default=False, description="Whether TOTP two-factor authentication is enabled for this account. Only GET /api/v1/auth/me resolves it; credential-creation responses leave it at the default.")

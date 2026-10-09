@@ -7,8 +7,10 @@ import { useState, useSyncExternalStore } from "react";
 
 import { Input } from "@/components/ui/input";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { pageStyles } from "@/components/workspace/page-body";
 import { useI18n } from "@/core/i18n/hooks";
+import { cn } from "@/lib/utils";
 
 const PluginGallery = dynamic(() =>
   import("./plugin-gallery").then((module) => module.PluginGallery),
@@ -48,8 +50,14 @@ export function CapabilityCenter() {
     setQuery("");
     router.replace(`${pathname}?tab=${value}`, { scroll: false });
   }
+  const searchLabel =
+    tab === "extensions"
+      ? t.extensions.search
+      : tab === "skills"
+        ? t.capabilities.searchSkills
+        : t.capabilities.searchPlugins;
   return (
-    <div className="bg-background flex h-full min-h-0 flex-col">
+    <div className={cn("flex h-full min-h-0 flex-col", pageStyles.page)}>
       <div className="text-muted-foreground flex h-14 shrink-0 items-center gap-3 border-b px-4 text-xs md:px-8">
         <SidebarTrigger className="md:hidden" />
         <span>{t.breadcrumb.workspace}</span>
@@ -57,13 +65,13 @@ export function CapabilityCenter() {
         <span className="text-foreground">{t.capabilities.title}</span>
       </div>
       <div className="flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-7xl px-5 py-8 md:px-10 md:py-10">
+        <div className="mx-auto max-w-7xl px-5 py-8 pb-28 md:px-10 md:py-10 md:pb-28">
           <header className="mb-8 flex flex-wrap items-end justify-between gap-5">
             <div>
               <h1 className="text-[28px] font-semibold tracking-tight">
                 {t.capabilities.title}
               </h1>
-              <p className="text-muted-foreground mt-2 text-sm leading-6">
+              <p className={cn(pageStyles.lede, "mt-2")}>
                 {t.capabilities.description}
               </p>
             </div>
@@ -71,51 +79,50 @@ export function CapabilityCenter() {
               <SearchIcon className="text-muted-foreground pointer-events-none absolute top-3 left-3 size-4" />
               <Input
                 disabled={!hydrated}
-                className="bg-muted/30 h-10 rounded-xl pl-9 shadow-none"
-                aria-label={
-                  tab === "extensions"
-                    ? t.extensions.search
-                    : tab === "skills"
-                      ? t.capabilities.searchSkills
-                      : t.capabilities.searchPlugins
-                }
-                placeholder={
-                  tab === "extensions"
-                    ? t.extensions.search
-                    : tab === "skills"
-                      ? t.capabilities.searchSkills
-                      : t.capabilities.searchPlugins
-                }
+                className="bg-background h-10 rounded-xl pl-9 shadow-none"
+                aria-label={searchLabel}
+                placeholder={searchLabel}
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
               />
             </div>
           </header>
-          <Tabs value={tab} onValueChange={changeTab} className="mb-7 border-b">
-            <TabsList variant="line" className="h-12 gap-7">
-              <TabsTrigger value="plugins" className="gap-2 px-1 pb-4 text-sm">
-                <BlocksIcon className="size-4" />
-                {t.capabilities.toolsAndIntegrations}
-              </TabsTrigger>
-              <TabsTrigger value="skills" className="gap-2 px-1 pb-4 text-sm">
-                <SparklesIcon className="size-4" />
-                {t.capabilities.skills}
-              </TabsTrigger>
-              <TabsTrigger
-                value="extensions"
-                className="gap-2 px-1 pb-4 text-sm"
-              >
-                {t.extensions.title}
-              </TabsTrigger>
-            </TabsList>
+          {/* Every trigger owns a real panel: aria-controls on the selected
+              tab must resolve, or axe flags aria-valid-attr-value. */}
+          <Tabs value={tab} onValueChange={changeTab} className="gap-0">
+            {/* On a phone the icons step aside so all three tabs fit; a
+                clipped last tab reads as if it did not exist. */}
+            <div className="mb-7 border-b">
+              <TabsList variant="line" className="h-12 gap-5 md:gap-7">
+                <TabsTrigger
+                  value="plugins"
+                  className="gap-2 px-1 pb-4 text-sm"
+                >
+                  <BlocksIcon className="hidden size-4 sm:block" />
+                  {t.capabilities.toolsAndIntegrations}
+                </TabsTrigger>
+                <TabsTrigger value="skills" className="gap-2 px-1 pb-4 text-sm">
+                  <SparklesIcon className="hidden size-4 sm:block" />
+                  {t.capabilities.skills}
+                </TabsTrigger>
+                <TabsTrigger
+                  value="extensions"
+                  className="gap-2 px-1 pb-4 text-sm"
+                >
+                  {t.extensions.title}
+                </TabsTrigger>
+              </TabsList>
+            </div>
+            <TabsContent value="plugins">
+              <PluginGallery query={query} />
+            </TabsContent>
+            <TabsContent value="skills">
+              <SkillGallery query={query} />
+            </TabsContent>
+            <TabsContent value="extensions">
+              <ExtensionGallery query={query} />
+            </TabsContent>
           </Tabs>
-          {tab === "extensions" ? (
-            <ExtensionGallery query={query} />
-          ) : tab !== "skills" ? (
-            <PluginGallery query={query} />
-          ) : (
-            <SkillGallery query={query} />
-          )}
         </div>
       </div>
     </div>

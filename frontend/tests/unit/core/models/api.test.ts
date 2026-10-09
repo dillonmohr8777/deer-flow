@@ -87,3 +87,45 @@ test("loadModels includes the status code when statusText is empty", async () =>
 
   await expect(loadModels()).rejects.toThrow("Failed to load models: 503");
 });
+
+test("loadModels shows the configured display name and never a routing slug", async () => {
+  rs.stubGlobal(
+    "fetch",
+    rs.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            models: [
+              {
+                id: "a",
+                name: "openrouter-muse-spark-contributor",
+                model: "meta/muse-spark-1.3-contributor",
+                display_name: "Muse Spark 1.3 (OpenRouter)",
+              },
+              {
+                id: "b",
+                name: "openrouter-opus-5",
+                model: "anthropic/claude-opus-5",
+                display_name: null,
+              },
+            ],
+            token_usage: { enabled: false },
+          }),
+          { status: 200 },
+        ),
+    ),
+  );
+
+  const { loadModels } = await import("@/core/models/api");
+  const { models } = await loadModels();
+
+  expect(models.map((model) => model.display_name)).toEqual([
+    "Muse Spark 1.3 (OpenRouter)",
+    "Claude Opus 5",
+  ]);
+  // Routing identity is untouched: requests still use the config name.
+  expect(models.map((model) => model.name)).toEqual([
+    "openrouter-muse-spark-contributor",
+    "openrouter-opus-5",
+  ]);
+});

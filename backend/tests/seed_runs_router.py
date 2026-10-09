@@ -8,11 +8,10 @@ no API key.
 
 Why a seeder instead of recording a conversation: issue #3352 only reproduces
 when the checkpoint no longer holds the older messages (post-compression), so
-the frontend rebuilds them from the per-run history endpoints. A seeder lets us
+the frontend rebuilds them from canonical message history. A seeder lets us
 create exactly that precondition deterministically — runs in the run store +
-per-run ``category="message"`` events, and **no checkpoint** — so on reload the
-buggy ``findLatestUnloadedRunIndex`` + prepend in ``core/threads/hooks.ts`` is
-the sole source of truth and its reversed order becomes observable.
+``category="message"`` events, an owned thread record and **no checkpoint**.
+On reload the canonical thread-global message page is the sole source of truth.
 
 It writes through the gateway's OWN ``app.state.run_store`` +
 ``app.state.run_event_store`` using the request's auth context, so the seeded
@@ -27,8 +26,13 @@ from __future__ import annotations
 
 from typing import Literal
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
+from sqlalchemy.exc import IntegrityError
+
+from app.gateway.deps import get_thread_store
+from deerflow.persistence.thread_meta import ThreadOwnershipConflictError
+from deerflow.utils.thread_id import ThreadId
 
 router = APIRouter(prefix="/api/test-only", tags=["test-only"])
 
@@ -52,7 +56,7 @@ class SeedRun(BaseModel):
 
 
 class SeedRunsBody(BaseModel):
-    thread_id: str
+    thread_id: ThreadId
     runs: list[SeedRun]
 
 
@@ -61,13 +65,22 @@ async def seed_runs(body: SeedRunsBody, request: Request) -> dict:
     """Seed runs + per-run message events for the authenticated user.
 
     No checkpoint is written: that is the whole point — it forces the frontend's
-    reload path to rebuild history from the per-run endpoints (the #3352 bug
-    site) instead of the (correctly ordered) checkpoint snapshot.
+    reload path to rebuild canonical event history instead of a checkpoint.
     """
     from langchain_core.messages import AIMessage, HumanMessage
 
     run_store = request.app.state.run_store
     event_store = request.app.state.run_event_store
+    thread_store = get_thread_store(request)
+    # The real history routes require an existing owned thread, even when its
+    # checkpoint was compressed/removed. Only seed metadata: create_thread's
+    # ordinary API would also write the checkpoint this scenario must omit.
+    if await thread_store.get(body.thread_id) is None:
+        try:
+            await thread_store.create(body.thread_id, assistant_id="lead_agent", metadata={})
+        except (ThreadOwnershipConflictError, IntegrityError):
+            if await thread_store.get(body.thread_id) is None:
+                raise HTTPException(status_code=404, detail="Thread not found") from None
 
     for run in body.runs:
         # user_id defaults (AUTO) to the request's auth context, matching the

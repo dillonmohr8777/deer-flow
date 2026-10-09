@@ -18,6 +18,8 @@ export interface FeaturesResponse {
   knowledge_base?: {
     scope_selection_enabled?: boolean;
   };
+  desk?: { enabled?: boolean };
+  momentum_internal?: { enabled?: boolean };
 }
 
 export interface ConversationReferencesCapability {
@@ -83,4 +85,26 @@ export async function fetchKnowledgeBaseFeature(): Promise<{
   return {
     scopeSelectionEnabled: feature?.scope_selection_enabled ?? false,
   };
+}
+
+/** Owner-only Desk home. Anything but an explicit true reads as off. */
+export function isDeskEnabled(features: FeaturesResponse): boolean {
+  return features.desk?.enabled === true;
+}
+
+export async function fetchDeskEnabled(): Promise<boolean> {
+  return isDeskEnabled(await fetchFeatures());
+}
+
+/**
+ * Staff-only Momentum surfaces (Team, Academy): the agency's own workspace
+ * (config.momentum_internal.organization_slugs) plus a
+ * staff role in the active workspace. Anything but an explicit true is off.
+ */
+export function isMomentumInternalEnabled(features: FeaturesResponse): boolean {
+  return features.momentum_internal?.enabled === true;
+}
+
+export async function fetchMomentumInternalEnabled(): Promise<boolean> {
+  return isMomentumInternalEnabled(await fetchFeatures());
 }

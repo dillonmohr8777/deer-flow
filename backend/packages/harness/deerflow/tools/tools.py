@@ -14,6 +14,8 @@ from deerflow.reflection import resolve_variable
 from deerflow.sandbox.security import is_host_bash_allowed
 from deerflow.subagents.batch_runtime import is_subagent_batch_runtime_available
 from deerflow.tools.builtins import (
+    agent_room_post,
+    agent_room_read,
     ask_clarification_tool,
     batch_status,
     batch_task,
@@ -22,8 +24,10 @@ from deerflow.tools.builtins import (
     list_background_tasks,
     list_uploaded_files,
     present_file_tool,
+    propose_action,
     review_skill_package,
     task_tool,
+    verify_claims_tool,
     view_image_tool,
 )
 from deerflow.tools.mcp_metadata import tag_mcp_tool
@@ -35,6 +39,8 @@ BUILTIN_TOOLS = [
     present_file_tool,
     ask_clarification_tool,
     review_skill_package,
+    propose_action,
+    verify_claims_tool,
 ]
 
 SUBAGENT_TOOLS = [
@@ -153,6 +159,15 @@ def get_available_tools(
     if not getattr(knowledge_base_config, "enabled", False):
         tool_configs = [tool for tool in tool_configs if tool.group != "knowledge"]
 
+    # Team-board, agent-seat, and hiring tools are opt-in the same way:
+    # ``groups=None`` (no agent config, or an agent config that never sets
+    # ``tool_groups``) otherwise means "every configured group", which would
+    # hand the Momentum staff Team Board, EXECUTIVE.md seat mutations, and
+    # hire/retire to the default agent. An agent that explicitly lists
+    # "team"/"exec"/"hire" in its own ``tool_groups`` still gets it.
+    if groups is None:
+        tool_configs = [tool for tool in tool_configs if tool.group not in ("team", "exec", "hire")]
+
     # Do not expose host bash by default when LocalSandboxProvider is active.
     if not is_host_bash_allowed(config):
         tool_configs = [tool for tool in tool_configs if not _is_host_bash_tool(tool)]
@@ -188,6 +203,10 @@ def get_available_tools(
         from deerflow.tools.skill_manage_tool import skill_manage_tool
 
         builtin_tools.append(skill_manage_tool)
+
+    private_workspace = getattr(config, "private_workspace", None)
+    if getattr(private_workspace, "enabled", False) is True:
+        builtin_tools.extend((agent_room_read, agent_room_post))
 
     # Add subagent tools only if enabled via runtime parameter
     if subagent_enabled:
@@ -236,7 +255,9 @@ def get_available_tools(
     # made through the Gateway API (which runs in a separate process) are immediately
     # reflected when loading MCP tools.
     mcp_tools = []
-    if include_mcp:
+    # An explicit empty selection must prevent discovery, not merely filter its
+    # results: lazy discovery can start globally enabled HTTP/stdio servers.
+    if include_mcp and mcp_plugins != []:
         try:
             from deerflow.config.extensions_config import ExtensionsConfig
             from deerflow.mcp.cache import get_cached_mcp_tools

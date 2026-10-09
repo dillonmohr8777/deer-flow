@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Start (or re-assert) the stack at login. restart.sh waits for OrbStack.
+     install.sh replaces __REPO__ and __DEPLOY__ with absolute paths. -->
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.momentum.momobot.start</string>
+  <key>ProgramArguments</key>
+  <array><string>/bin/bash</string><string>__REPO__/deploy/momentum/mac/restart.sh</string></array>
+  <key>EnvironmentVariables</key>
+  <dict><key>MOMOBOT_DEPLOY_DIR</key><string>__DEPLOY__</string></dict>
+  <key>RunAtLoad</key><true/>
+  <key>StandardOutPath</key><string>__DEPLOY__/logs/start.log</string>
+  <key>StandardErrorPath</key><string>__DEPLOY__/logs/start.log</string>
+</dict>
+</plist>

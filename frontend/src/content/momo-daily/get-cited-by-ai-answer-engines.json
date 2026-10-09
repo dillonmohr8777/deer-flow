@@ -1,0 +1,85 @@
+{
+  "title": "How to get your business cited by ChatGPT, Perplexity and Google AI Overviews",
+  "dek": "A practical checklist for getting your business quoted in AI generated answers, not just ranked in traditional search results.",
+  "slug": "get-cited-by-ai-answer-engines",
+  "date": "2026-09-22",
+  "author": { "name": "Dillon Mohr", "title": "AI Marketing Director" },
+  "keywords": [
+    "get cited by AI",
+    "ChatGPT citations",
+    "Perplexity citations",
+    "Google AI Overviews",
+    "AI answer engines"
+  ],
+  "summary": "Getting cited by an AI answer engine means writing pages that are easy to lift and trust: a short direct answer up top, clear headings shaped like real questions, named authorship, and accurate facts kept current. There is no submission form. Citations come from being the clearest, most verifiable source on a specific question.",
+  "section": "Search and Growth",
+  "hero": {
+    "src": "/momentum/daily/art/get-cited-by-ai-answer-engines.webp",
+    "alt": "Momo the blue robot mascot as a noir newspaper reporter hunched over a typewriter under a desk lamp, papers scattered about, in dramatic ink and halftone on cream newsprint"
+  },
+  "status": "draft",
+  "body": [
+    {
+      "heading": "What does it mean to be cited by an AI answer engine?",
+      "paragraphs": [
+        "Being cited means an AI assistant reads your page, decides it answers the question well, and either names your business directly or links to your page inside its generated response. It is the AI era version of being the first organic result, except the person asking may never click through. Your name and your answer arrive together.",
+        "This is different from an ad or a directory listing. There is no bidding, no submission form, and no guaranteed placement. The system chooses sources the same way a careful researcher would, by judging which pages answer the question clearly and which ones it can trust.",
+        "It also is not one single moment. A business can be cited for one question and skipped for the next, even on the same page, depending on how the AI system parsed the answer that day. Think of it less as a badge you earn once and more as a habit of showing up, question after question, because the underlying page keeps doing its job."
+      ]
+    },
+    {
+      "heading": "What structure makes a page easy to quote?",
+      "paragraphs": [
+        "The pages that get lifted most often share a shape. A short, direct answer sits within the first few sentences, before any backstory or company history. Headings are phrased the way a person would actually ask the question, not as clever marketing phrases. Below that direct answer, the page goes deeper: specifics, caveats, and examples that show real expertise.",
+        "Long is not the enemy here. A thorough page is fine, even good, as long as the short answer comes first. What hurts is burying the answer under three paragraphs of introduction before getting to the point."
+      ]
+    },
+    {
+      "heading": "Does structured data actually help?",
+      "paragraphs": [
+        "Structured data, specifically JSON-LD schema markup, will not force an AI system to cite you, but it removes guesswork. Marking up an article with its author, publish date, and organization tells the system exactly who is speaking, rather than leaving it to infer that from surrounding text. FAQ markup does something similar for question and answer pairs, making each one easy to pull out on its own.",
+        "Think of structured data as a clean label on a product, not the product itself. It helps a system trust and use what is already good content. It cannot rescue a page that is vague or wrong."
+      ]
+    },
+    {
+      "heading": "What role does authorship and trust play?",
+      "paragraphs": [
+        "AI systems weigh trust the same way people do: a named author with a real title, a page that states when it was last checked, and facts that hold up when checked elsewhere. A page signed by nobody, dated nowhere, competes at a real disadvantage against one that shows its work.",
+        "Consistency matters too. If your business name, address, and key facts about your services differ from page to page or across the web, that inconsistency reads as a small trust problem, whether the reader is a person or a machine.",
+        "This is one more reason the small, unglamorous parts of a website, a correct about page, a real staff bio, a footer that matches the header, carry more weight in an AI first world than they used to. They are the details a system checks when it is deciding whether to trust the rest of the page."
+      ]
+    },
+    {
+      "heading": "How do you know if it is working?",
+      "paragraphs": [
+        "There is no perfect dashboard for AI citations yet, but there are signals. Ask ChatGPT or Perplexity the exact questions your best pages answer and read what comes back. If your business shows up, note it. If a competitor shows up instead, look at what their page does that yours does not, usually a clearer direct answer or a more specific fact.",
+        "Search Console and analytics still matter too. A page that starts getting referral traffic from AI tools, or that holds its ranking for question style searches, is doing something right."
+      ]
+    },
+    {
+      "heading": "What is a simple first project?",
+      "paragraphs": [
+        "Pick five questions your customers ask most, before they ever call or fill out a form. Write a two or three sentence direct answer for each, place it at the top of the relevant page, and add basic authorship information: a real name, a real title, a date. That single project, done well, moves more of the needle than a long list of small tweaks. It is the same discipline behind every article on The Momo Daily.",
+        "Do not try to fix every page at once. Ranking the five or ten pages that matter most to revenue, usually a handful of service pages and the FAQ, and getting those exactly right will teach you more about what works than a rushed pass across the entire site."
+      ]
+    }
+  ],
+  "faq": [
+    {
+      "question": "Do I need to submit my site to ChatGPT or Perplexity?",
+      "answer": "No. There is no submission process. These tools read the public web the way a search engine does, so being crawlable and clear is what matters."
+    },
+    {
+      "question": "Does paying for search ads help me get cited?",
+      "answer": "No. AI generated answers are separate from paid search results, and citation cannot be purchased directly."
+    },
+    {
+      "question": "How often should I update a page once it is optimized?",
+      "answer": "Whenever a fact changes, and at minimum a light check every few months. A visible last updated date supports trust even between changes."
+    },
+    {
+      "question": "What is the single highest impact change I can make?",
+      "answer": "Move your direct answer to the top of the page and phrase your headings as the actual questions customers ask."
+    }
+  ]
+}

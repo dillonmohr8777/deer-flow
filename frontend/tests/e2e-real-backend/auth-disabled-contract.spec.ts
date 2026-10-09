@@ -19,6 +19,17 @@ const AUTH_DISABLED_PERMISSIONS = [
   "projects:read",
   "projects:write",
   "projects:delete",
+  "clients:read",
+  "clients:write",
+  "clients:delete",
+  "board:read",
+  "board:write",
+  "team:read",
+  "team:write",
+  "academy:read",
+  "academy:write",
+  "approvals:read",
+  "approvals:write",
 ];
 
 test.describe("auth-disabled contract (real backend)", () => {
@@ -30,6 +41,7 @@ test.describe("auth-disabled contract (real backend)", () => {
     expect(resp.status(), await resp.text()).toBe(200);
     await expect(resp.json()).resolves.toEqual({
       ...AUTH_DISABLED_USER,
+      mfa_enabled: false,
       permissions: AUTH_DISABLED_PERMISSIONS,
     });
   });

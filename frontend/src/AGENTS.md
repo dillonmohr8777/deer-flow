@@ -220,3 +220,37 @@ are sent on save. Custom-agent chat derives its initial selection from the saved
 binding; explicit page-local overrides survive new-thread route replacement and
 reset on conversation changes. Gateway supplies defaults for clients without a
 selector; frontend visibility must not become a runtime enforcement boundary.
+
+## Hosted crew, Browserbase, and iPhone installation
+
+`core/openai-agents` and `core/browserbase` preserve caller receipts and
+workspace scopes; mutating fetches use the shared CSRF fetcher. Do not retry
+uncertain paid submissions or use a root/child completion as semantic proof.
+`components/pwa` is lazy; `public/sw.js` may cache only the five generic
+installation/offline assets and must never retain authenticated workspace,
+API, RSC, or artifact responses. Validate 390/768/1440 and reduced motion.
+
+Workflow room reads the server catalog and schema bounds. Cache keys include
+actor and server owner scope; status pins the actor, other requests pin the
+scope. Scope/account changes abort owned reads, mutations, and downloads.
+Keep uncertain admissions locked to their original input and idempotency key.
+Only reported available frameworks can execute. Interrupted resume preserves
+the original run budget. Completion is separate from acceptance; accepted
+artifact downloads must match their durable byte count and SHA-256. Anonymous
+and static pages make no workflow API calls. Example inputs are synthetic.
+The optional plan-review checkbox submits `supervisor: true` only when selected.
+It is locked with the admitted inputs during an uncertain request. Run detail
+shows the persisted mode and existing `review_plan` timeline events; this never
+raises the server budget or treats model acceptance as owner approval.
+
+The optional Jevbox reviewed-source pane queries preparation metadata independently
+of paid workflow availability. Read the selected UI workspace and the server's
+actual owner scope separately; a null UI selection can represent the owner's
+nonnull private organization. Keep packet and proposal text in component memory,
+never query caches or browser storage. Upload exact File bytes through the shared
+CSRF fetcher; do not parse and serialize the packet again. Validate bounded closed
+responses, source hashes and false execution flags before displaying plain text.
+Match backend text limits with Unicode code points and transport limits with
+UTF-8 bytes. Scope/status failures and expired reviews must hide previews
+immediately, clear files, abort owned requests and ignore late completions.
+Preparing a proposal must not call run creation or enable paid execution.

@@ -1,0 +1,38 @@
+# Overlay on docker/docker-compose.yaml + deploy/momentum/compose.momentum.yaml:
+# adds a Postgres service and points the gateway at it. Use with
+#   restart.ps1 -ExtraComposeFile deploy/momentum/compose.postgres.yaml `
+#     -ConfigPath deploy/momentum/workspace.config.postgres.yaml
+# and POSTGRES_PASSWORD set in the env file (.env) -- never hardcoded here.
+# POSTGRES_USER / POSTGRES_DB default to "deerflow"; DATABASE_URL is derived
+# from those three so there is exactly one secret to set and rotate.
+#
+# No published port: only the gateway (same compose network) talks to
+# Postgres. For a pgtest- rehearsal that needs host access, add a second,
+# uncommitted overlay publishing the port instead of editing this file.
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: ${COMPOSE_PROJECT_NAME:-deer-flow}-postgres
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-deerflow}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env, never hardcoded}
+      - POSTGRES_DB=${POSTGRES_DB:-deerflow}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-deerflow} -d ${POSTGRES_DB:-deerflow}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    networks:
+      - deer-flow
+    restart: unless-stopped
+  gateway:
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-deerflow}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-deerflow}
+    depends_on:
+      postgres:
+        condition: service_healthy
+volumes:
+  postgres-data:

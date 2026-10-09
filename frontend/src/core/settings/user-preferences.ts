@@ -25,6 +25,7 @@ export function preferencesFromSettings(settings: LocalSettings): Preferences {
     model_name: settings.context.model_name ?? null,
     mode: settings.context.mode ?? null,
     reasoning_effort: settings.context.reasoning_effort ?? null,
+    experience_mode: settings.context.experience_mode ?? null,
   };
 }
 

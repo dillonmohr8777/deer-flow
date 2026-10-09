@@ -1,3 +1,32 @@
+"""Managed first-party integration installers (Lark/Feishu OAuth + skill pack).
+
+Organization isolation (M3): this router never takes an organization or user
+id from the request. Every handler resolves the caller's storage principal
+via ``deerflow.runtime.user_context.get_effective_user_id()`` and every
+``deerflow.integrations.lark_cli`` credential/auth-state path
+(``lark_cli_config_dir``, ``lark_cli_data_dir``, the flow-generation file) is
+keyed by that same id, so there is no parameter an attacker could use to name
+another organization's bucket -- resolution, not filtering, is the isolation
+boundary here (contrast the DB-row ``organization_id`` filter pattern in
+``persistence/AGENTS.md``). ``AuthMiddleware`` additionally exempts
+``/api/integrations`` from workspace-cookie selection
+(``_WORKSPACE_AUTH_EXEMPT_PREFIXES``), so a session request always resolves
+to the caller's own private organization here, never a shared workspace --
+Lark app credentials and OAuth tokens are per-private-organization, not
+shareable. A cross-organization attempt to complete another organization's
+OAuth/config flow by guessing its ``device_code``/``generation`` fails
+closed: those values are checked against the caller's *own*
+flow-generation file, which was never advanced by the other organization's
+flow, so it raises ``LarkFlowSupersededError`` (409) rather than 404 -- see
+``tests/test_org_isolation_integrations.py``.
+
+The one deployment-global piece is ``lark/install``: it extracts the shared,
+read-only Lark CLI skill pack once for every organization
+(``lark_integration_root()`` ignores its ``user_id`` argument on purpose) and
+is gated by ``require_admin_user`` (system-role admin, not org-scoped),
+mirroring ``skills.py``'s PUBLIC-skill global-config admin gate.
+"""
+
 import asyncio
 import logging
 from typing import Literal

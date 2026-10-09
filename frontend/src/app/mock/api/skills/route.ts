@@ -36,7 +36,7 @@ export function GET() {
       {
         name: "music-generation",
         description:
-          "Use this skill when the user requests to generate, create, compose, or produce music or songs — background music, theme songs, jingles, or instrumental tracks. Generates a song from a style/mood prompt and optional lyrics via the MiniMax music API.",
+          "Use this skill when the user requests to generate, create, compose, or produce music or songs: background music, theme songs, jingles, or instrumental tracks. Generates a song from a style/mood prompt and optional lyrics via the MiniMax music API.",
         license: null,
         category: "public",
         enabled: true,
@@ -68,7 +68,7 @@ export function GET() {
       {
         name: "vercel-deploy",
         description:
-          'Deploy applications and websites to Vercel. Use this skill when the user requests deployment actions such as "Deploy my app", "Deploy this to production", "Create a preview deployment", "Deploy and give me the link", or "Push this live". No authentication required - returns preview URL and claimable deployment link.',
+          'Deploy applications and websites to Vercel. Use this skill when the user requests deployment actions such as "Deploy my app", "Deploy this to production", "Create a preview deployment", "Deploy and give me the link", or "Push this live". No authentication required: returns preview URL and claimable deployment link.',
         license: null,
         category: "public",
         enabled: true,

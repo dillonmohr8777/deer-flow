@@ -7,12 +7,18 @@ issues when unit-testing lightweight config/registry code in isolation.
 from __future__ import annotations
 
 import importlib.util
+import os
 import sys
+import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
+
+# macOS temp dirs sit under the /var -> /private/var symlink; Brain Forge's
+# path checks correctly reject symlinked roots, so fixtures need the real path.
+tempfile.tempdir = os.path.realpath(tempfile.gettempdir())
 
 # Make 'app' and 'deerflow' importable from any working directory
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -182,3 +188,12 @@ def _auto_user_context(request):
         yield
     finally:
         reset_current_user(token)
+
+
+@pytest.fixture(autouse=True)
+def _admission_gate_off_for_legacy_suite(monkeypatch, tmp_path):
+    """The gate defaults ON in production and denies every unconfigured route; the pre-existing suite
+    uses fake endpoints, so switch it off here. tests/test_paid_admission.py re-enables it explicitly
+    and never touches the real ~/.momo state dir."""
+    monkeypatch.setenv("MOMO_ADMISSION_GATE", "off")
+    monkeypatch.setenv("MOMO_ADMISSION_DIR", str(tmp_path / "admission"))

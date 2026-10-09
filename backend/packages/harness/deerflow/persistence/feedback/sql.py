@@ -12,10 +12,10 @@ from sqlalchemy import case, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from deerflow.persistence.feedback.model import FeedbackRow
-from deerflow.persistence.organizations.resolution import organization_from_owned_parent
+from deerflow.persistence.organizations.resolution import organization_for_write, organization_from_owned_parent
 from deerflow.persistence.run.model import RunRow
 from deerflow.persistence.thread_meta.model import ThreadMetaRow
-from deerflow.runtime.user_context import AUTO, _AutoSentinel, resolve_user_id
+from deerflow.runtime.user_context import AUTO, _AutoSentinel, resolve_organization_id, resolve_user_id
 from deerflow.utils.time import coerce_iso
 
 
@@ -45,7 +45,15 @@ class FeedbackRepository:
         """Create a feedback record. rating must be +1 or -1."""
         if rating not in (1, -1):
             raise ValueError(f"rating must be +1 or -1, got {rating}")
+        # ``resolved_user_id`` is the audit owner stamped on the row: the
+        # person, even in a shared workspace. Ownership/organization checks
+        # against the thread and run must instead use the workspace storage
+        # principal (``resolve_user_id(AUTO)``), which is who those parent
+        # rows are actually stamped under; conflating the two is exactly the
+        # bug where feedback in a shared workspace 500'd (the person's id
+        # never matches the thread's storage-principal ``user_id``).
         resolved_user_id = resolve_user_id(user_id, method_name="FeedbackRepository.create")
+        storage_user_id = resolve_user_id(AUTO, method_name="FeedbackRepository.create")
         row = FeedbackRow(
             feedback_id=str(uuid.uuid4()),
             run_id=run_id,
@@ -58,14 +66,14 @@ class FeedbackRepository:
         )
         async with self._sf() as session:
             thread = (await session.execute(select(ThreadMetaRow).where(ThreadMetaRow.thread_id == thread_id).with_for_update())).scalar_one_or_none()
-            row.organization_id = organization_from_owned_parent(thread, resolved_user_id, parent_name="thread")
+            thread_organization_id = organization_from_owned_parent(thread, storage_user_id, parent_name="thread")
+            row.organization_id = organization_for_write(resolve_organization_id(), thread_organization_id, storage_user_id)
             run = (await session.execute(select(RunRow).where(RunRow.run_id == run_id).with_for_update())).scalar_one_or_none()
             if run is not None:
                 if run.thread_id != thread_id:
                     raise ValueError("run belongs to a different thread")
-                run_organization_id = organization_from_owned_parent(run, resolved_user_id, parent_name="run")
-                if row.organization_id is not None and run_organization_id != row.organization_id:
-                    raise ValueError("run has conflicting organization ownership")
+                run_organization_id = organization_from_owned_parent(run, storage_user_id, parent_name="run")
+                row.organization_id = organization_for_write(row.organization_id, run_organization_id, storage_user_id)
             session.add(row)
             await session.commit()
             await session.refresh(row)
@@ -78,11 +86,14 @@ class FeedbackRepository:
         user_id: str | None | _AutoSentinel = AUTO,
     ) -> dict | None:
         resolved_user_id = resolve_user_id(user_id, method_name="FeedbackRepository.get")
+        active_organization_id = resolve_organization_id()
         async with self._sf() as session:
             row = await session.get(FeedbackRow, feedback_id)
             if row is None:
                 return None
             if resolved_user_id is not None and row.user_id != resolved_user_id:
+                return None
+            if active_organization_id is not None and row.organization_id != active_organization_id:
                 return None
             return self._row_to_dict(row)
 
@@ -95,9 +106,12 @@ class FeedbackRepository:
         user_id: str | None | _AutoSentinel = AUTO,
     ) -> list[dict]:
         resolved_user_id = resolve_user_id(user_id, method_name="FeedbackRepository.list_by_run")
+        active_organization_id = resolve_organization_id()
         stmt = select(FeedbackRow).where(FeedbackRow.thread_id == thread_id, FeedbackRow.run_id == run_id)
         if resolved_user_id is not None:
             stmt = stmt.where(FeedbackRow.user_id == resolved_user_id)
+        if active_organization_id is not None:
+            stmt = stmt.where(FeedbackRow.organization_id == active_organization_id)
         stmt = stmt.order_by(FeedbackRow.created_at.asc()).limit(limit)
         async with self._sf() as session:
             result = await session.execute(stmt)
@@ -111,9 +125,12 @@ class FeedbackRepository:
         user_id: str | None | _AutoSentinel = AUTO,
     ) -> list[dict]:
         resolved_user_id = resolve_user_id(user_id, method_name="FeedbackRepository.list_by_thread")
+        active_organization_id = resolve_organization_id()
         stmt = select(FeedbackRow).where(FeedbackRow.thread_id == thread_id)
         if resolved_user_id is not None:
             stmt = stmt.where(FeedbackRow.user_id == resolved_user_id)
+        if active_organization_id is not None:
+            stmt = stmt.where(FeedbackRow.organization_id == active_organization_id)
         stmt = stmt.order_by(FeedbackRow.created_at.asc()).limit(limit)
         async with self._sf() as session:
             result = await session.execute(stmt)
@@ -126,11 +143,14 @@ class FeedbackRepository:
         user_id: str | None | _AutoSentinel = AUTO,
     ) -> bool:
         resolved_user_id = resolve_user_id(user_id, method_name="FeedbackRepository.delete")
+        active_organization_id = resolve_organization_id()
         async with self._sf() as session:
             row = await session.get(FeedbackRow, feedback_id)
             if row is None:
                 return False
             if resolved_user_id is not None and row.user_id != resolved_user_id:
+                return False
+            if active_organization_id is not None and row.organization_id != active_organization_id:
                 return False
             await session.delete(row)
             await session.commit()
@@ -148,17 +168,22 @@ class FeedbackRepository:
         """Create or update feedback for (thread_id, run_id, user_id). rating must be +1 or -1."""
         if rating not in (1, -1):
             raise ValueError(f"rating must be +1 or -1, got {rating}")
+        # Same actor/storage-principal split as create(): the row is audited
+        # to the person, but thread/run ownership and the derived
+        # organization must be checked against the workspace storage
+        # principal (see create()'s docstring note).
         resolved_user_id = resolve_user_id(user_id, method_name="FeedbackRepository.upsert")
+        storage_user_id = resolve_user_id(AUTO, method_name="FeedbackRepository.upsert")
         async with self._sf() as session:
             thread = (await session.execute(select(ThreadMetaRow).where(ThreadMetaRow.thread_id == thread_id).with_for_update())).scalar_one_or_none()
-            organization_id = organization_from_owned_parent(thread, resolved_user_id, parent_name="thread")
+            thread_organization_id = organization_from_owned_parent(thread, storage_user_id, parent_name="thread")
+            organization_id = organization_for_write(resolve_organization_id(), thread_organization_id, storage_user_id)
             run = (await session.execute(select(RunRow).where(RunRow.run_id == run_id).with_for_update())).scalar_one_or_none()
             if run is not None:
                 if run.thread_id != thread_id:
                     raise ValueError("run belongs to a different thread")
-                run_organization_id = organization_from_owned_parent(run, resolved_user_id, parent_name="run")
-                if organization_id is not None and run_organization_id != organization_id:
-                    raise ValueError("run has conflicting organization ownership")
+                run_organization_id = organization_from_owned_parent(run, storage_user_id, parent_name="run")
+                organization_id = organization_for_write(organization_id, run_organization_id, storage_user_id)
             stmt = select(FeedbackRow).where(
                 FeedbackRow.thread_id == thread_id,
                 FeedbackRow.run_id == run_id,
@@ -197,12 +222,15 @@ class FeedbackRepository:
     ) -> bool:
         """Delete the current user's feedback for a run. Returns True if a record was deleted."""
         resolved_user_id = resolve_user_id(user_id, method_name="FeedbackRepository.delete_by_run")
+        active_organization_id = resolve_organization_id()
         async with self._sf() as session:
             stmt = select(FeedbackRow).where(
                 FeedbackRow.thread_id == thread_id,
                 FeedbackRow.run_id == run_id,
                 FeedbackRow.user_id == resolved_user_id,
             )
+            if active_organization_id is not None:
+                stmt = stmt.where(FeedbackRow.organization_id == active_organization_id)
             result = await session.execute(stmt)
             row = result.scalar_one_or_none()
             if row is None:
@@ -224,10 +252,13 @@ class FeedbackRepository:
         owner, and ``None`` removes every owner's rows (migration/CLI callers).
         """
         resolved_user_id = resolve_user_id(user_id, method_name="FeedbackRepository.delete_by_thread")
+        active_organization_id = resolve_organization_id()
 
         conditions = [FeedbackRow.thread_id == thread_id]
         if resolved_user_id is not None:
             conditions.append(FeedbackRow.user_id == resolved_user_id)
+        if active_organization_id is not None:
+            conditions.append(FeedbackRow.organization_id == active_organization_id)
 
         async with self._sf() as session:
             count = await session.scalar(select(func.count()).select_from(FeedbackRow).where(*conditions)) or 0
@@ -251,9 +282,12 @@ class FeedbackRepository:
         update), with ``feedback_id`` breaking ties.
         """
         resolved_user_id = resolve_user_id(user_id, method_name="FeedbackRepository.list_by_thread_grouped")
+        active_organization_id = resolve_organization_id()
         stmt = select(FeedbackRow).where(FeedbackRow.thread_id == thread_id)
         if resolved_user_id is not None:
             stmt = stmt.where(FeedbackRow.user_id == resolved_user_id)
+        if active_organization_id is not None:
+            stmt = stmt.where(FeedbackRow.organization_id == active_organization_id)
         stmt = stmt.order_by(FeedbackRow.created_at.asc(), FeedbackRow.feedback_id.asc())
         async with self._sf() as session:
             result = await session.execute(stmt)
@@ -276,12 +310,15 @@ class FeedbackRepository:
         if not run_ids:
             return {}
         resolved_user_id = resolve_user_id(user_id, method_name="FeedbackRepository.list_by_run_ids")
+        active_organization_id = resolve_organization_id()
         stmt = select(FeedbackRow).where(
             FeedbackRow.thread_id == thread_id,
             FeedbackRow.run_id.in_(run_ids),
         )
         if resolved_user_id is not None:
             stmt = stmt.where(FeedbackRow.user_id == resolved_user_id)
+        if active_organization_id is not None:
+            stmt = stmt.where(FeedbackRow.organization_id == active_organization_id)
         stmt = stmt.order_by(FeedbackRow.created_at.asc(), FeedbackRow.feedback_id.asc())
         async with self._sf() as session:
             result = await session.execute(stmt)

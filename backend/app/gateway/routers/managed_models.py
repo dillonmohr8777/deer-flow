@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException, Request
 from langchain_core.messages import HumanMessage
 from pydantic import BaseModel, ConfigDict
 
-from app.gateway.deps import require_admin_user
+from app.gateway.deps import audit_actor_id, record_audit_event, require_admin_user
 from deerflow.config.app_config import get_app_config
 from deerflow.config.managed_models import ManagedModel, ManagedModelStore
 from deerflow.reflection import resolve_class
@@ -57,7 +57,9 @@ def _save(body: SaveModelRequest):
 @router.put("")
 async def save_model(request: Request, body: SaveModelRequest):
     await require_admin_user(request, detail=_ADMIN)
-    return await asyncio.to_thread(_save, body)
+    saved = await asyncio.to_thread(_save, body)
+    await record_audit_event(request, action="managed_model.saved", outcome="success", actor_user_id=audit_actor_id(request), target_type="managed_model", target_id=body.config.name)
+    return saved
 
 
 def _probe_config(body: SaveModelRequest):

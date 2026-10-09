@@ -14,6 +14,11 @@ import {
 } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  ErrorState,
+  StatusTag,
+  WorkingState,
+} from "@/components/workspace/page-body";
 import { useI18n } from "@/core/i18n/hooks";
 import { MCPConfigRequestError } from "@/core/mcp/api";
 import {
@@ -241,9 +246,7 @@ function MCPServerList({
       <div className="flex min-h-9 flex-wrap items-center justify-between gap-3">
         {toolbar ?? <span />}
         {isLoading && (
-          <p role="status" className="text-muted-foreground text-sm">
-            {t.common.loading}
-          </p>
+          <WorkingState label={t.common.loading} className="py-0" />
         )}
         {!isLoading && !error && (
           <Button
@@ -258,11 +261,14 @@ function MCPServerList({
       </div>
 
       {error && (
-        <p role="alert" className="text-muted-foreground text-sm">
-          {error instanceof MCPConfigRequestError && error.isAdminRequired
-            ? t.settings.tools.adminRequired
-            : `${t.common.error} ${error.message}`}
-        </p>
+        <ErrorState
+          className="py-0"
+          message={
+            error instanceof MCPConfigRequestError && error.isAdminRequired
+              ? t.settings.tools.adminRequired
+              : `${t.common.error} ${error.message}`
+          }
+        />
       )}
       <PluginDirectory
         query={query}
@@ -291,9 +297,13 @@ function MCPServerList({
                     config.description || t.capabilities.mcpDescription
                   }
                   label={
-                    config.enabled
-                      ? t.capabilities.enabled
-                      : t.capabilities.disabled
+                    config.enabled ? (
+                      <StatusTag tone="ok">{t.capabilities.enabled}</StatusTag>
+                    ) : (
+                      <StatusTag tone="idle">
+                        {t.capabilities.disabled}
+                      </StatusTag>
+                    )
                   }
                   icon={
                     <PluginIcon

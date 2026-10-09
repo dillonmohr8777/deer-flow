@@ -42,7 +42,12 @@ Webpack is the default development bundler. Use `DEER_FLOW_DEV_BUNDLER=turbo` wi
 
 Rstest runs them as two projects (`rstest.config.ts`). `*.test.ts` / `*.test.tsx` run in a plain **node** environment — that is nearly the whole suite, and it is the default for anything that is pure logic. `*.dom.test.ts` / `*.dom.test.tsx` run in **happy-dom**, for tests that need a document: hooks driven through `renderHook` from `@testing-library/react`, and components. Keep the split — a DOM environment costs roughly 3x the runtime of the node suite, so tests that do not render should not opt into it. A hook whose behavior only exists under real React (effect ordering, cleanup on unmount, re-render on store change) belongs in a `.dom.test.*` file rather than a node test that mocks `react` itself.
 
-E2E tests live under `tests/e2e/` and use Playwright with Chromium. They mock all backend APIs via `page.route()` network interception and test real page interactions (navigation, chat input, streaming responses). Config: `playwright.config.ts`. The real-backend auth contract in `tests/e2e-real-backend/auth-disabled-contract.spec.ts` and `backend/tests/test_auth_me_permissions.py` pin the complete route-permission list; update both when adding registered permissions (including `projects:read/write/delete`).
+E2E tests live under `tests/e2e/` and use Playwright with Chromium. They mock all backend APIs via `page.route()` network interception and test real page interactions (navigation, chat input, streaming responses). Config: `playwright.config.ts`.
+Auth recovery fixtures use context routes so worker-owned network requests reach
+the same mock after the public PWA worker claims the page. Keep explicit active
+worker recovery coverage at desktop/mobile widths, the exact retry counts and
+registration gate; do not alter production auth or disable the worker to mask it.
+`tests/e2e/design-surfaces.spec.ts` is an opt-in design-review harness, skipped unless `DESIGN_SHOTS=1`: it captures the signed-in surfaces at 1440×900 and 390×844 into `DESIGN_SHOTS_DIR` against the mocked API. `/login` needs a second server started with `DEER_FLOW_AUTH_DISABLED=0` and an unreachable gateway, passed as `DESIGN_SIGNED_OUT_URL`; `DESIGN_SHOTS_DEBUG=1` logs unmocked API calls. `DESIGN_SHOTS_ONLY=name,name` limits a run to the named surfaces. The real-backend auth contract in `tests/e2e-real-backend/auth-disabled-contract.spec.ts` and `backend/tests/test_auth_me_permissions.py` pin the complete route-permission list; update both when adding registered permissions (including `projects:read/write/delete`).
 
 The dedicated `run-history.ts` hook replaces the unpaged runs hook. Show counts
 only after a successful history read, never during initial loading or errors.
@@ -82,6 +87,12 @@ The frontend is a stateful chat application. Users create **threads** (conversat
 More specific `AGENTS.md` files under `src/` contain the frontend sections split from this file.
 
 ## Code Style
+
+Page-body paper colour overrides apply only while the root is light and paper.
+Use theme-aware status tokens for coloured text; treatment tokens alone do not
+follow the light/dark switch. Agent Room E2E checks rendered foreground and
+composited backgrounds across every treatment and both themes; normal text must
+keep at least 4.5:1 contrast, including390/768/1440px paper layouts.
 
 `core/utils/markdown.ts` reads web-fetch titles from the first nonblank line.
 Match zero to three literal spaces before `# ` without trimming indentation;
@@ -221,6 +232,16 @@ or invoices. The global background tray observes work; it does not start model
 calls. Stop actions require confirmation and the existing run-cancel permission.
 Keep project grouping distinct from verified client tenancy. Stage independently
 with `NEXT_BUILD_DIR=.next-momentum`; do not overwrite a running server's build.
+Momo films (`public/momentum/films/`, provenance in its SOURCES.md) render only
+through `components/momentum/momo-film.tsx`: muted, `preload="none"`, poster-only
+when motion is off (workspace `motionOn`, front door `useIntroMotion().live`).
+Scrapbook scraps (`public/momentum/scraps/`, provenance in its SOURCES.md) render
+only through `components/momentum/scraps.tsx`'s `Scraps` component: the sidebar
+footer, empty states (`page-body.tsx`'s `EmptyState`), and the Momo Daily front
+page margins at desktop widths. They stay out of chat threads, forms, dialogs, and
+dense tables, where a moving decoration would distract rather than help. `data-live`
+(the same `motionOn`/`useDailyMotion()` switch as Momo films) pauses their sway, and
+they are hidden entirely under the future and retro treatments.
 
 `backend/packages/harness/deerflow/capabilities/builtin.json` owns localized
 catalog manifests. Refresh the generated demo snapshot with `pnpm catalog:sync`
@@ -254,6 +275,62 @@ metadata support; it must never enter transport parameters. Preserve sibling
 presentation fields and masked credentials; cancel/reset/unmount must fence stale
 image-decoding results. Uploaded remote URLs and SVG are never rendered. Existing
 shared-MCP administrator checks remain authoritative; this adds no personal scope.
+
+## Desk (private instance only)
+
+`/workspace/desk` is the owner's home on the private instance. It exists only when
+`/api/features` reports `desk.enabled`, which the Gateway derives from
+`config.yaml -> private_workspace.enabled` (default false). With the flag on,
+`/workspace` redirects to Desk (`core/features/server.ts`, fail closed) and the
+sidebar gains a Desk link; with it off, the route replaces itself with Command
+Center before rendering anything Desk-shaped. Desk only reads existing APIs
+(scheduled tasks, clients and their fleet bindings, fleet templates, console
+usage, and the Momo Board's `GET /api/board/threads?status=drafted`);
+department grouping and schedule matching live in
+`components/workspace/desk/desk-data.ts`. The Approvals panel and the sidebar's
+Board badge both read that same drafted-threads query (e4): a count of threads
+waiting on the owner, plus an "After hours" flag when an `urgent`-triage thread
+is waiting outside 8am-8pm ET (`isAfterHoursET`/`hasUrgentAfterHoursApproval` in
+`desk-data.ts`). No external send is triggered by either alert.
+`tests/e2e/desk.spec.ts` proves both flag states, the fresh-instance empty
+states, and the approvals count/badge wiring.
+
+## Team and AI Academy (Momentum staff only)
+
+`/workspace/team` (staff channels) and `/workspace/academy` (AI training) render
+only when `/api/features` reports `momentum_internal.enabled`, which the Gateway
+computes per caller: `momentum_internal.enabled`, the active workspace's slug
+listed in `momentum_internal.organization_slugs` (the agency's own workspace),
+**and** a staff role (`owner`/`admin`/`member`) in it. Client workspaces on the
+same instance never qualify. Anyone else is replaced to
+Command Center and the sidebar links are hidden. The data comes from `/api/team`
+and `/api/academy`, which enforce the same rule server-side (404), so lesson
+content is never shipped to a client. `core/team` and `core/academy` wrap the
+APIs; `components/workspace/team/team-data.ts` and `core/academy/progress.ts`
+hold the pure logic. The channel view is keyed by channel id so a draft never
+follows you into another channel. `tests/e2e/team-academy.spec.ts` covers both
+flag states and checks for horizontal overflow at 390/768/1440.
+
+## Invite teammate (Settings > Invite teammate)
+
+Owners and admins of a shared workspace mint invites from Settings instead of
+calling the API. `components/workspace/settings/invite-settings-page.tsx` posts
+`{organization_id, email, role}` (`member`, `admin` or `client`) to
+`POST /api/v1/auth/invitations` through `core/invitations/api.ts`, using the
+shared `fetch` wrapper so the CSRF header is added. The workspace list comes
+from `GET /api/workspaces`, which returns shared workspaces only; the form
+offers the ones where the caller is `owner`/`admin`, defaulting to the active
+workspace, and shows a plain "only owners and admins" message otherwise. The
+Gateway stays the authority, so a 403 is still handled. The 201 response carries
+the one-time `token`, shown once as `${origin}/invite#token=...` with a copy
+button. The token lives only in component state: it is never put in the URL
+query, `localStorage`, `sessionStorage`, logs or analytics, and it is dropped on
+"Invite another person" or when the dialog closes. Failures map to fixed
+messages (`classifyInviteFailure`): the frozen 403, other 403, 409, 422, 503 and
+network. Listing and revoking invites are not in the UI yet.
+`tests/unit/core/invitations/api.test.ts` and
+`tests/unit/components/workspace/settings/invite-settings-page.dom.test.tsx`
+cover it.
 
 <!-- BEGIN:nextjs-agent-rules -->
 
@@ -295,3 +372,24 @@ Plugin page `openConversation(threadId)` resolves authenticated thread metadata
 with `pathOfThread`; do not let plugins hardcode default-agent routes. The page's
 abort signal fences late navigation after unmount/account changes. Synchronous
 conversation-action callbacks reject Promise returns while consuming rejections.
+
+The private Agent Room lives at `/workspace/desk/agent-room`. Its route and
+navigation use the existing Desk feature gate; message reads and owner posts use
+`core/agent-room` through the shared credential/CSRF fetcher. The Gateway retains
+owner/admin isolation and agents post through its separate principal-bound tool.
+Room access/message/mutation keys include the actual AuthProvider user ID; wait
+for affirmative private discovery before reading or projecting cached messages.
+Fence aborted/late reads, old-owner post settlement and composer drafts across
+auth transitions, without globally clearing unrelated caches. GET/POST send
+`X-Expected-User-Id`; the Gateway must enforce its optional actor mismatch fence
+before repository access. The header never grants permission or chooses storage.
+Keep existing no-header callers, admin/private gates and CSRF behavior unchanged.
+Its roster is a retained descriptive projection, not proof of live workers.
+Phone touch overrides belong to the workspace header, Background work, room
+composer and phone-only sidebar scope; do not modify generated UI primitives or
+desktop density. `tests/e2e/agent-room.spec.ts` covers readback, failed-post draft
+retention, the private gate and 390/768/1440 geometry with mocked APIs.
+
+## Approvals inbox (`/workspace/approvals`)
+
+List/detail page over `GET/PATCH/POST /api/approvals` (`src/core/approvals/`, `src/components/workspace/approvals/`). It reuses the Board's two-pane layout module. Edits save through `PATCH` and Approve is disabled while the form is dirty, so what is approved is always what was saved. Slack and email get typed fields; ad changes and other types edit as JSON. Keys the form does not show are preserved on save.

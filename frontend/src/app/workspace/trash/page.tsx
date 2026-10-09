@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { pageStyles } from "@/components/workspace/page-body";
 import { TrashView } from "@/components/workspace/trash/trash-view";
 import {
   WorkspaceBody,
@@ -21,7 +22,7 @@ export default function TrashPage() {
   const { t } = useI18n();
 
   useEffect(() => {
-    document.title = `${t.trash.title} - ${t.pages.appName}`;
+    document.title = `${t.trash.title} (${t.pages.appName})`;
   }, [t.trash.title, t.pages.appName]);
 
   // Static demo mode has no Gateway and hides every project surface.
@@ -32,7 +33,7 @@ export default function TrashPage() {
   return (
     <WorkspaceContainer>
       <WorkspaceHeader />
-      <WorkspaceBody>
+      <WorkspaceBody className={pageStyles.page}>
         <ScrollArea className="size-full">
           <TrashView />
         </ScrollArea>

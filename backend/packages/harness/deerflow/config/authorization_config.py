@@ -30,6 +30,10 @@ class AuthorizationConfig(BaseModel):
     fail_closed: bool = Field(default=True, description="Block access if the provider errors or identity is unresolved")
     default_role: str = Field(default="user", description="Role applied when user_role is None (e.g. unbound IM channels)")
     provider: AuthorizationProviderConfig | None = Field(default=None, description="Authorization provider configuration")
+    invitations_frozen: bool = Field(
+        default=True,
+        description="Refuse creating, inspecting and accepting shared-workspace invitations (M3 decision 1). Existing memberships are unaffected.",
+    )
 
 
 _authorization_config: AuthorizationConfig | None = None

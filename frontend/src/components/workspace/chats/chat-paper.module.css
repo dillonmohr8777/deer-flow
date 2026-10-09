@@ -1,0 +1,165 @@
+/*
+ * The conversation on paper: a calm record. The workspace shell already
+ * re-points the shadcn tokens and lays the cream canvas (styles/paper.css);
+ * this file only shapes what is particular to a conversation: the thread
+ * header, the composer sheet, the person's messages, the reply copy,
+ * receipts and subagent cards. Hairlines use the shell's --border.
+ *
+ * Every paper rule is gated on the paper treatment in light mode, so
+ * "current", "classic" and dark mode render exactly as before. Hooks are data
+ * attributes set in chat-page.tsx, input-box.tsx and messages/*, so no rule
+ * depends on utility class names.
+ */
+
+/* Thread header: the canvas itself (cream and the shell's grain, whose tiles
+   line up because the header starts at the surface's corner) over one
+   hairline. Opaque, since the record scrolls under it. No blur, no shadow. */
+:global(:root:not(.dark) [data-treatment="paper"])
+  .surface
+  :global([data-chat-header]) {
+  background-color: var(--paper-cream);
+  background-image: var(--paper-grain);
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+/* Header actions share one quiet shape, like the sidebar rows beside them:
+   no outline boxes on some and pills on others. */
+:global(:root:not(.dark) [data-treatment="paper"])
+  .surface
+  :global([data-chat-header] [data-variant]) {
+  border-color: transparent;
+  border-radius: 6px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--paper-ink);
+}
+
+:global(:root:not(.dark) [data-treatment="paper"])
+  .surface
+  :global([data-chat-header] [data-variant]:hover) {
+  background: var(--accent);
+}
+
+/* Composer: one cream-hi sheet on the canvas. Its line is the 3:1 UI token so
+   the field stays findable; focus is a crisp focus-blue edge, not a glow. */
+:global(:root:not(.dark) [data-treatment="paper"])
+  .surface
+  :global([data-chat-composer]) {
+  background: transparent;
+  backdrop-filter: none;
+}
+
+:global(:root:not(.dark) [data-treatment="paper"])
+  .surface
+  :global([data-chat-composer] [data-slot="input-group"]) {
+  border-color: var(--border);
+  border-radius: 8px;
+  background: var(--paper-cream-hi);
+  box-shadow: none;
+}
+
+:global(:root:not(.dark) [data-treatment="paper"])
+  .surface
+  :global(
+    [data-chat-composer]
+      [data-slot="input-group"]:has(
+        [data-slot="input-group-control"]:focus-visible
+      )
+  ) {
+  border-color: var(--paper-focus);
+  box-shadow: 0 0 0 1px var(--paper-focus);
+}
+
+:global(:root:not(.dark) [data-treatment="paper"])
+  .surface
+  :global([data-chat-starters] [data-variant]) {
+  border-color: var(--border);
+  background: var(--paper-cream-hi);
+  color: var(--paper-ink);
+}
+
+/* The person's words: a cream-hi sheet on a hairline. */
+:global(:root:not(.dark) [data-treatment="paper"])
+  .surface
+  :global([data-human-message]) {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--paper-cream-hi);
+}
+
+/* The agent's words: ink on the canvas. Headings take the Fraunces voice;
+   colour carries state, so no gradient, no violet markers, no violet code. */
+:global(:root:not(.dark) [data-treatment="paper"])
+  .surface
+  :global(.momentum-generated-copy) {
+  --momentum-copy-body: var(--paper-ink);
+  --momentum-copy-heading: var(--paper-ink);
+  --momentum-copy-heading-from: var(--paper-ink);
+  --momentum-copy-heading-mid: var(--paper-ink);
+  --momentum-copy-heading-to: var(--paper-ink);
+  --momentum-copy-strong: var(--paper-ink);
+  --momentum-copy-link: var(--paper-royal);
+  --momentum-copy-link-line: var(--paper-royal);
+  --momentum-copy-marker: var(--paper-ink-muted);
+  --momentum-copy-quote-line: var(--border);
+  --momentum-copy-quote-wash: transparent;
+  --momentum-copy-quote: var(--paper-ink-muted);
+  --momentum-copy-code: var(--paper-ink);
+  --momentum-copy-code-bg: var(--paper-cream-hi);
+  --momentum-copy-rule-from: var(--border);
+  --momentum-copy-rule-to: var(--border);
+}
+
+:global(:root:not(.dark) [data-treatment="paper"])
+  .surface
+  :global(.momentum-generated-copy :is(h1, h2, h3)) {
+  font-family: var(--m-font-serif);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+:global(:root:not(.dark) [data-treatment="paper"])
+  .surface
+  :global(.momentum-generated-copy em) {
+  color: inherit;
+}
+
+/* Receipts (run duration, token counts): plain ink-muted type, no icons. */
+:global(:root:not(.dark) [data-treatment="paper"])
+  .surface
+  :global([data-receipt]) {
+  color: var(--paper-ink-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+:global(:root:not(.dark) [data-treatment="paper"])
+  .surface
+  :global([data-receipt] svg) {
+  display: none;
+}
+
+/* Subagent cards: sheets, not glowing panels. The working glow and the
+   spectral shine border are off; the card still says "In progress". */
+:global(:root:not(.dark) [data-treatment="paper"])
+  .surface
+  :global([data-subtask-card]) {
+  border-radius: 6px;
+}
+
+:global(:root:not(.dark) [data-treatment="paper"])
+  .surface
+  :global([data-working-glow]) {
+  display: none;
+}
+
+/* Every treatment, phones: header actions shrink to 32px squares so the
+   thread title keeps room. */
+@media (max-width: 639px) {
+  .surface :global([data-chat-header] [data-variant]) {
+    height: 32px;
+    min-width: 32px;
+    padding-inline: 6px;
+  }
+}

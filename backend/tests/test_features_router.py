@@ -21,6 +21,8 @@ def _app_with_config(
     knowledge_base_enabled: bool = False,
     scope_selection_enabled: bool = False,
     knowledge_search_provider: str | None = None,
+    private_workspace_enabled: bool = False,
+    system_role: str | None = None,
 ) -> FastAPI:
     app = FastAPI()
     app.state.mcp_tasks_available = mcp_tasks_available
@@ -42,10 +44,18 @@ def _app_with_config(
             enabled=knowledge_base_enabled,
             scope_selection_enabled=scope_selection_enabled,
         ),
+        private_workspace=SimpleNamespace(enabled=private_workspace_enabled),
     )
     search_tool = SimpleNamespace(use=knowledge_search_provider) if knowledge_search_provider is not None else None
     fake_config.get_tool_config = lambda name: search_tool if name == "knowledge_search" else None
     app.dependency_overrides[get_config] = lambda: fake_config
+    if system_role is not None:
+
+        @app.middleware("http")
+        async def authenticated_actor(request, call_next):
+            request.state.user = SimpleNamespace(id="synthetic-actor", system_role=system_role)
+            return await call_next(request)
+
     return app
 
 
@@ -67,6 +77,8 @@ def test_features_reports_agents_api_enabled() -> None:
         "knowledge_base": {
             "scope_selection_enabled": False,
         },
+        "desk": {"enabled": False},
+        "momentum_internal": {"enabled": False},
     }
 
 
@@ -88,6 +100,8 @@ def test_features_reports_agents_api_disabled() -> None:
         "knowledge_base": {
             "scope_selection_enabled": False,
         },
+        "desk": {"enabled": False},
+        "momentum_internal": {"enabled": False},
     }
 
 
@@ -216,3 +230,71 @@ def test_features_reports_browser_control_disabled_for_unguarded_cdp() -> None:
         response = client.get("/api/features")
     assert response.status_code == 200
     assert response.json()["browser_control"] == {"enabled": False}
+
+
+def test_features_reports_desk_only_for_a_private_workspace_admin() -> None:
+    with TestClient(_app_with_config(agents_api_enabled=True, private_workspace_enabled=True, system_role="admin")) as client:
+        assert client.get("/api/features").json()["desk"] == {"enabled": True}
+    with TestClient(_app_with_config(agents_api_enabled=True, private_workspace_enabled=True, system_role="user")) as client:
+        assert client.get("/api/features").json()["desk"] == {"enabled": False}
+    with TestClient(_app_with_config(agents_api_enabled=True)) as client:
+        assert client.get("/api/features").json()["desk"] == {"enabled": False}
+
+
+def test_desk_is_off_for_a_default_client_facing_config() -> None:
+    """A MomoBot config that never mentions private_workspace must not show Desk."""
+    from deerflow.config.app_config import AppConfig
+
+    assert AppConfig.model_fields["private_workspace"].default_factory().enabled is False
+
+
+def _app_as(role: str | None, organization_id: str | None, *, internal_enabled: bool, user_id: str = "staff-user") -> FastAPI:
+    """A features app whose requests carry *role* the way AuthMiddleware stamps it."""
+    app = _app_with_config(agents_api_enabled=True)
+    base = app.dependency_overrides[get_config]()
+    base.momentum_internal = SimpleNamespace(enabled=internal_enabled, organization_slugs=["momentum"])
+    app.dependency_overrides[get_config] = lambda: base
+
+    @app.middleware("http")
+    async def _stamp(request, call_next):
+        request.state.organization_id = organization_id
+        request.state.organization_role = role
+        request.state.actor_user_id = user_id
+        return await call_next(request)
+
+    return app
+
+
+_SLUGS = {"org-momentum": "momentum", "org-client": "acme-co"}
+_CLIENT_CONTACTS = {("org-momentum", "acme-contact")}
+
+
+@pytest.mark.parametrize(
+    ("role", "organization_id", "internal_enabled", "expected"),
+    [
+        ("owner", "org-momentum", True, True),
+        ("admin", "org-momentum", True, True),
+        ("member", "org-momentum", True, True),
+        ("client", "org-momentum", True, False),
+        (None, None, True, False),
+        # The owner of a client workspace on the same instance.
+        ("owner", "org-client", True, False),
+        ("owner", "org-momentum", False, False),
+        # A client's person: an ordinary member with a client_contact assignment.
+        ("member:acme-contact", "org-momentum", True, False),
+    ],
+)
+def test_momentum_internal_is_staff_in_the_configured_workspace_only(monkeypatch, role, organization_id, internal_enabled, expected) -> None:
+    async def _slug(org_id: str) -> str | None:
+        return _SLUGS.get(org_id)
+
+    async def _client_contact(org_id: str, user_id: str) -> bool:
+        return (org_id, user_id) in _CLIENT_CONTACTS
+
+    monkeypatch.setattr("app.gateway.momentum_internal._organization_slug", _slug)
+    monkeypatch.setattr("app.gateway.momentum_internal._is_client_contact", _client_contact)
+    user_id = "staff-user"
+    if role and ":" in role:
+        role, user_id = role.split(":", 1)
+    with TestClient(_app_as(role, organization_id, internal_enabled=internal_enabled, user_id=user_id)) as client:
+        assert client.get("/api/features").json()["momentum_internal"] == {"enabled": expected}

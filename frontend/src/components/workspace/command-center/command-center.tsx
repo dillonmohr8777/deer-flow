@@ -6,30 +6,29 @@ import {
   ArrowLeftRight,
   ArrowRight,
   ArrowUpRight,
-  Bot,
   Check,
   ChevronLeft,
   ChevronRight,
   Circle,
   CircleStop,
-  Clock3,
   Layers3,
   Network,
   Paintbrush,
   Plus,
   RefreshCw,
   Search,
-  ShieldCheck,
   X,
 } from "lucide-react";
 import Link from "next/link";
 import { useRef, useState } from "react";
 
+import { PaperLayers } from "@/components/momentum/paper-layers";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { ThreadSubagentBatches } from "@/components/workspace/thread-subagent-batches";
 import { useAgents } from "@/core/agents";
 import { useAuth } from "@/core/auth/AuthProvider";
 import { hasPermission, PERMISSIONS } from "@/core/auth/permissions";
+import { useClients } from "@/core/clients";
 import {
   useCancelConsoleRun,
   useConsoleRuns,
@@ -37,27 +36,62 @@ import {
   useConsoleUsage,
   useConsoleUsageLedger,
   type ConsoleRunItem,
+  type ConsoleStats,
 } from "@/core/console";
+import { useModels } from "@/core/models/hooks";
 import { useSubagents } from "@/core/subagents";
 import { pathOfThread } from "@/core/threads/utils";
+import { formatCompactStamp } from "@/core/utils/datetime";
 
 import { AgentTopology } from "./agent-topology";
 import { useWorkspaceAppearance } from "./appearance-provider";
-import { BrandSignature } from "./brand-signature";
 import {
   ArtifactLibraryView,
   ClientSpacesView,
   WorkflowsView,
 } from "./business-views";
+import { DispatchBoard } from "./dispatch-board";
+import { LiveBoard } from "./live-board";
+import { modelDisplayName } from "./model-label";
 import { MomentumGlyph } from "./momentum-glyph";
-import { BrandMotionToggle, WorkspaceAppearance } from "./workspace-appearance";
+import {
+  BRAIN_ASPECT,
+  BRAIN_FLAT,
+  BRAIN_LAYERS,
+  MomoAvatar,
+} from "./momo-avatar";
+import { WorkspaceAppearance } from "./workspace-appearance";
 
 import styles from "./command-center.module.css";
 
+/**
+ * The hero introduces the crew rather than repeating the lead card below it:
+ * canon Momos by path (never copied; their lane owns the files), in paint
+ * order, so the lead is drawn last and stands in front.
+ */
+const HERO_CREW = ["growth", "builder", "research", "dillon-brain"] as const;
 const number = (value: number) => new Intl.NumberFormat("en-US").format(value);
 const active = (status: string) => status === "pending" || status === "running";
+/**
+ * The backend stores 0 when a run never reported usage, so 0 tokens across
+ * recorded runs is missing data, not a measurement (DESIGN.md, States).
+ */
+export function recordedTokens(stats: ConsoleStats | undefined) {
+  if (!stats) return undefined;
+  return stats.total_runs > 0 && stats.total_tokens === 0
+    ? undefined
+    : stats.total_tokens;
+}
+/** A run's token figure, or the reason there isn't one yet. */
+export function runTokens(
+  run: Pick<ConsoleRunItem, "status" | "total_tokens">,
+) {
+  if (run.total_tokens > 0) return `${number(run.total_tokens)} tokens`;
+  return active(run.status) ? "Tokens still counting" : "Tokens not recorded";
+}
 const tabs = [
   "Mission Control",
+  "Live Board",
   "Agent Studio",
   "Jobs",
   "Workflows",
@@ -66,6 +100,34 @@ const tabs = [
   "Artifact Library",
 ] as const;
 type View = (typeof tabs)[number];
+
+/*
+ * Every tab's endpoint answers (checked on the rehearsal stack 2026-09-22),
+ * but three of them promise more than the backend has: there is no client
+ * tenancy, no revenue or billing feed, and no workspace-wide artifact index.
+ * Those tabs say so instead of implying it.
+ */
+const PREVIEW_NOTES: Partial<Record<View, string>> = {
+  "Client Spaces":
+    "No clients have been added to this workspace yet. Once they are, they'll show up here with their assigned people and linked projects.",
+  "Business Intelligence":
+    "Token usage and provider attempts are recorded here. Revenue, margins and billing aren't connected yet.",
+  "Artifact Library":
+    "There's no workspace-wide artifact index yet. Choose a project to browse the files its conversations produced.",
+};
+
+/** Each view says what it holds; the brand line belongs to Mission Control. */
+const VIEW_LEDES: Record<Exclude<View, "Mission Control">, string> = {
+  "Live Board":
+    "Spend, approvals, agents, evals and the lobby, each tile read from its own source.",
+  "Agent Studio": "Your lead agent and the specialists it can hand work to.",
+  Jobs: "Every recorded run, newest first, with its receipt.",
+  Workflows: "Scheduled work and where each definition stands.",
+  "Client Spaces": "Clients, the people assigned to them and their projects.",
+  "Business Intelligence": "Recorded token usage and provider attempts.",
+  "Artifact Library":
+    "Files your conversations produced, one project at a time.",
+};
 
 function duration(seconds: number | null) {
   if (seconds === null) return "Not recorded";
@@ -113,6 +175,15 @@ export function CommandCenter() {
   const [appearanceOpen, setAppearanceOpen] = useState(false);
   const appearanceTrigger = useRef<HTMLButtonElement>(null);
   const canReadRuns = Boolean(user) && hasPermission(user, "runs:read");
+  const clientsQuery = useClients();
+  // Client Spaces stops being a preview once real clients exist (Momentum
+  // Phase 2 item 2). Only a successful empty read may say "no clients": a
+  // failed or pending read is unknown, not zero. Every other tab's
+  // disclaimer is unaffected.
+  const noClients = clientsQuery.isSuccess && clientsQuery.data.length === 0;
+  const previewNotes: Partial<Record<View, string>> = noClients
+    ? PREVIEW_NOTES
+    : { ...PREVIEW_NOTES, "Client Spaces": undefined };
   const [view, setView] = useState<View>("Mission Control");
   const [filter, setFilter] = useState("");
   const [offset, setOffset] = useState(0);
@@ -135,6 +206,9 @@ export function CommandCenter() {
     error: agentsError,
   } = useSubagents();
   const { agents } = useAgents();
+  const { models } = useModels();
+  const modelName = (slug: string | null | undefined) =>
+    modelDisplayName(slug, models);
   const lead =
     agents.find((agent) => agent.name === "dillon-brain") ?? agents[0];
   const startPath = lead
@@ -148,25 +222,82 @@ export function CommandCenter() {
   );
   const visibleRuns =
     runs.data?.runs.filter((run) =>
-      `${run.thread_title ?? ""} ${run.model_name ?? ""} ${run.run_id}`
+      `${run.thread_title ?? ""} ${modelName(run.model_name)} ${run.run_id}`
         .toLowerCase()
         .includes(search.toLowerCase()),
     ) ?? [];
+  // Two provider IDs can share one display name (the Contributor tier and
+  // the plain model), so usage rows are merged by the name people see.
+  const usageRows = Object.values(
+    Object.entries(usage.data?.by_model ?? {}).reduce<
+      Record<
+        string,
+        { model: string; tokens: number; runs: number; cost: number | null }
+      >
+    >((rows, [id, item]) => {
+      const model = modelName(id) || "Model not recorded";
+      const row = (rows[model] ??= { model, tokens: 0, runs: 0, cost: null });
+      row.tokens += item.tokens;
+      row.runs += item.runs;
+      if (item.cost != null) row.cost = (row.cost ?? 0) + item.cost;
+      return rows;
+    }, {}),
+  );
+  const failedRuns = stats.data?.failed_runs;
+  // Colour is state only: danger for a real failure, ok once runs exist and
+  // none failed, plain ink otherwise.
+  const errorState =
+    failedRuns == null
+      ? undefined
+      : failedRuns > 0
+        ? "danger"
+        : stats.data?.total_runs
+          ? "ok"
+          : undefined;
   const displayedAgents = subagents.filter(
     (agent) => agent.source === "managed",
   );
   const roster = displayedAgents.length ? displayedAgents : subagents;
-  const activeAgentNames =
+  // Running and queued are different states on the board, so the team
+  // keeps them apart too: only a running run pins its agent. An agent with
+  // a running run and a queued one is running.
+  const agentsWith = (status: string) =>
     activityRuns.data?.runs
-      .filter((run) => active(run.status))
+      .filter((run) => run.status === status)
       .map((run) => run.assistant_id)
       .filter((name): name is string => Boolean(name)) ?? null;
+  const runningAgentNames = agentsWith("running");
+  const queuedAgentNames =
+    agentsWith("pending")?.filter(
+      (name) => !(runningAgentNames ?? []).includes(name),
+    ) ?? null;
+  // Same guard as AgentTopology's lead state: an unknown live state must
+  // never read as the lead working, and neither must a queued run.
+  const heroBrainActive =
+    canReadRuns &&
+    activityRuns.isSuccess &&
+    (runningAgentNames ?? []).includes("dillon-brain");
 
   function openRun(run: ConsoleRunItem) {
     receiptTrigger.current = document.activeElement as HTMLElement | null;
     setSelectedRunId(run.run_id);
     setCancelConfirm(false);
     cancel.reset();
+  }
+
+  /** A person-readable agent name for a run: never a raw id (DESIGN.md, Copy). */
+  function agentLabel(assistantId: string | null) {
+    if (!assistantId) return "Agent not recorded";
+    if (assistantId === "lead" || assistantId === "lead_agent") {
+      return lead?.display_name ?? "Default agent";
+    }
+    const known = subagents.find((agent) => agent.name === assistantId);
+    if (known?.display_name) return known.display_name;
+    return assistantId
+      .split(/[-_]/)
+      .filter(Boolean)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(" ");
   }
 
   function runPath(run: ConsoleRunItem) {
@@ -269,32 +400,46 @@ export function CommandCenter() {
         </div>
       ) : (
         <div className={styles.jobRows}>
-          {visibleRuns.map((run) => (
-            <button
-              className={styles.jobRow}
-              key={run.run_id}
-              aria-pressed={selectedRunId === run.run_id}
-              onClick={() => openRun(run)}
-            >
-              <span className={styles.jobIcon} data-status={run.status}>
-                <MomentumGlyph seed={`thread:${run.thread_id}`} size={34} />
-              </span>
-              <span className={styles.jobName}>
-                <strong>{run.thread_title ?? "Untitled assignment"}</strong>
-                <small>
-                  <span className={styles.metaModel}>
-                    {run.model_name ?? "Model not recorded"}
-                  </span>{" "}
-                  <span aria-hidden="true">·</span>{" "}
-                  <span className={styles.metaTokens}>
-                    {number(run.total_tokens)} tokens
-                  </span>
-                </small>
-              </span>
-              <Status status={run.status} />
-              <ChevronRight size={16} />
-            </button>
-          ))}
+          {visibleRuns.map((run) => {
+            const title = run.thread_title ?? "Untitled assignment";
+            const stamp = formatCompactStamp(run.created_at, "en-US");
+            return (
+              <button
+                className={styles.jobRow}
+                key={run.run_id}
+                aria-pressed={selectedRunId === run.run_id}
+                onClick={() => openRun(run)}
+                title={title}
+              >
+                <span className={styles.jobIcon} data-status={run.status}>
+                  <MomentumGlyph seed={`thread:${run.thread_id}`} size={34} />
+                </span>
+                <span className={styles.jobName}>
+                  <strong>{title}</strong>
+                  <small>
+                    {stamp && run.created_at && (
+                      <>
+                        <time
+                          className={styles.metaStamp}
+                          dateTime={run.created_at}
+                        >
+                          {stamp}
+                        </time>{" "}
+                        <span aria-hidden="true">·</span>{" "}
+                      </>
+                    )}
+                    <span className={styles.metaModel}>
+                      {modelName(run.model_name) || "Model not recorded"}
+                    </span>{" "}
+                    <span aria-hidden="true">·</span>{" "}
+                    <span className={styles.metaTokens}>{runTokens(run)}</span>
+                  </small>
+                </span>
+                <Status status={run.status} />
+                <ChevronRight size={16} />
+              </button>
+            );
+          })}
         </div>
       )}
       <div className={styles.pagination}>
@@ -342,14 +487,17 @@ export function CommandCenter() {
         loading={agentsLoading}
         error={Boolean(agentsError)}
         runtimeKnown={canReadRuns && activityRuns.isSuccess}
-        activeAgentNames={activeAgentNames}
+        runningAgentNames={runningAgentNames}
+        queuedAgentNames={queuedAgentNames}
         onSelect={setSelectedAgentName}
       />
       {selectedAgent ? (
         <div className={styles.agentDetail}>
           <div className={styles.sectionHead}>
             <div className={styles.selectedIdentity}>
-              <MomentumGlyph seed={`agent:${selectedAgent.name}`} size={58} />
+              <span aria-hidden="true">
+                <MomoAvatar agent={selectedAgent} size={40} />
+              </span>
               <div>
                 <h3>{selectedAgent.display_name ?? selectedAgent.name}</h3>
                 <span>Role &amp; working brief</span>
@@ -378,7 +526,7 @@ export function CommandCenter() {
               <dd>
                 {selectedAgent.model === "inherit"
                   ? "Inherits lead model"
-                  : selectedAgent.model}
+                  : modelName(selectedAgent.model) || "Not recorded"}
               </dd>
             </div>
             <div>
@@ -403,7 +551,10 @@ export function CommandCenter() {
   );
 
   return (
-    <main
+    // A div, not <main>: the workspace shell's SidebarInset is already the
+    // page's main landmark, and a second one nested inside it confuses
+    // landmark navigation.
+    <div
       className={styles.root}
       data-live={stats.data?.active_runs ? "true" : "false"}
       data-treatment={preferences.treatment}
@@ -418,32 +569,65 @@ export function CommandCenter() {
       </header>
       <div className={styles.content}>
         <div className={styles.heading}>
-          <div>
+          <div className={styles.headingText}>
             <h1>{view}</h1>
             <p className={styles.headingCopy}>
-              <span>Give your ambition a team.</span>{" "}
-              <span>Keep the work in view.</span>
+              {view === "Mission Control" ? (
+                <>
+                  <span>Give your ambition a team.</span> Keep the work in view.
+                </>
+              ) : (
+                VIEW_LEDES[view]
+              )}
             </p>
-            <div className={styles.headingActions}>
-              <Link className={styles.primary} href={startPath}>
-                <Plus size={17} />
-                Start a mission
-              </Link>
-              <button
-                ref={appearanceTrigger}
-                className={styles.appearanceButton}
-                type="button"
-                aria-expanded={appearanceOpen}
-                aria-controls="workspace-appearance"
-                onClick={() => setAppearanceOpen(!appearanceOpen)}
-              >
-                <Paintbrush size={16} /> Appearance
-              </button>
-            </div>
           </div>
-          <div className={styles.brandStage}>
-            <BrandSignature size="hero" />
-            <BrandMotionToggle />
+          {/* The page's one loud moment: the crew on a kraft scrap, as on the
+              landing, lead in front. No brass pins here: on this page a pin
+              means a specialist is working. The sidebar carries the wordmark. */}
+          <div className={styles.heroArt} aria-hidden="true">
+            <span className={`${styles.heroScrap} paper-torn`} />
+            {HERO_CREW.map((slug) =>
+              slug === "dillon-brain" ? (
+                // Its box is sized by .heroMomo's own CSS (percentage width,
+                // aspect-ratio); PaperLayers fills it, [data-paper-layers]
+                // overriding its usual fixed pixel box for this one site.
+                <span key={slug} className={styles.heroMomo} data-crew={slug}>
+                  <PaperLayers
+                    layers={BRAIN_LAYERS}
+                    flatSrc={BRAIN_FLAT}
+                    size={160}
+                    aspectRatio={BRAIN_ASPECT}
+                    state={heroBrainActive ? "working" : "idle"}
+                  />
+                </span>
+              ) : (
+                <img
+                  key={slug}
+                  className={styles.heroMomo}
+                  data-crew={slug}
+                  src={`/momentum/momos/${slug}.svg`}
+                  alt=""
+                  width={160}
+                  height={160}
+                />
+              ),
+            )}
+          </div>
+          <div className={styles.headingActions}>
+            <Link className={styles.primary} href={startPath}>
+              <Plus size={17} />
+              Start a mission
+            </Link>
+            <button
+              ref={appearanceTrigger}
+              className={styles.appearanceButton}
+              type="button"
+              aria-expanded={appearanceOpen}
+              aria-controls="workspace-appearance"
+              onClick={() => setAppearanceOpen(!appearanceOpen)}
+            >
+              <Paintbrush size={16} /> Appearance
+            </button>
           </div>
         </div>
         {appearanceOpen && (
@@ -465,6 +649,12 @@ export function CommandCenter() {
               }}
             >
               {tab}
+              {previewNotes[tab] && (
+                <>
+                  {" "}
+                  <span className={styles.previewTag}>Preview</span>
+                </>
+              )}
             </button>
           ))}
         </nav>
@@ -474,80 +664,108 @@ export function CommandCenter() {
           </p>
         ) : stats.isError ? (
           <div className={styles.notice} role="alert">
-            Workspace totals could not be loaded.{" "}
+            Workspace totals couldn&apos;t be loaded.{" "}
             <button onClick={() => void stats.refetch()}>Retry</button>
           </div>
         ) : (
+          // A labelled, focusable region: below 640px this row scrolls
+          // sideways, and a scroller has to be reachable from the keyboard.
           <div
             className={styles.metrics}
-            aria-label="Recorded workspace totals"
+            role="region"
+            aria-label="Your recorded runs, all time"
+            tabIndex={0}
           >
             {[
-              { label: "Active runs", value: stats.data?.active_runs },
-              { label: "Recorded runs", value: stats.data?.total_runs },
-              { label: "Errors & timeouts", value: stats.data?.failed_runs },
-              { label: "Recorded tokens", value: stats.data?.total_tokens },
+              {
+                label: "Active runs",
+                value: stats.data?.active_runs,
+                scope: "Right now",
+              },
+              {
+                label: "Recorded runs",
+                value: stats.data?.total_runs,
+                scope: "All time, your runs",
+              },
+              {
+                label: "Errors & timeouts",
+                value: failedRuns,
+                state: errorState,
+                scope: "All time, your runs",
+              },
+              {
+                label: "Recorded tokens",
+                value: recordedTokens(stats.data),
+                missing:
+                  stats.data?.total_tokens === 0 ? "Not recorded" : undefined,
+                scope: "All time, input and output",
+              },
             ].map((metric) => (
-              <div
-                key={metric.label}
-                data-exception={
-                  metric.label === "Errors & timeouts" &&
-                  Number(metric.value) > 0
-                }
-              >
+              <div key={metric.label} data-state={metric.state}>
                 <span>{metric.label}</span>
                 <strong>
                   {stats.isLoading ? (
                     <span>Loading</span>
-                  ) : metric.value === undefined ? (
-                    <span>Unavailable</span>
+                  ) : metric.value == null ? (
+                    <span>{metric.missing ?? "Unavailable"}</span>
                   ) : (
                     number(metric.value)
                   )}
                 </strong>
+                <small>{metric.scope}</small>
               </div>
             ))}
           </div>
         )}
+        {previewNotes[view] && (
+          <p className={styles.previewNote}>
+            <span className={styles.previewTag}>Preview</span>{" "}
+            {previewNotes[view]}
+          </p>
+        )}
         {view === "Mission Control" ? (
           <>
-            <div className={styles.overview}>
-              {team}
-              {jobList}
-            </div>
-            <section
-              className={styles.destinations}
-              aria-label="Workspace tools"
-            >
+            {/* The work leads at every width (DESIGN.md, Layout): the
+                dispatch board comes first in the DOM, then the team, so the
+                keyboard walks the page in the order it reads. */}
+            {canReadRuns ? (
+              <DispatchBoard
+                runs={activityRuns.data?.runs}
+                loading={activityRuns.isLoading}
+                error={activityRuns.isError ? activityRuns.error.message : null}
+                onRetry={() => void activityRuns.refetch()}
+                onOpen={openRun}
+                selectedRunId={selectedRunId}
+                agentLabel={agentLabel}
+                startPath={startPath}
+                onShowAll={() => setView("Jobs")}
+                hasMore={Boolean(activityRuns.data?.has_more)}
+                panelClassName={styles.jobs}
+                headClassName={styles.sectionHead}
+              />
+            ) : (
+              jobList
+            )}
+            <div className={styles.missionTeam}>{team}</div>
+            <nav className={styles.destinations} aria-label="Workspace tools">
+              <span>Also in your workspace</span>
               <Link href="/workspace/agents">
-                <Bot size={20} />
-                <div>
-                  <strong>Agent workspace</strong>
-                  <span>Configure your lead agents</span>
-                </div>
-                <ArrowUpRight size={17} />
+                Agents <ArrowUpRight size={15} aria-hidden="true" />
               </Link>
               <Link href="/workspace/scheduled-tasks">
-                <Clock3 size={20} />
-                <div>
-                  <strong>Scheduled work</strong>
-                  <span>Inspect schedules and run history</span>
-                </div>
-                <ArrowUpRight size={17} />
+                Scheduled tasks <ArrowUpRight size={15} aria-hidden="true" />
               </Link>
               <Link href="/workspace/capabilities">
-                <ShieldCheck size={20} />
-                <div>
-                  <strong>Connected capabilities</strong>
-                  <span>Manage skills and integrations</span>
-                </div>
-                <ArrowUpRight size={17} />
+                Capability Center <ArrowUpRight size={15} aria-hidden="true" />
               </Link>
-            </section>
+            </nav>
           </>
         ) : null}
         {view === "Agent Studio" ? (
           <div className={styles.studio}>{team}</div>
+        ) : null}
+        {view === "Live Board" ? (
+          <LiveBoard canReadRuns={canReadRuns} agentLabel={agentLabel} />
         ) : null}
         {view === "Jobs" ? jobList : null}
         {view === "Workflows" ? <WorkflowsView /> : null}
@@ -568,7 +786,7 @@ export function CommandCenter() {
               <p role="status">Usage is unavailable for this account.</p>
             ) : usage.isError ? (
               <div className={styles.empty} role="alert">
-                <p>Usage could not be loaded.</p>
+                <p>Usage couldn&apos;t be loaded.</p>
                 <button onClick={() => void usage.refetch()}>Try again</button>
               </div>
             ) : usage.isLoading ? (
@@ -617,33 +835,31 @@ export function CommandCenter() {
                       </tr>
                     </thead>
                     <tbody>
-                      {Object.entries(usage.data?.by_model ?? {}).map(
-                        ([model, item]) => (
-                          <tr key={model}>
-                            <th scope="row">{model}</th>
-                            <td>{number(item.tokens)}</td>
-                            <td>{number(item.runs)}</td>
-                            <td>{money(item.cost, usage.data?.currency)}</td>
-                          </tr>
-                        ),
-                      )}
+                      {usageRows.map((row) => (
+                        <tr key={row.model}>
+                          <th scope="row">{row.model}</th>
+                          <td>{number(row.tokens)}</td>
+                          <td>{number(row.runs)}</td>
+                          <td>{money(row.cost, usage.data?.currency)}</td>
+                        </tr>
+                      ))}
                     </tbody>
                   </table>
                 </div>
-                {Object.keys(usage.data?.by_model ?? {}).length === 0 && (
+                {usageRows.length === 0 && (
                   <p>No model usage was recorded in this period.</p>
                 )}
                 <p className={styles.diagramNote}>
-                  Cost estimates cover priced models only. Unpriced usage is not
-                  free; these figures are not your provider balance or invoice.
-                  Client revenue, margins and billing are not connected.
+                  Cost estimates cover priced models only. Unpriced usage
+                  isn&apos;t free; these figures aren&apos;t your provider
+                  balance or invoice.
                 </p>
-                <div className={styles.sectionHead}>
+                <div className={`${styles.sectionHead} ${styles.ledgerHead}`}>
                   <div>
                     <h2>Provider attempt ledger</h2>
                     <p>
-                      Read-only attempt and retry evidence; this view does not
-                      approve, block, or authorize provider spend.
+                      Read-only attempt and retry evidence; this view
+                      doesn&apos;t approve, block, or authorize provider spend.
                     </p>
                   </div>
                   <button
@@ -662,7 +878,7 @@ export function CommandCenter() {
                 </div>
                 {usageLedger.isError ? (
                   <div className={styles.empty} role="alert">
-                    <p>Provider attempt evidence could not be loaded.</p>
+                    <p>Provider attempt evidence couldn&apos;t be loaded.</p>
                     <button onClick={() => void usageLedger.refetch()}>
                       Try again
                     </button>
@@ -726,9 +942,10 @@ export function CommandCenter() {
                             <td>
                               {attempt.provider ?? "Provider not recorded"}
                               <span className={styles.meta}>
-                                {attempt.resolved_model ??
-                                  attempt.requested_model ??
-                                  "Model not recorded"}
+                                {modelName(
+                                  attempt.resolved_model ??
+                                    attempt.requested_model,
+                                ) || "Model not recorded"}
                               </span>
                             </td>
                             <td>
@@ -780,7 +997,7 @@ export function CommandCenter() {
         ) : null}
         <footer className={styles.footer}>
           <span>Momentum · Built for the work ahead.</span>
-          <span>Powered by DeerFlow · No model calls from this dashboard</span>
+          <span>No model calls from this dashboard</span>
         </footer>
       </div>
       {selectedRun && (
@@ -818,7 +1035,7 @@ export function CommandCenter() {
               <dl>
                 <div>
                   <dt>Model</dt>
-                  <dd>{selectedRun.model_name ?? "Not recorded"}</dd>
+                  <dd>{modelName(selectedRun.model_name) || "Not recorded"}</dd>
                 </div>
                 <div>
                   <dt>Duration</dt>
@@ -826,7 +1043,13 @@ export function CommandCenter() {
                 </div>
                 <div>
                   <dt>Tokens</dt>
-                  <dd>{number(selectedRun.total_tokens)}</dd>
+                  <dd>
+                    {selectedRun.total_tokens > 0
+                      ? number(selectedRun.total_tokens)
+                      : active(selectedRun.status)
+                        ? "Still counting"
+                        : "Not recorded"}
+                  </dd>
                 </div>
                 <div>
                   <dt>Estimated cost</dt>
@@ -906,6 +1129,6 @@ export function CommandCenter() {
           </Dialog.Content>
         </Dialog.Root>
       )}
-    </main>
+    </div>
   );
 }

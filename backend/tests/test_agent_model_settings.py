@@ -30,6 +30,14 @@ def test_model_settings_default_to_none() -> None:
     assert cfg.thinking_enabled is None
     assert cfg.reasoning_effort is None
     assert cfg.memory_enabled is True
+    assert cfg.self_update_enabled is True
+
+
+def test_custom_agent_can_disable_self_update_as_an_api_managed_field() -> None:
+    cfg = AgentConfig(name="fixed-worker", self_update_enabled=False)
+    assert cfg.self_update_enabled is False
+    assert "self_update_enabled" in MANAGED_AGENT_CONFIG_FIELDS
+    assert preserve_non_managed_fields(cfg) == {}
 
 
 def test_custom_agent_can_disable_memory_as_an_api_managed_field() -> None:

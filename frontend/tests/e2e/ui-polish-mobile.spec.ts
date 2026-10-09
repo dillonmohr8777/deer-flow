@@ -11,9 +11,14 @@ test.describe("UI polish mobile regressions", () => {
 
     await page.goto("/workspace/chats/new");
 
-    await page.getByRole("button", { name: /toggle sidebar/i }).click();
-
-    await expect(page.getByRole("link", { name: /new chat/i })).toBeVisible();
+    // A click that lands before hydration does nothing (the button is server
+    // rendered), and this raced on the trunk too: retry until the sheet opens.
+    await expect(async () => {
+      await page.getByRole("button", { name: /toggle sidebar/i }).click();
+      await expect(page.getByRole("link", { name: /new chat/i })).toBeVisible({
+        timeout: 1_000,
+      });
+    }).toPass();
     await expect(page.getByRole("link", { name: /agents/i })).toBeVisible();
     await expect
       .poll(() => page.evaluate(() => document.documentElement.scrollWidth))
@@ -74,5 +79,34 @@ test.describe("UI polish mobile regressions", () => {
     // The two themes must resolve to different ring tokens, otherwise the test
     // would pass trivially if <html> were stuck in one mode.
     expect(darkRing).not.toBe(lightRing);
+  });
+
+  test("chats search and tabs keep the page gutter on phones", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    mockLangGraphAPI(page);
+
+    await page.goto("/workspace/chats");
+
+    const search = page.getByPlaceholder("Search chats");
+    await expect(search).toBeVisible();
+    const bounds = await search.boundingBox();
+    expect(bounds!.x).toBeGreaterThanOrEqual(12);
+    expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(390 - 12);
+  });
+
+  test("?settings=security opens the Security section", async ({ page }) => {
+    mockLangGraphAPI(page);
+
+    await page.goto("/workspace/chats/new?settings=security");
+
+    const dialog = page.getByRole("dialog", { name: "Settings" });
+    await expect(
+      dialog.getByRole("button", { name: "Security", exact: true }),
+    ).toHaveAttribute("aria-current", "page");
+    await expect(
+      dialog.getByRole("heading", { name: "Two-factor authentication" }),
+    ).toBeVisible();
   });
 });

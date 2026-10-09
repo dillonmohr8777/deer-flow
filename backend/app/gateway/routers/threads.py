@@ -668,6 +668,17 @@ def _derive_thread_status(snapshot: Any, pending_writes: list[Any], *, fallback_
     return "idle"
 
 
+async def _has_checkpoint(checkpointer: Any, thread_id: str) -> bool:
+    """Whether any checkpoint exists for ``thread_id``.
+
+    Checkpoints are keyed by thread id alone, so one with no row the caller owns
+    is another owner's (or no one's) conversation: creating a row over it would
+    claim it. Read it before the row so a concurrent create by the same caller,
+    which commits its row before its checkpoint, is found as the caller's row.
+    """
+    return await checkpointer.aget_tuple({"configurable": {"thread_id": thread_id, "checkpoint_ns": ""}}) is not None
+
+
 async def _ensure_thread_for_goal(thread_id: str, request: Request) -> None:
     """Ensure a thread_meta row and root checkpoint exist for goal commands."""
     from app.gateway.deps import get_thread_store
@@ -677,6 +688,7 @@ async def _ensure_thread_for_goal(thread_id: str, request: Request) -> None:
     thread_owner_user_id = get_trusted_internal_owner_user_id(request)
     thread_owner_kwargs = {"user_id": thread_owner_user_id} if thread_owner_user_id else {}
 
+    checkpoint_exists = await _has_checkpoint(checkpointer, thread_id)
     record = await thread_store.get(thread_id, **thread_owner_kwargs)
     if record is None and thread_owner_user_id:
         unscoped_record = await thread_store.get(thread_id, user_id=None)
@@ -685,6 +697,8 @@ async def _ensure_thread_for_goal(thread_id: str, request: Request) -> None:
                 await thread_store.update_owner(thread_id, thread_owner_user_id, user_id=None)
             record = await thread_store.get(thread_id, **thread_owner_kwargs)
     if record is None:
+        if checkpoint_exists:
+            raise HTTPException(status_code=404, detail=f"Thread {thread_id} not found")
         try:
             await thread_store.create(thread_id, metadata={}, **thread_owner_kwargs)
         except Exception:
@@ -833,26 +847,6 @@ async def _delete_thread_data_with_reservation(thread_id: str, request: Request)
     return response
 
 
-async def _resolve_existing_thread(
-    thread_store: Any,
-    thread_id: str,
-    thread_owner_user_id: str | None,
-    thread_owner_kwargs: dict[str, Any],
-) -> dict | None:
-    """Return the existing thread_meta record for an idempotent create.
-
-    When the caller carries a trusted internal owner but only a legacy unscoped
-    (``user_id=None``) row exists, claim it for that owner before returning.
-    Both the fast path and the insert-race recovery path resolve through here so
-    a thread's ownership does not diverge based on which path found the record.
-    """
-    existing_record = await thread_store.get(thread_id, **thread_owner_kwargs)
-    if existing_record is None and thread_owner_user_id:
-        await thread_store.claim_unowned(thread_id, thread_owner_user_id)
-        existing_record = await thread_store.get(thread_id, **thread_owner_kwargs)
-    return existing_record
-
-
 def _existing_thread_response(thread_id: str, record: dict) -> ThreadResponse:
     return ThreadResponse(
         thread_id=thread_id,
@@ -870,7 +864,9 @@ async def create_thread(body: ThreadCreateRequest, request: Request) -> ThreadRe
 
     Writes a thread_meta record (so the thread appears in /threads/search)
     and an empty checkpoint (so state endpoints work immediately).
-    Idempotent: returns the existing record when ``thread_id`` already exists.
+    Idempotent: returns the existing record when the caller already owns
+    ``thread_id``. An id anyone else holds, as a row or as a checkpoint with
+    no row (including legacy ownerless data), answers 404 and is never claimed.
     """
     from app.gateway.deps import get_thread_store
 
@@ -884,9 +880,12 @@ async def create_thread(body: ThreadCreateRequest, request: Request) -> ThreadRe
     # ``ThreadCreateRequest._strip_reserved`` — see the model definition.
 
     # Idempotency: return existing record when already present
-    existing_record = await _resolve_existing_thread(thread_store, thread_id, thread_owner_user_id, thread_owner_kwargs)
+    checkpoint_exists = await _has_checkpoint(checkpointer, thread_id)
+    existing_record = await thread_store.get(thread_id, **thread_owner_kwargs)
     if existing_record is not None:
         return _existing_thread_response(thread_id, existing_record)
+    if checkpoint_exists:
+        raise HTTPException(status_code=404, detail="Thread not found")
 
     # Write thread_meta so the thread appears in /threads/search immediately
     from deerflow.persistence.projects import ProjectNotAssignableError
@@ -911,16 +910,15 @@ async def create_thread(body: ThreadCreateRequest, request: Request) -> ThreadRe
         # concurrent request for the same thread_id can commit in between, so
         # the SQL-backed store rejects ours on the duplicate primary key.
         # Honour the documented idempotency contract by resolving the
-        # now-existing record — running the same owner reconciliation the fast
-        # path does — instead of surfacing the conflict as a 500. The memory
-        # store serializes same-id creates under its per-thread lock and keeps
-        # its historical overwrite behavior, so it does not reach this branch.
-        existing_record = await _resolve_existing_thread(thread_store, thread_id, thread_owner_user_id, thread_owner_kwargs)
+        # now-existing record instead of surfacing the conflict as a 500. The
+        # memory store serializes same-id creates under its per-thread lock and
+        # raises ThreadOwnershipConflictError for a foreign row instead.
+        existing_record = await thread_store.get(thread_id, **thread_owner_kwargs)
         if existing_record is not None:
             return _existing_thread_response(thread_id, existing_record)
-        # A duplicate-key error with no row we can read back is a real failure.
-        logger.exception("Failed to write thread_meta for %s", sanitize_log_param(thread_id))
-        raise HTTPException(status_code=500, detail="Failed to create thread")
+        # The row we collided with is not the caller's (another owner, no
+        # owner, or another organization): same answer as the memory store.
+        raise HTTPException(status_code=404, detail="Thread not found") from None
     except Exception:
         # Any non-race failure must surface, not be silently swallowed as a 200.
         logger.exception("Failed to write thread_meta for %s", sanitize_log_param(thread_id))
@@ -1274,7 +1272,7 @@ async def move_thread(thread_id: ThreadId, body: ThreadMoveRequest, request: Req
 
 
 @router.get("/{thread_id}", response_model=ThreadResponse)
-@require_permission("threads", "read", owner_check=True)
+@require_permission("threads", "read", owner_check=True, require_existing=True)
 async def get_thread(thread_id: ThreadId, request: Request) -> ThreadResponse:
     """Get thread info from metadata plus the graph's materialized state."""
     from app.gateway.deps import get_thread_store
@@ -1282,11 +1280,14 @@ async def get_thread(thread_id: ThreadId, request: Request) -> ThreadResponse:
     thread_store = get_thread_store(request)
     checkpointer = get_checkpointer(request)
     record: dict | None = await thread_store.get(thread_id)
+    if record is None:
+        # Deleted since the owner check. A checkpoint alone proves no owner.
+        raise HTTPException(status_code=404, detail=f"Thread {thread_id} not found")
     try:
         accessor, config = await abuild_checkpoint_state_accessor(
             request,
             thread_id=thread_id,
-            assistant_id=record.get("assistant_id") if record is not None else None,
+            assistant_id=record.get("assistant_id"),
         )
     except _CHECKPOINT_MODE_ERRORS as exc:
         raise _checkpoint_mode_http_error(exc, thread_id) from exc
@@ -1301,18 +1302,6 @@ async def get_thread(thread_id: ThreadId, request: Request) -> ThreadResponse:
         logger.exception("Failed to get checkpoint for thread %s", sanitize_log_param(thread_id))
         raise HTTPException(status_code=500, detail="Failed to get thread")
 
-    if record is None and not checkpoint_id:
-        raise HTTPException(status_code=404, detail=f"Thread {thread_id} not found")
-
-    metadata = snapshot.metadata or {}
-    if record is None:
-        record = {
-            "thread_id": thread_id,
-            "status": "idle",
-            "created_at": coerce_iso(snapshot.created_at or metadata.get("created_at", "")),
-            "updated_at": coerce_iso(metadata.get("updated_at", snapshot.created_at or metadata.get("created_at", ""))),
-            "metadata": {key: value for key, value in metadata.items() if key not in ("created_at", "updated_at", "step", "source", "writes", "parents")},
-        }
     stored_status = record.get("status", "idle")
     status = _derive_thread_status(snapshot, pending_writes, fallback_status=stored_status) if checkpoint_id else stored_status
 
@@ -1327,7 +1316,7 @@ async def get_thread(thread_id: ThreadId, request: Request) -> ThreadResponse:
 
 
 @router.get("/{thread_id}/goal", response_model=ThreadGoalResponse)
-@require_permission("threads", "read", owner_check=True)
+@require_permission("threads", "read", owner_check=True, require_existing=True)
 async def get_thread_goal(thread_id: ThreadId, request: Request) -> ThreadGoalResponse:
     """Return the active Claude-style goal for a thread, if any."""
     checkpointer = get_checkpointer(request)
@@ -1345,7 +1334,8 @@ async def set_thread_goal(thread_id: ThreadId, body: ThreadGoalRequest, request:
     """Set or replace the active goal for a thread.
 
     ``/chats/new`` pages already hold a generated UUID before the first run, so
-    this endpoint creates the missing thread checkpoint on demand.
+    this endpoint creates the missing thread on demand, but only for an unused
+    id: a checkpoint without the caller's row is not theirs to claim (404).
     """
     checkpointer = get_checkpointer(request)
     try:
@@ -1366,7 +1356,7 @@ async def set_thread_goal(thread_id: ThreadId, body: ThreadGoalRequest, request:
 
 
 @router.delete("/{thread_id}/goal", response_model=ThreadGoalResponse)
-@require_permission("threads", "write", owner_check=True)
+@require_permission("threads", "write", owner_check=True, require_existing=True)
 async def clear_thread_goal(thread_id: ThreadId, request: Request) -> ThreadGoalResponse:
     """Clear the active goal for a thread."""
     checkpointer = get_checkpointer(request)
@@ -1444,7 +1434,7 @@ async def compact_thread(thread_id: ThreadId, body: ThreadCompactRequest, reques
 
 # ---------------------------------------------------------------------------
 @router.get("/{thread_id}/state", response_model=ThreadStateResponse)
-@require_permission("threads", "read", owner_check=True)
+@require_permission("threads", "read", owner_check=True, require_existing=True)
 async def get_thread_state(thread_id: ThreadId, request: Request) -> ThreadStateResponse:
     """Get the latest materialized graph state for a thread."""
     # Resolve through the thread's assistant so custom middleware channels
@@ -1693,7 +1683,7 @@ async def _persist_run_history_metadata_background(
 
 
 @router.post("/{thread_id}/history", response_model=list[HistoryEntry])
-@require_permission("threads", "read", owner_check=True)
+@require_permission("threads", "read", owner_check=True, require_existing=True)
 async def get_thread_history(
     thread_id: ThreadId,
     body: ThreadHistoryRequest,

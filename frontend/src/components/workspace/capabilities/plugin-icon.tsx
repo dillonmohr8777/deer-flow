@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 
+import { pageStyles } from "@/components/workspace/page-body";
 import { safePluginIcon } from "@/core/mcp/icon";
 import { cn } from "@/lib/utils";
 
@@ -52,7 +53,8 @@ export function PluginIcon({
     return (
       <span
         className={cn(
-          "flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border bg-white p-2",
+          "flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-white p-1.5",
+          pageStyles.mark,
           className,
         )}
       >

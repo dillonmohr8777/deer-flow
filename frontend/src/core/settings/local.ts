@@ -14,6 +14,7 @@ export const DEFAULT_LOCAL_SETTINGS: LocalSettings = {
     model_name: undefined,
     mode: undefined,
     reasoning_effort: undefined,
+    experience_mode: undefined,
   },
 };
 
@@ -91,10 +92,12 @@ export interface LocalSettings {
     | "subagent_enabled"
     | "model_name"
     | "reasoning_effort"
+    | "experience_mode"
   > & {
     model_name?: string | undefined;
     mode: "flash" | "thinking" | "pro" | "ultra" | undefined;
     reasoning_effort?: "minimal" | "low" | "medium" | "high";
+    experience_mode?: "easy" | "medium" | "hard" | undefined;
   };
 }
 

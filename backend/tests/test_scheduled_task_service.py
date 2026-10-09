@@ -2,6 +2,7 @@ import asyncio
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from org_isolation_fixtures import fake_delegation
 
 from app.scheduler.service import ScheduledTaskService
 from deerflow.runtime import ConflictError, RunStatus
@@ -64,6 +65,9 @@ class DummyTaskRepo:
             return None
         row.update(updates)
         return dict(row)
+
+    async def resolve_launch_delegation(self, task):
+        return fake_delegation(task.get("user_id") or "user-1", subject_id=task["id"])
 
 
 class DummyRunRepo:
@@ -139,7 +143,7 @@ class DummyRunRepo:
 @pytest.mark.asyncio
 async def test_service_claims_and_dispatches_due_task():
     async def fake_launch(**kwargs):
-        assert kwargs["owner_user_id"] == "user-1"
+        assert kwargs["delegation"].owner_user_id == "user-1"
         assert kwargs["metadata"]["scheduled_task_id"] == "task-1"
         assert kwargs["metadata"]["scheduled_trigger"] == "scheduled"
         return {"run_id": "run-1", "thread_id": kwargs["thread_id"]}

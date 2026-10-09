@@ -110,6 +110,7 @@ providers:
 
     # User provisioning
     auto_create_users: true         # Auto-create DeerFlow account on first SSO login (default: true)
+    auto_create_requires_invitation: false  # Auto-create only for a verified email with a pending workspace invitation (default: false)
     require_verified_email: true    # Reject logins without verified email (default: true)
     allowed_email_domains: []       # Restrict to specific domains (default: no restriction)
     admin_emails: []                # Auto-grant admin role to these emails (default: none)
@@ -278,3 +279,4 @@ The frontend handles the post-SSO flow at `/auth/callback`:
 - **Reject alg=none** — ID tokens with algorithm "none" are always rejected
 - **No email auto-linking** — SSO accounts are always separate from email/password accounts. An email collision with an existing local account blocks the SSO login (409) rather than merging the two.
 - **Verified email requirement** — SSO users must have verified emails by default
+- **Invite-only auto-create (opt-in)**: with `auto_create_requires_invitation: true`, a first SSO login creates an account only when the provider-verified email holds a pending workspace invitation (not consumed, not expired, issuer still an active owner/admin). Otherwise it gets the same 403 as `auto_create_users: false`. Existing linked accounts are unaffected.

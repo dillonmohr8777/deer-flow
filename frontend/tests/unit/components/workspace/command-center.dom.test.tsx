@@ -1,3 +1,6 @@
+import { existsSync } from "node:fs";
+import { join } from "node:path";
+
 import { afterEach, beforeEach, describe, expect, it, rs } from "@rstest/core";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
@@ -17,7 +20,25 @@ const baseStats = {
 const mocks = rs.hoisted(() => ({
   stats: undefined as unknown,
   statsLoading: false,
+  runs: [] as unknown[],
+  clients: [] as unknown[],
+  clientsError: false,
 }));
+const contributorRun = {
+  run_id: "run-7",
+  thread_id: "thread-7",
+  thread_title: "Audit the landing page",
+  assistant_id: "lead",
+  status: "success",
+  model_name: "openrouter-muse-spark-contributor",
+  created_at: "2026-09-21T01:02:03.000Z",
+  updated_at: "2026-09-21T01:03:03.000Z",
+  duration_seconds: 42,
+  total_tokens: 1234,
+  message_count: 4,
+  cost: null,
+  error: null,
+};
 
 rs.mock("next/image", () => ({
   default: ({
@@ -54,8 +75,62 @@ rs.mock("@/components/workspace/thread-subagent-batches", () => ({
   ThreadSubagentBatches: () => null,
 }));
 
+// The topology renders its own states (command-center-agent-topology tests);
+// here it only shows which names Command Center hands it as running/queued.
 rs.mock("@/components/workspace/command-center/agent-topology", () => ({
-  AgentTopology: () => <div data-testid="agent-topology" />,
+  AgentTopology: ({
+    runningAgentNames,
+    queuedAgentNames,
+  }: {
+    runningAgentNames?: readonly string[] | null;
+    queuedAgentNames?: readonly string[] | null;
+  }) => (
+    <div
+      data-testid="agent-topology"
+      data-running={(runningAgentNames ?? []).join(",")}
+      data-queued={(queuedAgentNames ?? []).join(",")}
+    />
+  ),
+}));
+
+// The flattened fallback PaperLayers draws with motion off, plus the state
+// it was asked for, so a test can see whether the hero brain would pulse.
+rs.mock("@/components/momentum/paper-layers", () => ({
+  PaperLayers: ({
+    flatSrc,
+    size,
+    state,
+  }: {
+    flatSrc: string;
+    size: number;
+    state?: string;
+  }) => (
+    <img
+      data-paper-layers="root"
+      data-state={state ?? "idle"}
+      src={flatSrc}
+      alt=""
+      aria-hidden
+      width={size}
+    />
+  ),
+}));
+
+rs.mock("@/components/workspace/command-center/business-views", () => ({
+  ArtifactLibraryView: () => <div data-testid="artifact-library" />,
+  ClientSpacesView: () => <div data-testid="client-spaces" />,
+  WorkflowsView: () => <div data-testid="workflows" />,
+}));
+
+rs.mock("@/core/models/hooks", () => ({
+  useModels: () => ({
+    models: [
+      {
+        name: "openrouter-muse-spark-contributor",
+        display_name: "Muse Spark 1.3 Contributor (OpenRouter)",
+      },
+    ],
+  }),
 }));
 
 rs.mock("@/core/auth/AuthProvider", () => ({
@@ -69,6 +144,16 @@ rs.mock("@/core/auth/permissions", () => ({
 
 rs.mock("@/core/agents", () => ({
   useAgents: () => ({ agents: [{ name: "lead", display_name: "Lead" }] }),
+}));
+
+rs.mock("@/core/clients", () => ({
+  useClients: () => ({
+    data: mocks.clients,
+    isLoading: false,
+    isError: mocks.clientsError,
+    isSuccess: !mocks.clientsError,
+    refetch: rs.fn(),
+  }),
 }));
 
 rs.mock("@/core/subagents", () => ({
@@ -87,7 +172,7 @@ rs.mock("@/core/console", () => ({
     reset: rs.fn(),
   }),
   useConsoleRuns: () => ({
-    data: { runs: [], has_more: false },
+    data: { runs: mocks.runs, has_more: false },
     error: null,
     isError: false,
     isFetching: false,
@@ -103,7 +188,23 @@ rs.mock("@/core/console", () => ({
   }),
   useConsoleUsage: () => ({
     data: {
-      by_model: {},
+      // The ledger records these IDs doubled; both are one model to a person.
+      by_model: {
+        "meta/muse-spark-1.3meta/muse-spark-1.3": {
+          tokens: 1000,
+          runs: 1,
+          cost: null,
+          input_tokens: 900,
+          cache_read_tokens: 0,
+        },
+        "meta/muse-spark-1.3-contributormeta/muse-spark-1.3-contributor": {
+          tokens: 2000,
+          runs: 2,
+          cost: 0.5,
+          input_tokens: 1800,
+          cache_read_tokens: 0,
+        },
+      },
       currency: "USD",
       days: [],
       total_cost: 0.004,
@@ -155,6 +256,9 @@ rs.mock("@/core/console", () => ({
 beforeEach(() => {
   mocks.stats = { ...baseStats };
   mocks.statsLoading = false;
+  mocks.runs = [];
+  mocks.clients = [];
+  mocks.clientsError = false;
 });
 
 afterEach(() => {
@@ -167,35 +271,332 @@ function metric(label: string) {
 }
 
 describe("CommandCenter", () => {
-  it("marks errors as an exception only when failures were recorded", () => {
-    const { unmount } = render(<CommandCenter />);
-    expect(metric("Errors & timeouts").dataset.exception).toBe("false");
-    unmount();
+  it("colours the error count for state only: danger, ok, or plain ink", () => {
+    mocks.stats = { ...baseStats, total_runs: 0 };
+    const first = render(<CommandCenter />);
+    expect(metric("Errors & timeouts").dataset.state).toBeUndefined();
+    first.unmount();
+    mocks.stats = { ...baseStats };
+    const second = render(<CommandCenter />);
+    expect(metric("Errors & timeouts").dataset.state).toBe("ok");
+    second.unmount();
     mocks.stats = { ...baseStats, failed_runs: 2 };
     render(<CommandCenter />);
-    expect(metric("Errors & timeouts").dataset.exception).toBe("true");
+    expect(metric("Errors & timeouts").dataset.state).toBe("danger");
+    // No other numeral carries a state colour.
+    expect(metric("Recorded tokens").dataset.state).toBeUndefined();
+  });
+
+  it("makes the totals rail a labelled region the keyboard can reach", () => {
+    render(<CommandCenter />);
+    const rail = screen.getByRole("region", {
+      name: "Your recorded runs, all time",
+    });
+    expect(rail.tabIndex).toBe(0);
+  });
+
+  it("keeps the brand card and motion switch out of the hero; motion lives in Appearance", () => {
+    render(<CommandCenter />);
+    expect(screen.queryByRole("switch", { name: "Brand motion" })).toBeNull();
+    expect(screen.queryByAltText("Momentum")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Appearance" }));
+    expect(screen.getByRole("switch", { name: "Brand motion" })).toBeDefined();
+  });
+
+  it("introduces the crew in the hero, lead in front, rather than repeating the lead card", () => {
+    const { container } = render(<CommandCenter />);
+    const crew = [...container.querySelectorAll("[data-crew]")];
+    expect(crew.length).toBeGreaterThanOrEqual(3);
+    expect(crew.length).toBeLessThanOrEqual(4);
+    for (const el of crew) {
+      const slug = el.getAttribute("data-crew");
+      if (slug === "dillon-brain") {
+        // PaperLayers, not a robot Momo svg. No appearance provider is
+        // mounted here, so its motion default (off) holds it to the
+        // flattened WebP fallback.
+        const img = el.querySelector("img");
+        expect(img?.getAttribute("src")).toBe("/momentum/brain/flat.webp");
+        expect(
+          existsSync(join(process.cwd(), "public", "momentum/brain/flat.webp")),
+        ).toBe(true);
+        expect(el.closest('[aria-hidden="true"]')).not.toBeNull();
+        continue;
+      }
+      // Canon art by path, and the file is really there: no 404 in the hero.
+      const src = el.getAttribute("src") ?? "";
+      expect(src).toMatch(/^\/momentum\/momos\/[a-z-]+\.svg$/);
+      expect(existsSync(join(process.cwd(), "public", src))).toBe(true);
+      // Decoration: the heading beside it says what the page is.
+      expect(el.getAttribute("alt")).toBe("");
+      expect(el.closest('[aria-hidden="true"]')).not.toBeNull();
+    }
+    // One lead (Dillon Brain), painted last so it stands in front of the crew.
+    const slugs = crew.map((el) => el.getAttribute("data-crew"));
+    expect(slugs.filter((slug) => slug === "dillon-brain")).toHaveLength(1);
+    expect(slugs.at(-1)).toBe("dillon-brain");
+    expect(new Set(slugs).size).toBe(slugs.length);
+  });
+
+  it("names models by display name, never the slug or the Contributor tier", () => {
+    mocks.runs = [contributorRun];
+    render(<CommandCenter />);
+    // Mission Control's dispatch slips leave the model to the receipt; the
+    // Jobs list still names it on every row.
+    fireEvent.click(screen.getByRole("button", { name: "Jobs" }));
+    expect(screen.getByText("Muse Spark 1.3")).toBeDefined();
+    fireEvent.click(
+      screen.getByRole("button", { name: /Audit the landing page/ }),
+    );
+    expect(screen.getByRole("dialog")).toBeDefined();
+    expect(screen.getAllByText("Muse Spark 1.3").length).toBe(2);
+    expect(document.body.textContent).not.toMatch(/contributor/i);
+    expect(document.body.textContent).not.toContain("openrouter-");
+  });
+
+  it("names each slip's agent in words through the real agentLabel", () => {
+    mocks.runs = [
+      { ...contributorRun, run_id: "r1", thread_title: "Lead slip" },
+      {
+        ...contributorRun,
+        run_id: "r2",
+        thread_title: "Growth slip",
+        assistant_id: "dillon-growth",
+      },
+      {
+        ...contributorRun,
+        run_id: "r3",
+        thread_title: "Nobody slip",
+        assistant_id: null,
+      },
+    ];
+    render(<CommandCenter />);
+    const slip = (name: string) =>
+      screen.getAllByRole("button", { name: new RegExp(name) })[0]!;
+    // "lead" resolves to the lead agent's display name.
+    expect(slip("Lead slip").textContent).toContain("Lead");
+    expect(slip("Lead slip").textContent).not.toMatch(/\blead\b/);
+    // An unknown specialist id is spelled out, never shown raw.
+    expect(slip("Growth slip").textContent).toContain("Dillon Growth");
+    expect(slip("Growth slip").textContent).not.toContain("dillon-growth");
+    // A missing id says so instead of inventing an agent.
+    expect(slip("Nobody slip").textContent).toContain("Agent not recorded");
+  });
+
+  it("hands the team running and queued agents apart, so a queued run never pins or pulses", () => {
+    mocks.runs = [
+      // Pending only: queued, waiting, not working.
+      {
+        ...contributorRun,
+        run_id: "q1",
+        assistant_id: "dillon-growth",
+        status: "pending",
+      },
+      // Pending and running: the running run wins.
+      {
+        ...contributorRun,
+        run_id: "q2",
+        assistant_id: "dillon-builder",
+        status: "pending",
+      },
+      {
+        ...contributorRun,
+        run_id: "r2",
+        assistant_id: "dillon-builder",
+        status: "running",
+      },
+      // The lead's only live run is queued: the hero brain stays still.
+      {
+        ...contributorRun,
+        run_id: "q3",
+        assistant_id: "dillon-brain",
+        status: "pending",
+      },
+    ];
+    const { container, unmount } = render(<CommandCenter />);
+    const topology = screen.getByTestId("agent-topology");
+    expect(topology.getAttribute("data-running")).toBe("dillon-builder");
+    expect(topology.getAttribute("data-queued")).toBe(
+      "dillon-growth,dillon-brain",
+    );
+    const heroBrain = () =>
+      container.querySelector('[data-crew="dillon-brain"] [data-paper-layers]');
+    expect(heroBrain()?.getAttribute("data-state")).toBe("idle");
+    unmount();
+
+    // Once the lead's run is running, the hero brain works.
+    mocks.runs = [
+      {
+        ...contributorRun,
+        run_id: "r3",
+        assistant_id: "dillon-brain",
+        status: "running",
+      },
+    ];
+    const second = render(<CommandCenter />);
+    expect(
+      second.container
+        .querySelector('[data-crew="dillon-brain"] [data-paper-layers]')
+        ?.getAttribute("data-state"),
+    ).toBe("working");
+  });
+
+  it("dates each assignment and keeps its full title on hover", () => {
+    mocks.runs = [contributorRun, { ...contributorRun, created_at: null }];
+    render(<CommandCenter />);
+    const rows = screen.getAllByRole("button", {
+      name: /Audit the landing page/,
+    });
+    expect(rows).toHaveLength(2);
+    for (const row of rows) {
+      expect(row.getAttribute("title")).toBe("Audit the landing page");
+    }
+    const stamp = rows[0]?.querySelector("time");
+    expect(stamp?.getAttribute("dateTime")).toBe(contributorRun.created_at);
+    expect(stamp?.textContent).toMatch(/^Sep (20|21)(, 2026)?$/);
+    // A run with no recorded start omits the stamp instead of inventing one.
+    expect(rows[1]?.querySelector("time")).toBeNull();
+  });
+
+  it("says a run's tokens were not recorded instead of printing 0 tokens", () => {
+    mocks.runs = [
+      { ...contributorRun, total_tokens: 0 },
+      {
+        ...contributorRun,
+        run_id: "run-8",
+        thread_title: "Still working",
+        status: "running",
+        total_tokens: 0,
+      },
+    ];
+    render(<CommandCenter />);
+    // Token counts live on the Jobs list and the receipt, not on dispatch slips.
+    fireEvent.click(screen.getByRole("button", { name: "Jobs" }));
+    expect(screen.getByText("Tokens not recorded")).toBeDefined();
+    expect(screen.getByText("Tokens still counting")).toBeDefined();
+    expect(document.body.textContent).not.toContain("0 tokens");
+    fireEvent.click(
+      screen.getByRole("button", { name: /Audit the landing page/ }),
+    );
+    const tokens = screen.getByText("Tokens", { selector: "dt" });
+    expect(tokens.nextElementSibling?.textContent).toBe("Not recorded");
+  });
+
+  it("labels the tabs the backend only partly supports as Preview", () => {
+    render(<CommandCenter />);
+    for (const name of ["Mission Control", "Agent Studio", "Jobs", "Workflows"])
+      expect(screen.getByRole("button", { name })).toBeDefined();
+    for (const name of [
+      "Client Spaces",
+      "Business Intelligence",
+      "Artifact Library",
+    ])
+      expect(
+        screen.getByRole("button", { name: `${name} Preview` }),
+      ).toBeDefined();
+    expect(screen.queryByText(/not connected yet/)).toBeNull();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Client Spaces Preview" }),
+    );
+    expect(
+      screen.getByText(/No clients have been added to this workspace yet/),
+    ).toBeDefined();
+    expect(screen.getByTestId("client-spaces")).toBeDefined();
+  });
+
+  it("drops the Client Spaces preview label once real clients exist", () => {
+    mocks.clients = [{ id: "c1", display_name: "Acme" }];
+    render(<CommandCenter />);
+
+    expect(
+      screen.queryByRole("button", { name: "Client Spaces Preview" }),
+    ).toBeNull();
+    expect(screen.getByRole("button", { name: "Client Spaces" })).toBeDefined();
+    // Every other Preview-labelled tab is unaffected.
+    for (const name of ["Business Intelligence", "Artifact Library"])
+      expect(
+        screen.getByRole("button", { name: `${name} Preview` }),
+      ).toBeDefined();
+
+    fireEvent.click(screen.getByRole("button", { name: "Client Spaces" }));
+    expect(
+      screen.queryByText(/No clients have been added to this workspace yet/),
+    ).toBeNull();
+  });
+
+  it("never says there are no clients when the client read failed", () => {
+    mocks.clientsError = true;
+    render(<CommandCenter />);
+
+    // Unknown is not zero: no Preview tag and no "no clients" note.
+    expect(
+      screen.queryByRole("button", { name: "Client Spaces Preview" }),
+    ).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Client Spaces" }));
+    expect(
+      screen.queryByText(/No clients have been added to this workspace yet/),
+    ).toBeNull();
+  });
+
+  it("merges usage rows that share a display name", () => {
+    render(<CommandCenter />);
+    fireEvent.click(
+      screen.getByRole("button", { name: /^Business Intelligence/ }),
+    );
+    const rows = screen.getAllByRole("row", { name: /Muse Spark 1\.3/ });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.textContent).toContain("3,000");
+    expect(rows[0]!.textContent).toContain("$0.50");
   });
 
   it("says loading or unavailable instead of printing a number or a dash", () => {
     mocks.statsLoading = true;
     const { unmount } = render(<CommandCenter />);
     expect(metric("Recorded tokens").textContent).toBe(
-      "Recorded tokensLoading",
+      "Recorded tokensLoadingAll time, input and output",
     );
     unmount();
     mocks.statsLoading = false;
     mocks.stats = { ...baseStats, total_tokens: undefined };
     render(<CommandCenter />);
     expect(metric("Recorded tokens").textContent).toBe(
-      "Recorded tokensUnavailable",
+      "Recorded tokensUnavailableAll time, input and output",
     );
-    expect(metric("Recorded runs").textContent).toBe("Recorded runs1");
+    expect(metric("Recorded runs").textContent).toBe(
+      "Recorded runs1All time, your runs",
+    );
+  });
+
+  it("labels every total with its scope and period", () => {
+    render(<CommandCenter />);
+    expect(metric("Active runs").textContent).toBe("Active runs0Right now");
+    expect(metric("Errors & timeouts").textContent).toBe(
+      "Errors & timeouts0All time, your runs",
+    );
+    expect(metric("Recorded tokens").textContent).toBe(
+      "Recorded tokens30All time, input and output",
+    );
+  });
+
+  it("reads zero tokens across recorded runs as not recorded, not zero", () => {
+    mocks.stats = { ...baseStats, total_runs: 4, total_tokens: 0 };
+    const { unmount } = render(<CommandCenter />);
+    expect(metric("Recorded tokens").textContent).toBe(
+      "Recorded tokensNot recordedAll time, input and output",
+    );
+    unmount();
+    // With no runs at all, zero is the true count.
+    mocks.stats = { ...baseStats, total_runs: 0, total_tokens: 0 };
+    render(<CommandCenter />);
+    expect(metric("Recorded tokens").textContent).toBe(
+      "Recorded tokens0All time, input and output",
+    );
   });
 
   it("surfaces provider attempt receipts without presenting estimates as invoices", () => {
     render(<CommandCenter />);
     fireEvent.click(
-      screen.getByRole("button", { name: "Business Intelligence" }),
+      screen.getByRole("button", { name: /^Business Intelligence/ }),
     );
 
     expect(screen.getByText("Provider attempt ledger")).toBeDefined();
@@ -209,10 +610,10 @@ describe("CommandCenter", () => {
       screen.getByRole("row", { name: /attempt-1/ }).textContent,
     ).toContain("$0.004");
     expect(document.body.textContent).toContain(
-      "does not approve, block, or authorize provider spend",
+      "doesn't approve, block, or authorize provider spend",
     );
     expect(document.body.textContent).toContain(
-      "not your provider balance or invoice",
+      "aren't your provider balance or invoice",
     );
   });
 });

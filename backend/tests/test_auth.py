@@ -311,18 +311,21 @@ def _internal_auth_context() -> AuthContext:
     return AuthContext(user=user, permissions=[Permissions.THREADS_READ])
 
 
-def test_require_permission_internal_role_scoped_by_owner_header():
-    """An internal caller acting for the thread owner passes the owner check."""
+def test_require_permission_internal_owner_check_uses_the_delegated_storage_principal_only():
+    """A delegated caller (AuthMiddleware stamped storage_user_id) passes; the header alone does not."""
     from app.gateway.internal_auth import INTERNAL_OWNER_USER_ID_HEADER_NAME
 
     app = _make_internal_owner_check_app()
     with patch("app.gateway.authz._authenticate", return_value=_internal_auth_context()):
         with TestClient(app) as client:
-            response = client.get(
-                "/threads/alice-thread",
-                headers={INTERNAL_OWNER_USER_ID_HEADER_NAME: "alice"},
-            )
-    assert response.status_code == 200
+            response = client.get("/threads/alice-thread", headers={INTERNAL_OWNER_USER_ID_HEADER_NAME: "alice"})
+    assert response.status_code == 404
+
+    delegated = _internal_auth_context()
+    delegated.storage_user_id = "alice"
+    with patch("app.gateway.authz._authenticate", return_value=delegated):
+        with TestClient(app) as client:
+            assert client.get("/threads/alice-thread").status_code == 200
 
 
 def test_require_permission_internal_role_denied_for_other_owner():
@@ -1929,6 +1932,16 @@ def test_authenticate_skips_rehash_for_v2_hash():
     result = asyncio.run(provider.authenticate({"email": "v2@test.com", "password": password}))
     assert result is not None
     mock_repo.update_user.assert_not_called()
+
+
+def test_validate_next_param_rejects_control_characters():
+    """Browsers drop tab/newline/CR inside URLs, so "/\t/evil.example" is
+    parsed as "//evil.example": an open redirect after sign-in."""
+    from app.gateway.routers.auth import validate_next_param
+
+    for unsafe in ("/\t/evil.example", "/\n/evil.example", "/\r/evil.example", "/ /evil.example", "/\x00x", "/\x7fx", "/work space"):
+        assert validate_next_param(unsafe) is None, repr(unsafe)
+    assert validate_next_param("/invite") == "/invite"
 
 
 def test_validate_next_param_rejects_unsafe_paths():

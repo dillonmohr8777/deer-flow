@@ -8,7 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import aliased
 
-from deerflow.persistence.organizations.resolution import organization_from_owned_parent
+from deerflow.persistence.organizations.resolution import OrganizationMismatchError, organization_for_write, organization_from_owned_parent
 from deerflow.persistence.run import RunRepository
 from deerflow.persistence.run.model import RunRow
 from deerflow.persistence.scheduled_task_runs.model import ScheduledTaskRunRow
@@ -19,6 +19,7 @@ from deerflow.persistence.scheduled_tasks.model import (
     ScheduledTaskRow,
     ScheduledTaskRunStatus,
 )
+from deerflow.runtime.user_context import resolve_organization_id
 from deerflow.scheduler.schedules import next_run_at as compute_next_run_at
 from deerflow.utils.time import coerce_iso
 
@@ -200,7 +201,13 @@ class ScheduledTaskRunRepository:
                 if active_status is not None:
                     await session.rollback()
                     raise ActiveScheduledRunConflict(task_id)
-            row.organization_id = organization_from_owned_parent(task, expected_task_user_id, parent_name="scheduled task")
+            # A manual trigger's organization wins; the parent task must match it.
+            parent_organization_id = organization_from_owned_parent(task, expected_task_user_id, parent_name="scheduled task")
+            try:
+                row.organization_id = organization_for_write(resolve_organization_id(), parent_organization_id, task.user_id if task is not None else None)
+            except OrganizationMismatchError:
+                await session.rollback()
+                raise ScheduledTaskAdmissionRejected(task_id, reason="not_found") from None
             if task is not None:
                 row.occurrence_seq = await session.scalar(
                     update(ScheduledTaskRow)

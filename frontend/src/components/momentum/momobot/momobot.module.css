@@ -1,0 +1,353 @@
+/*
+ * MomoBot front door: lockup, scrapbook collage backdrop, paper doves and the
+ * waving login Momo. Only --paper-* tokens (paper.css), scoped under the
+ * [data-treatment="paper"] pages that mount these components.
+ */
+
+/* ---- Lockup: "MomoBot by Momentum" ------------------------------------- */
+
+.lockup {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  white-space: nowrap;
+}
+
+.lockupName {
+  font-size: 1.375rem;
+  line-height: 1;
+  color: var(--paper-royal, currentColor);
+}
+
+.lockupBy {
+  font-size: 0.8125rem;
+  color: var(--paper-ink-muted, currentColor);
+}
+
+.lockupWordmark {
+  height: 0.95rem;
+  width: auto;
+  align-self: center;
+}
+
+/* ---- Collage backdrop -------------------------------------------------- */
+
+.backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* The collage film fills the field; the scrim above sets its tone. */
+.collage {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: saturate(0.9);
+}
+
+/*
+ * Royal (sign in): the collage calms under the blueprint field colour; no
+ * copy sits on it, the cream sheet carries its own contrast.
+ * Cream (landing): hero copy sits over this. The text column gets the full
+ * LANDING_SCRIM_ALPHA (intro-motion.ts, contrast pinned by a unit test),
+ * fading only beyond
+ * the hero's right edge where no words sit.
+ */
+.scrim {
+  position: absolute;
+  inset: 0;
+}
+
+.backdrop[data-tone="royal"] .scrim {
+  background: rgb(20 52 110 / 38%);
+}
+
+.backdrop[data-tone="cream"] .scrim {
+  --text-edge: max(50% + 9rem, 47rem);
+  background: linear-gradient(
+    90deg,
+    rgb(242 237 227 / var(--scrim-alpha)) 0,
+    rgb(242 237 227 / var(--scrim-alpha)) var(--text-edge),
+    rgb(242 237 227 / 30%) calc(var(--text-edge) + 14rem)
+  );
+}
+
+@media (max-width: 48rem) {
+  .backdrop[data-tone="cream"] .scrim {
+    background: rgb(242 237 227 / var(--scrim-alpha));
+  }
+}
+
+/* ---- Paper doves ------------------------------------------------------- */
+
+.doves {
+  position: absolute;
+  inset: 0;
+}
+
+.dove {
+  position: absolute;
+  left: 0;
+  width: 3.25rem;
+  height: auto;
+  animation-name: dove-drift;
+  animation-iteration-count: infinite;
+  animation-timing-function: cubic-bezier(0.45, 0.05, 0.55, 0.95);
+  will-change: transform;
+}
+
+@keyframes dove-drift {
+  0% {
+    transform: translate(-10vw, 0) scale(var(--dove-scale));
+  }
+  25% {
+    transform: translate(22vw, -5vh) scale(var(--dove-scale));
+  }
+  50% {
+    transform: translate(50vw, 2vh) scale(var(--dove-scale));
+  }
+  75% {
+    transform: translate(78vw, -4vh) scale(var(--dove-scale));
+  }
+  100% {
+    transform: translate(112vw, 1vh) scale(var(--dove-scale));
+  }
+}
+
+/* Two wing frames, stepped: never tweened. */
+.wingUp,
+.wingDown {
+  animation: wing-flap 620ms steps(1, end) infinite;
+}
+
+.wingDown {
+  animation-delay: -310ms;
+}
+
+@keyframes wing-flap {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+
+.backdrop[data-live="false"] .dove,
+.backdrop[data-live="false"] .wingUp,
+.backdrop[data-live="false"] .wingDown {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .doves {
+    display: none;
+  }
+}
+
+/* ---- Pause / play ------------------------------------------------------ */
+
+.motionToggle {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 0.8rem;
+  border: 1px solid var(--paper-line);
+  background: var(--paper-cream-hi);
+  color: var(--paper-ink);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 0.25rem 0.75rem rgb(16 30 63 / 25%);
+}
+
+.motionToggle:hover {
+  background: var(--paper-cream);
+}
+
+.motionToggle:focus-visible {
+  outline: 2px solid var(--paper-focus);
+  outline-offset: 2px;
+}
+
+/* ---- Split lockup: product name and maker ------------------------------ */
+
+/* The product name alone, large enough to lead the page. */
+.productName {
+  font-size: clamp(1.75rem, 1.35rem + 1.3vw, 2.375rem);
+  line-height: 1;
+  letter-spacing: -0.015em;
+  color: var(--paper-royal, currentColor);
+  white-space: nowrap;
+}
+
+/* "by Momentum", set apart from the product: the maker signs the corner. */
+.maker {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  white-space: nowrap;
+}
+
+.makerBy {
+  font-size: 0.8125rem;
+  color: var(--paper-ink-muted, currentColor);
+}
+
+.makerWordmark {
+  height: 1.375rem;
+  width: auto;
+}
+
+/* ---- Bouncing Momo ----------------------------------------------------- */
+
+/*
+ * A Momo film on a cream photo, floating in 3D over a ground shadow that
+ * shrinks and fades as the photo rises. Transform and opacity only. The rise
+ * decelerates and the fall accelerates, so the float reads as a bounce.
+ * No pin: a pinned photo cannot float, and a pin means work in progress.
+ */
+.momoStage {
+  position: relative;
+  padding-bottom: 2.5rem;
+  perspective: 900px;
+  perspective-origin: 50% 30%;
+}
+
+.momoFloat {
+  transform: rotateX(6deg) rotateY(-12deg) rotateZ(2deg);
+  transform-style: preserve-3d;
+}
+
+.momoCard {
+  padding: 0.55rem 0.55rem 1.6rem;
+  background: var(--paper-cream-hi, #fbf8f1);
+  box-shadow:
+    0 1px 2px rgb(16 30 63 / 0.16),
+    0 24px 44px -18px rgb(16 30 63 / 0.5);
+}
+
+.momoCard video {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  object-position: 62% 50%;
+}
+
+.momoGround {
+  position: absolute;
+  right: 14%;
+  bottom: 0.5rem;
+  left: 14%;
+  height: 1.25rem;
+  border-radius: 50%;
+  background: radial-gradient(
+    closest-side,
+    rgb(16 30 63 / 0.34),
+    rgb(16 30 63 / 0)
+  );
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .momoFloat {
+    animation: momo-bounce 2.6s infinite;
+    will-change: transform;
+  }
+
+  .momoGround {
+    animation: momo-ground 2.6s infinite;
+  }
+
+  .momoStage[data-live="false"] .momoFloat,
+  .momoStage[data-live="false"] .momoGround {
+    animation-play-state: paused;
+  }
+}
+
+@keyframes momo-bounce {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) rotateX(6deg) rotateY(-12deg) rotateZ(2deg);
+    animation-timing-function: cubic-bezier(0.22, 0.61, 0.36, 1);
+  }
+  50% {
+    transform: translate3d(0, -26px, 0) rotateX(-5deg) rotateY(10deg)
+      rotateZ(-1deg);
+    animation-timing-function: cubic-bezier(0.55, 0, 0.78, 0.4);
+  }
+}
+
+@keyframes momo-ground {
+  0%,
+  100% {
+    transform: scaleX(1);
+    opacity: 1;
+    animation-timing-function: cubic-bezier(0.22, 0.61, 0.36, 1);
+  }
+  50% {
+    transform: scaleX(0.7);
+    opacity: 0.5;
+    animation-timing-function: cubic-bezier(0.55, 0, 0.78, 0.4);
+  }
+}
+
+@media (forced-colors: active) {
+  .momoGround {
+    display: none;
+  }
+}
+
+/* ---- Sign in: Momo beside the sheet, maker in the corner --------------- */
+
+/* Phones stack Momo over the sheet; wide screens set them side by side. */
+.signInStage {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  justify-items: center;
+  gap: clamp(0.5rem, 3vw, 1.5rem);
+  width: min(28rem, 100%);
+  height: fit-content;
+  /* Clear of the corner mark even at the top of Momo's bounce. */
+  margin-top: 2rem;
+}
+
+.signInMomo {
+  width: clamp(11rem, 52vw, 14rem);
+}
+
+@media (min-width: 64rem) {
+  .signInStage {
+    grid-template-columns: minmax(0, 1fr) 28rem;
+    align-items: center;
+    column-gap: clamp(3rem, 6vw, 6rem);
+    width: min(62rem, 100%);
+    margin-top: 0;
+  }
+
+  .signInMomo {
+    width: clamp(16rem, 24vw, 21rem);
+  }
+}
+
+/* The maker's tab, top right of the field, well clear of Momo. */
+.cornerMark {
+  position: absolute;
+  top: 1rem;
+  right: clamp(1rem, 3vw, 2rem);
+  z-index: 2;
+  padding: 0.45rem 0.8rem;
+  border: 1px solid var(--paper-line);
+  background: var(--paper-cream-hi);
+  box-shadow: 0 8px 16px -10px rgb(16 30 63 / 0.6);
+}

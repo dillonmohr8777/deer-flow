@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Every 15 minutes: Docker, loopback UI, /health/ready, the public Funnel
+     URL and a fresh PASS backup receipt (vps/health.sh runs on macOS too). -->
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.momentum.momobot.health</string>
+  <key>ProgramArguments</key>
+  <array><string>/bin/bash</string><string>__REPO__/deploy/momentum/vps/health.sh</string></array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>__HOME__/.orbstack/bin:__HOME__/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+    <key>DOCKER_HOST</key><string>unix://__HOME__/.orbstack/run/docker.sock</string>
+    <key>MOMOBOT_ENV_FILE</key><string>__DEPLOY__/.env</string>
+    <key>MOMOBOT_BACKUP_DEST</key><string>__DEPLOY__/backups</string>
+    <key>MOMOBOT_HEALTH_LOG</key><string>__DEPLOY__/logs/health.jsonl</string>
+  </dict>
+  <key>StartInterval</key><integer>900</integer>
+  <key>RunAtLoad</key><true/>
+  <key>StandardOutPath</key><string>/dev/null</string>
+  <key>StandardErrorPath</key><string>__DEPLOY__/logs/health.err</string>
+</dict>
+</plist>

@@ -27,7 +27,9 @@ class InvitationRow(Base):
     token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     organization_id: Mapped[str] = mapped_column(String(64), index=True)
     email: Mapped[str] = mapped_column(String(320), index=True)
-    role: Mapped[str] = mapped_column(String(32), default="admin")
+    # Least privilege by default; the router lets an inviter explicitly
+    # choose "admin" instead (see CreateInvitationRequest.role).
+    role: Mapped[str] = mapped_column(String(32), default="member")
     created_by: Mapped[str] = mapped_column(String(64))
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

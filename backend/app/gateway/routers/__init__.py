@@ -1,4 +1,5 @@
 from . import (
+    agent_room,
     artifacts,
     assistants_compat,
     browser,
@@ -15,6 +16,7 @@ from . import (
 )
 
 __all__ = [
+    "agent_room",
     "artifacts",
     "assistants_compat",
     "browser",

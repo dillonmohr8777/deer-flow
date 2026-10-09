@@ -8,19 +8,21 @@ test.describe("Landing page", () => {
 
     await expect(
       page
-        .locator("header")
-        .first()
-        .getByRole("img", { name: "Momentum", exact: true }),
+        .getByRole("banner")
+        .getByRole("link", { name: "MomoBot", exact: true }),
     ).toBeVisible();
     await expect(page.locator("h1")).toHaveCount(1);
-    await expect(page.locator("h1")).toHaveText(
-      /^The future needs\s*Momentum$/,
-    );
-
-    // "Enter the workspace" call-to-action button in hero
     await expect(
-      page.getByRole("link", { name: /enter the workspace/i }),
+      page.getByRole("heading", { name: "Say hello to MomoBot", exact: true }),
     ).toBeVisible();
+
+    // Current MomoBot call to action in the hero.
+    await expect(
+      page.getByRole("link", { name: "Enter the workspace", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: "Enter the workspace", exact: true }),
+    ).toHaveAttribute("href", "/workspace");
   });
 
   for (const width of [320, 375, 390]) {
@@ -35,20 +37,24 @@ test.describe("Landing page", () => {
     });
   }
 
-  test("Enter the workspace link navigates to command center", async ({
-    page,
-  }) => {
+  test("Enter the workspace link navigates to workspace", async ({ page }) => {
     mockLangGraphAPI(page);
 
     await page.goto("/");
 
     const enterWorkspace = page.getByRole("link", {
-      name: /enter the workspace/i,
+      name: "Enter the workspace",
+      exact: true,
     });
+    await expect(enterWorkspace).toHaveAttribute("href", "/workspace");
     await enterWorkspace.click();
 
-    // Should redirect to /workspace/command-center
-    await page.waitForURL("**/workspace/command-center");
-    await expect(page).toHaveURL(/\/workspace\/command-center/);
+    // The default workspace home is Command Center when Desk is disabled.
+    await expect(page).toHaveURL(
+      new URL("/workspace/command-center", page.url()).href,
+    );
+    await expect(
+      page.getByRole("heading", { name: "Mission Control", exact: true }),
+    ).toBeVisible();
   });
 });

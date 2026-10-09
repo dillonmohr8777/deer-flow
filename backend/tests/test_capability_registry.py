@@ -88,3 +88,67 @@ def test_ambiguous_installation_selection_fails_closed(collision):
     tools = [SimpleNamespace(name=name, metadata={"deerflow_mcp": True, "deerflow_mcp_source": {"server_name": name}}) for name in servers]
     assert filter_mcp_plugins(tools, [identity], config) == []
     assert filter_mcp_plugins(tools, None, config) == tools
+
+
+@pytest.mark.parametrize("include_mcp,selection", [(True, []), (False, []), (False, None), (False, ["selected"])])
+def test_no_mcp_policy_skips_config_and_discovery_before_initialization(monkeypatch, include_mcp, selection):
+    from deerflow.config.app_config import AppConfig
+    from deerflow.config.sandbox_config import SandboxConfig
+    from deerflow.extensions.registry import ExtensionRegistry
+    from deerflow.tools import tools as assembly
+    from deerflow.tools.mcp_metadata import is_mcp_tool
+
+    # Both transports are globally enabled; neither may be initialized by a
+    # caller that explicitly selects no MCP or disables MCP altogether.
+    globally_enabled = ExtensionsConfig.model_validate({"mcpServers": {"http": {"enabled": True, "type": "http", "url": "https://example.invalid/mcp"}, "stdio": {"enabled": True, "command": "unreachable-fixture"}}})
+    assert set(globally_enabled.get_enabled_mcp_servers()) == {"http", "stdio"}
+
+    def forbidden_config(*args, **kwargs):
+        pytest.fail("No-MCP assembly read the global MCP configuration")
+
+    def forbidden_discovery():
+        pytest.fail("No-MCP assembly entered cached MCP discovery")
+
+    monkeypatch.setattr(ExtensionsConfig, "from_file", forbidden_config)
+    monkeypatch.setattr("deerflow.mcp.cache.get_cached_mcp_tools", forbidden_discovery)
+    app_config = AppConfig(models=[], sandbox=SandboxConfig(use="deerflow.sandbox.local:LocalSandboxProvider"))
+    result = assembly.get_available_tools(app_config=app_config, extensions=ExtensionRegistry().build(), include_mcp=include_mcp, mcp_plugins=selection)
+
+    assert not any(is_mcp_tool(tool) for tool in result)
+    assert all(any(tool is builtin for tool in result) for builtin in assembly.BUILTIN_TOOLS)
+
+
+@pytest.mark.parametrize("selection,ambiguous,expected", [(None, False, {"http", "stdio"}), (["chosen"], False, {"http"}), (["unknown"], False, set()), (["chosen"], True, set())])
+def test_inherited_and_selected_mcp_keep_discovery_tagging_and_source_filter(monkeypatch, selection, ambiguous, expected):
+    from langchain_core.tools import Tool
+
+    from deerflow.config.app_config import AppConfig
+    from deerflow.config.sandbox_config import SandboxConfig
+    from deerflow.extensions.registry import ExtensionRegistry
+    from deerflow.tools import get_available_tools
+    from deerflow.tools.mcp_metadata import MCP_TOOL_SOURCE_METADATA_KEY, get_mcp_source, is_mcp_tool
+
+    config = ExtensionsConfig.model_validate({"mcpServers": {"http": {"enabled": True, "type": "http", "url": "https://example.invalid/mcp", "capability": {"id": "chosen"}}, "stdio": {"enabled": True, "command": "unreachable-fixture"}}})
+    if ambiguous:
+        config.mcp_servers["stdio"] = config.mcp_servers["http"].model_copy()
+    cached = [Tool(name=name, description="Offline MCP discovery fixture", func=lambda query: query, metadata={MCP_TOOL_SOURCE_METADATA_KEY: {"server_name": name, "transport": server.type}}) for name, server in config.mcp_servers.items()]
+    calls = []
+
+    def read_config(*args, **kwargs):
+        calls.append("config")
+        return config
+
+    def read_cache():
+        calls.append("cache")
+        return cached
+
+    monkeypatch.setattr(ExtensionsConfig, "from_file", read_config)
+    monkeypatch.setattr("deerflow.mcp.cache.get_cached_mcp_tools", read_cache)
+    app_config = AppConfig(models=[], sandbox=SandboxConfig(use="deerflow.sandbox.local:LocalSandboxProvider"))
+    result = get_available_tools(app_config=app_config, extensions=ExtensionRegistry().build(), mcp_plugins=selection)
+
+    assert calls == ["config", "cache"]
+    assert all(is_mcp_tool(tool) for tool in cached)
+    selected = [tool for tool in result if is_mcp_tool(tool)]
+    assert {get_mcp_source(tool)["server_name"] for tool in selected} == expected
+    assert all(any(tool is original for original in cached) for tool in selected)

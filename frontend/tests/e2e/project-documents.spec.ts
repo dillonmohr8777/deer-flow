@@ -91,7 +91,7 @@ test("project document lifecycle: upload → shelf → attach → trash → rest
     .getByRole("button", { name: "Delete permanently", exact: true })
     .click();
   await expect(
-    page.getByText(/will be permanently deleted. This cannot be undone./),
+    page.getByText(/will be permanently deleted. This can't be undone./),
   ).toBeVisible();
   await page
     .getByRole("dialog")
@@ -125,7 +125,7 @@ test("Empty trash permanently deletes every freshly trashed row", async ({
   await page.getByTestId("trash-empty-button").click();
   await expect(
     page.getByText(
-      "2 documents will be permanently deleted. This cannot be undone.",
+      "2 documents will be permanently deleted. This can't be undone.",
     ),
   ).toBeVisible();
   await page

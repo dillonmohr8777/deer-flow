@@ -56,6 +56,7 @@ class SkillToolPolicyMiddleware(AgentMiddleware[AgentState]):
         app_config: AppConfig | None = None,
         user_id: str | None = None,
         slash_source_owner_token: str,
+        owner_tool_names: list[str] | None = None,
     ) -> None:
         super().__init__()
         if not isinstance(slash_source_owner_token, str) or not slash_source_owner_token:
@@ -65,6 +66,10 @@ class SkillToolPolicyMiddleware(AgentMiddleware[AgentState]):
         self._user_id = user_id
         self._slash_source_owner_token = slash_source_owner_token
         self._decision_owner_token = secrets.token_urlsafe(24)
+        self._owner_tool_names = frozenset(owner_tool_names) if owner_tool_names is not None else None
+
+    def release_policy_parameters(self) -> dict[str, object]:
+        return {"owner_tool_names": sorted(self._owner_tool_names) if self._owner_tool_names is not None else None}
 
     def _storage(self) -> SkillStorage:
         if self._user_id is not None:
@@ -138,13 +143,17 @@ class SkillToolPolicyMiddleware(AgentMiddleware[AgentState]):
         return active, False
 
     def _allowed_names_for_paths(self, paths: tuple[str, ...]) -> set[str] | None:
+        if not paths:
+            return set(self._owner_tool_names) if self._owner_tool_names is not None else None
         active_skills, policy_failed = self._active_skills_for_paths(paths)
         if policy_failed:
-            return set(ALWAYS_AVAILABLE_BUILTIN_TOOL_NAMES)
-        allowed = allowed_tool_names_for_skills(active_skills)
-        if allowed is None:
-            return None
-        return allowed | set(ALWAYS_AVAILABLE_BUILTIN_TOOL_NAMES)
+            allowed = set(ALWAYS_AVAILABLE_BUILTIN_TOOL_NAMES)
+        else:
+            skill_allowed = allowed_tool_names_for_skills(active_skills)
+            allowed = None if skill_allowed is None else skill_allowed | set(ALWAYS_AVAILABLE_BUILTIN_TOOL_NAMES)
+        if self._owner_tool_names is not None:
+            return set(self._owner_tool_names) if allowed is None else allowed & self._owner_tool_names
+        return allowed
 
     @staticmethod
     def _runtime_context(request: ModelRequest | ToolCallRequest) -> dict | None:
@@ -322,7 +331,7 @@ class SkillToolPolicyMiddleware(AgentMiddleware[AgentState]):
     ) -> ModelCallResult:
         policy = self._active_policy(request)
         _, paths = policy
-        if not paths:
+        if not paths and self._owner_tool_names is None:
             self._store_policy_decision(request, policy, None)
             return await handler(request)
         filtered = await asyncio.to_thread(
@@ -340,7 +349,7 @@ class SkillToolPolicyMiddleware(AgentMiddleware[AgentState]):
         handler: Callable[[ToolCallRequest], ToolMessage | Command],
     ) -> ToolMessage | Command:
         policy = self._active_policy(request)
-        if not policy[1]:
+        if not policy[1] and self._owner_tool_names is None:
             return handler(request)
         allowed = self._allowed_names(request, policy=policy)
         blocked = self._blocked_tool_message(request, allowed=allowed)
@@ -355,7 +364,7 @@ class SkillToolPolicyMiddleware(AgentMiddleware[AgentState]):
         handler: Callable[[ToolCallRequest], Awaitable[ToolMessage | Command]],
     ) -> ToolMessage | Command:
         policy = self._active_policy(request)
-        if not policy[1]:
+        if not policy[1] and self._owner_tool_names is None:
             return await handler(request)
         allowed = await asyncio.to_thread(self._allowed_names, request, policy=policy)
         blocked = self._blocked_tool_message(request, allowed=allowed)

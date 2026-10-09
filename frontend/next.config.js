@@ -33,7 +33,59 @@ const config = {
     root: fileURLToPath(new URL(".", import.meta.url)),
   },
   devIndicators: false,
+  async headers() {
+    return [
+      {
+        source: "/sw.js",
+        headers: [
+          {
+            key: "Content-Type",
+            value: "application/javascript; charset=utf-8",
+          },
+          {
+            key: "Cache-Control",
+            value: "no-cache, no-store, must-revalidate",
+          },
+          {
+            key: "Content-Security-Policy",
+            value: "default-src 'self'; script-src 'self'",
+          },
+        ],
+      },
+      {
+        source: "/offline.html",
+        headers: [{ key: "Cache-Control", value: "no-store" }],
+      },
+    ];
+  },
   allowedDevOrigins: getAllowedDevOrigins(),
+  // The Momo Daily reads its JSON articles with node:fs at request time;
+  // make sure standalone output carries them.
+  outputFileTracingIncludes: {
+    "/daily": ["./src/content/momo-daily/**"],
+    "/daily/[slug]": ["./src/content/momo-daily/**"],
+    "/sitemap.xml": ["./src/content/momo-daily/**"],
+  },
+  // Momentum does not publish upstream DeerFlow's blog or docs site. Redirect
+  // instead of deleting the routes so upstream merges stay conflict-free.
+  async redirects() {
+    return [
+      { source: "/blog", destination: "/", permanent: false },
+      { source: "/blog/:path*", destination: "/", permanent: false },
+      {
+        source: "/:lang(en|zh)/docs",
+        destination: "/",
+        permanent: false,
+        locale: false,
+      },
+      {
+        source: "/:lang(en|zh)/docs/:path*",
+        destination: "/",
+        permanent: false,
+        locale: false,
+      },
+    ];
+  },
   async rewrites() {
     const rewrites = [];
     const gatewayURL = getInternalServiceURL(

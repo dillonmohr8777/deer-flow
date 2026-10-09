@@ -18,6 +18,26 @@ https://github.com/user-attachments/assets/a8bcadc4-e040-4cf2-8fda-dd768b999c18
 
 ## Official Website
 
+### MomoBot Brain Forge workflow
+
+The optional [Brain Forge Slack workflow](backend/app/channels/BRAINFORGE.md) runs an explicitly scoped `@bot brief` request against reviewed, hash-pinned work sources. It retrieves the full thread, saves a private protected readback receipt and returns recorded counts without calling a model or modifying canonical work. It is disabled by default and requires an existing authenticated Slack runtime binding.
+
+The optional private project compiler joins the brief with reviewed research and existing Momo workflow requests for offers, SEO, social, CRM, reporting, developer blockers and security review. A single protected receipt binds the source brief and project artifact. `python -m app.channels.brainforge_cli` provides local preflight, build and independent readback; compiled requests remain unsent until the existing authenticated workflow service admits them. See the [unified project configuration](backend/app/channels/BRAINFORGE.md#unified-private-project).
+
+The same CLI's `prepare` and `check` commands create and validate a private,
+disabled configuration candidate offline. They never overwrite live settings,
+read credentials, start Slack, or accept captured source pins as current truth.
+Missing scope remains explicit. Local preflight does not verify the separate
+owner connection, encrypted token, persistent host, or Slack canary; see the
+[setup and binding sequence](backend/app/channels/BRAINFORGE.md#offline-configuration-preparation).
+
+Restart recovery scans receipts in bounded cursor pages so held or stale routes
+cannot hide later eligible work. A single channel-owned expiry timer revisits live
+claims after their leases expire, including on otherwise quiet channels. Shutdown
+cancels the timer; uncertain sends and exhausted attempts are never replayed.
+
+This first workflow has local failure and restart tests. Live Slack delivery, unattended operation and shared-host durability require separate runtime verification.
+
 Learn more and see **real demos** on our [**official website**](https://deerflow.tech).
 The landing-page case studies open as allowlisted, read-only showcases without requiring a sign-in.
 
@@ -109,6 +129,12 @@ Help me clone DeerFlow if needed, then bootstrap it for local development by fol
 That prompt is intended for coding agents. It tells the agent to clone the repo if needed, choose Docker when available, and stop with the exact next command plus any missing config the user still needs to provide.
 
 ## Quick Start
+
+Fixed-purpose custom agents can set `self_update_enabled: false` to withhold
+their self-update tool while keeping owner/API edits available. Existing agents
+retain the default `true` behavior.
+An optional `tool_names` allowlist caps configured, builtin and middleware tools;
+omitting it preserves the existing catalog, while `[]` permits no tools.
 
 ### Configuration
 
@@ -1924,7 +1950,9 @@ DeerFlow is model-agnostic — it works with any LLM that implements the OpenAI-
 For `DeerFlowClient(agent_name="researcher")`, the named agent's `mcp_plugins`
 selection applies to both the lead agent and its `task` / `batch_task`
 delegations: `null` inherits all enabled MCP plugins, `[]` selects none, and
-installation IDs select only those plugins. Call `client.reset_agent()` after
+installation IDs select only those plugins. An explicit `[]` also skips MCP
+configuration reads and discovery, so assembling that agent cannot start globally
+enabled MCP servers. Call `client.reset_agent()` after
 editing the saved agent configuration to refresh the selection.
 
 `DeerFlowClient.stream()` includes `summary_text` in each `values` event. This is the current compacted context summary, or `None` when absent. Consumers can record changes without reading checkpoint internals; repeated snapshots may carry the same summary, and an initial snapshot may already contain one from an earlier turn.
@@ -2076,6 +2104,17 @@ Current MVP capabilities:
 - Search task titles or prompts, combined with status/type filters and the current thread scope.
 - Execute scheduled work through the normal DeerFlow run lifecycle
 - Browse execution history in pages of 50; older pages pause automatic refresh, with an explicit return to the latest runs. Counts appear only after a successful read; loading and failed reads are not reported as zero runs.
+
+### Fleet template acceptance prompts
+
+Fleet templates can declare `acceptance_criteria`. When a template is stamped,
+those criteria are appended to the agent's rendered `SOUL.md` after the
+`{client_name}` placeholder is filled. The appended instructions ask the agent
+to check each criterion against concrete evidence, retain unmet criteria as
+`UNVERIFIED`, and repair within its authorized scope and budget when possible.
+This is prompt propagation only: scheduled-task and subagent completion
+statuses still describe execution completion and remain separate from
+deliverable acceptance.
 
 **Filter execution history through the API**
 
@@ -2289,8 +2328,197 @@ Runtime execution and artifact controls remain in the existing DeerFlow services
 For an independent local preview, set `NEXT_BUILD_DIR=.next-momentum` and run the
 frontend on a separate loopback port with the existing gateway configured.
 
+Agent-seat weekly scorecard checks require a confirmed `#exec` post before
+resetting an employee's missed-week streak. A completed blank scorecard counts
+as a missed week only after its miss notice is delivered; two evaluated misses
+reopen the title. Model, usage-store and delivery outages are inconclusive and
+preserve the streak, title and last evaluated week, so a later sweep can retry.
+The recurring sweep remains opt-in (`exec_seats.scorecard_check_enabled: false`
+by default); this policy does not turn on scheduled work.
+
+### Hiring tool permissions
+
+Momentum staff hiring tools check a titled manager's stored agent configuration
+before creating a hire. Invalid or unreadable tool permissions block hiring with
+an instruction to repair the configuration or restore storage access. An explicit
+unrestricted setting (`tool_groups: null` or omitted) remains supported within
+the organization's configured tool catalog; an empty list grants no tools.
+Claimed titles without any custom-agent record retain that unrestricted default
+only after the agent store confirms the record is absent. These checks do not
+provision an agent or change the existing private-data, budget, or organization
+authorization rules.
+
+## Manual Browserbase public-page QA
+
+For reusable operator-approved jobs, the optional [Browserbase fleet adapter](docs/browserbase/fleet.md)
+adds public research, mobile QA and local draft workflows. It remains inactive
+until the private operator manifest and current account allowance are verified.
+Native Agent recovery requires the recorded run and terminal session to match
+the original reservation; changing a job name cannot reset account-wide charges.
+Native Agent task instructions do not enforce website or write permissions.
+
+The existing CrewAI department workflow also has an offline recovery test that
+runs the real isolated worker, resumes its verifier after shutdown and preserves
+the original token limits and receipts. This verifies recovery with synthetic
+provider responses, without claiming a new paid run or a production deployment.
+
+The opt-in `deerflow.community.browser_automation.browserbase_qa` runner creates
+one 60-second Browserbase session for public-page checks at 390/768/1440. It uses
+the headless HTTP/CDP API with Playwright, without model calls, form submission,
+persistent cookies or scheduler changes. It requires an exact host allowlist,
+blocks mutating requests and redirects, records overflow/target-size measurements,
+and requests release only for its own created session. Receipts and screenshots
+belong in a fresh private directory outside Git. Provider errors are sanitized;
+credential-bearing CDP URLs must never be logged.
+
+```sh
+cd backend
+uv sync --frozen --extra browser
+# Existing credential: BROWSERBASE_API_KEY, or macOS Keychain browserbase.api-key.
+# This command consumes included browser time; run only within an approved budget.
+uv run --no-sync python -m deerflow.community.browser_automation.browserbase_qa \
+  --url https://example.com/ --allow-host example.com \
+  --project-id YOUR_EXISTING_PROJECT_UUID --output /private/local/fresh-qa-run
+```
+
+The default reported-usage admission ceiling is 50 browser minutes; missing or
+invalid usage stops before session creation. This ceiling is a conservative
+local gate, not proof of the account's plan, remaining quota or an atomic shared
+budget. Request/body/screenshot admission caps bound retained QA data; HTTP
+responses are fetched before body-size rejection, so this is not a hard network
+transfer cap. API creation failures are never automatically retried; an ambiguous
+timeout must be reconciled before another attempt. This manual runner does not
+enable the general browser tool group or production Browserbase routing.
+
+## Responses multi-agent preflight (local customization)
+
+An opt-in Sol 6.1/OpenRouter Responses adapter stages bounded requests, separates
+root final answers from agent progress, and records durable spending receipts.
+It is not registered or activated by default. Native activation requires actual
+hosted child output and verified aggregate provider spending enforcement across
+all descendants and continuations; concurrency limits alone cannot cap cost.
+The ordinary read-only function-call probe is separate capability evidence.
+See [protocol, spending gates and integration criteria](backend/docs/RESPONSES_MULTI_AGENT.md).
+
+## Private agency pilot guard (local customization)
+
+For an opt-in bounded private MomoBot pilot, see the [loopback request guard and
+artifact readback example](examples/momo-agency-guard/README.md). It does not
+activate schedules or enforce budgets for preexisting gateway routes.
+
+### Preserved private Agent Room
+
+This local integration preserves the existing standby owner-private Agent Room
+API, repository, read/post tools, and admin-only Desk visibility. Original source
+was matched to deployed bytes before bringing over only its room wiring; no live
+configuration or data is copied into Git. Its shipped `0040_agent_room_messages`
+history remains unchanged. A no-DDL `0047_merge_agent_room_exec` joins that branch
+with `0046_organization_entitlements`, allowing either existing database history
+to upgrade without a manual stamp. Tests exercise actual bootstrap from both
+histories and preserve existing owner credentials and room handoff rows. This is
+not a deployment receipt. A standby update requires a quiet writer window and a
+verified pre-upgrade backup: the previous image cannot read the new revision, so
+an image-only rollback is insufficient. Do not downgrade or restamp a live DB.
+
+Key-free full-stack replay checks keep normal thread ownership active: seeded
+history has an owned native thread record but no checkpoint, and its browser
+messages must render once each in chronological order. The auth-disabled check
+compares the full current response, including MFA state and registered permissions.
+
+Agents with explicitly empty skills and a fully assembled canonical Room/batch
+toolset can start without constructing an unused sandbox provider. Unknown,
+deferred or extension capabilities keep the existing sandbox policy; inherited
+sandbox bindings are refused. This grants no Docker or network access. See the
+[native startup contract](backend/docs/NATIVE_LAZY_SANDBOX_STARTUP.md).
+
 ## Star History
 
 [![Star History Chart](https://star-history.dera.page/svg?repos=bytedance/deer-flow&type=Date)](https://star-history.dera.page/#bytedance/deer-flow&Date)
+
+Private agency upgrade checks preserve the existing room and enforce canonical safe identifiers on client Board routes, including existing hex IDs. Board, Team and Academy PAT scope names stay aligned with route permissions; the existing default-deny PAT endpoint policy still controls reachability.
+
+The optional [fixed agency packet phases](examples/momo-approved-packets/README.md)
+let an operator pin two complete private source packets, submit producers and
+independent reviewers through the existing durable native batch queue, and
+persist exact native result bytes with immutable owner/thread-bound readback.
+The feature stays disabled without an operator digest-pinned manifest. Phase
+receipts expose evidence, not acceptance or proof of whole-gateway spend control.
+
+## MomoBot iPhone and desktop app
+
+The private workspace adds **OpenAI crew** at `/workspace/openai` for durable
+GPT-6.1 Sol hosted tasks with up to three subagents, saved results and file
+downloads. **Browser research** at `/workspace/browser-research` captures up to
+three public HTTPS sources with a bounded Browserbase session and source
+receipts. Captures render sanitized source text; they do not represent live
+origin-page interaction. Existing client records and queues remain authoritative.
+
+On iPhone, open the authenticated HTTPS workspace in Safari and use Share →
+Add to Home Screen; the in-app install help explains iOS and desktop steps.
+Offline mode contains only generic help and icons, never private workspace data.
+The Electron client lives in [desktop](desktop/README.md). A private environment
+file supplies credentials only to the server; the web app and native bundle
+contain no API keys. See [release setup](docs/MOMOBOT_APP_RELEASE.md),
+[OpenAI lifecycle](backend/docs/MOMOBOT_OPENAI_LIFECYCLE.md), and
+[Browserbase configuration](backend/docs/BROWSERBASE_APP.md).
+
+MomoBot desktop 0.2.1 uses the official Design C headshot for its macOS icon and
+connection screen. The exact artwork and generation provenance live in
+[desktop branding](desktop/branding/SOURCES.md); web/PWA branding has its own
+deployment state.
+
+The workflow, hosted crew and browser rooms retain session-only admission, owner/workspace fences and uncertain-call holds alongside the existing private Agent Room and native startup controls. Integration preserves the current migration graph; deployment and accepted output still require their own runtime evidence.
+
+Brain Forge adds a scoped, opt-in Slack `brief` workflow backed by the existing
+private daily-brief builder and read-only canonical sources. The offline
+`brainforge_cli prepare` and `check` commands create and validate a disabled
+configuration candidate. Exact owner binding, encrypted connection credentials,
+source acceptance and an authorized live canary remain separate host checks;
+see [Brain Forge setup](backend/app/channels/BRAINFORGE.md).
+
+The original research pilot's pinned proposals and whole reviewed evidence can
+join that same private brief/project receipt through an offline adapter. It
+prepares native research inputs without collecting, spending or dispatching;
+client marketing facts and useful resulting output still require their review.
+
+The opt-in **Workflows** room at `/workspace/workflows` adds 120 concrete recipes:
+100 Momentum marketing, operations and development tasks plus 20 personal
+writing, music, research, coding and administration tasks. Each recipe has a
+closed input/output schema, synthetic preview and independent acceptance criteria.
+LangGraph retains the durable controller and the application's native run,
+thread and event stores; CrewAI, Mastra, Deep Agents, Agno and Inngest AgentKit
+are finite adapters under the same owner scope and provider meter.
+
+Select **Review plan before drafting** to require a separate worker's approval
+before the producer starts. The existing final review can request one revision;
+the optional supervisor path stays within the same six-call server budget and
+returns a reviewable draft. See [workflow limits](backend/docs/WORKFLOWS.md).
+
+The default budget is three executing jobs, capacity for 100 waiting jobs,
+six model attempts and 8,192 output / 60,000 input tokens per run, and 240 model
+attempts across the ledger in a rolling 24 hours. Browser work uses one bounded
+Browserbase session per owner scope. Optional Stagehand analyzes inert public
+snapshots through the same admitted model callback. Results stay reviewable
+drafts with immutable, hash-checked downloads; unknown billed cost stays unavailable.
+See [workflow operation and limits](backend/docs/WORKFLOWS.md),
+[isolated adapters](backend/docs/WORKFLOW_ADAPTERS.md), and the
+[Mac workbench client](scripts/MOMO_WORKBENCH.md). The separate
+[AgentOS probe](docs/AGNO_AGENTOS_PROBE.md) tests bounded native persistence and
+authorization; it does not activate another production platform.
+
+The default Gateway image excludes optional framework worker dependencies.
+The separate [private worker image](workers/browser-teams/README.md#optional-private-container-image)
+adds locked Python3.13/Node24 adapters to an explicitly reviewed Gateway image;
+the default backend build and publication pipeline retain their current behavior.
+Its disposable offline smoke uses synthetic model responses with network disabled.
+
+Before starting a newly prepared dedicated private app state, stop its Gateway
+and run `scripts/run_momobot_openai_app.py prepare-config` with `--state-dir`
+and the reviewed `--expected-config-sha256`. This appends a missing
+`run_events.backend: db` setting using the existing SQLite database and retains
+an exact private backup. Explicit owner settings, authentication, signing secret,
+provider budgets and development defaults are preserved. The private Gateway
+rejects an omitted journal setting; previous memory-only pilot events remain
+historical. See the exact invocation in [private setup](docs/MOMOBOT_APP_RELEASE.md).
 
 Optional Momentum integration: [synthetic offline SDK review worker](examples/momentum-sdk-review/README.md). Disabled by default; does not perform live client work or inference.

@@ -39,6 +39,9 @@ async def attach_connection_identity(
         inbound.connection_id = connection["id"]
         inbound.owner_user_id = connection["owner_user_id"]
         inbound.workspace_id = connection.get("workspace_id")
+        # The worker acts for the owner only through this delegation; with none
+        # (never granted, revoked) the Gateway refuses its calls.
+        inbound.delegation_id = connection.get("delegation_id")
         return inbound
 
     return inbound

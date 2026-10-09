@@ -18,7 +18,7 @@ Gaps this file fills:
      read path had a regression test. An admin who loses membership must
      also lose the ability to overwrite or reset workspace branding.
   2. Invitation creation (POST /api/v1/auth/invitations) does its own
-     in-handler membership check (`_active_shared_workspace_member`)
+     in-handler membership check (`active_shared_workspace_member`)
      independent of AuthMiddleware/require_permission — it was untested
      against a revoked admin trying to invite new members into a workspace
      they no longer belong to.
@@ -47,6 +47,7 @@ from deerflow.persistence.organizations.branding import OrganizationBrandingRow
 from deerflow.persistence.organizations.identity import private_organization_id, private_organization_slug
 from deerflow.persistence.organizations.invitation import InvitationRow
 from deerflow.persistence.organizations.model import OrganizationMemberRow, OrganizationRow
+from deerflow.persistence.user.model import UserRow
 
 SHARED_ID = "revocation-workspace-1"
 ADMIN = "actor-admin"
@@ -65,6 +66,8 @@ async def membership_db(monkeypatch):
             lambda sync: Base.metadata.create_all(
                 sync,
                 tables=[
+                    # Organization resolution also checks users.disabled_at.
+                    UserRow.__table__,
                     OrganizationRow.__table__,
                     OrganizationMemberRow.__table__,
                     OrganizationBrandingRow.__table__,
@@ -91,7 +94,7 @@ async def membership_db(monkeypatch):
     monkeypatch.setattr("deerflow.persistence.engine.get_session_factory", lambda: session_factory)
     monkeypatch.setattr(workspaces, "get_session_factory", lambda: session_factory)
     monkeypatch.setattr(invitations, "_session_factory", lambda: session_factory)
-    monkeypatch.setattr("app.gateway.authz._get_route_authorization_config", lambda: AuthorizationConfig())
+    monkeypatch.setattr("app.gateway.authz._get_route_authorization_config", lambda: AuthorizationConfig(invitations_frozen=False))
 
     yield session_factory
     await engine.dispose()

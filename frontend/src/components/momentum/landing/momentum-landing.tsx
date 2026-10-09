@@ -18,15 +18,27 @@
  * FUNNEL_TREATMENT ("current"), so day-one "/" stays byte-identical.
  */
 
-import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { CutPaper } from "@/components/momentum/cut-paper";
+import { MomoFilm } from "@/components/momentum/momo-film";
+import { BouncingMomo } from "@/components/momentum/momobot/bouncing-momo";
+import { useIntroMotion } from "@/components/momentum/momobot/intro-motion";
+import {
+  MomentumMark,
+  MomoBotLockup,
+  MomoBotWordmark,
+} from "@/components/momentum/momobot/lockup";
+import { ScrapbookBackdrop } from "@/components/momentum/momobot/scrapbook-backdrop";
 import {
   FUNNEL_TREATMENT,
   resolveFunnelTreatment,
 } from "@/components/momentum/treatment";
+import {
+  BRAIN_ASPECT,
+  BRAIN_FLAT,
+} from "@/components/workspace/command-center/momo-avatar";
 
 import styles from "./momentum-landing.module.css";
 
@@ -41,7 +53,7 @@ const CAPABILITIES = [
     body: (
       <>
         A <strong>lead</strong> that plans and delegates, with specialists for
-        research, brand, revenue, client success and release review.
+        research, growth, revenue, client success and release review.
       </>
     ),
   },
@@ -74,6 +86,28 @@ const CAPABILITIES = [
   },
 ];
 
+/*
+ * The team sheet beside the cards: the lead and the five specialists the
+ * Agents card names, drawn with the art the Command Center roster uses. The
+ * lead is Dillon Brain (the flat render of the BRAIN_LAYERS stack that
+ * MomoAvatar draws for "dillon-brain"); the specialists are canon Momos from
+ * public/momentum/momos. The lead comes first and larger.
+ */
+const momo = (slug: string) => `/momentum/momos/${slug}.svg`;
+const TEAM = [
+  { key: "lead", name: "Lead", src: BRAIN_FLAT, aspect: BRAIN_ASPECT },
+  { key: "research", name: "Research", src: momo("research"), aspect: 1 },
+  { key: "growth", name: "Growth", src: momo("growth"), aspect: 1 },
+  { key: "revenue", name: "Revenue", src: momo("revenue"), aspect: 1 },
+  {
+    key: "client-success",
+    name: "Client success",
+    src: momo("client-success"),
+    aspect: 1,
+  },
+  { key: "qa", name: "Release review", src: momo("qa"), aspect: 1 },
+] as const;
+
 // Staggered pin offsets for the four paper cards — deliberately uneven, never
 // a three/four-equal-card row.
 const CARD_OFFSETS = [0, 24, 8, 16] as const;
@@ -101,15 +135,7 @@ export function MomentumLanding() {
       <div className={styles.shell}>
         <header className={styles.header}>
           <Link className={styles.wordmark} href="/">
-            <Image
-              className={styles.wordmarkImage}
-              src="/momentum/wordmark.png"
-              alt="Momentum"
-              width={132}
-              height={24}
-              priority
-            />
-            <span className={styles.wordmarkNote}>Workspace</span>
+            <MomoBotLockup wordmarkClassName={styles.wordmarkImage} />
           </Link>
           <Link className={styles.secondary} href="/workspace">
             Sign in
@@ -124,10 +150,10 @@ export function MomentumLanding() {
             </p>
             <h1 className={styles.title}>Give your ambition a team.</h1>
             <p className={styles.lede}>
-              Momentum Workspace is a private environment where a team of agents
-              takes on real work across research, build and review, and leaves a
-              record you can check. You were invited here because someone wants
-              you in the room.
+              MomoBot is a private workspace where a team of agents takes on
+              real work across research, build and review, and leaves a record
+              you can check. You were invited here because someone wants you in
+              the room.
             </p>
             <div className={styles.actions}>
               <Link className={styles.primary} href="/workspace">
@@ -170,6 +196,9 @@ export function MomentumLanding() {
 
         <footer className={styles.footer}>
           <span>© {new Date().getFullYear()} Momentum</span>
+          <Link className={styles.footerLink} href="/daily">
+            The Momo Daily
+          </Link>
           <Link className={styles.footerLink} href="/workspace">
             Have an invitation? Sign in
           </Link>
@@ -185,79 +214,30 @@ export function MomentumLanding() {
  * theme provider pins on this route (theme-provider.tsx:14) — nothing here
  * reads a `--momentum-*`/shadcn dark-mode token, only `--paper-*` ones.
  */
-/*
- * The canonical flat Momo (public/momentum/momo-mark.svg geometry) drawn in
- * paper tokens per the 2026-09-21 re-lock: royal body, cream eyes, grey
- * hardware, gold only on the antenna ball. Stands in for the hero crew until
- * public/momentum/momos/ has art; the console glyph fallback is the wrong
- * medium on a paper sheet. The stem grey is Momo hardware, not a text token.
- */
-function PaperMomo({ size, tilt = 0 }: { size: number; tilt?: number }) {
-  return (
-    <svg
-      viewBox="0 0 120 132"
-      width={size}
-      height={(size * 132) / 120}
-      aria-hidden="true"
-      style={{ transform: `rotate(${tilt}deg)` }}
-    >
-      <path
-        d="M60 29V14"
-        stroke="#5c6773"
-        strokeWidth="7"
-        strokeLinecap="round"
-      />
-      <circle cx="60" cy="11" r="6" fill="var(--paper-brass)" />
-      <path
-        d="M60 28c30 0 49 20 49 49s-18 47-49 47S11 106 11 77s19-49 49-49Z"
-        fill="var(--paper-royal)"
-      />
-      <rect
-        x="35"
-        y="59"
-        width="12"
-        height="23"
-        rx="6"
-        fill="var(--paper-cream-hi)"
-      />
-      <rect
-        x="73"
-        y="59"
-        width="12"
-        height="23"
-        rx="6"
-        fill="var(--paper-cream-hi)"
-      />
-    </svg>
-  );
-}
-
 function PaperLanding() {
+  const motion = useIntroMotion();
+  // Momo's intro plays once, then his Hello loop stays pinned in front of
+  // the moving collage for as long as the page is open.
+  const [introDone, setIntroDone] = useState(false);
   return (
     <div className={styles.paperPage} data-treatment="paper">
-      <div
-        className={`${styles.paperBlueprintA} paper-torn`}
-        aria-hidden="true"
-      />
-      <div
-        className={`${styles.paperBlueprintB} paper-torn-alt`}
-        aria-hidden="true"
-      />
+      <div className={styles.paperIntro}>
+        <ScrapbookBackdrop motion={motion} tone="cream" />
+      </div>
 
       <div className={styles.paperShell}>
         <header className={styles.paperHeader}>
+          {/* The product leads on the left; the maker signs off at the far
+              right, apart from it, after the one action. */}
           <Link className={styles.paperWordmark} href="/">
-            <Image
-              src="/momentum/wordmark.png"
-              alt="Momentum"
-              width={132}
-              height={24}
-              priority
-            />
+            <MomoBotWordmark />
           </Link>
-          <Link className={styles.paperSignIn} href="/workspace">
-            Sign in
-          </Link>
+          <div className={styles.paperHeaderEnd}>
+            <Link className={styles.paperSignIn} href="/workspace">
+              Sign in
+            </Link>
+            <MomentumMark className={styles.paperMaker} />
+          </div>
         </header>
 
         <main className={styles.paperHero}>
@@ -265,19 +245,31 @@ function PaperLanding() {
             still invite only, for now
           </p>
 
+          {/* Before the headline in the DOM so phones meet Momo first; wide
+              screens lift him beside the headline (position: absolute). */}
+          <BouncingMomo live={motion.live} className={styles.paperMomos}>
+            <MomoFilm
+              key={introDone ? "hello" : "intro"}
+              name={introDone ? "momo-hello" : "momo-intro"}
+              live={motion.live}
+              loop={introDone}
+              onEnded={() => setIntroDone(true)}
+            />
+          </BouncingMomo>
+
           <h1 className={styles.paperTitle}>
-            <span className="m-voice-serif">The future needs</span>
+            <span className="m-voice-serif">Say hello to</span>
             <CutPaper
-              word="Momentum"
+              word="MomoBot"
               className={`${styles.paperCutWord} m-voice-cut-paper`}
               letterClassName={styles.paperCutLetter}
             />
           </h1>
 
           <p className={`${styles.paperLede} m-voice-body`}>
-            A private workspace where a team of agents takes on real work and
-            leaves a record you can check. You were invited here because someone
-            wants you in the room.
+            MomoBot is a private workspace where a team of agents takes on real
+            work and leaves a record you can check. You were invited here
+            because someone wants you in the room.
           </p>
 
           <div className={styles.paperActions}>
@@ -317,16 +309,48 @@ function PaperLanding() {
             ))}
           </ul>
 
-          <div className={styles.paperMomos} aria-hidden="true">
-            <PaperMomo size={160} tilt={-4} />
-            <PaperMomo size={112} tilt={3} />
-          </div>
+          {/* Fills the paper right of the cards on wide screens and follows
+              them on phones. A kraft sheet, not pinned: nothing here is
+              running. */}
+          <section
+            className={`${styles.paperTeam} paper-torn-alt`}
+            aria-labelledby="paper-team-title"
+          >
+            <h2
+              className={`${styles.paperTeamTitle} m-voice-label`}
+              id="paper-team-title"
+            >
+              Your team
+            </h2>
+            <p className={`${styles.paperTeamLede} m-voice-body`}>
+              One lead plans the work and hands each part to a specialist.
+            </p>
+            <ul className={styles.paperTeamList}>
+              {TEAM.map((member) => (
+                <li className={styles.paperTeamMember} key={member.key}>
+                  <img
+                    className={styles.paperTeamArt}
+                    src={member.src}
+                    alt=""
+                    width={120}
+                    height={Math.round(120 / member.aspect)}
+                    loading="lazy"
+                    decoding="async"
+                  />
+                  <span className={styles.paperTeamName}>{member.name}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
         </main>
 
         <footer className={styles.paperFooter}>
           <span className="m-voice-body">
             © {new Date().getFullYear()} Momentum
           </span>
+          <Link className={styles.paperFooterLink} href="/daily">
+            The Momo Daily
+          </Link>
           <Link className={styles.paperFooterLink} href="/workspace">
             Have an invitation? Sign in
           </Link>

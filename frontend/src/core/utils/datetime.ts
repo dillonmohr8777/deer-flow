@@ -14,6 +14,20 @@ function getDateFnsLocale(locale: Locale) {
   }
 }
 
+/** A calendar day for lists and ledgers: "Sep 21, 2026", or null if unknown. */
+export function formatDay(
+  date: Date | string | number,
+  locale: string,
+): string | null {
+  const parsed = date instanceof Date ? date : new Date(date);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return new Intl.DateTimeFormat(locale === "zh-CN" ? "zh-CN" : "en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  }).format(parsed);
+}
+
 export function formatTimeAgo(date: Date | string | number, locale?: Locale) {
   const effectiveLocale =
     locale ??
@@ -31,4 +45,33 @@ export function formatTimeAgo(date: Date | string | number, locale?: Locale) {
     addSuffix: true,
     locale: getDateFnsLocale(effectiveLocale),
   });
+}
+
+/**
+ * A short stamp that tells similar rows apart: the time for today ("2:32 PM"),
+ * the day for anything older ("Sep 21"), and the year only when it differs.
+ * Returns null for a missing or invalid timestamp so callers can omit it.
+ */
+export function formatCompactStamp(
+  date: Date | string | number | null | undefined,
+  locale: string,
+  now: Date = new Date(),
+): string | null {
+  if (date === null || date === undefined || date === "") return null;
+  const parsed = date instanceof Date ? date : new Date(date);
+  if (Number.isNaN(parsed.getTime())) return null;
+  const intlLocale = locale === "zh-CN" ? "zh-CN" : "en-US";
+  if (parsed.toDateString() === now.toDateString()) {
+    return new Intl.DateTimeFormat(intlLocale, {
+      hour: "numeric",
+      minute: "2-digit",
+    }).format(parsed);
+  }
+  return new Intl.DateTimeFormat(intlLocale, {
+    month: "short",
+    day: "numeric",
+    ...(parsed.getFullYear() === now.getFullYear()
+      ? {}
+      : { year: "numeric" as const }),
+  }).format(parsed);
 }

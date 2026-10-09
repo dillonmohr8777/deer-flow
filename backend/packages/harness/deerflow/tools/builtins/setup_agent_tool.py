@@ -63,8 +63,22 @@ def setup_agent(
             try:
                 existing = store.get(agent_name, user_id=user_id)
             except FileNotFoundError:
-                pass  # First bootstrap has no user-authored label to preserve.
+                # A missing config does not prove that the identity is fresh:
+                # file-backed records can retain their directory and SOUL.md.
+                try:
+                    absent = store.exists(agent_name, user_id=user_id) is False
+                except Exception:
+                    absent = False
+                if not absent:
+                    return Command(update={"messages": [ToolMessage(content="Error: Existing agent configuration is unavailable; refusing setup.", tool_call_id=runtime.tool_call_id, status="error")]})
+            except Exception:
+                return Command(update={"messages": [ToolMessage(content="Error: Existing agent configuration is unavailable; refusing setup.", tool_call_id=runtime.tool_call_id, status="error")]})
             else:
+                if existing is None or not existing.self_update_enabled or (existing.tool_names is not None and "setup_agent" not in existing.tool_names):
+                    return Command(update={"messages": [ToolMessage(content="Error: Existing agent operator-owned permissions forbid setup.", tool_call_id=runtime.tool_call_id, status="error")]})
+                config_data["self_update_enabled"] = existing.self_update_enabled
+                if existing.tool_names is not None:
+                    config_data["tool_names"] = list(existing.tool_names)
                 if existing.knowledge_scope is not None:
                     config_data["knowledge_scope"] = canonicalize_knowledge_scope(existing.knowledge_scope)
                 if existing.display_name is not None:

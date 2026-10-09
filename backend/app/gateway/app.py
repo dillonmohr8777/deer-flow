@@ -15,17 +15,27 @@ from app.gateway.csrf_middleware import CORS_EXPOSED_HEADERS, CSRFMiddleware, ge
 from app.gateway.deps import langgraph_runtime
 from app.gateway.health import READINESS_CHECKPOINTER_CONFIG_ATTR, readiness_payload
 from app.gateway.routers import (
+    academy,
+    admin,
+    agent_room,
     agents,
+    approvals,
     artifacts,
     assistants_compat,
     auth,
+    board,
     browser,
+    browserbase_research,
     capabilities,
     channel_connections,
     channels,
+    clients,
+    command_center,
     console,
+    cost_router,
     features,
     feedback,
+    fleet,
     github_webhooks,
     input_polish,
     integrations,
@@ -35,6 +45,7 @@ from app.gateway.routers import (
     mcp_tasks,
     memory,
     models,
+    openai_agents,
     plugins,
     project_documents,
     project_thread_files,
@@ -45,11 +56,13 @@ from app.gateway.routers import (
     subagent_batches,
     subagents,
     suggestions,
+    team_board,
     thread_runs,
     threads,
     trash,
     uploads,
     user_preferences,
+    workflows,
     workspace_branding,
     workspaces,
 )
@@ -311,6 +324,352 @@ async def _shutdown_startup_trash_sweep(app: FastAPI) -> None:
         logger.exception("Startup trash sweep failed during shutdown")
 
 
+async def _announce_to_exec_without_receipt(text: str) -> None:
+    """Adapt the confirmed-post API for fire-and-forget sweep callbacks.
+
+    Scorecard evaluation retains the original boolean receipt contract.
+    """
+    from deerflow.tools.exec_seat_tools import announce_to_exec
+
+    await announce_to_exec(text)
+
+
+async def _run_seat_budget_sweep() -> None:
+    """One weekly-budget pause/resume pass over every organization's agent seats (queue item f95).
+
+    ``deerflow.exec_seats.budget.evaluate_seat_budget`` and its ``#exec``
+    announcement are organization-scoped (``AgentSeatRepository``'s ambient
+    ``resolve_organization_id()``, ``TeamBoardRepository``'s the same), so
+    each organization's seats are evaluated inside that organization's own
+    storage context -- otherwise the announcement would resolve no channel
+    (or the wrong one) and ``AgentSeatRepository.set_paused`` would refuse
+    every write as foreign.
+    """
+    from sqlalchemy import select
+
+    from deerflow.exec_seats.budget import evaluate_seat_budget
+    from deerflow.persistence.engine import get_session_factory
+    from deerflow.persistence.exec_seats import AgentSeatRepository
+    from deerflow.persistence.organizations.model import OrganizationMemberRow, OrganizationRow
+    from deerflow.runtime.user_context import WorkspaceStorageContext, reset_storage_context, set_storage_context
+
+    session_factory = get_session_factory()
+    if session_factory is None:
+        return
+    repo = AgentSeatRepository(session_factory)
+    seats_by_org: dict[str, list[dict]] = {}
+    for seat in await repo.list_seats():
+        seats_by_org.setdefault(seat["organization_id"], []).append(seat)
+
+    for organization_id, org_seats in seats_by_org.items():
+        async with session_factory() as session:
+            storage_user_id = await session.scalar(select(OrganizationRow.storage_user_id).where(OrganizationRow.id == organization_id))
+            owner_user_id = await session.scalar(
+                select(OrganizationMemberRow.user_id).where(
+                    OrganizationMemberRow.organization_id == organization_id,
+                    OrganizationMemberRow.role == "owner",
+                    OrganizationMemberRow.status == "active",
+                )
+            )
+        if owner_user_id is None:
+            # No active owner to attribute the sweep to (org mid-deletion,
+            # data oddity): still safe to skip -- pause/resume is not urgent
+            # enough to guess an identity for.
+            continue
+        token = set_storage_context(WorkspaceStorageContext(actor_user_id=owner_user_id, organization_id=organization_id, storage_user_id=storage_user_id or owner_user_id))
+        try:
+            for seat in org_seats:
+                await evaluate_seat_budget(repo, seat, announce=_announce_to_exec_without_receipt)
+        finally:
+            reset_storage_context(token)
+
+
+async def _run_seat_budget_loop(interval_seconds: float) -> None:
+    """Recurring seat-budget sweep, cancelled cleanly on shutdown (queue item f95)."""
+    while True:
+        await asyncio.sleep(interval_seconds)
+        try:
+            await _run_seat_budget_sweep()
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("Seat budget sweep failed")
+
+
+def _start_seat_budget_loop(startup_config) -> asyncio.Task | None:
+    """Schedule the recurring sweep when configured; ``None`` otherwise.
+
+    Defensive against unconfigured ``startup_config`` test doubles (a bare
+    ``SimpleNamespace``/``MagicMock`` with no ``exec_seats`` attribute) the
+    same way the scheduler and trash-sweep gates already are: only a real
+    ``ExecSeatsConfig`` with ``budget_check_enabled=True`` starts the loop.
+    """
+    from deerflow.config.exec_seats_config import ExecSeatsConfig
+
+    exec_seats_config = getattr(startup_config, "exec_seats", None)
+    if not isinstance(exec_seats_config, ExecSeatsConfig) or not exec_seats_config.budget_check_enabled:
+        return None
+    return asyncio.create_task(_run_seat_budget_loop(exec_seats_config.budget_check_interval_seconds))
+
+
+async def _shutdown_seat_budget_loop(app: FastAPI) -> None:
+    """Cancel the recurring sweep task, if one was started."""
+    task = getattr(app.state, "seat_budget_loop_task", None)
+    if task is None or task.done():
+        return
+    task.cancel()
+    with suppress(asyncio.CancelledError):
+        await task
+
+
+async def _run_seat_scorecard_sweep() -> None:
+    """One weekly-scorecard pass over every organization's agent seats (queue item e11).
+
+    Same per-organization storage-context shape as ``_run_seat_budget_sweep``
+    (``deerflow.exec_seats.scorecard.evaluate_seat_scorecard`` and its
+    ``#exec`` announcement are organization-scoped via ambient
+    ``resolve_organization_id()``), and the same "skip an org with no active
+    owner to attribute the sweep to" posture.
+    """
+    from sqlalchemy import select
+
+    from deerflow.exec_seats.scorecard import evaluate_seat_scorecard
+    from deerflow.persistence.engine import get_session_factory
+    from deerflow.persistence.exec_seats import AgentSeatRepository
+    from deerflow.persistence.organizations.model import OrganizationMemberRow, OrganizationRow
+    from deerflow.runtime.user_context import WorkspaceStorageContext, reset_storage_context, set_storage_context
+    from deerflow.tools.exec_seat_tools import announce_to_exec
+
+    session_factory = get_session_factory()
+    if session_factory is None:
+        return
+    repo = AgentSeatRepository(session_factory)
+    seats_by_org: dict[str, list[dict]] = {}
+    for seat in await repo.list_seats():
+        seats_by_org.setdefault(seat["organization_id"], []).append(seat)
+
+    for organization_id, org_seats in seats_by_org.items():
+        async with session_factory() as session:
+            storage_user_id = await session.scalar(select(OrganizationRow.storage_user_id).where(OrganizationRow.id == organization_id))
+            owner_user_id = await session.scalar(
+                select(OrganizationMemberRow.user_id).where(
+                    OrganizationMemberRow.organization_id == organization_id,
+                    OrganizationMemberRow.role == "owner",
+                    OrganizationMemberRow.status == "active",
+                )
+            )
+        if owner_user_id is None:
+            continue
+        token = set_storage_context(WorkspaceStorageContext(actor_user_id=owner_user_id, organization_id=organization_id, storage_user_id=storage_user_id or owner_user_id))
+        try:
+            for seat in org_seats:
+                await evaluate_seat_scorecard(repo, seat, announce=announce_to_exec)
+        finally:
+            reset_storage_context(token)
+
+
+async def _run_seat_scorecard_loop(interval_seconds: float) -> None:
+    """Recurring seat-scorecard sweep, cancelled cleanly on shutdown (queue item e11)."""
+    while True:
+        await asyncio.sleep(interval_seconds)
+        try:
+            await _run_seat_scorecard_sweep()
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("Seat scorecard sweep failed")
+
+
+def _start_seat_scorecard_loop(startup_config) -> asyncio.Task | None:
+    """Schedule the recurring scorecard sweep when configured; ``None`` otherwise.
+
+    Defensive against unconfigured ``startup_config`` test doubles, same as
+    ``_start_seat_budget_loop``.
+    """
+    from deerflow.config.exec_seats_config import ExecSeatsConfig
+
+    exec_seats_config = getattr(startup_config, "exec_seats", None)
+    if not isinstance(exec_seats_config, ExecSeatsConfig) or not exec_seats_config.scorecard_check_enabled:
+        return None
+    return asyncio.create_task(_run_seat_scorecard_loop(exec_seats_config.scorecard_check_interval_seconds))
+
+
+async def _shutdown_seat_scorecard_loop(app: FastAPI) -> None:
+    """Cancel the recurring scorecard sweep task, if one was started."""
+    task = getattr(app.state, "seat_scorecard_loop_task", None)
+    if task is None or task.done():
+        return
+    task.cancel()
+    with suppress(asyncio.CancelledError):
+        await task
+
+
+async def _run_hire_idle_retirement_sweep() -> None:
+    """One idle-probation pass over every organization's active hires (queue item e12).
+
+    EXECUTIVE.md Hiring rule: "A hire idle 7 days ... is retired
+    automatically." Same per-organization storage-context shape as
+    ``_run_seat_budget_sweep``/``_run_seat_scorecard_sweep``
+    (``deerflow.hiring.retirement.evaluate_hire_idle_retirement`` and its
+    ``#exec`` announcement are organization-scoped via ambient
+    ``resolve_organization_id()``), and the same "skip an org with no active
+    owner to attribute the sweep to" posture.
+    """
+    from sqlalchemy import select
+
+    from deerflow.config.hiring_config import HiringConfig
+    from deerflow.hiring.retirement import evaluate_hire_idle_retirement
+    from deerflow.persistence.engine import get_session_factory
+    from deerflow.persistence.hiring.sql import HiredAgentRepository
+    from deerflow.persistence.organizations.model import OrganizationMemberRow, OrganizationRow
+    from deerflow.runtime.user_context import WorkspaceStorageContext, reset_storage_context, set_storage_context
+
+    session_factory = get_session_factory()
+    if session_factory is None:
+        return
+    hiring_config = getattr(get_app_config(), "hiring", None)
+    idle_days = hiring_config.idle_days_before_retirement if isinstance(hiring_config, HiringConfig) else HiringConfig().idle_days_before_retirement
+    repo = HiredAgentRepository(session_factory)
+    hires_by_org: dict[str, list[dict]] = {}
+    for hire in await repo.list_hires():
+        hires_by_org.setdefault(hire["organization_id"], []).append(hire)
+
+    for organization_id, org_hires in hires_by_org.items():
+        async with session_factory() as session:
+            storage_user_id = await session.scalar(select(OrganizationRow.storage_user_id).where(OrganizationRow.id == organization_id))
+            owner_user_id = await session.scalar(
+                select(OrganizationMemberRow.user_id).where(
+                    OrganizationMemberRow.organization_id == organization_id,
+                    OrganizationMemberRow.role == "owner",
+                    OrganizationMemberRow.status == "active",
+                )
+            )
+        if owner_user_id is None:
+            continue
+        token = set_storage_context(WorkspaceStorageContext(actor_user_id=owner_user_id, organization_id=organization_id, storage_user_id=storage_user_id or owner_user_id))
+        try:
+            for hire in org_hires:
+                await evaluate_hire_idle_retirement(repo, hire, idle_days=idle_days, announce=_announce_to_exec_without_receipt)
+        finally:
+            reset_storage_context(token)
+
+
+async def _run_hire_idle_retirement_loop(interval_seconds: float) -> None:
+    """Recurring hire idle-retirement sweep, cancelled cleanly on shutdown (queue item e12)."""
+    while True:
+        await asyncio.sleep(interval_seconds)
+        try:
+            await _run_hire_idle_retirement_sweep()
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("Hire idle-retirement sweep failed")
+
+
+def _start_hire_idle_retirement_loop(startup_config) -> asyncio.Task | None:
+    """Schedule the recurring sweep when configured; ``None`` otherwise.
+
+    Defensive against unconfigured ``startup_config`` test doubles, same as
+    ``_start_seat_budget_loop``.
+    """
+    from deerflow.config.hiring_config import HiringConfig
+
+    hiring_config = getattr(startup_config, "hiring", None)
+    if not isinstance(hiring_config, HiringConfig) or not hiring_config.retirement_check_enabled:
+        return None
+    return asyncio.create_task(_run_hire_idle_retirement_loop(hiring_config.retirement_check_interval_seconds))
+
+
+async def _shutdown_hire_idle_retirement_loop(app: FastAPI) -> None:
+    """Cancel the recurring sweep task, if one was started."""
+    task = getattr(app.state, "hire_idle_retirement_loop_task", None)
+    if task is None or task.done():
+        return
+    task.cancel()
+    with suppress(asyncio.CancelledError):
+        await task
+
+
+async def _run_hire_kpi_review_sweep() -> None:
+    """One weekly KPI-review pass over every organization's active hires (queue item e12).
+
+    The other half of EXECUTIVE.md's Probation rule ("missing its KPI 2
+    weeks running ... is retired automatically"), alongside
+    ``_run_hire_idle_retirement_sweep``. Same per-organization storage-context
+    shape.
+    """
+    from sqlalchemy import select
+
+    from deerflow.hiring.kpi_review import evaluate_hire_kpi
+    from deerflow.persistence.engine import get_session_factory
+    from deerflow.persistence.hiring.sql import HiredAgentRepository
+    from deerflow.persistence.organizations.model import OrganizationMemberRow, OrganizationRow
+    from deerflow.runtime.user_context import WorkspaceStorageContext, reset_storage_context, set_storage_context
+
+    session_factory = get_session_factory()
+    if session_factory is None:
+        return
+    repo = HiredAgentRepository(session_factory)
+    hires_by_org: dict[str, list[dict]] = {}
+    for hire in await repo.list_hires():
+        hires_by_org.setdefault(hire["organization_id"], []).append(hire)
+
+    for organization_id, org_hires in hires_by_org.items():
+        async with session_factory() as session:
+            storage_user_id = await session.scalar(select(OrganizationRow.storage_user_id).where(OrganizationRow.id == organization_id))
+            owner_user_id = await session.scalar(
+                select(OrganizationMemberRow.user_id).where(
+                    OrganizationMemberRow.organization_id == organization_id,
+                    OrganizationMemberRow.role == "owner",
+                    OrganizationMemberRow.status == "active",
+                )
+            )
+        if owner_user_id is None:
+            continue
+        token = set_storage_context(WorkspaceStorageContext(actor_user_id=owner_user_id, organization_id=organization_id, storage_user_id=storage_user_id or owner_user_id))
+        try:
+            for hire in org_hires:
+                await evaluate_hire_kpi(repo, hire, announce=_announce_to_exec_without_receipt)
+        finally:
+            reset_storage_context(token)
+
+
+async def _run_hire_kpi_review_loop(interval_seconds: float) -> None:
+    """Recurring hire KPI-review sweep, cancelled cleanly on shutdown (queue item e12)."""
+    while True:
+        await asyncio.sleep(interval_seconds)
+        try:
+            await _run_hire_kpi_review_sweep()
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("Hire KPI-review sweep failed")
+
+
+def _start_hire_kpi_review_loop(startup_config) -> asyncio.Task | None:
+    """Schedule the recurring sweep when configured; ``None`` otherwise.
+
+    Defensive against unconfigured ``startup_config`` test doubles, same as
+    ``_start_hire_idle_retirement_loop``.
+    """
+    from deerflow.config.hiring_config import HiringConfig
+
+    hiring_config = getattr(startup_config, "hiring", None)
+    if not isinstance(hiring_config, HiringConfig) or not hiring_config.kpi_check_enabled:
+        return None
+    return asyncio.create_task(_run_hire_kpi_review_loop(hiring_config.kpi_check_interval_seconds))
+
+
+async def _shutdown_hire_kpi_review_loop(app: FastAPI) -> None:
+    """Cancel the recurring sweep task, if one was started."""
+    task = getattr(app.state, "hire_kpi_review_loop_task", None)
+    if task is None or task.done():
+        return
+    task.cancel()
+    with suppress(asyncio.CancelledError):
+        await task
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan handler."""
@@ -345,6 +704,20 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         raise RuntimeError(error_msg) from e
     config = get_gateway_config()
     logger.info(f"Starting API Gateway on {config.host}:{config.port}")
+
+    # The Jevbox preparation route is disabled unless a strict, bounded
+    # startup-owned binding is explicitly configured. Never log its path or
+    # contents, and fail startup closed when an opted-in binding is invalid.
+    from app.gateway.jevbox_preparation_binding import (
+        JevboxPreparationBindingError,
+        load_optional_jevbox_preparation_binding,
+    )
+
+    try:
+        app.state.jevbox_preparation_binding = await asyncio.to_thread(load_optional_jevbox_preparation_binding)
+    except JevboxPreparationBindingError:
+        logger.error("Jevbox preparation binding rejected; startup stopped")
+        raise RuntimeError("Jevbox preparation binding invalid") from None
 
     from deerflow.skills.projection import ensure_public_skill_projection
 
@@ -434,6 +807,22 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         # in-flight sweep a bounded graceful budget before cancelling it; any
         # already-started file worker drains before the runtime is torn down.
         app.state.startup_trash_sweep_task = asyncio.create_task(_run_startup_trash_sweep(app, startup_config))
+
+        # Queue item f95: recurring weekly-budget pause/resume sweep for
+        # Momentum agent seats, off by default (config.exec_seats.budget_check_enabled).
+        app.state.seat_budget_loop_task = _start_seat_budget_loop(startup_config)
+
+        # Queue item e11: recurring weekly-scorecard sweep for Momentum agent
+        # seats, off by default (config.exec_seats.scorecard_check_enabled).
+        app.state.seat_scorecard_loop_task = _start_seat_scorecard_loop(startup_config)
+
+        # Queue item e12: recurring idle-probation sweep for Momentum agent
+        # hires, off by default (config.hiring.retirement_check_enabled).
+        app.state.hire_idle_retirement_loop_task = _start_hire_idle_retirement_loop(startup_config)
+
+        # Queue item e12: recurring KPI-review sweep for Momentum agent
+        # hires, off by default (config.hiring.kpi_check_enabled).
+        app.state.hire_kpi_review_loop_task = _start_hire_kpi_review_loop(startup_config)
 
         try:
             from app.gateway.services import launch_scheduled_thread_run
@@ -565,9 +954,58 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 set_subagent_batch_submitter(batch_service)
                 app.state.subagent_batches_available = True
 
+        from app.gateway.openai_agent_service import OpenAIAgentService
+        from deerflow.config.paths import get_paths
+
+        app.state.openai_agent_service = OpenAIAgentService(get_paths().base_dir / "openai-agents.sqlite")
+        await app.state.openai_agent_service.start()
+
+        from app.gateway.browserbase_service import BrowserbaseResearchService
+
+        if BrowserbaseResearchService.enabled():
+            app.state.browserbase_service = BrowserbaseResearchService(get_paths().base_dir / "browserbase-research.sqlite")
+            await app.state.browserbase_service.start()
+
+        from app.gateway.workflow_service import WorkflowService
+
+        if WorkflowService.enabled():
+            from app.gateway.workflow_authority import workflow_actor_authorized
+            from app.gateway.workflow_hai_budget import create_workflow_model_adapter
+
+            app.state.workflow_service = WorkflowService(
+                get_paths().base_dir / "workflows.sqlite",
+                checkpointer=app.state.checkpointer,
+                adapter=create_workflow_model_adapter(startup_config),
+                browser_service=getattr(app.state, "browserbase_service", None),
+                run_manager=app.state.run_manager,
+                thread_store=app.state.thread_store,
+                event_store=app.state.run_event_store,
+                authority=workflow_actor_authorized,
+            )
+            await app.state.workflow_service.start()
+
         yield
 
         await _shutdown_startup_trash_sweep(app)
+        await _shutdown_seat_budget_loop(app)
+        await _shutdown_seat_scorecard_loop(app)
+        await _shutdown_hire_idle_retirement_loop(app)
+        await _shutdown_hire_kpi_review_loop(app)
+
+        if getattr(app.state, "workflow_service", None) is not None:
+            await app.state.workflow_service.aclose()
+
+        if getattr(app.state, "browserbase_service", None) is not None:
+            try:
+                await app.state.browserbase_service.aclose()
+            except Exception:
+                logger.exception("Failed to close Browserbase research client")
+
+        if getattr(app.state, "openai_agent_service", None) is not None:
+            try:
+                await app.state.openai_agent_service.aclose()
+            except Exception:
+                logger.exception("Failed to close OpenAI agent HTTP client")
 
         try:
             await auth.close_oidc_service()
@@ -914,12 +1352,18 @@ This gateway provides runtime endpoints for agent runs plus custom endpoints for
 
     app.include_router(managed_models.router)
     app.include_router(models.router)
+    app.include_router(openai_agents.router)
+    app.include_router(browserbase_research.router)
+    app.include_router(workflows.router)
 
     # Features API is mounted at /api/features
     app.include_router(features.router)
+    app.include_router(agent_room.router)
 
     # Console API (cross-thread observability) is mounted at /api/console
     app.include_router(console.router)
+    app.include_router(cost_router.router)
+    app.include_router(command_center.router)
 
     # MCP API is mounted at /api/mcp
     app.include_router(capabilities.router)
@@ -966,6 +1410,19 @@ This gateway provides runtime endpoints for agent runs plus custom endpoints for
     app.include_router(project_thread_files.router)
     # Trash API is mounted at /api/trash
     app.include_router(trash.router)
+    # Client roster API (+ admin registry import) is mounted at /api/clients
+    app.include_router(clients.router)
+    # Momo Board API (client posts/tickets/concerns/DMs) is mounted at /api/board
+    app.include_router(board.router)
+
+    # Approvals inbox (agent-proposed outbound actions) is mounted at /api/approvals
+    app.include_router(approvals.router)
+    # Momentum-internal, staff only (private instance + staff role, else 404):
+    # team channels at /api/team and the AI Academy at /api/academy
+    app.include_router(team_board.router)
+    app.include_router(academy.router)
+    # Fleet template catalog (read-only) is mounted at /api/fleet
+    app.include_router(fleet.router)
 
     # Deployment-level subagent catalog and admin management.
     app.include_router(subagents.router)
@@ -993,6 +1450,10 @@ This gateway provides runtime endpoints for agent runs plus custom endpoints for
     app.include_router(workspaces.router)
     app.include_router(workspace_branding.router)
     app.include_router(user_preferences.router)
+
+    # System-admin controls (user disable/enable/force-logout, audit log) are
+    # mounted at /api/admin
+    app.include_router(admin.router)
 
     # Feedback API is mounted at /api/threads/{thread_id}/runs/{run_id}/feedback
     app.include_router(feedback.router)

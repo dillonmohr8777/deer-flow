@@ -132,7 +132,9 @@ test("measures a cold real Worker with a normal approximately 1 MiB CSV", async 
   expect(metrics.firstTableMs).not.toBeNull();
   // Report actual latency/long tasks, without asserting hardware-specific targets.
   await page.getByRole("button", { name: "Next page" }).click();
-  await expect(page.getByText(/^51–100/)).toBeVisible();
+  await expect(
+    page.getByText("51 to 100 of preview", { exact: true }),
+  ).toBeVisible();
 });
 
 test("keeps the main thread responsive during an extremely wide quoted record", async ({

@@ -1,0 +1,74 @@
+{
+  "title": "What does an AI marketing team of agents actually do in a day?",
+  "dek": "A look inside a real daily run: research, drafts, checks and one human sign off before anything goes out.",
+  "slug": "ai-marketing-agents-day-in-the-life",
+  "date": "2026-09-23",
+  "author": { "name": "Dillon Mohr", "title": "AI Marketing Director" },
+  "keywords": [
+    "AI marketing agents",
+    "AI marketing team",
+    "marketing automation",
+    "agent workflow"
+  ],
+  "summary": "An AI marketing team of agents spends most of a day on research, drafting and checking, the same work a human team does, just faster. Each agent has one job. Nothing that costs money or reaches a client goes out until a person reviews it.",
+  "section": "Front Page",
+  "hero": {
+    "src": "/momentum/daily/art/ai-marketing-agents-day-in-the-life.webp",
+    "alt": "A 1930s pulp noir illustration of Momo the robot mascot as a night city desk editor, on the phone at a cluttered desk under a lamp with newspapers flying past and a wall clock overhead"
+  },
+  "status": "draft",
+  "body": [
+    {
+      "heading": "What does a day actually look like?",
+      "paragraphs": [
+        "A small or mid size business does not need a marketing department the size of a newsroom to get newsroom level output. It needs a handful of agents, each with a narrow job, working through a queue every day and handing finished drafts to a person who decides what ships.",
+        "A typical day starts with research. One agent checks what changed since yesterday: a competitor's new offer, a shift in search rankings, a client's calendar event, a question that came up on social media. It does not write anything yet. It reads, summarizes and flags what matters.",
+        "From there the work splits into lanes. A content agent turns approved topics into drafts: blog posts, social captions, email copy. A design agent builds the visuals that go with them. An analytics agent checks last week's numbers and notes what is working and what is not. A client success agent watches for anything that looks like a risk, a missed reply, a slipping metric, before it becomes a real problem."
+      ]
+    },
+    {
+      "heading": "Who decides what is worth doing?",
+      "paragraphs": [
+        "The agents do not decide their own priorities from nothing. A short list of goals sets the direction each day: which clients need attention, which campaigns are live, what deadlines are close. Agents work from that list, not from whatever seems interesting.",
+        "This matters because agents are good at producing volume. Left alone, a content agent could write dozens of posts nobody asked for. The discipline is in scoping the work tightly: this client, this campaign, this week's plan, and stopping there.",
+        "A morning stand up, even a short automated one, sets that scope before the agents start. It lists what is due, what changed overnight, and what to skip. Without that step, agents default to doing everything they are capable of, which is rarely the same thing as doing what actually needs to happen today."
+      ]
+    },
+    {
+      "heading": "Where does a person come in?",
+      "paragraphs": [
+        "At the end, not the start. By the time a draft reaches a person, the research is done, the copy is written, the image is built, and the agent has already checked its own work against the brief. What is left is a judgment call: does this sound right, does it fit the client, is the offer accurate, should this go out today or wait.",
+        "That review is not a formality. Anything that spends money, changes a live campaign, or goes out under a client's name waits for a person to say yes. Drafts pile up in a queue with the reasoning behind them attached, so approving one takes a minute, not an investigation.",
+        "A good approval queue shows the finished draft next to the reason it exists: which client, which goal, which facts it relied on. An account manager scanning that queue at the end of the day can approve, edit or reject each item without reopening the whole research trail behind it."
+      ]
+    },
+    {
+      "heading": "Why does this beat a bigger team?",
+      "paragraphs": [
+        "Not because the agents are smarter than a person. They are not. They are faster at the parts of marketing that are mostly repetition: pulling data, drafting a first version, checking a fact, resizing an image for five platforms. A small business gets that speed without hiring five specialists, and an account manager gets to spend their day on strategy and client relationships instead of production.",
+        "The honest version of this story is not that agents replace judgment. It is that they clear away the work that sits in front of judgment, so the person making the final call gets to it faster and with better material in hand."
+      ]
+    },
+    {
+      "heading": "What can go wrong with this setup?",
+      "paragraphs": [
+        "Agents can be confidently wrong, especially about facts they were not given directly. That is why every claim in a draft should trace back to a real source: a client's own numbers, a public fact, or a note from the account manager, never a guess dressed up as a statistic.",
+        "The fix is not to slow everything down. It is to put the review where it belongs: light checking on routine drafts, careful review on anything client facing, and a hard stop before spend or a public send. Read more daily notes like this one at The Momo Daily, where Momentum publishes what its own agent team learns."
+      ]
+    }
+  ],
+  "faq": [
+    {
+      "question": "Do AI marketing agents work without any human oversight?",
+      "answer": "No. Agents handle research, drafting and checking. A person still approves anything that spends money, changes a live campaign, or is sent under a client's name."
+    },
+    {
+      "question": "How many agents does a small business actually need?",
+      "answer": "Usually a handful, each with one job: research, content, design, analytics and client success. More agents does not mean more value if the work is not scoped tightly."
+    },
+    {
+      "question": "What is the biggest risk of using AI marketing agents?",
+      "answer": "Confident mistakes, usually a made up statistic or a misread brief. The safeguard is requiring every claim to trace back to a real source and keeping human review on anything client facing."
+    }
+  ]
+}

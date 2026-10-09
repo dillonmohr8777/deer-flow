@@ -12,8 +12,9 @@ from pydantic import BaseModel, Field
 
 from app.gateway.browser_capability import browser_capability
 from app.gateway.conversation_access import conversation_references_enabled
-from app.gateway.deps import get_config
+from app.gateway.deps import get_config, is_admin_user
 from app.gateway.knowledge_scope_admission import RAGFLOW_KNOWLEDGE_SEARCH_PROVIDER
+from app.gateway.momentum_internal import is_momentum_staff
 from app.gateway.run_models import MAX_CONVERSATION_REFERENCES
 from deerflow.config.app_config import AppConfig
 from deerflow.subagents.capacity import configured_subagent_max_running
@@ -64,6 +65,18 @@ class KnowledgeBaseFeature(BaseModel):
     )
 
 
+class DeskFeature(BaseModel):
+    """Availability of the owner-only Desk home."""
+
+    enabled: bool = Field(..., description="Whether this instance is the owner's private workspace, so the Desk home is shown")
+
+
+class MomentumInternalFeature(BaseModel):
+    """Availability of staff-only Momentum surfaces (team channels, AI Academy)."""
+
+    enabled: bool = Field(..., description="Whether the caller is staff in the agency's own workspace, so Team and Academy are shown")
+
+
 class FeaturesResponse(BaseModel):
     """Frontend-facing feature availability flags."""
 
@@ -73,6 +86,8 @@ class FeaturesResponse(BaseModel):
     subagent_batches: SubagentBatchesFeature
     conversation_references: ConversationReferencesFeature
     knowledge_base: KnowledgeBaseFeature
+    desk: DeskFeature
+    momentum_internal: MomentumInternalFeature
 
 
 @router.get(
@@ -111,6 +126,13 @@ async def list_features(request: Request, config: AppConfig = Depends(get_config
         knowledge_base=KnowledgeBaseFeature(
             scope_selection_enabled=_knowledge_scope_selection_enabled(config),
         ),
+        # Config-only, read per request. Off unless config.yaml says
+        # private_workspace.enabled: true, so client-facing MomoBot never shows Desk.
+        desk=DeskFeature(enabled=config.private_workspace.enabled is True and await is_admin_user(request)),
+        # Per caller, not per instance: the agency's own workspace (by slug,
+        # from config) plus a staff role in it. The routes behind it enforce
+        # the same predicate.
+        momentum_internal=MomentumInternalFeature(enabled=await is_momentum_staff(request, config)),
     )
 
 

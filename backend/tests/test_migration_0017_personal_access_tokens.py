@@ -33,6 +33,9 @@ _EXPECTED_COLUMNS = {
     "last_used_at",
     "created_at",
     "revoked_at",
+    # Added by migration 0037_pat_organization; this test upgrades to "head",
+    # not to 0017 in isolation, so it must track every later additive column.
+    "organization_id",
 }
 
 

@@ -52,7 +52,7 @@ export function BrowserViewPanel({
       setNavigating(false);
       toast.error(
         message?.replace(/^Error:\s*/i, "") ??
-          `Cannot open ${url ?? "that URL"}`,
+          `Can't open ${url ?? "that URL"}`,
       );
     },
     [],
@@ -446,7 +446,7 @@ export function BrowserViewPanel({
               description={
                 live
                   ? "Waiting for the first live frame."
-                  : "Enter a URL above or let the agent browse — the live view will appear here."
+                  : "Enter a URL above or let the agent browse. The live view will appear here."
               }
             />
           )}

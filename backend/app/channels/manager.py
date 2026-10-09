@@ -945,7 +945,9 @@ def _owner_headers(msg: InboundMessage) -> dict[str, str] | None:
     owner_user_id = _effective_owner_user_id(msg)
     if not owner_user_id:
         return None
-    return create_internal_auth_headers(owner_user_id=owner_user_id)
+    # The Gateway admits the owner header only together with the connection's
+    # active delegation; without one the call is refused (fail closed).
+    return create_internal_auth_headers(owner_user_id=owner_user_id, delegation_id=msg.delegation_id)
 
 
 def _safe_user_id_for_run(raw_user_id: str) -> str:

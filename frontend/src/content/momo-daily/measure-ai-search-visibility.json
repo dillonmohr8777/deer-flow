@@ -1,0 +1,75 @@
+{
+  "title": "How do you measure your visibility in AI search?",
+  "dek": "Rankings still matter, but the new question is whether an AI assistant names your business at all.",
+  "slug": "measure-ai-search-visibility",
+  "date": "2026-09-24",
+  "author": { "name": "Dillon Mohr", "title": "AI Marketing Director" },
+  "keywords": [
+    "AI search visibility",
+    "answer engine optimization",
+    "generative engine optimization",
+    "brand mentions"
+  ],
+  "summary": "You measure AI search visibility by asking the questions your customers ask, in tools like ChatGPT, Gemini and Google's AI Overviews, and tracking whether your business is named, how it is described, and which competitors show up instead. A monthly log of those checks shows whether your work is moving the needle.",
+  "section": "Search and Growth",
+  "hero": {
+    "src": "/momentum/daily/art/measure-ai-search-visibility.webp",
+    "alt": "A 1930s pulp noir illustration of Momo the robot mascot standing on a rooftop at night, looking through a brass spyglass at a glowing city skyline"
+  },
+  "status": "draft",
+  "body": [
+    {
+      "heading": "What is AI search visibility?",
+      "paragraphs": [
+        "It is whether an AI assistant mentions your business when someone asks it a question your business could answer. A search engine shows you a page of links and lets you pick. An AI assistant reads several sources and writes one answer. If your business is not part of what it reads, it does not exist in that answer.",
+        "This is a different kind of visibility than a search ranking. A page can rank on the first page of Google and still never get quoted by an AI assistant, because the assistant is looking for a clear, direct, attributable answer, not just a relevant page."
+      ]
+    },
+    {
+      "heading": "How do you actually check it?",
+      "paragraphs": [
+        "Start with the questions your customers ask before they buy: what a service costs, who is best for a given job, what the difference is between two options, whether a business serves their area. Type those questions into the AI tools people actually use, plainly, the way a customer would.",
+        "Read what comes back. Note whether your business is named, how accurately it is described, and which competitors get mentioned instead. Do this across a handful of tools, since each one draws on different sources and can give different answers to the same question.",
+        "Keep a simple log: the question, the date, which tool, what it said. A single check tells you where you stand today. A log kept over weeks tells you whether the work you are doing is changing anything.",
+        "It helps to assign a small set of people, or an agent, to run the same set of questions on a fixed schedule rather than checking whenever it comes to mind. Consistency in when you check matters almost as much as what you ask, since AI tools change their answers over time and a scattered check makes that drift hard to see."
+      ]
+    },
+    {
+      "heading": "What makes a business more likely to get cited?",
+      "paragraphs": [
+        "Clear, direct answers on your own site help most. A page that states a fact plainly near the top, in plain language, is easier for an assistant to lift and quote than a page that buries the answer under three paragraphs of introduction.",
+        "Being named consistently across the web also matters. If your business name, location and services are described the same way on your site, your listings and other pages that mention you, an assistant has an easier time confirming who you are and what you do.",
+        "Structured data helps too. Marking up your pages so a machine can confirm the author, the publisher and the facts on the page gives an assistant a more confident basis for citing you instead of a vaguer competitor.",
+        "Reviews and third party mentions carry weight as well. An assistant weighing whether to trust your description of your own business often checks whether other sources, directories, review sites, local press, describe you the same way. Consistency across those sources builds the same kind of trust a person would extend after hearing your name from more than one place."
+      ]
+    },
+    {
+      "heading": "Does this replace tracking rankings and traffic?",
+      "paragraphs": [
+        "No. Search rankings, click through rates and site traffic are still real signals, and most customers still click through to a website before they buy. AI search visibility sits alongside those numbers as an added layer, not a replacement for them.",
+        "Think of it as one more question in a weekly or monthly review: are we ranking, are we getting clicks, and now, are we the business an AI assistant actually names. Treating all three together gives a fuller picture than any one of them alone.",
+        "It is also fair to expect this to move slowly at first. Traditional search rankings can shift within weeks of a change. AI assistants draw on a mix of sources that update on their own schedule, so a business often has to keep at the fundamentals, clear answers, consistent naming, structured data, for a few months before the citations start showing up."
+      ]
+    },
+    {
+      "heading": "Where should a small business start this week?",
+      "paragraphs": [
+        "Pick the five questions your customers ask most often. Run them through two or three AI tools. Write down what comes back. That single afternoon of checking will tell you more about your AI search visibility than any tool that promises to score it automatically. You can find more plain answers like this one at The Momo Daily."
+      ]
+    }
+  ],
+  "faq": [
+    {
+      "question": "What is the difference between SEO and AI search visibility?",
+      "answer": "SEO earns a place in a list of links a person scans and clicks. AI search visibility earns a mention inside the one composed answer an assistant writes, which is a higher bar for clarity and trust."
+    },
+    {
+      "question": "How often should I check my AI search visibility?",
+      "answer": "Monthly is enough for most small businesses. AI tools update how they answer over time, so a single check goes stale, but a monthly log shows real trends."
+    },
+    {
+      "question": "Can a small local business actually show up in AI answers?",
+      "answer": "Yes. Being named consistently, answering common questions plainly on your own site, and using structured data all help, regardless of business size."
+    }
+  ]
+}

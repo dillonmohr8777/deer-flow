@@ -13,22 +13,7 @@
  */
 
 /** Routing prefixes that identify *where* a model is served, not which model. */
-const PROVIDER_PREFIXES = [
-  "openrouter-",
-  "vercel-",
-  "ollama-",
-  "gateway-",
-  "anthropic/",
-  "openai/",
-  "meta/",
-  "google/",
-  "qwen/",
-  "z-ai/",
-  "x-ai/",
-  "moonshotai/",
-  "deepseek/",
-  "mistralai/",
-];
+const PROVIDER_PREFIXES = ["openrouter-", "vercel-", "ollama-", "gateway-"];
 
 /**
  * Commercial tier markers. These must never reach a product surface, per the
@@ -36,13 +21,21 @@ const PROVIDER_PREFIXES = [
  */
 const TIER_SUFFIXES = ["-contributor", "-batch", ":batch", "-preview", "-beta"];
 
+/** The same markers as whole words, for display names and a final guard. */
+const TIER_WORDS = /\b(contributor|batch|preview|beta)\b/gi;
+
 /** Families whose display name is not simply the title-cased slug. */
 const FAMILIES: ReadonlyArray<readonly [RegExp, string]> = [
   [/^claude-?/, "Claude "],
   [/^(opus|sonnet|haiku|fable)\b/, "Claude $1 "],
   [/^muse-spark(-1\.3)?$/, "Muse Spark 1.3"],
   [/^gpt-/, "GPT-"],
+  [/^deepseek-/, "DeepSeek "],
 ];
+
+function withoutTierWords(value: string): string {
+  return value.replace(TIER_WORDS, " ").replace(/\s+/g, " ").trim();
+}
 
 function titleCaseWords(value: string): string {
   return value
@@ -65,6 +58,11 @@ export function formatModelLabel(slug: string | null | undefined): string {
 
   let value = slug.trim().toLowerCase();
   if (value === "inherit") return "Lead model";
+
+  // A namespace ("meta/", "google/") names the vendor, not the model. Taking
+  // the last segment also recovers the model from the doubled IDs the usage
+  // ledger currently records ("meta/x-contributormeta/x-contributor").
+  value = value.slice(value.lastIndexOf("/") + 1);
 
   for (const prefix of PROVIDER_PREFIXES) {
     if (value.startsWith(prefix)) {
@@ -92,9 +90,30 @@ export function formatModelLabel(slug: string | null | undefined): string {
   for (const [pattern, replacement] of FAMILIES) {
     if (pattern.test(value)) {
       const named = value.replace(pattern, replacement).trim();
-      return titleCaseWords(named).replace(/\bGpt\b/g, "GPT");
+      return withoutTierWords(titleCaseWords(named).replace(/\bGpt\b/g, "GPT"));
     }
   }
 
-  return titleCaseWords(value);
+  return withoutTierWords(titleCaseWords(value));
+}
+
+/**
+ * The name a person configured for a model, when the slug is one of the
+ * workspace's configured models, minus the provider in parentheses
+ * ("(OpenRouter)") and any tier word. Configured names carry the tier word
+ * today ("Muse Spark 1.3 Contributor (OpenRouter)"), so they are cleaned, not
+ * trusted. Anything the model list does not know, such as the provider model
+ * IDs in usage rows, falls back to formatModelLabel.
+ */
+export function modelDisplayName(
+  slug: string | null | undefined,
+  models: ReadonlyArray<{ name: string; display_name?: string | null }> = [],
+): string {
+  const configured = slug
+    ? models.find((model) => model.name === slug)?.display_name
+    : null;
+  const cleaned = withoutTierWords(
+    (configured ?? "").replace(/\s*\([^)]*\)\s*$/, ""),
+  );
+  return cleaned || formatModelLabel(slug);
 }

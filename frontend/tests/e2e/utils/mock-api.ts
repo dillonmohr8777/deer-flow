@@ -1068,7 +1068,7 @@ export function mockLangGraphAPI(page: Page, options?: MockAPIOptions) {
     );
   });
 
-  void page.route(/\/api\/projects\/([^/]+)\/threads$/, (route) => {
+  void page.route(/\/api\/projects\/([^/]+)\/threads(?:\?|$)/, (route) => {
     if (route.request().method() !== "GET") {
       return route.fallback();
     }

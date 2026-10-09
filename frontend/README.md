@@ -148,6 +148,42 @@ src/
 - Environment validation can be skipped with `SKIP_ENV_VALIDATION=1` (useful for Docker)
 - Backend API URLs are optional; nginx proxy is used by default in development
 
+## Workflow room
+
+`/workspace/workflows` lists the Gateway's agency and personal workflow catalog.
+The count, categories, input schemas, steps and acceptance checks come from the
+catalog response; the UI does not start a runner for each definition. Search and
+category filters help select a recipe, then the bounded schema form collects its
+inputs. Synthetic examples are explicitly labeled and remain editable; loading
+one never creates a run.
+
+The status endpoint reports availability for LangGraph, CrewAI, Mastra,
+DeepAgents, Agno and Inngest AgentKit. Unavailable frameworks cannot be selected
+for execution. Browser-required recipes additionally require the guarded browser
+capability. The room shows the actual shared running limit and queue capacity,
+saved steps, worker/model/effort, evidence and usage. Missing billing stays
+unavailable; unresolved usage is labeled as a known minimum. Resume applies only
+to an interrupted saved run and preserves its remaining budget.
+
+Requests use the existing authenticated CSRF fetcher. The actor header pins the
+status read, and all catalog/run/action/artifact requests carry the server's
+expected workflow scope. Cache keys include both actor and scope. Switching
+account or scope aborts in-flight work and clears that room's private cache;
+anonymous and static pages issue no workflow API calls. An unconfirmed admission
+keeps its exact payload and idempotency key for an explicit retry.
+
+Only a completed, accepted run with a saved artifact receipt offers a download.
+The client verifies the exact streamed byte count and SHA-256 before handing the
+JSON Blob to the browser. This handoff is not proof that the user saved the file.
+
+Workflow tests live in `tests/unit/core/workflows`,
+`tests/unit/components/workspace/workflow-room.dom.test.tsx` and
+`tests/e2e/workflow-room.spec.ts`. The browser suite blocks service workers and
+intercepts every API request, including a fail-closed fallback, so its synthetic
+fixtures cannot trigger a paid provider call. Responsive checks cover 390, 768
+and 1440px, 44px controls, focus and reduced motion. Fixture QA does not establish
+physical iPhone installation or live provider acceptance.
+
 ## License
 
 MIT License. See [LICENSE](../LICENSE) for details.

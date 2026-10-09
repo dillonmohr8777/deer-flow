@@ -79,7 +79,7 @@ export default function SetupPage() {
     setError("");
 
     if (newPassword !== confirmPassword) {
-      setError("Passwords do not match");
+      setError("Passwords don't match");
       return;
     }
 
@@ -121,7 +121,7 @@ export default function SetupPage() {
     setError("");
 
     if (newPassword !== confirmPassword) {
-      setError("Passwords do not match");
+      setError("Passwords don't match");
       return;
     }
     if (newPassword.length < 8) {

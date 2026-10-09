@@ -1,3 +1,5 @@
+import { ACCESS_TOKEN_COOKIE_NAME } from "./constants";
+
 export interface ProxyPolicy {
   /** Allowed upstream path prefixes */
   readonly allowedPaths: readonly string[];
@@ -49,7 +51,7 @@ export const LANGGRAPH_COMPAT_POLICY: ProxyPolicy = {
     "content-length",
     "set-cookie",
   ]),
-  credential: { type: "cookie", name: "access_token" },
+  credential: { type: "cookie", name: ACCESS_TOKEN_COOKIE_NAME },
   timeoutMs: 120_000,
   csrf: true,
 };

@@ -1,6 +1,16 @@
 export const WORKSPACE_MAIN_ID = "workspace-main";
 
 /**
+ * The persistent React-owned div `WorkspaceContent` always renders as the
+ * sole child of `#workspace-main`, holding the connectivity banners and the
+ * routed page content. `RetroResolve` targets this id to apply its
+ * pixelation filter as a plain style property, never by moving this node's
+ * children in and out of a wrapper it builds itself — see the "why a
+ * persistent target" note in retro-resolve.tsx.
+ */
+export const WORKSPACE_MAIN_CONTENT_ID = "workspace-main-content";
+
+/**
  * First tab stop in the workspace. Without it a keyboard user crosses every
  * sidebar link and each recent chat's "More" button (30+ stops) before
  * reaching the page they opened.

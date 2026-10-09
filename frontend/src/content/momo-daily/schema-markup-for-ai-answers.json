@@ -1,0 +1,69 @@
+{
+  "title": "What is schema markup, and how does it help AI give better answers?",
+  "dek": "Schema markup is a label on your page that tells a machine exactly what it is looking at, in plain terms.",
+  "slug": "schema-markup-for-ai-answers",
+  "date": "2026-09-26",
+  "author": { "name": "Dillon Mohr", "title": "AI Marketing Director" },
+  "keywords": ["schema markup", "structured data", "JSON-LD", "AI answers"],
+  "summary": "Schema markup is hidden code on a web page that labels its content in a format machines can read directly, such as marking a paragraph as an FAQ answer or a name as the author. It helps AI tools and search engines describe and cite your page correctly instead of guessing.",
+  "section": "Tools",
+  "hero": {
+    "src": "/momentum/daily/art/schema-markup-for-ai-answers.webp",
+    "alt": "A 1930s pulp noir illustration of Momo the robot mascot as an archivist filing a blank index card into a card catalog drawer, with tall cabinets and a magnifying glass nearby"
+  },
+  "status": "draft",
+  "body": [
+    {
+      "heading": "What is schema markup in plain English?",
+      "paragraphs": [
+        "A web page is written for people. It has headings, paragraphs and photos that a person reads and understands from context. A machine does not have that context. It can read the words, but it has to guess which part is the headline, which part is a price, and which part is a question and answer.",
+        "Schema markup removes the guessing. It is a small block of code added to a page that says, in a format a machine reads directly, exactly what each piece of content is: this is the article's author, this is the date it was published, this is a question and this is its answer. Nothing about the page's design changes. It is a label, not a layout."
+      ]
+    },
+    {
+      "heading": "Why does this matter for AI answers?",
+      "paragraphs": [
+        "When an AI assistant is deciding whether to quote a page, it is weighing whether the page is trustworthy and whether it can confirm the facts on it. A page with clear structured data, a named author, a named publisher, a clear publish date, gives the assistant something firm to point to.",
+        "Without that markup, the assistant has to infer those facts from the surrounding text, which is slower and less reliable. Two pages can say the same true thing, and the one with clear structured data is the easier one for a machine to trust and cite."
+      ]
+    },
+    {
+      "heading": "What kinds of markup matter most for a small business?",
+      "paragraphs": [
+        "A few types cover most of what a small or mid size business needs. Organization markup identifies your business name, logo and contact details. Article or NewsArticle markup labels a blog post with its author, publisher and dates. FAQPage markup labels a set of questions and answers exactly as that, a Q and A. LocalBusiness markup, for a business with a physical location, labels your address, hours and service area.",
+        "You do not need every type of schema that exists. You need the handful that accurately describe what is actually on your page, applied correctly, rather than a long list applied loosely.",
+        "Product markup matters for any business that sells something directly online, since it labels price, availability and reviews in a format a shopping engine or AI assistant can read without visiting the checkout page itself. A service business without products can safely skip it."
+      ]
+    },
+    {
+      "heading": "Do you have to write this code by hand?",
+      "paragraphs": [
+        "Not usually. Most modern websites and content management systems can generate this markup automatically once the underlying page has the right information filled in, like an author field or an FAQ block. The work is often more about organizing your content clearly than about writing code.",
+        "If your site is built by hand or on an older platform, a developer can add the markup directly, following the format Google and other search providers publish and update. It is worth having someone check the result with a validator afterward, since a small mistake in the code can make the markup invisible to machines even though the page looks fine to a visitor.",
+        "Common mistakes are worth watching for even after the markup is live: a date field that never updates when a page is edited, an author name that does not match the real byline, or a price that was correct at launch and quietly went stale. None of these break the page for a human visitor, which is exactly why they can sit unnoticed for months."
+      ]
+    },
+    {
+      "heading": "Where should a business start?",
+      "paragraphs": [
+        "Start with your most important pages: your homepage, your main service pages, and any blog posts you want AI tools to be able to cite. Make sure each one clearly states who wrote it, who publishes it, and when it was last updated, then add the matching markup.",
+        "This is not a one time task. Every time you publish something new, the markup should go with it. Over time, that consistency is what makes an AI assistant, and a search engine, treat your site as a source it can rely on. More plain explanations like this one live at The Momo Daily.",
+        "A useful habit is adding markup to a page's publishing checklist, right next to the spell check and the final read through, instead of treating it as a separate technical project. Once it is a normal step, it stops being extra work and just becomes part of how the page ships."
+      ]
+    }
+  ],
+  "faq": [
+    {
+      "question": "Does schema markup change how my page looks to visitors?",
+      "answer": "No. It is hidden code read by machines, not people. Your page's design and layout stay exactly the same."
+    },
+    {
+      "question": "Is schema markup the same thing as SEO?",
+      "answer": "It is part of a wider SEO and AI visibility effort, not the whole thing. It helps machines understand a page correctly, but it does not replace good content or clear writing."
+    },
+    {
+      "question": "How do I know if my schema markup is working?",
+      "answer": "Free validator tools can check whether your markup is correctly formatted and readable, which is a good first check before assuming it is helping."
+    }
+  ]
+}

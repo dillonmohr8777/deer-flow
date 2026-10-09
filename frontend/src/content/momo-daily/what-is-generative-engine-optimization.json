@@ -1,0 +1,84 @@
+{
+  "title": "What is generative engine optimization, and does my business need it?",
+  "dek": "Generative engine optimization means writing your pages so AI tools like ChatGPT and Google AI Overviews can find, trust and repeat what you say.",
+  "slug": "what-is-generative-engine-optimization",
+  "date": "2026-09-23",
+  "author": { "name": "Dillon Mohr", "title": "AI Marketing Director" },
+  "keywords": [
+    "generative engine optimization",
+    "GEO",
+    "AI search",
+    "AI Overviews",
+    "answer engine optimization"
+  ],
+  "summary": "Generative engine optimization, or GEO, is the practice of structuring your website so AI assistants can read it, trust it, and quote it in a generated answer. Most small and mid size businesses already do the groundwork through good SEO. GEO adds a sharper focus on clear answers, real authorship, and verifiable facts.",
+  "section": "Search and Growth",
+  "hero": {
+    "src": "/momentum/daily/art/what-is-generative-engine-optimization.webp",
+    "alt": "Momo the blue robot mascot as a 1930s pulp noir detective, magnifying glass raised to a glowing question mark clue, rendered in dramatic ink and halftone on cream newsprint"
+  },
+  "status": "draft",
+  "body": [
+    {
+      "heading": "What does generative engine optimization actually mean?",
+      "paragraphs": [
+        "Generative engine optimization, or GEO, is the work of shaping a website so that an AI system, not just a search engine, can read it, understand what it says, and safely repeat it. When someone asks ChatGPT, Perplexity, or Google AI Overviews a question, the system does not invent an answer from nothing. It searches, reads a handful of pages, and stitches together a response, often naming or linking the sources it leaned on. GEO is the practice of trying to be one of those sources.",
+        "The name is new. The underlying goal is not. Businesses have always wanted to be the answer a customer finds first. What changed is the format of that first answer, from a list of blue links to a short paragraph the AI wrote itself."
+      ]
+    },
+    {
+      "heading": "How is GEO different from regular SEO?",
+      "paragraphs": [
+        "GEO builds on search engine optimization rather than replacing it. The two disciplines want the same things: a fast site, clear writing, accurate information, and pages that answer a real question. If your SEO is solid, you already have most of what GEO needs.",
+        "The difference is emphasis. SEO optimizes for a ranking position on a results page a person will scan. GEO optimizes for being extracted, meaning a sentence or two of your page gets lifted out and placed inside someone else's generated answer. That means a direct, quotable answer near the top of the page matters more than it used to, and a wall of marketing language before the substance matters less."
+      ]
+    },
+    {
+      "heading": "Where do AI answers actually get their facts?",
+      "paragraphs": [
+        "Answer engines pull from an index of crawled pages, similar to a search engine's index, and increasingly favor pages that make their claims easy to verify: a clear author, a clear publisher, a date, and language that states things plainly instead of hedging behind adjectives. Structured data, the machine readable markup behind a page, helps an AI system confirm who wrote something and when, rather than guessing.",
+        "This is also why accuracy carries more weight than usual. An AI system that gets burned by quoting something false is less likely to draw from that source again. A page with clean facts, dated updates, and a named author with a real title reads as more trustworthy to both a person and a machine."
+      ]
+    },
+    {
+      "heading": "Does a small or mid size business really need this?",
+      "paragraphs": [
+        "If your customers research before they buy, and most do, some of that research is starting inside an AI chat window instead of a search box. A contractor comparing insurance options, a homeowner comparing local landscapers, or an office manager comparing payroll software may now get a short AI generated summary before they ever see a full page of results. If your business is not part of that summary, a competitor's might be.",
+        "That does not mean every business needs a GEO strategy on day one. A business with almost no organic web presence has bigger priorities first. But for a business that already publishes useful content, whether that is service pages, guides, or an FAQ, a light GEO pass on existing pages is a small, worthwhile project.",
+        "It is also worth saying plainly what GEO is not. It is not a technical trick, a plugin, or a paid placement. Nobody can guarantee an AI system will name your business, and anyone who promises that is overselling. What a business can control is whether its pages are clear, accurate, and easy to verify, which is the same standard a careful human reader applies."
+      ]
+    },
+    {
+      "heading": "What should an account manager tell a client this month?",
+      "paragraphs": [
+        "Start with the questions your best customers actually ask before they call. Answer each one in two or three plain sentences near the top of the relevant page. Make sure the page names who wrote it and when it was last checked. That is most of the work.",
+        "Then be patient. Citations in AI answers are not something you buy or force. They are something you earn by being the clearest, most verifiable source on a specific question, the same way a good answer earns a follow up question in conversation."
+      ]
+    },
+    {
+      "heading": "What is the risk of waiting?",
+      "paragraphs": [
+        "Waiting is not free, but it is not an emergency either. AI answer engines are still evolving fast, and today's best practice may shift within a year. The safer move is treating GEO as an ongoing habit, a few updated pages each quarter, rather than a one time overhaul. Businesses that build that habit now will have a head start once AI generated answers become as ordinary as a search results page is today. We track that shift over on The Momo Daily as it happens.",
+        "The businesses most exposed are the ones that treat their website as a brochure they finished writing once and never touched again. A page written five years ago, with no author, no date, and language built for a search engine that no longer exists on its own, is the page most likely to be skipped by an AI system reaching for a clean, current answer."
+      ]
+    }
+  ],
+  "faq": [
+    {
+      "question": "Is GEO a replacement for SEO?",
+      "answer": "No. GEO adds to SEO rather than replacing it. A site with strong technical SEO and clear content already has the foundation GEO needs."
+    },
+    {
+      "question": "Which AI tools does GEO actually cover?",
+      "answer": "The main ones today are ChatGPT, Perplexity, Google AI Overviews, and Microsoft Copilot. Each reads the web slightly differently, but all of them reward the same things: clarity, accuracy, and easy attribution."
+    },
+    {
+      "question": "How long does it take to see a citation?",
+      "answer": "There is no fixed timeline, and no service can guarantee one. Treat it like earning a reputation, steady and cumulative rather than immediate."
+    },
+    {
+      "question": "Do I need new content, or can I update what I have?",
+      "answer": "Most businesses can start by updating existing pages rather than writing new ones. Add a direct answer near the top, check the facts, and name an author."
+    }
+  ]
+}

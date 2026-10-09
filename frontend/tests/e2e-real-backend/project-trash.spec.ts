@@ -82,7 +82,7 @@ test.describe("trash empty action (real backend)", () => {
     // confirmation) covers every trashed row the account has.
     await expect(
       page.getByText(
-        /documents? will be permanently deleted\. This cannot be undone\./,
+        /documents? will be permanently deleted\. This can't be undone\./,
       ),
     ).toBeVisible();
     await page

@@ -8,6 +8,8 @@ test("account notification setting survives clearing browser storage", async ({
   mockLangGraphAPI(page);
   const owner = "00000000-0000-0000-0000-000000000025";
   let enabled: boolean | null = null;
+  let syncReads = 0;
+  let chooserReads = 0;
   const patches: unknown[] = [];
   await page.route("**/api/v1/auth/me", (route) =>
     route.fulfill({
@@ -29,12 +31,20 @@ test("account notification setting survives clearing browser storage", async ({
       enabled = patch.notification_enabled;
       await route.fulfill({ status: 204 });
     } else {
+      expect(route.request().method()).toBe("GET");
+      const contentType = route.request().headers()["content-type"];
+      if (contentType === undefined) chooserReads++;
+      else {
+        expect(contentType).toBe("application/json");
+        syncReads++;
+      }
       await route.fulfill({
         json: {
           notification_enabled: enabled,
           model_name: null,
           mode: null,
           reasoning_effort: null,
+          experience_mode: "medium",
         },
       });
     }
@@ -47,6 +57,8 @@ test("account notification setting survives clearing browser storage", async ({
   });
 
   async function openSettings(page: Page) {
+    const previousSyncReads = syncReads;
+    const previousChooserReads = chooserReads;
     await page.goto("/workspace/chats/new");
     await page
       .locator("[data-sidebar='sidebar']")
@@ -59,13 +71,18 @@ test("account notification setting survives clearing browser storage", async ({
       .click();
     // Opening the dialog also waits for hydration. The mock web server starts
     // auth-disabled; refresh the real AuthProvider to this session fixture.
-    const hydrated = page.waitForResponse((response) =>
-      response.url().endsWith("/api/v1/auth/preferences"),
+    const hydrated = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/v1/auth/preferences") &&
+        response.request().method() === "GET" &&
+        response.request().headers()["content-type"] === "application/json",
     );
     await page.evaluate(() =>
       document.dispatchEvent(new Event("visibilitychange")),
     );
     await hydrated;
+    await expect.poll(() => syncReads).toBe(previousSyncReads + 1);
+    await expect.poll(() => chooserReads).toBe(previousChooserReads + 1);
     // Account resolution remounts the dialog at its default section.
     await dialog
       .getByRole("button", { name: "Notification", exact: true })

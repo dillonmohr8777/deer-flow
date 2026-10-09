@@ -27,14 +27,14 @@ from langgraph.types import Command
 
 from app.gateway.auth_disabled import AUTH_SOURCE_INTERNAL
 from app.gateway.authz import require_cancel_permission_if
-from app.gateway.deps import get_checkpointer, get_local_provider, get_run_context, get_run_manager, get_stream_bridge
+from app.gateway.deps import get_checkpointer, get_local_provider, get_run_context, get_run_manager, get_stream_bridge, get_thread_store
 from app.gateway.internal_auth import (
-    INTERNAL_OWNER_USER_ID_HEADER_NAME,
     INTERNAL_SYSTEM_ROLE,
     get_internal_user,
     get_trusted_internal_owner_user_id,
 )
 from app.gateway.knowledge_scope_admission import admit_message_knowledge_scope
+from app.gateway.momentum_internal import is_momentum_staff
 from app.gateway.run_models import RunCreateRequest
 from app.gateway.utils import sanitize_log_param
 from app.mcp_tasks.errors import PermanentNotificationError
@@ -49,6 +49,8 @@ from deerflow.config.agents_config import load_agent_config
 from deerflow.config.app_config import get_app_config
 from deerflow.config.database_config import resolve_checkpoint_graph_cache_max
 from deerflow.knowledge_scope import KNOWLEDGE_SCOPE_KEY, KNOWLEDGE_SCOPE_RUNTIME_KEY
+from deerflow.persistence.organizations.delegation import ActiveDelegation, OrganizationDelegationRepository
+from deerflow.persistence.organizations.resolution import storage_user_id_for_organization
 from deerflow.projects.context import PROJECT_CONTEXT_MESSAGE_MARKER, resolve_project_context
 from deerflow.runtime import (
     END_SENTINEL,
@@ -76,6 +78,7 @@ from deerflow.runtime.checkpoint_mode import (
 )
 from deerflow.runtime.checkpoint_state import graph_state_schema
 from deerflow.runtime.context_keys import PROJECT_CONTEXT_KEY
+from deerflow.runtime.cost_router import CostRouterRefusal, admit_run
 from deerflow.runtime.events.message_identity import MESSAGE_SEQ_KEY
 from deerflow.runtime.goal import goal_thread_lock
 from deerflow.runtime.journal import build_checkpoint_history_seed_events
@@ -91,8 +94,11 @@ from deerflow.runtime.user_context import (
     AUTHENTICATED_CONTEXT_MARKER,
     AUTHENTICATED_CONTEXT_MARKER_KEY,
     WORKSPACE_IDENTITY_CONTEXT_KEYS,
+    WorkspaceStorageContext,
     reset_current_user,
+    reset_storage_context,
     set_current_user,
+    set_storage_context,
 )
 from deerflow.sandbox.lease import SANDBOX_SERVER_OWNED_CONTEXT_KEYS
 from deerflow.subagents.status_contract import SUBAGENT_ACCEPTANCE_VERDICT_KEY, SUBAGENT_RECEIPT_VERDICT_KEY, SUBAGENT_TOOL_RECEIPTS_KEY
@@ -210,18 +216,16 @@ async def _ensure_thread_metadata(
     run_ctx: RunContext,
     record: RunRecord,
     *,
-    owner_user_id: str | None,
     require_existing_thread: bool = False,
 ) -> None:
-    """Ensure an admitted run's thread exists without delaying task attachment."""
+    """Ensure an admitted run's thread exists without delaying task attachment.
+
+    Never re-owns an existing row: admission already refused threads the
+    caller does not own, and claiming someone else's (or nobody's) row is how
+    an internal caller used to take a thread over.
+    """
     thread_store = run_ctx.thread_store
     existing = await thread_store.get(record.thread_id)
-    if existing is None and owner_user_id:
-        unscoped = await thread_store.get(record.thread_id, user_id=None)
-        if unscoped is not None:
-            if unscoped.get("user_id") != owner_user_id:
-                await thread_store.update_owner(record.thread_id, owner_user_id, user_id=None)
-            existing = await thread_store.get(record.thread_id)
     if existing is None:
         if require_existing_thread:
             raise LookupError(f"Thread {record.thread_id} was deleted during run admission")
@@ -587,12 +591,17 @@ _CONTEXT_INTERNAL_CALLER_KEYS: frozenset[str] = frozenset({"interaction_mode", "
 #   ``channel_user_id``         — accepted only from trusted internal context.
 #   ``langgraph_auth_user*``    — populated only by LangGraph Server auth.
 #   ``sandbox_*_id``           — created only inside the run/subagent lifecycle.
+#   ``momentum_staff``          — the same ``is_momentum_staff`` router check,
+#                                 run once at run start and stamped here; see
+#                                 ``inject_authenticated_user_context``. Team
+#                                 board tools trust only this flag.
 _SERVER_OWNED_RUNTIME_CONTEXT_KEYS: frozenset[str] = (
     frozenset(
         {
             "is_internal",
             "authz_attributes",
             "channel_user_id",
+            "momentum_staff",
             "is_subagent",
             "agent_id",
             "__run_loop_detection_recorder",
@@ -734,6 +743,7 @@ def inject_authenticated_user_context(
     *,
     internal_owner_user: Any | None = None,
     request_context: Mapping[str, Any] | None = None,
+    momentum_staff: bool = False,
 ) -> None:
     """Stamp the authenticated user into the run context for background tools.
 
@@ -744,6 +754,14 @@ def inject_authenticated_user_context(
     ``request_context.channel_user_id`` is the sole exception: it is honored
     only after ``request.state.auth_source`` proves the caller is internal.
     Values copied through the free-form RunnableConfig are always cleared.
+
+    ``momentum_staff`` is likewise server-owned: the caller (``start_run``)
+    runs the same ``is_momentum_staff`` check the ``/api/team`` router uses
+    and passes the result in here explicitly, rather than this function
+    resolving it itself, so it stays a plain sync stamp like every other
+    field below. It is always written — before any early return, like
+    ``is_internal`` — so a client-supplied value (cleared above with the rest
+    of ``_SERVER_OWNED_RUNTIME_CONTEXT_KEYS``) never survives.
     """
 
     # --- Server-owned authorization and sandbox lifecycle identity fields ---
@@ -773,6 +791,7 @@ def inject_authenticated_user_context(
         if isinstance(configurable, dict):
             configurable.pop("user_id", None)
     runtime_context["is_internal"] = auth_source == AUTH_SOURCE_INTERNAL
+    runtime_context["momentum_staff"] = bool(momentum_staff)
     if auth_source == AUTH_SOURCE_INTERNAL and request_context is not None:
         channel_user_id = request_context.get("channel_user_id")
         if channel_user_id is not None:
@@ -835,6 +854,24 @@ def inject_authenticated_user_context(
     # the in-process run configuration.
     runtime_context[AUTHENTICATED_CONTEXT_MARKER_KEY] = AUTHENTICATED_CONTEXT_MARKER
     return
+
+
+async def _refuse_if_agent_seat_paused(agent_name: str) -> None:
+    """Refuse to start a run for an agent whose Momentum seat is paused (queue item f95).
+
+    ``deerflow.exec_seats.budget`` pauses a seat that has exceeded its weekly
+    token budget (queue item e10), but until this check nothing ever stopped
+    that agent's runs -- a pause had no enforcement. Best-effort: persistence
+    unavailable (bare-memory composition, most tests) never blocks a run.
+    """
+    from deerflow.exec_seats.budget import paused_seat_blocking
+
+    seat = await paused_seat_blocking(agent_name)
+    if seat is not None:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Seat {seat['seat']!r} ({agent_name}) is paused: over its weekly token budget.",
+        )
 
 
 def resolve_agent_factory(assistant_id: str | None):
@@ -1517,6 +1554,11 @@ async def ensure_checkpoint_history_seeded(
     }
     if await get_checkpointer(request).aget_tuple(checkpoint_config) is None:
         return
+    # Seed only a thread whose row the caller owns: a checkpoint that no row
+    # of theirs claims (orphan, ownerless, another organization's) is not
+    # their history to copy into a feed.
+    if await get_thread_store(request).get(thread_id) is None:
+        return
 
     accessor, config = await abuild_checkpoint_state_accessor(
         request,
@@ -1643,6 +1685,14 @@ async def _load_scope_agent_config(
 ) -> Any | None:
     if not assistant_id or assistant_id == _DEFAULT_ASSISTANT_ID:
         return None
+    if not isinstance(assistant_id, str):
+        # A client can send any JSON scalar as configurable/context.agent_name
+        # (both are untyped dicts); a non-string value can never name a real
+        # agent, so answer like a missing one instead of crashing on .strip().
+        raise HTTPException(
+            status_code=422,
+            detail="knowledge_scope assistant configuration could not be resolved",
+        )
     normalized = assistant_id.strip().lower().replace("_", "-")
     try:
         return await asyncio.to_thread(
@@ -1655,6 +1705,45 @@ async def _load_scope_agent_config(
             status_code=422,
             detail="knowledge_scope assistant configuration could not be resolved",
         ) from exc
+
+
+async def _require_run_agent_visible(
+    *,
+    agent_name: str | None,
+    agent_config: Any | None,
+    is_bootstrap: bool,
+    content_user_id: str | None,
+    actor_user_id: str | None,
+) -> None:
+    """Refuse a session/PAT run on a client-stamped agent the actor may not see (f85).
+
+    Same rule as ``get_agent``/``update_agent``/``delete_agent``: an agent
+    with a ``client_id`` is visible to an org owner/admin, or to a member
+    assigned to that client. A foreign agent answers exactly like a missing
+    one (``_load_scope_agent_config``'s 422), so a run can't probe which
+    agent names exist. A bootstrap run skips the normal config load, but
+    ``setup_agent`` would upsert the named agent -- overwriting a foreign
+    agent's SOUL -- so an existing agent is peeked at and checked too.
+    """
+    if not agent_name or agent_name == _DEFAULT_ASSISTANT_ID:
+        return
+    if agent_config is None and is_bootstrap:
+        try:
+            agent_config = await _load_scope_agent_config(assistant_id=agent_name, user_id=content_user_id)
+        except HTTPException:
+            return  # Nothing exists yet: bootstrap creates a fresh agent.
+    client_id = getattr(agent_config, "client_id", None)
+    if client_id is None:
+        return
+    # Lazy import: the agents router imports this module.
+    from app.gateway.routers.agents import _visible_client_ids
+
+    visible_client_ids = await _visible_client_ids(actor_user_id)
+    if visible_client_ids is not None and client_id not in visible_client_ids:
+        raise HTTPException(
+            status_code=422,
+            detail="knowledge_scope assistant configuration could not be resolved",
+        )
 
 
 async def _validate_scope_thread_binding(
@@ -1736,6 +1825,18 @@ async def start_run(
     if model_name is not None and not isinstance(model_name, str):
         model_name = str(model_name)
 
+    # Cost router: route by task class, then refuse denylisted, unpriced or
+    # over-cap models before any run row exists.
+    try:
+        router_config = get_app_config()
+    except FileNotFoundError:  # no config.yaml: nothing to route, and the run cannot start anyway
+        router_config = None
+    if router_config is not None:
+        try:
+            model_name = await admit_run(router_config, getattr(request.app.state, "run_store", None), model_name, body_context.get("task_class"))
+        except CostRouterRefusal as exc:
+            raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
+
     # Validate model against the allowlist when a model_name is provided.
     if model_name:
         app_config = get_app_config()
@@ -1746,23 +1847,26 @@ async def start_run(
                 detail=f"Model {model_name!r} is not in the configured model allowlist",
             )
 
+    # Set only for a delegated internal caller (verified by AuthMiddleware or an
+    # in-process launcher): the delegation organization's storage principal.
     owner_user_id = get_trusted_internal_owner_user_id(request)
     # Stateless run endpoints carry thread_id in the request *body*, so the
     # @require_permission(owner_check=True) decorator -- which resolves ownership
     # from the path param -- cannot protect them. Enforce thread ownership here,
-    # before any run is created, so one user cannot start runs on (or read /wait
-    # checkpoint state from) another user's thread. Missing rows (auto-created
-    # temp threads) and NULL-owner rows (shared / pre-auth data) stay accessible
-    # via check_access; only a thread already owned by another user is rejected
-    # with 404, matching thread_runs.py's anti-enumeration behaviour. Internal
-    # channel runs act on behalf of the connection owner carried in
-    # X-DeerFlow-Owner-User-Id, so they are scoped to that owner instead of
-    # bypassing the check -- a leaked internal token must not grant cross-user
-    # thread access.
+    # before any run is created and before checkpoint history is seeded: a row
+    # owned by someone else answers 404, and so does a checkpoint that no row of
+    # the caller's claims (orphan or ownerless history), because admitting it
+    # would let _ensure_thread_metadata create ownership over it. A missing row
+    # with no checkpoint is a fresh thread and stays admissible.
     user = getattr(request.state, "user", None)
+    storage_user_id = getattr(request.state, "storage_user_id", None)
+    actor_user_id = getattr(request.state, "actor_user_id", None) or (str(user.id) if user is not None else None)
 
-    content_user_id = owner_user_id or getattr(request.state, "storage_user_id", None) or (str(user.id) if user is not None else None)
-    if user is not None and content_user_id != str(user.id) and not owner_user_id:
+    content_user_id = owner_user_id or storage_user_id or (str(user.id) if user is not None else None)
+    # Shared-workspace content (the storage principal differs from the acting
+    # person or the delegation owner) needs the isolated sandbox, for delegated
+    # internal launches exactly as for browser sessions.
+    if user is not None and content_user_id != actor_user_id:
         sandbox_config = get_app_config().sandbox
         if sandbox_config.use != "deerflow.community.aio_sandbox:AioSandboxProvider" or sandbox_config.network.mode == "open":
             raise HTTPException(status_code=503, detail="Shared workspace tools require the isolated workspace sandbox")
@@ -1772,20 +1876,11 @@ async def start_run(
             if not require_existing_thread:
                 return True
             return await run_ctx.thread_store.get(thread_id) is not None
-        allowed = await run_ctx.thread_store.check_access(
-            thread_id,
-            getattr(request.state, "storage_user_id", None) or str(user.id),
-            require_existing=require_existing_thread,
-        )
-        if not allowed and owner_user_id and getattr(user, "system_role", None) == INTERNAL_SYSTEM_ROLE:
-            # Channel workers may also act for the connection owner named in
-            # the trusted header (e.g. claiming a legacy default-owned channel
-            # thread for its real owner).
-            allowed = await run_ctx.thread_store.check_access(
-                thread_id,
-                owner_user_id,
-                require_existing=require_existing_thread,
-            )
+        caller = storage_user_id or str(user.id)
+        allowed = await run_ctx.thread_store.check_access(thread_id, caller, require_existing=require_existing_thread)
+        checkpointer = getattr(run_ctx, "checkpointer", None)
+        if allowed and not require_existing_thread and checkpointer is not None and await checkpointer.aget_tuple({"configurable": {"thread_id": thread_id, "checkpoint_ns": ""}}) is not None:
+            allowed = await run_ctx.thread_store.get(thread_id, user_id=caller) is not None
         return allowed
 
     if not await thread_access_allowed():
@@ -1855,7 +1950,42 @@ async def start_run(
         scope_runtime_config = dict(config.get("configurable") or {})
         if isinstance(config.get("context"), dict):
             scope_runtime_config.update(config["context"])
-        scope_assistant_id = scope_runtime_config.get("agent_name") or _DEFAULT_ASSISTANT_ID
+        raw_scope_agent_name = scope_runtime_config.get("agent_name")
+        if raw_scope_agent_name is not None and not isinstance(raw_scope_agent_name, str):
+            # ``configurable``/``context`` are untyped dicts, so a client can send
+            # any JSON scalar (e.g. ``42``) as ``agent_name``. It can never name a
+            # real agent, so refuse the same way ``_load_scope_agent_config``
+            # (f102(d)/#90) treats a missing one -- before the pause gate and the
+            # burn-accounting metadata stamp below ever call ``.strip()`` on it
+            # and crash with an unhandled 500 (review of f98, #90's fix runs too
+            # late to cover this earlier code path). Checked against the raw
+            # value, before the ``or _DEFAULT_ASSISTANT_ID`` fallback below: a
+            # *falsy* non-string (``0``, ``False``, ``[]``) would otherwise slip
+            # through as the default agent and surface as a worker-side
+            # ``ValueError`` instead of this clean 422 (f116 review).
+            raise HTTPException(status_code=422, detail="knowledge_scope assistant configuration could not be resolved")
+        scope_assistant_id = raw_scope_agent_name or _DEFAULT_ASSISTANT_ID
+        if scope_assistant_id != _DEFAULT_ASSISTANT_ID:
+            await _refuse_if_agent_seat_paused(scope_assistant_id)
+            # Server-resolved, like deerflow_trace_id above: an agent seat's weekly
+            # burn (queue item f95) must be counted from the run's real effective
+            # agent, not a caller-forged claim of one. Normalized the same way
+            # AgentSeatRepository.paused_seat_for_agent already matches a seat's
+            # own agent_name (case/underscore-hyphen insensitive, f97 review) --
+            # an un-normalized context.agent_name (e.g. "CMO-Agent") would
+            # otherwise never match a seat claimed as "cmo-agent" in the ledger.
+            # Only custom agents can hold a seat, so default-agent runs are not
+            # stamped: burn accounting falls back to the run's assistant_id, and
+            # ordinary run metadata stays exactly what the caller sent.
+            from deerflow.persistence.exec_seats import EFFECTIVE_AGENT_NAME_METADATA_KEY
+
+            run_metadata[EFFECTIVE_AGENT_NAME_METADATA_KEY] = scope_assistant_id.strip().lower().replace("_", "-")
+        else:
+            # Default-agent runs hold no seat: drop any caller-forged value
+            # instead of stamping "lead-agent" into ordinary run metadata.
+            from deerflow.persistence.exec_seats import EFFECTIVE_AGENT_NAME_METADATA_KEY
+
+            run_metadata.pop(EFFECTIVE_AGENT_NAME_METADATA_KEY, None)
         # Bootstrap assembly intentionally does not load an agent config: the
         # new agent may not exist yet and setup_agent creates its definition.
         agent_config = (
@@ -1866,6 +1996,16 @@ async def start_run(
             if not scope_runtime_config.get("is_bootstrap")
             else None
         )
+        # Internal launchers (scheduler, channels, MCP notifications) act
+        # through an organization delegation, not a person's client scope.
+        if user is not None and not is_internal_caller:
+            await _require_run_agent_visible(
+                agent_name=scope_assistant_id,
+                agent_config=agent_config,
+                is_bootstrap=bool(scope_runtime_config.get("is_bootstrap")),
+                content_user_id=content_user_id,
+                actor_user_id=actor_user_id,
+            )
         # Keep the pre-default identity even when the agent is initially
         # unbound: adding a default must not reject an already-accepted retry.
         # The durable input still exposes the original accepted scope.
@@ -1888,12 +2028,18 @@ async def start_run(
             )
         run_record_input = _canonical_run_record_input(body.input, graph_input)
 
-        internal_owner_user = await resolve_trusted_internal_owner_for_attribution(request, owner_user_id)
+        # Attribution names the delegation owner (a person), never the storage principal.
+        internal_owner_user = await resolve_trusted_internal_owner_for_attribution(request, actor_user_id if owner_user_id else None)
+        # Same check the ``/api/team`` router runs, computed once here so the
+        # team-board tools never have to (and never get to) decide staff-ness
+        # themselves — see ``momentum_staff`` on ``_SERVER_OWNED_RUNTIME_CONTEXT_KEYS``.
+        momentum_staff = await is_momentum_staff(request, get_app_config())
         inject_authenticated_user_context(
             config,
             request,
             internal_owner_user=internal_owner_user,
             request_context=getattr(body, "context", None),
+            momentum_staff=momentum_staff,
         )
 
         conversation_references = list(getattr(body, "conversation_references", None) or [])
@@ -1952,7 +2098,6 @@ async def start_run(
                 _ensure_thread_metadata(
                     run_ctx,
                     record,
-                    owner_user_id=owner_user_id,
                     require_existing_thread=require_existing_thread,
                 )
             )
@@ -2114,28 +2259,146 @@ async def start_run(
             reset_current_user(owner_context_token)
 
 
+def _delegated_internal_request(app: Any, delegation: ActiveDelegation) -> SimpleNamespace:
+    """The in-process twin of a delegated internal HTTP request.
+
+    Identity comes only from the resolved delegation, exactly as AuthMiddleware
+    stamps it: the owner acts, in the delegation's organization, on that
+    organization's storage principal. No owner header is sent.
+    """
+    organization = delegation.organization
+    storage_user_id = storage_user_id_for_organization(organization, delegation.owner_user_id)
+    if not storage_user_id:
+        raise PermissionError("the delegation's organization has no storage principal")
+    return SimpleNamespace(
+        app=app,
+        headers={},
+        cookies={},
+        state=SimpleNamespace(
+            user=get_internal_user(owner_user_id=delegation.owner_user_id),
+            auth_source=AUTH_SOURCE_INTERNAL,
+            organization_id=organization.id,
+            organization_role=organization.role,
+            actor_user_id=delegation.owner_user_id,
+            storage_user_id=storage_user_id,
+            delegation_id=delegation.id,
+        ),
+    )
+
+
+async def _require_delegated_run_entitlement(request: Any, organization_id: str | None) -> None:
+    """Enforce ``runs.create`` for a delegated (non-HTTP-decorated) run launch.
+
+    Review finding f59: scheduled-task triggers, cron ticks, and MCP
+    task-notification runs all reach ``start_run`` through
+    ``_start_delegated_run`` rather than a FastAPI route, so none of them
+    ever pass through a ``@require_entitlement``-decorated handler --
+    ``/runs/stream`` returning 403 with ``runs.create`` suspended meant
+    nothing if a scheduled task on the same organization kept spending
+    tokens unchecked. This is the one place all three paths funnel through.
+    """
+    from app.gateway.deps import get_entitlement_repo
+    from deerflow.authz.entitlements import evaluate_entitlement
+    from deerflow.config.entitlement_config import resolve_current_entitlement_config
+
+    entitlement_config = resolve_current_entitlement_config()
+    if not entitlement_config.enabled:
+        return
+
+    if organization_id is None:
+        raise HTTPException(status_code=403, detail={"error": "entitlement_exceeded", "key": "runs.create", "reason": "no_organization"})
+
+    repo = get_entitlement_repo(request)
+    decision = await evaluate_entitlement(repo, organization_id, "runs.create", config=entitlement_config)
+    if not decision.allowed:
+        raise HTTPException(status_code=403, detail={"error": "entitlement_exceeded", "key": "runs.create", "reason": decision.reason})
+
+
+async def _start_delegated_run(body: RunCreateRequest, thread_id: str, request: Any, **kwargs: Any) -> RunRecord:
+    """start_run under the storage context AuthMiddleware would have set.
+
+    The run worker is created inside and inherits it, so the run and its
+    thread are stamped with the delegation's organization.
+    """
+    state = request.state
+    await _require_delegated_run_entitlement(request, state.organization_id)
+    token = set_storage_context(
+        WorkspaceStorageContext(
+            actor_user_id=state.actor_user_id,
+            organization_id=state.organization_id,
+            storage_user_id=state.storage_user_id,
+            role=state.organization_role,
+        )
+    )
+    try:
+        return await start_run(body, thread_id, request, **kwargs)
+    finally:
+        reset_storage_context(token)
+
+
+async def _resolve_launch_delegation(*, subject_type: str, subject_id: str, organization_id: str | None) -> ActiveDelegation | None:
+    """Re-read a background subject's delegation to start runs; ``None`` denies."""
+    from deerflow.persistence.engine import get_session_factory
+
+    session_factory = get_session_factory()
+    if session_factory is None or not organization_id:
+        return None
+    return await OrganizationDelegationRepository(session_factory).resolve_active_delegation(
+        subject_type=subject_type,
+        subject_id=subject_id,
+        organization_id=organization_id,
+        scope="runs:create",
+    )
+
+
 async def launch_scheduled_thread_run(
     *,
     thread_id: str,
     assistant_id: str | None,
     prompt: str,
-    request: Request | None = None,
-    app: Any | None = None,
-    owner_user_id: str | None = None,
+    app: Any,
+    delegation: ActiveDelegation | None = None,
     metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    if request is None:
-        if app is None:
-            raise ValueError("launch_scheduled_thread_run requires request or app")
-        request = SimpleNamespace(
-            app=app,
-            headers=({INTERNAL_OWNER_USER_ID_HEADER_NAME: owner_user_id} if owner_user_id else {}),
-            state=SimpleNamespace(
-                user=get_internal_user(),
-                auth_source=AUTH_SOURCE_INTERNAL,
-            ),
-            cookies={},
+    """Launch one scheduled occurrence, acting only through the task's delegation.
+
+    The scheduler resolves the delegation immediately before launching; a task
+    without one (absent, revoked, expired, owner gone) never starts a run.
+    """
+    if delegation is None:
+        raise PermissionError("scheduled task has no active delegation in its organization")
+    request = _delegated_internal_request(app, delegation)
+    owner_user_id = delegation.owner_user_id
+    # f96 (review follow-up on f88/PR #82): the create/PATCH gate alone isn't
+    # enough -- a task's assistant_id is fixed at creation, but the actor's
+    # visibility into that agent's client can change later (unassigned,
+    # agent re-stamped, or a pre-f88 task already named a foreign client's
+    # agent), and start_run's own _require_run_agent_visible always skips
+    # internal callers. Re-run the same check on every launch, against the
+    # delegation owner -- the real acting person a scheduled run answers
+    # for -- under the storage context _start_delegated_run would set,
+    # since _visible_client_ids resolves the org/actor from that context,
+    # not from a parameter.
+    state = request.state
+    context_token = set_storage_context(
+        WorkspaceStorageContext(
+            actor_user_id=state.actor_user_id,
+            organization_id=state.organization_id,
+            storage_user_id=state.storage_user_id,
+            role=state.organization_role,
         )
+    )
+    try:
+        agent_config = await _load_scope_agent_config(assistant_id=assistant_id, user_id=state.storage_user_id)
+        await _require_run_agent_visible(
+            agent_name=assistant_id,
+            agent_config=agent_config,
+            is_bootstrap=False,
+            content_user_id=state.storage_user_id,
+            actor_user_id=owner_user_id,
+        )
+    finally:
+        reset_storage_context(context_token)
     body = RunCreateRequest(
         assistant_id=assistant_id,
         input={"messages": [{"role": "user", "content": prompt}]},
@@ -2146,7 +2409,7 @@ async def launch_scheduled_thread_run(
         # runtime-context consumers without a ContextVar fallback (e.g.
         # user-scoped GuardrailMiddleware providers) see the owning user;
         # ``inject_authenticated_user_context`` skips the internal user.
-        context=({"non_interactive": True, "user_id": owner_user_id} if owner_user_id else {"non_interactive": True}),
+        context={"non_interactive": True, "user_id": owner_user_id},
         webhook=None,
         checkpoint_id=None,
         checkpoint=None,
@@ -2171,7 +2434,7 @@ async def launch_scheduled_thread_run(
     # scheduler service's own per-occurrence scope -- ensure_trace_context
     # keeps that trace instead of minting a competing one.
     with ensure_trace_context():
-        record = await start_run(
+        record = await _start_delegated_run(
             body,
             thread_id,
             request,
@@ -2203,14 +2466,20 @@ async def launch_mcp_task_notification_run(
     dispatch_version: int,
     dispatch_attempt: int,
     event: dict[str, Any],
+    organization_id: str | None = None,
 ) -> dict[str, Any]:
-    """Idempotently launch the Agent run that delivers one task event."""
-    request = SimpleNamespace(
-        app=app,
-        headers={INTERNAL_OWNER_USER_ID_HEADER_NAME: owner_user_id},
-        state=SimpleNamespace(user=get_internal_user(), auth_source=AUTH_SOURCE_INTERNAL),
-        cookies={},
-    )
+    """Idempotently launch the Agent run that delivers one task event.
+
+    Acts only through the task's ``mcp_task`` delegation in its organization,
+    re-read here: absent, revoked or expired (or an owner who lost their
+    membership) raises ``PermissionError`` before any run starts.
+    ``owner_user_id`` (the task's storage principal) is never trusted alone.
+    """
+    delegation = await _resolve_launch_delegation(subject_type="mcp_task", subject_id=task_id, organization_id=organization_id)
+    if delegation is None:
+        logger.warning("Refused MCP task notification without an active delegation: task=%s", sanitize_log_param(task_id))
+        raise PermissionError("MCP task has no active delegation in its organization")
+    request = _delegated_internal_request(app, delegation)
     body = RunCreateRequest(
         assistant_id=assistant_id,
         input={
@@ -2231,7 +2500,7 @@ async def launch_mcp_task_notification_run(
             }
         },
         config=None,
-        context={"non_interactive": True, "user_id": owner_user_id},
+        context={"non_interactive": True, "user_id": delegation.owner_user_id},
         webhook=None,
         checkpoint_id=None,
         checkpoint=None,
@@ -2253,7 +2522,7 @@ async def launch_mcp_task_notification_run(
     # notification keeps every delivery attempt separately correlatable.
     try:
         with ensure_trace_context():
-            record = await start_run(
+            record = await _start_delegated_run(
                 body,
                 thread_id,
                 request,
@@ -2267,6 +2536,30 @@ async def launch_mcp_task_notification_run(
             raise PermanentNotificationError(str(exc.detail)) from exc
         raise
     return {"run_id": record.run_id, "thread_id": record.thread_id}
+
+
+async def _stream_viewer_still_admitted(request: Any) -> bool:
+    """Re-check an open stream's admission (decision 6: revocation closes streams).
+
+    Admission was checked once before subscribing; each heartbeat re-reads the
+    viewer's active membership (or, for a delegated internal caller, the whole
+    delegation). Requests with no organization boundary (auth-disabled mode,
+    test compositions) have nothing to re-check.
+    """
+    state = getattr(request, "state", None)
+    organization_id = getattr(state, "organization_id", None)
+    if not isinstance(organization_id, str) or not organization_id:
+        return True
+    from deerflow.persistence.engine import get_session_factory
+
+    session_factory = get_session_factory()
+    if session_factory is None:
+        return False
+    delegations = OrganizationDelegationRepository(session_factory)
+    delegation_id = getattr(state, "delegation_id", None)
+    if isinstance(delegation_id, str) and delegation_id:
+        return await delegations.resolve_delegation_by_id(delegation_id) is not None
+    return await delegations.is_membership_active(user_id=getattr(state, "actor_user_id", None), organization_id=organization_id)
 
 
 async def sse_consumer(
@@ -2343,6 +2636,9 @@ async def sse_consumer(
             if entry is HEARTBEAT_SENTINEL:
                 if await _orphan_recovery_observed_after_heartbeat(record, run_mgr):
                     yield format_sse("end", None)
+                    return
+                if not await _stream_viewer_still_admitted(request):
+                    logger.info("Closing run stream %s: the viewer's membership or delegation was revoked", sanitize_log_param(record.run_id))
                     return
                 yield ": heartbeat\n\n"
                 continue

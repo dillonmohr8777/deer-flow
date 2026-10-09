@@ -103,6 +103,8 @@ async def test_postgres_task_create_serializes_with_thread_mutation(postgres_rep
 
     await asyncio.wait_for(mutation_task, timeout=5)
     if mutation == "update_owner":
+        # The queued share lock sees the committed new owner. Creation by the
+        # old owner must deny rather than persist a cross-owner orphan task.
         with pytest.raises(ValueError, match="thread belongs to a different user"):
             await asyncio.wait_for(create_task, timeout=5)
     else:
@@ -112,6 +114,7 @@ async def test_postgres_task_create_serializes_with_thread_mutation(postgres_rep
         task = await session.get(McpTaskRow, f"task-{mutation}")
     if mutation == "update_owner":
         assert task is None
+        assert (await thread_repo.get("thread-1", user_id="user-2"))["user_id"] == "user-2"
     else:
         assert task is not None
         assert task.thread_incarnation is None

@@ -1,3 +1,5 @@
+import { writeFile } from "node:fs/promises";
+
 import { type Locator, type Page, expect, test } from "@playwright/test";
 
 import { mockLangGraphAPI } from "./utils/mock-api";
@@ -79,6 +81,35 @@ async function narrowPanel(handle: Locator, distance: number): Promise<void> {
 async function openArtifact(page: Page): Promise<void> {
   await expect(page.getByText(ARTIFACT_PATH)).toBeVisible({ timeout: 15_000 });
   await page.getByText(ARTIFACT_PATH).click();
+}
+
+async function settledArtifactWidth(panel: Locator): Promise<number> {
+  await expect(panel).toHaveAttribute("aria-hidden", "false");
+  await expect(panel.getByText("report.html")).toBeVisible();
+  await expect
+    .poll(() =>
+      panel.evaluate((element) => {
+        const content = element.firstElementChild as HTMLElement | null;
+        const group = element.closest('[data-slot="resizable-panel-group"]');
+        const moving = Array.from(group?.children ?? []).some((child) =>
+          child
+            .getAnimations()
+            .some(
+              (animation) =>
+                animation instanceof CSSTransition &&
+                animation.transitionProperty === "flex-grow" &&
+                animation.playState === "running",
+            ),
+        );
+        return (
+          element.getBoundingClientRect().width > 0 &&
+          content?.style.width === "" &&
+          !moving
+        );
+      }),
+    )
+    .toBe(true);
+  return panelWidth(panel);
 }
 
 test.describe("Artifacts panel resize", () => {
@@ -243,5 +274,174 @@ test.describe("Artifacts panel resize", () => {
     })();
 
     expect(transitionDuringDrag).not.toContain("flex-grow");
+  });
+
+  test("reduced motion completes opening and reopening without pinning or drag transitions", async ({
+    page,
+  }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await openArtifact(page);
+
+    const panel = page.locator("#artifacts");
+    const handle = page.locator('[data-slot="resizable-handle"]');
+    const group = page.locator('[data-slot="resizable-panel-group"]');
+    const openWidth = await settledArtifactWidth(panel);
+    const availableWidth =
+      (await panelWidth(group)) - (await panelWidth(handle));
+    expect(Math.abs(openWidth - availableWidth * 0.4)).toBeLessThanOrEqual(1);
+    expect(
+      await panel.evaluate(
+        (element) =>
+          getComputedStyle(element.closest("[data-panel]")!).transitionProperty,
+      ),
+    ).not.toContain("flex-grow");
+
+    await widenPanel(handle, 200);
+    await expect.poll(() => panelWidth(panel)).toBeGreaterThan(openWidth + 100);
+    const draggedWidth = await settledArtifactWidth(panel);
+
+    await panel.getByRole("button", { name: /close/i }).first().click();
+    await expect(panel).toHaveAttribute("aria-hidden", "true");
+    await expect(panel.getByText("report.html")).toHaveCount(0);
+    await openArtifact(page);
+    expect(
+      Math.abs((await settledArtifactWidth(panel)) - draggedWidth),
+    ).toBeLessThanOrEqual(1);
+  });
+
+  test("rapid reopen cancels stale closing completion and retains the current artifact", async ({
+    page,
+  }, testInfo) => {
+    // The header's native ArtifactTrigger requires the thread artifact catalog;
+    // a write_file message alone only renders a clickable (non-keyboard) step.
+    mockLangGraphAPI(page, {
+      threads: [
+        {
+          thread_id: THREAD_ID,
+          title: "Artifact panel resize",
+          messages: writeFileMessages(),
+          artifacts: [ARTIFACT_PATH],
+        },
+      ],
+    });
+    await page.reload();
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    await openArtifact(page);
+    const panel = page.locator("#artifacts");
+    const openWidth = await settledArtifactWidth(panel);
+    await expect(page.getByTestId("artifact-trigger")).toBeVisible();
+    const group = page.locator('[data-slot="resizable-panel-group"]');
+    const selector = await group.evaluate(
+      (element) => `#${CSS.escape(element.id)}`,
+    );
+    // A longer real transition keeps the interruption observable on loaded CI;
+    // there is no timed sleep or alteration of the original resize cases.
+    await page.addStyleTag({
+      content: `${selector} > [data-panel] { transition-duration: 900ms !important; }`,
+    });
+    const probe = await group.evaluateHandle((element) => {
+      const state = {
+        activeAtReopen: false,
+        widthAtReopen: null as number | null,
+        transitionsAtReopen: [] as {
+          currentTimeMs: number | null;
+          pending: boolean;
+        }[],
+        cancellations: 0,
+      };
+      const trigger = document.querySelector(
+        '[data-testid="artifact-trigger"]',
+      )!;
+      const onReopen = () => {
+        const transitions = element
+          .getAnimations({ subtree: true })
+          .filter(
+            (animation) =>
+              animation instanceof CSSTransition &&
+              animation.transitionProperty === "flex-grow" &&
+              animation.playState === "running",
+          );
+        state.activeAtReopen = transitions.length > 0;
+        state.widthAtReopen = document
+          .querySelector("#artifacts")!
+          .getBoundingClientRect().width;
+        state.transitionsAtReopen = transitions.map((animation) => ({
+          currentTimeMs:
+            typeof animation.currentTime === "number"
+              ? animation.currentTime
+              : null,
+          pending: animation.pending,
+        }));
+      };
+      const onCancel = (event: Event) => {
+        if ((event as TransitionEvent).propertyName === "flex-grow") {
+          state.cancellations += 1;
+        }
+      };
+      trigger.addEventListener("click", onReopen, true);
+      element.addEventListener("transitioncancel", onCancel);
+      return {
+        state,
+        dispose: () => {
+          trigger.removeEventListener("click", onReopen, true);
+          element.removeEventListener("transitioncancel", onCancel);
+        },
+      };
+    });
+
+    try {
+      await panel.getByRole("button", { name: /close/i }).first().click();
+      await expect(panel).toHaveAttribute("aria-hidden", "true");
+      await expect
+        .poll(() =>
+          panel.evaluate((element, widthBefore) => {
+            const width = element.getBoundingClientRect().width;
+            return (
+              width > 0 &&
+              width < widthBefore - 1 &&
+              element
+                .closest('[data-slot="resizable-panel-group"]')!
+                .getAnimations({ subtree: true })
+                .some(
+                  (animation) =>
+                    animation instanceof CSSTransition &&
+                    animation.transitionProperty === "flex-grow" &&
+                    animation.playState === "running",
+                )
+            );
+          }, openWidth),
+        )
+        .toBe(true);
+      // Native keyboard activation avoids waiting for a moving mouse target.
+      await page.getByTestId("artifact-trigger").press("Enter");
+      expect(
+        Math.abs((await settledArtifactWidth(panel)) - openWidth),
+      ).toBeLessThanOrEqual(1);
+      await expect
+        .poll(() => probe.evaluate(({ state }) => state.cancellations))
+        .toBeGreaterThan(0);
+      const interruption = await probe.evaluate(({ state }) => state);
+      expect(interruption.activeAtReopen).toBe(true);
+      expect(interruption.widthAtReopen).toBeGreaterThan(0);
+      expect(interruption.widthAtReopen).toBeLessThan(openWidth - 1);
+      expect(interruption.cancellations).toBeGreaterThan(0);
+      await expect(panel.getByText("report.html")).toBeVisible();
+    } finally {
+      const diagnosticPath = testInfo.outputPath("rapid-artifact-reopen.json");
+      await writeFile(
+        diagnosticPath,
+        JSON.stringify(
+          { openWidth, ...(await probe.evaluate(({ state }) => state)) },
+          null,
+          2,
+        ),
+      );
+      await testInfo.attach("rapid-artifact-reopen", {
+        path: diagnosticPath,
+        contentType: "application/json",
+      });
+      await probe.evaluate(({ dispose }) => dispose());
+      await probe.dispose();
+    }
   });
 });

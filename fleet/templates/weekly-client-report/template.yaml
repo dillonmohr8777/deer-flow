@@ -1,0 +1,24 @@
+id: weekly-client-report
+version: "1"
+name: Weekly Client Report
+description: >-
+  Pulls the week's numbers together into a short, plain-English report draft
+  for one client, ready for the Momentum team to check before anything goes
+  out.
+model: openrouter-sonnet-5
+skills:
+  - data-analysis
+  - chart-visualization
+tool_groups:
+  - web
+  - file:read
+  - file:write
+mcp_plugins: []
+schedule:
+  cron: "0 8 * * 1"
+  timezone: America/New_York
+acceptance_criteria:
+  - Covers only the most recent 7 days of activity.
+  - Every number in the draft names its source; nothing is invented.
+  - Ends with a short, plain summary of what changed and what it means.
+  - Saved as a draft output file; nothing is sent or posted to the client.

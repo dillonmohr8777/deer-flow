@@ -123,10 +123,11 @@ async def _authenticate_ws(websocket: WebSocket):
     """
     from app.gateway.auth import decode_token
     from app.gateway.auth.errors import TokenError
+    from app.gateway.auth.session_cookie import ACCESS_TOKEN_COOKIE_NAME
     from app.gateway.auth_disabled import get_auth_disabled_user, is_auth_disabled
     from app.gateway.deps import get_local_provider
 
-    access_token = websocket.cookies.get("access_token")
+    access_token = websocket.cookies.get(ACCESS_TOKEN_COOKIE_NAME)
     if access_token:
         payload = decode_token(access_token)
         if not isinstance(payload, TokenError):

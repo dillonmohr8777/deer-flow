@@ -1,3 +1,23 @@
+"""MCP server configuration API (``extensions_config.json``'s ``mcpServers``).
+
+Organization isolation (M3): MCP server configuration is deployment-global,
+not per-organization, by design -- there is exactly one ``extensions_config.json``
+per Gateway process (see backend/AGENTS.md's note on it being written
+read-write at runtime), and every route below reads or writes that single
+file regardless of which organization is active. This mirrors
+``managed_subagents`` (deployment-global catalog, admin-only mutation) and
+``skills.py``'s PUBLIC-skill state, which explicitly "matches the MCP
+router" for the same reason: MCP servers are Gateway-wide infrastructure an
+operator configures once (npx/uvx launchers, OAuth client registrations,
+routing/toolset policy), not per-tenant data. Every read (``GET
+/api/mcp/config``) and every write (``PUT``/``POST``/``PATCH``/``DELETE``)
+is gated by ``require_admin_user`` -- a system-role check, not an
+organization-role check -- so an admin acting under any organization can
+administer it, and a non-admin under any organization cannot, regardless of
+which organization is active. See ``persistence/AGENTS.md``'s "deployment-global,
+not shareable" list and ``tests/test_org_isolation_mcp_config.py``.
+"""
+
 import asyncio
 import logging
 import os
@@ -9,7 +29,7 @@ from typing import Any, Literal, NamedTuple, NoReturn
 from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
-from app.gateway.deps import require_admin_user
+from app.gateway.deps import audit_actor_id, record_audit_event, require_admin_user
 from deerflow.config.extensions_config import (
     ExtensionsConfig,
     McpRoutingConfig,
@@ -1513,6 +1533,7 @@ async def update_mcp_configuration(request: Request, body: McpConfigUpdateReques
 
         servers = {name: _mask_server_config(McpServerConfigResponse(**server.model_dump())) for name, server in reloaded_servers.items()}
         reset_mcp_tools_cache()
+        await record_audit_event(request, action="mcp.config.updated", outcome="success", actor_user_id=audit_actor_id(request), target_type="mcp_config", details={"server_names": sorted(servers)})
         return McpConfigResponse(mcp_servers=servers)
 
     except HTTPException:
@@ -1537,6 +1558,7 @@ async def create_mcp_servers(request: Request, body: McpConfigUpdateRequest) -> 
 
         servers = {name: _mask_server_config(McpServerConfigResponse(**server.model_dump())) for name, server in reloaded_servers.items()}
         reset_mcp_tools_cache()
+        await record_audit_event(request, action="mcp.servers.created", outcome="success", actor_user_id=audit_actor_id(request), target_type="mcp_config", details={"server_names": sorted(body.mcp_servers)})
         return McpConfigResponse(mcp_servers=servers)
     except HTTPException:
         raise
@@ -1563,6 +1585,7 @@ async def update_mcp_server(request: Request, body: McpServerConfigUpdateRequest
 
         servers = {name: _mask_server_config(McpServerConfigResponse(**server.model_dump())) for name, server in reloaded_servers.items()}
         reset_mcp_tools_cache()
+        await record_audit_event(request, action="mcp.server.updated", outcome="success", actor_user_id=audit_actor_id(request), target_type="mcp_server", target_id=body.server_name)
         return McpConfigResponse(mcp_servers=servers)
     except HTTPException:
         raise
@@ -1585,6 +1608,7 @@ async def delete_mcp_server(request: Request, server_name: str) -> McpConfigResp
 
         servers = {name: _mask_server_config(McpServerConfigResponse(**server.model_dump())) for name, server in reloaded_servers.items()}
         reset_mcp_tools_cache()
+        await record_audit_event(request, action="mcp.server.deleted", outcome="success", actor_user_id=audit_actor_id(request), target_type="mcp_server", target_id=server_name)
         return McpConfigResponse(mcp_servers=servers)
     except HTTPException:
         raise
@@ -1607,6 +1631,7 @@ async def update_mcp_server_state(request: Request, body: McpServerStateUpdateRe
 
         servers = {name: _mask_server_config(McpServerConfigResponse(**server.model_dump())) for name, server in reloaded_servers.items()}
         reset_mcp_tools_cache()
+        await record_audit_event(request, action="mcp.server.state_updated", outcome="success", actor_user_id=audit_actor_id(request), target_type="mcp_server", target_id=body.server_name, details={"enabled": body.enabled})
         return McpConfigResponse(mcp_servers=servers)
     except HTTPException:
         raise

@@ -20,14 +20,17 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 
-from app.gateway.authz import require_permission
-from app.gateway.deps import get_current_user
+from app.gateway.authz import get_auth_context, require_entitlement, require_permission
+from app.gateway.deps import get_current_user, get_entitlement_repo, get_project_repo
+from deerflow.authz.entitlements import evaluate_entitlement
 from deerflow.config import get_app_config
 from deerflow.config.agents_config import list_custom_agents
+from deerflow.config.entitlement_config import resolve_current_entitlement_config
 from deerflow.persistence.engine import get_session_factory
 from deerflow.persistence.models.run_event import RunEventRow
 from deerflow.persistence.run.model import RunRow
 from deerflow.persistence.thread_meta.model import ThreadMetaRow
+from deerflow.runtime.user_context import resolve_organization_id
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/console", tags=["console"])
@@ -160,6 +163,14 @@ def _session_factory_or_503():
             detail="Console requires a SQL database backend; set database.backend to sqlite or postgres in config.yaml.",
         )
     return sf
+
+
+def _owner_filters(model, user_id: str | None) -> list:
+    """The storage-user filter plus, when the request has one, the active organization filter."""
+    filters = [model.user_id == user_id] if user_id else []
+    if (organization_id := resolve_organization_id()) is not None:
+        filters.append(model.organization_id == organization_id)
+    return filters
 
 
 def _as_utc(dt: datetime | None) -> datetime | None:
@@ -320,10 +331,8 @@ async def console_stats(request: Request) -> ConsoleStatsResponse:
     """Return the dashboard's headline counters."""
     sf = _session_factory_or_503()
     user_id = await get_current_user(request)
-    run_where = (RunRow.operation_kind == "run",)
-    if user_id:
-        run_where += (RunRow.user_id == user_id,)
-    thread_where = (ThreadMetaRow.user_id == user_id,) if user_id else ()
+    run_where = (RunRow.operation_kind == "run", *_owner_filters(RunRow, user_id))
+    thread_where = _owner_filters(ThreadMetaRow, user_id)
 
     pricing = _build_pricing_map()
 
@@ -405,8 +414,7 @@ async def console_runs(
         .limit(limit + 1)
         .offset(offset)
     )
-    if user_id:
-        stmt = stmt.where(RunRow.user_id == user_id)
+    stmt = stmt.where(*_owner_filters(RunRow, user_id))
     if status:
         stmt = stmt.where(RunRow.status == status)
 
@@ -475,8 +483,7 @@ async def console_usage_ledger(
         .limit(limit + 1)
         .offset(offset)
     )
-    if user_id:
-        stmt = stmt.where(RunRow.user_id == user_id)
+    stmt = stmt.where(*_owner_filters(RunRow, user_id))
     if run_id:
         stmt = stmt.where(RunRow.run_id == run_id)
 
@@ -546,9 +553,7 @@ async def console_usage(
     start_local = today_local - timedelta(days=days - 1)
     window_start_utc = datetime.combine(start_local, time.min, tzinfo=UTC) - tz_delta
 
-    stmt = select(RunRow).where(RunRow.operation_kind == "run", RunRow.created_at >= window_start_utc)
-    if user_id:
-        stmt = stmt.where(RunRow.user_id == user_id)
+    stmt = select(RunRow).where(RunRow.operation_kind == "run", RunRow.created_at >= window_start_utc, *_owner_filters(RunRow, user_id))
 
     async with sf() as session:
         rows = (await session.execute(stmt)).scalars().all()
@@ -621,3 +626,102 @@ async def console_usage(
         total_cost=total_cost,
         currency=_pricing_currency(pricing),
     )
+
+
+class OwnerlessThreadsResponse(BaseModel):
+    """Thread ids no one can open (decision 3), listed so an admin can assign them later."""
+
+    ownerless: list[str] = Field(..., description="threads_meta rows with no owner (user_id NULL)")
+    orphan_checkpoints: list[str] = Field(..., description="Checkpointed thread ids with no threads_meta row")
+
+
+@router.get(
+    "/ownerless-threads",
+    response_model=OwnerlessThreadsResponse,
+    summary="Ownerless and orphan threads (admin only)",
+    description="Read-only. Ownerless and orphan threads fail closed for every caller; this lists their ids, never their content.",
+)
+async def console_ownerless_threads(request: Request) -> OwnerlessThreadsResponse:
+    from app.gateway.deps import require_admin_user
+
+    await require_admin_user(request, detail="Admin privileges required to list ownerless threads.")
+    sf = _session_factory_or_503()
+    async with sf() as session:
+        rows = (await session.execute(select(ThreadMetaRow.thread_id, ThreadMetaRow.user_id))).all()
+    known = {thread_id for thread_id, _ in rows}
+    orphans: set[str] = set()
+    checkpointer = getattr(request.app.state, "checkpointer", None)
+    if checkpointer is not None:
+        # ponytail: scans every checkpoint; fine for a one-off admin listing.
+        # Query the checkpoint table directly if it ever gets slow.
+        async for item in checkpointer.alist(None):
+            thread_id = (item.config.get("configurable") or {}).get("thread_id")
+            if thread_id and thread_id not in known:
+                orphans.add(str(thread_id))
+    return OwnerlessThreadsResponse(ownerless=sorted(thread_id for thread_id, owner in rows if owner is None), orphan_checkpoints=sorted(orphans))
+
+
+# ---------------------------------------------------------------------------
+# Entitlement snapshot (M4, task e6) — design §5 of docs/momo-week/m4-entitlement.md
+# ---------------------------------------------------------------------------
+
+# Design §5's minimum key set. ``workflows.max``/``brands.max``/
+# ``repair_minutes.monthly`` have no owning resource in this codebase yet, so
+# they are intentionally left out of the snapshot rather than reported
+# against a fabricated counter; add them once those resources exist.
+_ENTITLEMENT_GATE_KEYS: tuple[str, ...] = ("console.read", "runs.create", "runs.cancel", "agents.manage", "schedules.manage")
+_ENTITLEMENT_LIMIT_KEYS: tuple[str, ...] = ("projects.max",)
+
+
+class EntitlementGateSnapshot(BaseModel):
+    allowed: bool
+
+
+class EntitlementLimitSnapshot(BaseModel):
+    limit: int | None = Field(description="None when entitlements are disabled or not enforced for this key -- distinct from 0, which means enforced-and-exhausted")
+    used: int
+
+
+class EntitlementSnapshotResponse(BaseModel):
+    """Same shape the route-level evaluator derives (design §7.3: display and
+    enforcement must never read different data)."""
+
+    organization_id: str | None
+    entitlements: dict[str, EntitlementGateSnapshot | EntitlementLimitSnapshot]
+    degraded: bool
+
+
+@router.get(
+    "/entitlements",
+    response_model=EntitlementSnapshotResponse,
+    summary="Effective entitlement snapshot",
+    description="The same allow/deny and limit/used values the route-level entitlement evaluator uses, for display.",
+)
+@require_permission("runs", "read")
+@require_entitlement("console.read")
+async def console_entitlements(request: Request) -> EntitlementSnapshotResponse:
+    auth = get_auth_context(request)
+    organization_id = auth.organization_id if auth is not None else None
+    entitlement_config = resolve_current_entitlement_config()
+    repo = get_entitlement_repo(request)
+
+    entitlements: dict[str, EntitlementGateSnapshot | EntitlementLimitSnapshot] = {}
+    degraded = False
+    for key in _ENTITLEMENT_GATE_KEYS:
+        decision = await evaluate_entitlement(repo, organization_id, key, config=entitlement_config)
+        entitlements[key] = EntitlementGateSnapshot(allowed=decision.allowed)
+        degraded = degraded or decision.degraded
+
+    project_repo = get_project_repo(request)
+    for key in _ENTITLEMENT_LIMIT_KEYS:
+        # Live usage is real regardless of enforcement state; the evaluator's
+        # own `limit` already carries the distinction the UI needs: None
+        # (entitlements disabled -- unenforced) vs 0 (enabled, no row --
+        # enforced and exhausted) vs a real number. Coercing None to 0 here
+        # would make a disabled gate look identical to an exhausted one.
+        current_usage = len(await project_repo.list(status="active"))
+        decision = await evaluate_entitlement(repo, organization_id, key, current_usage=current_usage, config=entitlement_config)
+        entitlements[key] = EntitlementLimitSnapshot(limit=decision.limit, used=current_usage)
+        degraded = degraded or decision.degraded
+
+    return EntitlementSnapshotResponse(organization_id=organization_id, entitlements=entitlements, degraded=degraded)

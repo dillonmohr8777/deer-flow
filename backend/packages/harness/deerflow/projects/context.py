@@ -241,6 +241,33 @@ def render_documents_block(snapshot: Mapping[str, Any] | None, *, max_entries: i
     return None
 
 
+# Evidence-check pilot (verify_quote, backend/AGENTS.md): plain text, no XML
+# tag wrapper. It carries a fixed policy sentence rather than forgeable data
+# (unlike <project>/<documents>, there is nothing here an attacker would gain
+# by injecting a fake copy), so it needs no _BLOCKED_TAG_NAMES entry.
+_EVIDENCE_CITATION_INSTRUCTIONS = (
+    "Project documents are in scope for this run. When a claim relies on a "
+    "project document, cite it as [doc:<id>] with an exact quote under 40 "
+    "words. Call verify_quote(document_id, quote) before relying on any "
+    "quote. If verify_quote does not find the quote, or no document "
+    "supports the claim, say plainly that it could not be confirmed "
+    "instead of guessing."
+)
+
+
+def render_evidence_citation_instructions(documents_block: str | None) -> str | None:
+    """Short citation/verification instruction, only when documents are in scope.
+
+    ``documents_block`` is the already-rendered ``<documents>`` text (or
+    ``None`` for an empty shelf, :func:`render_documents_block`). An empty
+    shelf has nothing to cite, so the instruction is omitted rather than
+    spent on a project with no documents.
+    """
+    if documents_block is None:
+        return None
+    return _EVIDENCE_CITATION_INSTRUCTIONS
+
+
 def build_project_context_message(block: str, run_id: str | None) -> HumanMessage:
     """Build the transient request-only project message for one model call.
 

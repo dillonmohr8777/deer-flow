@@ -1,10 +1,24 @@
 "use client";
 
-import { AlertCircle, FileText, FolderKanban, RefreshCw } from "lucide-react";
+import {
+  AlertCircle,
+  Bot,
+  FileText,
+  FolderKanban,
+  RefreshCw,
+} from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
 import { resolveArtifactOpenURL } from "@/core/artifacts/viewer";
+import type { Client } from "@/core/clients";
+import { useClients } from "@/core/clients";
+import {
+  useClientAgents,
+  useFleetTemplates,
+  useStampClientAgent,
+} from "@/core/fleet";
+import { useI18n } from "@/core/i18n/hooks";
 import { useInfiniteProjectThreadFiles, useProjects } from "@/core/projects";
 import { useScheduledTasks } from "@/core/scheduled-tasks/hooks";
 import { pathOfThread } from "@/core/threads/utils";
@@ -17,7 +31,7 @@ const dateFormatter = new Intl.DateTimeFormat(undefined, {
 });
 
 function formatDate(value: string | null | undefined) {
-  if (!value) return "—";
+  if (!value) return "Not recorded";
   const date = new Date(value);
   return Number.isNaN(date.valueOf()) ? value : dateFormatter.format(date);
 }
@@ -61,7 +75,7 @@ export function WorkflowsView() {
       ) : null}
       {query.isError ? (
         <QueryNotice
-          message="Workflows could not be loaded."
+          message="Workflows couldn't be loaded."
           onRetry={() => void query.refetch()}
         />
       ) : null}
@@ -125,47 +139,125 @@ export function WorkflowsView() {
   );
 }
 
+function ClientAgentsSection({ client }: { client: Client }) {
+  const { t } = useI18n();
+  const copy = t.commandCenter.clientAgents;
+  const agentsQuery = useClientAgents(client.id);
+  const templatesQuery = useFleetTemplates();
+  const stamp = useStampClientAgent(client.id);
+  const [templateId, setTemplateId] = useState("");
+
+  const agents = agentsQuery.data ?? [];
+  const stampedTemplateIds = new Set(agents.map((agent) => agent.template_id));
+  const availableTemplates = (templatesQuery.data ?? []).filter(
+    (template) => !stampedTemplateIds.has(template.id),
+  );
+
+  return (
+    <div className={styles.agentsSection}>
+      <span className={styles.agentsLabel}>{copy.title}</span>
+      {agentsQuery.isLoading ? (
+        <p className={styles.state}>{copy.loading}</p>
+      ) : null}
+      {!agentsQuery.isLoading && agents.length === 0 ? (
+        <p className={styles.state}>{copy.empty}</p>
+      ) : null}
+      {agents.length > 0 ? (
+        <ul className={styles.agentsList}>
+          {agents.map((agent) => (
+            <li key={agent.agent_name}>
+              <Bot size={14} aria-hidden="true" />
+              <span>{agent.display_name ?? agent.agent_name}</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {availableTemplates.length > 0 ? (
+        <form
+          className={styles.addAgentForm}
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (!templateId) return;
+            stamp.mutate(templateId, {
+              onSuccess: () => setTemplateId(""),
+            });
+          }}
+        >
+          <select
+            aria-label={`${copy.title}: ${client.display_name}`}
+            value={templateId}
+            onChange={(event) => setTemplateId(event.target.value)}
+            disabled={stamp.isPending}
+          >
+            <option value="">{copy.selectPlaceholder}</option>
+            {availableTemplates.map((template) => (
+              <option value={template.id} key={template.id}>
+                {template.name}
+              </option>
+            ))}
+          </select>
+          <button
+            type="submit"
+            className={styles.linkButton}
+            disabled={!templateId || stamp.isPending}
+          >
+            {stamp.isPending ? copy.adding : copy.add}
+          </button>
+        </form>
+      ) : null}
+      {stamp.isError ? (
+        <p className={styles.state} role="alert">
+          {stamp.error instanceof Error ? stamp.error.message : copy.addError}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+const CLIENT_STATUS_LABEL: Record<string, string> = {
+  active: "Active",
+  inactive: "Inactive",
+  prospect: "Prospect",
+};
+
 export function ClientSpacesView() {
-  const query = useProjects("active");
-  const projects = query.data ?? [];
+  const query = useClients();
+  const clients = query.data ?? [];
   return (
     <section className={styles.view} aria-labelledby="client-spaces-heading">
       <div className={styles.header}>
         <div>
           <h2 id="client-spaces-heading">Client spaces</h2>
-          <p className={styles.subtle}>
-            Project-backed groupings only. Client or tenant mapping is not
-            verified here.
-          </p>
+          <p className={styles.subtle}>Clients your workspace manages.</p>
         </div>
       </div>
       {query.isLoading ? (
-        <p className={styles.state}>Loading project spaces…</p>
+        <p className={styles.state}>Loading clients…</p>
       ) : null}
       {query.isError ? (
         <QueryNotice
-          message="Project spaces could not be loaded."
+          message="Clients couldn't be loaded."
           onRetry={() => void query.refetch()}
         />
       ) : null}
-      {!query.isLoading && !query.isError && projects.length === 0 ? (
-        <p className={styles.state}>No active project spaces found.</p>
+      {!query.isLoading && !query.isError && clients.length === 0 ? (
+        <p className={styles.state}>
+          No clients yet. Clients you create appear here.
+        </p>
       ) : null}
       <ul className={styles.cards}>
-        {projects.map((project) => (
-          <li key={project.id} className={styles.card}>
+        {clients.map((client) => (
+          <li key={client.id} className={styles.card}>
             <FolderKanban size={20} aria-hidden="true" />
             <div>
-              <Link
-                href={`/workspace/projects/${encodeURIComponent(project.id)}`}
-                className={styles.textLink}
-              >
-                {project.name || "Untitled project"}
-              </Link>
+              <strong>{client.display_name}</strong>
               <span className={styles.meta}>
-                Project-backed grouping · not verified client tenancy · updated{" "}
-                {formatDate(project.updated_at)}
+                {CLIENT_STATUS_LABEL[client.status] ?? client.status} ·{" "}
+                {client.assignments.length} assigned · {client.project_count}{" "}
+                project
+                {client.project_count === 1 ? "" : "s"}
               </span>
+              <ClientAgentsSection client={client} />
             </div>
           </li>
         ))}
@@ -190,14 +282,13 @@ export function ArtifactLibraryView() {
         <div>
           <h2 id="artifact-library-heading">Artifact library</h2>
           <p className={styles.subtle}>
-            Browse files returned by a selected project. This is not a global
-            index.
+            Files from the conversations in one project.
           </p>
         </div>
       </div>
       {projectsQuery.isError ? (
         <QueryNotice
-          message="Projects could not be loaded."
+          message="Projects couldn't be loaded."
           onRetry={() => void projectsQuery.refetch()}
         />
       ) : null}
@@ -219,7 +310,9 @@ export function ArtifactLibraryView() {
       </select>
       {!projectId ? (
         <p className={styles.state}>
-          Choose a project to load its thread files.
+          {projectsQuery.data?.length === 0
+            ? "No active projects yet, so there are no files to list."
+            : "Choose a project to load its thread files."}
         </p>
       ) : null}
       {project && filesQuery.isLoading ? (
@@ -227,7 +320,7 @@ export function ArtifactLibraryView() {
       ) : null}
       {project && filesQuery.isError ? (
         <QueryNotice
-          message="Artifacts could not be loaded."
+          message="Artifacts couldn't be loaded."
           onRetry={() => void filesQuery.refetch()}
         />
       ) : null}

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import logging
 import math
 import os
@@ -93,12 +94,39 @@ def _merge_channel_connection_runtime_config(channels_config: dict[str, Any], ap
     merge_runtime_channel_configs(channels_config, connection_config)
 
 
+def _warn_if_chat_channels_cannot_authenticate(channels_config: dict[str, Any], connections_enabled: bool) -> None:
+    """Say so at startup when enabled channels have no identity binding to run under.
+
+    Without ``channel_connections`` an inbound chat message reaches the Gateway
+    with no delegation, so thread creation is refused with a 403 ("Internal calls
+    require an active organization delegation") and the sender only sees a generic
+    error. That is what the Oct 6 Slack pilot hit with no hint in the startup log.
+    """
+    if connections_enabled:
+        return
+    from app.channels.run_policy import CHANNEL_RUN_POLICY
+    from app.gateway.auth_disabled import is_auth_disabled
+
+    if is_auth_disabled():
+        return
+    names = sorted(
+        name
+        for name, channel_config in channels_config.items()
+        if name in _CHANNEL_REGISTRY and isinstance(channel_config, dict) and channel_config.get("enabled") is True and getattr(CHANNEL_RUN_POLICY.get(name), "requires_bound_identity", True)
+    )
+    if names:
+        logger.warning(
+            "Channels %s are enabled but channel_connections.enabled is false: the Gateway will refuse their messages (403, no organization delegation). Enable channel_connections and bind each sender.",
+            ", ".join(names),
+        )
+
+
 def _make_connection_repo(connection_config: ChannelConnectionsConfig | None):
     if connection_config is None or not getattr(connection_config, "enabled", False):
         return None
 
     try:
-        from deerflow.persistence.channel_connections import ChannelConnectionRepository
+        from app.channels.connection_repository import create_channel_connection_repository
         from deerflow.persistence.engine import get_session_factory
     except Exception:
         logger.exception("Failed to import channel connection repository")
@@ -108,7 +136,7 @@ def _make_connection_repo(connection_config: ChannelConnectionsConfig | None):
     if session_factory is None:
         logger.warning("Channel connections are enabled but database persistence is not available")
         return None
-    return ChannelConnectionRepository(session_factory)
+    return create_channel_connection_repository(session_factory)
 
 
 class ChannelService:
@@ -187,6 +215,7 @@ class ChannelService:
         connection_config = getattr(app_config, "channel_connections", None)
         connections_enabled = connection_config is not None and getattr(connection_config, "enabled", False)
         require_bound_identity = bool(connections_enabled and getattr(connection_config, "require_bound_identity", True))
+        _warn_if_chat_channels_cannot_authenticate(channels_config, bool(connections_enabled))
         return cls(
             channels_config=channels_config,
             connection_repo=_make_connection_repo(connection_config),
@@ -453,7 +482,7 @@ class ChannelService:
         try:
             from deerflow.reflection import resolve_class
 
-            channel_cls = resolve_class(import_path, base_class=None)
+            channel_cls: Callable[..., Channel] = resolve_class(import_path, base_class=None)
         except Exception:
             logger.exception("Failed to import channel class")
             return False
@@ -474,7 +503,11 @@ class ChannelService:
                 config["connection_repo"] = self._connection_repo
             channel = channel_cls(bus=self.bus, config=config)
             self._channels[name] = channel
-            await channel.start()
+            # A restart can run inside an HTTP request; the channel's
+            # background tasks must not inherit that request's identity
+            # ContextVars. Start in an empty context, so every task acts only
+            # through the explicit owner and delegation of each message.
+            await asyncio.create_task(channel.start(), context=contextvars.Context())
             if not channel.is_running:
                 logger.error("Channel did not enter a running state after start()")
                 await self._stop_and_discard_channel(name, channel)

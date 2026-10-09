@@ -99,7 +99,7 @@ async function expectSingleLineEllipsis(title: Locator) {
 /**
  * SSE server that emits one `values` frame carrying an unresolved `task` tool
  * call and then holds the connection open, keeping `thread.isLoading` true so
- * the subtask card renders its running state. Closed via
+ * the subtask card renders its running branch. Closed via
  * `closeAllConnections` in test teardown.
  */
 async function startRunningSubtaskStream() {
@@ -311,7 +311,9 @@ test.describe("Subtask card", () => {
     expect(rowMetrics.scrollWidth).toBeLessThanOrEqual(rowMetrics.clientWidth);
     await expectSingleLineEllipsis(title);
   });
-  test("truncates a running task title as plain text", async ({ page }) => {
+  test("truncates a running task title as one plain text run", async ({
+    page,
+  }) => {
     const streamServer = await startRunningSubtaskStream();
     mockLangGraphAPI(page, {
       runStreamHandler: (route) => route.continue({ url: streamServer.url }),
@@ -328,11 +330,21 @@ test.describe("Subtask card", () => {
       await expect(title).toBeVisible({ timeout: 15_000 });
       await expect(page.getByText("Subtask failed")).toHaveCount(0);
 
-      // Momentum renders the running title as plain text in the truncating
-      // span. Preserve the complete title and the single-line layout contract.
+      await expect(
+        page.getByText("Executing subtask", { exact: true }),
+      ).toBeVisible();
+      await expect(
+        page.getByText(LONG_RUNNING_STATUS, { exact: true }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("button", {
+          name: "Stop the running turn",
+          exact: true,
+        }),
+      ).toBeVisible();
+      // Current titles are a single raw text run inside the truncating span.
       await expect(title).toHaveText(LONG_TASK_PROMPT);
-      await expect(title).toHaveCSS("display", "block");
-      await expect(title.locator(":scope > *")).toHaveCount(0);
+      await expect(title.locator("span")).toHaveCount(0);
       await expectSingleLineEllipsis(title);
     } finally {
       await streamServer.close();

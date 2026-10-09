@@ -1,5 +1,6 @@
 import "katex/dist/katex.min.css";
 import "streamdown/styles.css";
+import "@/styles/workspace-mobile.css";
 
 import { redirect } from "next/navigation";
 
@@ -9,6 +10,8 @@ import { getServerSideUser } from "@/core/auth/server";
 import { assertNever } from "@/core/auth/types";
 import { I18nProvider } from "@/core/i18n/context";
 import { detectLocaleServer } from "@/core/i18n/server";
+import { MobileHintProvider } from "@/core/viewport/context";
+import { detectIsMobileServer } from "@/core/viewport/server";
 
 import { WorkspaceContent } from "./workspace-content";
 
@@ -18,6 +21,7 @@ export default async function WorkspaceLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   const locale = await detectLocaleServer();
+  const isMobileHint = await detectIsMobileServer();
   const result = await getServerSideUser();
 
   let content: React.ReactNode;
@@ -52,5 +56,9 @@ export default async function WorkspaceLayout({
       assertNever(result);
   }
 
-  return <I18nProvider initialLocale={locale}>{content}</I18nProvider>;
+  return (
+    <I18nProvider initialLocale={locale}>
+      <MobileHintProvider hint={isMobileHint}>{content}</MobileHintProvider>
+    </I18nProvider>
+  );
 }

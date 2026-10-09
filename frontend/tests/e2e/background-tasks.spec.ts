@@ -218,7 +218,7 @@ test("shows, refreshes, and cancels current-chat background tasks", async ({
   await expect(page.getByText("Agent notification failed")).toBeVisible();
   await expect(
     page.getByText(
-      "Chat notification attempt 2 failed; Momentum will retry with backoff.",
+      "Chat notification attempt 2 failed; MomoBot will retry with backoff.",
     ),
   ).toBeVisible();
   await expect(
@@ -241,7 +241,7 @@ test("shows, refreshes, and cancels current-chat background tasks", async ({
   await expect(page.getByText("Approve the revised budget?")).toBeVisible();
   await expect(
     page.getByText(
-      "This integration cannot send your response back to the remote task yet.",
+      "This integration can't send your response back to the remote task yet.",
     ),
   ).toBeVisible();
 
@@ -252,7 +252,7 @@ test("shows, refreshes, and cancels current-chat background tasks", async ({
   await expect(page.getByText("Remote cancellation timed out")).toBeVisible();
   await expect(
     page.getByText(
-      "Cancellation attempt 4 failed; Momentum will keep retrying.",
+      "Cancellation attempt 4 failed; MomoBot will keep retrying.",
     ),
   ).toBeVisible();
 

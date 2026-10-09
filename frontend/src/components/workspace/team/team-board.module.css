@@ -1,0 +1,193 @@
+/*
+ * Team board: staff channels. Layout only, in the Desk's visual language --
+ * colour comes from the shell's semantic tokens. Message bubbles sit on
+ * --card with a border, never --muted, which the paper treatment rebinds
+ * to dark ink (see board finding f6).
+ */
+
+.frame {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 1.25rem;
+  width: 100%;
+  max-width: 72rem;
+  min-height: 0;
+  margin-inline: auto;
+  padding: 2rem 1rem;
+}
+
+@media (min-width: 40rem) {
+  .frame {
+    padding: 2.5rem 1.5rem;
+  }
+}
+
+.layout {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 1.25rem;
+  min-height: 0;
+}
+
+@media (min-width: 64rem) {
+  .layout {
+    flex-direction: row;
+  }
+}
+
+.channels {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+@media (min-width: 64rem) {
+  .channels {
+    flex: 0 0 16rem;
+    width: 16rem;
+  }
+}
+
+.channelList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+@media (min-width: 64rem) {
+  .channelList {
+    flex-direction: column;
+    flex-wrap: nowrap;
+  }
+}
+
+.channelButton {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-height: 2.75rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+  color: var(--foreground);
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+@media (min-width: 64rem) {
+  .channelButton {
+    width: 100%;
+  }
+}
+
+.channelButton[aria-current="true"] {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 1px var(--primary);
+}
+
+.hash {
+  color: var(--muted-foreground);
+}
+
+.addChannel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+}
+
+.conversation {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-width: 0;
+  min-height: 24rem;
+}
+
+.channelHead {
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.messages {
+  flex: 1;
+  min-height: 14rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.messageList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.75rem;
+}
+
+.message {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+  color: var(--card-foreground);
+  font-size: 0.9375rem;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.groupStart {
+  margin-top: 0.5rem;
+}
+
+.author {
+  display: flex;
+  gap: 0.5rem;
+  align-items: baseline;
+  margin-bottom: 0.125rem;
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+.stamp {
+  color: var(--muted-foreground);
+  font-weight: 500;
+}
+
+.composer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+@media (min-width: 40rem) {
+  .composer {
+    flex-direction: row;
+    align-items: flex-end;
+  }
+}
+
+.composer textarea {
+  flex: 1;
+}
+
+.composerButton {
+  min-height: 2.75rem;
+  min-width: 5.5rem;
+}
+
+.hint {
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+}
+
+.errorText {
+  color: var(--destructive);
+  font-size: 0.8125rem;
+}

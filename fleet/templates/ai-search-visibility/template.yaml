@@ -1,0 +1,23 @@
+id: ai-search-visibility
+version: "1"
+name: AI Search Visibility
+description: >-
+  Checks whether the client is cited by ChatGPT, Perplexity, and Google's AI
+  answers for their key queries, and drafts a short visibility check for the
+  Momentum team.
+model: openrouter-sonnet-5
+skills:
+  - deep-research
+tool_groups:
+  - web
+  - file:read
+  - file:write
+mcp_plugins: []
+schedule:
+  cron: "0 9 * * 3"
+  timezone: America/New_York
+acceptance_criteria:
+  - Checks each of the client's key queries and records whether the client is cited.
+  - Notes plainly which checks could not be verified directly, rather than guessing.
+  - Flags any new or lost citation compared to the last check, when prior data exists.
+  - Saved as a draft output file for the team to review, never sent to the client.

@@ -40,6 +40,16 @@ const MODELS: Model[] = [
   },
 ];
 
+// Exact user-facing labels for these canonical fixture IDs. The two Shared
+// entries are disambiguated by their positions in the supplied catalog.
+const MODEL_LABELS: Record<string, string> = {
+  "alpha-api": "Alpha",
+  "beta-api": "Shared, 1 of 2",
+  "beta-duplicate": "Shared, 2 of 2",
+  "very-long-model-name":
+    "A very long model display name that must truncate on narrow screens",
+};
+
 type InstallOptions = Parameters<typeof mockLangGraphAPI>[1];
 
 async function installPageMocks(
@@ -82,7 +92,8 @@ function favoriteButton(page: Page, modelName: string) {
     throw new Error(`Unknown model fixture: ${modelName}`);
   }
   return picker(page).getByRole("button", {
-    name: `Favorite ${model.display_name} (${model.name})`,
+    name: `Favorite ${MODEL_LABELS[model.name]}`,
+    exact: true,
   });
 }
 
@@ -96,7 +107,7 @@ function modelButton(page: Page, modelName: string) {
     throw new Error(`Unknown model fixture: ${modelName}`);
   }
   return picker(page).getByRole("button", {
-    name: `${model.display_name} (${model.name})`,
+    name: MODEL_LABELS[model.name],
     exact: true,
   });
 }
@@ -201,10 +212,23 @@ test("favorites a model without selecting it and persists the choice after refre
   );
   await expect(
     favoriteGroup(page).getByRole("button", {
-      name: "Shared (beta-api)",
+      name: "Shared, 1 of 2",
       exact: true,
     }),
   ).toBeVisible();
+
+  // The shared display name must still submit the selected canonical ID.
+  await page.keyboard.press("Escape");
+  const submittedRun = page.waitForRequest(
+    (request) =>
+      request.method() === "POST" && request.url().includes("/runs/stream"),
+  );
+  const composer = page.getByPlaceholder(/how can i assist you/i);
+  await composer.fill("Check the selected model.");
+  await composer.press("Enter");
+  expect((await submittedRun).postDataJSON().context.model_name).toBe(
+    "beta-api",
+  );
 });
 
 test("synchronizes favorite additions and removals across real tabs", async ({
@@ -294,7 +318,7 @@ test("restores a temporarily unavailable favorite and keeps the narrow picker us
     const dialogBox = dialog.getBoundingClientRect();
     const longRow = dialog
       .querySelector(
-        'button[aria-label="Favorite A very long model display name that must truncate on narrow screens (very-long-model-name)"]',
+        'button[aria-label="Favorite A very long model display name that must truncate on narrow screens"]',
       )
       ?.closest("li")
       ?.getBoundingClientRect();
@@ -342,7 +366,7 @@ test("restores a temporarily unavailable favorite and keeps the narrow picker us
   );
   await expect(
     favoriteGroup(page).getByRole("button", {
-      name: `${MODELS[3]!.display_name} (very-long-model-name)`,
+      name: MODEL_LABELS["very-long-model-name"],
       exact: true,
     }),
   ).toBeVisible();

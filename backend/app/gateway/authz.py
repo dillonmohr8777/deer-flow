@@ -72,6 +72,21 @@ class Permissions:
     PROJECTS_READ = "projects:read"
     PROJECTS_WRITE = "projects:write"
     PROJECTS_DELETE = "projects:delete"
+    # Clients
+    CLIENTS_READ = "clients:read"
+    CLIENTS_WRITE = "clients:write"
+    CLIENTS_DELETE = "clients:delete"
+    # Momo Board
+    BOARD_READ = "board:read"
+    BOARD_WRITE = "board:write"
+    # Momentum-internal: team channels and AI Academy (staff only)
+    TEAM_READ = "team:read"
+    TEAM_WRITE = "team:write"
+    ACADEMY_READ = "academy:read"
+    ACADEMY_WRITE = "academy:write"
+    # Approvals inbox: review/approve outbound actions agents proposed
+    APPROVALS_READ = "approvals:read"
+    APPROVALS_WRITE = "approvals:write"
 
 
 class AuthContext:
@@ -172,6 +187,17 @@ _ALL_PERMISSIONS: list[str] = [
     Permissions.PROJECTS_READ,
     Permissions.PROJECTS_WRITE,
     Permissions.PROJECTS_DELETE,
+    Permissions.CLIENTS_READ,
+    Permissions.CLIENTS_WRITE,
+    Permissions.CLIENTS_DELETE,
+    Permissions.BOARD_READ,
+    Permissions.BOARD_WRITE,
+    Permissions.TEAM_READ,
+    Permissions.TEAM_WRITE,
+    Permissions.ACADEMY_READ,
+    Permissions.ACADEMY_WRITE,
+    Permissions.APPROVALS_READ,
+    Permissions.APPROVALS_WRITE,
 ]
 
 
@@ -720,8 +746,6 @@ def require_permission(
             # strict-deny rather than strict-allow — only an *existing*
             # row with a *different* user_id triggers 404.
             if owner_check:
-                from app.gateway.internal_auth import INTERNAL_OWNER_USER_ID_HEADER_NAME, INTERNAL_SYSTEM_ROLE
-
                 thread_id = kwargs.get("thread_id")
                 if thread_id is None:
                     raise ValueError("require_permission with owner_check=True requires 'thread_id' parameter")
@@ -729,33 +753,109 @@ def require_permission(
                 from app.gateway.deps import get_thread_store
 
                 thread_store = get_thread_store(request)
+                # Internal callers get no owner-header fallback: AuthMiddleware
+                # already stamped a delegated caller's storage principal here,
+                # and an undelegated one never reaches a route.
                 storage_user_id = auth.storage_user_id or str(auth.user.id)
                 allowed = await thread_store.check_access(
                     thread_id,
                     storage_user_id,
                     require_existing=require_existing,
                 )
-                if not allowed and getattr(auth.user, "system_role", None) == INTERNAL_SYSTEM_ROLE:
-                    # Trusted internal callers (channel workers) also act for
-                    # the connection owner carried in X-DeerFlow-Owner-User-Id.
-                    # Scope the check to that owner instead of bypassing it; a
-                    # leaked internal token must not grant cross-user thread
-                    # access. The header is honored only after ``auth`` proved
-                    # the caller holds the internal token (mirrors
-                    # get_trusted_internal_owner_user_id, which keys off the
-                    # middleware-stamped ``request.state.user``).
-                    header_owner = (request.headers.get(INTERNAL_OWNER_USER_ID_HEADER_NAME) or "").strip()
-                    if header_owner:
-                        allowed = await thread_store.check_access(
-                            thread_id,
-                            header_owner,
-                            require_existing=require_existing,
-                        )
                 if not allowed:
                     raise HTTPException(
                         status_code=404,
                         detail=f"Thread {thread_id} not found",
                     )
+
+            return await func(*args, **kwargs)
+
+        return wrapper
+
+    return decorator
+
+
+def require_entitlement(
+    key: str,
+    *,
+    requested_amount: int = 1,
+) -> Callable[[Callable[P, T]], Callable[P, T]]:
+    """Decorator enforcing the M4 entitlement gate for a paid mutation.
+
+    Design: ``docs/momo-week/m4-entitlement.md`` §3, §7.3 (task ``c2``/``e6``).
+    Must be composed AFTER ``@require_permission`` (i.e. placed BELOW it in
+    the decorator stack, so it executes second) — it reads
+    ``request.state.auth.organization_id``, which only ``AuthMiddleware`` or
+    ``require_permission``'s own ``_authenticate()`` populate. No router in
+    this codebase uses ``@require_auth`` today, and stacking it back in above
+    this decorator would wipe that org context right before it's needed.
+
+    Only suitable for a gate key (no attempted-count needed). A limit key
+    (``projects.max`` etc.) needs the caller's live usage count from the
+    request body, so those routes call ``evaluate_entitlement(...)`` inline
+    in the handler instead — the same "decorator for the common case, inline
+    call for the parametrized case" split ``board.py`` already uses for
+    ``_require_client_access``.
+
+    Raises:
+        HTTPException 401: If unauthenticated.
+        HTTPException 403: If entitlements are enabled and the key is denied
+            (no resolved organization, no row, or a suspended row). The body
+            is ``{"error": "entitlement_exceeded", "key": ..., "reason": ...}``
+            so the frontend can show upgrade copy instead of a bare
+            permission error.
+    """
+
+    def decorator(func: Callable[P, T]) -> Callable[P, T]:
+        @functools.wraps(func)
+        async def wrapper(*args: Any, **kwargs: Any) -> Any:
+            request = kwargs.get("request")
+            if request is None:
+                try:
+                    bound = inspect.signature(func).bind_partial(*args, **kwargs)
+                except TypeError:
+                    bound = None
+                if bound is not None and "request" in bound.arguments:
+                    request = bound.arguments["request"]
+                elif "request" in inspect.signature(func).parameters:
+                    kwargs["request"] = _make_test_request_stub()
+                    request = kwargs["request"]
+                else:
+                    return await func(*args, **kwargs)
+
+            if getattr(request, "_deerflow_test_bypass_auth", False):
+                return await func(*args, **kwargs)
+
+            from deerflow.config.entitlement_config import resolve_current_entitlement_config
+
+            entitlement_config = resolve_current_entitlement_config()
+            if not entitlement_config.enabled:
+                return await func(*args, **kwargs)
+
+            auth: AuthContext | None = getattr(request.state, "auth", None)
+            if auth is None:
+                auth = await _authenticate(request)
+                request.state.auth = auth
+
+            if not auth.is_authenticated:
+                raise HTTPException(status_code=401, detail="Authentication required")
+
+            from app.gateway.deps import get_entitlement_repo
+            from deerflow.authz.entitlements import evaluate_entitlement
+
+            repo = get_entitlement_repo(request)
+            decision = await evaluate_entitlement(
+                repo,
+                auth.organization_id,
+                key,
+                requested_amount=requested_amount,
+                config=entitlement_config,
+            )
+            if not decision.allowed:
+                raise HTTPException(
+                    status_code=403,
+                    detail={"error": "entitlement_exceeded", "key": key, "reason": decision.reason},
+                )
 
             return await func(*args, **kwargs)
 

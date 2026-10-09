@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from deerflow.config.agents_config import AgentConfig
 from deerflow.tools.builtins.setup_agent_tool import setup_agent
 
 # --- Helpers ---
@@ -44,6 +45,84 @@ def _call_setup_agent(tmp_path: Path, soul: str, description: str, agent_name: s
 
 
 # --- Agent name validation tests ---
+
+
+@pytest.mark.parametrize("cfg", [AgentConfig(name="test-agent", self_update_enabled=False), AgentConfig(name="test-agent", tool_names=[]), AgentConfig(name="test-agent", tool_names=["read_file"])])
+def test_setup_cannot_reset_existing_owner_permissions(cfg):
+    store = MagicMock()
+    store.get.return_value = cfg
+    with patch("deerflow.tools.builtins.setup_agent_tool.get_agent_store", return_value=store):
+        result = setup_agent.func(soul="replacement", description="must not persist", runtime=_make_runtime())
+    store.update.assert_not_called()
+    assert result.update["messages"][0].status == "error"
+
+
+def test_allowed_rebootstrap_preserves_owner_permissions():
+    cfg = AgentConfig(name="test-agent", self_update_enabled=True, tool_names=["setup_agent", "read_file"])
+    store = MagicMock()
+    store.get.return_value = cfg
+    with patch("deerflow.tools.builtins.setup_agent_tool.get_agent_store", return_value=store):
+        setup_agent.func(soul="replacement", description="permitted", runtime=_make_runtime())
+    saved = store.update.call_args.args[1]
+    assert saved["self_update_enabled"] is True
+    assert saved["tool_names"] == ["setup_agent", "read_file"]
+
+
+@pytest.mark.parametrize("failure", [ValueError("synthetic private load payload"), None])
+def test_unreadable_existing_config_fails_closed_without_upsert(failure):
+    store = MagicMock()
+    if failure is None:
+        store.get.return_value = None
+    else:
+        store.get.side_effect = failure
+    with patch("deerflow.tools.builtins.setup_agent_tool.get_agent_store", return_value=store):
+        result = setup_agent.func(soul="replacement", description="must not persist", runtime=_make_runtime())
+    store.update.assert_not_called()
+    assert result.update["messages"][0].status == "error"
+    assert "synthetic private load payload" not in result.update["messages"][0].content
+
+
+def test_fresh_bootstrap_keeps_existing_permission_defaults():
+    store = MagicMock()
+    store.get.side_effect = FileNotFoundError()
+    store.exists.return_value = False
+    with patch("deerflow.tools.builtins.setup_agent_tool.get_agent_store", return_value=store):
+        setup_agent.func(soul="new soul", description="fresh", runtime=_make_runtime())
+    cfg = AgentConfig(**store.update.call_args.args[1])
+    assert cfg.self_update_enabled is True and cfg.tool_names is None
+
+
+@pytest.mark.parametrize("probe", [True, None, 0, ValueError("private existence payload")])
+def test_missing_config_requires_authoritative_identity_absence(probe):
+    store = MagicMock()
+    store.get.side_effect = FileNotFoundError("private missing config payload")
+    if isinstance(probe, Exception):
+        store.exists.side_effect = probe
+    else:
+        store.exists.return_value = probe
+    with patch("deerflow.tools.builtins.setup_agent_tool.get_agent_store", return_value=store):
+        result = setup_agent.func(soul="replacement", description="must not persist", runtime=_make_runtime())
+    store.update.assert_not_called()
+    store.exists.assert_called_once_with("test-agent", user_id="test-user-autouse")
+    assert result.update["messages"][0].status == "error"
+    assert "private" not in result.update["messages"][0].content
+
+
+def test_existing_directory_without_config_is_not_rebootstrapped(tmp_path, monkeypatch):
+    from deerflow.persistence.agents.file import FileAgentStore
+
+    monkeypatch.setenv("DEER_FLOW_HOME", str(tmp_path))
+    agent_dir = tmp_path / "users" / "test-user-autouse" / "agents" / "test-agent"
+    agent_dir.mkdir(parents=True)
+    soul = agent_dir / "SOUL.md"
+    soul.write_text("owner original", encoding="utf-8")
+    store = FileAgentStore()
+    assert store.exists("test-agent") is True
+    with patch("deerflow.tools.builtins.setup_agent_tool.get_agent_store", return_value=store):
+        result = setup_agent.func(soul="replacement", description="must not persist", runtime=_make_runtime())
+    assert result.update["messages"][0].status == "error"
+    assert soul.read_text(encoding="utf-8") == "owner original"
+    assert not (agent_dir / "config.yaml").exists()
 
 
 def test_setup_agent_rejects_invalid_agent_name_before_writing(tmp_path, monkeypatch):

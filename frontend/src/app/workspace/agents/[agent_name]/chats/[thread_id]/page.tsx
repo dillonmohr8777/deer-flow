@@ -468,7 +468,11 @@ export default function AgentChatPage() {
               <div
                 className={cn(
                   "right-0 bottom-0 left-0 z-30 flex justify-center px-3 sm:px-4",
-                  isWelcomeMode ? "absolute" : "relative shrink-0 pb-4",
+                  // The disclaimer hangs below the composer (top-full); the
+                  // padding keeps it clear of the bottom edge and home bar.
+                  isWelcomeMode
+                    ? "absolute"
+                    : "relative shrink-0 pb-[max(1.75rem,env(safe-area-inset-bottom))]",
                 )}
               >
                 <div

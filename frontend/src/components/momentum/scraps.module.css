@@ -1,0 +1,61 @@
+.scraps {
+  display: inline-flex;
+  align-items: flex-end;
+}
+
+.scrap {
+  position: relative;
+  display: inline-block;
+  line-height: 0;
+  transform: rotate(var(--scrap-tilt, 0deg));
+  filter: drop-shadow(0 3px 6px rgba(16, 30, 63, 0.28));
+  animation-name: scrap-sway;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+  animation-direction: alternate;
+}
+
+.scrap img {
+  display: block;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* Washi tape: a translucent cream strip taped across the top edge. */
+.scrap::before {
+  content: "";
+  position: absolute;
+  top: -5px;
+  left: 30%;
+  width: 40%;
+  height: 12px;
+  background: rgba(244, 237, 216, 0.6);
+  border: 1px solid rgba(244, 237, 216, 0.4);
+  transform: rotate(-4deg);
+  pointer-events: none;
+}
+
+@keyframes scrap-sway {
+  from {
+    transform: rotate(var(--scrap-tilt, 0deg)) translateY(0);
+  }
+  to {
+    transform: rotate(calc(var(--scrap-tilt, 0deg) + 1.5deg)) translateY(-3px);
+  }
+}
+
+.scraps[data-live="false"] .scrap {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scrap {
+    animation: none;
+  }
+}
+
+/* Future (chrome) and retro (16-bit) do not want torn paper. */
+:global([data-treatment="future"]) .scraps,
+:global([data-treatment="retro"]) .scraps {
+  display: none;
+}

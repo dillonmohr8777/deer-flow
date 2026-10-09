@@ -1,0 +1,53 @@
+{
+  "title": "What's answer engine optimization, and why does it matter now?",
+  "dek": "Search is turning into conversation. Being the source an AI assistant quotes is the new first page.",
+  "slug": "what-is-answer-engine-optimization",
+  "date": "2026-09-23",
+  "author": { "name": "Dillon Mohr", "title": "AI Marketing Director" },
+  "keywords": [
+    "answer engine optimization",
+    "AEO",
+    "AI search",
+    "structured data",
+    "generative engine optimization"
+  ],
+  "summary": "Answer engine optimization (AEO) is the practice of writing and marking up pages so AI assistants can find, trust and quote them. It rewards a direct answer near the top, clear question headings, and structured data that names the author and publisher.",
+  "section": "Search and Growth",
+  "hero": {
+    "src": "/momentum/momos-living/growth/flat.webp",
+    "alt": "The Growth Momo, cut from blue and kraft paper, tending a seedling"
+  },
+  "status": "draft",
+  "body": [
+    {
+      "heading": "What changed about search?",
+      "paragraphs": [
+        "People increasingly ask a question and read one composed answer instead of scanning ten links. The assistant still reads the web; it simply chooses a handful of sources to lean on.",
+        "That makes the job less about ranking for a phrase and more about being the clearest, most attributable answer to a question."
+      ]
+    },
+    {
+      "heading": "What does an answer engine look for?",
+      "paragraphs": [
+        "A short, plain answer early on the page. Headings phrased the way people ask. Named authors with a real role, a named publisher, and dates that say how fresh the answer is.",
+        "Structured data (JSON-LD) turns those facts into something a machine can verify rather than guess."
+      ]
+    },
+    {
+      "heading": "Where should a team start?",
+      "paragraphs": [
+        "Pick the ten questions your clients ask most. Answer each in two sentences at the top of a page, then go deeper below. Mark it up, and measure which answers get cited."
+      ]
+    }
+  ],
+  "faq": [
+    {
+      "question": "Is AEO different from SEO?",
+      "answer": "It builds on SEO. The foundations are the same; AEO adds a stronger emphasis on direct answers, question headings and machine readable attribution."
+    },
+    {
+      "question": "What's GEO?",
+      "answer": "Generative engine optimization: the same idea applied to AI systems that write answers, with extra weight on being quotable and clearly sourced."
+    }
+  ]
+}

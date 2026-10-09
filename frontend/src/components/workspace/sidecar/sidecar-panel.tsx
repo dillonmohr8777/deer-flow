@@ -755,16 +755,9 @@ function SidecarModeMenu({
             {mode === "flash" && <ZapIcon className="size-3" />}
             {mode === "thinking" && <LightbulbIcon className="size-3" />}
             {mode === "pro" && <GraduationCapIcon className="size-3" />}
-            {mode === "ultra" && (
-              <RocketIcon className="size-3 text-[#dabb5e]" />
-            )}
+            {mode === "ultra" && <RocketIcon className="size-3" />}
           </div>
-          <div
-            className={cn(
-              "truncate text-xs font-normal",
-              mode === "ultra" && "golden-text",
-            )}
-          >
+          <div className="truncate text-xs font-normal">
             {(mode === "flash" && t.inputBox.flashMode) ||
               (mode === "thinking" && t.inputBox.reasoningMode) ||
               (mode === "pro" && t.inputBox.proMode) ||
@@ -876,12 +869,10 @@ function SidecarModeMenu({
                 <RocketIcon
                   className={cn(
                     "mr-2 size-4",
-                    mode === "ultra" && "text-[#dabb5e]",
+                    mode === "ultra" && "text-accent-foreground",
                   )}
                 />
-                <div className={cn(mode === "ultra" && "golden-text")}>
-                  {t.inputBox.ultraMode}
-                </div>
+                {t.inputBox.ultraMode}
               </div>
               <div className="pl-7 text-xs">
                 {t.inputBox.ultraModeDescription}
@@ -923,7 +914,7 @@ function SidecarModelSelector({
       <ModelPickerTrigger asChild>
         <PromptInputButton className={cn("min-w-0 px-2!", className)}>
           <div className="flex min-w-0 flex-col text-left">
-            <span className="flex-1 truncate text-left text-xs font-normal">
+            <span className="flex-1 truncate text-left text-[13px] font-semibold">
               {selectedModel.display_name}
             </span>
           </div>

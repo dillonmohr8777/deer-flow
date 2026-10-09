@@ -1,0 +1,281 @@
+/*
+ * Dispatch board (momo-week d9, slice 1). Colours come only from Command
+ * Center's local palette (--surface, --ink, --muted, --line, --strong,
+ * --blue, --green, --danger, --focus), which every treatment remaps, so no
+ * hex lives here. Depth is print: a hairline edge and a 1px ink shadow.
+ */
+
+.board {
+  min-width: 0;
+}
+
+.head {
+  margin-bottom: 18px;
+}
+
+.showAll {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  background: none;
+  color: var(--blue);
+  font-size: 14px;
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+/* Uneven on purpose: the desk is where attention goes, so it is wider. */
+.lanes {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+.lanes:has(> [data-lane="unsorted"]) {
+  grid-template-columns: minmax(0, 1.35fr) repeat(3, minmax(0, 1fr));
+}
+
+.lane {
+  min-width: 0;
+  padding: 14px 12px 16px;
+  border-top: 2px solid var(--strong);
+}
+.lane[data-lane="desk"] {
+  border-top-color: var(--blue);
+}
+.lane[data-lane="stamped"] {
+  border-top-color: var(--green);
+}
+/* Danger only when the lane holds a real failure; a lane of stopped runs
+   keeps the neutral rule. */
+.lane[data-lane="returned"][data-failed="true"] {
+  border-top-color: var(--danger);
+}
+
+.laneTitle {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0 0 14px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+.count {
+  color: var(--ink);
+  font-size: 13px;
+  letter-spacing: 0;
+}
+
+.laneEmpty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.slips {
+  display: grid;
+  gap: 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.slip {
+  position: relative;
+  display: grid;
+  width: 100%;
+  min-height: 44px;
+  gap: 6px;
+  padding: 16px 14px 14px;
+  border: 1px solid var(--line);
+  border-radius: 2px 5px 3px 6px;
+  background: var(--surface);
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--ink) 10%, transparent);
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+/* A slight hand-placed lean, never more than a degree. */
+.slip[data-tilt="1"] {
+  transform: rotate(-0.6deg);
+}
+.slip[data-tilt="2"] {
+  transform: rotate(0.5deg);
+}
+.slip:global(.pinned)::before {
+  top: -6px;
+  left: 50%;
+  margin-left: -7px;
+}
+.slip[aria-pressed="true"] {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 1px var(--blue);
+}
+.slip:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* Stamped work: the stamp sits beside the words, not under them, so five
+   finished slips stay short enough to scan. */
+.slip[data-lane="stamped"] {
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 12px;
+  align-items: center;
+}
+.slip[data-lane="stamped"] > :not(.stamp) {
+  grid-column: 1;
+}
+
+/* A failed run: the top right corner is folded down along a straight
+   crease (clip) and the flap (.tear) lies over the slip, kraft underside
+   up, its outer edges ragged where it tore. The flap is the cut corner
+   reflected across the crease, so the two always meet. An interrupted run
+   was stopped, not broken, so it keeps its corner. */
+.slip[data-failed="true"] {
+  padding-right: 46px;
+  clip-path: polygon(0 0, calc(100% - 48px) 0, 100% 32px, 100% 100%, 0 100%);
+}
+/* clip-path clips everything outside the slip, outlines and outer rings
+   included, so a torn slip draws its focus and selected rings inside. */
+.slip[data-failed="true"]:focus-visible {
+  outline-offset: -5px;
+}
+.slip[data-failed="true"][aria-pressed="true"] {
+  box-shadow: inset 0 0 0 1px var(--blue);
+}
+.tear {
+  position: absolute;
+  top: -1px;
+  right: -1px;
+  width: 48px;
+  height: 46px;
+  background: var(--paper-kraft, var(--line));
+  clip-path: polygon(
+    0 0,
+    48px 32px,
+    41px 35px,
+    35px 36px,
+    29px 40px,
+    23px 41px,
+    18px 45px,
+    14px 36px,
+    11px 30px,
+    8px 21px,
+    4px 14px,
+    3px 7px
+  );
+}
+
+.slipTitle {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.slip:focus-visible .slipTitle,
+.slip:hover .slipTitle {
+  -webkit-line-clamp: unset;
+}
+
+.slipMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.word {
+  justify-self: start;
+  font-size: 12px;
+  font-weight: 800;
+}
+.word[data-tone="active"] {
+  color: var(--blue);
+}
+.word[data-tone="danger"] {
+  color: var(--danger);
+}
+.word[data-tone="unknown"] {
+  color: var(--muted);
+}
+
+/* The ink stamp: a dated mark, pressed once, slightly askew. Static. */
+.stamp {
+  display: inline-grid;
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  justify-self: end;
+  justify-items: center;
+  padding: 3px 9px 2px;
+  border: 2px solid var(--green);
+  border-radius: 3px;
+  color: var(--green);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  line-height: 1.25;
+  text-transform: uppercase;
+  transform: rotate(-6deg);
+}
+.stamp span:last-child {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+}
+
+.batch {
+  margin: 16px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .slip {
+    transition:
+      transform 140ms ease,
+      box-shadow 140ms ease;
+  }
+  .slip:hover {
+    transform: translateY(-2px);
+  }
+}
+
+/* Phones and narrow panels: lanes stack, the desk first (DOM order). */
+@media (max-width: 900px) {
+  .lanes,
+  .lanes:has(> [data-lane="unsorted"]) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .head {
+    flex-wrap: wrap;
+  }
+}
+
+@media (forced-colors: active) {
+  .slip {
+    clip-path: none;
+    transform: none;
+  }
+  .tear {
+    display: none;
+  }
+  .stamp {
+    border-color: CanvasText;
+    color: CanvasText;
+  }
+}

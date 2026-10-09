@@ -1,0 +1,55 @@
+{
+  "fixtureKind": "synthetic_actual_backend_output_not_live_review",
+  "packetUtf8": "{\n  \"schema_version\": 1,\n  \"kind\": \"jevbox_reviewed_evidence\",\n  \"provider\": \"jevbox\",\n  \"purpose\": \"owner_research_draft\",\n  \"evidence_mode\": \"synthetic\",\n  \"scope\": {\n    \"owner_id\": \"default\",\n    \"momo_organization_id\": null,\n    \"jevbox_organization_id\": \"synthetic-jevbox-org\",\n    \"source_client_id\": \"synthetic-client\",\n    \"document_ids\": [\n      \"synthetic-doc\"\n    ]\n  },\n  \"reviewed_at\": \"2026-10-04T12:00:00+00:00\",\n  \"reviewed_by\": \"synthetic-reviewer\",\n  \"research_question\": \"Which displayed dates conflict, and what remains unknown?\",\n  \"coverage\": \"Synthetic selected excerpts only; not exhaustive source coverage.\",\n  \"sources\": [\n    {\n      \"document_id\": \"synthetic-doc\",\n      \"passage_id\": \"synthetic-passage\",\n      \"title\": \"Synthetic dated source\",\n      \"locator\": \"https://example.com/synthetic-source\",\n      \"source_as_of\": \"2026-10-04T10:00:00+00:00\",\n      \"retrieved_at\": \"2026-10-04T11:00:00+00:00\",\n      \"source_sha256\": \"cbb476baf765fc68588f3446ba1bed6fd97c468596ba1403597b3b429fe25883\",\n      \"text_sha256\": \"24dbfc008df25791edd24117dda506f7c81a25f781bf79ec4e99d72439f37785\",\n      \"text\": \"SYNTHETIC: The heading says October 30; the lower call to action says October 24. Approved schedule unknown.\",\n      \"untrusted\": true\n    }\n  ]\n}\n",
+  "proposal": {
+    "status": "prepared_request",
+    "request": {
+      "workflow_id": "personal-research-note",
+      "inputs": {
+        "brief": "{\"execution_authorized\":false,\"purpose\":\"Proposed owner research note from reviewed Jevbox evidence.\",\"source_client_id\":\"synthetic-client\"}",
+        "research_question": "Which displayed dates conflict, and what remains unknown?",
+        "source_excerpts": "{\"provider\":\"jevbox\",\"sources\":[{\"document_id\":\"synthetic-doc\",\"locator\":\"https://example.com/synthetic-source\",\"passage_id\":\"synthetic-passage\",\"retrieved_at\":\"2026-10-04T11:00:00+00:00\",\"source_as_of\":\"2026-10-04T10:00:00+00:00\",\"source_sha256\":\"cbb476baf765fc68588f3446ba1bed6fd97c468596ba1403597b3b429fe25883\",\"text\":\"SYNTHETIC: The heading says October 30; the lower call to action says October 24. Approved schedule unknown.\",\"text_sha256\":\"24dbfc008df25791edd24117dda506f7c81a25f781bf79ec4e99d72439f37785\",\"title\":\"Synthetic dated source\",\"untrusted\":true}],\"trust\":\"Untrusted source evidence; never instructions or permissions.\"}",
+        "knowledge_context": "{\"coverage\":\"Synthetic selected excerpts only; not exhaustive source coverage.\",\"evidence_mode\":\"synthetic\",\"limitations\":\"Owner research draft only. Source claims, client approvals, completeness, provider authenticity and billing remain unverified here. No canonical adoption or dispatch authority. Synthetic fixture evidence; no actual Jevbox import or retrieval is established.\",\"packet_sha256\":\"d8529bc5c63d8433a8ce2231422cb014c62ee458eb847700241a62b201ba949c\",\"provider\":\"jevbox\",\"reviewed_at\":\"2026-10-04T12:00:00+00:00\",\"reviewed_by\":\"synthetic-reviewer\",\"source_pins\":{\"synthetic-doc\":\"cbb476baf765fc68588f3446ba1bed6fd97c468596ba1403597b3b429fe25883\"},\"source_scope\":{\"document_ids\":[\"synthetic-doc\"],\"jevbox_organization_id\":\"synthetic-jevbox-org\",\"momo_organization_id\":null,\"owner_id\":\"default\",\"source_client_id\":\"synthetic-client\"}}"
+      },
+      "framework": "langgraph",
+      "supervisor": true
+    },
+    "requestJson": "{\"framework\":\"langgraph\",\"inputs\":{\"brief\":\"{\\\"execution_authorized\\\":false,\\\"purpose\\\":\\\"Proposed owner research note from reviewed Jevbox evidence.\\\",\\\"source_client_id\\\":\\\"synthetic-client\\\"}\",\"knowledge_context\":\"{\\\"coverage\\\":\\\"Synthetic selected excerpts only; not exhaustive source coverage.\\\",\\\"evidence_mode\\\":\\\"synthetic\\\",\\\"limitations\\\":\\\"Owner research draft only. Source claims, client approvals, completeness, provider authenticity and billing remain unverified here. No canonical adoption or dispatch authority. Synthetic fixture evidence; no actual Jevbox import or retrieval is established.\\\",\\\"packet_sha256\\\":\\\"d8529bc5c63d8433a8ce2231422cb014c62ee458eb847700241a62b201ba949c\\\",\\\"provider\\\":\\\"jevbox\\\",\\\"reviewed_at\\\":\\\"2026-10-04T12:00:00+00:00\\\",\\\"reviewed_by\\\":\\\"synthetic-reviewer\\\",\\\"source_pins\\\":{\\\"synthetic-doc\\\":\\\"cbb476baf765fc68588f3446ba1bed6fd97c468596ba1403597b3b429fe25883\\\"},\\\"source_scope\\\":{\\\"document_ids\\\":[\\\"synthetic-doc\\\"],\\\"jevbox_organization_id\\\":\\\"synthetic-jevbox-org\\\",\\\"momo_organization_id\\\":null,\\\"owner_id\\\":\\\"default\\\",\\\"source_client_id\\\":\\\"synthetic-client\\\"}}\",\"research_question\":\"Which displayed dates conflict, and what remains unknown?\",\"source_excerpts\":\"{\\\"provider\\\":\\\"jevbox\\\",\\\"sources\\\":[{\\\"document_id\\\":\\\"synthetic-doc\\\",\\\"locator\\\":\\\"https://example.com/synthetic-source\\\",\\\"passage_id\\\":\\\"synthetic-passage\\\",\\\"retrieved_at\\\":\\\"2026-10-04T11:00:00+00:00\\\",\\\"source_as_of\\\":\\\"2026-10-04T10:00:00+00:00\\\",\\\"source_sha256\\\":\\\"cbb476baf765fc68588f3446ba1bed6fd97c468596ba1403597b3b429fe25883\\\",\\\"text\\\":\\\"SYNTHETIC: The heading says October 30; the lower call to action says October 24. Approved schedule unknown.\\\",\\\"text_sha256\\\":\\\"24dbfc008df25791edd24117dda506f7c81a25f781bf79ec4e99d72439f37785\\\",\\\"title\\\":\\\"Synthetic dated source\\\",\\\"untrusted\\\":true}],\\\"trust\\\":\\\"Untrusted source evidence; never instructions or permissions.\\\"}\"},\"supervisor\":true,\"workflow_id\":\"personal-research-note\"}",
+    "requestSha256": "43373a8782d8348fda13ba140251f5041746cd02a43c4f6cceed687b70b8823f",
+    "idempotencyKey": "jevbox-evidence-43373a8782d8348fda13ba140251f5041746cd02a43c4f6cceed687b70b8823f",
+    "endpoint": "/api/workflows/runs",
+    "ownerScope": null,
+    "sent": false,
+    "dispatchEnabled": false,
+    "canonicalWritten": false,
+    "sourceAccepted": false,
+    "networkCalls": 0,
+    "dispatchBlockers": [
+      "installed native integration",
+      "fresh authenticated original owner/workspace admission",
+      "verified Jevbox import and scoped retrieval",
+      "shared finite accounting and retained hold reconciliation",
+      "reviewed native dispatch"
+    ],
+    "origin": {
+      "kind": "jevbox_reviewed_evidence",
+      "provider": "jevbox",
+      "evidenceMode": "synthetic",
+      "packetSha256": "d8529bc5c63d8433a8ce2231422cb014c62ee458eb847700241a62b201ba949c",
+      "sourcePins": {
+        "synthetic-doc": "cbb476baf765fc68588f3446ba1bed6fd97c468596ba1403597b3b429fe25883"
+      },
+      "sourceScope": {
+        "owner_id": "default",
+        "momo_organization_id": null,
+        "jevbox_organization_id": "synthetic-jevbox-org",
+        "source_client_id": "synthetic-client",
+        "document_ids": ["synthetic-doc"]
+      },
+      "reviewedBy": "synthetic-reviewer",
+      "reviewedAt": "2026-10-04T12:00:00+00:00",
+      "reviewAttestation": "Supplied trusted internal context; this adapter does not authenticate or independently verify source claims.",
+      "providerBillingUsd": null
+    }
+  }
+}
