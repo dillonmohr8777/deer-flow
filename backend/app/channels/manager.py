@@ -1307,6 +1307,12 @@ class ChannelManager:
 
     def _resolve_session_layer(self, msg: InboundMessage) -> tuple[dict[str, Any], dict[str, Any]]:
         channel_layer = _as_dict(self._channel_sessions.get(msg.channel_name))
+        if msg.channel_name == "slack":
+            # Scope operator-provided routing to both workspace and conversation.
+            team_id = str((msg.metadata or {}).get("team_id") or "")
+            chats = _as_dict(channel_layer.get("chats"))
+            if team_id and msg.chat_id:
+                channel_layer = _merge_dicts(channel_layer, _as_dict(chats.get(f"{team_id}:{msg.chat_id}")))
         users_layer = _as_dict(channel_layer.get("users"))
         user_layer = _as_dict(users_layer.get(msg.user_id))
         return channel_layer, user_layer
