@@ -49,6 +49,24 @@ def _parse(value: bytes | str) -> Any:
     return json.loads(value, object_pairs_hook=closed_pairs, parse_constant=invalid_constant)
 
 
+def _worker_failure(result: dict, job_id: str) -> Exception:
+    # A failure envelope is not receipt-verified, so it counts as a known outcome only when the worker
+    # states a capped, labeled cost. Zero cost is a pre-spend refusal; anything unclear stays uncertain.
+    from app.gateway.workflow_adapters import AdapterError
+
+    cost = result.get("cost_usd")
+    if result.get("cost_known") is not True or type(cost) not in (int, float) or not math.isfinite(cost) or not 0 <= cost <= MAX_BUDGET:
+        return AdapterError("claude_sdk_outcome_uncertain")
+    if cost == 0:
+        return AdapterError("claude_sdk_worker_refused")
+    usage = result.get("usage")
+    token_keys = ("input_tokens", "output_tokens", "cache_creation_input_tokens", "cache_read_input_tokens")
+    if result.get("job_id") != job_id or not isinstance(usage, dict) or any(type(usage.get(key)) is not int or not 0 <= usage[key] <= 100_000_000 for key in token_keys):
+        return AdapterError("claude_sdk_outcome_uncertain")
+    totals = {"input_tokens": usage["input_tokens"] + usage["cache_creation_input_tokens"] + usage["cache_read_input_tokens"], "output_tokens": usage["output_tokens"], "cost": cost}
+    return AdapterError("claude_sdk_worker_failed", usage=totals, served_model=MODEL)
+
+
 class ClaudeSDKBridge:
     def __init__(self, *, transport: httpx.AsyncBaseTransport | None = None):
         self.enabled = os.environ.get("MOMOBOT_CLAUDE_SDK_ENABLED", "").lower() in {"1", "true", "yes"}
@@ -128,8 +146,7 @@ class ClaudeSDKBridge:
             async with asyncio.timeout(HTTP_DEADLINE):
                 async with httpx.AsyncClient(transport=self.transport, trust_env=False, follow_redirects=False, timeout=httpx.Timeout(95, connect=5)) as client:
                     async with client.stream("POST", self.url, content=raw, headers={"Authorization": "Bearer " + self._token, "Content-Type": "application/json"}) as response:
-                        if response.status_code != 200:
-                            raise ValueError
+                        status = response.status_code
                         chunks = bytearray()
                         async for chunk in response.aiter_bytes():
                             chunks.extend(chunk)
@@ -138,6 +155,10 @@ class ClaudeSDKBridge:
             result = _parse(bytes(chunks))
         except Exception:
             raise AdapterError("claude_sdk_outcome_uncertain") from None
+        if status in (200, 400) and isinstance(result, dict) and result.get("ok") is False:
+            raise _worker_failure(result, job_id)
+        if status != 200:
+            raise AdapterError("claude_sdk_outcome_uncertain")
         try:
             usage = result["usage"]
             token_keys = ("input_tokens", "output_tokens", "cache_creation_input_tokens", "cache_read_input_tokens")
