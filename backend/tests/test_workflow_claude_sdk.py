@@ -425,6 +425,83 @@ async def test_legacy_worker_rejects_new_one_attempt_contract_without_fallback(m
         assert job["max_attempts"] == 1
         return httpx.Response(200, json={"ok": False, "error": "invalid_job_fields", "cost_usd": 0.0, "cost_known": True})
 
-    with pytest.raises(AdapterError, match="claude_sdk_receipt_shape_invalid"):
+    with pytest.raises(AdapterError, match="claude_sdk_worker_refused"):
         await configured(monkeypatch, handler).call(request(), context())
     assert len(requests) == 1
+
+
+@pytest.mark.asyncio
+async def test_paid_worker_failure_keeps_labeled_actual_cost(monkeypatch):
+    calls = []
+
+    def handler(req):
+        job = json.loads(req.content)
+        calls.append(job)
+        envelope = dict(
+            job_id=job["job_id"],
+            ok=False,
+            error="output_validation_failed",
+            outcome="failed",
+            attempts=1,
+            models=[MODEL],
+            observed_models=[MODEL],
+            requested_model=MODEL,
+            usage={"input_tokens": 10, "output_tokens": 6, "cache_creation_input_tokens": 2, "cache_read_input_tokens": 3},
+            cost_usd=0.002,
+            cost_known=True,
+            cost_is_estimate=True,
+            result=None,
+        )
+        return httpx.Response(400, json=envelope)
+
+    with pytest.raises(AdapterError, match="claude_sdk_worker_failed") as failed:
+        await configured(monkeypatch, handler).call(request(), context())
+    assert failed.value.usage == {"input_tokens": 15, "output_tokens": 6, "cost": 0.002}
+    assert failed.value.served_model == MODEL
+    assert len(calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_zero_cost_worker_refusal_is_known_not_uncertain(monkeypatch):
+    def handler(_req):
+        return httpx.Response(400, json={"ok": False, "error": "quiet_hours", "cost_usd": 0.0, "cost_known": True})
+
+    with pytest.raises(AdapterError, match="claude_sdk_worker_refused") as refused:
+        await configured(monkeypatch, handler).call(request(), context())
+    assert refused.value.usage is None
+
+
+@pytest.mark.parametrize("change", [dict(cost_known=False), dict(job_id="wrong"), dict(cost_usd=0.031), dict(usage={"input_tokens": True, "output_tokens": 6, "cache_creation_input_tokens": 2, "cache_read_input_tokens": 3})])
+@pytest.mark.asyncio
+async def test_unverifiable_failure_envelope_stays_uncertain(monkeypatch, change):
+    calls = []
+
+    def handler(req):
+        calls.append(req)
+        job = json.loads(req.content)
+        envelope = dict(
+            job_id=job["job_id"],
+            ok=False,
+            error="output_validation_failed",
+            cost_usd=0.002,
+            cost_known=True,
+            cost_is_estimate=True,
+            usage={"input_tokens": 10, "output_tokens": 6, "cache_creation_input_tokens": 2, "cache_read_input_tokens": 3},
+            result=None,
+        )
+        return httpx.Response(400, json={**envelope, **change})
+
+    with pytest.raises(AdapterError, match="claude_sdk_outcome_uncertain"):
+        await configured(monkeypatch, handler).call(request(), context())
+    assert len(calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_server_error_envelope_is_not_trusted(monkeypatch):
+    def handler(req):
+        job = json.loads(req.content)
+        envelope = dict(job_id=job["job_id"], ok=False, error="unavailable", cost_usd=0.002, cost_known=True, usage={"input_tokens": 1, "output_tokens": 1, "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0})
+        return httpx.Response(503, json=envelope)
+
+    with pytest.raises(AdapterError, match="claude_sdk_outcome_uncertain"):
+        await configured(monkeypatch, handler).call(request(), context())
