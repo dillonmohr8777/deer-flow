@@ -32,7 +32,10 @@ must enforce that field before inference and suppress its optional Sonnet
 correction. Older workers reject the extra field before inference; Gateway
 fails closed without a compatibility fallback or retry. The one-attempt
 protocol is included in the pinned configuration hash. Any multi-attempt or
-wrong-model response remains uncertain and reserved. Successful receipts require exactly one actual observed
+wrong-model response remains uncertain and reserved. A worker failure envelope (HTTP 200 or 400 with `ok:false`)
+is a known outcome only when it reports `cost_known:true`, a finite cost no higher than $0.03, the matching job ID
+and complete token fields. Paid failures record `claude_sdk_worker_failed` with that usage; zero-cost refusals record
+`claude_sdk_worker_refused`; anything else stays uncertain. Successful receipts require exactly one actual observed
 `claude-haiku-5-5` model, known finite estimated cost, complete token fields,
 no external tools, a terminal/session receipt and readback of the **exact
 JSONL line and matching metadata/output hash** from the worker ledger. Ledger
