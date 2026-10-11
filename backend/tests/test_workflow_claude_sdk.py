@@ -75,7 +75,9 @@ def response(job, output=None, tools_used=None, usage=None):
 
 @pytest.fixture(autouse=True)
 def receipts(tmp_path, monkeypatch):
-    monkeypatch.setenv("MOMOBOT_CLAUDE_SDK_RECEIPTS", str(tmp_path / "worker-receipts.jsonl"))
+    path = tmp_path / "worker-receipts.jsonl"
+    path.touch()  # the route stays unavailable until the ledger exists, as the pilot runbook requires
+    monkeypatch.setenv("MOMOBOT_CLAUDE_SDK_RECEIPTS", str(path))
 
 
 def configured(monkeypatch, handler):
@@ -518,3 +520,55 @@ async def test_server_error_envelope_is_not_trusted(monkeypatch):
 
     with pytest.raises(AdapterError, match="claude_sdk_outcome_uncertain"):
         await configured(monkeypatch, handler).call(request(), context())
+
+
+@pytest.mark.asyncio
+async def test_zero_cost_refusal_that_reports_tokens_stays_uncertain(monkeypatch):
+    def handler(req):
+        job = json.loads(req.content)
+        envelope = dict(job_id=job["job_id"], ok=False, error="output_validation_failed", cost_usd=0.0, cost_known=True, usage={"input_tokens": 10, "output_tokens": 6, "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0})
+        return httpx.Response(400, json=envelope)
+
+    with pytest.raises(AdapterError, match="claude_sdk_outcome_uncertain"):
+        await configured(monkeypatch, handler).call(request(), context())
+
+
+@pytest.mark.asyncio
+async def test_missing_ledger_is_unavailable_before_any_payment(monkeypatch):
+    calls = []
+
+    def handler(req):
+        calls.append(req)
+        return httpx.Response(200)
+
+    bridge = configured(monkeypatch, handler)
+    Path(os.environ["MOMOBOT_CLAUDE_SDK_RECEIPTS"]).unlink()
+    assert bridge.capability()["available"] is False
+    with pytest.raises(AdapterError, match="claude_sdk_unavailable"):
+        await bridge.call(request(), context())
+    assert calls == []
+
+
+@pytest.mark.asyncio
+async def test_overlapping_runs_queue_for_the_one_worker(monkeypatch):
+    monkeypatch.setattr("app.gateway.workflow_claude_sdk._WORKER_LOCK", asyncio.Lock())
+    active = peak = 0
+
+    async def handler(_req):
+        nonlocal active, peak
+        active += 1
+        peak = max(peak, active)
+        await asyncio.sleep(0.01)
+        active -= 1
+        return httpx.Response(500)
+
+    bridge = configured(monkeypatch, handler)
+    results = await asyncio.gather(*(bridge.call(request(), dict(context(), run_id=f"run{index}")) for index in range(2)), return_exceptions=True)
+    assert all(isinstance(result, AdapterError) for result in results)
+    assert peak == 1
+
+
+def test_budget_refusals_are_recognized_sdk_failure_codes():
+    from deerflow.workflows.engine import SDK_FAILURE_CODES
+
+    assert {"run_model_budget_exhausted", "daily_model_budget_exhausted"} <= SDK_FAILURE_CODES

@@ -28,6 +28,8 @@ MAX_CALLS = 3
 MAX_ATTEMPTS = 1
 HTTP_DEADLINE = 95
 SHA = re.compile(r"[0-9a-f]{64}\Z")
+# The worker runs one job at a time and refuses overlaps with worker_busy, so runs queue here instead of failing.
+_WORKER_LOCK = asyncio.Lock()
 
 
 def _json(value: Any) -> str:
@@ -51,16 +53,19 @@ def _parse(value: bytes | str) -> Any:
 
 def _worker_failure(result: dict, job_id: str) -> Exception:
     # A failure envelope is not receipt-verified, so it counts as a known outcome only when the worker
-    # states a capped, labeled cost. Zero cost is a pre-spend refusal; anything unclear stays uncertain.
+    # states a capped, labeled cost. Zero cost with no tokens is a pre-spend refusal; zero cost with tokens
+    # cannot prove nothing was billed, so it stays uncertain. Anything unclear stays uncertain.
     from app.gateway.workflow_adapters import AdapterError
 
     cost = result.get("cost_usd")
     if result.get("cost_known") is not True or type(cost) not in (int, float) or not math.isfinite(cost) or not 0 <= cost <= MAX_BUDGET:
         return AdapterError("claude_sdk_outcome_uncertain")
-    if cost == 0:
-        return AdapterError("claude_sdk_worker_refused")
     usage = result.get("usage")
     token_keys = ("input_tokens", "output_tokens", "cache_creation_input_tokens", "cache_read_input_tokens")
+    if cost == 0:
+        if isinstance(usage, dict) and any(usage.get(key) for key in token_keys):
+            return AdapterError("claude_sdk_outcome_uncertain")
+        return AdapterError("claude_sdk_worker_refused")
     if result.get("job_id") != job_id or not isinstance(usage, dict) or any(type(usage.get(key)) is not int or not 0 <= usage[key] <= 100_000_000 for key in token_keys):
         return AdapterError("claude_sdk_outcome_uncertain")
     totals = {"input_tokens": usage["input_tokens"] + usage["cache_creation_input_tokens"] + usage["cache_read_input_tokens"], "output_tokens": usage["output_tokens"], "cost": cost}
@@ -86,8 +91,14 @@ class ClaudeSDKBridge:
         self.configuration_sha256 = hashlib.sha256(_json([self.url, str(self.receipts), MODEL, MAX_BUDGET, MAX_CALLS, SOURCE_WORKFLOW, {"max_attempts": MAX_ATTEMPTS}]).encode()).hexdigest()
 
     def capability(self) -> dict:
-        available = self.enabled and self.safe_url and bool(self._token) and self.receipts is not None
+        available = self.enabled and self.safe_url and bool(self._token) and self._receipts_ready()
         return {"available": available, "detail": "existing_sdk_worker; pinned_synthetic_fixture; no_tools; transport_not_verified" if available else "claude_sdk_disabled_or_unconfigured"}
+
+    def _receipts_ready(self) -> bool:
+        # Readback can only succeed for a regular, readable ledger reached without symlinks, so refuse before paying.
+        if self.receipts is None or any(path.is_symlink() for path in (self.receipts, *self.receipts.parents)):
+            return False
+        return self.receipts.is_file() and os.access(self.receipts, os.R_OK)
 
     def _readback(self, result: dict) -> None:
         if self.receipts is None or any(path.is_symlink() for path in (self.receipts, *self.receipts.parents)):
@@ -112,6 +123,11 @@ class ClaudeSDKBridge:
             raise ValueError
 
     async def call(self, data: dict, context: dict | None) -> dict:
+        # Readback stays inside the lock: a queued run must not append to the ledger while another run reads it.
+        async with _WORKER_LOCK:
+            return await self._call_once(data, context)
+
+    async def _call_once(self, data: dict, context: dict | None) -> dict:
         from app.gateway.workflow_adapters import AdapterError
 
         if not self.capability()["available"]:

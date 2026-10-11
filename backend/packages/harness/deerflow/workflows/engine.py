@@ -50,7 +50,8 @@ SDK_FAILURE_CODES = {
     "model_route_changed",
     "provider_receipt_invalid",
     "owner_authorization_changed",
-    "run_call_budget_exhausted",
+    "run_model_budget_exhausted",
+    "daily_model_budget_exhausted",
 }
 _RUN_LOCKS: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
 
