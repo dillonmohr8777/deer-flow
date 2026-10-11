@@ -529,14 +529,29 @@ def _stub_app_config():
 
 
 def _make_test_app(tmp_path: Path):
-    """Create a FastAPI app with the agents router, patching paths to tmp_path."""
+    """Create a FastAPI app with the agents router, patching paths to tmp_path.
+
+    The router's resource gate needs an authenticated caller with threads permissions, so the app stamps the same stub auth context the memory router tests use.
+    """
+    from _router_auth_helpers import make_authed_test_app
+
+    from app.gateway.routers.agents import router
+
+    app = make_authed_test_app()
+    app.include_router(router)
+    return app
+
+
+def test_agent_routes_refuse_unauthenticated_callers() -> None:
     from fastapi import FastAPI
 
     from app.gateway.routers.agents import router
 
     app = FastAPI()
     app.include_router(router)
-    return app
+    with TestClient(app) as client:
+        assert client.get("/api/agents").status_code == 401
+        assert client.post("/api/agents", json={"name": "reviewer"}).status_code == 401
 
 
 @pytest.fixture()

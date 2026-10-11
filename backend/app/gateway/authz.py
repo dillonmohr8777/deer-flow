@@ -770,6 +770,28 @@ def require_permission(
     return decorator
 
 
+def resource_permission_dependency(resource: str):
+    """Enforce HTTP read/write/delete scopes for request-free CRUD handlers.
+
+    Router dependencies run with the real HTTP request even when a handler's
+    ``request`` parameter is its Pydantic body. Reuse the normal authorization
+    check rather than treating route admission as a grant of every action.
+    """
+    checks = {}
+    for action in ("read", "write", "delete"):
+
+        async def permitted(request: Request) -> None:
+            return None
+
+        checks[action] = require_permission(resource, action)(permitted)
+
+    async def dependency(request: Request) -> None:
+        action = "read" if request.method in ("GET", "HEAD", "OPTIONS") else "delete" if request.method == "DELETE" else "write"
+        await checks[action](request=request)
+
+    return dependency
+
+
 def require_entitlement(
     key: str,
     *,

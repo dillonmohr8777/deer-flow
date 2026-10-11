@@ -1,5 +1,9 @@
 ### Configuration System
 
+Extensions loader failures report only path and exception class and suppress
+the original exception chain. Pydantic validation may render already-resolved
+environment credentials, so never embed its full exception in logs or errors.
+
 The user-profile management API stores ``USER.md`` under the active storage
 bucket at ``{base_dir}/users/{storage_user_id}/USER.md``. Private users resolve
 to their own bucket; members of an active shared workspace resolve to that
