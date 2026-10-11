@@ -41,6 +41,8 @@ SDK_FAILURE_CODES = {
     "claude_sdk_ledger_readback_failed",
     "claude_sdk_output_json_invalid",
     "claude_sdk_output_schema_invalid",
+    "claude_sdk_worker_failed",
+    "claude_sdk_worker_refused",
     "provider_token_limit_exceeded",
     "run_token_budget_exhausted",
     "uncertain_provider_attempt",
