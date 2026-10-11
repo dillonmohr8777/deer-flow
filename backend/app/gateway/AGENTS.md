@@ -235,25 +235,19 @@ Batch workers pin `app.state.extensions`; never persist snapshots.
 
 Managed OpenAI retains owner/uncertain admissions: `backend/docs/OPENAI_AGENTS_APP.md`. Disabled Browserbase performs no I/O.
 
-Workflow routes (`routers/workflows.py`) require session auth, run permissions,
-CSRF and expected actor/org/storage scope; PATs stay denied. Paid create/resume
-uses the entitlement bridge; workers recheck membership, storage principal and
-`runs:create` before I/O.
-`workflow_service.py` owns its private SQLite job/attempt ledger, process lease,
-finite queue and immutable hash-checked artifacts. It consumes the existing
-native RunManager, thread/event stores and shared checkpointer; do not create a
-second client registry or canonical task queue. Native rows use a private
-owner in NULL-org quarantine; legacy journals abort pending migration. Replay retains
-native identity, journal once by call ID, and use per-native usage
-deltas while the logical job retains cumulative totals. Uncertain paid attempts
-fail closed on resume. Cancellation must drain admission and native cleanup.
+Workflow routes require session/CSRF/run permissions and expected
+actor/org/storage scope; deny PATs. Paid create/resume uses entitlement;
+reauthorize membership/storage/runs:create before I/O. WorkflowService owns
+private SQLite attempts, exclusive lease, finite queue and immutable artifacts.
+Reuse RunManager/thread/event stores/checkpointer; no client registry/task queue.
+Native rows use private-owner NULL-org quarantine; legacy migration fails closed.
+Replay preserves native identity, call-ID journaling and per-native usage deltas
+with cumulative job totals. Uncertain attempts cannot resume; cancel drains.
 
-`workflow_adapters.py` brokers all six finite framework adapters through one
-server-selected model/token budget. Stagehand inference uses that same meter,
-one owned Browserbase session and an operator-fixed top-level `extensionId`;
-rendered public snapshots expose no live target-origin interaction. Provider
-keys and `MOMOBOT_STAGEHAND_EXTENSION_ID` are Gateway-only. Availability is not
-accepted output or installation; billed cost remains unknown unless receipted.
-Details and scoped tests: [WORKFLOWS.md](../../docs/WORKFLOWS.md).
+Existing adapters share model/token admission. Stagehand uses that meter,
+one owned Browserbase session, fixed extensionId and inert public snapshots.
+Keys stay Gateway-only; availability is not acceptance. HAI stays disabled.
 
-HAI stays disabled; see WORKFLOWS.md.
+Default-off claude_sdk admits one pinned synthetic line-edit fixture, no private
+sources/external tools. Verify exact worker ledger/output hashes; no uncertain
+replay. Three requests at $0.03 each. Details/tests: [WORKFLOWS.md](../../docs/WORKFLOWS.md).

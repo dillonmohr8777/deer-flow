@@ -35,3 +35,11 @@ real SOP quality or new provider execution. The optional test-only
 use it to override production worker paths.
 
 Native model identity is server selected and checkpoint bound. The default/legacy identity remains OpenAI; an opt-in HAI run must use Low for planner, supervisor plan reviewer, maker and checker and cannot change provider on resume. Keep this package provider-neutral: Gateway owns its protected route, original currency admission and actual model/usage receipts. Synthetic HAI tests do not authorize real dispatch.
+
+The additional `claude_sdk` framework admits `claude-haiku-5-5` as a server
+identity. Existing nondefault-model planner schemas permit only Low, so neither
+planner nor maker can choose a higher workflow effort. This label is not proof
+of SDK reasoning effort: Gateway receipts report effort_verified=false and
+observed_effort=null. Gateway alone restricts exact synthetic fixture inputs,
+configuration/source pins, three paid attempts, no tools and receipt readback;
+keep Claude worker/HTTP imports outside this provider-neutral kernel.

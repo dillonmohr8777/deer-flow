@@ -24,12 +24,32 @@ from deerflow.workflows.catalog import MAX_OUTPUT_BYTES, WorkflowDefinition, val
 from deerflow.workflows.errors import WorkflowCallbackError, WorkflowInputError, WorkflowOutputError, WorkflowResumeError, WorkflowReviewError
 
 MODEL = "gpt-6.1-sol"
-SERVER_MODELS = {MODEL, "glm-5.3-uncensored"}
+SERVER_MODELS = {MODEL, "glm-5.3-uncensored", "claude-haiku-5-5"}
 MAX_MODEL_CALLS = 5
 MAX_SUPERVISOR_MODEL_CALLS = 6
 MAX_PROMPT_BYTES = 131_072
 MAX_CONTEXT_BYTES = 72_000
-FRAMEWORKS = ("langgraph", "crewai", "mastra", "deepagents", "agno", "agentkit")
+FRAMEWORKS = ("langgraph", "crewai", "mastra", "deepagents", "agno", "agentkit", "claude_sdk")
+SDK_FAILURE_CODES = {
+    "claude_sdk_unavailable",
+    "claude_sdk_source_denied",
+    "claude_sdk_model_denied",
+    "claude_sdk_context_too_large",
+    "claude_sdk_outcome_uncertain",
+    "claude_sdk_receipt_uncertain",
+    "claude_sdk_receipt_shape_invalid",
+    "claude_sdk_ledger_readback_failed",
+    "claude_sdk_output_json_invalid",
+    "claude_sdk_output_schema_invalid",
+    "provider_token_limit_exceeded",
+    "run_token_budget_exhausted",
+    "uncertain_provider_attempt",
+    "model_policy_denied",
+    "model_route_changed",
+    "provider_receipt_invalid",
+    "owner_authorization_changed",
+    "run_call_budget_exhausted",
+}
 _RUN_LOCKS: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
 
 
@@ -228,7 +248,10 @@ class WorkflowEngine:
                 result = await model_call(worker_id=worker["id"], role=role, prompt=prompt, output_schema=schema, effort=effort, model=model, continuation=copy.deepcopy(worker["history"][-4:]), call_id=call_id)
             except asyncio.CancelledError:
                 raise
-            except Exception:
+            except Exception as error:
+                code = getattr(error, "code", None)
+                if framework == "claude_sdk" and isinstance(code, str) and code in SDK_FAILURE_CODES:
+                    raise WorkflowCallbackError(code) from None
                 raise WorkflowCallbackError("workflow_model_call_failed") from None
             _validate_receipt(result, effort=effort, model=model)
             output = _validate_output(schema, result.get("output"))

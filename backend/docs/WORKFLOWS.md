@@ -1,5 +1,88 @@
 # MomoBot workflows
 
+## Opt-in Claude SDK synthetic pilot
+
+`framework: claude_sdk` adds an explicitly selected route to the existing
+isolated Claude Agent SDK localhost worker. It is disabled by default; normal
+OpenAI/HAI and framework paths retain their previous behavior. The existing
+WorkflowService, RunManager, checkpointer, authority and immutable artifact
+store own admission and acceptance. No new service, scheduler, client registry
+or canonical task queue is created.
+
+The only admitted pilot is `manuscript-line-edit` with its **exact current
+catalog example_inputs**. Gateway hashes and pins those fictional inputs and
+rechecks them before paid I/O and artifact writing. Different text, a different
+recipe, supervisor mode, browser sources and private/client jobs are refused.
+No caller-provided classification flag can bypass this gate. SDK external
+tools and source_refs/failed_sources must be empty.
+
+Server-only settings are `MOMOBOT_CLAUDE_SDK_ENABLED=true`, an uncredentialed
+literal-loopback `MOMOBOT_CLAUDE_SDK_URL` ending in `/run` (default
+`http://127.0.0.1:18878/run`), existing authentication through
+`MOMOBOT_CLAUDE_SDK_TOKEN` or `WORKER_AUTH_TOKEN`, and required absolute
+`MOMOBOT_CLAUDE_SDK_RECEIPTS` pointing to the existing worker JSONL journal.
+Never put token values in commands, configuration files, artifacts or source.
+Installed/configured capability does not imply a working transport or an
+accepted output. Literal loopback, disabled environment proxies, no redirects,
+a 95-second total HTTP deadline and bounded request/response sizes apply.
+
+Each logical job admits at most three worker requests, each with a $0.03 SDK
+budget, a 90-second worker deadline and `max_attempts:1`. A compatible worker
+must enforce that field before inference and suppress its optional Sonnet
+correction. Older workers reject the extra field before inference; Gateway
+fails closed without a compatibility fallback or retry. The one-attempt
+protocol is included in the pinned configuration hash. Any multi-attempt or
+wrong-model response remains uncertain and reserved. Successful receipts require exactly one actual observed
+`claude-haiku-5-5` model, known finite estimated cost, complete token fields,
+no external tools, a terminal/session receipt and readback of the **exact
+JSONL line and matching metadata/output hash** from the worker ledger. Ledger
+symlinks, partial/invalid lines, missing receipts, changed content and journals
+above the 8 MiB read bound fail closed. Receipt persistence is repaired from
+a previously validated durable call receipt without another paid request.
+The SDK's internal `StructuredOutput` formatter is permitted only as the
+exact sole `tools_used` entry, validated separately by the worker; it grants
+no external action authority and is recorded as `internal_format_tools`.
+
+The SDK's dollar/turn limits do not provide a hard per-call output-token ceiling.
+Gateway allocates up to 4,096 output tokens to an SDK request, clipped to the
+remaining unchanged 8,192-token logical-job ceiling; SDK formatter usage counts
+in actual totals. Gateway checks actual tokens, includes cache-creation/read tokens in its input
+totals, records known usage/cost on token overage and rejects acceptance. Dollar
+values remain estimates, not provider invoices. Low is the workflow's routing
+label; the current worker does not verify SDK effort, so each SDK receipt
+contains `effort_verified:false` and `observed_effort:null`.
+
+The existing planner/producer/independent-verifier kernel performs its normal
+closed-schema, provenance and exact candidate-hash checks. Accepted immutable
+artifacts include all three SDK receipts and the pinned synthetic source hash.
+This verifies a fictional draft and transport/accounting, not client source
+truth, a Gmail draft, Slack delivery or a production installation.
+
+`scripts/verify_claude_sdk_workflow.py` is an explicit paid acceptance driver,
+requiring `--execute --state-dir <new absolute directory> --receipts <existing
+absolute worker journal>`. Authentication is injected by the caller through the
+existing environment route. It runs the real WorkflowService and native
+RunManager/thread/event implementations with isolated memory native stores and
+a new SQLite job/artifact ledger. It checks native usage/journal, artifact hash,
+idempotent admission and foreign-owner denial, and writes `acceptance.json`.
+The driver captures each bounded synthetic HTTP response body before adapter
+parsing in exclusive mode-0600 files under `sdk-responses/`, with a hash sidecar.
+It records no request bodies, headers or authentication, and refuses recognized
+credential echoes. This owner-only diagnostic capture does not exist in the
+production adapter; it allows a failed proof to be audited without guessing
+or another automatic paid request. Shape, JSON, schema, ledger and token errors
+are reported separately with fixed safe codes; proven known-cost schema/token
+failures retain actual usage in Gateway's terminal receipt.
+Known failed SDK costs carry `cost_is_estimate:true` in both the failed snapshot
+and native run-end usage, including a failure on the very first call.
+It sends no external tools or messages and never enables a production Gateway.
+
+The production Gateway and worker may run in separate container namespaces.
+Host-loopback pilot success does not prove container connectivity. Production
+activation requires a reviewed colocation/network-namespace and read-only
+receipt-journal mount plan; do not broaden the hostname allowlist to bypass
+that boundary or enable flags in the live Gateway as part of this pilot.
+
 The authenticated `/workspace/workflows` room and Mac workbench client use the
 existing Gateway runtime. The catalog contains 100 concrete Momentum marketing,
 operations and development recipes, plus 20 personal writing, music, research,
