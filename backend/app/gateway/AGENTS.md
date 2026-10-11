@@ -1,4 +1,4 @@
-### Gateway
+### Gateway API (`app/gateway/`)
 
 Read [security](../../docs/SECURITY_HARDENING.md).
 
@@ -16,7 +16,7 @@ handler and off the event loop; cancellation drains owned workers before
 propagating. Backend `close()` must be quick or internally bounded. Budget its
 configured flush timeout, close, other hooks, and each extension service's
 30-second `stop()` timeout in the pod grace period. Drain `stop_services()`
-across host cancellation before later runtime resources unwind.
+across host cancellation before later resources unwind.
 
 `conversation_access.py` binds its opt-in read-only tool only to explicit
 `conversation_references` plus effective `runs:read`; never derive grants from
@@ -27,11 +27,11 @@ Request dependency; callers still own authorization, and non-text/internal
 content stays hidden. `RunCreateRequest` accepts the list at top level or as
 `context.conversation_references` for LangGraph SDK clients: a before-validator
 lifts the context form, shares bounds/errors, and removes it before context
-merging; sending both is 422. `conversation_references_enabled()` is the single
+merging; sending both is 422. `conversation_references_enabled()` is the one
 configured predicate for admission and `/api/features`.
 
 FastAPI listens on 8001. `GET /health` is liveness; `GET /health/ready`
-concurrently probes the configured ORM engine and effective LangGraph
+concurrently probes the ORM engine and effective LangGraph
 checkpointer/Store under one bounded deadline. It resolves the legacy
 `checkpointer:` section or derives it from `database:` using the startup snapshot
 on `app.state`, serializes connection-opening probes behind a per-process gate,
