@@ -18,7 +18,7 @@ from app.gateway.upload_ingestion import ThreadUploadIngestionService, UnsafeFil
 from deerflow.config.app_config import AppConfig
 from deerflow.config.paths import get_paths
 from deerflow.runtime.user_context import get_effective_user_id
-from deerflow.sandbox.sandbox_provider import SandboxProvider, get_sandbox_provider
+from deerflow.sandbox.sandbox_provider import SandboxProvider, get_initialized_sandbox_provider, get_sandbox_provider
 from deerflow.uploads.manager import (
     UPLOAD_STAGING_PREFIX,
     UPLOAD_STAGING_SUFFIX,
@@ -56,6 +56,7 @@ __all__ = [
     "claim_unique_filename",
     "convert_file_to_markdown",
     "ensure_uploads_dir",
+    "get_initialized_sandbox_provider",
     "get_sandbox_provider",
     "normalize_filename",
     "router",
