@@ -109,9 +109,7 @@ test("persisted public capture reopens on phone and downloads actual evidence", 
   await page
     .getByRole("button", { name: "Capture pages", exact: true })
     .click();
-  await expect(
-    page.getByText("Capture completed · captured evidence retrieved"),
-  ).toBeVisible();
+  await expect(page.getByText(/Started .*, 1 page saved/)).toBeVisible();
   expect(receipts).toHaveLength(1);
   expect(receipts[0]).toMatch(/^[0-9a-f-]{36}$/);
   await page.getByText("Read captured text", { exact: true }).click();
@@ -151,10 +149,8 @@ test("persisted public capture reopens on phone and downloads actual evidence", 
     page.getByText(/Confirm the saved file in Downloads/),
   ).toBeVisible();
   await page.reload();
-  await page.getByRole("button", { name: "Official docs completed" }).click();
-  await expect(
-    page.getByText("Capture completed · captured evidence retrieved"),
-  ).toBeVisible();
+  await page.getByRole("button", { name: /^Official docs Captured/ }).click();
+  await expect(page.getByText(/Started .*, 1 page saved/)).toBeVisible();
   for (const width of [390, 768, 1440]) {
     await page.setViewportSize({ width, height: 900 });
     expect(
@@ -198,16 +194,22 @@ test("unverified quota and failed retrieval never become useful output", async (
   await expect(
     page.getByRole("button", { name: "Capture pages", exact: true }),
   ).toBeDisabled();
-  await page.getByRole("button", { name: "Official docs failed" }).click();
-  await expect(page.getByText("Capture failed", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: /^Official docs Failed/ }).click();
+  const receipt = page.getByRole("region", { name: "Capture evidence" });
+  await expect(receipt.getByText("Failed", { exact: true })).toBeVisible();
+  // The stored code is a reason in words, never the code itself.
+  await expect(receipt.getByText("public_destination_rejected")).toHaveCount(0);
+  await expect(
+    receipt.getByText("The capture could not be completed."),
+  ).toBeVisible();
   await expect(
     page.getByText("No page evidence has been retrieved."),
   ).toBeVisible();
-  await expect(page.getByText(/captured evidence retrieved/)).toHaveCount(0);
+  await expect(page.getByText(/page saved/)).toHaveCount(0);
   await expect(
     page.getByRole("button", { name: "Download evidence" }),
-  ).toBeDisabled();
-  await expect(page.getByText(/Cost unavailable/)).toBeVisible();
+  ).toHaveCount(0);
+  await expect(receipt.getByText("Not priced")).toBeVisible();
   expect(receipts).toHaveLength(0);
 });
 
@@ -246,9 +248,68 @@ test("transport ambiguity retries one receipt instead of admitting duplicate wor
   await page
     .getByRole("button", { name: "Retry same request", exact: true })
     .click();
-  await expect(
-    page.getByText("Capture completed · captured evidence retrieved"),
-  ).toBeVisible();
+  await expect(page.getByText(/Started .*, 1 page saved/)).toBeVisible();
   expect(receipts).toHaveLength(2);
   expect(receipts[0]).toBe(receipts[1]);
+});
+
+test("on a phone the page scrolls in its body and a tapped capture comes to hand", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await setup(page);
+  const older = Array.from({ length: 5 }, (_, index) => ({
+    ...SUMMARY,
+    id: `older-${index}`,
+    title: `Older capture ${index + 1}`,
+  }));
+  const failed = {
+    ...SUMMARY,
+    id: "failed",
+    title: "Client staging site",
+    status: "failed",
+    last_error: "private_network_blocked",
+  };
+  await page.route("**/api/browserbase/research", (route) =>
+    route.fulfill({ json: { data: [...older, SUMMARY, failed] } }),
+  );
+  await page.route("**/api/browserbase/research/owned-capture", (route) =>
+    route.fulfill({ json: DETAIL }),
+  );
+  await page.goto("/workspace/browser-research");
+  const heading = page.getByRole("heading", {
+    level: 1,
+    name: "Browser research",
+  });
+  await expect(heading).toBeVisible();
+  expect(
+    await heading.evaluate((node) => getComputedStyle(node).fontFamily),
+  ).toMatch(/Fraunces/);
+  // A failure names its reason in words on its row.
+  await expect(
+    page.getByText(
+      "That address points to a private network, so it was not opened.",
+    ),
+  ).toBeVisible();
+  await expect(page.getByText("private_network_blocked")).toHaveCount(0);
+  await page.getByRole("button", { name: /^Official docs Captured/ }).click();
+  const title = page.getByRole("heading", { level: 3, name: "Official docs" });
+  await expect(title).toBeFocused();
+  await expect(title).toBeInViewport();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollHeight - window.innerHeight,
+    ),
+  ).toBeLessThanOrEqual(0);
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth - window.innerWidth,
+    ),
+  ).toBeLessThanOrEqual(0);
+  for (const control of await page
+    .locator("main button:visible, main input:visible, main textarea:visible")
+    .all()) {
+    const box = await control.boundingBox();
+    expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
+  }
 });

@@ -87,7 +87,7 @@ for (const width of [1280, 390]) {
       "Knowledge · 1 base",
     );
     await page
-      .getByPlaceholder(/how can i assist you/i)
+      .getByPlaceholder(/describe the job|reply, or give the next step/i)
       .fill("Find the leave policy");
     await page.getByRole("button", { name: "Send" }).click();
     await expect.poll(() => submitted).toBeDefined();
@@ -114,7 +114,7 @@ for (const width of [1280, 390]) {
     await page.getByRole("button", { name: "Apply", exact: true }).click();
     submitted = undefined;
     await page
-      .getByPlaceholder(/how can i assist you/i)
+      .getByPlaceholder(/describe the job|reply, or give the next step/i)
       .fill("Do not search knowledge");
     await page.getByRole("button", { name: "Send" }).click();
     await expect.poll(() => submitted).toBeDefined();

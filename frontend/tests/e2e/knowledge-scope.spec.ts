@@ -79,7 +79,7 @@ test.describe("custom-agent knowledge scope", () => {
     await expect(trigger).not.toHaveClass(/bg-primary\/10/);
 
     await page
-      .getByPlaceholder(/how can i assist you/i)
+      .getByPlaceholder(/describe the job|reply, or give the next step/i)
       .fill("Find the policy");
     await page.getByRole("button", { name: "Send" }).click();
     await expect.poll(() => streamBody).toBeDefined();
@@ -155,7 +155,9 @@ test.describe("custom-agent knowledge scope", () => {
 
     await page.goto("/workspace/chats/new");
 
-    await expect(page.getByPlaceholder(/how can i assist you/i)).toBeVisible();
+    await expect(
+      page.getByPlaceholder(/describe the job|reply, or give the next step/i),
+    ).toBeVisible();
     const trigger = page.getByTestId("knowledge-scope-trigger");
     await expect(trigger).toHaveText("");
     await expect(trigger).toHaveAttribute("aria-pressed", "true");
@@ -168,7 +170,7 @@ test.describe("custom-agent knowledge scope", () => {
     await page.getByRole("button", { name: "Apply" }).click();
 
     await page
-      .getByPlaceholder(/how can i assist you/i)
+      .getByPlaceholder(/describe the job|reply, or give the next step/i)
       .fill("Find the policy");
     await page.getByRole("button", { name: "Send" }).click();
     await expect.poll(() => streamBody).toBeDefined();
@@ -209,7 +211,9 @@ test.describe("custom-agent knowledge scope", () => {
 
     await page.goto("/workspace/chats/new");
 
-    await expect(page.getByPlaceholder(/how can i assist you/i)).toBeVisible();
+    await expect(
+      page.getByPlaceholder(/describe the job|reply, or give the next step/i),
+    ).toBeVisible();
     await expect(page.getByTestId("knowledge-scope-trigger")).toHaveCount(0);
     expect(catalogRequests).toBe(0);
   });

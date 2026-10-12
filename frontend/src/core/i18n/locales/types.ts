@@ -149,6 +149,7 @@ export interface Translations {
     export: string;
     exportAsMarkdown: string;
     exportAsJSON: string;
+    chatActions: string;
     exportSuccess: string;
     exportFailed: string;
     regenerate: string;
@@ -292,6 +293,8 @@ export interface Translations {
   // Input Box
   inputBox: {
     placeholder: string;
+    replyPlaceholder: string;
+    messageLabel: string;
     disclaimer: string;
     createSkillPrompt: string;
     addAttachments: string;
@@ -423,6 +426,8 @@ export interface Translations {
     instructionsPlaceholder: string;
     instructionsByteCount: (used: number, max: number) => string;
     instructionsTooLong: (max: number) => string;
+    briefMissing: string;
+    archivedLede: string;
     instructionsSaved: string;
     instructionsSaveFailed: string;
     // Project page — Documents tab shelf (Phase 2 Slice E)
@@ -775,6 +780,7 @@ export interface Translations {
     nameStepTitle: string;
     nameStepHint: string;
     nameStepPlaceholder: string;
+    nameStepNext: string;
     nameStepContinue: string;
     nameStepInvalidError: string;
     nameStepAlreadyExistsError: string;
@@ -786,10 +792,11 @@ export interface Translations {
     save: string;
     saving: string;
     saveRequested: string;
-    saveHint: string;
+    chatStepEyebrow: string;
+    chatStepPlaceholder: string;
+    chatStepSaved: string;
     saveCommandMessage: string;
     agentCreatedPendingRefresh: string;
-    more: string;
     agentCreated: string;
     startChatting: string;
     backToGallery: string;
@@ -854,6 +861,7 @@ export interface Translations {
 
   // Chats
   chats: {
+    lede: string;
     deleteChat: string;
     deleteConfirm: (title: string) => string;
     deleteFailed: string;
@@ -869,12 +877,23 @@ export interface Translations {
     archiveDescription: string;
     undoArchive: string;
     noArchivedChats: string;
+    noArchivedChatsHint: string;
+    backToRecentChats: string;
+    loadingChats: string;
     noMatchingChats: string;
     loadChatsFailed: string;
     retryLoadChats: string;
     searchChats: string;
     branchLabel: (title: string, parentTitle: string) => string;
     loadMoreToSearch: string;
+    dayGroups: {
+      pinned: string;
+      today: string;
+      yesterday: string;
+      lastWeek: string;
+      earlierIn: (month: string) => string;
+      undated: string;
+    };
     loadingMore: string;
     loadOlderChats: string;
     pinChat: string;

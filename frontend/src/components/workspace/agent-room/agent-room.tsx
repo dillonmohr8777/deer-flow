@@ -25,6 +25,7 @@ import {
   type AgentRoomMessage,
   type AgentRoomMessageType,
 } from "@/core/agent-room";
+import { toDateTimeAttr } from "@/core/utils/datetime";
 import { cn } from "@/lib/utils";
 
 function messageTone(type: AgentRoomMessageType) {
@@ -65,7 +66,7 @@ function MessageRow({ message }: { message: AgentRoomMessage }) {
         </StatusTag>
         <time
           className="text-muted-foreground ml-auto text-xs"
-          dateTime={message.created_at}
+          dateTime={toDateTimeAttr(message.created_at)}
         >
           {formatMessageTime(message.created_at)}
         </time>

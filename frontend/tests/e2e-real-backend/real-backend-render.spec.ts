@@ -89,7 +89,9 @@ test.describe("real backend render (replay, no API key)", () => {
 
     await page.goto("/workspace/chats/new");
 
-    const textarea = page.getByPlaceholder(/how can i assist you/i);
+    const textarea = page.getByPlaceholder(
+      /describe the job|reply, or give the next step/i,
+    );
     await expect(textarea).toBeVisible({ timeout: 30_000 });
     await textarea.fill(PROMPT);
     await textarea.press("Enter");

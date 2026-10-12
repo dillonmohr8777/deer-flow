@@ -223,7 +223,9 @@ test("favorites a model without selecting it and persists the choice after refre
     (request) =>
       request.method() === "POST" && request.url().includes("/runs/stream"),
   );
-  const composer = page.getByPlaceholder(/how can i assist you/i);
+  const composer = page.getByPlaceholder(
+    /describe the job|reply, or give the next step/i,
+  );
   await composer.fill("Check the selected model.");
   await composer.press("Enter");
   expect((await submittedRun).postDataJSON().context.model_name).toBe(

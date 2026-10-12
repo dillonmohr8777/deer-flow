@@ -1,6 +1,13 @@
 "use client";
 
-import { Download, FileJson, FileText } from "lucide-react";
+import {
+  CalendarClock,
+  Download,
+  Ellipsis,
+  FileJson,
+  FileText,
+} from "lucide-react";
+import Link from "next/link";
 import { useCallback } from "react";
 import { toast } from "sonner";
 
@@ -14,13 +21,27 @@ import {
 import { useI18n } from "@/core/i18n/hooks";
 import { exportThread, type ThreadExportFormat } from "@/core/threads/export";
 import type { AgentThread } from "@/core/threads/types";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 import { useThread } from "./messages/context";
 import { Tooltip } from "./tooltip";
 
-export function ExportTrigger({ threadId }: { threadId: string }) {
+/**
+ * On phones the header can't hold every thread control at 44px beside a
+ * readable title, so the thread's Scheduled tasks link (`scheduledTasksHref`)
+ * folds into this menu and the menu becomes "Chat actions".
+ */
+export function ExportTrigger({
+  threadId,
+  scheduledTasksHref,
+}: {
+  threadId: string;
+  scheduledTasksHref?: string;
+}) {
   const { t } = useI18n();
   const { thread } = useThread();
+  const isMobile = useIsMobile();
+  const foldedHref = isMobile ? scheduledTasksHref : undefined;
 
   const messages = thread.messages;
 
@@ -46,33 +67,48 @@ export function ExportTrigger({ threadId }: { threadId: string }) {
     [messages, thread.values, threadId, t],
   );
 
-  if (messages.length === 0) {
+  const canExport = messages.length > 0;
+  if (!canExport && !foldedHref) {
     return null;
   }
+  const label = foldedHref ? t.common.chatActions : t.common.export;
 
   return (
     <DropdownMenu>
-      <Tooltip content={t.common.export}>
+      <Tooltip content={label}>
         <DropdownMenuTrigger asChild>
           <Button
-            aria-label={t.common.export}
+            aria-label={label}
             className="text-muted-foreground hover:text-foreground"
+            data-testid="export-trigger"
             variant="ghost"
           >
-            <Download />
-            <span className="hidden sm:inline">{t.common.export}</span>
+            {foldedHref ? <Ellipsis /> : <Download />}
+            <span className="hidden sm:inline">{label}</span>
           </Button>
         </DropdownMenuTrigger>
       </Tooltip>
       <DropdownMenuContent align="end">
-        <DropdownMenuItem onSelect={() => handleExport("markdown")}>
-          <FileText className="text-muted-foreground" />
-          <span>{t.common.exportAsMarkdown}</span>
-        </DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => handleExport("json")}>
-          <FileJson className="text-muted-foreground" />
-          <span>{t.common.exportAsJSON}</span>
-        </DropdownMenuItem>
+        {foldedHref && (
+          <DropdownMenuItem asChild>
+            <Link href={foldedHref}>
+              <CalendarClock className="text-muted-foreground" />
+              <span>{t.sidebar.scheduledTasks}</span>
+            </Link>
+          </DropdownMenuItem>
+        )}
+        {canExport && (
+          <>
+            <DropdownMenuItem onSelect={() => handleExport("markdown")}>
+              <FileText className="text-muted-foreground" />
+              <span>{t.common.exportAsMarkdown}</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => handleExport("json")}>
+              <FileJson className="text-muted-foreground" />
+              <span>{t.common.exportAsJSON}</span>
+            </DropdownMenuItem>
+          </>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );

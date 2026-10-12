@@ -51,6 +51,57 @@
   color: var(--paper-ink-muted);
 }
 
+/*
+ * Phones: a record list becomes paper slips on the desk, as Desk results
+ * and the Agents roster do. The selected slip is edged in royal.
+ */
+@media (max-width: 639px) {
+  .slips.slips {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    border: 0;
+  }
+
+  .slips.slips > li {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 2px 5px 3px 6px;
+    box-shadow: 0 1px 0 color-mix(in srgb, var(--foreground) 10%, transparent);
+  }
+
+  .slips.slips > li:nth-child(even) {
+    border-radius: 5px 2px 6px 3px;
+  }
+
+  .slips.slips > li:has([aria-pressed="true"]) {
+    border-color: var(--primary);
+    box-shadow: inset 0 0 0 1px var(--primary);
+  }
+
+  .slips > li > button {
+    padding: 0.875rem 1rem;
+    /* The slip carries the royal edge; the row's own edge would double it. */
+    box-shadow: none;
+    border-radius: inherit;
+    background: transparent;
+  }
+
+  /* One slip where rows cannot be direct list children (virtualized lists);
+     .slipAlt turns the cut the other way on every second slip. */
+  .slip.slip {
+    margin-bottom: 0.75rem;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 2px 5px 3px 6px;
+    box-shadow: 0 1px 0 color-mix(in srgb, var(--foreground) 10%, transparent);
+  }
+
+  .slipAlt.slipAlt {
+    border-radius: 5px 2px 6px 3px;
+  }
+}
+
 /* A pin is reserved for something that is doing work right now. */
 .pin {
   position: relative;
@@ -71,6 +122,66 @@
   letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--muted-foreground);
+}
+
+/*
+ * A ledger's day label (Chats) in the eyebrow voice. Wide lists already rule
+ * each row, so the label stands alone there; on phones, where chats are
+ * slips on the desk, a hairline runs on to the edge so the group reads as
+ * a filed section.
+ */
+.dayLabel {
+  margin: 1.5rem 0 0.25rem;
+  font-family: var(--m-font-text);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+
+.dayLabelFirst.dayLabelFirst {
+  margin-top: 0.25rem;
+}
+
+@media (max-width: 639px) {
+  .dayLabel {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin: 1rem 0 0.5rem;
+  }
+
+  .dayLabel::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: color-mix(in srgb, var(--border) 60%, transparent);
+  }
+}
+
+/* Outranks the paper page-heading rule, which would set it in Fraunces. */
+:global([data-treatment="paper"]) .page h2.dayLabel {
+  font-family: var(--m-font-text);
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  color: var(--paper-ink-muted);
+}
+
+/* An eyebrow is a label even when it is a section heading (OpenAI crew's
+   Your sessions), so it keeps the text voice under the same rule. */
+:global([data-treatment="paper"]) .page h2.eyebrow {
+  font-family: var(--m-font-text);
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  color: var(--paper-ink-muted);
+}
+
+@media (forced-colors: active) {
+  .dayLabel::after {
+    background: CanvasText;
+  }
 }
 
 .lede {
@@ -324,6 +435,37 @@
   line-height: 1;
 }
 
+/* DESIGN.md's 44px touch floor on phones (Scheduled tasks, Board and
+   Capability Center filters share this). Each group is one sideways rail,
+   so five 44px choices never wrap into three rows of chrome. */
+@media (max-width: 639px) {
+  .filters {
+    flex-wrap: nowrap;
+    /* Size to the column, never to the choices: without containment the
+       rail's full width leaks up through the ScrollArea's table and grid
+       parents and pushes the whole page past the gutter. */
+    contain: inline-size;
+    width: calc(100% + 10px);
+    overflow-x: auto;
+    scrollbar-width: none;
+    /* Room for the 3px focus ring, which the scroll box would clip. The
+       negative margin is sideways only: a block one would cancel the gap
+       the parent's space-y puts under the rail (unlayered beats Tailwind). */
+    margin-inline: -5px;
+    padding: 5px;
+  }
+
+  .filter,
+  .filterLabel {
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
+  .filter {
+    min-height: 44px;
+  }
+}
+
 .filter:hover {
   color: var(--foreground);
   background: var(--accent);
@@ -340,9 +482,29 @@
   border-radius: 2px;
 }
 
+/* Selected is royal (DESIGN.md), the same rule as a selected slip: the
+   pressed choice is a cream-hi scrap edged and lettered in royal (7.77:1),
+   never filled, so it cannot be mistaken for the page's primary button. */
 :global([data-treatment="paper"]) .filter[aria-pressed="true"] {
-  background: var(--paper-kraft);
-  box-shadow: none;
+  color: var(--paper-royal);
+  background: var(--paper-cream-hi);
+  box-shadow: inset 0 0 0 1px var(--paper-royal);
+}
+
+/* Forced colours drop box-shadows; an outline keeps the choice marked. */
+@media (forced-colors: active) {
+  .filter[aria-pressed="true"] {
+    outline: 2px solid;
+    outline-offset: -2px;
+  }
+
+  /* The pressed outline is unlayered and would hide the focus ring; a
+     focused filter keeps a ring outside the choice marking. */
+  .filter:focus-visible,
+  .filter[aria-pressed="true"]:focus-visible {
+    outline: 3px solid Highlight;
+    outline-offset: 2px;
+  }
 }
 
 /* ---------- Loading: working squares tick in steps(3) ---------- */
@@ -460,6 +622,8 @@
 .emptyArt {
   position: relative;
   flex: none;
+  /* Room for the top-left scrap, so it never crosses the gutter. */
+  margin-inline-start: 14px;
 }
 
 /* Positioned so it always wins the stacking order over the scraps behind

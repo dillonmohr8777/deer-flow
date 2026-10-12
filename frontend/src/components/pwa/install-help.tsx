@@ -113,6 +113,7 @@ export function InstallHelp() {
     <aside
       aria-label="MomoBot installation"
       className={styles.hint}
+      data-slot="install-hint"
       data-workspace={pathname?.startsWith("/workspace") || undefined}
     >
       <button

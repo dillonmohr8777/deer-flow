@@ -218,6 +218,34 @@ describe("DispatchBoard", () => {
     expect(onShowAll).toHaveBeenCalled();
   });
 
+  it("folds a long Stamped lane into a pile with a toggle for the rest", () => {
+    const done = Array.from({ length: 5 }, (_, i) =>
+      run({ run_id: `s${i}`, status: "success", thread_title: `Done ${i}` }),
+    );
+    board({ runs: done });
+    const list = document.getElementById("slips-stamped");
+    expect(list?.getAttribute("data-fold")).toBe("true");
+    // Every slip stays in the DOM; CSS hides the older ones on phones only.
+    expect(list?.querySelectorAll("li")).toHaveLength(5);
+    const toggle = screen.getByRole("button", {
+      name: "Show 2 older stamped slips",
+    });
+    expect(toggle.getAttribute("aria-controls")).toBe("slips-stamped");
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(toggle);
+    expect(list?.hasAttribute("data-fold")).toBe(false);
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    expect(toggle.textContent).toBe("Show fewer stamped slips");
+  });
+
+  it("leaves a short Stamped lane unfolded, with no toggle", () => {
+    board();
+    expect(
+      document.getElementById("slips-stamped")?.hasAttribute("data-fold"),
+    ).toBe(false);
+    expect(screen.queryByRole("button", { name: /stamped slip/ })).toBeNull();
+  });
+
   it("says when older work is not on the board", () => {
     board({ hasMore: true });
     expect(

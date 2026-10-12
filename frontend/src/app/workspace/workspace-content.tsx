@@ -17,6 +17,7 @@ import {
 } from "@/components/workspace/skip-to-content";
 import { WorkspaceSettingsDeepLink } from "@/components/workspace/workspace-settings-deep-link";
 import { WorkspaceSidebar } from "@/components/workspace/workspace-sidebar";
+import { WorkspaceTabBar } from "@/components/workspace/workspace-tab-bar";
 import { ExtensionPageBootstrap } from "@/core/extensions/hooks";
 import { UserPreferencesBoundary } from "@/core/settings/user-preferences-boundary";
 
@@ -75,6 +76,7 @@ export async function WorkspaceContent({
                 <ModelLoadErrorBanner gatewayUnavailable={gatewayUnavailable} />
                 {children}
               </div>
+              <WorkspaceTabBar />
             </SidebarInset>
           </SidebarProvider>
           <RetroResolve />

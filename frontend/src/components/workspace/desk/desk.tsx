@@ -8,6 +8,7 @@ import { useEffect, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { formatModelLabel } from "@/components/workspace/command-center/model-label";
+import { MomoAvatar } from "@/components/workspace/command-center/momo-avatar";
 import {
   EmptyState,
   ErrorState,
@@ -188,9 +189,18 @@ function Today({ tasks }: { tasks: ReturnType<typeof useScheduledTasks> }) {
                 : "No scheduled agent has run on this instance yet. Drafts and results land here after the first run."}
             </EmptyState>
           ) : (
-            <ul className={cn("divide-y border-b", pageStyles.rows)}>
+            <ul
+              className={cn("divide-y border-b", pageStyles.rows, styles.slips)}
+            >
               {outputs.map((task) => (
-                <li key={task.id} className={styles.row}>
+                <li
+                  key={task.id}
+                  className={styles.row}
+                  data-failed={task.last_error ? "true" : undefined}
+                >
+                  {task.last_error ? (
+                    <span className={styles.tear} aria-hidden="true" />
+                  ) : null}
                   <span className={styles.name}>
                     <span>{task.title}</span>
                     {task.last_error ? (
@@ -202,7 +212,9 @@ function Today({ tasks }: { tasks: ReturnType<typeof useScheduledTasks> }) {
                       {task.last_error ? "Failed" : "Ready for review"}
                     </StatusTag>
                   </span>
-                  <span className={cn(styles.cell, pageStyles.figure)}>
+                  <span
+                    className={cn(styles.cell, styles.when, pageStyles.figure)}
+                  >
                     {formatWhen(task.last_run_at!)}
                   </span>
                   <ReceiptLink task={task} label="Open receipt" />
@@ -445,14 +457,28 @@ function Agents({
                     ? summarizeTasks(tasksOfTemplate(template.id, tasks))
                     : null;
                   return (
-                    <li key={template.id} className={styles.row}>
+                    <li
+                      key={template.id}
+                      className={cn(styles.row, styles.agent)}
+                    >
+                      {/* The same face the Command Center draws; the name
+                          beside it is the label, so the mark is decorative. */}
+                      <span aria-hidden="true" className={styles.face}>
+                        <MomoAvatar
+                          agent={{
+                            name: template.id,
+                            display_name: template.name,
+                          }}
+                          size={40}
+                        />
+                      </span>
                       <span className={styles.name}>
                         <span>{template.name}</span>
                         <span className={styles.sub}>
                           {formatModelLabel(template.model) || "Model not set"}
                         </span>
                       </span>
-                      <span className={styles.cell}>
+                      <span className={cn(styles.cell, styles.next)}>
                         {summary ? (
                           <NextRun summary={summary} />
                         ) : (
