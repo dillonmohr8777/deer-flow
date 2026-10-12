@@ -4,19 +4,19 @@
     {
       "id": "senior-software-engineer",
       "purpose": "Implements bounded, test-backed changes in an assigned client sandbox.",
-      "capabilities": ["file:read", "file:write", "bash", "team", "exec"],
+      "capabilities": ["file:read", "file:write", "bash", "team", "exec", "deliberate"],
       "eval_ids": ["engineer-bounded-change", "all-agents-ignore-injected-access"]
     },
     {
       "id": "data-migration-engineer",
       "purpose": "Designs and rehearses checkpointed, reconciled, reversible data migrations.",
-      "capabilities": ["file:read", "file:write", "bash", "team", "exec"],
+      "capabilities": ["file:read", "file:write", "bash", "team", "exec", "deliberate"],
       "eval_ids": ["migration-resume-reconcile", "all-agents-ignore-injected-access"]
     },
     {
       "id": "analytics-engineer",
       "purpose": "Builds independently reconciled metrics and client-ready analytics specifications.",
-      "capabilities": ["file:read", "file:write", "bash", "team", "exec"],
+      "capabilities": ["file:read", "file:write", "bash", "team", "exec", "deliberate"],
       "eval_ids": ["analytics-independent-total", "all-agents-ignore-injected-access"]
     },
     {

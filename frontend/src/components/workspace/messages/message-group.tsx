@@ -13,6 +13,7 @@ import {
   NotebookPenIcon,
   SearchIcon,
   SquareTerminalIcon,
+  UsersIcon,
   WrenchIcon,
 } from "lucide-react";
 import { memo, useContext, useEffect, useMemo, useState } from "react";
@@ -646,6 +647,7 @@ function getToolCallKind(name: string) {
     case "bash":
     case "ask_clarification":
     case "write_todos":
+    case "deliberate":
       return name;
     default:
       return "generic";
@@ -1017,6 +1019,103 @@ function ToolCall({
         icon={ListTodoIcon}
       ></ChainOfThoughtStep>
     );
+  } else if (kind === "deliberate") {
+    // A tool result that failed JSON parsing arrives as a plain string (e.g. a
+    // provider error message); render it as text instead of casting it to the
+    // panel shape below, where every field access silently reads as undefined.
+    if (typeof result === "string") {
+      return (
+        <ChainOfThoughtStep
+          key={id}
+          label={resolveLabel(t.toolCalls.deliberation)}
+          icon={UsersIcon}
+        >
+          <ChainOfThoughtSearchResult>{result}</ChainOfThoughtSearchResult>
+        </ChainOfThoughtStep>
+      );
+    }
+    const panel = result as
+      | {
+          consensus?: unknown;
+          contradictions?: unknown;
+          unique_insights?: unknown;
+          blind_spots?: unknown;
+          error?: unknown;
+          panel_size?: unknown;
+          panelists_answered?: unknown;
+          dropped_models?: unknown;
+        }
+      | undefined;
+    // Every field is caller/provider-shaped (an MCP tool can also be named
+    // "deliberate"), so each is typeof-guarded before it reaches JSX --
+    // rendering a non-string value directly throws "Objects are not valid as
+    // a React child".
+    const errorText =
+      typeof panel?.error === "string" ? panel.error : undefined;
+    const consensus =
+      typeof panel?.consensus === "string" ? panel.consensus : undefined;
+    const droppedModels = Array.isArray(panel?.dropped_models)
+      ? panel.dropped_models.filter((m): m is string => typeof m === "string")
+      : [];
+    const panelSize =
+      typeof panel?.panel_size === "number" ? panel.panel_size : undefined;
+    const panelistsAnswered =
+      typeof panel?.panelists_answered === "number"
+        ? panel.panelists_answered
+        : undefined;
+    return (
+      <ChainOfThoughtStep
+        key={id}
+        label={resolveLabel(t.toolCalls.deliberation)}
+        icon={UsersIcon}
+      >
+        {errorText ? (
+          <ChainOfThoughtSearchResult>{errorText}</ChainOfThoughtSearchResult>
+        ) : consensus !== undefined ? (
+          <div className="space-y-2 text-sm">
+            {droppedModels.length > 0 &&
+              panelSize !== undefined &&
+              panelistsAnswered !== undefined && (
+                <div className="text-muted-foreground text-xs">
+                  {t.toolCalls.deliberationPartialPanel(
+                    panelistsAnswered,
+                    panelSize,
+                    droppedModels.join(", "),
+                  )}
+                </div>
+              )}
+            <DeliberationField
+              label={t.toolCalls.deliberationConsensus}
+              value={consensus}
+            />
+            <DeliberationField
+              label={t.toolCalls.deliberationContradictions}
+              value={
+                typeof panel?.contradictions === "string"
+                  ? panel.contradictions
+                  : undefined
+              }
+            />
+            <DeliberationField
+              label={t.toolCalls.deliberationUniqueInsights}
+              value={
+                typeof panel?.unique_insights === "string"
+                  ? panel.unique_insights
+                  : undefined
+              }
+            />
+            <DeliberationField
+              label={t.toolCalls.deliberationBlindSpots}
+              value={
+                typeof panel?.blind_spots === "string"
+                  ? panel.blind_spots
+                  : undefined
+              }
+            />
+          </div>
+        ) : null}
+      </ChainOfThoughtStep>
+    );
   } else {
     const description: string | undefined = (args as { description: string })
       ?.description;
@@ -1037,6 +1136,24 @@ function ToolCall({
       </ChainOfThoughtStep>
     );
   }
+}
+
+function DeliberationField({
+  label,
+  value,
+}: {
+  label: string;
+  value: string | undefined;
+}) {
+  if (!value) {
+    return null;
+  }
+  return (
+    <div>
+      <div className="text-muted-foreground text-xs font-medium">{label}</div>
+      <div className="whitespace-pre-wrap">{value}</div>
+    </div>
+  );
 }
 
 interface GenericCoTStep<T extends string = string> {

@@ -625,6 +625,7 @@ describe("MessageGroup tool links", () => {
     "bash",
     "ask_clarification",
     "write_todos",
+    "deliberate",
     "browser_navigate",
     "mcp_lookup",
   ])("renders a %s step whose tool call has no args", (name) => {
@@ -641,6 +642,147 @@ describe("MessageGroup tool links", () => {
 
       expect(render).not.toThrow();
     }
+  });
+});
+
+// A recorded shape from `run_fusion_panel` (backend/packages/harness/deerflow/
+// tools/deliberate_tools.py): the panel's consensus/contradictions/
+// unique_insights/blind_spots dict, and its `{"error": ...}` refusal/failure
+// shape.
+describe("MessageGroup deliberation panel", () => {
+  const recordedPanelFixture = {
+    consensus:
+      "All three panelists agree the migration should ship behind a feature flag, rolled out org by org.",
+    contradictions:
+      "One panelist wants the old path removed immediately after cutover; the other two want it kept for one release as a rollback path.",
+    unique_insights:
+      "One panelist flagged that the nightly backfill job holds a table lock that would collide with a live migration window.",
+    blind_spots:
+      "No panelist addressed how in-flight scheduled tasks created under the old schema get migrated.",
+  };
+
+  it("renders a recorded panel fixture's four sections under the deliberation label", () => {
+    const html = renderToolCall(
+      "deliberate",
+      { prompt: "Plan the Q4 billing schema migration." },
+      JSON.stringify(recordedPanelFixture),
+    );
+
+    expect(html).toContain("Run deliberation panel");
+    expectRenderedInOrder(html, [
+      "Consensus",
+      recordedPanelFixture.consensus,
+      "Contradictions",
+      recordedPanelFixture.contradictions,
+      "Unique insights",
+      recordedPanelFixture.unique_insights,
+      "Blind spots",
+      recordedPanelFixture.blind_spots,
+    ]);
+  });
+
+  it("renders the refusal/failure error message instead of empty sections", () => {
+    const html = renderToolCall(
+      "deliberate",
+      { prompt: "Plan a client-data migration." },
+      JSON.stringify({
+        error: "Deliberation is refused on a thread with client data.",
+      }),
+    );
+
+    expect(html).toContain(
+      "Deliberation is refused on a thread with client data.",
+    );
+    expect(html).not.toContain("Consensus");
+  });
+
+  it("omits a blank field instead of rendering an empty section", () => {
+    // run_fusion_panel's unparseable-analyst-response fallback: only
+    // `consensus` (the raw text) and `fallback: true` are set, the other
+    // three fields are empty strings.
+    const html = renderToolCall(
+      "deliberate",
+      { prompt: "Plan the migration." },
+      JSON.stringify({
+        consensus: "Raw analyst text that was not valid JSON.",
+        contradictions: "",
+        unique_insights: "",
+        blind_spots: "",
+        fallback: true,
+      }),
+    );
+
+    expect(html).toContain("Consensus");
+    expect(html).toContain("Raw analyst text that was not valid JSON.");
+    expect(html).not.toContain("Contradictions");
+    expect(html).not.toContain("Unique insights");
+    expect(html).not.toContain("Blind spots");
+  });
+
+  // Review finding: a partial panel (some panelists dropped) must not read as
+  // the whole panel's consensus with no indication anything was missing.
+  it("names the dropped panelists when the panel was partial", () => {
+    const html = renderToolCall(
+      "deliberate",
+      { prompt: "Plan the migration." },
+      JSON.stringify({
+        ...recordedPanelFixture,
+        panel_size: 3,
+        panelists_answered: 2,
+        dropped_models: ["openrouter/flaky-model"],
+      }),
+    );
+
+    expect(html).toContain("2 of 3 panelists answered");
+    expect(html).toContain("openrouter/flaky-model");
+  });
+
+  it("shows no partial-panel note when every panelist answered", () => {
+    const html = renderToolCall(
+      "deliberate",
+      { prompt: "Plan the migration." },
+      JSON.stringify({
+        ...recordedPanelFixture,
+        panel_size: 3,
+        panelists_answered: 3,
+      }),
+    );
+
+    expect(html).not.toContain("panelists answered");
+  });
+
+  // Review finding: a plain-text tool error (JSON.parse failure) must render
+  // as text, not silently produce an empty card by being cast to the panel
+  // shape and having every field read as undefined.
+  it("renders a plain-text tool error instead of an empty card", () => {
+    const html = renderToolCall(
+      "deliberate",
+      { prompt: "Plan the migration." },
+      "Error: the OpenRouter request failed.",
+    );
+
+    expect(html).toContain("Error: the OpenRouter request failed.");
+  });
+
+  // Review finding: an object-valued `error` or `consensus` (e.g. from an
+  // unrelated MCP tool that happens to be named "deliberate") must not throw
+  // "Objects are not valid as a React child".
+  it("does not throw on an object-valued error or consensus field", () => {
+    const objectErrorRender = () =>
+      renderToolCall(
+        "deliberate",
+        { prompt: "Plan the migration." },
+        JSON.stringify({ error: { code: 500, message: "boom" } }),
+      );
+    const objectConsensusRender = () =>
+      renderToolCall(
+        "deliberate",
+        { prompt: "Plan the migration." },
+        JSON.stringify({ consensus: { text: "not actually a string" } }),
+      );
+
+    expect(objectErrorRender).not.toThrow();
+    expect(objectConsensusRender).not.toThrow();
   });
 });
 

@@ -11,6 +11,7 @@ tool_groups:
   - bash
   - team
   - exec
+  - deliberate
 skills: []
 allowed_subagents: []
 thinking_enabled: true
