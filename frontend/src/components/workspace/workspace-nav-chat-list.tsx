@@ -2,6 +2,7 @@
 
 import {
   BotIcon,
+  Crown,
   GraduationCap,
   Hash,
   CalendarClock,
@@ -32,7 +33,11 @@ import {
 } from "@/components/ui/tooltip";
 import { useAgentsApiEnabled } from "@/core/agents";
 import { useBoardThreads } from "@/core/board";
-import { useDeskEnabled, useMomentumInternalEnabled } from "@/core/features";
+import {
+  useCeoDeskEnabled,
+  useDeskEnabled,
+  useMomentumInternalEnabled,
+} from "@/core/features";
 import { useI18n } from "@/core/i18n/hooks";
 
 export function WorkspaceNavChatList() {
@@ -41,6 +46,7 @@ export function WorkspaceNavChatList() {
   const { enabled: agentsEnabled } = useAgentsApiEnabled();
   const { enabled: deskEnabled } = useDeskEnabled();
   const { enabled: internalEnabled } = useMomentumInternalEnabled();
+  const { enabled: ceoEnabled } = useCeoDeskEnabled();
   // Threads with a Momo draft waiting on the owner; same query Desk's
   // Approvals panel runs, so React Query shares one cache entry.
   const waitingApproval = useBoardThreads({
@@ -121,6 +127,17 @@ export function WorkspaceNavChatList() {
               <Link className="text-muted-foreground" href="/workspace/team">
                 <Hash />
                 <span>Team</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        )}
+        {/* Owner/admin of the active organization only; not tied to Desk. */}
+        {ceoEnabled && (
+          <SidebarMenuItem>
+            <SidebarMenuButton isActive={pathname === "/workspace/ceo"} asChild>
+              <Link className="text-muted-foreground" href="/workspace/ceo">
+                <Crown />
+                <span>CEO Desk</span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>

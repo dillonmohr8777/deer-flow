@@ -20,6 +20,7 @@ export interface FeaturesResponse {
   };
   desk?: { enabled?: boolean };
   momentum_internal?: { enabled?: boolean };
+  ceo?: { enabled?: boolean };
 }
 
 export interface ConversationReferencesCapability {
@@ -107,4 +108,18 @@ export function isMomentumInternalEnabled(features: FeaturesResponse): boolean {
 
 export async function fetchMomentumInternalEnabled(): Promise<boolean> {
   return isMomentumInternalEnabled(await fetchFeatures());
+}
+
+/**
+ * The CEO Desk: an owner/admin of the caller's active organization. Unlike
+ * Desk this needs no `private_workspace.enabled` -- it mirrors `/api/ceo`'s
+ * own organization-role gate, not Desk's system_role check. Anything but an
+ * explicit true is off.
+ */
+export function isCeoDeskEnabled(features: FeaturesResponse): boolean {
+  return features.ceo?.enabled === true;
+}
+
+export async function fetchCeoDeskEnabled(): Promise<boolean> {
+  return isCeoDeskEnabled(await fetchFeatures());
 }

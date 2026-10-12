@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import {
   fetchBrowserControlEnabled,
+  fetchCeoDeskEnabled,
   fetchConversationReferencesCapability,
   fetchDeskEnabled,
   fetchKnowledgeBaseFeature,
@@ -101,6 +102,18 @@ export function useMomentumInternalEnabled() {
   const { data, isPending } = useQuery({
     queryKey: ["features", "momentum_internal"],
     queryFn: fetchMomentumInternalEnabled,
+    staleTime: 0,
+    refetchOnMount: true,
+    retry: false,
+  });
+  return { enabled: data ?? false, isLoading: isPending };
+}
+
+/** CEO Desk: an owner/admin of the caller's active organization. */
+export function useCeoDeskEnabled() {
+  const { data, isPending } = useQuery({
+    queryKey: ["features", "ceo"],
+    queryFn: fetchCeoDeskEnabled,
     staleTime: 0,
     refetchOnMount: true,
     retry: false,

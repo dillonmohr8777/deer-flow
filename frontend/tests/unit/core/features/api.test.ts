@@ -5,6 +5,7 @@ rs.mock("@/core/config", () => ({ getBackendBaseURL: () => "" }));
 
 import { fetch } from "@/core/api/fetcher";
 import {
+  fetchCeoDeskEnabled,
   fetchConversationReferencesCapability,
   fetchDeskEnabled,
   fetchSubagentBatchesCapability,
@@ -116,5 +117,23 @@ describe("desk feature", () => {
       jsonResponse({ agents_api: { enabled: true }, desk: { enabled: "yes" } }),
     );
     await expect(fetchDeskEnabled()).resolves.toBe(false);
+  });
+});
+
+describe("ceo desk feature", () => {
+  it("is on only for an explicit true from the instance", async () => {
+    mockedFetch.mockResolvedValueOnce(
+      jsonResponse({ agents_api: { enabled: true }, ceo: { enabled: true } }),
+    );
+    await expect(fetchCeoDeskEnabled()).resolves.toBe(true);
+    // A plain member or client caller never sees the CEO Desk.
+    mockedFetch.mockResolvedValueOnce(
+      jsonResponse({ agents_api: { enabled: true } }),
+    );
+    await expect(fetchCeoDeskEnabled()).resolves.toBe(false);
+    mockedFetch.mockResolvedValueOnce(
+      jsonResponse({ agents_api: { enabled: true }, ceo: { enabled: "yes" } }),
+    );
+    await expect(fetchCeoDeskEnabled()).resolves.toBe(false);
   });
 });

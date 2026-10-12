@@ -23,7 +23,7 @@ from sqlalchemy import select
 from app.gateway.authz import require_permission
 from app.gateway.deps import get_board_repo, get_client_repo, get_current_user_from_request, record_audit_event
 from deerflow.board.triage import triage_board_thread
-from deerflow.board.workflow import BoardOwnerRequiredError, BoardTransitionError, assert_can_approve, assert_can_draft, assert_can_reply
+from deerflow.board.workflow import BoardOwnerRequiredError, BoardTransitionError, assert_can_approve, assert_can_draft, assert_can_reply, latest_momo_draft_body
 from deerflow.persistence.board.model import BoardThreadStatus
 from deerflow.persistence.organizations.model import OrganizationMemberRow
 from deerflow.runtime.user_context import resolve_organization_id
@@ -324,10 +324,7 @@ async def add_board_message(thread_id: ThreadId, body: BoardMessageCreateRequest
 async def _latest_momo_draft_body(board_repo, thread_id: str) -> str | None:
     """The body of the most recent ``momo``-authored message, or ``None`` if there is none."""
     messages = await board_repo.list_messages(thread_id) or []
-    for message in reversed(messages):
-        if message["author_kind"] == "momo":
-            return message.get("body")
-    return None
+    return latest_momo_draft_body(messages)
 
 
 async def _load_thread_for_actor(board_repo, client_repo, thread_id: str, request: Request) -> tuple[dict, str]:
