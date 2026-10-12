@@ -67,13 +67,13 @@ describe("MomoAvatar", () => {
     const { container: withAvatar } = render(
       <MomoAvatar agent={UNKNOWN_AGENT} size={40} />,
     );
-    // MomoAvatar passes the display name through so an unmapped agent gets a
-    // monogram rather than an abstract mark, so the direct comparison has to
-    // hand the glyph the same name.
+    // MomoAvatar passes the stable agent name through so an unmapped agent
+    // gets a monogram rather than an abstract mark, so the direct comparison
+    // has to hand the glyph the same name.
     const { container: direct } = render(
       <MomentumGlyph
         seed={`agent:${UNKNOWN_AGENT.name}`}
-        initial={UNKNOWN_AGENT.display_name}
+        initial={UNKNOWN_AGENT.name}
         size={40}
       />,
     );
@@ -213,6 +213,20 @@ describe("MomoAvatar", () => {
       const decoration = container.querySelector("img, svg");
       expect(decoration).toBeTruthy();
       expect(decoration?.getAttribute("aria-hidden")).toBe("true");
+      unmount();
+    }
+  });
+
+  it("stays silent when decorative, because the name is written beside it", () => {
+    for (const agent of [KNOWN_AGENT, UNKNOWN_AGENT]) {
+      const { container, unmount } = render(
+        <MomoAvatar agent={agent} size={26} decorative />,
+      );
+      const wrapper = container.firstElementChild;
+      expect(wrapper?.getAttribute("aria-hidden")).toBe("true");
+      expect(wrapper?.getAttribute("role")).toBeNull();
+      expect(wrapper?.getAttribute("aria-label")).toBeNull();
+      expect(screen.queryByRole("img")).toBeNull();
       unmount();
     }
   });
