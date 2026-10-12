@@ -1,7 +1,9 @@
 /*
  * MomoBot's only offline content is a generic connection screen and public
  * app icons. Never store app HTML, RSC payloads, API results or client files.
- * No background sync, offline writes, push or agent execution is implied.
+ * No background sync, offline writes or agent execution is implied. Push
+ * notifications only display a server-sent title/body/url; the payload is
+ * never trusted as HTML or as an absolute URL (see showPushNotification).
  */
 const CACHE_PREFIX = "momobot-public-offline-";
 const CACHE_NAME = `${CACHE_PREFIX}v1`;
@@ -79,6 +81,67 @@ self.addEventListener("activate", (event) => {
       );
       await self.clients.claim();
     })(),
+  );
+});
+
+function notificationTargetPath(payload) {
+  // Only ever a same-origin relative path: a push payload is server data,
+  // never trusted as a destination outside the app. Reject "//host/..." and
+  // "/\host/..." too -- both resolve to a different origin against a base URL.
+  const url = payload.url;
+  return typeof url === "string" &&
+    url.startsWith("/") &&
+    !url.startsWith("//") &&
+    !url.startsWith("/\\")
+    ? url
+    : "/workspace";
+}
+
+async function showPushNotification(event) {
+  let payload = {};
+  if (event.data) {
+    try {
+      payload = event.data.json();
+    } catch {
+      payload = {};
+    }
+  }
+  const title =
+    typeof payload.title === "string" && payload.title
+      ? payload.title
+      : "MomoBot";
+  const body = typeof payload.body === "string" ? payload.body : "";
+  await self.registration.showNotification(title, {
+    body,
+    icon: "/icons/icon-192.png",
+    badge: "/icons/icon-192.png",
+    data: { url: notificationTargetPath(payload) },
+  });
+}
+
+self.addEventListener("push", (event) => {
+  event.waitUntil(showPushNotification(event));
+});
+
+async function focusOrOpenNotificationTarget(path) {
+  const target = new URL(path, self.location.origin).href;
+  const clientList = await self.clients.matchAll({
+    type: "window",
+    includeUncontrolled: true,
+  });
+  for (const client of clientList) {
+    if (client.url === target && "focus" in client) return client.focus();
+  }
+  if (self.clients.openWindow) return self.clients.openWindow(target);
+  return undefined;
+}
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  event.waitUntil(
+    focusOrOpenNotificationTarget(
+      notificationTargetPath(event.notification.data ?? {}),
+    ),
   );
 });
 

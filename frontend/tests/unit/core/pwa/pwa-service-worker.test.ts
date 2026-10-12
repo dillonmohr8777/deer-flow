@@ -14,6 +14,7 @@ const PUBLIC_PATHS = [
   "/icons/apple-touch-icon.png",
 ];
 const source = readFileSync(join(process.cwd(), "public/sw.js"), "utf8");
+const MALFORMED_PUSH = Symbol("malformed push payload");
 
 type Fetcher = (request: Request, options?: RequestInit) => Promise<Response>;
 type WorkerEvent = {
@@ -40,11 +41,27 @@ function responseFor(url: string, body?: string, contentType?: string) {
   return response;
 }
 
+type NotificationEvent = {
+  data: { json: () => unknown } | null;
+  waitUntil: (promise: Promise<unknown>) => void;
+};
+type ClickEvent = {
+  notification: { data: unknown; close: () => void };
+  waitUntil: (promise: Promise<unknown>) => void;
+};
+
 function createWorker() {
-  const listeners = new Map<string, (event: WorkerEvent) => void>();
+  const listeners = new Map<
+    string,
+    (event: WorkerEvent | NotificationEvent | ClickEvent) => void
+  >();
   const stores = new Map<string, Map<string, Response>>();
   const calls: { request: Request; options?: RequestInit }[] = [];
   const writes: string[] = [];
+  const notifications: { title: string; options: Record<string, unknown> }[] =
+    [];
+  const windowClients: { url: string; focused: boolean }[] = [];
+  let opened: string | undefined;
   let fetcher: Fetcher = async (request) => responseFor(request.url);
   let claimed = false;
 
@@ -80,12 +97,30 @@ function createWorker() {
       location: { origin: ORIGIN },
       addEventListener: (
         name: string,
-        listener: (event: WorkerEvent) => void,
+        listener: (event: WorkerEvent | NotificationEvent | ClickEvent) => void,
       ) => listeners.set(name, listener),
       skipWaiting: async () => undefined,
+      registration: {
+        showNotification: async (
+          title: string,
+          options: Record<string, unknown>,
+        ) => {
+          notifications.push({ title, options });
+        },
+      },
       clients: {
         claim: async () => {
           claimed = true;
+        },
+        matchAll: async () =>
+          windowClients.map((client) => ({
+            url: client.url,
+            focus: async () => {
+              client.focused = true;
+            },
+          })),
+        openWindow: async (url: string) => {
+          opened = url;
         },
       },
     },
@@ -137,12 +172,61 @@ function createWorker() {
     return pending;
   }
 
+  async function push(payload?: unknown) {
+    let pending: Promise<unknown> | undefined;
+    (
+      listeners.get("push") as ((event: NotificationEvent) => void) | undefined
+    )?.({
+      data:
+        payload === undefined
+          ? null
+          : {
+              json: () => {
+                if (payload === MALFORMED_PUSH)
+                  throw new SyntaxError("Unexpected token");
+                return JSON.parse(JSON.stringify(payload));
+              },
+            },
+      waitUntil: (promise) => {
+        pending = promise;
+      },
+    });
+    if (!pending) throw new Error("Missing push event");
+    return pending;
+  }
+
+  async function notificationclick(data: unknown) {
+    const notification = { data, close: () => undefined };
+    let pending: Promise<unknown> | undefined;
+    (
+      listeners.get("notificationclick") as
+        | ((event: ClickEvent) => void)
+        | undefined
+    )?.({
+      notification,
+      waitUntil: (promise) => {
+        pending = promise;
+      },
+    });
+    if (!pending) throw new Error("Missing notificationclick event");
+    await pending;
+    return notification;
+  }
+
   return {
     calls,
     writes,
     stores,
     lifecycle,
     request,
+    push,
+    notificationclick,
+    notifications,
+    openedUrl: () => opened,
+    addWindowClient: (url: string) =>
+      windowClients.push({ url, focused: false }),
+    isWindowClientFocused: (url: string) =>
+      windowClients.find((client) => client.url === url)?.focused ?? false,
     setFetcher: (next: Fetcher) => {
       fetcher = next;
     },
@@ -339,5 +423,80 @@ describe("MomoBot public-only service worker", () => {
       PUBLIC_PATHS.map((path) => ORIGIN + path).sort(),
     );
     expect(worker.isClaimed()).toBe(true);
+  });
+
+  it("shows a push notification from a well-formed payload, falling back to app icons", async () => {
+    const worker = createWorker();
+    await worker.push({
+      title: "Momo needs your yes",
+      body: "A board thread is waiting on your approval.",
+      url: "/workspace/board/thread-1",
+    });
+    expect(worker.notifications).toEqual([
+      {
+        title: "Momo needs your yes",
+        options: {
+          body: "A board thread is waiting on your approval.",
+          icon: "/icons/icon-192.png",
+          badge: "/icons/icon-192.png",
+          data: { url: "/workspace/board/thread-1" },
+        },
+      },
+    ]);
+  });
+
+  it("falls back to generic copy and the workspace root for missing, malformed or hostile push payloads", async () => {
+    for (const payload of [
+      undefined,
+      MALFORMED_PUSH,
+      { title: 42, body: { nested: true } },
+      { url: "https://evil.example.test/phish" },
+      { url: "//evil.example.test" },
+    ]) {
+      const worker = createWorker();
+      await worker.push(payload);
+      expect(worker.notifications).toEqual([
+        {
+          title: "MomoBot",
+          options: {
+            body: "",
+            icon: "/icons/icon-192.png",
+            badge: "/icons/icon-192.png",
+            data: { url: "/workspace" },
+          },
+        },
+      ]);
+    }
+  });
+
+  it("focuses an already-open client on the notification's target instead of opening a new one", async () => {
+    const worker = createWorker();
+    worker.addWindowClient(ORIGIN + "/workspace/board/thread-1");
+    const notification = await worker.notificationclick({
+      url: "/workspace/board/thread-1",
+    });
+    expect(notification.close).toBeInstanceOf(Function);
+    expect(
+      worker.isWindowClientFocused(ORIGIN + "/workspace/board/thread-1"),
+    ).toBe(true);
+    expect(worker.openedUrl()).toBeUndefined();
+  });
+
+  it("opens a new window at the notification's target when nothing is already open there", async () => {
+    const worker = createWorker();
+    await worker.notificationclick({ url: "/workspace/board/thread-9" });
+    expect(worker.openedUrl()).toBe(ORIGIN + "/workspace/board/thread-9");
+  });
+
+  it("never opens a notification target outside the app's own origin", async () => {
+    for (const hostile of [
+      "https://evil.example.test/phish",
+      "//evil.example.test/phish",
+      "/\\evil.example.test/phish",
+    ]) {
+      const worker = createWorker();
+      await worker.notificationclick({ url: hostile });
+      expect(worker.openedUrl()).toBe(ORIGIN + "/workspace");
+    }
   });
 });
