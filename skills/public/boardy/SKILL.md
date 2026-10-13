@@ -1,6 +1,6 @@
 ---
 name: boardy
-description: Draft an introduction request to Boardy (boardy.ai, the AI superconnector) for Dillon to approve. Use when someone runs /boardy <who and why> or asks for a Boardy intro, warm intro, or "who should we meet" request. Drafts text only; never sends.
+description: Draft an introduction request to Boardy (boardy.ai, the AI superconnector) for Dillon to approve. Use when someone runs /boardy followed by who and why or asks for a Boardy intro, warm intro, or "who should we meet" request. Drafts text only; never sends.
 ---
 
 # Boardy intro request
