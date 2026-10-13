@@ -122,6 +122,19 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.workflow.calls, [])
         self.assertEqual(runtime.ledger.pending(), [])
 
+    async def test_refused_brief_is_recognised_but_not_admitted(self):
+        runtime = self.make_runtime(allowed_users=["U123", "UOTHER"], channel_clients={"C123": "__owner__"})
+        for changes in ({"user": "UOTHER"}, {"channel": "COTHER"}):
+            refused = request(**changes)
+            self.assertTrue(runtime.matches(refused, team_id="T123"))
+            self.assertIsNone(runtime.prepare(refused, team_id="T123"))
+            self.assertTrue(runtime.refused(refused, team_id="T123"))
+        self.assertFalse(runtime.refused(request(), team_id="T123"))
+        for text in ("ordinary discussion", "<@U999> brief me on the weather"):
+            self.assertFalse(runtime.matches(request(text=text), team_id="T123"))
+        self.assertFalse(runtime.matches(request(user="U999"), team_id="T123"))
+        self.assertEqual(runtime.ledger.pending(), [])
+
     async def test_aggregate_route_is_reserved_to_exact_slack_owner(self):
         runtime = self.make_runtime(allowed_users=["U123", "UOTHER"], channel_clients={"C123": "__owner__"})
         self.assertIsNone(runtime.prepare(request(user="UOTHER"), team_id="T123"))

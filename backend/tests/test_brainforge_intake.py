@@ -75,6 +75,10 @@ class ScopeTests(unittest.TestCase):
         for change in (*bots, {"subtype": "message_changed"}, {"type": []}, {"ts": "bad"}, {"channel": []}, {"user": {}}, {"text": "password: SYNTHETIC_SECRET"}, {"text": "Authorization: Bearer SYNTHETIC_SECRET"}):
             self.assertIsNone(admit_event(self.policy, event(**change), team_id="T123"))
 
+    def test_bot_id_event_with_non_string_user_is_denied_not_raised(self):
+        for user in ({}, [], ["U123"], {"id": "U123"}, 7):
+            self.assertIsNone(admit_event(self.policy, event(bot_id="B123", user=user), team_id="T123"))
+
     def test_allowlisted_human_posting_through_another_app_is_admitted(self):
         self.assertIsNotNone(admit_event(self.policy, event(bot_id="B123"), team_id="T123"))
 

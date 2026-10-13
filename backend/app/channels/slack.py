@@ -349,6 +349,15 @@ class SlackChannel(Channel):
                     team = req.payload.get("team_id") or req.payload.get("team") or event.get("team")
                     is_brief = self._brainforge.matches(event, team_id=team)
                     admitted = self._brainforge.prepare(event, team_id=team) if is_brief else None
+                    # A refused brief is answered once (app_mention or DM only, since a channel
+                    # mention also fires a message event) instead of reaching the paid agent.
+                    if is_brief and not admitted and self._loop and self._loop.is_running() and (event.get("type") == "app_mention" or event.get("channel_type") == "im") and self._brainforge.refused(event, team_id=team):
+                        self._submit_threadsafe_coroutine(
+                            self._post_connection_reply(event.get("channel", ""), "Brief is owner-only and runs in the approved client channels.", event.get("thread_ts") or event.get("ts")),
+                            self._loop,
+                            name="brainforge_refused",
+                            msg_id=str(event.get("ts") or ""),
+                        )
                 # Exclusive mode (default): non-brief events are acknowledged but never sent
                 # to the paid dispatcher. agent_passthrough lets them reach the normal agent path.
                 if is_brief or not self._brainforge_config.get("agent_passthrough"):
@@ -433,7 +442,7 @@ class SlackChannel(Channel):
         user_id = event.get("user", "")
         # An allowlisted human posting through another app with their own user
         # token (e.g. Composio) carries that app's bot_id but is still the human.
-        if event.get("bot_id") and not (user_id in self._allowed_users and user_id != self._bot_user_id):
+        if event.get("bot_id") and not (isinstance(user_id, str) and user_id in self._allowed_users and user_id != self._bot_user_id):
             return
 
         text = event.get("text", "").strip()

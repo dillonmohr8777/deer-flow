@@ -93,7 +93,9 @@ def admit_event(policy: ScopePolicy, event: Mapping[str, Any], *, team_id: str |
         return None
     # An allowlisted human posting through another app with their own user token
     # (e.g. Composio) carries that app's bot_id; the bot itself never qualifies.
-    if event.get("bot_id") and (event.get("user") not in policy.allowed_users or event.get("user") == policy.bot_user_id):
+    # The allowlist and type checks below cover everything else; comparing with ==
+    # (not `in frozenset`) keeps a malformed dict/list user from raising TypeError.
+    if event.get("bot_id") and event.get("user") == policy.bot_user_id:
         return None
     channel = event.get("channel")
     user = event.get("user")
