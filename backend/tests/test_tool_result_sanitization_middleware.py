@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 from types import SimpleNamespace
 
+import pytest
 from langchain_core.messages import ToolMessage
 from langgraph.types import Command
 
@@ -33,6 +34,25 @@ def _request(tool_name: str, tool_call_id: str = "tc-1") -> SimpleNamespace:
 
 def _msg(content, *, name: str, tool_call_id: str = "tc-1") -> ToolMessage:
     return ToolMessage(content=content, tool_call_id=tool_call_id, name=name)
+
+
+@pytest.mark.parametrize("tool_name", ["browser_navigate", "browser_snapshot", "browser_click", "browser_type", "browser_get_text", "browser_back"])
+@pytest.mark.parametrize("async_call", [False, True])
+def test_browser_command_neutralizes_remote_tags(tool_name, async_call):
+    mw = ToolResultSanitizationMiddleware()
+    command = Command(update={"messages": [_msg(_MALICIOUS_PAGE, name=tool_name)], "artifacts": ["/mnt/user-data/outputs/capture.png"]})
+    if async_call:
+
+        async def handler(_):
+            return command
+
+        result = asyncio.run(mw.awrap_tool_call(_request(tool_name), handler))
+    else:
+        result = mw.wrap_tool_call(_request(tool_name), lambda _: command)
+    assert "<system-reminder>" not in result.update["messages"][0].content
+    assert "&lt;system-reminder&gt;" in result.update["messages"][0].content
+    assert "Ordinary text about gardening." in result.update["messages"][0].content
+    assert result.update["artifacts"] == command.update["artifacts"]
 
 
 class TestRemoteToolResultsNeutralized:

@@ -98,6 +98,8 @@ class SlackChannel(Channel):
         self._web_client = None
         self._loop: asyncio.AbstractEventLoop | None = None
         self._allowed_users = _normalize_allowed_users(config.get("allowed_users", []))
+        self._channel_policies = config.get("channel_policies", {})
+        self._engaged_threads: dict[tuple[str, str, str], None] = {}
         self._web_client_factory = config.get("web_client_factory")
         self._connection_web_clients: dict[str, tuple[str, Any]] = {}
         configured_bot_user_id = config.get("bot_user_id")
@@ -448,14 +450,31 @@ class SlackChannel(Channel):
                     logger.info("[Slack] main loop stopped before channel connection bind could be scheduled")
             return
 
-        # Check allowed users after connect-code handling so browser-initiated
-        # binding can bootstrap a new external identity.
-        if self._allowed_users and user_id not in self._allowed_users:
+        channel_id = str(event.get("channel") or "")
+        thread_ts = event.get("thread_ts") or event.get("ts", "")
+        policy_key = f"{team_id}:{channel_id}"
+        policy = self._channel_policies.get(policy_key, {}) if isinstance(self._channel_policies, dict) else {}
+        policy = policy if isinstance(policy, dict) else {}
+        globally_allowed = not self._allowed_users or user_id in self._allowed_users
+        if not globally_allowed and not (user_id and team_id and channel_id and policy.get("allow_all_users") is True):
             logger.debug("Ignoring message from non-allowed user: %s", user_id)
             return
+        if not globally_allowed:
+            from app.gateway.auth_disabled import is_auth_disabled
 
-        channel_id = event.get("channel", "")
-        thread_ts = event.get("thread_ts") or event.get("ts", "")
+            # Public-channel admission must never inherit the operator/default
+            # identity. Existing connection validation still binds each sender.
+            if self._connection_repo is None or is_auth_disabled():
+                logger.warning("Slack channel member requires an authenticated personal connection")
+                return
+        # Channel-wide participation does not grant operator commands.
+        if not globally_allowed and is_known_channel_command(text):
+            return
+        engagement_key = (str(team_id or ""), channel_id, str(thread_ts))
+        if policy.get("mentions_and_threads_only") is True:
+            is_mention = event.get("type") == "app_mention" or bool(self._bot_user_id and f"<@{self._bot_user_id}>" in event.get("text", ""))
+            if not is_mention and not (event.get("thread_ts") and engagement_key in self._engaged_threads):
+                return
 
         if is_known_channel_command(text):
             msg_type = InboundMessageType.COMMAND
@@ -474,6 +493,7 @@ class SlackChannel(Channel):
             metadata={
                 # team_id is already resolved (payload team_id/team, else event team) by the caller.
                 "team_id": team_id,
+                "requires_personal_connection": not globally_allowed,
                 "message_id": event.get("ts"),
                 "client_msg_id": event.get("client_msg_id"),
             },
@@ -484,10 +504,8 @@ class SlackChannel(Channel):
             reservation = self._reserve_inbound(inbound)
             if reservation is None:
                 return
-            # Acknowledge with an eyes reaction
-            self._add_reaction(channel_id, event.get("ts", thread_ts), "eyes")
-            # Send "running" reply first (fire-and-forget from SDK thread)
-            self._send_running_reply(channel_id, thread_ts)
+            if globally_allowed:
+                self._acknowledge_inbound(inbound)
             try:
                 if self._connection_repo is None:
                     # Reservation bounds callbacks scheduled from the SDK
@@ -516,9 +534,26 @@ class SlackChannel(Channel):
     ) -> None:
         try:
             inbound = await self._attach_connection_identity(inbound, team_id=team_id)
+            if inbound.metadata.get("requires_personal_connection") and not (inbound.connection_id and inbound.owner_user_id and inbound.workspace_id == team_id):
+                logger.warning("Slack channel member has no personal workspace binding")
+                return
+            if inbound.metadata.get("requires_personal_connection"):
+                self._acknowledge_inbound(inbound)
             self._commit_reserved_inbound(reservation, inbound)
         finally:
             reservation.release()
+
+    def _acknowledge_inbound(self, inbound) -> None:
+        """Acknowledge only after expanded participants have a personal binding."""
+        team_id = str(inbound.metadata.get("team_id") or "")
+        policy = self._channel_policies.get(f"{team_id}:{inbound.chat_id}", {}) if isinstance(self._channel_policies, dict) else {}
+        if isinstance(policy, dict) and policy.get("mentions_and_threads_only") is True:
+            key = (team_id, inbound.chat_id, str(inbound.thread_ts))
+            self._engaged_threads[key] = None
+            if len(self._engaged_threads) > 256:
+                self._engaged_threads.pop(next(iter(self._engaged_threads)))
+        self._add_reaction(inbound.chat_id, inbound.metadata.get("message_id") or inbound.thread_ts, "eyes")
+        self._send_running_reply(inbound.chat_id, inbound.thread_ts)
 
     async def _attach_connection_identity(self, inbound, *, team_id: str | None = None):
         workspace_id = str(team_id or inbound.metadata.get("team_id") or "")

@@ -1,5 +1,14 @@
 ## Service Startup Contracts
 
+`momobot_security_config.py` is a narrow operator tool: it moves the existing
+Brain header into a mode-0600 environment file, disables unreviewed broad Brain
+access and requires ZDR on the two named Luna routes. Plans never print secrets.
+Application fences source bytes and writes/fsyncs existing files in place to
+preserve single-file Docker mount inodes. Exact backups and manifests remain in
+a private deployment directory; rollback refuses drift. The tool never calls a
+provider or restarts a container. Standby runtime readback and explicit production
+approval belong to the private deployment runbook.
+
 Optional browser dependency detection reads the top-level `tools:` sequence
 without requiring `name` to be its first mapping key. Both indented and
 indentless lists are supported; nested option names and block-scalar text
