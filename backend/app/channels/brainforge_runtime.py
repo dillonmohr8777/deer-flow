@@ -31,7 +31,7 @@ class BrainForgeRuntime:
     def __init__(self, channel: Any, config: dict[str, Any]) -> None:
         self.channel = channel
         self.config = config
-        self.policy = ScopePolicy(config["team_id"], frozenset(config["allowed_users"]), config["channel_clients"], config["bot_user_id"])
+        self.policy = ScopePolicy(config["team_id"], frozenset(config["allowed_users"]), config["channel_clients"], config["bot_user_id"], frozenset(config.get("trusted_app_ids") or ()))
         if not self.policy.valid:
             raise ValueError("exact nonempty Slack scope required")
         self.owner = config.get("owner_user_id")

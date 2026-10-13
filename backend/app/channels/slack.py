@@ -12,6 +12,7 @@ from typing import Any
 from markdown_to_mrkdwn import SlackMarkdownConverter
 
 from app.channels.base import Channel
+from app.channels.brainforge_intake import bot_app_trusted
 from app.channels.brainforge_runtime import BrainForgeRuntime
 from app.channels.commands import is_known_channel_command
 from app.channels.connection_identity import attach_connection_identity
@@ -108,6 +109,8 @@ class SlackChannel(Channel):
         - ``reply_in_thread``: (optional, default true) Set ``false`` to post
           replies as top-level channel messages instead of thread replies.
           Conversation continuity still keys on the originating thread/message.
+        - ``trusted_app_ids``: (optional) Slack app IDs (A...) allowed to post as an
+          allowlisted user via a user token (e.g. Composio). Empty = any app.
     """
 
     def __init__(self, bus: MessageBus, config: dict[str, Any]) -> None:
@@ -124,7 +127,10 @@ class SlackChannel(Channel):
         configured_bot_user_id = config.get("bot_user_id")
         self._bot_user_id = str(configured_bot_user_id).lstrip("@") if configured_bot_user_id else None
         self._brainforge: BrainForgeRuntime | None = None
-        self._brainforge_config = config.get("brain_forge") or {}
+        # trusted_app_ids: when set, a bot_id event from an allowlisted user is only
+        # accepted if its Slack app id is listed (empty = any app, the old behavior).
+        self._trusted_app_ids = frozenset(_normalize_allowed_users(config.get("trusted_app_ids", [])))
+        self._brainforge_config = {"trusted_app_ids": sorted(self._trusted_app_ids), **(config.get("brain_forge") or {})}
         self._brainforge_drain_lock = threading.Lock()
         self._brainforge_drain_token = None
         self._brainforge_drain_wakeup = False
@@ -541,7 +547,7 @@ class SlackChannel(Channel):
         user_id = event.get("user", "")
         # An allowlisted human posting through another app with their own user
         # token (e.g. Composio) carries that app's bot_id but is still the human.
-        if event.get("bot_id") and not (isinstance(user_id, str) and user_id in self._allowed_users and user_id != self._bot_user_id):
+        if event.get("bot_id") and not (isinstance(user_id, str) and user_id in self._allowed_users and user_id != self._bot_user_id and bot_app_trusted(event, self._trusted_app_ids)):
             return
 
         text = event.get("text", "").strip()
