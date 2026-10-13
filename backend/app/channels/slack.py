@@ -169,7 +169,8 @@ class SlackChannel(Channel):
                 logger.error("Brain Forge Slack transport connection failed")
                 return
         self._running = True
-        if not self._brainforge:
+        # Passthrough mode still delivers agent replies, so it needs the outbound path.
+        if not self._brainforge or self._brainforge_config.get("agent_passthrough"):
             self.bus.subscribe_outbound(self._on_outbound)
 
         # Start socket mode in background thread

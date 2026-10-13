@@ -96,6 +96,21 @@ class BrainForgeSlackTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(client.send_socket_mode_response.call_count, 2)
         self.assertEqual(self.channel._brainforge.prepare.call_count, 1)
 
+    async def test_passthrough_start_subscribes_outbound_for_agent_replies(self):
+        for passthrough, expected in ((False, 0), (True, 1)):
+            channel = slack.SlackChannel(MessageBus(), {"bot_token": "xoxb-synthetic", "app_token": "xapp-synthetic", "brain_forge": {"enabled": True, "agent_passthrough": passthrough}})
+            runtime = SimpleNamespace(validate_transport=AsyncMock(), close=AsyncMock())
+            socket = SimpleNamespace(socket_mode_request_listeners=[], connect=Mock(), close=Mock())
+            with (
+                patch.object(slack, "BrainForgeRuntime", return_value=runtime),
+                patch("slack_sdk.socket_mode.SocketModeClient", return_value=socket),
+                patch.object(channel, "_initialize_operator_web_client", AsyncMock()),
+                patch.object(channel, "_wake_brainforge"),
+                patch.object(channel.bus, "subscribe_outbound") as subscribe,
+            ):
+                await channel.start()
+            self.assertEqual(subscribe.call_count, expected)
+
     async def test_sdk_burst_schedules_one_drain(self):
         client = SimpleNamespace(send_socket_mode_response=Mock())
         for _ in range(1000):
