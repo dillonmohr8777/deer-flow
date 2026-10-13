@@ -421,11 +421,14 @@ class SlackChannel(Channel):
             self._wake_brainforge()
 
     def _handle_message_event(self, event: dict, *, team_id: str | None = None) -> None:
-        # Ignore bot messages
-        if event.get("bot_id") or event.get("subtype"):
+        # Ignore bot messages and subtyped events (edits, joins, broadcasts).
+        if event.get("subtype"):
             return
-
         user_id = event.get("user", "")
+        # An allowlisted human posting through another app with their own user
+        # token (e.g. Composio) carries that app's bot_id but is still the human.
+        if event.get("bot_id") and not (user_id in self._allowed_users and user_id != self._bot_user_id):
+            return
 
         text = event.get("text", "").strip()
         if event.get("type") == "app_mention":
