@@ -82,6 +82,13 @@ class ScopeTests(unittest.TestCase):
     def test_allowlisted_human_posting_through_another_app_is_admitted(self):
         self.assertIsNotNone(admit_event(self.policy, event(bot_id="B123"), team_id="T123"))
 
+    def test_trusted_app_ids_gate_bot_id_events_only(self):
+        policy = ScopePolicy("T123", frozenset({"U123"}), {"C123": "synthetic-client"}, "U999", frozenset({"ACOMPOSIO"}))
+        for ok in (event(bot_id="B123", app_id="ACOMPOSIO"), event(bot_id="B123", bot_profile={"app_id": "ACOMPOSIO"}), event()):
+            self.assertIsNotNone(admit_event(policy, ok, team_id="T123"))
+        for bad in (event(bot_id="B123", app_id="AOTHER"), event(bot_id="B123", bot_profile={"app_id": "AOTHER"}), event(bot_id="B123"), event(bot_id="B123", app_id={})):
+            self.assertIsNone(admit_event(policy, bad, team_id="T123"))
+
     def test_policy_copies_mutable_mapping(self):
         channels = {"C123": "synthetic-client"}
         policy = ScopePolicy("T123", frozenset({"U123"}), channels, "U999")
