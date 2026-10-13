@@ -71,8 +71,12 @@ class ScopeTests(unittest.TestCase):
         self.assertIsNone(admit_event(self.policy, event(text="Hi", type="message"), team_id="T123", followed_thread=True))
 
     def test_bot_edit_sensitive_and_malformed_events_are_denied(self):
-        for change in ({"bot_id": "B123"}, {"subtype": "message_changed"}, {"type": []}, {"ts": "bad"}, {"channel": []}, {"user": {}}, {"text": "password: SYNTHETIC_SECRET"}, {"text": "Authorization: Bearer SYNTHETIC_SECRET"}):
+        bots = ({"bot_id": "B123", "user": "UOTHER"}, {"bot_id": "B123", "user": "U999"})
+        for change in (*bots, {"subtype": "message_changed"}, {"type": []}, {"ts": "bad"}, {"channel": []}, {"user": {}}, {"text": "password: SYNTHETIC_SECRET"}, {"text": "Authorization: Bearer SYNTHETIC_SECRET"}):
             self.assertIsNone(admit_event(self.policy, event(**change), team_id="T123"))
+
+    def test_allowlisted_human_posting_through_another_app_is_admitted(self):
+        self.assertIsNotNone(admit_event(self.policy, event(bot_id="B123"), team_id="T123"))
 
     def test_policy_copies_mutable_mapping(self):
         channels = {"C123": "synthetic-client"}

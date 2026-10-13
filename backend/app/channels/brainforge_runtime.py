@@ -65,6 +65,10 @@ class BrainForgeRuntime:
         text = re.sub(r"^<@!?" + re.escape(self.policy.bot_user_id) + r"(?:\|[^>\n]+)?>\s*", "", admitted.text).strip().casefold()
         return admitted if text in {"brief", "forge brief", "/forge brief"} else None
 
+    def matches(self, event: dict, *, team_id: str | None) -> bool:
+        """True when this event is an admitted brief request (read-only check)."""
+        return self._admit(event, team_id) is not None
+
     def prepare(self, event: dict, *, team_id: str | None) -> AdmittedEvent | None:
         """SDK thread: persist admitted identity before the transport ACK."""
         admitted = self._admit(event, team_id)

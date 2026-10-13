@@ -89,7 +89,11 @@ def admit_event(policy: ScopePolicy, event: Mapping[str, Any], *, team_id: str |
     """
     if not policy.valid or team_id != policy.team_id or not isinstance(event, Mapping):
         return None
-    if not isinstance(event.get("type"), str) or event.get("type") not in {"message", "app_mention"} or event.get("bot_id") or event.get("subtype"):
+    if not isinstance(event.get("type"), str) or event.get("type") not in {"message", "app_mention"} or event.get("subtype"):
+        return None
+    # An allowlisted human posting through another app with their own user token
+    # (e.g. Composio) carries that app's bot_id; the bot itself never qualifies.
+    if event.get("bot_id") and (event.get("user") not in policy.allowed_users or event.get("user") == policy.bot_user_id):
         return None
     channel = event.get("channel")
     user = event.get("user")

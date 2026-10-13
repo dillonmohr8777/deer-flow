@@ -29,6 +29,7 @@ class BrainForgeSlackTests(unittest.IsolatedAsyncioTestCase):
         self.channel._running = True
         self.channel._SocketModeResponse = lambda **kwargs: kwargs
         self.channel._brainforge = SimpleNamespace(
+            matches=Mock(return_value=True),
             prepare=Mock(return_value=SimpleNamespace(message_ts="100.001")),
             recover=AsyncMock(return_value=0),
             recovery_has_more=False,
@@ -70,6 +71,30 @@ class BrainForgeSlackTests(unittest.IsolatedAsyncioTestCase):
         client.send_socket_mode_response.assert_called_once()
         legacy.assert_not_called()
         self.assertEqual(self.submissions, [])
+
+    async def test_non_brief_event_is_dropped_in_exclusive_mode(self):
+        self.channel._brainforge.matches.return_value = False
+        legacy = Mock()
+        self.channel._handle_message_event = legacy
+        client = SimpleNamespace(send_socket_mode_response=Mock())
+        self.channel._on_socket_event(client, self.request())
+        client.send_socket_mode_response.assert_called_once()
+        legacy.assert_not_called()
+        self.channel._brainforge.prepare.assert_not_called()
+
+    async def test_agent_passthrough_sends_only_non_brief_events_to_agent(self):
+        self.channel._brainforge_config = {"agent_passthrough": True}
+        legacy = Mock()
+        self.channel._handle_message_event = legacy
+        client = SimpleNamespace(send_socket_mode_response=Mock())
+        self.channel._on_socket_event(client, self.request())
+        legacy.assert_not_called()
+        self.assertEqual(len(self.submissions), 1)
+        self.channel._brainforge.matches.return_value = False
+        self.channel._on_socket_event(client, self.request())
+        legacy.assert_called_once()
+        self.assertEqual(client.send_socket_mode_response.call_count, 2)
+        self.assertEqual(self.channel._brainforge.prepare.call_count, 1)
 
     async def test_sdk_burst_schedules_one_drain(self):
         client = SimpleNamespace(send_socket_mode_response=Mock())

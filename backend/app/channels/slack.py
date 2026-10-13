@@ -342,14 +342,19 @@ class SlackChannel(Channel):
         try:
             if self._brainforge:
                 admitted = None
+                is_brief = False
                 if req.type == "events_api":
                     event = req.payload.get("event", {})
-                    admitted = self._brainforge.prepare(event, team_id=req.payload.get("team_id") or req.payload.get("team") or event.get("team"))
-                # Rejected events are acknowledged but never sent to the paid dispatcher.
-                client.send_socket_mode_response(self._SocketModeResponse(envelope_id=req.envelope_id))
-                if admitted and self._loop and self._loop.is_running():
-                    self._wake_brainforge()
-                return
+                    team = req.payload.get("team_id") or req.payload.get("team") or event.get("team")
+                    is_brief = self._brainforge.matches(event, team_id=team)
+                    admitted = self._brainforge.prepare(event, team_id=team) if is_brief else None
+                # Exclusive mode (default): non-brief events are acknowledged but never sent
+                # to the paid dispatcher. agent_passthrough lets them reach the normal agent path.
+                if is_brief or not self._brainforge_config.get("agent_passthrough"):
+                    client.send_socket_mode_response(self._SocketModeResponse(envelope_id=req.envelope_id))
+                    if admitted and self._loop and self._loop.is_running():
+                        self._wake_brainforge()
+                    return
             # Acknowledge the event
             response = self._SocketModeResponse(envelope_id=req.envelope_id)
             client.send_socket_mode_response(response)
