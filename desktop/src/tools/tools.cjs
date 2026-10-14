@@ -4,6 +4,7 @@
 const browse = require("./browse.cjs");
 const expand = require("./expand.cjs");
 const vault = require("./vault.cjs");
+const concierge = require("./concierge.cjs");
 
 /** @typedef {{type:"string"|"number"|"boolean", description:string, required?:boolean, enum?:string[]}} Field */
 /** @typedef {{name:string, group:string, description:string, input:Record<string, Field>, run:(args:any)=>Promise<any>}} Tool */
@@ -30,6 +31,11 @@ const TOOLS = [
   { name: "codes_fill", group: "Codes", description: "Fetch a one-time code (TOTP seed, iMessage, Gmail) and type it into the page's code field. The code is never returned. Domain-locked to the item.",
     input: { session, id: { type: "string", description: "Bitwarden item id for the site", required: true }, source: { type: "string", description: "Where the code comes from", required: true, enum: ["totp", "sms", "email"] }, sender: { type: "string", description: "SMS handle or email sender to match" } },
     run: (a) => vault.codesFill({ session: a.session, id: a.id, source: a.source, sender: a.sender }) },
+  { name: "concierge_request", group: "Concierge", description: "Get a teammate into a client login. Resolves who is asking (Slack user id), which client and site, checks that person's grants (default deny, domain-locked, money actions need Dillon's approval), logs in with an injected credential, pulls 2FA codes from the right inbox, and returns a Browserbase live-view link (or a one-line reason). Never returns a password.",
+    input: { asker: { type: "string", description: "Slack user id of the person asking (from the verified Slack event)", required: true }, text: { type: "string", description: "Their request in words, e.g. get me into Bar Crawl wordpress" }, client: { type: "string", description: "Client id, if already known" }, site: { type: "string", description: "Site key, if already known" }, action: { type: "string", description: "login (default) or a specific action such as billing.update" }, handoff: { type: "string", description: "false to log in without opening a live session", enum: ["true", "false"] } },
+    run: (a) => concierge.request(a) },
+  { name: "concierge_status", group: "Concierge", description: "What the concierge will do for a person: their clients, and whether their Gmail is connected for login codes. No secrets.",
+    input: { asker: { type: "string", description: "Slack user id", required: true } }, run: (a) => concierge.status(a) },
 ];
 
 /** @param {string} name @param {Record<string, unknown>} args */
