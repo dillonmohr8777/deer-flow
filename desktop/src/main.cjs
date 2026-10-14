@@ -8,6 +8,7 @@ const path = require("node:path");
 const { DEFAULT_ENDPOINT, validateEndpoint, isSameOriginNavigation, safeExternalURL, permittedMediaRequest, rendererPreferences } = require("./security.cjs");
 const { startSettingsServer } = require("./settings-server.cjs");
 const { handleArtifactDownload } = require("./artifact-download.cjs");
+const tools = require("./tools/tools.cjs");
 
 const smoke = process.argv.includes("--smoke-test");
 const workspaceSmoke = smoke && process.argv.includes("--verify-workspace");
@@ -120,6 +121,7 @@ app.whenReady().then(async () => {
     }
   }
   settings = await startSettingsServer({
+    tools,
     getEndpoint: () => endpoint,
     getFailure: () => failure,
     getExternal: () => external,
@@ -181,7 +183,7 @@ app.whenReady().then(async () => {
   });
   /** @type {Electron.MenuItemConstructorOptions[]} */
   const template = [
-    { label: "MomoBot", submenu: [{ label: "Connection…", click: () => showLocal() }, { type: "separator" }, { role: "quit" }] },
+    { label: "MomoBot", submenu: [{ label: "Connection…", click: () => showLocal() }, { label: "Tools…", accelerator: "CmdOrCtrl+Shift+T", click: () => showLocal("/tools") }, { type: "separator" }, { role: "quit" }] },
     { role: "editMenu" },
     { label: "View", submenu: [{ role: "reload" }, { role: "resetZoom" }, { role: "zoomIn" }, { role: "zoomOut" }, { role: "togglefullscreen" }] },
     { role: "windowMenu" },
@@ -204,5 +206,5 @@ app.on("before-quit", (event) => {
   if (stopping || !settings) return;
   event.preventDefault();
   stopping = true;
-  void settings.close().finally(() => app.quit());
+  void Promise.allSettled([tools.closeAll(), settings.close()]).finally(() => app.quit());
 });

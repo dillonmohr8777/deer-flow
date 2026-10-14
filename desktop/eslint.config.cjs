@@ -16,6 +16,11 @@ module.exports = [
         URLSearchParams: "readonly",
         setImmediate: "readonly",
         setTimeout: "readonly",
+        clearTimeout: "readonly",
+        console: "readonly",
+        fetch: "readonly",
+        AbortSignal: "readonly",
+        WebSocket: "readonly",
       },
     },
     rules: {

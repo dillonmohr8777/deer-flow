@@ -31,3 +31,21 @@ Earlier timestamped builds are superseded.
 Only this window's same-origin authenticated artifacts/PNG/JSON are accepted, with20MiB bounds, safe filenames, explicit user intent, private unique files under Downloads and interrupted-file cleanup. External/executable downloads are rejected; saved files never auto-open. Hidden smoke rejects every download. Unit tests cover these policies; a physical Save interaction remains user-driven.
 
 The app is ad-hoc signed and not notarized; no DeveloperID identity is installed. Public Mac distribution requires DeveloperID signing/notarization. The private iPhone app is a PWA and requires no iOSAppStore build. A harmless macOS helper sandbox-extension warning appeared; actual renderer OS sandboxing remained true.
+
+## 0.2.2 rebuild - October 13, 2026
+
+Built from branch `claude/momobot-desktop-20261013` (origin/main `1f6a22f76`), Electron 44.5.0, arm64. `npm ci`, strict typecheck, ESLint and 21 Node tests passed. Ad-hoc signature verified (`codesign --verify --deep --strict`, flags `adhoc`, identifier `com.momentum.momobot.openai`). Installed to `~/Applications/MomoBot.app`; the 0.2.1 app was kept at `~/Applications/MomoBot-0.2.1-backup.app`. Hidden `--smoke-test --verify-login` with `MOMOBOT_DESKTOP_URL=http://127.0.0.1:2026/workspace` (the installed app's saved endpoint) reached `/login` ("Sign in to MomoBot", password field and button present, renderer `require`/`process` undefined, OS sandbox true, cross-origin navigation blocked, window never shown). Without the env var the smoke test uses the built-in default `http://127.0.0.1:2030/workspace`, because smoke mode ignores the saved connection file.
+
+## Done when
+
+| Criterion | Status Oct 13 | Evidence / gap |
+| --- | --- | --- |
+| Signed-in session round trip (sign in, open workspace, send a message, get a reply, in the packaged app) | NOT YET | Smoke stops at the login page by design. Needs one real sign-in by Dillon, then a `--verify-workspace` run or a manual message. |
+| Persistent connection (endpoint and session survive quit and relaunch) | PARTIAL | Endpoint persists in `connection.json` (confirmed `http://127.0.0.1:2026/workspace`). Cookie persistence needs the signed-in check above. |
+| Reboot survival (launch at login) | FAIL | The app has no Login Items support (`setLoginItemSettings` is not called). Add it behind a menu toggle, or add the app to System Settings > Login Items by hand. |
+| Notarized build | FAIL | Ad-hoc only. `scripts/package.cjs` already notarizes when `MOMOBOT_SIGNING_IDENTITY` and `MOMOBOT_NOTARY_PROFILE` are set; both need a paid Apple Developer enrollment and a Developer ID certificate. |
+| Staff-reachable host | FAIL | Plain HTTP is accepted for loopback only, so the app reaches only this Mac's `:2026`. Staff need a stable HTTPS URL (Tailscale Serve or a public domain). The app already accepts HTTPS hosts. |
+| Build, signature, install, hidden smoke to login page | PASS | See above. |
+
+## Tools capability - October 14, 2026
+Branch `claude/momobot-desktop-tools-20261014`. `npm run check` and `npm test` (31 tests, 10 new: domain lock, redaction, TOTP vectors, ledger, panel token, MCP stdio) pass; hidden `--smoke-test` still passes. `node scripts/e2e-tools.cjs` (live, through the MCP server): Expand fetch of example.com, Browserbase + Vault login to expand.ai landed on the dashboard (screenshot read back, inputs blurred), the same item was refused on example.com by the domain lock, and a byte scan of MCP output, ledger and screenshots for the password and username (plain, URL, JSON and base64 forms) found no hits. Not covered live: SMS/Gmail codes (code paths unit-tested only), local Chrome backend, the packaged app's Full Disk Access for iMessage.
