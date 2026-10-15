@@ -43,7 +43,7 @@ deer-flow/
 │   │           │   ├── builtins/      # general-purpose, bash agents
 │   │           │   ├── executor.py    # Background execution engine
 │   │           │   └── registry.py    # Agent registry
-│   │           ├── tools/builtins/    # Built-in tools (present_files, ask_clarification, view_image, review_skill_package)
+│   │           ├── tools/builtins/    # Built-in tools (present_files, ask_clarification, view_image, review_skill_package, verify_claims)
 │   │           ├── mcp/               # MCP integration (tools, cache, client)
 │   │           ├── integrations/      # Managed first-party integration installers (e.g. Lark CLI skill pack)
 │   │           ├── extensions/        # Python plugin loader, registry, placement, and isolation
@@ -354,12 +354,7 @@ Outlines use ATX syntax (1–6 hashes, space/tab separator, ≤3 leading spaces)
 - Supports: PDF, PPT, Excel, Word documents (converted via `markitdown`)
 - Rejects directories before copying to keep uploads all-or-nothing
 - One conversion worker per request when called from an active event loop
-- Files stored in thread-isolated directories under the resolving user's bucket (`users/{user_id}/threads/{thread_id}/user-data/uploads`). For IM channels the owner is threaded explicitly via the `user_id=` kwarg (see IM Channels → Owner-scoped file storage); HTTP/embedded callers resolve it from `get_effective_user_id()`
-- Duplicate filenames within one request get `_N` suffixes to prevent overwrites.
-- Gateway HTTP uploads stage bytes as `.upload-*.part` files and atomically replace the destination only after size validation. These staging files are hidden from upload listings, agent upload context, and sandbox listing/search tools, and swept on Gateway startup if a hard crash leaves one behind.
-- Gateway HTTP upload/list/delete handlers offload filesystem work through `deerflow.utils.file_io.run_file_io`, a dedicated ContextVar-preserving file IO executor. Non-mounted sandbox uploads acquire sandboxes with `SandboxProvider.acquire_async()` and offload `read_bytes()` plus `sandbox.update_file()` together.
-- Mounted uploads skip sandbox acquire/sync. AIO remote/provisioner requires accurate `sandbox.thread_data_mounts: true`; omission keeps backend auto-detection.
-- `UploadsMiddleware` caps outline titles at 200 characters and previews at 2000 including markers. Titles use `original_user_content`, not upload-prefixed content; attachment-only titles use a sanitized, bounded filename or count.
+- Upload storage, staging, executor and middleware caps: see [docs/UPLOADS_AND_VIEW_IMAGE.md](docs/UPLOADS_AND_VIEW_IMAGE.md).
 
 See [docs/FILE_UPLOAD.md](docs/FILE_UPLOAD.md) for details.
 
@@ -372,6 +367,10 @@ multi-step tasks: one `in_progress` task, real-time updates. See
 ### Run Interaction Policy
 
 Interaction-sensitive changes must follow [policy](docs/RUN_INTERACTION_POLICY.md).
+
+### Cost Router
+
+`cost_router` config (`deerflow/runtime/cost_router.py`) routes `context.task_class` to a model, refuses runs over a route's USD cap or on an unpriced model, and always blocks the denylist (`meta/muse-*`). Spend: `GET /api/cost-router/spend`. `GET /api/command-center/board` (admin) feeds the Live Board: admission ledger, `DEER_FLOW_HOME/agency-evals`, lobby notes (`MOMO_LOBBY_NOTES_DIR`). Missing source: `available: false`, never 0.
 
 ### Context Summarization
 
@@ -394,7 +393,7 @@ See [docs/summarization.md](docs/summarization.md) for details.
 For models with `supports_vision: true`:
 - `ViewImageMiddleware` processes images in conversation
 - `view_image_tool` added to agent's toolset
-- Images are converted to base64 and appended to the model request as a hidden message carrying both a reserved ID prefix and a server-owned metadata marker; Gateway strips that marker from untrusted input, and the middleware requires both identifiers to recognize its own message. The middleware injects inside `wrap_model_call`, so the payload never enters graph state: checkpoints retain only lightweight `viewed_images` metadata, while client-chosen IDs survive. It also sweeps its own message out of every request before rebuilding it, so a payload stranded in an older checkpoint by an interrupted run stops being resent
+- `view_image` injects a hidden, server-marked message inside `wrap_model_call`; details in [docs/UPLOADS_AND_VIEW_IMAGE.md](docs/UPLOADS_AND_VIEW_IMAGE.md).
 
 ## Code Style
 
@@ -414,3 +413,12 @@ See `docs/` directory for detailed documentation:
 - [PATH_EXAMPLES.md](docs/PATH_EXAMPLES.md) - Path types and usage
 - [summarization.md](docs/summarization.md) - Context summarization
 - [plan_mode_usage.md](docs/plan_mode_usage.md) - Plan mode with TodoList
+- Agency workflow templates (`deerflow/scheduler/workflow_templates.py`) are data only, with no client data. `backend/scripts/seed_scheduled_workflows.py` creates them as paused tasks, idempotent by title, and never touches `scheduler.enabled`.
+
+## Approvals inbox (`/api/approvals`)
+
+Agents propose outbound actions with `propose_action`; nothing executes before an org owner/admin approves (compare-and-set, exactly-once). Proposals and edited approvals are fact-checked (contradicted claims are refused), and edits are recorded per client in `client_corrections`, whose last 10 entries `ClientCorrectionsMiddleware` injects. Detail: [docs/APPROVALS_INBOX.md](docs/APPROVALS_INBOX.md). Tests: `tests/test_approvals_inbox.py`, `tests/test_client_memory.py`.
+
+## Fact checker (`verify_claims`)
+
+Built-in tool backed by the pure module `deerflow/factcheck/core.py`: extracts numeric, date and named-source claims from an outbound draft and checks each against run evidence (successful tool outputs plus caller-supplied `evidence`). Verdicts: supported (with pointer), contradicted, unsupported, unverifiable. Gate: any contradicted -> `block`, any unsupported/unverifiable -> `flag`, else `pass`. Rules: missing data is never 0, "up/down X%" needs before/after values from one source, platform labels must match the evidence's source. Deterministic first; a model judge runs only for ambiguous claims and only when `use_model=true`. Integrators (e.g. approvals) call `verify_draft(draft, evidence).to_dict()` and refuse to enqueue when `gate == "block"`. Tests: `tests/test_factcheck.py`.

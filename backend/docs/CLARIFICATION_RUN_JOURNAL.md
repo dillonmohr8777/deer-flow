@@ -1,0 +1,5 @@
+# ClarificationMiddleware and RunJournal reconciliation
+
+Moved out of `packages/harness/deerflow/agents/middlewares/AGENTS.md` to keep the guidance chain under its byte budget. Nothing was dropped.
+
+Because this middleware can short-circuit before `on_tool_end`, `RunJournal` does a root-run reconciliation for `ToolMessage`s whose `tool_call_id` came from the current run, so cards survive checkpoint compaction. That reconciliation is **not** `ask_clarification`-only — any middleware that answers a tool call has the same gap, and a result the user saw must not vanish on reload (#4666 — `ReadBeforeWriteMiddleware` blocked-write errors reached the UI but not the event store). It is bounded by three conditions, not a name allowlist: the message is user-visible, the call belongs to this run's **lead agent** (`_remember_current_run_tool_calls` records lead-agent calls only; subagent results stay in `subagent.step`), and it is not already persisted. Human Input Card replies are `hide_from_ui` `HumanMessage`s with `additional_kwargs.human_input_response`; `RunJournal` persists only allowlisted hidden sources (currently `ask_clarification`) as `llm.human.input`.

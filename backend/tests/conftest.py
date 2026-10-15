@@ -182,3 +182,12 @@ def _auto_user_context(request):
         yield
     finally:
         reset_current_user(token)
+
+
+@pytest.fixture(autouse=True)
+def _admission_gate_off_for_legacy_suite(monkeypatch, tmp_path):
+    """The gate defaults ON in production and denies every unconfigured route; the pre-existing suite
+    uses fake endpoints, so switch it off here. tests/test_paid_admission.py re-enables it explicitly
+    and never touches the real ~/.momo state dir."""
+    monkeypatch.setenv("MOMO_ADMISSION_GATE", "off")
+    monkeypatch.setenv("MOMO_ADMISSION_DIR", str(tmp_path / "admission"))

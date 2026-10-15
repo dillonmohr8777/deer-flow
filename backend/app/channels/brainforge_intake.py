@@ -47,15 +47,30 @@ def _valid_route(value: Any) -> bool:
     return value == "__owner__" or _valid(value, _CLIENT)
 
 
+def bot_app_trusted(event: Mapping[str, Any], trusted_app_ids: Any) -> bool:
+    """True unless a bot_id event comes from an app outside a non-empty trusted list.
+
+    An empty list keeps the original behavior (any app posting with an allowlisted
+    user token is accepted). Events without bot_id (typed by a human) are unaffected.
+    """
+    if not event.get("bot_id") or not trusted_app_ids:
+        return True
+    profile = event.get("bot_profile")
+    app_id = event.get("app_id") or (profile.get("app_id") if isinstance(profile, Mapping) else None)
+    return isinstance(app_id, str) and app_id in trusted_app_ids
+
+
 @dataclass(frozen=True)
 class ScopePolicy:
     team_id: str
     allowed_users: frozenset[str]
     channel_clients: Mapping[str, str]
     bot_user_id: str
+    trusted_app_ids: frozenset[str] = frozenset()
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "allowed_users", frozenset(self.allowed_users))
+        object.__setattr__(self, "trusted_app_ids", frozenset(self.trusted_app_ids))
         object.__setattr__(self, "channel_clients", MappingProxyType(dict(self.channel_clients)))
 
     @property
@@ -89,7 +104,15 @@ def admit_event(policy: ScopePolicy, event: Mapping[str, Any], *, team_id: str |
     """
     if not policy.valid or team_id != policy.team_id or not isinstance(event, Mapping):
         return None
-    if not isinstance(event.get("type"), str) or event.get("type") not in {"message", "app_mention"} or event.get("bot_id") or event.get("subtype"):
+    if not isinstance(event.get("type"), str) or event.get("type") not in {"message", "app_mention"} or event.get("subtype"):
+        return None
+    # An allowlisted human posting through another app with their own user token
+    # (e.g. Composio) carries that app's bot_id; the bot itself never qualifies.
+    # The allowlist and type checks below cover everything else; comparing with ==
+    # (not `in frozenset`) keeps a malformed dict/list user from raising TypeError.
+    if event.get("bot_id") and event.get("user") == policy.bot_user_id:
+        return None
+    if not bot_app_trusted(event, policy.trusted_app_ids):
         return None
     channel = event.get("channel")
     user = event.get("user")

@@ -1,6 +1,6 @@
 "use strict";
 
-const DEFAULT_ENDPOINT = "http://127.0.0.1:3040/workspace/openai";
+const DEFAULT_ENDPOINT = "http://127.0.0.1:2030/workspace";
 const MAX_ARTIFACT_BYTES = 20 * 1024 * 1024;
 // Saved files keep only document and image types. Anything else (for example .terminal, .inetloc or
 // .workflow) can run on a macOS double-click, so an allow-list replaces guessing every runnable type.
@@ -32,7 +32,7 @@ function validateEndpoint(value) {
   if (!url.hostname || url.hostname.endsWith(".")) {
     throw new Error("Enter a valid workspace hostname.");
   }
-  if (url.pathname === "/") url.pathname = "/workspace/openai";
+  if (url.pathname === "/") url.pathname = "/workspace";
   return url.toString();
 }
 

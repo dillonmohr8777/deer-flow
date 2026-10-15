@@ -1,0 +1,34 @@
+/*
+ * Approvals inbox. List/detail layout comes from the Board's module (same
+ * two-pane shape); this file only adds the edit fields and action bar.
+ */
+
+.field {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.actions > * {
+  min-height: 2.75rem;
+}
+
+.mono {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.8125rem;
+  overflow-wrap: anywhere;
+}
+
+.note {
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow-wrap: anywhere;
+}

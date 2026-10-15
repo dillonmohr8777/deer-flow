@@ -2058,4 +2058,41 @@ export const enUS: Translations = {
       addError: "Couldn't add that agent.",
     },
   },
+  workflowPreparation: {
+    title: "Reviewed source draft",
+    description:
+      "Prepare a bounded research-note proposal from the exact reviewed evidence file.",
+    tag: "Preparation only",
+    checking: "Checking workspace review status…",
+    statusFailed:
+      "Could not confirm the reviewed source status. Refresh and try again.",
+    refresh: "Refresh status",
+    unavailable: "No reviewed source binding is available in this workspace.",
+    expired:
+      "The source review is expired. A current owner-reviewed file is required.",
+    uploadHint:
+      "The upload is checked against the workspace’s pinned review. It stays in memory for this page only.",
+    fileLabel: "Reviewed JSON file",
+    fileSizeInvalid:
+      "Choose a non-empty reviewed JSON file no larger than 48 KB.",
+    selectedFile: (name, bytes) => `Selected file: ${name} · ${bytes} bytes`,
+    preparing: "Preparing draft…",
+    prepare: "Prepare unsent draft",
+    clear: "Clear file and draft",
+    limitations: "This prepares an unsent draft. Paid research remains off.",
+    unsent: "Unsent proposal",
+    synthetic: "synthetic evidence",
+    reviewed: "reviewed evidence",
+    brief: "Brief",
+    question: "Research question",
+    sources: "Source excerpts",
+    context: "Knowledge context and limitations",
+    sourceReview: "Review the sources and dates before using this draft.",
+    scopeChanged:
+      "The workspace changed. Refresh the review status before uploading again.",
+    reviewExpired:
+      "This review has expired or changed. Load a current reviewed source file.",
+    failed:
+      "The reviewed evidence could not be prepared. Recheck the workspace and current review.",
+  },
 };
