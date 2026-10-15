@@ -71,6 +71,7 @@ _BLOCKED_TAG_NAMES: frozenset[str] = frozenset(
         "system-reminder",
         "system_reminder",
         "memory",
+        "client_corrections",
         "current_date",
         "think",
         "analysis",

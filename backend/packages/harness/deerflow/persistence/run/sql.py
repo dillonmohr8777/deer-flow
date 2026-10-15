@@ -564,6 +564,19 @@ class RunRepository(RunStore):
             await session.execute(update(RunRow).where(RunRow.run_id == run_id, RunRow.status == "running").values(**values))
             await session.commit()
 
+    async def usage_by_model_since(self, since: datetime) -> dict[str, dict[str, int]]:
+        stmt = select(RunRow.model_name, RunRow.total_input_tokens, RunRow.total_output_tokens, RunRow.token_usage_by_model).where(RunRow.operation_kind == "run", RunRow.created_at >= since)
+        async with self._sf() as session:
+            rows = (await session.execute(stmt)).all()
+        out: dict[str, dict[str, int]] = {}
+        for r in rows:
+            per_model = r.token_usage_by_model or {r.model_name or "unknown": {"input_tokens": r.total_input_tokens, "output_tokens": r.total_output_tokens}}
+            for model, u in per_model.items():
+                b = out.setdefault(model, {"input_tokens": 0, "output_tokens": 0})
+                b["input_tokens"] += u.get("input_tokens", 0)
+                b["output_tokens"] += u.get("output_tokens", 0)
+        return out
+
     async def aggregate_tokens_by_thread(
         self,
         thread_id: str,

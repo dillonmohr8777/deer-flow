@@ -62,6 +62,9 @@ compose=(docker compose --env-file "$ENV_FILE" -p "$PROJECT"
   -f "$REPO/docker/docker-compose.yaml"
   -f "$REPO/docker/docker-compose.dood.yaml"
   -f "$REPO/deploy/momentum/mac/compose.funnel.yaml")
+# The admission gate override mounts ~/.momo/admission; without it paid routes fail closed.
+ADMISSION_OVERRIDE="$DEPLOY_DIR/ops/compose.admission-20261005.yaml"
+[[ -f "$ADMISSION_OVERRIDE" ]] && compose+=(-f "$ADMISSION_OVERRIDE")
 
 if [[ "${1:-}" == "--what-if" ]]; then
   exec "${compose[@]}" config

@@ -78,6 +78,7 @@ from deerflow.runtime.checkpoint_mode import (
 )
 from deerflow.runtime.checkpoint_state import graph_state_schema
 from deerflow.runtime.context_keys import PROJECT_CONTEXT_KEY
+from deerflow.runtime.cost_router import CostRouterRefusal, admit_run
 from deerflow.runtime.events.message_identity import MESSAGE_SEQ_KEY
 from deerflow.runtime.goal import goal_thread_lock
 from deerflow.runtime.journal import build_checkpoint_history_seed_events
@@ -1823,6 +1824,18 @@ async def start_run(
     # Coerce non-string model_name values to str before truncation.
     if model_name is not None and not isinstance(model_name, str):
         model_name = str(model_name)
+
+    # Cost router: route by task class, then refuse denylisted, unpriced or
+    # over-cap models before any run row exists.
+    try:
+        router_config = get_app_config()
+    except FileNotFoundError:  # no config.yaml: nothing to route, and the run cannot start anyway
+        router_config = None
+    if router_config is not None:
+        try:
+            model_name = await admit_run(router_config, getattr(request.app.state, "run_store", None), model_name, body_context.get("task_class"))
+        except CostRouterRefusal as exc:
+            raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
 
     # Validate model against the allowlist when a model_name is provided.
     if model_name:
