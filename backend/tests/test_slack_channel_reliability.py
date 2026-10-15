@@ -28,20 +28,23 @@ def _queued(bus):
         return None
 
 
-def test_run_client_has_no_read_deadline_so_long_runs_are_not_cancelled():
+def test_run_client_allows_long_runs_but_never_waits_forever():
     from app.channels.manager import ChannelManager
 
     manager = ChannelManager(bus=MessageBus(), store=ChannelStore(path=Path(tempfile.mkdtemp()) / "store.json"))
     with patch("langgraph_sdk.get_client") as get_client:
         manager._get_client()
     timeout = get_client.call_args.kwargs["timeout"]
-    # runs.wait sends nothing until the run ends; a read deadline disconnects and the Gateway cancels the run.
-    assert timeout.read is None
+    # runs.wait sends nothing until the run ends, so a short read deadline disconnects and the Gateway
+    # cancels the run; a missing one lets a hung Gateway block the conversation forever.
+    assert timeout.read is not None and timeout.read >= 3600
     assert timeout.connect is not None
 
 
-def test_failed_run_reports_an_error_instead_of_a_stale_answer():
+def test_failed_run_reports_an_error_instead_of_a_stale_answer(monkeypatch):
     from app.channels.manager import ChannelManager
+
+    monkeypatch.setattr("app.channels.manager._owner_headers", lambda _msg: {"X-Synthetic-Owner": "o1"})
 
     async def go():
         bus = MessageBus()
@@ -69,7 +72,8 @@ def test_failed_run_reports_an_error_instead_of_a_stale_answer():
         await bus.publish_inbound(InboundMessage(channel_name="test", chat_id="c1", user_id="u1", text="Q2", topic_id="t", thread_ts="m1"))
         await _wait_for(lambda: len(outbound) >= 1)
         await manager.stop()
-        client.runs.get.assert_awaited_once_with("t1", "r1")
+        # The run read carries the same owner identity as the run itself (GET /runs/{id} is owner-checked).
+        client.runs.get.assert_awaited_once_with("t1", "r1", headers={"X-Synthetic-Owner": "o1"})
         assert "A1" not in outbound[0].text
         assert "didn't finish" in outbound[0].text
 
@@ -130,3 +134,32 @@ def test_failed_socket_connect_leaves_the_channel_not_running():
     assert channel._running is False
     assert channel._socket_client is None
     socket_client.close.assert_called_once()
+
+
+def test_wait_route_names_its_run_so_the_sdk_reports_it(monkeypatch):
+    """runs.wait's on_run_created only fires from Content-Location; without it the failed-run check never runs."""
+    import httpx
+    from langgraph_sdk._shared.utilities import _get_run_metadata_from_response
+    from test_thread_run_idempotency import _make_client, _user
+
+    client = _make_client(monkeypatch, _user("alice@example.com"), {})
+    response = client.post("/api/threads/thread-1/runs/wait", json={"input": {"messages": []}})
+    assert response.status_code == 200, response.text
+    metadata = _get_run_metadata_from_response(httpx.Response(200, headers={"Content-Location": response.headers.get("Content-Location", "")}))
+    assert metadata == {"run_id": "run-1", "thread_id": "thread-1"}
+
+
+def test_bot_ignores_its_own_file_uploads():
+    from app.channels.slack import SlackChannel
+
+    bus = MessageBus()
+    # No allowed_users: everyone may talk to the bot, so only the self-check stops a reply loop.
+    channel = SlackChannel(bus=bus, config={"bot_user_id": "UBOT"})
+    loop = MagicMock()
+    loop.is_running.return_value = True
+    channel._loop = loop
+    channel._web_client = MagicMock()
+    channel._handle_message_event({"subtype": "file_share", "user": "UBOT", "text": "", "channel": "C1", "ts": "2.1", "files": [{"id": "F1"}]})
+    channel._handle_message_event({"user": "UBOT", "text": "report attached", "channel": "C1", "ts": "2.2"})
+    assert _queued(bus) is None
+    channel._web_client.chat_postMessage.assert_not_called()

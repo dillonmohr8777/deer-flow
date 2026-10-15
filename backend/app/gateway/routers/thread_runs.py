@@ -1055,6 +1055,7 @@ async def wait_run(
     thread_id: ThreadId,
     body: RunCreateRequest,
     request: Request,
+    response: Response = None,  # type: ignore[assignment]  # FastAPI injects it by annotation; direct callers may omit it
     idempotency_key: IdempotencyKeyHeader = None,
 ) -> dict:
     """Create a run and block until it completes, returning the final state.
@@ -1075,6 +1076,10 @@ async def wait_run(
     # record's idempotency_reused flag, so an overlapping retry must not
     # change this request's checkpoint-vs-status decision.
     reused = bool(getattr(record, "idempotency_reused", False))
+    # Same run resource header as /runs/stream: the LangGraph SDK reads the run id from it
+    # (on_run_created), which callers need to check whether a waited run actually succeeded.
+    if response is not None:
+        response.headers["Content-Location"] = f"/api/threads/{thread_id}/runs/{record.run_id}"
 
     # Reused/hydrated records have no local task. Wait on the bridge when this
     # worker can observe it; otherwise return durable status rather than

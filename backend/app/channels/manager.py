@@ -87,6 +87,7 @@ STREAM_UPDATE_MIN_CHARS = 60  # flush immediately when this many chars accumulat
 # Platform) deliver the requested "messages-tuple" mode as event "messages".
 STREAM_MODES = ["messages-tuple", "values"]
 MESSAGE_STREAM_EVENTS = ("messages-tuple", "messages")
+CHANNEL_RUN_READ_TIMEOUT_SECONDS = 2 * 60 * 60
 RUN_FAILED_STATUSES = frozenset({"error", "timeout"})
 RUN_FAILED_MESSAGE = "MomoBot didn't finish that request because the run ended with an error. Please try again."
 THREAD_BUSY_MESSAGE = "This conversation is already processing another request. Please wait for it to finish and try again."
@@ -1832,9 +1833,10 @@ class ChannelManager:
 
             self._client = get_client(
                 url=self._langgraph_url,
-                # runs.wait sends nothing until the run ends. A read deadline would disconnect
-                # long runs, and the Gateway cancels a run whose waiting client disconnects.
-                timeout=httpx.Timeout(connect=5, read=None, write=300, pool=5),
+                # runs.wait sends nothing until the run ends, and the Gateway cancels a run whose
+                # waiting client disconnects, so the read deadline is long; it is still finite so a
+                # hung Gateway cannot hold a conversation busy forever.
+                timeout=httpx.Timeout(connect=5, read=CHANNEL_RUN_READ_TIMEOUT_SECONDS, write=300, pool=5),
                 headers={
                     **create_internal_auth_headers(),
                     CSRF_HEADER_NAME: self._csrf_token,
@@ -2586,7 +2588,7 @@ class ChannelManager:
         # previous turn's answer. Check this run's own status before replying with that state.
         if created_run.get("run_id"):
             try:
-                run = await client.runs.get(thread_id, created_run["run_id"])
+                run = await client.runs.get(thread_id, created_run["run_id"], headers=run_kwargs.get("headers"))
             except Exception:
                 logger.warning("[Manager] could not read run status: thread_id=%s run_id=%s", thread_id, created_run["run_id"], exc_info=True)
                 run = None

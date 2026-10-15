@@ -192,6 +192,7 @@ class SlackChannel(Channel):
             except Exception:
                 self._running = False
                 self.bus.unsubscribe_outbound(self._on_outbound)
+                await self._close_and_drain_threadsafe_futures()
                 await asyncio.to_thread(self._socket_client.close)
                 self._socket_client = None
                 logger.error("Slack Socket Mode connection failed; the channel is not running")
@@ -470,6 +471,9 @@ class SlackChannel(Channel):
         if event.get("subtype") not in (None, *_ANSWERED_MESSAGE_SUBTYPES):
             return
         user_id = event.get("user", "")
+        # The bot's own posts (its file uploads can arrive without a bot_id) must never get a reply.
+        if self._bot_user_id and user_id == self._bot_user_id:
+            return
         # An allowlisted human posting through another app with their own user
         # token (e.g. Composio) carries that app's bot_id but is still the human.
         if event.get("bot_id") and not (isinstance(user_id, str) and user_id in self._allowed_users and user_id != self._bot_user_id and bot_app_trusted(event, self._trusted_app_ids)):
