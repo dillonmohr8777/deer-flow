@@ -46,7 +46,7 @@ async function main() {
     asar: true,
     prune: true,
     overwrite: false,
-    ignore: [/^\/\.build(?:\/|$)/u, /^\/tests(?:\/|$)/u, /^\/scripts(?:\/|$)/u, /^\/out(?:\/|$)/u, /^\/README\.md$/u, /^\/package-lock\.json$/u],
+    ignore: [/^\/\.build(?:\/|$)/u, /^\/tests(?:\/|$)/u, /^\/scripts(?:\/|$)/u, /^\/out(?:\/|$)/u, /^\/README\.md$/u, /^\/VERIFICATION\.md$/u, /^\/package-lock\.json$/u],
     extendInfo: {
       NSMicrophoneUsageDescription: "MomoBot uses your microphone only when you start voice input in your workspace.",
     },
