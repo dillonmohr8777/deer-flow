@@ -2,6 +2,9 @@
 
 const DEFAULT_ENDPOINT = "http://127.0.0.1:2030/workspace";
 const MAX_ARTIFACT_BYTES = 20 * 1024 * 1024;
+// Saved files keep only document and image types. Anything else (for example .terminal, .inetloc or
+// .workflow) can run on a macOS double-click, so an allow-list replaces guessing every runnable type.
+const SAVEABLE_EXTENSIONS = /\.(?:png|jpe?g|gif|webp|pdf|json|txt|md|csv|tsv|log|html|docx|xlsx|pptx)$/i;
 const EXECUTABLE_EXTENSIONS = /\.(?:app|exe|com|bat|cmd|msi|msp|ps1|sh|bash|zsh|fish|command|desktop|js|cjs|mjs|vbs|vbe|wsf|hta|py|pyw|rb|pl|jar|dll|so|dylib|wasm|scpt|applescript|lnk|url|webloc|pkg|dmg|deb|rpm)(?:\.|$)/i;
 
 /** @param {string} hostname */
@@ -69,6 +72,25 @@ function permittedMediaRequest(permission, origin, endpoint, details = {}) {
   return Array.isArray(types) && types.length > 0 && types.every((type) => type === "audio");
 }
 
+/**
+ * Microphone audio and clipboard writes from the workspace origin only. Clipboard reads stay denied.
+ * @param {string} permission
+ * @param {string} origin
+ * @param {string} endpoint
+ * @param {{mediaType?: string, mediaTypes?: readonly string[]}} details
+ */
+function permittedSessionRequest(permission, origin, endpoint, details = {}) {
+  // Chromium's permission check passes a serialized origin with a trailing slash ("https://host/").
+  let normalized;
+  try {
+    normalized = new URL(origin).origin;
+  } catch {
+    return false;
+  }
+  if (permission === "clipboard-sanitized-write") return normalized === new URL(endpoint).origin;
+  return permittedMediaRequest(permission, normalized, endpoint, details);
+}
+
 function rendererPreferences() {
   return {
     nodeIntegration: false,
@@ -86,7 +108,7 @@ function rendererPreferences() {
 
 /** @param {unknown} value */
 function artifactFilename(value) {
-  if (typeof value !== "string" || !value || value.length > 160 || [...value].some((char) => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127 || char === "/" || char === "\\") || value.startsWith(".") || value.endsWith(".") || EXECUTABLE_EXTENSIONS.test(value)) return null;
+  if (typeof value !== "string" || !value || value.length > 160 || [...value].some((char) => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127 || char === "/" || char === "\\") || value.startsWith(".") || value.endsWith(".") || EXECUTABLE_EXTENSIONS.test(value) || !SAVEABLE_EXTENSIONS.test(value)) return null;
   const filename = value.replace(/[^\w.-]/g, "-");
   return filename && filename !== "." && filename !== ".." ? filename : null;
 }
@@ -125,4 +147,4 @@ function permittedArtifactDownload(candidate, endpoint) {
   }
 }
 
-module.exports = { DEFAULT_ENDPOINT, MAX_ARTIFACT_BYTES, validateEndpoint, isSameOriginNavigation, safeExternalURL, permittedMediaRequest, rendererPreferences, artifactFilename, isArtifactDownloadURL, permittedArtifactDownload };
+module.exports = { DEFAULT_ENDPOINT, MAX_ARTIFACT_BYTES, validateEndpoint, isSameOriginNavigation, safeExternalURL, permittedMediaRequest, permittedSessionRequest, rendererPreferences, artifactFilename, isArtifactDownloadURL, permittedArtifactDownload };
