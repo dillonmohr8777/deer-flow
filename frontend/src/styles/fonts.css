@@ -95,21 +95,16 @@
 /* ---------- Voice custom properties ---------- */
 
 :root {
-  --m-font-display: "Archivo Black", system-ui, sans-serif;
-  --m-font-serif: "Fraunces", Georgia, serif;
-  --m-font-text:
-    "Nunito Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  /* Ironic Ineptocracy faces (ironicineptocracy.com DESIGN.md): Impact display,
+     Georgia body, IBM Plex Mono labels. All system or fallback stacks, so no
+     extra font request. */
+  --m-font-display: Impact, Anton, Haettenschweiler, "Arial Black", sans-serif;
+  --m-font-serif: Georgia, "Times New Roman", serif;
+  --m-font-text: Georgia, "Times New Roman", serif;
   --m-font-script: "Caveat", "Segoe Script", cursive;
-  /*
-   * Voice 5: code. No shipped face — this is a stack on purpose. Code is the
-   * one surface where the reader's own configured font is more useful than
-   * ours, and a downloaded face would cost a render-blocking request on every
-   * artifact and diff view to say nothing the system stack does not already
-   * say. Ordered for what is actually installed per platform.
-   */
   --m-font-mono:
-    ui-monospace, "Cascadia Mono", "Segoe UI Mono", "SF Mono", "JetBrains Mono",
-    "Fira Code", Menlo, Consolas, "Liberation Mono", monospace;
+    "IBM Plex Mono", "Courier New", ui-monospace, "SF Mono", Menlo, Consolas,
+    monospace;
 }
 
 /* ---------- Voice utilities ---------- */

@@ -1,5 +1,6 @@
 /*
- * Paper cutout treatment — token layer.
+ * Paper cutout treatment — token layer, re-inked for The Ironic Ineptocracy
+ * (black #030303, paper #f3eee2, signal red #d32218, warning orange #f05a28).
  *
  * Canon: "blue, white, grey, with a hint of gold." Grey hardware, gold
  * accent only. Restraint is the craft.
@@ -34,36 +35,36 @@
 
 [data-treatment="paper"] {
   /* Paper */
-  --paper-cream: #f2ede3;
-  --paper-cream-hi: #fbf8f1;
+  --paper-cream: #f3eee2;
+  --paper-cream-hi: #faf7ef;
   /* Hover and quiet fills: visible on cream and on cream-hi sheets. */
-  --paper-cream-lo: #e9decc;
-  --paper-kraft: #d8c3a0;
+  --paper-cream-lo: #e2d3ac;
+  --paper-kraft: #c9c1b2;
 
   /* The landing's 5% grain as a background tile, so it sits under content. */
   --paper-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E");
 
   /* Ink */
-  --paper-ink: #101e3f;
-  --paper-ink-muted: #3a4a6b;
+  --paper-ink: #030303;
+  --paper-ink-muted: #3d3933;
 
   /* Royal blue */
-  --paper-royal: #1b4b9e;
-  --paper-royal-deep: #14346e;
-  --paper-focus: #003da5;
+  --paper-royal: #d32218;
+  --paper-royal-deep: #8f160f;
+  --paper-focus: #030303;
 
   /* Text-safe accents */
-  --paper-brass-text: #7a5e18;
-  --paper-cyan-text: #0a6183;
-  --paper-danger: #9a2b3c;
-  --paper-ok: #0a6b4f;
+  --paper-brass-text: #a3330c;
+  --paper-cyan-text: #a3330c;
+  --paper-danger: #a3190f;
+  --paper-ok: #2f6b2b;
 
   /* UI hardware, not text */
-  --paper-line: #8c7a5c;
+  --paper-line: #7e7a70;
 
   /* Object-only colours — never text. A word uses the -text variant. */
-  --paper-brass: #c8a04a;
-  --paper-cyan: #17a9e8;
+  --paper-brass: #f05a28;
+  --paper-cyan: #f05a28;
 
   /*
    * Surface remap: command-center.module.css defines a first-pass local
