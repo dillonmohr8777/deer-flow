@@ -80,8 +80,15 @@ function permittedMediaRequest(permission, origin, endpoint, details = {}) {
  * @param {{mediaType?: string, mediaTypes?: readonly string[]}} details
  */
 function permittedSessionRequest(permission, origin, endpoint, details = {}) {
-  if (permission === "clipboard-sanitized-write") return origin === new URL(endpoint).origin;
-  return permittedMediaRequest(permission, origin, endpoint, details);
+  // Chromium's permission check passes a serialized origin with a trailing slash ("https://host/").
+  let normalized;
+  try {
+    normalized = new URL(origin).origin;
+  } catch {
+    return false;
+  }
+  if (permission === "clipboard-sanitized-write") return normalized === new URL(endpoint).origin;
+  return permittedMediaRequest(permission, normalized, endpoint, details);
 }
 
 function rendererPreferences() {

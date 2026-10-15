@@ -62,3 +62,11 @@ test("only the workspace may write to the clipboard; it may never read it", () =
   assert.equal(permittedSessionRequest("media", "https://momo.example.com", endpoint, { mediaTypes: ["audio"] }), true);
   for (const [permission, origin] of [["clipboard-sanitized-write", "https://evil.example"], ["clipboard-read", "https://momo.example.com"], ["notifications", "https://momo.example.com"]]) assert.equal(permittedSessionRequest(permission, origin, endpoint), false);
 });
+
+test("permission checks accept Chromium's serialized origin with a trailing slash", () => {
+  const { permittedSessionRequest } = require("../src/security.cjs");
+  const endpoint = "https://momo.example.com/workspace/openai";
+  assert.equal(permittedSessionRequest("clipboard-sanitized-write", "https://momo.example.com/", endpoint), true);
+  assert.equal(permittedSessionRequest("clipboard-sanitized-write", "https://evil.example/", endpoint), false);
+  assert.equal(permittedSessionRequest("clipboard-sanitized-write", "not a url", endpoint), false);
+});

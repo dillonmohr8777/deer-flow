@@ -50,10 +50,16 @@ function showWindow() {
 
 async function openWorkspace() {
   external = undefined;
+  // Only a page that never arrives times out. Once the workspace page has committed, its scripts
+  // may keep loading slowly; stopping then would leave a half-loaded app instead of an error page.
+  const committed = () => clearTimeout(timer);
   const timer = setTimeout(() => {
+    if (window.isDestroyed()) return;
+    window.webContents.off("did-navigate", committed);
     failure = `MomoBot could not reach the workspace within ${LOAD_TIMEOUT_MS / 1000} seconds. Check the server and your network, then try again.`;
     window.webContents.stop();
   }, LOAD_TIMEOUT_MS);
+  window.webContents.once("did-navigate", committed);
   try {
     await window.loadURL(endpoint);
   } catch {
@@ -61,6 +67,7 @@ async function openWorkspace() {
     if (!external) showLocal("/error");
   } finally {
     clearTimeout(timer);
+    if (!window.isDestroyed()) window.webContents.off("did-navigate", committed);
   }
 }
 
