@@ -21,6 +21,11 @@ logger = logging.getLogger(__name__)
 
 _slack_md_converter = SlackMarkdownConverter()
 
+# Slack message subtypes that still carry a person's request: a message with an upload, and a
+# thread reply also sent to the channel. Every other subtype (edits, joins, bots) is ignored.
+_ANSWERED_MESSAGE_SUBTYPES = ("file_share", "thread_broadcast")
+ATTACHMENT_NOTICE = "I can't read file attachments in Slack yet. Paste the text into your message or describe what you need."
+
 
 def _escape_slack_text(text: str) -> str:
     """Escape Slack's reserved characters (``&``, ``<``, ``>``) in raw message text,
@@ -172,9 +177,18 @@ class SlackChannel(Channel):
         if not self._brainforge:
             self.bus.subscribe_outbound(self._on_outbound)
 
-        # Start socket mode in background thread
         if not self._brainforge:
-            asyncio.get_event_loop().run_in_executor(None, self._socket_client.connect)
+            # A failed first connect never starts slack-sdk's reconnect monitor, so a channel
+            # left "running" here would stay deaf. Report it as not running instead.
+            try:
+                await asyncio.to_thread(self._socket_client.connect)
+            except Exception:
+                self._running = False
+                self.bus.unsubscribe_outbound(self._on_outbound)
+                await asyncio.to_thread(self._socket_client.close)
+                self._socket_client = None
+                logger.error("Slack Socket Mode connection failed; the channel is not running")
+                return
         else:
             self._wake_brainforge()
         logger.info("Slack channel started")
@@ -321,6 +335,15 @@ class SlackChannel(Channel):
             return
         self._add_reaction_with_client(self._web_client, channel_id, timestamp, emoji)
 
+    def _send_attachment_notice(self, channel_id: str, thread_ts: str) -> None:
+        """Tell the sender a file-only message can't be read (Slack file downloads aren't supported)."""
+        if not self._web_client:
+            return
+        try:
+            self._web_client.chat_postMessage(channel=channel_id, text=ATTACHMENT_NOTICE, thread_ts=thread_ts)
+        except Exception:
+            logger.exception("[Slack] failed to send attachment notice in channel=%s", channel_id)
+
     def _send_running_reply(self, channel_id: str, thread_ts: str) -> None:
         """Send a 'Working on it......' reply in the thread (called from SDK thread)."""
         if not self._web_client:
@@ -421,8 +444,9 @@ class SlackChannel(Channel):
             self._wake_brainforge()
 
     def _handle_message_event(self, event: dict, *, team_id: str | None = None) -> None:
-        # Ignore bot messages
-        if event.get("bot_id") or event.get("subtype"):
+        # Ignore bot messages and edits/joins/etc.; a message with an upload or one also sent
+        # to the channel from a thread is still a person talking to the bot.
+        if event.get("bot_id") or event.get("subtype") not in (None, *_ANSWERED_MESSAGE_SUBTYPES):
             return
 
         user_id = event.get("user", "")
@@ -430,7 +454,8 @@ class SlackChannel(Channel):
         text = event.get("text", "").strip()
         if event.get("type") == "app_mention":
             text = _strip_leading_slack_bot_mention(text, self._bot_user_id)
-        if not text:
+        attachment_only = not text and event.get("subtype") == "file_share"
+        if not text and not attachment_only:
             return
 
         connect_code = self._pending_connect_code(text)
@@ -475,6 +500,10 @@ class SlackChannel(Channel):
             is_mention = event.get("type") == "app_mention" or bool(self._bot_user_id and f"<@{self._bot_user_id}>" in event.get("text", ""))
             if not is_mention and not (event.get("thread_ts") and engagement_key in self._engaged_threads):
                 return
+
+        if attachment_only:
+            self._send_attachment_notice(channel_id, str(thread_ts))
+            return
 
         if is_known_channel_command(text):
             msg_type = InboundMessageType.COMMAND

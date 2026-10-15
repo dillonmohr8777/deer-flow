@@ -87,6 +87,8 @@ STREAM_UPDATE_MIN_CHARS = 60  # flush immediately when this many chars accumulat
 # Platform) deliver the requested "messages-tuple" mode as event "messages".
 STREAM_MODES = ["messages-tuple", "values"]
 MESSAGE_STREAM_EVENTS = ("messages-tuple", "messages")
+RUN_FAILED_STATUSES = frozenset({"error", "timeout"})
+RUN_FAILED_MESSAGE = "MomoBot didn't finish that request because the run ended with an error. Please try again."
 THREAD_BUSY_MESSAGE = "This conversation is already processing another request. Please wait for it to finish and try again."
 BOUND_IDENTITY_REQUIRED_MESSAGE = "Connect this channel from DeerFlow Settings, complete the in-channel connect step, then send your message again."
 BOUND_IDENTITY_UNAVAILABLE_MESSAGE = "Channel connection verification is temporarily unavailable. Please try again later or contact the DeerFlow operator."
@@ -1830,6 +1832,9 @@ class ChannelManager:
 
             self._client = get_client(
                 url=self._langgraph_url,
+                # runs.wait sends nothing until the run ends. A read deadline would disconnect
+                # long runs, and the Gateway cancels a run whose waiting client disconnects.
+                timeout=httpx.Timeout(connect=5, read=None, write=300, pool=5),
                 headers={
                     **create_internal_auth_headers(),
                     CSRF_HEADER_NAME: self._csrf_token,
@@ -2558,10 +2563,12 @@ class ChannelManager:
             return
 
         logger.info("[Manager] invoking runs.wait(thread_id=%s, text_len=%d)", thread_id, len(msg.text or ""))
+        created_run: dict[str, Any] = {}
         try:
             result = await client.runs.wait(
                 thread_id,
                 assistant_id,
+                on_run_created=created_run.update,
                 **run_kwargs,
             )
         except Exception as exc:
@@ -2574,6 +2581,19 @@ class ChannelManager:
                 return
             else:
                 raise
+
+        # runs.wait returns the thread's latest state even when the run failed, which can be the
+        # previous turn's answer. Check this run's own status before replying with that state.
+        if created_run.get("run_id"):
+            try:
+                run = await client.runs.get(thread_id, created_run["run_id"])
+            except Exception:
+                logger.warning("[Manager] could not read run status: thread_id=%s run_id=%s", thread_id, created_run["run_id"], exc_info=True)
+                run = None
+            if isinstance(run, dict) and run.get("status") in RUN_FAILED_STATUSES:
+                logger.warning("[Manager] run ended with status=%s: thread_id=%s run_id=%s", run.get("status"), thread_id, created_run["run_id"])
+                await self._send_error(msg, RUN_FAILED_MESSAGE)
+                return
 
         response_text = _extract_response_text(result)
         pending_clarification = _has_current_turn_clarification(result)
