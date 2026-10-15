@@ -22,6 +22,29 @@
   padding: 16px 16px 64px;
 }
 
+.exit {
+  position: sticky;
+  top: env(safe-area-inset-top, 0px);
+  z-index: 10;
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--paper-ink);
+  background: var(--paper-cream);
+  color: var(--paper-ink);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-decoration: none;
+}
+
+.exit:hover,
+.exit:focus-visible {
+  background: var(--paper-ink);
+  color: var(--paper-cream);
+}
+
 .stage {
   --daily-tilt-x: 0deg;
   --daily-tilt-y: 0deg;
