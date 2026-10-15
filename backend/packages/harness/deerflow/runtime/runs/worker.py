@@ -40,7 +40,7 @@ from deerflow.agents.goal_state import GoalEvaluation, GoalState
 from deerflow.agents.middlewares.input_sanitization_middleware import neutralize_untrusted_tags
 from deerflow.config.app_config import AppConfig
 from deerflow.config.database_config import CheckpointChannelMode
-from deerflow.constants import CONVERSATION_READER_CONTEXT_KEY, TOOL_RESULTS_DIRNAME
+from deerflow.constants import CONVERSATION_READER_CONTEXT_KEY, MOMENTUM_SDK_CONTEXT_KEY, TOOL_RESULTS_DIRNAME
 from deerflow.knowledge_scope import KNOWLEDGE_SCOPE_RUNTIME_KEY, execution_scope
 from deerflow.runtime.checkpoint_mode import (
     aensure_checkpoint_mode_compatible,
@@ -201,6 +201,7 @@ def _release_run_scoped_references(
         "__run_journal",
         CURRENT_RUN_PRE_EXISTING_MESSAGE_IDS_KEY,
         CONVERSATION_READER_CONTEXT_KEY,
+        MOMENTUM_SDK_CONTEXT_KEY,
     }
     try:
         from deerflow.extensions import EXTENSION_SNAPSHOT_CONTEXT_KEY
@@ -225,6 +226,7 @@ def _release_run_scoped_references(
         if isinstance(configurable, dict):
             configurable.pop("__pregel_runtime", None)
             configurable.pop(CONVERSATION_READER_CONTEXT_KEY, None)
+            configurable.pop(MOMENTUM_SDK_CONTEXT_KEY, None)
         context = runnable_config.get("context")
         if isinstance(context, dict):
             for key in internal_context_keys:
@@ -521,6 +523,7 @@ _SERVER_OWNED_RUNTIME_CONTEXT_KEYS: Final[frozenset[str]] = (
             CURRENT_RUN_PRE_EXISTING_MESSAGE_IDS_KEY,
             DEERFLOW_TRACE_METADATA_KEY,
             CONVERSATION_READER_CONTEXT_KEY,
+            MOMENTUM_SDK_CONTEXT_KEY,
             "is_subagent",
             "agent_id",
             "__run_loop_detection_recorder",
@@ -547,6 +550,7 @@ def _build_runtime_context(
     task_store: Any | None = None,
     extensions: Any | None = None,
     conversation_reader: Any | None = None,
+    momentum_sdk_reviewer: Any | None = None,
 ) -> dict[str, Any]:
     """Build the dict that becomes ``ToolRuntime.context`` for the run.
 
@@ -576,6 +580,8 @@ def _build_runtime_context(
                     runtime_ctx[key] = value
     if app_config is not None:
         runtime_ctx["app_config"] = app_config
+    if momentum_sdk_reviewer is not None:
+        runtime_ctx[MOMENTUM_SDK_CONTEXT_KEY] = momentum_sdk_reviewer
     if conversation_reader is not None:
         runtime_ctx[CONVERSATION_READER_CONTEXT_KEY] = conversation_reader
     if task_store is not None:
@@ -661,6 +667,7 @@ class RunContext:
     on_run_completed: Any | None = field(default=None)
     # The host binds this capability to one run's authenticated reader and references.
     conversation_reader: Any | None = field(default=None)
+    momentum_sdk_reviewer: Any | None = field(default=None)
 
 
 def _install_runtime_context(config: dict, runtime_context: dict[str, Any]) -> None:
@@ -669,6 +676,7 @@ def _install_runtime_context(config: dict, runtime_context: dict[str, Any]) -> N
     configurable = config.get("configurable")
     if isinstance(configurable, dict):
         configurable.pop(CONVERSATION_READER_CONTEXT_KEY, None)
+        configurable.pop(MOMENTUM_SDK_CONTEXT_KEY, None)
     existing_context = config.get("context")
     if isinstance(existing_context, dict):
         existing_context.setdefault("thread_id", runtime_context["thread_id"])
@@ -1115,6 +1123,7 @@ async def run_agent(
             task_store,
             extensions,
             ctx.conversation_reader,
+            ctx.momentum_sdk_reviewer,
         )
         _pin_authenticated_identity_context(config, runtime_ctx)
         # Bind every checkpoint produced by this run to the effective agent

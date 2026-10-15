@@ -308,6 +308,14 @@ class RunStore(abc.ABC):
         """
         pass
 
+    async def usage_by_model_since(self, since: datetime) -> dict[str, dict[str, int]]:
+        """Account-wide token usage per model for runs created at or after ``since``.
+
+        Returns ``{model: {"input_tokens": n, "output_tokens": n}}``. Not scoped
+        to a user or organization: spend caps are account-wide.
+        """
+        raise NotImplementedError
+
     @abc.abstractmethod
     async def update_lease(
         self,

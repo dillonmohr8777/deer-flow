@@ -179,3 +179,14 @@ def test_public_news_route_overrides_user_and_thread_agent_choices(tmp_path):
     assert context["subagent_enabled"] is False
     msg.chat_id = "OTHER"
     assert manager._resolve_run_params(msg, "thread")[2]["public_news_channel"] is False
+
+
+def test_allowlisted_user_posting_via_third_party_app_is_admitted():
+    adapter = channel()
+    adapter._make_inbound = MagicMock(wraps=adapter._make_inbound)
+    base = {"type": "message", "channel": "COTHER", "text": "hi", "ts": "1", "bot_id": "BCOMPOSIO"}
+    adapter._handle_message_event({**base, "user": "UOWNER"}, team_id=TEAM)
+    assert adapter._make_inbound.call_count == 1
+    for event in ({**base, "user": "UMEMBER"}, {**base, "user": "UBOT"}, {**base, "user": "UOWNER", "subtype": "bot_message"}):
+        adapter._handle_message_event(event, team_id=TEAM)
+    assert adapter._make_inbound.call_count == 1

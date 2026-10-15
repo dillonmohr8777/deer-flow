@@ -42,6 +42,8 @@ _ALL_PERMISSIONS = [
     Permissions.TEAM_WRITE,
     Permissions.ACADEMY_READ,
     Permissions.ACADEMY_WRITE,
+    Permissions.APPROVALS_READ,
+    Permissions.APPROVALS_WRITE,
 ]
 
 

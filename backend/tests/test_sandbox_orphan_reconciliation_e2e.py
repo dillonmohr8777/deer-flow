@@ -16,6 +16,7 @@ Requires: Docker running locally
 
 import subprocess
 import time
+import uuid
 
 import pytest
 
@@ -44,7 +45,8 @@ def _stop_container(container_name: str) -> None:
 
 # Use a lightweight image for testing to avoid pulling the heavy sandbox image
 E2E_TEST_IMAGE = "busybox:latest"
-E2E_PREFIX = "deer-flow-sandbox-e2e-test"
+# Unique per process: concurrent suites sharing one Docker daemon must not collide on container names.
+E2E_PREFIX = f"deer-flow-sandbox-e2e-test-{uuid.uuid4().hex[:6]}"
 
 
 @pytest.fixture(autouse=True)

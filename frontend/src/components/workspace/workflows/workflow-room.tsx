@@ -31,6 +31,7 @@ import {
 } from "@/core/workflows/types";
 import { cn } from "@/lib/utils";
 
+import { JevboxPreparationPane } from "./jevbox-preparation-panel";
 import { WorkflowForm } from "./workflow-form";
 import { WorkflowRunDetail } from "./workflow-run";
 
@@ -483,6 +484,7 @@ export function WorkflowRoom() {
             access.
           </p>
         )}
+        {connected && owner && <JevboxPreparationPane owner={owner} />}
         {status.isLoading && connected && (
           <p role="status" className="p-4">
             Loading workflow capabilities…

@@ -22,6 +22,15 @@ gateway:
 test:
 	PYTHONPATH=. PYTHONIOENCODING=utf-8 PYTHONUTF8=1 uv run pytest -m "not live" --ignore=tests/blocking_io tests/ -v
 
+# Weekly agency eval: `make agency-evals EVAL_MODEL=openai/gpt-6-luna` (needs OPENROUTER_API_KEY, e.g. via with-openrouter).
+# Writes a dated results JSON plus the HTML trend report under EVAL_OUT.
+EVAL_MODEL ?= openai/gpt-6-luna
+EVAL_OUT ?= $(CURDIR)/.deer-flow/agency-evals
+agency-evals:
+	mkdir -p "$(EVAL_OUT)"
+	PYTHONPATH=. uv run python -m scripts.benchmark.agency_evals run --model "$(EVAL_MODEL)" --out "$(EVAL_OUT)/$$(date +%Y-%m-%d)-$$(echo $(EVAL_MODEL) | tr '/' '_').json"
+	PYTHONPATH=. uv run python -m scripts.benchmark.agency_evals report $$(ls "$(EVAL_OUT)"/*.json | sort) --out "$(EVAL_OUT)/report.html"
+
 test-live:
 	DEER_FLOW_RUN_LIVE_TESTS=1 PYTHONPATH=. PYTHONIOENCODING=utf-8 PYTHONUTF8=1 uv run pytest -m live tests/ -v -s
 
