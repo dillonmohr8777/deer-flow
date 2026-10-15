@@ -27,6 +27,9 @@ MAX_BUDGET = 0.03
 MAX_CALLS = 3
 MAX_ATTEMPTS = 1
 HTTP_DEADLINE = 95
+LEDGER_LIMIT = 8 * 1024 * 1024
+# Room for this call's own receipt row: a ledger this close to the readback cap is refused before paying, not after.
+LEDGER_HEADROOM = 64 * 1024
 SHA = re.compile(r"[0-9a-f]{64}\Z")
 # The worker runs one job at a time and refuses overlaps with worker_busy, so runs queue here instead of failing.
 _WORKER_LOCK = asyncio.Lock()
@@ -98,7 +101,11 @@ class ClaudeSDKBridge:
         # Readback can only succeed for a regular, readable ledger reached without symlinks, so refuse before paying.
         if self.receipts is None or any(path.is_symlink() for path in (self.receipts, *self.receipts.parents)):
             return False
-        return self.receipts.is_file() and os.access(self.receipts, os.R_OK)
+        try:
+            info = self.receipts.stat()
+        except OSError:
+            return False
+        return stat.S_ISREG(info.st_mode) and info.st_size <= LEDGER_LIMIT - LEDGER_HEADROOM and os.access(self.receipts, os.R_OK)
 
     def _readback(self, result: dict) -> None:
         if self.receipts is None or any(path.is_symlink() for path in (self.receipts, *self.receipts.parents)):
@@ -106,12 +113,15 @@ class ClaudeSDKBridge:
         descriptor = os.open(self.receipts, os.O_RDONLY | os.O_NOFOLLOW)
         with os.fdopen(descriptor, "rb") as handle:
             size = os.fstat(handle.fileno())
-            if not stat.S_ISREG(size.st_mode) or size.st_size > 8 * 1024 * 1024:
+            if not stat.S_ISREG(size.st_mode) or size.st_size > LEDGER_LIMIT:
                 raise ValueError
-            raw = handle.read(8 * 1024 * 1024 + 1)
-        if len(raw) > 8 * 1024 * 1024 or not raw.endswith(b"\n"):
+            raw = handle.read(LEDGER_LIMIT + 1)
+        if len(raw) > LEDGER_LIMIT or not raw.endswith(b"\n"):
             raise ValueError
-        rows = [(line, _parse(line)) for line in raw.splitlines(keepends=True)]
+        # Only rows naming this job are parsed, so one malformed row from another job cannot fail every later readback.
+        rows = [(line, _parse(line)) for line in raw.splitlines(keepends=True) if result["job_id"].encode() in line]
+        if not all(isinstance(row, dict) for _, row in rows):
+            raise ValueError
         matches = [(line, row) for line, row in rows if row.get("job_id") == result["job_id"] and row.get("event") == "finished"]
         if len(matches) != 1:
             raise ValueError
