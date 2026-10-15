@@ -550,6 +550,46 @@ async def test_missing_ledger_is_unavailable_before_any_payment(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_nearly_full_ledger_is_unavailable_before_any_payment(monkeypatch):
+    calls = []
+
+    def handler(req):
+        calls.append(req)
+        return httpx.Response(200)
+
+    bridge = configured(monkeypatch, handler)
+    ledger = os.environ["MOMOBOT_CLAUDE_SDK_RECEIPTS"]
+    os.truncate(ledger, 8 * 1024 * 1024 - 128 * 1024)
+    assert bridge.capability()["available"] is True
+    os.truncate(ledger, 8 * 1024 * 1024 - 1024)
+    assert bridge.capability()["available"] is False
+    with pytest.raises(AdapterError, match="claude_sdk_unavailable"):
+        await bridge.call(request(), context())
+    assert calls == []
+
+
+@pytest.mark.asyncio
+async def test_unrelated_malformed_ledger_rows_do_not_block_readback(monkeypatch):
+    Path(os.environ["MOMOBOT_CLAUDE_SDK_RECEIPTS"]).write_bytes(b'{"job_id":"sdk_other","x":1,"x":2}\n[1,2]\nnot json\n')
+    bridge = configured(monkeypatch, lambda req: httpx.Response(200, json=response(json.loads(req.content))))
+    result = await bridge.call(request(), context())
+    assert result["output"] == {"answer": "Synthetic result"}
+
+
+@pytest.mark.asyncio
+async def test_malformed_row_naming_this_job_still_fails_readback(monkeypatch):
+    def handler(req):
+        job = json.loads(req.content)
+        value = response(job)
+        with Path(os.environ["MOMOBOT_CLAUDE_SDK_RECEIPTS"]).open("ab") as stream:
+            stream.write(b'{"job_id":"' + job["job_id"].encode() + b'", broken\n')
+        return httpx.Response(200, json=value)
+
+    with pytest.raises(AdapterError, match="claude_sdk_ledger_readback_failed"):
+        await configured(monkeypatch, handler).call(request(), context())
+
+
+@pytest.mark.asyncio
 async def test_overlapping_runs_queue_for_the_one_worker(monkeypatch):
     monkeypatch.setattr("app.gateway.workflow_claude_sdk._WORKER_LOCK", asyncio.Lock())
     active = peak = 0
