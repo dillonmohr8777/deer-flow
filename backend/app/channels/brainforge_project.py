@@ -104,11 +104,28 @@ class BrainForgeProjectCompiler:
         self.inputs = config.get("inputs", {})
         if not isinstance(self.inputs, dict) or set(self.inputs) - set(WORKFLOW_LANES):
             raise ValueError("unknown project lane")
+        research = config.get("research")
+        if research is not None:
+            if self._research_mode(research) == "original_x_pilot":
+                from app.channels.brainforge_research_handoff import original_source_pins
+
+                original_source_pins(research)
+                if "research" in self.inputs:
+                    raise ValueError("original research cannot be overridden by a lane packet")
         _pinned(config["control"])
         self.catalog = self._catalog()
         collector = config.get("collector", {})
         if collector.get("total_budget_usd") != 16:
             raise ValueError("existing X pilot has one $16 total ceiling")
+
+    @staticmethod
+    def _research_mode(config: Any) -> str:
+        if not isinstance(config, dict):
+            raise ValueError("unknown research mode")
+        mode = config.get("kind", "reviewed_js")
+        if not isinstance(mode, str) or mode not in {"reviewed_js", "original_x_pilot"}:
+            raise ValueError("unknown research mode")
+        return mode
 
     def _catalog(self) -> dict:
         rows = _json(self.config["catalog"]).get("workflows")
@@ -162,9 +179,21 @@ class BrainForgeProjectCompiler:
         config = self.config.get("research")
         if not config:
             return None
+        mode = self._research_mode(config)
+        if mode == "original_x_pilot" and "research" in self.inputs:
+            raise ValueError("original research cannot be overridden by a lane packet")
         # Personal research evidence never routes to a client lane implicitly.
         if client_id != "__owner__":
             return {"status": "different_client_scope"}
+        if mode == "original_x_pilot":
+            from app.channels.brainforge_research_handoff import prepare_original_handoff
+
+            prepared = prepare_original_handoff(config, _pinned, _credential_shaped)
+            if prepared["inputs"] is None:
+                return {"status": "needs_reviewed_inputs", "workflowId": WORKFLOW_LANES["research"], "reason": "empty_original_evidence", "researchOrigin": prepared["origin"]}
+            result = self._request("research", prepared["inputs"])
+            result["researchOrigin"] = prepared["origin"]
+            return result
         pins = config.get("source_files", [])
         if not pins:
             raise ValueError("complete reviewed research program pins required")
@@ -301,9 +330,15 @@ class BrainForgeProjectCompiler:
         for pin in self.inputs.values():
             _pinned(pin)
         if self.config.get("research"):
-            for pin in self.config["research"]["source_files"]:
-                _pinned(pin)
-            _pinned(self.config["research"]["reviewed_evidence"])
+            research_config = self.config["research"]
+            if self._research_mode(research_config) == "original_x_pilot":
+                from app.channels.brainforge_research_handoff import validate_original_pins
+
+                validate_original_pins(research_config, _pinned, _credential_shaped)
+            else:
+                for pin in research_config["source_files"]:
+                    _pinned(pin)
+                _pinned(research_config["reviewed_evidence"])
         if self.config.get("model"):
             self._model()
         return result

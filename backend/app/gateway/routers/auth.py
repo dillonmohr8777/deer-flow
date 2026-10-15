@@ -1285,6 +1285,29 @@ async def list_auth_providers():
     return {"providers": providers}
 
 
+def _canonical_oidc_start_url(request: Request, provider: str, redirect_uri: str | None, next_path: str, remember_me: bool) -> str | None:
+    """Start browser SSO on the callback host so its state cookie returns."""
+    if not redirect_uri:
+        return None
+    callback = urllib.parse.urlsplit(redirect_uri)
+    if callback.scheme not in {"http", "https"} or not callback.hostname or callback.username or callback.password:
+        raise HTTPException(400, detail="Invalid configured SSO callback")
+    incoming = urllib.parse.urlsplit(str(request.url))
+
+    # TLS is terminated by the trusted proxy. Its Host preserves the public
+    # authority even when the ASGI scheme is the internal HTTP transport.
+    def authority(url: urllib.parse.SplitResult) -> tuple[str | None, int | None]:
+        port = url.port
+        if port == 443 and callback.scheme == "https":
+            port = None
+        return url.hostname, port
+
+    if authority(incoming) == authority(callback):
+        return None
+    query = urllib.parse.urlencode({"next": next_path, "remember_me": str(remember_me).lower()})
+    return urllib.parse.urlunsplit((callback.scheme, callback.netloc, f"{router.prefix}/oauth/{provider}", query, ""))
+
+
 @router.get("/oauth/{provider}")
 async def oauth_login(
     request: Request,
@@ -1315,6 +1338,12 @@ async def oauth_login(
 
     # Validate `next` / open redirect prevention
     redirect_path = validate_next_param(next) or "/workspace"
+
+    canonical_start = _canonical_oidc_start_url(request, provider, provider_config.redirect_uri, redirect_path, remember_me)
+    if canonical_start:
+        # No state/PKCE cookie has been issued yet. The real browser receives
+        # it on the configured callback host, including desktop handoffs.
+        return RedirectResponse(canonical_start, status_code=status.HTTP_302_FOUND)
 
     # Resolve redirect URI
     redirect_uri = _resolve_oidc_redirect_uri(request, provider, provider_config)

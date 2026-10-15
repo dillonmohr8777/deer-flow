@@ -1,0 +1,38 @@
+name: MomoBot desktop checks
+
+on:
+  pull_request:
+    paths:
+      - 'desktop/**'
+      - '.github/workflows/momobot-desktop-checks.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: momobot-desktop-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  desktop-checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout reviewed source
+        uses: actions/checkout@v6
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - name: Install locked desktop dependencies
+        working-directory: desktop
+        run: npm ci --no-audit --no-fund
+      - name: Typecheck and lint
+        working-directory: desktop
+        run: npm run check
+      - name: Verify desktop contracts
+        working-directory: desktop
+        run: npm test

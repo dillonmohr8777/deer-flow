@@ -12,6 +12,7 @@ from typing import Any
 from markdown_to_mrkdwn import SlackMarkdownConverter
 
 from app.channels.base import Channel
+from app.channels.brainforge_intake import bot_app_trusted
 from app.channels.brainforge_runtime import BrainForgeRuntime
 from app.channels.commands import is_known_channel_command
 from app.channels.connection_identity import attach_connection_identity
@@ -95,6 +96,8 @@ class SlackChannel(Channel):
         - ``allowed_users``: (optional) List of allowed Slack user IDs, or a
           single Slack user ID string as shorthand. Empty = allow all. Other
           scalar values are treated as a single string with a warning.
+        - ``trusted_app_ids``: (optional) Slack app IDs (A...) allowed to post as an
+          allowlisted user via a user token (e.g. Composio). Empty = any app.
     """
 
     def __init__(self, bus: MessageBus, config: dict[str, Any]) -> None:
@@ -110,7 +113,10 @@ class SlackChannel(Channel):
         configured_bot_user_id = config.get("bot_user_id")
         self._bot_user_id = str(configured_bot_user_id).lstrip("@") if configured_bot_user_id else None
         self._brainforge: BrainForgeRuntime | None = None
-        self._brainforge_config = config.get("brain_forge") or {}
+        # trusted_app_ids: when set, a bot_id event from an allowlisted user is only
+        # accepted if its Slack app id is listed (empty = any app, the old behavior).
+        self._trusted_app_ids = frozenset(_normalize_allowed_users(config.get("trusted_app_ids", [])))
+        self._brainforge_config = {"trusted_app_ids": sorted(self._trusted_app_ids), **(config.get("brain_forge") or {})}
         self._brainforge_drain_lock = threading.Lock()
         self._brainforge_drain_token = None
         self._brainforge_drain_wakeup = False
@@ -174,7 +180,8 @@ class SlackChannel(Channel):
                 logger.error("Brain Forge Slack transport connection failed")
                 return
         self._running = True
-        if not self._brainforge:
+        # Passthrough mode still delivers agent replies, so it needs the outbound path.
+        if not self._brainforge or self._brainforge_config.get("agent_passthrough"):
             self.bus.subscribe_outbound(self._on_outbound)
 
         if not self._brainforge:
@@ -365,14 +372,28 @@ class SlackChannel(Channel):
         try:
             if self._brainforge:
                 admitted = None
+                is_brief = False
                 if req.type == "events_api":
                     event = req.payload.get("event", {})
-                    admitted = self._brainforge.prepare(event, team_id=req.payload.get("team_id") or req.payload.get("team") or event.get("team"))
-                # Rejected events are acknowledged but never sent to the paid dispatcher.
-                client.send_socket_mode_response(self._SocketModeResponse(envelope_id=req.envelope_id))
-                if admitted and self._loop and self._loop.is_running():
-                    self._wake_brainforge()
-                return
+                    team = req.payload.get("team_id") or req.payload.get("team") or event.get("team")
+                    is_brief = self._brainforge.matches(event, team_id=team)
+                    admitted = self._brainforge.prepare(event, team_id=team) if is_brief else None
+                    # A refused brief is answered once (app_mention or DM only, since a channel
+                    # mention also fires a message event) instead of reaching the paid agent.
+                    if is_brief and not admitted and self._loop and self._loop.is_running() and (event.get("type") == "app_mention" or event.get("channel_type") == "im") and self._brainforge.refused(event, team_id=team):
+                        self._submit_threadsafe_coroutine(
+                            self._post_connection_reply(event.get("channel", ""), "Brief is owner-only and runs in the approved client channels.", event.get("thread_ts") or event.get("ts")),
+                            self._loop,
+                            name="brainforge_refused",
+                            msg_id=str(event.get("ts") or ""),
+                        )
+                # Exclusive mode (default): non-brief events are acknowledged but never sent
+                # to the paid dispatcher. agent_passthrough lets them reach the normal agent path.
+                if is_brief or not self._brainforge_config.get("agent_passthrough"):
+                    client.send_socket_mode_response(self._SocketModeResponse(envelope_id=req.envelope_id))
+                    if admitted and self._loop and self._loop.is_running():
+                        self._wake_brainforge()
+                    return
             # Acknowledge the event
             response = self._SocketModeResponse(envelope_id=req.envelope_id)
             client.send_socket_mode_response(response)
@@ -444,12 +465,15 @@ class SlackChannel(Channel):
             self._wake_brainforge()
 
     def _handle_message_event(self, event: dict, *, team_id: str | None = None) -> None:
-        # Ignore bot messages and edits/joins/etc.; a message with an upload or one also sent
-        # to the channel from a thread is still a person talking to the bot.
-        if event.get("bot_id") or event.get("subtype") not in (None, *_ANSWERED_MESSAGE_SUBTYPES):
+        # Ignore edits/joins/etc.; a message with an upload or one also sent to the channel
+        # from a thread is still a person talking to the bot. Bot posts are handled below.
+        if event.get("subtype") not in (None, *_ANSWERED_MESSAGE_SUBTYPES):
             return
-
         user_id = event.get("user", "")
+        # An allowlisted human posting through another app with their own user
+        # token (e.g. Composio) carries that app's bot_id but is still the human.
+        if event.get("bot_id") and not (isinstance(user_id, str) and user_id in self._allowed_users and user_id != self._bot_user_id and bot_app_trusted(event, self._trusted_app_ids)):
+            return
 
         text = event.get("text", "").strip()
         if event.get("type") == "app_mention":

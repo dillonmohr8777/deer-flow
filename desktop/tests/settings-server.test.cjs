@@ -48,7 +48,7 @@ test("settings endpoint requires its origin and an unpredictable form nonce", as
   assert.deepEqual(server.changes, []);
   const response = await request(server.origin, { method: "POST", path: "/connect", form: new URLSearchParams({ endpoint: "https://momo.example.com", nonce }).toString(), requestOrigin: server.origin });
   assert.equal(response.status, 200);
-  assert.deepEqual(server.changes, ["https://momo.example.com/workspace/openai"]);
+  assert.deepEqual(server.changes, ["https://momo.example.com/workspace"]);
 });
 
 test("invalid configuration cannot redirect or reach native external opening", async (t) => {

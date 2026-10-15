@@ -16,6 +16,7 @@ from deerflow.config.auth_config import AuthAppConfig
 from deerflow.config.authorization_config import AuthorizationConfig, load_authorization_config_from_dict
 from deerflow.config.channel_connections_config import ChannelConnectionsConfig
 from deerflow.config.checkpointer_config import CheckpointerConfig, load_checkpointer_config_from_dict
+from deerflow.config.cost_router_config import CostRouterConfig
 from deerflow.config.database_config import DatabaseConfig
 from deerflow.config.dedupe_storage_config import DedupeStorageConfig
 from deerflow.config.entitlement_config import EntitlementConfig, load_entitlement_config_from_dict
@@ -230,6 +231,7 @@ class AppConfig(BaseModel):
     )
     token_usage: TokenUsageConfig = Field(default_factory=TokenUsageConfig, description="Token usage tracking configuration")
     token_budget: TokenBudgetConfig = Field(default_factory=TokenBudgetConfig, description="Token Budget tracking and limits configuration.")
+    cost_router: CostRouterConfig = Field(default_factory=CostRouterConfig, description="Cost router: task class routes, USD spend caps, price table and model denylist.")
     plugins: list[ExtensionSpec] = Field(
         default_factory=list,
         description=format_field_description(

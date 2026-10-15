@@ -48,6 +48,9 @@ export default defineConfig({
       env: {
         DEERFLOW_ENABLE_TEST_SEED: "1",
         DEER_FLOW_AUTH_DISABLED: "1",
+        // The replay model is fake and has no paid route, so the paid-route
+        // admission gate would deny every call as unknown_route.
+        MOMO_ADMISSION_GATE: "off",
       },
     },
     {

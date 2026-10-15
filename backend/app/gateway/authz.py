@@ -84,6 +84,9 @@ class Permissions:
     TEAM_WRITE = "team:write"
     ACADEMY_READ = "academy:read"
     ACADEMY_WRITE = "academy:write"
+    # Approvals inbox: review/approve outbound actions agents proposed
+    APPROVALS_READ = "approvals:read"
+    APPROVALS_WRITE = "approvals:write"
 
 
 class AuthContext:
@@ -193,6 +196,8 @@ _ALL_PERMISSIONS: list[str] = [
     Permissions.TEAM_WRITE,
     Permissions.ACADEMY_READ,
     Permissions.ACADEMY_WRITE,
+    Permissions.APPROVALS_READ,
+    Permissions.APPROVALS_WRITE,
 ]
 
 

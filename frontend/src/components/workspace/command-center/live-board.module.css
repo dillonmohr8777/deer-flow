@@ -1,0 +1,237 @@
+/*
+ * Live board. Colour rule: each tile owns one ultracode accent, used only as a
+ * top bar, a dot and meter fills. Every word stays in the page ink, so contrast
+ * comes from --ink on --surface, never from the accent.
+ */
+.board {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.intro {
+  margin: 0;
+  color: var(--muted, #50657b);
+  max-width: 62ch;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem;
+}
+
+@media (min-width: 900px) {
+  .grid {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+  }
+  .spend {
+    grid-column: span 7;
+  }
+  .approvals {
+    grid-column: span 5;
+  }
+  .agents {
+    grid-column: span 5;
+  }
+  .ledger {
+    grid-column: span 7;
+  }
+  .evals {
+    grid-column: span 7;
+  }
+  .lobby {
+    grid-column: span 5;
+  }
+}
+
+.tile {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem 1.1rem 0.9rem;
+  background: var(--surface, #fff);
+  color: var(--ink, #07172f);
+  border: 1px solid var(--line, #d2e3f2);
+  border-top: 6px solid var(--accent);
+  border-radius: 6px;
+}
+
+.label {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+}
+
+.dot {
+  flex: none;
+  width: 0.85rem;
+  height: 0.85rem;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--ink, #07172f);
+}
+
+.body {
+  display: grid;
+  gap: 0.6rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.body p {
+  margin: 0;
+}
+
+.meta {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--muted, #50657b);
+  overflow-wrap: anywhere;
+}
+
+.meta code {
+  font-size: 0.78rem;
+}
+
+.big {
+  font-size: 3rem;
+  line-height: 1;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.unavailable {
+  padding: 0.6rem 0.75rem;
+  border: 2px dashed color-mix(in srgb, var(--ink, #07172f) 55%, transparent);
+  border-radius: 4px;
+  overflow-wrap: anywhere;
+}
+
+.loading,
+.note,
+.muted {
+  color: var(--muted, #50657b);
+}
+
+.route {
+  display: grid;
+  gap: 0.4rem;
+  padding-bottom: 0.6rem;
+  border-bottom: 1px solid var(--line, #d2e3f2);
+}
+
+.route:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.routeName span {
+  color: var(--muted, #50657b);
+  overflow-wrap: anywhere;
+}
+
+.meterRow {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.meterText {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.25rem 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.track {
+  display: block;
+  height: 0.7rem;
+  border-radius: 999px;
+  background: var(--canvas, #f7fbff);
+  border: 1px solid color-mix(in srgb, var(--ink, #07172f) 55%, transparent);
+  overflow: hidden;
+}
+
+.fill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  border-right: 2px solid var(--ink, #07172f);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .fill {
+    transition: width 700ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+}
+
+.list,
+.weeks {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.list li {
+  overflow-wrap: anywhere;
+}
+
+.weeks li {
+  display: grid;
+  grid-template-columns: 5.5rem minmax(3rem, 1fr) 3rem;
+  align-items: center;
+  gap: 0.2rem 0.6rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.weeks .muted {
+  grid-column: 2 / -1;
+  font-size: 0.8125rem;
+}
+
+.weekName {
+  font-weight: 700;
+}
+
+.graph {
+  width: 100%;
+  max-width: 26rem;
+  height: auto;
+  margin-inline: auto;
+}
+
+.edge {
+  stroke: color-mix(in srgb, var(--ink, #07172f) 60%, transparent);
+  stroke-linecap: round;
+}
+
+.node {
+  fill: var(--accent);
+  stroke: var(--ink, #07172f);
+  stroke-width: 0.7;
+}
+
+.nodeLabel {
+  fill: var(--ink, #07172f);
+  font-size: 4.2px;
+  font-weight: 700;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

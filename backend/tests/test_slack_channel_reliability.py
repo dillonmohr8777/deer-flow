@@ -112,7 +112,7 @@ class TestSlackFileMessages:
 
     def test_bot_and_edit_events_stay_ignored(self):
         bus, channel = self._channel()
-        channel._handle_message_event({"subtype": "file_share", "bot_id": "B1", "user": "U1", "text": "x", "channel": "C1", "ts": "1.4"})
+        channel._handle_message_event({"subtype": "file_share", "bot_id": "B1", "user": "U_OTHER_BOT", "text": "x", "channel": "C1", "ts": "1.4"})
         channel._handle_message_event({"subtype": "message_changed", "user": "U1", "text": "x", "channel": "C1", "ts": "1.5"})
         assert _queued(bus) is None
         channel._web_client.chat_postMessage.assert_not_called()

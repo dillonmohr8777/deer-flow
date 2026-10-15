@@ -2,12 +2,18 @@
 
 const assert = require("node:assert/strict");
 const { test } = require("node:test");
-const { validateEndpoint, isSameOriginNavigation, safeExternalURL, permittedMediaRequest, rendererPreferences } = require("../src/security.cjs");
+const { DEFAULT_ENDPOINT, validateEndpoint, isSameOriginNavigation, safeExternalURL, permittedMediaRequest, rendererPreferences } = require("../src/security.cjs");
+
+test("the agency connection opens the existing Momo workspace instead of the auxiliary OpenAI room", () => {
+  assert.equal(DEFAULT_ENDPOINT, "http://127.0.0.1:2030/workspace");
+  assert.equal(validateEndpoint("http://127.0.0.1:2030"), DEFAULT_ENDPOINT);
+  assert.equal(validateEndpoint("https://agency.example.com/workspace/workflows"), "https://agency.example.com/workspace/workflows");
+});
 
 test("remote URLs require HTTPS and localhost is the only HTTP exception", () => {
-  assert.equal(validateEndpoint("https://momo.example.com"), "https://momo.example.com/workspace/openai");
+  assert.equal(validateEndpoint("https://momo.example.com"), "https://momo.example.com/workspace");
   assert.equal(validateEndpoint("http://127.0.0.1:2030/workspace/openai"), "http://127.0.0.1:2030/workspace/openai");
-  assert.equal(validateEndpoint("http://[::1]:2030"), "http://[::1]:2030/workspace/openai");
+  assert.equal(validateEndpoint("http://[::1]:2030"), "http://[::1]:2030/workspace");
   for (const url of ["http://momo.example.com", "http://192.168.1.5:2030", "http://127.0.0.1.evil.example", "http://localhost.evil.example", "file:///etc/passwd", "javascript:alert(1)", "data:text/html,hello"]) assert.throws(() => validateEndpoint(url));
 });
 

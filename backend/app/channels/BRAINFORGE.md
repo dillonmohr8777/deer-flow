@@ -127,6 +127,11 @@ channels:
           queue/work-items.json: "<REVIEWED_SHA256>"
 ```
 
+By default Brain Forge is exclusive: every non-brief event is acknowledged and
+dropped. Set `agent_passthrough: true` to keep the normal agent path for
+everything that is not an admitted brief request. A brief request never
+reaches the agent path in either mode.
+
 `require_connection` defaults to true. `owner_user_id` is a Slack identity;
 `connection_owner_id` is the distinct backend owner identity. The authenticated
 sender must resolve to that backend owner through the existing channel
@@ -205,6 +210,76 @@ in `source_files`, and the reviewed-evidence path/hash. The CLI runs with
 `--no-network`, a restricted environment, a deadline and bounded output. Personal
 research requests remain scoped to `__owner__`. Source changes before or during
 compilation reject the result.
+
+### Original pilot evidence
+
+The server-selected `project.research.kind: original_x_pilot` alternative reads
+the original bounded X pilot's saved proposal artifacts. It preserves the
+existing JavaScript route when the kind is omitted or `reviewed_js`. Unknown
+modes, mixed configurations and an `inputs.research` override in original mode
+are rejected. The new adapter imports no original program and performs no
+collection, financial-state operation, subprocess or model call.
+
+Run the independently pinned original `marketing_signal_brief.build_brief`
+separately, before compilation, using exact-hash page artifacts, a fixed UTC
+observation time and a new private output directory. Save its returned producer
+proof as a private JSON file. This upstream preparation writes only its original
+brief/envelope artifacts. Do not invoke the collector, `Pilot` constructor or
+status method to perform it. Missing original financial history must remain
+missing; recovering code does not authorize initializing another ledger.
+
+Configure only these original-mode fields, all selected by the trusted operator:
+
+```yaml
+research:
+  kind: original_x_pilot
+  producer_sources:
+    marketing_signal_brief.py: {path: /reviewed/marketing_signal_brief.py, sha256: "<REVIEWED_SHA256>"}
+    x_post_pilot.py: {path: /reviewed/x_post_pilot.py, sha256: "<REVIEWED_SHA256>"}
+  profile: {path: /private/original-profile.json, sha256: "<REVIEWED_SHA256>"}
+  proof: {path: /private/original-producer-proof.json, sha256: "<REVIEWED_SHA256>"}
+  pages:
+    - {path: /private/original-page.json, sha256: "<REVIEWED_SHA256>"}
+  review: {path: /private/original-review.json, sha256: "<REVIEWED_SHA256>"}
+```
+
+Pins contain only `path` and `sha256`; paths must be absolute without symlinks.
+Producer and profile fingerprints must match the original dillon-os PR447 commit
+`5003cdaa1ef0171a2148592f15ff4d784c94c3d8`, recorded in the adapter's constants;
+rebinding changed programs or a replacement profile does not admit another pilot.
+The proof must have the original eight fields (`briefPath`, `briefSha256`,
+`envelopePath`, `envelopeSha256`, `counts`, `readbackVerified`, `canonicalWrites`,
+`modelCalls`) and bind the actual saved outputs, with zero writes/calls to the
+canonical/model systems. The profile retains the original cumulative pilot and
+post-read scope. Historical price metadata is not a current price or invoice.
+
+The review is a closed JSON object with `kind: brain_forge_original_pilot_review`,
+`pilot_id` matching the original profile, `accepted_for: owner_research_proposal`,
+`proof_sha256`, `profile_sha256`, `producer_sha256` (both producer filenames),
+`page_sha256` (ordered page hashes), `reviewed_by`, `reviewed_at`, `evidence_mode`,
+`selected_post_ids`, and `research_question`. Its timestamp must follow the
+source/proposal observations. The mode is `fixture` or `reviewed_public_subset`;
+neither claims authenticated provider retrieval. The existing trusted operator
+pins this reviewed file. Its contents are an attestation, not independent
+authentication of a reviewer or automatic verification of the source's claims.
+
+Whole selected posts must exist in the original pinned pages and findings.
+The adapter preserves complete sanitized text, nullable publication/author
+provenance, observation time, original source/program/output/review pins and
+explicit omitted IDs in the private project. The original ranking excerpts and
+URL-only envelope are not replacements for whole evidence. Native field limits
+and the existing request-byte limit reject oversized batches without truncating
+them; the reviewer must choose a smaller explicit batch. Zero selected findings
+prepare zero research requests. Nonowner routes receive no personal evidence.
+
+Compilation and saved-receipt verification remain deterministic readers and
+recheck all pins after projection. They do not run the upstream producer or
+change any artifact. The existing original allowance and uncertain holds remain
+separate and unresolved until reconciled by their owner. Marketing lanes still
+require separately reviewed exact client packets: keyword rankings cannot create
+verified answers, approved claims, offers, actual leads or reporting metrics.
+Native dispatch retains its normal owner/workspace, entitlement, budget,
+supervisor and independent-check gates; this adapter only prepares a request.
 
 `project.collector.total_budget_usd` preserves the original one-time $16 pilot.
 Its optional `ledger` is a reference to the original pinned ledger; missing
