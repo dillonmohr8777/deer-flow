@@ -197,11 +197,12 @@ const TAG = `(() => {
     const r = el.getBoundingClientRect(); const cs = getComputedStyle(el);
     if (r.width < 1 || r.height < 1 || cs.visibility === 'hidden' || cs.display === 'none' || el.disabled) continue;
     el.setAttribute('data-mb-ref', ++n);
-    const tag = el.tagName.toLowerCase(); const type = (el.getAttribute('type') || '').toLowerCase();
+    const tag = el.tagName.toLowerCase(); const type = (el.type || el.getAttribute('type') || '').toLowerCase();
     const label = (el.getAttribute('aria-label') || (tag === 'input' && !['submit', 'button'].includes(type) ? '' : (el.innerText || el.value)) || el.getAttribute('placeholder') || el.getAttribute('title') || '').trim().replace(/\\s+/g, ' ').slice(0, 80);
     let href = ''; try { if (el.href) { const u = new URL(el.href); href = u.host + u.pathname; } } catch (e) {}
-    let action = ''; try { if (el.form) action = new URL(el.form.getAttribute('action') || location.href, location.href).href; } catch (e) {}
-    rows.push({ ref: n, tag, type, label, name: el.getAttribute('name') || el.id || '', ac: el.getAttribute('autocomplete') || '', placeholder: el.getAttribute('placeholder') || '', href, action });
+    let action = ''; try { if (el.form) action = new URL(el.hasAttribute('formaction') && type === 'submit' ? el.formAction : el.form.action, document.baseURI).href; } catch (e) {}
+    const form = el.form ? Array.from(document.forms).indexOf(el.form) : null;
+    rows.push({ ref: n, tag, type, label, name: el.getAttribute('name') || el.id || '', ac: el.getAttribute('autocomplete') || '', placeholder: el.getAttribute('placeholder') || '', href, action, form });
   }
   return { title: document.title, text: (document.body ? document.body.innerText : '').replace(/[ \\t]+/g, ' ').replace(/\\n{3,}/g, '\\n\\n').slice(0, 4000), rows };
 })()`;

@@ -56,8 +56,8 @@ function findFields(rows) {
   const otp = inputs.find(isOtp);
   const user = inputs.find((r) => r !== otp && r.type !== "password" && ["", "text", "email", "tel"].includes(r.type));
   const anchor = pass ?? otp ?? user;
-  const buttons = rows.filter((r) => r.type === "submit" || (r.tag === "button" && /sign in|log in|login|continue|next|submit|verify|confirm/iu.test(r.label)));
-  const submit = buttons.find((r) => anchor && r.action && r.action === anchor.action) ?? buttons[0];
+  const buttons = rows.filter((r) => (r.tag === "button" || r.tag === "input") && r.type === "submit");
+  const submit = anchor && anchor.form != null && anchor.form >= 0 ? buttons.find((r) => r.form === anchor.form) : undefined;
   return { pass, otp, user, submit };
 }
 
@@ -84,11 +84,36 @@ async function typeLocked(session, uris, field, secret) {
   await session.page.insert(secret);
 }
 
-/** @param {browse.Session} session @param {{submit?:{ref:number}}} fields */
-async function submit(session, fields) {
+/**
+ * Recheck the live native submitter after secret insertion; unknown implicit submissions fail closed.
+ * This DOM check does not prevent arbitrary page JavaScript from sending data.
+ * @param {browse.Session} session @param {readonly string[]} uris
+ * @param {{submit?:{ref:number},pass?:{ref:number},otp?:{ref:number},user?:{ref:number}}} fields
+ */
+async function submit(session, uris, fields) {
   browse.assertInteractiveNavigation(session);
   await assertAutofillAllowed(session);
-  if (fields.submit) await session.page.click(fields.submit.ref); else await session.page.press("Enter");
+  const anchor = fields.pass ?? fields.otp ?? fields.user;
+  if (!anchor || !fields.submit) throw new PolicyError("DOMAIN_LOCK_DENIED", "Cannot determine an explicit submitter for this credential form; implicit submission is unavailable");
+  const here = domainLock(await session.page.url(), uris);
+  if (!here.ok) throw new PolicyError(here.category, `domain lock before submission: ${here.reason}`);
+  const target = await session.page.eval(`(() => {
+    const field = document.querySelector('[data-mb-ref="${Number(anchor.ref)}"]');
+    const button = document.querySelector('[data-mb-ref="${Number(fields.submit.ref)}"]');
+    if (!field || !button || !field.isConnected || !button.isConnected || !field.form || field.form !== button.form ||
+        !['BUTTON', 'INPUT'].includes(button.tagName) || button.type !== 'submit' ||
+        button.matches(':disabled') || field.matches(':disabled') || button.form.method === 'dialog') return null;
+    try { return { action: new URL(button.hasAttribute('formaction') ? button.formAction : button.form.action, document.baseURI).href }; }
+    catch { return null; }
+  })()`);
+  if (!target?.action) throw new PolicyError("DOMAIN_LOCK_DENIED", "Cannot verify the live credential form submitter");
+  if (cloudBlocked(target.action)) throw new PolicyError("PROTECTED_SITE", "Protected-site form destination cannot be submitted");
+  const destination = domainLock(target.action, uris);
+  if (!destination.ok) throw new PolicyError(destination.category, `domain lock: submitter posts to a different site (${destination.reason})`);
+  await assertAutofillAllowed(session);
+  const current = domainLock(await session.page.url(), uris);
+  if (!current.ok) throw new PolicyError(current.category, `domain lock before click: ${current.reason}`);
+  await session.page.click(fields.submit.ref);
   await sleep(2800);
 }
 
@@ -136,7 +161,7 @@ async function loginWith({ session: sid, id, otp, sender, submit: doSubmit = tru
       } else break;
       acted++;
       if (!doSubmit) return { status: "filled_not_submitted", domain: first.domain };
-      await submit(session, fields);
+      await submit(session, uris, fields);
     }
     if (!acted) return { status: "no_login_form", domain: first.domain, url: (await session.page.url()).split(/[?#]/u)[0], note: "no username, password or code field is showing; the session may already be signed in" };
     return redact({ status: "submitted", domain: first.domain, url: (await session.page.url()).split(/[?#]/u)[0], steps, note: "take a screenshot to confirm the login landed" }, session.secrets);
@@ -167,7 +192,7 @@ async function codesFill({ session: sid, id, source, sender, waitSeconds = 90 })
   session.secrets.add(code);
   ledger.record({ action: "codes_fill", item: id, domain: lock.domain });
   await typeLocked(session, uris, fields.otp, code);
-  await submit(session, fields);
+  await submit(session, uris, fields);
   return redact({ status: "submitted", source, domain: lock.domain, url: (await session.page.url()).split(/[?#]/u)[0] }, session.secrets);
 }
 
