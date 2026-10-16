@@ -49,3 +49,37 @@ Built from branch `claude/momobot-desktop-20261013` (origin/main `1f6a22f76`), E
 
 ## Tools capability - October 14, 2026
 Branch `claude/momobot-desktop-tools-20261014`. `npm run check` and `npm test` (31 tests, 10 new: domain lock, redaction, TOTP vectors, ledger, panel token, MCP stdio) pass; hidden `--smoke-test` still passes. `node scripts/e2e-tools.cjs` (live, through the MCP server): Expand fetch of example.com, Browserbase + Vault login to expand.ai landed on the dashboard (screenshot read back, inputs blurred), the same item was refused on example.com by the domain lock, and a byte scan of MCP output, ledger and screenshots for the password and username (plain, URL, JSON and base64 forms) found no hits. Not covered live: SMS/Gmail codes (code paths unit-tested only), local Chrome backend, the packaged app's Full Disk Access for iMessage.
+
+
+## October 15 source correction (unreleased draft)
+
+The earlier live-login narrative above is historical and has not been revalidated.
+The old acceptance script could exit zero without proving authentication, screenshots,
+release or ledger validity. Its PNG byte scan did not prove visual redaction.
+Cloud CDP Input.insertText transmits secret text to Browserbase-hosted Chrome.
+No new live credential exposure was performed or established in this correction.
+Offline source tests are separate from packaged-app acceptance. Real login, cookie
+persistence, screenshot visual review and an installed-app round trip remain unverified.
+Cloud click/keypress/submit now fail closed pending browser-wide navigation enforcement.
+
+## October 15 independent-review follow-up (unreleased draft)
+
+The first correction's click/keypress block did not cover cloud text input or
+`submit:false` secret fill. Those could still trigger page navigation. All cloud
+automation now fails closed before session creation, focus, insertion or DOM
+evaluation; release/list remain available for cleanup. Local supported actions
+remain available. Browser-wide request protection is still absent, so cloud
+login acceptance is unavailable, not passed. The live harness exits before any
+provider or credential work even with its opt-in variables supplied.
+
+The first correction also counted any tool error as domain-lock evidence. MCP now
+carries a policy-generated error category: only `DOMAIN_MISMATCH` qualifies for
+that sub-check; `CLOUD_UNAVAILABLE`, protected-site refusal, generic failure and
+unconfigured domain lock do not. Overall acceptance additionally requires the
+backend to be available. Tests use synthetic proofs and are not live acceptance.
+
+Secret insertion now rechecks the complete saved-domain lock after focus for
+password and code paths. Offline regressions cover off-domain navigation,
+HTTPS downgrade, protected hosts, input-triggered cloud navigation, denial
+categories and overall acceptance. These checks do not establish atomic
+protection against every asynchronous hostile-page race or visual redaction.

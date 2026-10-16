@@ -41,7 +41,7 @@ function toolsPage(tools, token) {
   }).join("");
   const open = sessions.length ? sessions.map((s) => `<li>${escapeHTML(s.session)} · ${escapeHTML(s.backend)} · ${s.ageSeconds}s</li>`).join("") : "<li>No browser sessions open.</li>";
   const used = recent.length ? recent.map((r) => `<li>${escapeHTML(r.ts.slice(11, 19))} · ${escapeHTML(r.action)}${r.domain ? ` · ${escapeHTML(r.domain)}` : ""}${r.item ? ` · item ${escapeHTML(r.item.slice(0, 8))}` : ""}</li>`).join("") : "<li>Nothing used yet.</li>";
-  return `<p>Browse, fetch, the vault and login codes, on this Mac. Secrets are read locally, typed into the page and never shown, logged or sent to Browserbase as data.</p><h2>Open sessions</h2><ul>${open}</ul><h2>Recent use</h2><ul>${used}</ul><h2>Tools</h2>${forms}<p><a href="/">Connection settings</a></p>`;
+  return `<p>Browse, fetch, the vault and login codes, on this Mac. Secrets are read locally and redacted from tool output. In cloud sessions, secret text is transmitted over CDP to the Browserbase-hosted browser. Input masking and byte scans do not prove visual redaction. All cloud automation, including opening sessions, navigation, text input and DOM capture, is unavailable pending a browser-wide request-level navigation guard. Local tools remain available.</p><h2>Open sessions</h2><ul>${open}</ul><h2>Recent use</h2><ul>${used}</ul><h2>Tools</h2>${forms}<p><a href="/">Connection settings</a></p>`;
 }
 
 /**

@@ -30,17 +30,17 @@ function hostOf(value) {
  * Domain lock: may this item's secrets be typed into this page? Only https, and only when the page host equals
  * or is a subdomain of a host saved on the item. Returns the matched saved host (what the ledger records).
  * @param {string} pageUrl @param {readonly string[]} savedUris
- * @returns {{ok:true, domain:string}|{ok:false, reason:string}}
+ * @returns {{ok:true, domain:string}|{ok:false, reason:string, category:"DOMAIN_MISMATCH"|"DOMAIN_LOCK_DENIED"}}
  */
 function domainLock(pageUrl, savedUris) {
   let page;
-  try { page = new URL(pageUrl); } catch { return { ok: false, reason: "page URL unreadable" }; }
-  if (page.protocol !== "https:" || page.username || page.password) return { ok: false, reason: "page is not plain https" };
+  try { page = new URL(pageUrl); } catch { return { ok: false, category: "DOMAIN_LOCK_DENIED", reason: "page URL unreadable" }; }
+  if (page.protocol !== "https:" || page.username || page.password) return { ok: false, category: "DOMAIN_LOCK_DENIED", reason: "page is not plain https" };
   const host = normHost(page.hostname);
   const saved = savedUris.map(hostOf).filter((value) => value !== null);
-  if (!saved.length) return { ok: false, reason: "item has no saved website to match" };
+  if (!saved.length) return { ok: false, category: "DOMAIN_LOCK_DENIED", reason: "item has no saved website to match" };
   const hit = saved.find((domain) => isUnder(host, domain));
-  return hit ? { ok: true, domain: hit } : { ok: false, reason: `${host} does not match the item's saved sites` };
+  return hit ? { ok: true, domain: hit } : { ok: false, category: "DOMAIN_MISMATCH", reason: `${host} does not match the item's saved sites` };
 }
 
 /** @param {string} url */

@@ -8,6 +8,9 @@ const crypto = require("node:crypto");
 const { CDP, Page, sleep } = require("./cdp.cjs");
 const { cloudBlocked, hostOf, redact } = require("./policy.cjs");
 const ledger = require("./ledger.cjs");
+const { PolicyError } = require("./errors.cjs");
+// No browser-wide request guard exists yet; no environment override may enable cloud automation.
+const CLOUD_AUTOMATION_AVAILABLE = false;
 
 const API = "https://api.browserbase.com/v1";
 const WITH_BROWSERBASE = path.join(os.homedir(), ".local", "bin", "with-browserbase");
@@ -86,6 +89,7 @@ function proxyNeeded(host) {
  * @returns {Promise<Session>}
  */
 async function openCloud({ url, context, proxies, captchas, timeout = 600 }) {
+  assertInteractiveNavigation({ backend: "cloud" });
   const host = url ? hostOf(url) : null;
   if (url && cloudBlocked(url)) throw new Error("Google, Facebook and Apple are never opened in Browserbase (lockout risk). Use backend \"local\".");
   const contextId = await contextFor(context ?? (host ? siteKey(host) : "scratch"));
@@ -156,6 +160,7 @@ async function openLocal({ profile, headless = true }) {
 async function open(options = {}) {
   if (sessions.size >= MAX_SESSIONS) throw new Error(`at most ${MAX_SESSIONS} browser sessions at once; stop one first`);
   const backend = options.backend ?? "cloud";
+  assertInteractiveNavigation({ backend });
   const session = backend === "local" ? await openLocal({ profile: options.profile ?? (options.url && hostOf(options.url) ? siteKey(/** @type {string} */ (hostOf(options.url))) : "scratch"), headless: options.headless }) : await openCloud(options);
   session.id = crypto.randomBytes(3).toString("hex");
   sessions.set(session.id, session);
@@ -174,6 +179,7 @@ function get(id) {
 /** @param {string} id @param {string} url */
 async function goto(id, url) {
   const session = get(id);
+  assertInteractiveNavigation(session);
   const host = hostOf(url);
   if (!host) throw new Error("only plain http(s) URLs without embedded credentials can be opened");
   if (session.backend === "cloud" && cloudBlocked(url)) throw new Error("Google, Facebook and Apple are never opened in Browserbase (lockout risk). Open a local session instead.");
@@ -201,29 +207,41 @@ const TAG = `(() => {
 })()`;
 
 /** @param {string} id @returns {Promise<{title:string, text:string, rows:any[]}>} */
-async function tagged(id) { return get(id).page.eval(TAG); }
+async function tagged(id) { const session = get(id); assertInteractiveNavigation(session); return session.page.eval(TAG); }
 
 /** @param {string} id */
 async function snapshot(id) {
   const session = get(id);
+  assertInteractiveNavigation(session);
   const { title, text, rows } = await tagged(id);
   const lines = rows.map((row) => `[${row.ref}] ${row.tag}${row.type ? `:${row.type}` : ""} ${JSON.stringify(row.label || row.placeholder || row.name)}${row.href ? ` -> ${row.href}` : ""}`);
   return redact({ url: (await session.page.url()).split(/[?#]/u)[0], title, elements: lines, text }, session.secrets);
 }
 
+/** Fail closed: DOM inspection cannot predict JS, delayed redirects or popup navigation.
+ * Until a browser-wide request guard covers every target, cloud input that can
+ * trigger navigation is unavailable, including focus, text and DOM evaluation.
+ * All cloud automation is disabled before session creation; existing sessions may only be released.
+ * @param {{backend:"cloud"|"local"}} session
+ */
+function assertInteractiveNavigation(session) {
+  if (session.backend === "cloud" && !CLOUD_AUTOMATION_AVAILABLE) throw new PolicyError("CLOUD_UNAVAILABLE", "Cloud automation is unavailable until every navigation target has a request-level protected-site guard. Use a local session.");
+}
+
 /** @param {string} id @param {number} ref */
-async function click(id, ref) { await get(id).page.click(ref); await sleep(600); return { url: (await get(id).page.url()).split(/[?#]/u)[0] }; }
+async function click(id, ref) { assertInteractiveNavigation(get(id)); await get(id).page.click(ref); await sleep(600); return { url: (await get(id).page.url()).split(/[?#]/u)[0] }; }
 
 /** Plain (non-secret) text. Secrets only ever go through the vault tools. @param {string} id @param {number} ref @param {string} text */
-async function fill(id, ref, text) { const { page } = get(id); await page.focus(ref); await page.insert(text); return { ok: true }; }
+async function fill(id, ref, text) { const session = get(id); assertInteractiveNavigation(session); const { page } = session; await page.focus(ref); await page.insert(text); return { ok: true }; }
 
 /** @param {string} id @param {"Enter"|"Tab"|"Escape"} key */
-async function press(id, key) { await get(id).page.press(key); await sleep(600); return { url: (await get(id).page.url()).split(/[?#]/u)[0] }; }
+async function press(id, key) { assertInteractiveNavigation(get(id)); await get(id).page.press(key); await sleep(600); return { url: (await get(id).page.url()).split(/[?#]/u)[0] }; }
 
 /** Blur every input and any text showing a username used in this session, capture, then restore. */
 /** @param {string} id */
 async function screenshot(id) {
   const session = get(id);
+  assertInteractiveNavigation(session);
   const names = JSON.stringify([...session.usernames].filter((name) => name.length >= 3));
   await session.page.eval(`(() => {
     const s = document.createElement('style'); s.id = 'mb-mask'; s.textContent = 'input,textarea,select,[contenteditable]{filter:blur(8px)!important}'; document.head.appendChild(s);
@@ -253,4 +271,4 @@ async function closeAll() { await Promise.allSettled([...sessions.keys()].map(st
 
 function list() { return [...sessions.values()].map((s) => ({ session: s.id, backend: s.label, ageSeconds: Math.round((Date.now() - s.started) / 1000) })); }
 
-module.exports = { open, goto, snapshot, click, fill, press, screenshot, stop, closeAll, list, get, tagged, sessions };
+module.exports = { open, goto, snapshot, click, fill, press, screenshot, stop, closeAll, list, get, tagged, sessions, assertInteractiveNavigation, CLOUD_AUTOMATION_AVAILABLE };

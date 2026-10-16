@@ -7,6 +7,7 @@ const browse = require("./browse.cjs");
 const codes = require("./codes.cjs");
 const ledger = require("./ledger.cjs");
 const { domainLock, cloudBlocked, redact } = require("./policy.cjs");
+const { PolicyError } = require("./errors.cjs");
 const { sleep } = require("./cdp.cjs");
 
 // The wrapper injects the Keychain-held session (bw-session); this process never sees or stores it.
@@ -65,20 +66,35 @@ function findFields(rows) {
  * @param {browse.Session} session @param {readonly string[]} uris @param {{ref:number, action:string}} field @param {string} secret
  */
 async function typeLocked(session, uris, field, secret) {
+  browse.assertInteractiveNavigation(session);
+  await assertAutofillAllowed(session);
+  if (field.action && cloudBlocked(field.action)) throw new PolicyError("PROTECTED_SITE", "Protected-site form action cannot be auto-filled");
   const here = domainLock(await session.page.url(), uris);
-  if (!here.ok) throw new Error(`domain lock: ${here.reason}`);
+  if (!here.ok) throw new PolicyError(here.category, `domain lock: ${here.reason}`);
   if (field.action) {
     const target = domainLock(field.action, uris);
-    if (!target.ok) throw new Error(`domain lock: this form posts to a different site (${target.reason})`);
+    if (!target.ok) throw new PolicyError(target.category, `domain lock: this form posts to a different site (${target.reason})`);
   }
   await session.page.focus(field.ref);
+  await assertAutofillAllowed(session);
+  // Focus handlers may change location. Recheck the complete saved-site lock,
+  // not just the protected-host denylist, immediately before secret insertion.
+  const focused = domainLock(await session.page.url(), uris);
+  if (!focused.ok) throw new PolicyError(focused.category, `domain lock after focus: ${focused.reason}`);
   await session.page.insert(secret);
 }
 
 /** @param {browse.Session} session @param {{submit?:{ref:number}}} fields */
 async function submit(session, fields) {
+  browse.assertInteractiveNavigation(session);
+  await assertAutofillAllowed(session);
   if (fields.submit) await session.page.click(fields.submit.ref); else await session.page.press("Enter");
   await sleep(2800);
+}
+
+/** @param {browse.Session} session */
+async function assertAutofillAllowed(session) {
+  if (cloudBlocked(await session.page.url())) throw new PolicyError("PROTECTED_SITE", "Google, Facebook and Apple logins are never auto-filled; reuse a trusted local profile");
 }
 
 /**
@@ -87,6 +103,8 @@ async function submit(session, fields) {
  */
 async function loginWith({ session: sid, id, otp, sender, submit: doSubmit = true }) {
   const session = browse.get(sid);
+  browse.assertInteractiveNavigation(session);
+  await assertAutofillAllowed(session);
   if (ledger.loginsToday(id) >= MAX_LOGINS_PER_DAY) throw new Error(`login limit reached for this item today (${MAX_LOGINS_PER_DAY}); lockout protection`);
   const raw = await bw(["get", "item", id]);
   const login = raw.login ?? {};
@@ -95,7 +113,7 @@ async function loginWith({ session: sid, id, otp, sender, submit: doSubmit = tru
   session.secrets.add(login.password); session.secrets.add(login.username); session.usernames.add(login.username);
   const first = domainLock(await session.page.url(), uris);
   try {
-    if (!first.ok) throw new Error(`domain lock: ${first.reason}`);
+    if (!first.ok) throw new PolicyError(first.category, `domain lock: ${first.reason}`);
     if (cloudBlocked(await session.page.url())) throw new Error("Google, Facebook and Apple logins are never automated; sign in once through trust_device.py and reuse the local profile");
     ledger.record({ action: "login_with", item: id, domain: first.domain });
     let steps = 0, acted = 0;
@@ -123,8 +141,10 @@ async function loginWith({ session: sid, id, otp, sender, submit: doSubmit = tru
     if (!acted) return { status: "no_login_form", domain: first.domain, url: (await session.page.url()).split(/[?#]/u)[0], note: "no username, password or code field is showing; the session may already be signed in" };
     return redact({ status: "submitted", domain: first.domain, url: (await session.page.url()).split(/[?#]/u)[0], steps, note: "take a screenshot to confirm the login landed" }, session.secrets);
   } catch (error) {
-    // eslint-disable-next-line preserve-caught-error -- the original error is deliberately not chained: it could carry a secret
-    throw new Error(redact(error instanceof Error ? error.message : "login failed", session.secrets));
+    const message = redact(error instanceof Error ? error.message : "login failed", session.secrets);
+    if (error instanceof PolicyError) throw new PolicyError(error.code, message);
+    // eslint-disable-next-line preserve-caught-error -- never chain an error that may carry a secret
+    throw new Error(message);
   }
 }
 
@@ -132,11 +152,13 @@ async function loginWith({ session: sid, id, otp, sender, submit: doSubmit = tru
 /** @param {{session:string, id:string, source:"totp"|"sms"|"email", sender?:string, waitSeconds?:number}} options */
 async function codesFill({ session: sid, id, source, sender, waitSeconds = 90 }) {
   const session = browse.get(sid);
+  browse.assertInteractiveNavigation(session);
+  await assertAutofillAllowed(session);
   const raw = await bw(["get", "item", id]);
   const login = raw.login ?? {};
   const uris = /** @type {string[]} */ ((login.uris ?? []).map((/** @type {any} */ u) => u.uri).filter(Boolean));
   const lock = domainLock(await session.page.url(), uris);
-  if (!lock.ok) throw new Error(`domain lock: ${lock.reason}`);
+  if (!lock.ok) throw new PolicyError(lock.category, `domain lock: ${lock.reason}`);
   const { rows } = await browse.tagged(sid);
   const fields = findFields(rows);
   if (!fields.otp) throw new Error("no code field on this page");

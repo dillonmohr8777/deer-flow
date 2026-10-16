@@ -5,6 +5,7 @@
 // Newline-delimited JSON-RPC 2.0. Tool errors are returned as tool results, never as stack traces.
 const readline = require("node:readline");
 const tools = require("./tools.cjs");
+const { errorCategory } = require("./errors.cjs");
 const { redact } = require("./policy.cjs");
 
 /** @param {any} message */
@@ -22,6 +23,7 @@ async function handle(request) {
     } else if (method === "tools/call") {
       const content = [];
       let isError = false;
+      let category;
       try {
         const name = String(params?.name);
         const { _image, ...result } = await tools.run(name, params?.arguments ?? {});
@@ -29,9 +31,10 @@ async function handle(request) {
         if (_image) content.push({ type: "image", data: _image, mimeType: "image/png" });
       } catch (error) {
         isError = true;
+        category = errorCategory(error);
         content.push({ type: "text", text: redact(error instanceof Error ? error.message : "tool failed", tools.secrets()) });
       }
-      send({ jsonrpc: "2.0", id, result: { content, isError } });
+      send({ jsonrpc: "2.0", id, result: { content, isError, ...(category ? { errorCategory: category } : {}) } });
     } else if (method === "ping") {
       send({ jsonrpc: "2.0", id, result: {} });
     } else {

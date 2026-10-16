@@ -11,8 +11,8 @@ const vault = require("./vault.cjs");
 const session = { type: /** @type {const} */ ("string"), description: "Session id from browse_open", required: true };
 /** @type {Tool[]} */
 const TOOLS = [
-  { name: "browse_open", group: "Browse", description: "Open a browser session. backend cloud = Browserbase with a saved login context (never Google/Facebook/Apple); backend local = this Mac's trusted Chrome profile (use it for Google, Facebook, Apple).",
-    input: { backend: { type: "string", description: "cloud (default) or local", enum: ["cloud", "local"] }, url: { type: "string", description: "Page to open first" }, context: { type: "string", description: "Browserbase context name or id (default: derived from the site)" }, profile: { type: "string", description: "Local Chrome profile name (default: derived from the site)" } },
+  { name: "browse_open", group: "Browse", description: "Open a browser session. backend cloud is unavailable pending browser-wide request protection; backend local = this Mac's trusted Chrome profile (use it for Google, Facebook, Apple).",
+    input: { backend: { type: "string", description: "local; cloud (default) currently fails closed", enum: ["cloud", "local"] }, url: { type: "string", description: "Page to open first" }, context: { type: "string", description: "Browserbase context name or id (default: derived from the site)" }, profile: { type: "string", description: "Local Chrome profile name (default: derived from the site)" } },
     run: (a) => browse.open(a) },
   { name: "browse_goto", group: "Browse", description: "Navigate an open session to a URL.", input: { session, url: { type: "string", description: "http(s) URL", required: true } }, run: (a) => browse.goto(a.session, a.url) },
   { name: "browse_snapshot", group: "Browse", description: "Page text plus numbered interactive elements. Use the numbers as refs for click and fill. Input values are never shown.", input: { session }, run: (a) => browse.snapshot(a.session) },
