@@ -87,6 +87,8 @@ class Permissions:
     # Approvals inbox: review/approve outbound actions agents proposed
     APPROVALS_READ = "approvals:read"
     APPROVALS_WRITE = "approvals:write"
+    # Fleet hosts: claim, renew, finalize and release fleet-executed batch items
+    FLEET_WORK = "fleet:work"
 
 
 class AuthContext:
@@ -198,6 +200,7 @@ _ALL_PERMISSIONS: list[str] = [
     Permissions.ACADEMY_WRITE,
     Permissions.APPROVALS_READ,
     Permissions.APPROVALS_WRITE,
+    Permissions.FLEET_WORK,
 ]
 
 
