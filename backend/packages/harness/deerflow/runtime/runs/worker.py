@@ -728,6 +728,36 @@ def _agent_graph(agent_result: Any) -> Any:
     return unwrap_agent_graph(agent_result)
 
 
+def _assembled_effective_model(agent_result: Any, graph: Any, config: Mapping[str, Any]) -> str | None:
+    """Return the model reported by agent assembly, without inventing a fallback.
+
+    The lead assembly exposes the resolved model directly and on its optional
+    descriptor. It also stamps the same value into RunnableConfig metadata,
+    which remains the compatibility path for assemblies constructed by older
+    factories. A bare graph's metadata is the final legacy source.
+    """
+    descriptor = getattr(agent_result, "descriptor", None)
+    for candidate in (
+        getattr(agent_result, "effective_model", None),
+        getattr(descriptor, "effective_model", None),
+    ):
+        if isinstance(candidate, str) and candidate:
+            return candidate
+
+    graph_metadata = getattr(graph, "metadata", None)
+    if isinstance(graph_metadata, Mapping):
+        candidate = graph_metadata.get("model_name")
+        if isinstance(candidate, str) and candidate:
+            return candidate
+
+    config_metadata = config.get("metadata")
+    if isinstance(config_metadata, Mapping):
+        candidate = config_metadata.get("model_name")
+        if isinstance(candidate, str) and candidate:
+            return candidate
+    return None
+
+
 class _SubagentEventBuffer:
     """Buffer subagent ``task_*`` step events and flush them in one locked batch (#3779).
 
@@ -1201,7 +1231,8 @@ async def run_agent(
             # get_available_tools(), which may block on MCP cache
             # initialization — it must not stall the calling event loop
             # (issue #5172).
-            agent = _agent_graph(await run_assembly(agent_factory, **agent_factory_kwargs))
+            agent_result = await run_assembly(agent_factory, **agent_factory_kwargs)
+            agent = _agent_graph(agent_result)
 
         # ``resolve_config_user_id`` needs the capability marker while the
         # agent is assembled, but no runtime consumer or checkpoint should see
@@ -1261,16 +1292,14 @@ async def run_agent(
         runtime_ctx[CURRENT_RUN_PRE_EXISTING_MESSAGE_IDS_KEY] = frozenset(pre_existing_message_ids)
         _install_runtime_context(config, runtime_ctx)
 
-        # Capture the effective (resolved) model name from the agent's metadata.
-        # _resolve_model_name in agent.py may return the default model if the
-        # requested name is not in the allowlist — this update ensures the
-        # persisted model_name reflects the actual model used.
-        if record.model_name is not None:
-            resolved = getattr(agent, "metadata", {}) or {}
-            if isinstance(resolved, dict):
-                effective = resolved.get("model_name")
-                if effective and effective != record.model_name:
-                    await run_manager.update_model_name(record.run_id, effective)
+        # Capture the effective model from the assembly result. Gateway
+        # admission initially records the requested/cost-routed model, while
+        # lead assembly resolves request -> custom-agent -> default (and any
+        # authorization adjustment). Persist that resolved value before the
+        # graph streams; run.start and token usage remain independent truth.
+        effective = _assembled_effective_model(agent_result, agent, config)
+        if effective and effective != record.model_name:
+            await run_manager.update_model_name(record.run_id, effective)
 
         # 4. Attach checkpointer and store
         if checkpointer is not None:

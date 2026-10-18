@@ -1678,6 +1678,25 @@ def _current_human_message(graph_input: object) -> HumanMessage | None:
     )
 
 
+def _configured_agent_model_name(agent_config: Any, *, assistant_id: str, app_config: Any | None) -> str | None:
+    """Return a custom agent's configured model after fail-closed validation.
+
+    File-backed and DB-backed agent configs are validated when written through
+    the Agents API, but a model can later be removed from ``models:`` or a
+    config can be edited directly. Do not let that stale name reach lead-agent
+    resolution, where an unknown request model deliberately falls back.
+    """
+    configured_model = getattr(agent_config, "model", None)
+    if configured_model is None or configured_model == "":
+        return None
+    if not isinstance(configured_model, str) or (app_config is not None and app_config.get_model_config(configured_model) is None):
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unknown model {configured_model!r} configured for agent {assistant_id!r}. Use a model name defined under `models:` in config.yaml.",
+        )
+    return configured_model
+
+
 async def _load_scope_agent_config(
     *,
     assistant_id: str | None,
@@ -2006,6 +2025,27 @@ async def start_run(
                 content_user_id=content_user_id,
                 actor_user_id=actor_user_id,
             )
+        # The model stamped on the run row must be the model lead assembly
+        # will actually resolve. Lead precedence is explicit runtime request,
+        # then the custom agent's configured model, then the default. The
+        # admission above only saw the body-context request (the agent config
+        # needs the resolved identity), so when no runtime model was
+        # requested, admit and stamp the agent's model here, still before any
+        # run row exists. An unknown configured agent model fails closed here
+        # instead of silently resolving to the default inside lead assembly.
+        agent_model_name = _configured_agent_model_name(
+            agent_config,
+            assistant_id=scope_assistant_id,
+            app_config=run_ctx.app_config or router_config,
+        )
+        runtime_requested_model_name = scope_runtime_config.get("model_name") or scope_runtime_config.get("model")
+        if agent_model_name and not runtime_requested_model_name and agent_model_name != model_name:
+            if router_config is not None:
+                try:
+                    agent_model_name = await admit_run(router_config, getattr(request.app.state, "run_store", None), agent_model_name, body_context.get("task_class")) or agent_model_name
+                except CostRouterRefusal as exc:
+                    raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
+            model_name = agent_model_name
         # Keep the pre-default identity even when the agent is initially
         # unbound: adding a default must not reject an already-accepted retry.
         # The durable input still exposes the original accepted scope.
