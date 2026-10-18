@@ -47,6 +47,9 @@ PAT_ALLOWED_SCOPES: frozenset[str] = frozenset(
         "academy:write",
         "approvals:read",
         "approvals:write",
+        # Vocabulary alignment only: /api/fleet/work is not in the PAT route policy below,
+        # so a PAT carrying fleet:work still cannot claim fleet items.
+        "fleet:work",
     }
 )
 
