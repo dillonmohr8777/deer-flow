@@ -179,6 +179,23 @@
   outline-offset: 2px;
 }
 
+@media (max-width: 40rem) {
+  .motionToggle {
+    top: 4.5rem;
+    bottom: auto;
+    left: 1rem;
+    right: auto;
+    width: 44px;
+    height: 44px;
+    justify-content: center;
+    padding: 0;
+  }
+
+  .motionToggle span {
+    display: none;
+  }
+}
+
 /* ---- Split lockup: product name and maker ------------------------------ */
 
 /* The product name alone, large enough to lead the page. */
