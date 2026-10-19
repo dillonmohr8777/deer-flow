@@ -138,27 +138,25 @@ test("catalog search, editable synthetic inputs and accepted artifact survive re
   const state = await setup(page);
   await page.goto("/workspace/workflows");
   await expect(
-    page.getByRole("heading", { name: "Workflow room", exact: true }),
+    page.getByRole("heading", { name: "Workflows", exact: true }),
   ).toBeVisible();
   await expect(page.getByText("100 of 100 workflow definitions")).toBeVisible();
   await page.getByLabel("Workflow category").selectOption("Operations");
   await page.getByLabel("Search workflows").fill("099");
   await expect(page.getByText("1 of 100 workflow definitions")).toBeVisible();
   await choose(page, "099");
-  await page.getByRole("button", { name: "Load synthetic example" }).click();
-  await expect(page.getByText(/Synthetic example loaded/)).toBeVisible();
-  await page
-    .getByLabel("Task brief (required)")
-    .fill("Actual edited fixture task");
+  await page.getByRole("button", { name: "Fill in sample inputs" }).click();
+  await expect(page.getByText(/Sample inputs filled in/)).toBeVisible();
+  await page.getByLabel("Task brief").fill("Actual edited fixture task");
   await expect(
-    page.getByRole("option", { name: "CrewAI (unavailable)" }),
+    page.getByRole("option", { name: "CrewAI (not set up)" }),
   ).toBeDisabled();
   expect(state.receipts).toEqual([]);
   await page.getByRole("button", { name: "Run workflow", exact: true }).click();
   await expect(
-    page.getByText("completed · LangGraph · acceptance passed"),
-  ).toBeVisible();
-  await expect(page.getByText(/Cost unavailable/)).toBeVisible();
+    page.locator("section[aria-label='Workflow run']").getByRole("status"),
+  ).toHaveText("Accepted · LangGraph");
+  await expect(page.getByText("Unavailable", { exact: true })).toBeVisible();
   expect(state.payloads[0]).toEqual(
     expect.objectContaining({
       workflow_id: "fixture-099",
@@ -184,11 +182,11 @@ test("catalog search, editable synthetic inputs and accepted artifact survive re
   await expect(page.getByText(/size and SHA-256 matched/)).toBeVisible();
   await page.reload();
   await page
-    .getByRole("button", { name: /^Synthetic saved run completed/ })
+    .getByRole("button", { name: /^Synthetic saved run Accepted/ })
     .click();
   await expect(
-    page.getByText("completed · LangGraph · acceptance passed"),
-  ).toBeVisible();
+    page.locator("section[aria-label='Workflow run']").getByRole("status"),
+  ).toHaveText("Accepted · LangGraph");
   expect(state.receipts).toHaveLength(1);
   expect(errors).toEqual([]);
 });
@@ -199,12 +197,14 @@ test("unconfirmed admission retries the same exact request and receipt", async (
   const state = await setup(page, { ambiguous: true });
   await page.goto("/workspace/workflows");
   await choose(page);
-  await page.getByLabel("Task brief (required)").fill("Bounded fixture task");
+  await page.getByLabel("Task brief").fill("Bounded fixture task");
   await page.getByRole("button", { name: "Run workflow", exact: true }).click();
   await expect(page.getByText(/request is unconfirmed/)).toBeVisible();
-  await expect(page.getByLabel("Task brief (required)")).toBeDisabled();
+  await expect(page.getByLabel("Task brief")).toBeDisabled();
   await page.getByRole("button", { name: "Retry same request" }).click();
-  await expect(page.getByText(/acceptance passed/)).toBeVisible();
+  await expect(
+    page.locator("section[aria-label='Workflow run']").getByRole("status"),
+  ).toHaveText("Accepted · LangGraph");
   expect(state.receipts).toHaveLength(2);
   expect(new Set(state.receipts).size).toBe(1);
   expect(state.payloads[0]).toEqual(state.payloads[1]);
@@ -216,11 +216,13 @@ test("disabled execution cannot admit work or advertise it as complete", async (
   const state = await setup(page, { unavailable: true });
   await page.goto("/workspace/workflows");
   await choose(page);
-  await page.getByLabel("Task brief (required)").fill("No paid dispatch");
+  await page.getByLabel("Task brief").fill("No paid dispatch");
   await expect(
     page.getByRole("button", { name: "Run workflow", exact: true }),
   ).toBeDisabled();
-  await expect(page.getByText("Workflow execution is disabled.")).toBeVisible();
+  await expect(
+    page.getByText("Workflow runs are turned off in this workspace."),
+  ).toBeVisible();
   expect(state.receipts).toEqual([]);
   await expect(
     page.getByRole("button", { name: "Download accepted artifact" }),
@@ -233,11 +235,13 @@ test("interrupted resume uses the existing record and original budget", async ({
   const state = await setup(page, { interrupted: true });
   await page.goto("/workspace/workflows");
   await page
-    .getByRole("button", { name: /^Synthetic saved run interrupted/ })
+    .getByRole("button", { name: /^Synthetic saved run Interrupted/ })
     .click();
   await expect(page.getByText(/remaining budget/)).toBeVisible();
   await page.getByRole("button", { name: "Resume interrupted run" }).click();
-  await expect(page.getByText(/acceptance passed/)).toBeVisible();
+  await expect(
+    page.locator("section[aria-label='Workflow run']").getByRole("status"),
+  ).toHaveText("Accepted · LangGraph");
   expect(state.actions).toEqual(["/api/workflows/runs/owned-run/resume"]);
   expect(state.receipts).toEqual([]);
 });
@@ -248,9 +252,7 @@ test("altered artifact bytes never become a successful download", async ({
   const state = await setup(page, { corruptArtifact: true });
   await page.goto("/workspace/workflows");
   await choose(page);
-  await page
-    .getByLabel("Task brief (required)")
-    .fill("Download integrity fixture");
+  await page.getByLabel("Task brief").fill("Download integrity fixture");
   await page.getByRole("button", { name: "Run workflow", exact: true }).click();
   let downloads = 0;
   page.on("download", () => (downloads += 1));
@@ -273,7 +275,7 @@ for (const width of [390, 768, 1440])
     await setup(page);
     await page.goto("/workspace/workflows");
     await choose(page);
-    await page.getByRole("button", { name: "Load synthetic example" }).click();
+    await page.getByRole("button", { name: "Fill in sample inputs" }).click();
     expect(
       await page.evaluate(
         () => document.documentElement.scrollWidth <= innerWidth,
@@ -294,8 +296,8 @@ for (const width of [390, 768, 1440])
         expect(Math.max(...durations)).toBeLessThanOrEqual(0.00002);
       }
     }
-    await page.getByLabel("Task brief (required)").focus();
-    await expect(page.getByLabel("Task brief (required)")).toBeFocused();
+    await page.getByLabel("Task brief").focus();
+    await expect(page.getByLabel("Task brief")).toBeFocused();
     expect(errors).toEqual([]);
     const shots =
       process.env.WORKFLOW_SHOTS_DIR ?? "/tmp/momobot-workflow-ui-qa";

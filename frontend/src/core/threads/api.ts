@@ -47,6 +47,9 @@ export type ThreadMetadataPatchResponse = Pick<
   "thread_id" | "status" | "created_at" | "updated_at" | "metadata"
 >;
 
+/** The search error when the server gives no reason; the UI says it in its own locale. */
+export const THREAD_SEARCH_FAILED_FALLBACK = "Failed to load conversations.";
+
 async function readThreadAPIError(
   response: Response,
   fallback: string,
@@ -235,7 +238,7 @@ export async function searchThreadsByArchive({
   );
   if (!response.ok) {
     throw new Error(
-      await readThreadAPIError(response, "Failed to load conversations."),
+      await readThreadAPIError(response, THREAD_SEARCH_FAILED_FALLBACK),
     );
   }
   return (await response.json()) as AgentThread[];

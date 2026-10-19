@@ -179,7 +179,9 @@ test("assembles streamed write-file argument deltas in the artifact preview", as
   try {
     await page.goto(`/workspace/chats/${THREAD_ID}`);
 
-    const textarea = page.getByPlaceholder(/how can i assist you/i);
+    const textarea = page.getByPlaceholder(
+      /describe the job|reply, or give the next step/i,
+    );
     await expect(textarea).toBeVisible({ timeout: 15_000 });
     await textarea.fill("Continue the report");
     await textarea.press("Enter");

@@ -98,7 +98,9 @@ test.describe("Notification settings", () => {
 
     await page.goto("/workspace/chats/new");
 
-    const textarea = page.getByPlaceholder(/how can i assist you/i);
+    const textarea = page.getByPlaceholder(
+      /describe the job|reply, or give the next step/i,
+    );
     await expect(textarea).toBeVisible({ timeout: 15_000 });
     await textarea.fill("Run a one minute task");
     await textarea.press("Enter");

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@rstest/core";
 
-import { formatCompactStamp } from "@/core/utils/datetime";
+import { formatCompactStamp, toDateTimeAttr } from "@/core/utils/datetime";
 
 const now = new Date(2026, 8, 24, 15, 0);
 
@@ -28,5 +28,19 @@ describe("formatCompactStamp", () => {
     expect(formatCompactStamp(undefined, "en-US", now)).toBeNull();
     expect(formatCompactStamp("", "en-US", now)).toBeNull();
     expect(formatCompactStamp("not a date", "en-US", now)).toBeNull();
+  });
+});
+
+describe("toDateTimeAttr", () => {
+  it("drops the API's microseconds to a valid HTML datetime", () => {
+    expect(toDateTimeAttr("2026-09-30T08:50:00.123456+00:00")).toBe(
+      "2026-09-30T08:50:00.123Z",
+    );
+  });
+
+  it("is undefined for a missing or invalid timestamp", () => {
+    expect(toDateTimeAttr(undefined)).toBeUndefined();
+    expect(toDateTimeAttr("")).toBeUndefined();
+    expect(toDateTimeAttr("not a date")).toBeUndefined();
   });
 });

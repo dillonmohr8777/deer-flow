@@ -72,7 +72,11 @@ import {
   pathOfThread,
   titleOfThread,
 } from "@/core/threads/utils";
-import { formatDay, formatTimeAgo } from "@/core/utils/datetime";
+import {
+  toDateTimeAttr,
+  formatDay,
+  formatTimeAgo,
+} from "@/core/utils/datetime";
 import { getFileIcon } from "@/core/utils/files";
 import { env } from "@/env";
 import { cn } from "@/lib/utils";
@@ -522,7 +526,7 @@ function ProjectDocumentRow({
         {added ? (
           <time
             className={pageStyles.ledgerDate}
-            dateTime={document.created_at}
+            dateTime={toDateTimeAttr(document.created_at)}
           >
             {added}
           </time>

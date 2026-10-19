@@ -35,9 +35,9 @@ export type MomoSizeBucket = "sm" | "md" | "lg";
  * Only names with a confident fit are mapped here. Everything else falls
  * through to MomentumGlyph.
  *
- * Two rosters feed this: the fleet definitions in fleet/agents/*\/config.yaml
- * and the managed subagents the Command Center lists from /api/subagents
- * (dillon-* and momentum-*). "dillon-brain" is the lead agent's real name,
+ * Three rosters feed this: the fleet definitions in fleet/agents/*\/config.yaml,
+ * the managed subagents the Command Center lists from /api/subagents
+ * (dillon-* and momentum-*), and the Desk's fleet templates. "dillon-brain" is the lead agent's real name,
  * seeded wherever the Command Center draws the lead's card. "lead" is kept
  * mapped for compatibility but nothing in the app passes it any more. Every
  * known name has canon art; only names nobody has mapped yet fall back to
@@ -65,6 +65,25 @@ const SLUG_MAP: Record<string, string> = {
   "momentum-analytics-engineer": "analytics",
   "momentum-solutions-architect": "engineer",
   "momentum-migration-engineer": "migration",
+  // The Desk's fleet templates (desk-data.ts DEPARTMENTS). chief-of-staff,
+  // content-studio, video-*, and brain-curator have no confident fit and keep
+  // their monogram.
+  "delivery-auditor": "verifier",
+  "research-swarm": "research",
+  "muse-scout": "research",
+  "job-radar": "research",
+  "marketing-lead": "growth",
+  "seo-geo-strategist": "growth",
+  "outreach-drafter": "growth",
+  "paid-media-analyst": "analytics",
+  "eng-lead": "engineer",
+  "reliability-scout": "reliability",
+  "qa-critic": "qa",
+  "web-designer": "builder",
+  "web-builder": "builder",
+  "momo-concierge": "client-success",
+  "client-reporter": "client-success",
+  "revenue-ops": "revenue",
 };
 
 // ponytail: manual manifest instead of a build-time fs glob of momos/. Every

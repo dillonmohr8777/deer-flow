@@ -84,7 +84,9 @@ export function titleOfThread(thread: AgentThread) {
   return thread.values?.title ?? "Untitled";
 }
 
-export function isThreadPinned(thread: Pick<AgentThread, "metadata">) {
+export function isThreadPinned(thread: {
+  metadata?: Record<string, unknown> | null;
+}) {
   return thread.metadata?.[THREAD_PINNED_METADATA_KEY] === true;
 }
 

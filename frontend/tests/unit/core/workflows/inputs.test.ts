@@ -1,6 +1,10 @@
 import { describe, expect, it } from "@rstest/core";
 
-import { exampleDraft, parseWorkflowInputs } from "@/core/workflows/inputs";
+import {
+  exampleDraft,
+  fieldLabel,
+  parseWorkflowInputs,
+} from "@/core/workflows/inputs";
 
 import { WORKFLOW_FIXTURES } from "../../../fixtures/workflows";
 
@@ -96,5 +100,17 @@ describe("Workflow schema input feedback", () => {
         { brief: "🙂".repeat(12_000) },
       ),
     ).toThrow("48 KB");
+  });
+});
+
+describe("Workflow field labels", () => {
+  it("keeps acronyms in a snake_case field name", () => {
+    expect(fieldLabel("source_urls", {})).toBe("Source URLs");
+    expect(fieldLabel("agreed_kpis", {})).toBe("Agreed KPIs");
+    expect(fieldLabel("known_a11y_issues", {})).toBe(
+      "Known accessibility issues",
+    );
+    expect(fieldLabel("brand_rules", {})).toBe("Brand rules");
+    expect(fieldLabel("brief", { title: "Task brief" })).toBe("Task brief");
   });
 });

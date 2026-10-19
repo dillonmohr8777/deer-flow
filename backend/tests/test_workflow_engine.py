@@ -229,7 +229,10 @@ async def test_budget_callback_stops_before_next_provider_dispatch_and_errors_ar
         await WorkflowEngine(InMemorySaver()).execute(definition, definition.example_inputs, run_id="budget", scope="a", framework="langgraph", model_call=budgeted, browser_call=None, event=event_double)
     assert "secret" not in str(error.value)
     assert error.value.code == "workflow_model_call_failed"
-    assert error.value.__cause__ is None
+    # The raw provider exception is preserved as the cause so workflow_service.py
+    # can recover an inner WorkflowServiceError's own code, but the wrapper's own
+    # message/code never leaks it.
+    assert isinstance(error.value.__cause__, RuntimeError)
     assert len(model.calls) == 2
 
 
