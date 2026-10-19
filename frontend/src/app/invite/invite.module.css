@@ -55,7 +55,9 @@
   color: var(--paper-ink);
 }
 
-/* Pin, centred over the sheet's top edge (paper.css's .pinned::before). */
+/* Pin, centred over the sheet's top edge (paper.css's .pinned::before).
+   Only while the accept request runs: at rest the sheet sits in photo
+   corners (paper.css's .paper-corners), since a pin means working. */
 .frame:global(.pinned)::before {
   /* Below the 24px tear band's deepest notch, so the pin pierces paper. */
   top: 14px;
@@ -66,7 +68,7 @@
 }
 
 /*
- * Moment: on accept, the pin lifts 4px, the sheet tilts 1.5deg and slides
+ * Moment: on accept, the pin placed for the request lifts 4px, the sheet tilts 1.5deg and slides
  * away, 420ms. Reduced motion turns this fully off (InvitePage only adds
  * .sheetReleased when release is allowed to begin with).
  */
@@ -80,8 +82,8 @@
   transform: translate(-50%, -4px);
 }
 
-/* Error state: a red tag on the pin, a torn corner, plus the existing text
-   (never colour alone). */
+/* Error state: a red tag at the top edge, a torn corner, plus the existing
+   text (never colour alone). */
 .sheetError {
   clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%, 0 22px, 22px 22px, 22px 0);
 }
