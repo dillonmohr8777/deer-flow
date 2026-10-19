@@ -2,6 +2,7 @@ import asyncio
 import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager, suppress
+from typing import Any
 
 from deerflow_extension_api import EXTENSION_PRINCIPAL_RESOLVER_KEY, ExtensionPrincipal
 from fastapi import FastAPI, Request, Response
@@ -667,6 +668,81 @@ async def _shutdown_hire_kpi_review_loop(app: FastAPI) -> None:
         await task
 
 
+async def _start_singleton_service(service: Any, *, error_cls: type[Exception], label: str) -> None:
+    """Start a service guarded by a cross-worker exclusive file lock.
+
+    Losing the lock (``service_already_running``) is a normal, expected
+    outcome under ``GATEWAY_WORKERS>1`` (these services are single-instance
+    per `base_dir`): it is logged and swallowed rather than failing the
+    whole worker's lifespan, leaving ``service`` installed on ``app.state``
+    but unstarted so its own routes answer with a 503 instead of crashing
+    the worker. Any other error still propagates.
+    """
+    try:
+        await service.start()
+    except error_cls as error:
+        if getattr(error, "code", None) != "service_already_running":
+            raise
+        logger.warning(
+            "%s is already running in another Gateway worker; this worker will report it as unavailable. %s requires GATEWAY_WORKERS=1.",
+            label,
+            label,
+        )
+
+
+async def _startup_browserbase_service(app: FastAPI) -> None:
+    from app.gateway.browserbase_service import BrowserbaseError, BrowserbaseResearchService
+    from deerflow.config.paths import get_paths
+
+    if not BrowserbaseResearchService.enabled():
+        return
+    app.state.browserbase_service = BrowserbaseResearchService(get_paths().base_dir / "browserbase-research.sqlite")
+    await _start_singleton_service(app.state.browserbase_service, error_cls=BrowserbaseError, label="Browserbase research service")
+
+
+async def _startup_workflow_service(app: FastAPI) -> None:
+    from app.gateway.browserbase_service import BrowserbaseResearchService
+    from app.gateway.workflow_service import WorkflowService, WorkflowServiceError
+
+    if not WorkflowService.enabled():
+        return
+    from app.gateway.workflow_adapters import WorkflowModelAdapter
+    from app.gateway.workflow_authority import workflow_actor_authorized
+    from deerflow.config.paths import get_paths
+
+    browserbase_service = getattr(app.state, "browserbase_service", None)
+    app.state.workflow_service = WorkflowService(
+        get_paths().base_dir / "workflows.sqlite",
+        checkpointer=app.state.checkpointer,
+        adapter=WorkflowModelAdapter(),
+        browser_service=browserbase_service,
+        run_manager=app.state.run_manager,
+        thread_store=app.state.thread_store,
+        event_store=app.state.run_event_store,
+        authority=workflow_actor_authorized,
+    )
+    if BrowserbaseResearchService.enabled() and not (browserbase_service and browserbase_service.started):
+        # Browserbase and Workflow take separate, independent exclusive
+        # leases, so a worker can win one and lose the other. Starting
+        # Workflow here anyway would hand it a browser_service that is not
+        # actually running on this process: WorkflowService.create() admits
+        # a browser workflow without checking browser capability, so it
+        # would be accepted and only fail partway through (possibly after
+        # model spend) once it tried to use the dead browser_service. Stay
+        # unstarted here too instead, matching the lease this worker lost
+        # (the object itself is still installed on app.state, exactly like
+        # a worker that lost the Workflow lease directly, so /api/workflows
+        # routes see `self.started is False` and degrade normally instead
+        # of 503ing on a missing service).
+        logger.warning(
+            "Workflow service needs this worker's own Browserbase lease, which it did not win; "
+            "leaving Workflow unstarted here too so an admitted workflow never sees a dead "
+            "browser_service. Keep GATEWAY_WORKERS=1 whenever Browserbase and Workflows are both enabled."
+        )
+        return
+    await _start_singleton_service(app.state.workflow_service, error_cls=WorkflowServiceError, label="Workflow service")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan handler."""
@@ -943,29 +1019,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         app.state.openai_agent_service = OpenAIAgentService(get_paths().base_dir / "openai-agents.sqlite")
         await app.state.openai_agent_service.start()
 
-        from app.gateway.browserbase_service import BrowserbaseResearchService
-
-        if BrowserbaseResearchService.enabled():
-            app.state.browserbase_service = BrowserbaseResearchService(get_paths().base_dir / "browserbase-research.sqlite")
-            await app.state.browserbase_service.start()
-
-        from app.gateway.workflow_service import WorkflowService
-
-        if WorkflowService.enabled():
-            from app.gateway.workflow_adapters import WorkflowModelAdapter
-            from app.gateway.workflow_authority import workflow_actor_authorized
-
-            app.state.workflow_service = WorkflowService(
-                get_paths().base_dir / "workflows.sqlite",
-                checkpointer=app.state.checkpointer,
-                adapter=WorkflowModelAdapter(),
-                browser_service=getattr(app.state, "browserbase_service", None),
-                run_manager=app.state.run_manager,
-                thread_store=app.state.thread_store,
-                event_store=app.state.run_event_store,
-                authority=workflow_actor_authorized,
-            )
-            await app.state.workflow_service.start()
+        await _startup_browserbase_service(app)
+        await _startup_workflow_service(app)
 
         yield
 

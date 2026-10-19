@@ -289,6 +289,7 @@ class BrowserbaseResearchService:
         self.lock = asyncio.Lock()
         self.started = False
         self.closing = False
+        self.lock_contended = False
 
     @staticmethod
     def enabled() -> bool:
@@ -381,6 +382,7 @@ class BrowserbaseResearchService:
                     fcntl.flock(lease.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
                 except OSError:
                     lease.close()
+                    self.lock_contended = True
                     raise BrowserbaseError("service_already_running", 503) from None
                 self.lease = lease
             except ImportError:
@@ -391,6 +393,7 @@ class BrowserbaseResearchService:
                 self.lease.close()
                 self.lease = None
                 raise
+            self.lock_contended = False
             self.started = True
             for data in await self._storage("held"):
                 if data.get("session_id"):
@@ -460,6 +463,9 @@ class BrowserbaseResearchService:
         }
         if not self.enabled():
             state["reason"] = "not_enabled"
+            return state
+        if self.lock_contended:
+            state["reason"] = "service_unavailable"
             return state
         if not configured:
             state["reason"] = "provider_unconfigured"

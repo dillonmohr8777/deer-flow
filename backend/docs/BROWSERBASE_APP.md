@@ -28,6 +28,35 @@ has no storage side effects. `tests/test_managed_provider_startup.py` exercises
 overlapping real lifespans and authenticated status/admission/list requests,
 including missing `fcntl`, with no provider storage or network access.
 
+When *enabled* with `GATEWAY_WORKERS > 1`, this service is still
+process-local: `start()` takes an exclusive `fcntl` lease on `path` (one
+`BrowserbaseResearchService` per `base_dir`), so only the first worker to
+reach it actually owns the SQLite store and provider session lifecycle.
+Losing that race is expected, not an error — the worker logs it, leaves its
+own `BrowserbaseResearchService` unstarted, and keeps serving every other
+route; it never aborts that worker's Gateway lifespan. The unstarted
+instance's `lock_contended` flag makes `/api/browserbase/status` report
+`service_unavailable` directly instead of querying the provider from a
+process that does not own the lease, and any admission/storage call lazily
+retries `start()` (self-healing if the owning worker later exits) and
+surfaces `service_already_running` as a 503 while the lease is still held
+elsewhere. `MOMOBOT_WORKFLOWS_ENABLED`'s `WorkflowService` shares the same
+exclusive-lease-per-`base_dir` pattern and the same non-fatal-loser startup
+behavior (see `WORKFLOWS.md`), but — unlike Browserbase — it does not lazily
+retry `start()` on later calls, so a worker that lost the Workflow lease
+stays unavailable for its own lifetime even after the owning worker exits.
+Browserbase and Workflow take *separate* leases, so a worker can win one and
+lose the other; when both features are enabled, Gateway startup skips
+`WorkflowService.start()` on a worker that lost the Browserbase lease even if
+that worker would have otherwise won the Workflow lease, since an admitted
+browser workflow trusts `browser_service` to actually be running. Keep
+`GATEWAY_WORKERS=1` for either feature unless every worker shares the same
+`base_dir` on purpose and you have accepted that only one worker actually
+runs it; running them under separate `base_dir`s (one per worker) is not
+supported today.
+`tests/test_managed_provider_startup.py::test_enabled_browserbase_survives_lock_contention_across_gateway_workers`
+covers this path end to end.
+
 The limit must come from current account-plan evidence, not a guessed public pricing tier. This owner's verified account plan has 6000 shared browser minutes, resets October 1, and supports 25 concurrent sessions; these observations are time-specific and are not a new purchase. The code requests no project ID: the latest Browserbase API infers the project from the key. No `BROWSERBASE_PROJECT_ID` is needed.
 
 Python Playwright is required only as a CDP client. No local Chrome install or browser download is required. The gateway must use its existing single-process service lifecycle; background task ownership is local to that process, while receipts and idempotency live in SQLite. A restart fails interrupted jobs and releases their recorded provider sessions; it does not silently recreate a paid job.
