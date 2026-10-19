@@ -44,7 +44,7 @@ const CANON_PALETTE: ReadonlySet<string> = new Set([
   "#FFFFFF", // eyes
   "#8E9AA6", // grey hardware and tools
   "#5C6773", // hardware shade
-  "#C8A04A", // gold: antenna ball and one rivet only
+  "#C8A04A", // gold: the antenna ball only
   "#FBF8F1", // cream-hi: the cut-paper margin
   "#D8C3A0", // kraft: cards, sheets, tags, crates
   "#9A2B3C", // red: the verifier's tag thread
@@ -78,6 +78,16 @@ describe("momo manifest", () => {
       const svg = readFileSync(join(MOMOS_DIR, `${slug}.svg`), "utf8");
       expect(svg).toContain(CANON_BODY);
       expect(svg).toContain(CANON_ANTENNA_BALL);
+    }
+  });
+
+  it("confines gold to the antenna ball", () => {
+    // Backlog 8: gold belongs to Momo's antenna, so a gold rivet on a tool
+    // would make the specialty read as a status. Tools are grey.
+    for (const slug of shippedSlugs()) {
+      const svg = readFileSync(join(MOMOS_DIR, `${slug}.svg`), "utf8");
+      const gold = svg.match(/#C8A04A/gi) ?? [];
+      expect({ slug, gold: gold.length }).toEqual({ slug, gold: 1 });
     }
   });
 

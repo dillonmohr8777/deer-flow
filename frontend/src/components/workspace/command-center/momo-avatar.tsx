@@ -123,6 +123,7 @@ export function MomoAvatar({
   size = 40,
   sizeBucket,
   active,
+  decorative,
   className,
 }: {
   agent: MomoAvatarAgent;
@@ -134,6 +135,8 @@ export function MomoAvatar({
    * state is unknown, which simply keeps the stack still.
    */
   active?: boolean;
+  /** The agent's name is already written beside the mark, so skip announcing it. */
+  decorative?: boolean;
   className?: string;
 }) {
   const [imgFailed, setImgFailed] = useState(false);
@@ -152,8 +155,9 @@ export function MomoAvatar({
     <span
       className={[styles.avatar, className].filter(Boolean).join(" ")}
       data-size={bucket}
-      role="img"
-      aria-label={accessibleName}
+      role={decorative ? undefined : "img"}
+      aria-label={decorative ? undefined : accessibleName}
+      aria-hidden={decorative ? true : undefined}
     >
       {isBrain ? (
         // PaperLayers itself goes fully static under prefers-reduced-motion
@@ -182,7 +186,9 @@ export function MomoAvatar({
         <MomentumGlyph
           seed={seed}
           size={size}
-          initial={label}
+          // From the stable name, not the display name: the mark must not
+          // change letter when the agent record finishes loading.
+          initial={agent.name}
           className={styles.art}
         />
       )}
