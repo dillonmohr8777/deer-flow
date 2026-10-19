@@ -55,12 +55,13 @@ test("workspace chat artifacts download with their real type; look-alikes fail c
   const chat = { ...candidate, url: `${thread}?download=true`, urlChain: [`${thread}?download=true`], mimeType: "text/plain", filename: "desktop-check.txt" };
   assert.equal(permittedArtifactDownload(chat, endpoint), true);
   assert.equal(permittedArtifactDownload({ ...chat, mimeType: "application/pdf", filename: "report.pdf" }, endpoint), true);
-  assert.equal(permittedArtifactDownload({ ...chat, filename: "run.command" }, endpoint), false);
+  for (const filename of ["run.command", "fix.terminal", "profile.mobileconfig", "macro.docm", "disk.iso"]) assert.equal(permittedArtifactDownload({ ...chat, filename }, endpoint), false, filename);
   for (const url of [thread, `${thread}?download=1`, `${thread}?download=true&x=1`, `${thread}?download=true#t`,
     "https://evil.example/api/threads/d00d93d8-4a05-4383-8ca9-d9c339148220/artifacts/a.txt?download=true",
     "https://momo.example.com/api/threads/not-a-uuid/artifacts/a.txt?download=true",
     "https://momo.example.com/api/threads/d00d93d8-4a05-4383-8ca9-d9c339148220/artifacts/mnt%2F..%2F..%2Fetc%2Fpasswd?download=true",
-    "https://momo.example.com/api/threads/d00d93d8-4a05-4383-8ca9-d9c339148220/runs/x/artifacts/archive?download=true"]) {
+    "https://momo.example.com/api/threads/d00d93d8-4a05-4383-8ca9-d9c339148220/runs/x/artifacts/archive?download=true",
+    "https://momo.example.com/api/threads/d00d93d8-4a05-4383-8ca9-d9c339148220/artifacts/a/..%5C..%5Cetc%5Cpasswd?download=true"]) {
     assert.equal(permittedArtifactDownload({ ...chat, url, urlChain: [url] }, endpoint), false, url);
   }
 });

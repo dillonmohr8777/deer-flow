@@ -15,6 +15,7 @@ site=${MOMOBOT_SITE_URL:?set MOMOBOT_SITE_URL (download site, ends with /)}
 site_dir=${MOMOBOT_SITE_DIR:?set MOMOBOT_SITE_DIR (local download-site folder)}
 workspace=${MOMOBOT_WORKSPACE:?set MOMOBOT_WORKSPACE (https://host/workspace)}
 case "$site" in https://*/) ;; *) echo "MOMOBOT_SITE_URL must be https and end with /" >&2; exit 1 ;; esac
+case "$workspace" in *[\"\\\ \'\`\$?#]*|"") echo "MOMOBOT_WORKSPACE has invalid characters" >&2; exit 1 ;; https://*) ;; *) echo "MOMOBOT_WORKSPACE must be https" >&2; exit 1 ;; esac
 version=$(node -p "require('./package.json').version")
 tag="momobot-desktop-v$version"
 if [ -n "$(git status --porcelain -- .)" ]; then echo "Commit the desktop changes first." >&2; exit 1; fi
@@ -29,7 +30,7 @@ trap 'rm -rf "$out"' EXIT
 MOMOBOT_RELEASE_DIR="$out" npm run package:mac
 build=$(ls -d "$out"/build-*)
 app=$(node -p "require('$build/build-paths.json').appPath")
-"$app/Contents/MacOS/MomoBot" --smoke-test > "$out/smoke.json"
+"$app/Contents/MacOS/MomoBot" --smoke-test > "$out/smoke.json" || true
 grep -q '"passed":true' "$out/smoke.json" || { echo "Launch smoke failed; nothing released:" >&2; cat "$out/smoke.json" >&2; exit 1; }
 zip_sha=$(shasum -a 256 "$build/MomoBot-mac-arm64.zip" | awk '{print $1}')
 install_sha=$(shasum -a 256 "$build/install.sh" | awk '{print $1}')
@@ -39,7 +40,8 @@ git push origin "$tag"
 # shellcheck disable=SC2016 # the backticks are Markdown, not a command
 printf 'MomoBot desktop %s for Apple Silicon Macs (ad-hoc signed, not notarized).\n\nInstall or update with the setup line on the team download page; it pins this SHA-256:\n\n```\n%s  MomoBot-mac-arm64.zip\n```\n' "$version" "$zip_sha" > "$out/notes.md"
 gh release create "$tag" --repo "$repo" --latest=false --title "MomoBot desktop $version" --notes-file "$out/notes.md" \
-  "$build/MomoBot-mac-arm64.zip" "$build/MomoBot-mac-arm64.dmg" "$build/SHA256SUMS" "$build/release.json" "$build/install.sh"
+  "$build/MomoBot-mac-arm64.zip" "$build/MomoBot-mac-arm64.dmg" "$build/SHA256SUMS" "$build/release.json" "$build/install.sh" \
+  || { git push origin ":refs/tags/$tag"; git tag -d "$tag"; echo "Release upload failed; tag removed so a rerun works." >&2; exit 1; }
 
 mkdir -p "$site_dir"
 cp "$build/release.json" "$build/install.sh" "$site_dir/"

@@ -2,7 +2,7 @@
 
 const DEFAULT_ENDPOINT = "http://127.0.0.1:2030/workspace";
 const MAX_ARTIFACT_BYTES = 20 * 1024 * 1024;
-const EXECUTABLE_EXTENSIONS = /\.(?:app|exe|com|bat|cmd|msi|msp|ps1|sh|bash|zsh|fish|command|desktop|js|cjs|mjs|vbs|vbe|wsf|hta|py|pyw|rb|pl|jar|dll|so|dylib|wasm|scpt|applescript|lnk|url|webloc|pkg|dmg|deb|rpm)(?:\.|$)/i;
+const EXECUTABLE_EXTENSIONS = /\.(?:app|exe|com|bat|cmd|msi|msp|ps1|sh|bash|zsh|fish|command|desktop|js|cjs|mjs|vbs|vbe|wsf|hta|py|pyw|rb|pl|jar|dll|so|dylib|wasm|scpt|applescript|lnk|url|webloc|pkg|dmg|deb|rpm|terminal|mobileconfig|inetloc|fileloc|workflow|action|prefpane|kext|plugin|osax|scptd|shortcut|docm|xlsm|pptm|iso|img|sparseimage|scr|cpl|msc|reg|xll)(?:\.|$)/i;
 
 /** @param {string} hostname */
 function isLoopbackHostname(hostname) {
@@ -95,7 +95,7 @@ function artifactFilename(value) {
 function isThreadArtifactURL(url) {
   return (url.protocol === "https:" || url.protocol === "http:") && url.search === "?download=true"
     && /^\/api\/threads\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/artifacts(?:\/[A-Za-z0-9._~%-]+)+$/i.test(url.pathname)
-    && !decodeURIComponent(url.pathname).split("/").some((segment) => segment === ".." || segment === ".");
+    && !decodeURIComponent(url.pathname).split(/[\\/]/).some((segment) => segment === ".." || segment === ".");
 }
 
 /** @param {string} target @param {string} endpoint */

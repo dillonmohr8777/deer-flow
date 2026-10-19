@@ -159,7 +159,8 @@ async function runSmoke() {
   const reachedLogin = !loginSmoke || (new URL(currentURL).pathname === "/login" && typeof renderer.heading === "string" && !!renderer.heading.trim() && !!renderer.form);
   // Reported, not gating: an unreachable release server must not fail a launch check.
   const update = updateURL ? await checkForUpdate({ updateURL, currentVersion: app.getVersion(), fetchImpl: net.fetch }) : undefined;
-  const passed = crashes.length === 0 && reachedWorkspace && reachedLogin && renderer.require === "undefined" && renderer.process === "undefined" && osSandboxed && preferences.contextIsolation === true && preferences.nodeIntegration === false && preferences.webSecurity === true && blockedNavigation && !window.isVisible();
+  // A real heading proves the page rendered (a 403 or blank settings page has none).
+  const passed = crashes.length === 0 && typeof renderer.heading === "string" && !!renderer.heading.trim() && reachedWorkspace && reachedLogin && renderer.require === "undefined" && renderer.process === "undefined" && osSandboxed && preferences.contextIsolation === true && preferences.nodeIntegration === false && preferences.webSecurity === true && blockedNavigation && !window.isVisible();
   process.stdout.write(`${JSON.stringify({ type: "desktop-smoke", passed, workspaceSmoke, loginSmoke, reachedWorkspace, reachedLogin, finalOrigin: new URL(currentURL).origin, soak, update, version: app.getVersion(), electron: process.versions.electron, hidden: !window.isVisible(), osSandboxed, renderer, blockedNavigation })}\n`);
   app.exit(passed ? 0 : 1);
 }

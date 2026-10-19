@@ -59,6 +59,22 @@ main() {
   if [ -d "$apps/MomoBot.app" ]; then rm -rf "$apps/MomoBot-previous.app"; mv "$apps/MomoBot.app" "$apps/MomoBot-previous.app"; fi
   mv "$tmp/app/MomoBot.app" "$apps/MomoBot.app"
 
+  # Hidden, sandbox-checked launch; never shows a window or takes focus.
+  MOMOBOT_UPDATE_URL="$update_url" "$apps/MomoBot.app/Contents/MacOS/MomoBot" --smoke-test > "$tmp/smoke.json" 2>&1 || true
+  if ! grep -q '"passed":true' "$tmp/smoke.json"; then
+    echo "The new MomoBot failed its launch check:" >&2
+    cat "$tmp/smoke.json" >&2
+    if [ -d "$apps/MomoBot-previous.app" ]; then
+      rm -rf "$apps/MomoBot.app"
+      mv "$apps/MomoBot-previous.app" "$apps/MomoBot.app"
+      echo "Your previous MomoBot was put back; nothing changed." >&2
+    else
+      rm -rf "$apps/MomoBot.app"
+      echo "Nothing was installed." >&2
+    fi
+    exit 1
+  fi
+  # Saved only after the launch check, so a rollback really leaves nothing changed.
   if [ -n "$workspace" ]; then
     conf="$HOME/Library/Application Support/MomoBot"
     mkdir -p "$conf"
@@ -72,18 +88,6 @@ main() {
     fi
   fi
 
-  # Hidden, sandbox-checked launch; never shows a window or takes focus.
-  MOMOBOT_UPDATE_URL="$update_url" "$apps/MomoBot.app/Contents/MacOS/MomoBot" --smoke-test > "$tmp/smoke.json" 2>&1 || true
-  if ! grep -q '"passed":true' "$tmp/smoke.json"; then
-    echo "The new MomoBot failed its launch check:" >&2
-    cat "$tmp/smoke.json" >&2
-    if [ -d "$apps/MomoBot-previous.app" ]; then
-      rm -rf "$apps/MomoBot.app"
-      mv "$apps/MomoBot-previous.app" "$apps/MomoBot.app"
-      echo "Your previous MomoBot was put back; nothing changed." >&2
-    fi
-    exit 1
-  fi
   version=$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "$apps/MomoBot.app/Contents/Info.plist")
   echo "MomoBot $version installed to $apps/MomoBot.app (Finder: Go > Home > Applications). Open it and sign in."
 }
