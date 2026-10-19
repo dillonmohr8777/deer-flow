@@ -1,6 +1,6 @@
 "use strict";
 
-const { app, BrowserWindow, Menu, shell, session, dialog } = require("electron");
+const { app, BrowserWindow, Menu, shell, session, dialog, clipboard, net } = require("electron");
 const fs = require("node:fs/promises");
 const fsSync = require("node:fs");
 const os = require("node:os");
@@ -8,6 +8,7 @@ const path = require("node:path");
 const { DEFAULT_ENDPOINT, validateEndpoint, isSameOriginNavigation, safeExternalURL, permittedMediaRequest, rendererPreferences } = require("./security.cjs");
 const { startSettingsServer } = require("./settings-server.cjs");
 const { handleArtifactDownload } = require("./artifact-download.cjs");
+const { validateUpdateURL, checkForUpdate } = require("./update-check.cjs");
 const tools = require("./tools/tools.cjs");
 
 const smoke = process.argv.includes("--smoke-test");
@@ -15,6 +16,12 @@ const workspaceSmoke = smoke && process.argv.includes("--verify-workspace");
 const loginSmoke = smoke && process.argv.includes("--verify-login");
 const soakIndex = process.argv.indexOf("--soak-minutes");
 const soakMinutes = smoke && soakIndex > -1 ? Number(process.argv[soakIndex + 1]) : 0;
+// A smoke profile keeps the real persistent session (and allows downloads into <profile>/Downloads)
+// so sign-in survival across relaunches can be tested without touching the user's own profile.
+const profileIndex = process.argv.indexOf("--smoke-profile");
+const smokeProfile = smoke && profileIndex > -1 && process.argv[profileIndex + 1] ? path.resolve(process.argv[profileIndex + 1]) : undefined;
+/** @type {string|undefined} */
+let updateURL;
 /** @type {Electron.BrowserWindow} */
 let window;
 /** @type {Awaited<ReturnType<typeof startSettingsServer>>} */
@@ -30,7 +37,8 @@ let smokeDirectory;
 app.setName("MomoBot");
 if (smoke) {
   app.setActivationPolicy("accessory");
-  smokeDirectory = fsSync.mkdtempSync(path.join(os.tmpdir(), "momobot-desktop-smoke-"));
+  if (smokeProfile) fsSync.mkdirSync(smokeProfile, { recursive: true, mode: 0o700 });
+  smokeDirectory = smokeProfile ?? fsSync.mkdtempSync(path.join(os.tmpdir(), "momobot-desktop-smoke-"));
   app.setPath("userData", smokeDirectory);
   app.setPath("sessionData", smokeDirectory);
 }
@@ -45,6 +53,28 @@ async function openWorkspace() {
     await window.loadURL(endpoint);
   } catch {
     showLocal("/error");
+  }
+}
+
+/** Silent checks speak up only when a newer release exists. @param {boolean} interactive */
+async function checkUpdates(interactive) {
+  if (!updateURL) {
+    if (interactive) await dialog.showMessageBox(window, { message: "Update checks aren't set up for this copy of MomoBot.", detail: "Reinstall with the team setup command to turn them on." });
+    return;
+  }
+  const result = await checkForUpdate({ updateURL, currentVersion: app.getVersion(), fetchImpl: net.fetch });
+  if (result.status === "newer") {
+    const command = `curl -fsSL ${updateURL}setup.sh | sh`;
+    const { response } = await dialog.showMessageBox(window, {
+      message: `MomoBot ${result.latest} is available`,
+      detail: `You have ${app.getVersion()}. Paste this into Terminal, then reopen MomoBot:\n\n${command}`,
+      buttons: ["Copy Command", "Later"], defaultId: 0, cancelId: 1, noLink: true,
+    });
+    if (response === 0) clipboard.writeText(command);
+  } else if (interactive) {
+    await dialog.showMessageBox(window, result.status === "current"
+      ? { message: "MomoBot is up to date.", detail: `Version ${app.getVersion()}.` }
+      : { type: "warning", message: "Couldn't check for updates.", detail: "Check your internet connection and try again." });
   }
 }
 
@@ -67,13 +97,13 @@ function configureSession(partition) {
     callback(!smoke && permittedMediaRequest(permission, origin, endpoint, { mediaTypes }));
   });
   partition.on("will-download", (event, item, contents, frame) => {
-    if (smoke || !window || window.isDestroyed() || contents !== window.webContents || frame !== contents.mainFrame) {
+    if ((smoke && !smokeProfile) || !window || window.isDestroyed() || contents !== window.webContents || frame !== contents.mainFrame) {
       event.preventDefault();
       return;
     }
     handleArtifactDownload(event, item, {
       endpoint, documentURL: contents.getURL(), frameURL: frame.url, ownedFrame: true,
-      downloadsDirectory: app.getPath("downloads"),
+      downloadsDirectory: smokeProfile ? path.join(smokeProfile, "Downloads") : app.getPath("downloads"),
       confirm: (filename) => window.isVisible() && window.isFocused() && dialog.showMessageBoxSync(window, {
         title: "Save MomoBot file", message: `Save ${filename} to Downloads?`,
         buttons: ["Save File", "Cancel"], defaultId: 1, cancelId: 1, noLink: true,
@@ -115,8 +145,10 @@ async function runSmoke() {
   const osSandboxed = processMetric?.sandboxed === true;
   const reachedWorkspace = !workspaceSmoke || renderer.heading === "OpenAI crew";
   const reachedLogin = !loginSmoke || (new URL(currentURL).pathname === "/login" && typeof renderer.heading === "string" && !!renderer.heading.trim() && !!renderer.form);
+  // Reported, not gating: an unreachable release server must not fail a launch check.
+  const update = updateURL ? await checkForUpdate({ updateURL, currentVersion: app.getVersion(), fetchImpl: net.fetch }) : undefined;
   const passed = crashes.length === 0 && reachedWorkspace && reachedLogin && renderer.require === "undefined" && renderer.process === "undefined" && osSandboxed && preferences.contextIsolation === true && preferences.nodeIntegration === false && preferences.webSecurity === true && blockedNavigation && !window.isVisible();
-  process.stdout.write(`${JSON.stringify({ type: "desktop-smoke", passed, workspaceSmoke, loginSmoke, reachedWorkspace, reachedLogin, finalOrigin: new URL(currentURL).origin, soak, version: app.getVersion(), electron: process.versions.electron, hidden: !window.isVisible(), osSandboxed, renderer, blockedNavigation })}\n`);
+  process.stdout.write(`${JSON.stringify({ type: "desktop-smoke", passed, workspaceSmoke, loginSmoke, reachedWorkspace, reachedLogin, finalOrigin: new URL(currentURL).origin, soak, update, version: app.getVersion(), electron: process.versions.electron, hidden: !window.isVisible(), osSandboxed, renderer, blockedNavigation })}\n`);
   app.exit(passed ? 0 : 1);
 }
 
@@ -124,6 +156,7 @@ app.whenReady().then(async () => {
   const configPath = path.join(app.getPath("userData"), "connection.json");
   try {
     const saved = JSON.parse(await fs.readFile(configPath, "utf8"));
+    updateURL = validateUpdateURL(saved.updateURL);
     endpoint = validateEndpoint(saved.endpoint);
     configured = true;
   } catch { /* First launch and invalid configurations use the safe setup screen. */ }
@@ -136,6 +169,7 @@ app.whenReady().then(async () => {
       configured = false;
     }
   }
+  updateURL = validateUpdateURL(process.env.MOMOBOT_UPDATE_URL) ?? updateURL;
   settings = await startSettingsServer({
     tools,
     getEndpoint: () => endpoint,
@@ -143,7 +177,7 @@ app.whenReady().then(async () => {
     getExternal: () => external,
     onConnect: async (nextEndpoint) => {
       await fs.mkdir(path.dirname(configPath), { recursive: true });
-      await fs.writeFile(configPath, `${JSON.stringify({ endpoint: nextEndpoint }, null, 2)}\n`, { mode: 0o600 });
+      await fs.writeFile(configPath, `${JSON.stringify({ endpoint: nextEndpoint, updateURL }, null, 2)}\n`, { mode: 0o600 });
       endpoint = nextEndpoint;
       configured = true;
       setImmediate(() => { void openWorkspace(); });
@@ -157,7 +191,7 @@ app.whenReady().then(async () => {
     },
   });
   const preferences = rendererPreferences();
-  if (smoke) preferences.partition = `momobot-smoke-${process.pid}`;
+  if (smoke && !smokeProfile) preferences.partition = `momobot-smoke-${process.pid}`;
   configureSession(session.fromPartition(preferences.partition));
   window = new BrowserWindow({
     width: 1280,
@@ -199,7 +233,7 @@ app.whenReady().then(async () => {
   });
   /** @type {Electron.MenuItemConstructorOptions[]} */
   const template = [
-    { label: "MomoBot", submenu: [{ role: "about" }, { type: "separator" }, { label: "Connection…", click: () => showLocal() }, { label: "Tools…", accelerator: "CmdOrCtrl+Shift+T", click: () => showLocal("/tools") },
+    { label: "MomoBot", submenu: [{ role: "about" }, { label: "Check for Updates…", click: () => { void checkUpdates(true); } }, { type: "separator" }, { label: "Connection…", click: () => showLocal() }, { label: "Tools…", accelerator: "CmdOrCtrl+Shift+T", click: () => showLocal("/tools") },
       { label: "Open at Login", type: "checkbox", checked: app.getLoginItemSettings().openAtLogin, click: (item) => app.setLoginItemSettings({ openAtLogin: item.checked }) },
       { type: "separator" }, { role: "quit" }] },
     { role: "editMenu" },
@@ -212,6 +246,7 @@ app.whenReady().then(async () => {
     return;
   }
   window.once("ready-to-show", () => window.show());
+  setTimeout(() => { void checkUpdates(false); }, 5_000);
   if (configured) await openWorkspace();
   else await window.loadURL(settings.origin);
 }).catch((error) => {
