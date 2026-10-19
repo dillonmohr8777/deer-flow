@@ -77,6 +77,16 @@ async def test_claim_returns_leased_item_for_runner_body() -> None:
 
 
 @pytest.mark.asyncio
+async def test_claim_passes_runner_batch_selector_to_repo() -> None:
+    repo = SimpleNamespace(claim_items=AsyncMock(return_value=[]))
+
+    await fleet_work.claim_work.__wrapped__(request=_request(repo), body=fleet_work.ClaimRequest(**RUNNER_BODY, batch_id="batch-synthetic-1"))
+    await fleet_work.claim_work.__wrapped__(request=_request(repo), body=fleet_work.ClaimRequest(**RUNNER_BODY))
+
+    assert [c.kwargs["batch_id"] for c in repo.claim_items.await_args_list] == ["batch-synthetic-1", None]
+
+
+@pytest.mark.asyncio
 async def test_claim_with_empty_queue_is_ok_and_empty() -> None:
     repo = SimpleNamespace(claim_items=AsyncMock(return_value=[]))
 
@@ -144,3 +154,32 @@ def test_runner_poll_through_real_auth_middleware(monkeypatch, delegation_state)
     else:
         assert response.status_code == 403
         repo.claim_items.assert_not_awaited()
+
+
+@pytest.mark.parametrize("raw", ["not json", '{"lanes": ["haiku"]}', '{"lease_owner": "w", "lanes": "haiku"}', '{"lease_owner": "w", "lanes": ["nope"]}'])
+def test_malformed_claim_body_over_http_is_422_and_claims_nothing(monkeypatch, raw) -> None:
+    from org_isolation_fixtures import fake_delegation
+
+    from app.gateway.auth_middleware import AuthMiddleware
+    from app.gateway.internal_auth import create_internal_auth_headers
+
+    monkeypatch.setenv("DEER_FLOW_AUTH_DISABLED", "0")
+    monkeypatch.setenv("DEER_FLOW_INTERNAL_AUTH_TOKEN", "synthetic-internal-token")
+    delegation = fake_delegation("owner-1", subject_type="fleet_host", subject_id="mac-mini", scopes=frozenset({"fleet:work"}))
+    monkeypatch.setattr("app.gateway.auth_middleware._resolve_internal_delegation", AsyncMock(return_value=delegation))
+    monkeypatch.setattr("app.gateway.auth_middleware.resolve_route_permissions", AsyncMock(return_value=["fleet:work"]))
+    repo = SimpleNamespace(claim_items=AsyncMock(return_value=[]))
+    app = FastAPI()
+    app.state.subagent_batch_repo = repo
+    app.add_middleware(AuthMiddleware)
+    app.include_router(fleet_work.router)
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/fleet/work/claim",
+            headers={**create_internal_auth_headers(delegation_id=delegation.id), "Content-Type": "application/json"},
+            content=raw,
+        )
+
+    assert response.status_code == 422
+    repo.claim_items.assert_not_awaited()

@@ -395,6 +395,7 @@ class SubagentBatchRepository:
         lanes: Collection[str] | None = None,
         owner_id: str | None = None,
         organization_id: str | None = None,
+        batch_id: str | None = None,
     ) -> list[dict[str, Any]]:
         """Promote pending work and atomically claim runnable items.
 
@@ -413,6 +414,8 @@ class SubagentBatchRepository:
             stmt = select(SubagentBatchRow).where(SubagentBatchRow.status.in_(("queued", "running")))
             if owner_id is not None:
                 stmt = stmt.where(SubagentBatchRow.user_id == owner_id, SubagentBatchRow.organization_id == organization_id)
+            if batch_id is not None:
+                stmt = stmt.where(SubagentBatchRow.id == batch_id)
             batches = list((await session.execute(stmt.order_by(SubagentBatchRow.created_at, SubagentBatchRow.id).with_for_update(skip_locked=True))).scalars())
             for batch in batches:
                 if len(claimed) >= limit:

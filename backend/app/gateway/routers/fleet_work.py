@@ -80,6 +80,7 @@ class ClaimRequest(BaseModel):
     lease_owner: str = _LEASE_OWNER_FIELD
     lanes: list[Lane] = Field(min_length=1)
     limit: int = Field(default=1, ge=1, le=64)
+    batch_id: str | None = Field(default=None, min_length=1, max_length=64)  # runner --batch-id selector
 
 
 class LeaseRequest(BaseModel):
@@ -247,6 +248,7 @@ async def claim_work(request: Request, body: ClaimRequest) -> dict[str, Any]:
         lanes=set(body.lanes),
         owner_id=trusted_owner,
         organization_id=organization_id,
+        batch_id=body.batch_id,
     )
     expires_at = (now + timedelta(seconds=config.lease_seconds)).isoformat()
     return {

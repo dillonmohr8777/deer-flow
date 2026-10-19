@@ -105,3 +105,17 @@ async def test_fleet_lease_is_fenced_released_and_reclaimed_with_stable_identity
     done = (await repo.list_items("fleet-haiku", user_id="user-1", include_result=True))[0]
     assert (done["status"], done["result"], done["model_name"]) == ("succeeded", "done", "anthropic/claude-haiku-5.5")
     assert await repo.claim_items(now=now + timedelta(seconds=3), lease_owner="w-haiku-03", lease_seconds=60, limit=1, executor="fleet", lanes={"haiku"}) == []
+
+
+@pytest.mark.asyncio
+async def test_claim_batch_selector_leaves_other_same_lane_batches_queued(tmp_path) -> None:
+    repo = await _repo(tmp_path)
+    spec = {"executor": "fleet", "lane": "haiku", "data_class": "synthetic"}
+    await _create(repo, "older", spec, count=1)
+    await _create(repo, "selected", spec, count=1)
+    now = datetime.now(UTC)
+
+    got = await repo.claim_items(now=now, lease_owner="w-haiku-01", lease_seconds=60, limit=5, executor="fleet", lanes={"haiku"}, batch_id="selected")
+
+    assert {item["batch_id"] for item in got} == {"selected"}
+    assert (await repo.list_items("older", user_id="user-1"))[0]["status"] in {"pending", "queued"}
