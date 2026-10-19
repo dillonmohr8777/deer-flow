@@ -1,10 +1,11 @@
 #!/bin/sh
-# One-command MomoBot install from a release folder (ZIP + SHA256SUMS):
-#   sh install.sh <release-dir> [--workspace https://host/workspace]
+# One-command MomoBot install from a release folder or https download URL (ZIP + SHA256SUMS):
+#   sh install.sh <release-dir-or-url> [--workspace https://host/workspace]
+#   curl -fsSL <url>/install.sh | sh -s -- <url> --workspace https://host/workspace
 # Verifies the checksum and signature, installs to ~/Applications (keeping any
 # previous app beside it), saves the workspace URL, then runs a hidden smoke test.
 set -eu
-dir=${1:?usage: install.sh <release-dir> [--workspace https://host/workspace]}
+dir=${1:?usage: install.sh <release-dir-or-url> [--workspace https://host/workspace]}
 workspace=""
 if [ "${2:-}" = "--workspace" ]; then workspace=${3:?--workspace needs a URL}; fi
 case "$workspace" in
@@ -14,22 +15,30 @@ case "$workspace" in
   *) echo "Workspace URL must start with https://" >&2; exit 1 ;;
 esac
 
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+case "$dir" in
+  https://*)
+    echo "Downloading MomoBot..."
+    curl -fsSL "${dir%/}/SHA256SUMS" -o "$tmp/SHA256SUMS"
+    curl -fL --progress-bar "${dir%/}/MomoBot-mac-arm64.zip" -o "$tmp/MomoBot-mac-arm64.zip"
+    dir="$tmp" ;;
+esac
 zip="$dir/MomoBot-mac-arm64.zip"
 expected=$(awk '$2=="MomoBot-mac-arm64.zip"{print $1}' "$dir/SHA256SUMS")
 actual=$(shasum -a 256 "$zip" | awk '{print $1}')
 if [ -z "$expected" ] || [ "$expected" != "$actual" ]; then echo "Checksum mismatch; nothing installed." >&2; exit 1; fi
 
-tmp=$(mktemp -d)
-trap 'rm -rf "$tmp"' EXIT
-ditto -x -k "$zip" "$tmp"
-codesign --verify --deep --strict "$tmp/MomoBot.app"
+mkdir "$tmp/app"
+ditto -x -k "$zip" "$tmp/app"
+codesign --verify --deep --strict "$tmp/app/MomoBot.app"
 # The release is ad-hoc signed; the user is installing it on purpose, so clear the download quarantine.
-xattr -dr com.apple.quarantine "$tmp/MomoBot.app" 2>/dev/null || true
+xattr -dr com.apple.quarantine "$tmp/app/MomoBot.app" 2>/dev/null || true
 
 apps="$HOME/Applications"
 mkdir -p "$apps"
 if [ -d "$apps/MomoBot.app" ]; then mv "$apps/MomoBot.app" "$apps/MomoBot-previous-$(date +%Y%m%d%H%M%S).app"; fi
-mv "$tmp/MomoBot.app" "$apps/MomoBot.app"
+mv "$tmp/app/MomoBot.app" "$apps/MomoBot.app"
 
 if [ -n "$workspace" ]; then
   conf="$HOME/Library/Application Support/MomoBot"
