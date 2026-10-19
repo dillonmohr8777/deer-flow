@@ -289,7 +289,9 @@ function MCPServerList({
               id: `mcp:${name}`,
               category: metadata?.category ?? "custom",
               search: `${name} ${config.description ?? ""} ${metadata?.aliases.join(" ") ?? ""} ${Object.values(metadata?.name ?? {}).join(" ")} ${Object.values(metadata?.description ?? {}).join(" ")}`,
-              installed: true,
+              // A switched-off server is installed, not working: it waits
+              // with what is available until someone turns it back on.
+              installed: config.enabled,
               node: (
                 <PluginRow
                   name={displayName}
