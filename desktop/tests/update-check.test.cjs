@@ -17,7 +17,8 @@ test("versions compare numerically, not as strings", () => {
 test("update URL must be plain HTTPS and gains a trailing slash", () => {
   assert.equal(validateUpdateURL("https://example.com/momobot"), "https://example.com/momobot/");
   assert.equal(validateUpdateURL("https://example.com"), "https://example.com/");
-  for (const bad of ["http://example.com/", "https://user:pw@example.com/", "https://example.com/?x=1", "file:///tmp/", "", 42, undefined]) {
+  assert.equal(validateUpdateURL("https://example.com/`id`/"), "https://example.com/%60id%60/");
+  for (const bad of ["http://example.com/", "https://user:pw@example.com/", "https://example.com/?x=1", "file:///tmp/", "https://example.com/$(id)/", "https://example.com/a;b/", "", 42, undefined]) {
     assert.equal(validateUpdateURL(bad), undefined, String(bad));
   }
 });

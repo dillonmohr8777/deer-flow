@@ -64,7 +64,8 @@ async function checkUpdates(interactive) {
   }
   const result = await checkForUpdate({ updateURL, currentVersion: app.getVersion(), fetchImpl: net.fetch });
   if (result.status === "newer") {
-    const command = `curl -fsSL ${updateURL}setup.sh | sh`;
+    // No --workspace: an update keeps this Mac's saved endpoint and update URL.
+    const command = `curl -fsSL ${updateURL}install.sh | sh -s -- ${updateURL}`;
     const { response } = await dialog.showMessageBox(window, {
       message: `MomoBot ${result.latest} is available`,
       detail: `You have ${app.getVersion()}. Paste this into Terminal, then reopen MomoBot:\n\n${command}`,
@@ -104,7 +105,8 @@ function configureSession(partition) {
     handleArtifactDownload(event, item, {
       endpoint, documentURL: contents.getURL(), frameURL: frame.url, ownedFrame: true,
       downloadsDirectory: smokeProfile ? path.join(smokeProfile, "Downloads") : app.getPath("downloads"),
-      confirm: (filename) => window.isVisible() && window.isFocused() && dialog.showMessageBoxSync(window, {
+      // A smoke profile is an operator-run test with no visible window to confirm in.
+      confirm: (filename) => Boolean(smokeProfile) || window.isVisible() && window.isFocused() && dialog.showMessageBoxSync(window, {
         title: "Save MomoBot file", message: `Save ${filename} to Downloads?`,
         buttons: ["Save File", "Cancel"], defaultId: 1, cancelId: 1, noLink: true,
       }) === 0,

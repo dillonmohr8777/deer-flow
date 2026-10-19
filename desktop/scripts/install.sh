@@ -11,7 +11,7 @@ workspace=""
 if [ "${2:-}" = "--workspace" ]; then workspace=${3:?--workspace needs a URL}; fi
 case "$workspace" in
   "") ;;
-  *[\"\\\ ]*) echo "Workspace URL has invalid characters." >&2; exit 1 ;;
+  *[\"\\\ ?#]*) echo "Workspace URL has invalid characters." >&2; exit 1 ;;
   https://*) ;;
   *) echo "Workspace URL must start with https://" >&2; exit 1 ;;
 esac
@@ -58,7 +58,7 @@ if [ -n "$workspace" ]; then
 fi
 
 # Hidden, sandbox-checked launch; never shows a window or takes focus.
-MOMOBOT_UPDATE_URL="$release_url" "$apps/MomoBot.app/Contents/MacOS/MomoBot" --smoke-test > "$tmp/smoke.json"
+MOMOBOT_UPDATE_URL="$release_url" "$apps/MomoBot.app/Contents/MacOS/MomoBot" --smoke-test > "$tmp/smoke.json" || true
 grep -q '"passed":true' "$tmp/smoke.json" || { echo "Installed, but the launch check failed:" >&2; cat "$tmp/smoke.json" >&2; exit 1; }
 version=$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "$apps/MomoBot.app/Contents/Info.plist")
 echo "MomoBot $version installed to $apps/MomoBot.app. Open it and sign in."

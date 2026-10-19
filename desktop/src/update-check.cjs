@@ -22,7 +22,8 @@ function validateUpdateURL(value) {
     const url = new URL(value);
     if (url.protocol !== "https:" || url.username || url.password || url.search || url.hash) return undefined;
     if (!url.pathname.endsWith("/")) url.pathname += "/";
-    return url.toString();
+    // The URL is shown inside a Terminal command, so allow only characters with no shell meaning.
+    return /^https:\/\/[A-Za-z0-9.-]+(?::\d+)?\/[A-Za-z0-9._~/%-]*$/u.test(url.toString()) ? url.toString() : undefined;
   } catch {
     return undefined;
   }
