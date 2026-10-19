@@ -25,7 +25,11 @@ missing payload, a non-JSON body, or a non-string field all fall back to
 notification's target, or opens one). The target `url` is only ever trusted
 as a same-origin relative path: an absolute URL, a protocol-relative
 `//host/...`, or a backslash variant all collapse to `/workspace` instead of
-navigating off-app. See `tests/unit/core/pwa/pwa-service-worker.test.ts` for
+navigating off-app. Non-object JSON payloads use the same generic fallback.
+Control characters and backslashes are rejected before URL parsing, and the
+parsed origin is checked before a destination is stored or opened. Accepted
+paths are normalized while retaining their query and fragment.
+See `tests/unit/core/pwa/pwa-service-worker.test.ts` for
 the push/notificationclick coverage.
 
 What this slice does **not** do yet: nothing subscribes a browser to push
@@ -122,12 +126,12 @@ None of these are purchased or enrolled by this task — distribution work
 stops at the doc and the generic push mechanism until Dillon says go, per
 the queue's standing rule against spend decisions.
 
-| Account | Cost | Needed for |
-| --- | --- | --- |
-| Apple Developer Program | $99/yr | Developer ID signing + notarization (macOS direct download), Mac App Store submission, iOS App Store submission, APNs push credentials |
-| Google Play Console | $25 one-time | Android app signing, Google Play submission |
-| Microsoft Partner Center (Store) | Free for an individual developer account at the time of writing; confirm current pricing at submission time, Microsoft has changed this tier before | Microsoft Store submission (MSIX) |
-| Windows code-signing certificate (EV or OV) | Recurring, varies by issuer (roughly $75-400/yr) | Signing the direct-download Windows installer so it does not trigger SmartScreen |
+| Account                                     | Cost                                                                                                                                                | Needed for                                                                                                                             |
+| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Apple Developer Program                     | $99/yr                                                                                                                                              | Developer ID signing + notarization (macOS direct download), Mac App Store submission, iOS App Store submission, APNs push credentials |
+| Google Play Console                         | $25 one-time                                                                                                                                        | Android app signing, Google Play submission                                                                                            |
+| Microsoft Partner Center (Store)            | Free for an individual developer account at the time of writing; confirm current pricing at submission time, Microsoft has changed this tier before | Microsoft Store submission (MSIX)                                                                                                      |
+| Windows code-signing certificate (EV or OV) | Recurring, varies by issuer (roughly $75-400/yr)                                                                                                    | Signing the direct-download Windows installer so it does not trigger SmartScreen                                                       |
 
 ## 5. Why the stable domain has to come first
 

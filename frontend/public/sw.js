@@ -85,23 +85,34 @@ self.addEventListener("activate", (event) => {
 });
 
 function notificationTargetPath(payload) {
-  // Only ever a same-origin relative path: a push payload is server data,
-  // never trusted as a destination outside the app. Reject "//host/..." and
-  // "/\host/..." too -- both resolve to a different origin against a base URL.
-  const url = payload.url;
-  return typeof url === "string" &&
-    url.startsWith("/") &&
-    !url.startsWith("//") &&
-    !url.startsWith("/\\")
-    ? url
-    : "/workspace";
+  // URL parsing removes tabs/newlines and treats backslashes as separators.
+  // Validate the parsed origin too, before storing or opening a destination.
+  const url = payload?.url;
+  if (
+    typeof url !== "string" ||
+    !url.startsWith("/") ||
+    url.startsWith("//") ||
+    /[\\\u0000-\u001f\u007f]/.test(url)
+  )
+    return "/workspace";
+  try {
+    const target = new URL(url, self.location.origin);
+    return target.origin === self.location.origin
+      ? `${target.pathname}${target.search}${target.hash}`
+      : "/workspace";
+  } catch {
+    return "/workspace";
+  }
 }
 
 async function showPushNotification(event) {
   let payload = {};
   if (event.data) {
     try {
-      payload = event.data.json();
+      const parsed = event.data.json();
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        payload = parsed;
+      }
     } catch {
       payload = {};
     }
