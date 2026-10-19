@@ -62,10 +62,13 @@ main() {
   if [ -n "$workspace" ]; then
     conf="$HOME/Library/Application Support/MomoBot"
     mkdir -p "$conf"
+    # Keep an owner's Tools opt-in across updates; everything else is rewritten.
+    tools=""
+    if grep -q '"tools": *true' "$conf/connection.json" 2>/dev/null; then tools=',\n  "tools": true'; fi
     if [ -n "$update_url" ]; then
-      (umask 077 && printf '{\n  "endpoint": "%s",\n  "updateURL": "%s"\n}\n' "$workspace" "$update_url" > "$conf/connection.json")
+      (umask 077 && printf "{\n  \"endpoint\": \"%s\",\n  \"updateURL\": \"%s\"$tools\n}\n" "$workspace" "$update_url" > "$conf/connection.json")
     else
-      (umask 077 && printf '{\n  "endpoint": "%s"\n}\n' "$workspace" > "$conf/connection.json")
+      (umask 077 && printf "{\n  \"endpoint\": \"%s\"$tools\n}\n" "$workspace" > "$conf/connection.json")
     fi
   fi
 

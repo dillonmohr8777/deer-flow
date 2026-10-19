@@ -10,8 +10,10 @@ const { startSettingsServer, SECRET_HEADER } = require("./settings-server.cjs");
 const { handleArtifactDownload } = require("./artifact-download.cjs");
 const { validateUpdateURL, checkForUpdate } = require("./update-check.cjs");
 // The local Tools panel drives Dillon's own vault and browser helpers; teammates don't have them.
-const toolsEnabled = process.env.MOMOBOT_TOOLS === "1";
-const tools = toolsEnabled ? require("./tools/tools.cjs") : undefined;
+// On with MOMOBOT_TOOLS=1 or `"tools": true` in connection.json (apps opened from Finder get no env).
+let savedTools = false;
+/** @type {typeof import("./tools/tools.cjs") | undefined} */
+let tools;
 
 const smoke = process.argv.includes("--smoke-test");
 const workspaceSmoke = smoke && process.argv.includes("--verify-workspace");
@@ -167,6 +169,7 @@ app.whenReady().then(async () => {
   try {
     const saved = JSON.parse(await fs.readFile(configPath, "utf8"));
     updateURL = validateUpdateURL(saved.updateURL);
+    savedTools = saved.tools === true;
     endpoint = validateEndpoint(saved.endpoint);
     configured = true;
   } catch { /* First launch and invalid configurations use the safe setup screen. */ }
@@ -180,6 +183,7 @@ app.whenReady().then(async () => {
     }
   }
   updateURL = validateUpdateURL(process.env.MOMOBOT_UPDATE_URL) ?? updateURL;
+  if (savedTools || process.env.MOMOBOT_TOOLS === "1") tools = require("./tools/tools.cjs");
   settings = await startSettingsServer({
     tools,
     getEndpoint: () => endpoint,
@@ -187,7 +191,7 @@ app.whenReady().then(async () => {
     getExternal: () => external,
     onConnect: async (nextEndpoint) => {
       await fs.mkdir(path.dirname(configPath), { recursive: true });
-      await fs.writeFile(configPath, `${JSON.stringify({ endpoint: nextEndpoint, updateURL }, null, 2)}\n`, { mode: 0o600 });
+      await fs.writeFile(configPath, `${JSON.stringify({ endpoint: nextEndpoint, updateURL, tools: savedTools || undefined }, null, 2)}\n`, { mode: 0o600 });
       endpoint = nextEndpoint;
       configured = true;
       setImmediate(() => { void openWorkspace(); });
@@ -243,7 +247,7 @@ app.whenReady().then(async () => {
   });
   /** @type {Electron.MenuItemConstructorOptions[]} */
   const template = [
-    { label: "MomoBot", submenu: [{ role: "about" }, { label: "Check for Updates…", click: () => { void checkUpdates(true); } }, { type: "separator" }, { label: "Connection…", click: () => showLocal() }, ...(toolsEnabled ? [{ label: "Tools…", accelerator: "CmdOrCtrl+Shift+T", click: () => showLocal("/tools") }] : []),
+    { label: "MomoBot", submenu: [{ role: "about" }, { label: "Check for Updates…", click: () => { void checkUpdates(true); } }, { type: "separator" }, { label: "Connection…", click: () => showLocal() }, ...(tools ? [{ label: "Tools…", accelerator: "CmdOrCtrl+Shift+T", click: () => showLocal("/tools") }] : []),
       { label: "Open at Login", type: "checkbox", checked: app.getLoginItemSettings().openAtLogin, click: (item) => app.setLoginItemSettings({ openAtLogin: item.checked }) },
       { type: "separator" }, { role: "quit" }] },
     { role: "editMenu" },
