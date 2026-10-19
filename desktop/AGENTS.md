@@ -12,9 +12,12 @@ do not bump backend/Helm versions, activate the private agency or deploy web/PWA
 assets. Run `npm run check`, `npm test`, packaging and hidden smoke checks.
 Retain earlier releases and sessions. Distinguish ad-hoc signing from Developer
 ID/notarization; release metadata must describe the actual source and signature.
-Ship with `npm run release` (tag + GitHub latest release, which installed apps
-update from) only after the PR is agent-reviewed and Dillon approves; never
-hand-upload builds. Smoke flags: `--smoke-profile <dir>` keeps a real session
+Ship with `npm run release` (fixed tag, never GitHub "latest"; writes the
+download site's release.json, install.sh and a setup.sh pinning the ZIP and
+installer SHA-256) only after the PR is agent-reviewed and Dillon approves;
+deploying the site folder is what ships the update. Never hand-upload builds.
+The local Tools panel exists only with `MOMOBOT_TOOLS=1`; the local settings
+server rejects any request without the per-launch secret header. Smoke flags: `--smoke-profile <dir>` keeps a real session
 for relaunch/download tests; `MOMOBOT_UPDATE_URL` reports the update check.
 
 ## Tools (src/tools)

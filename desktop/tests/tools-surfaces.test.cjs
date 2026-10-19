@@ -8,22 +8,24 @@ const os = require("node:os");
 const path = require("node:path");
 const { test } = require("node:test");
 process.env.MOMOBOT_TOOLS_HOME = fs.mkdtempSync(path.join(os.tmpdir(), "momobot-tools-surface-"));
-const { startSettingsServer } = require("../src/settings-server.cjs");
+const { startSettingsServer, SECRET_HEADER } = require("../src/settings-server.cjs");
+let secret = "";
 const tools = require("../src/tools/tools.cjs");
 
 function post(origin, path_, form) {
   return new Promise((resolve, reject) => {
-    const req = http.request(`${origin}${path_}`, { method: "POST", headers: { Origin: origin, "Content-Type": "application/x-www-form-urlencoded" } }, (res) => {
+    const req = http.request(`${origin}${path_}`, { method: "POST", headers: { [SECRET_HEADER]: secret, Origin: origin, "Content-Type": "application/x-www-form-urlencoded" } }, (res) => {
       let body = ""; res.on("data", (c) => { body += c; }); res.on("end", () => resolve({ status: res.statusCode, body }));
     });
     req.on("error", reject); req.end(form);
   });
 }
-const get = (origin, path_) => new Promise((resolve, reject) => http.get(`${origin}${path_}`, (res) => { let b = ""; res.on("data", (c) => { b += c; }); res.on("end", () => resolve({ status: res.statusCode, body: b })); }).on("error", reject));
+const get = (origin, path_) => new Promise((resolve, reject) => http.get(`${origin}${path_}`, { headers: { [SECRET_HEADER]: secret } }, (res) => { let b = ""; res.on("data", (c) => { b += c; }); res.on("end", () => resolve({ status: res.statusCode, body: b })); }).on("error", reject));
 
 test("Tools panel lists every tool, and only runs one with the page's form token", async (t) => {
   const server = await startSettingsServer({ tools, getEndpoint: () => "http://127.0.0.1:2030/workspace", getFailure: () => "", getExternal: () => undefined, onConnect: async () => {}, onExternal: async () => {}, onRetry: async () => {} });
   t.after(() => server.close());
+  secret = server.secret;
   const panel = await get(server.origin, "/tools");
   assert.equal(panel.status, 200);
   for (const tool of tools.TOOLS) assert.match(panel.body, new RegExp(`Run ${tool.name}`));

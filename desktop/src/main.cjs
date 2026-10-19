@@ -6,10 +6,12 @@ const fsSync = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { DEFAULT_ENDPOINT, validateEndpoint, isSameOriginNavigation, safeExternalURL, permittedMediaRequest, rendererPreferences } = require("./security.cjs");
-const { startSettingsServer } = require("./settings-server.cjs");
+const { startSettingsServer, SECRET_HEADER } = require("./settings-server.cjs");
 const { handleArtifactDownload } = require("./artifact-download.cjs");
 const { validateUpdateURL, checkForUpdate } = require("./update-check.cjs");
-const tools = require("./tools/tools.cjs");
+// The local Tools panel drives Dillon's own vault and browser helpers; teammates don't have them.
+const toolsEnabled = process.env.MOMOBOT_TOOLS === "1";
+const tools = toolsEnabled ? require("./tools/tools.cjs") : undefined;
 
 const smoke = process.argv.includes("--smoke-test");
 const workspaceSmoke = smoke && process.argv.includes("--verify-workspace");
@@ -64,8 +66,8 @@ async function checkUpdates(interactive) {
   }
   const result = await checkForUpdate({ updateURL, currentVersion: app.getVersion(), fetchImpl: net.fetch });
   if (result.status === "newer") {
-    // No --workspace: an update keeps this Mac's saved endpoint and update URL.
-    const command = `curl -fsSL ${updateURL}install.sh | sh -s -- ${updateURL}`;
+    // The site's setup.sh pins the new release's SHA-256; never the release's own install.sh.
+    const command = `curl -fsSL ${updateURL}setup.sh | sh`;
     const { response } = await dialog.showMessageBox(window, {
       message: `MomoBot ${result.latest} is available`,
       detail: `You have ${app.getVersion()}. Paste this into Terminal, then reopen MomoBot:\n\n${command}`,
@@ -90,6 +92,12 @@ function guardNavigation(event, target) {
 
 /** @param {Electron.Session} partition */
 function configureSession(partition) {
+  // Only this app's own requests to the local settings server carry the per-launch secret.
+  partition.webRequest.onBeforeSendHeaders((details, callback) => {
+    const headers = details.requestHeaders;
+    if (details.url.startsWith(`${settings.origin}/`)) headers[SECRET_HEADER] = settings.secret;
+    callback({ requestHeaders: headers });
+  });
   partition.setPermissionCheckHandler((_contents, permission, origin, details) => permittedMediaRequest(permission, origin, endpoint, details));
   partition.setPermissionRequestHandler((_contents, permission, callback, details) => {
     let origin = "";
@@ -212,7 +220,7 @@ app.whenReady().then(async () => {
     if (!details.isMainFrame && !isSameOriginNavigation(details.url, endpoint, settings.origin)) details.preventDefault();
   });
   window.webContents.setWindowOpenHandler(({ url }) => {
-    if (!smoke) {
+    if (!smoke || smokeProfile) {
       if (isSameOriginNavigation(url, endpoint, settings.origin)) setImmediate(() => { void window.loadURL(url); });
       else {
         external = safeExternalURL(url) ?? undefined;
@@ -235,7 +243,7 @@ app.whenReady().then(async () => {
   });
   /** @type {Electron.MenuItemConstructorOptions[]} */
   const template = [
-    { label: "MomoBot", submenu: [{ role: "about" }, { label: "Check for Updates…", click: () => { void checkUpdates(true); } }, { type: "separator" }, { label: "Connection…", click: () => showLocal() }, { label: "Tools…", accelerator: "CmdOrCtrl+Shift+T", click: () => showLocal("/tools") },
+    { label: "MomoBot", submenu: [{ role: "about" }, { label: "Check for Updates…", click: () => { void checkUpdates(true); } }, { type: "separator" }, { label: "Connection…", click: () => showLocal() }, ...(toolsEnabled ? [{ label: "Tools…", accelerator: "CmdOrCtrl+Shift+T", click: () => showLocal("/tools") }] : []),
       { label: "Open at Login", type: "checkbox", checked: app.getLoginItemSettings().openAtLogin, click: (item) => app.setLoginItemSettings({ openAtLogin: item.checked }) },
       { type: "separator" }, { role: "quit" }] },
     { role: "editMenu" },
@@ -261,5 +269,5 @@ app.on("before-quit", (event) => {
   if (stopping || !settings) return;
   event.preventDefault();
   stopping = true;
-  void Promise.allSettled([tools.closeAll(), settings.close()]).finally(() => app.quit());
+  void Promise.allSettled([tools?.closeAll(), settings.close()]).finally(() => app.quit());
 });

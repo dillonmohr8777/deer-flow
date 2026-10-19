@@ -13,6 +13,8 @@ function escapeHTML(value) {
   return String(value).replace(/[&<>"']/gu, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char] ?? char);
 }
 
+const SECRET_HEADER = "x-momobot-local-secret";
+
 /** @param {string|null} actual @param {string} expected */
 function matchingNonce(actual, expected) {
   if (typeof actual !== "string") return false;
@@ -49,14 +51,18 @@ function toolsPage(tools, token) {
  */
 async function startSettingsServer({ getEndpoint, getFailure, getExternal, onConnect, onExternal, onRetry, tools }) {
   const nonce = randomBytes(32).toString("hex");
+  // Per-launch secret the main process adds as a header to every request from its own session.
+  // Other local users and processes can reach the port but never see this value, so they get 403.
+  const secret = randomBytes(32).toString("hex");
   let origin = "";
   const server = http.createServer(async (req, res) => {
     res.setHeader("Content-Security-Policy", "default-src 'none'; img-src 'self'; style-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'");
     res.setHeader("Cache-Control", "no-store");
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Referrer-Policy", "no-referrer");
-    if (req.headers.host !== new URL(origin).host) {
-      res.writeHead(403).end("Invalid host.");
+    const presented = req.headers[SECRET_HEADER];
+    if (req.headers.host !== new URL(origin).host || !matchingNonce(typeof presented === "string" ? presented : null, secret)) {
+      res.writeHead(403).end("Forbidden.");
       return;
     }
     const url = new URL(req.url ?? "/", origin);
@@ -155,7 +161,7 @@ async function startSettingsServer({ getEndpoint, getFailure, getExternal, onCon
   const address = server.address();
   if (!address || typeof address === "string") throw new Error("Unable to start local connection settings.");
   origin = `http://127.0.0.1:${address.port}`;
-  return { origin, close: () => new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve(undefined))) };
+  return { origin, secret, close: () => new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve(undefined))) };
 }
 
-module.exports = { startSettingsServer, escapeHTML, matchingNonce };
+module.exports = { startSettingsServer, escapeHTML, matchingNonce, SECRET_HEADER };
