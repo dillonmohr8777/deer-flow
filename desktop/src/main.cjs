@@ -13,6 +13,8 @@ const tools = require("./tools/tools.cjs");
 const smoke = process.argv.includes("--smoke-test");
 const workspaceSmoke = smoke && process.argv.includes("--verify-workspace");
 const loginSmoke = smoke && process.argv.includes("--verify-login");
+const soakIndex = process.argv.indexOf("--soak-minutes");
+const soakMinutes = smoke && soakIndex > -1 ? Number(process.argv[soakIndex + 1]) : 0;
 /** @type {Electron.BrowserWindow} */
 let window;
 /** @type {Awaited<ReturnType<typeof startSettingsServer>>} */
@@ -82,7 +84,21 @@ function configureSession(partition) {
 
 async function runSmoke() {
   if (workspaceSmoke && loginSmoke) throw new Error("Choose one smoke boundary: workspace or login.");
-  await window.loadURL(workspaceSmoke || loginSmoke ? endpoint : settings.origin);
+  if (!(soakMinutes >= 0 && soakMinutes <= 240)) throw new Error("--soak-minutes must be between 0 and 240.");
+  /** @type {string[]} */
+  const crashes = [];
+  window.webContents.on("render-process-gone", (_event, details) => crashes.push(`renderer:${details.reason}`));
+  window.webContents.on("unresponsive", () => crashes.push("renderer:unresponsive"));
+  app.on("child-process-gone", (_event, details) => crashes.push(`${details.type}:${details.reason}`));
+  const memory = () => app.getAppMetrics().reduce((total, metric) => total + metric.memory.workingSetSize, 0);
+  await window.loadURL(workspaceSmoke || loginSmoke || soakMinutes ? endpoint : settings.origin);
+  const startMemoryKB = memory();
+  // Soak: reload the real workspace once a minute and record any crash or hang.
+  for (let minute = 0; minute < soakMinutes; minute++) {
+    await new Promise((resolve) => setTimeout(resolve, 60_000));
+    window.webContents.reload();
+  }
+  const soak = soakMinutes ? { minutes: soakMinutes, crashes, startMemoryKB, endMemoryKB: memory() } : undefined;
   if (loginSmoke) {
     for (let attempt = 0; attempt < 40; attempt++) {
       if (new URL(window.webContents.getURL()).pathname === "/login" && await window.webContents.executeJavaScript("!!document.querySelector('form') && !!document.querySelector('h1')?.textContent?.trim()").catch(() => false)) break;
@@ -99,8 +115,8 @@ async function runSmoke() {
   const osSandboxed = processMetric?.sandboxed === true;
   const reachedWorkspace = !workspaceSmoke || renderer.heading === "OpenAI crew";
   const reachedLogin = !loginSmoke || (new URL(currentURL).pathname === "/login" && typeof renderer.heading === "string" && !!renderer.heading.trim() && !!renderer.form);
-  const passed = reachedWorkspace && reachedLogin && renderer.require === "undefined" && renderer.process === "undefined" && osSandboxed && preferences.contextIsolation === true && preferences.nodeIntegration === false && preferences.webSecurity === true && blockedNavigation && !window.isVisible();
-  process.stdout.write(`${JSON.stringify({ type: "desktop-smoke", passed, workspaceSmoke, loginSmoke, reachedWorkspace, reachedLogin, version: app.getVersion(), electron: process.versions.electron, hidden: !window.isVisible(), osSandboxed, renderer, blockedNavigation })}\n`);
+  const passed = crashes.length === 0 && reachedWorkspace && reachedLogin && renderer.require === "undefined" && renderer.process === "undefined" && osSandboxed && preferences.contextIsolation === true && preferences.nodeIntegration === false && preferences.webSecurity === true && blockedNavigation && !window.isVisible();
+  process.stdout.write(`${JSON.stringify({ type: "desktop-smoke", passed, workspaceSmoke, loginSmoke, reachedWorkspace, reachedLogin, finalOrigin: new URL(currentURL).origin, soak, version: app.getVersion(), electron: process.versions.electron, hidden: !window.isVisible(), osSandboxed, renderer, blockedNavigation })}\n`);
   app.exit(passed ? 0 : 1);
 }
 
@@ -183,7 +199,9 @@ app.whenReady().then(async () => {
   });
   /** @type {Electron.MenuItemConstructorOptions[]} */
   const template = [
-    { label: "MomoBot", submenu: [{ label: "Connection…", click: () => showLocal() }, { label: "Tools…", accelerator: "CmdOrCtrl+Shift+T", click: () => showLocal("/tools") }, { type: "separator" }, { role: "quit" }] },
+    { label: "MomoBot", submenu: [{ role: "about" }, { type: "separator" }, { label: "Connection…", click: () => showLocal() }, { label: "Tools…", accelerator: "CmdOrCtrl+Shift+T", click: () => showLocal("/tools") },
+      { label: "Open at Login", type: "checkbox", checked: app.getLoginItemSettings().openAtLogin, click: (item) => app.setLoginItemSettings({ openAtLogin: item.checked }) },
+      { type: "separator" }, { role: "quit" }] },
     { role: "editMenu" },
     { label: "View", submenu: [{ role: "reload" }, { role: "resetZoom" }, { role: "zoomIn" }, { role: "zoomOut" }, { role: "togglefullscreen" }] },
     { role: "windowMenu" },
