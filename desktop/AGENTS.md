@@ -12,6 +12,10 @@ do not bump backend/Helm versions, activate the private agency or deploy web/PWA
 assets. Run `npm run check`, `npm test`, packaging and hidden smoke checks.
 Retain earlier releases and sessions. Distinguish ad-hoc signing from Developer
 ID/notarization; release metadata must describe the actual source and signature.
+Ship with `npm run release` (tag + GitHub latest release, which installed apps
+update from) only after the PR is agent-reviewed and Dillon approves; never
+hand-upload builds. Smoke flags: `--smoke-profile <dir>` keeps a real session
+for relaunch/download tests; `MOMOBOT_UPDATE_URL` reports the update check.
 
 ## Tools (src/tools)
 Browse (Browserbase cloud or local Chrome profile over raw CDP), Fetch (Expand, public pages), Vault (Bitwarden CLI via the Keychain-backed `~/.local/bin/bw`) and Codes (TOTP, iMessage, Gmail). One registry (`tools.cjs`) feeds the Tools panel (`/tools` on the loopback settings server, menu Tools...) and the stdio MCP server (`src/tools/mcp-server.cjs`). The renderer still has no native bridge. Secrets are read in the main process only, typed over CDP after a domain lock (`policy.cjs`), redacted from outputs, and never take a tool argument. The ledger (`ledger.cjs`) holds item id, domain, action and time only. Google, Facebook and Apple are never opened or auto-filled in Browserbase. Live acceptance: `node scripts/e2e-tools.cjs`.
