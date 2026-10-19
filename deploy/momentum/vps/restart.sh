@@ -35,6 +35,7 @@ export DEER_FLOW_CONFIG_PATH="$CONFIG"
 export DEER_FLOW_EXTENSIONS_CONFIG_PATH="$EXTENSIONS"
 export DEER_FLOW_HOME="$REPO/backend/.deer-flow"
 export MOMOBOT_CADDYFILE="$REPO/deploy/momentum/vps/Caddyfile"
+export MOMOBOT_REALIP_CONF="$REPO/deploy/momentum/vps/nginx-realip.conf"
 
 compose=(docker compose --env-file "$ENV_FILE" -p "$PROJECT"
   -f "$REPO/docker/docker-compose.yaml"
