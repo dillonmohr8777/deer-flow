@@ -91,12 +91,21 @@ function artifactFilename(value) {
   return filename && filename !== "." && filename !== ".." ? filename : null;
 }
 
+/** A workspace chat artifact (`/api/threads/<uuid>/artifacts/<path>?download=true`). @param {URL} url */
+function isThreadArtifactURL(url) {
+  return (url.protocol === "https:" || url.protocol === "http:") && url.search === "?download=true"
+    && /^\/api\/threads\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/artifacts(?:\/[A-Za-z0-9._~%-]+)+$/i.test(url.pathname)
+    && !decodeURIComponent(url.pathname).split("/").some((segment) => segment === ".." || segment === ".");
+}
+
 /** @param {string} target @param {string} endpoint */
 function isArtifactDownloadURL(target, endpoint) {
   try {
     const url = new URL(target);
     const origin = new URL(endpoint).origin;
-    if (url.origin !== origin || url.username || url.password || url.search || url.hash) return false;
+    if (url.origin !== origin || url.username || url.password || url.hash) return false;
+    if (isThreadArtifactURL(url)) return true;
+    if (url.search) return false;
     if (url.protocol === "blob:") {
       const source = new URL(url.pathname);
       return !source.username && !source.password && !source.search && !source.hash && /^\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(source.pathname);
@@ -117,7 +126,8 @@ function permittedArtifactDownload(candidate, endpoint) {
     if (new URL(candidate.documentURL).origin !== origin || new URL(candidate.frameURL).origin !== origin) return false;
     if (!isArtifactDownloadURL(candidate.url, endpoint) || !Array.isArray(candidate.urlChain) || !candidate.urlChain.length || !candidate.urlChain.every((url) => isArtifactDownloadURL(url, endpoint))) return false;
     const filename = artifactFilename(candidate.filename);
-    const permittedMime = candidate.mimeType === "application/octet-stream" || (candidate.mimeType === "image/png" && filename?.toLowerCase().endsWith(".png")) || (candidate.mimeType === "application/json" && filename?.toLowerCase().endsWith(".json"));
+    // Chat artifacts carry their real type (text, CSV, PDF, Office, images); the filename rules still apply.
+    const permittedMime = isThreadArtifactURL(new URL(candidate.url)) || candidate.mimeType === "application/octet-stream" || (candidate.mimeType === "image/png" && filename?.toLowerCase().endsWith(".png")) || (candidate.mimeType === "application/json" && filename?.toLowerCase().endsWith(".json"));
     if (!permittedMime || !filename) return false;
     return [candidate.totalBytes, candidate.receivedBytes].every((bytes) => Number.isSafeInteger(bytes) && bytes >= 0 && bytes <= MAX_ARTIFACT_BYTES);
   } catch {
