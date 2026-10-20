@@ -1,7 +1,7 @@
 {
   "name": "momobot-openai-desktop",
   "productName": "MomoBot",
-  "version": "0.2.1",
+  "version": "0.3.1",
   "private": true,
   "description": "MomoBot desktop app for the existing private Momentum agency.",
   "main": "src/main.cjs",
@@ -12,7 +12,8 @@
     "lint": "eslint .",
     "test": "node --test tests/*.test.cjs",
     "smoke": "electron . --smoke-test",
-    "package:mac": "node scripts/package.cjs"
+    "package:mac": "node scripts/package.cjs",
+    "release": "sh scripts/release.sh"
   },
   "devDependencies": {
     "@electron/packager": "20.3.0",

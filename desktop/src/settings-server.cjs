@@ -5,11 +5,15 @@ const { randomBytes, timingSafeEqual } = require("node:crypto");
 const fs = require("node:fs/promises");
 const path = require("node:path");
 const { validateEndpoint } = require("./security.cjs");
+const { redact } = require("./tools/policy.cjs");
+const ledger = require("./tools/ledger.cjs");
 
 /** @param {unknown} value */
 function escapeHTML(value) {
   return String(value).replace(/[&<>"']/gu, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char] ?? char);
 }
+
+const SECRET_HEADER = "x-momobot-local-secret";
 
 /** @param {string|null} actual @param {string} expected */
 function matchingNonce(actual, expected) {
@@ -24,19 +28,41 @@ function page({ title, content }) {
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHTML(title)} · MomoBot</title><link rel="stylesheet" href="/setup.css"></head><body><main><img class="mark" src="/icon.png" width="72" height="72" alt="MomoBot"><p class="eyebrow">MOMENTUM · MOMOBOT</p><h1>${escapeHTML(title)}</h1>${content}</main></body></html>`;
 }
 
+/** @param {NonNullable<Parameters<typeof startSettingsServer>[0]["tools"]>} tools @param {string} token */
+function toolsPage(tools, token) {
+  const sessions = tools.sessions();
+  const recent = ledger.read().slice(-8).reverse();
+  const forms = tools.TOOLS.map((tool) => {
+    const fields = Object.entries(tool.input).map(([key, field]) => {
+      const control = field.enum
+        ? `<select name="f_${key}" id="${tool.name}-${key}">${field.required ? "" : "<option value=\"\"></option>"}${field.enum.map((value) => `<option>${escapeHTML(value)}</option>`).join("")}</select>`
+        : `<input id="${tool.name}-${key}" name="f_${key}" type="text" autocomplete="off"${field.required ? " required" : ""}>`;
+      return `<label for="${tool.name}-${key}">${escapeHTML(key)}${field.required ? "" : " (optional)"}</label>${control}<p class="hint">${escapeHTML(field.description)}</p>`;
+    }).join("");
+    return `<details><summary>${escapeHTML(tool.name)}</summary><p class="hint">${escapeHTML(tool.description)}</p><form action="/tools/run" method="post">${token}<input type="hidden" name="tool" value="${tool.name}">${fields}<button type="submit">Run ${escapeHTML(tool.name)}</button></form></details>`;
+  }).join("");
+  const open = sessions.length ? sessions.map((s) => `<li>${escapeHTML(s.session)} · ${escapeHTML(s.backend)} · ${s.ageSeconds}s</li>`).join("") : "<li>No browser sessions open.</li>";
+  const used = recent.length ? recent.map((r) => `<li>${escapeHTML(r.ts.slice(11, 19))} · ${escapeHTML(r.action)}${r.domain ? ` · ${escapeHTML(r.domain)}` : ""}${r.item ? ` · item ${escapeHTML(r.item.slice(0, 8))}` : ""}</li>`).join("") : "<li>Nothing used yet.</li>";
+  return `<p>Browse, fetch, the vault and login codes, on this Mac. Secrets are read locally and redacted from tool output. In cloud sessions, secret text is transmitted over CDP to the Browserbase-hosted browser. Input masking and byte scans do not prove visual redaction. All cloud automation, including opening sessions, navigation, text input and DOM capture, is unavailable pending a browser-wide request-level navigation guard. Local tools remain available.</p><h2>Open sessions</h2><ul>${open}</ul><h2>Recent use</h2><ul>${used}</ul><h2>Tools</h2>${forms}<p><a href="/">Connection settings</a></p>`;
+}
+
 /**
- * @param {{getEndpoint:()=>string, getFailure:()=>string, getExternal:()=>string|undefined, onConnect:(endpoint:string)=>Promise<void>, onExternal:()=>Promise<void>, onRetry:()=>Promise<void>}} options
+ * @param {{getEndpoint:()=>string, getFailure:()=>string, getExternal:()=>string|undefined, onConnect:(endpoint:string)=>Promise<void>, onExternal:()=>Promise<void>, onRetry:()=>Promise<void>, tools?: typeof import("./tools/tools.cjs")}} options
  */
-async function startSettingsServer({ getEndpoint, getFailure, getExternal, onConnect, onExternal, onRetry }) {
+async function startSettingsServer({ getEndpoint, getFailure, getExternal, onConnect, onExternal, onRetry, tools }) {
   const nonce = randomBytes(32).toString("hex");
+  // Per-launch secret the main process adds as a header to every request from its own session.
+  // Other local users and processes can reach the port but never see this value, so they get 403.
+  const secret = randomBytes(32).toString("hex");
   let origin = "";
   const server = http.createServer(async (req, res) => {
     res.setHeader("Content-Security-Policy", "default-src 'none'; img-src 'self'; style-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'");
     res.setHeader("Cache-Control", "no-store");
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Referrer-Policy", "no-referrer");
-    if (req.headers.host !== new URL(origin).host) {
-      res.writeHead(403).end("Invalid host.");
+    const presented = req.headers[SECRET_HEADER];
+    if (req.headers.host !== new URL(origin).host || !matchingNonce(typeof presented === "string" ? presented : null, secret)) {
+      res.writeHead(403).end("Forbidden.");
       return;
     }
     const url = new URL(req.url ?? "/", origin);
@@ -46,6 +72,13 @@ async function startSettingsServer({ getEndpoint, getFailure, getExternal, onCon
         const bytes = await fs.readFile(file);
         res.setHeader("Content-Type", url.pathname.endsWith("css") ? "text/css; charset=utf-8" : "image/png");
         res.writeHead(200).end(bytes);
+        return;
+      }
+      if (req.method === "GET" && tools && url.pathname.startsWith("/tools/shot/")) {
+        const name = url.pathname.slice("/tools/shot/".length);
+        if (!/^[\w.-]{1,80}\.png$/u.test(name)) { res.writeHead(404).end("Not found."); return; }
+        res.setHeader("Content-Type", "image/png");
+        res.writeHead(200).end(await fs.readFile(path.join(ledger.home(), "shots", name)));
         return;
       }
       if (req.method === "POST") {
@@ -73,12 +106,30 @@ async function startSettingsServer({ getEndpoint, getFailure, getExternal, onCon
           await onRetry();
         } else if (url.pathname === "/open-external") {
           await onExternal();
+        } else if (url.pathname === "/tools/run" && tools) {
+          const name = form.get("tool") ?? "";
+          const args = Object.fromEntries([...form.entries()].filter(([key, value]) => key.startsWith("f_") && value !== "").map(([key, value]) => [key.slice(2), value]));
+          let body;
+          try {
+            const { _image, ...result } = await tools.run(name, args);
+            body = `<pre>${escapeHTML(JSON.stringify(result, null, 2))}</pre>${_image && result.name ? `<img src="/tools/shot/${escapeHTML(result.name)}" alt="Screenshot" style="max-width:100%">` : ""}`;
+          } catch (error) {
+            body = `<p>${escapeHTML(redact(error instanceof Error ? error.message : "Tool failed.", tools.secrets()))}</p>`;
+          }
+          res.setHeader("Content-Type", "text/html; charset=utf-8");
+          res.writeHead(200).end(page({ title: name, content: `${body}<p><a href="/tools">Back to Tools</a></p>` }));
+          return;
         } else {
           res.writeHead(404).end("Not found.");
           return;
         }
         res.setHeader("Content-Type", "text/html; charset=utf-8");
         res.writeHead(200).end(page({ title: "Opening workspace", content: '<p>Your connection is ready.</p><p><a href="/">Connection settings</a></p>' }));
+        return;
+      }
+      if (req.method === "GET" && tools && url.pathname === "/tools") {
+        res.setHeader("Content-Type", "text/html; charset=utf-8");
+        res.writeHead(200).end(page({ title: "Tools", content: toolsPage(tools, `<input type="hidden" name="nonce" value="${nonce}">`) }));
         return;
       }
       if (req.method !== "GET" || !["/", "/error", "/external"].includes(url.pathname)) {
@@ -110,7 +161,7 @@ async function startSettingsServer({ getEndpoint, getFailure, getExternal, onCon
   const address = server.address();
   if (!address || typeof address === "string") throw new Error("Unable to start local connection settings.");
   origin = `http://127.0.0.1:${address.port}`;
-  return { origin, close: () => new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve(undefined))) };
+  return { origin, secret, close: () => new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve(undefined))) };
 }
 
-module.exports = { startSettingsServer, escapeHTML, matchingNonce };
+module.exports = { startSettingsServer, escapeHTML, matchingNonce, SECRET_HEADER };
