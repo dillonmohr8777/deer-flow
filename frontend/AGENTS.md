@@ -311,6 +311,10 @@ hold the pure logic. The channel view is keyed by channel id so a draft never
 follows you into another channel. `tests/e2e/team-academy.spec.ts` covers both
 flag states and checks for horizontal overflow at 390/768/1440.
 
+## MomoBot Agents and About (`/workspace/lineup`, `/workspace/about`)
+
+Render the private kit served by `/api/momobot-brand/*` (`core/momobot-brand`, `components/workspace/lineup`); the sidebar items appear only when that API answers. No kit text, art or price is committed: copy and assets come from the server folder. Prices render only through `priceLabel` when the server sends `show_pricing: true`; a null amount reads "Not priced", and packages are never summed. `tests/e2e/momobot-lineup.spec.ts` uses a synthetic kit unless `LINEUP_KIT_DIR` is set.
+
 ## Invite teammate (Settings > Invite teammate)
 
 Owners and admins of a shared workspace mint invites from Settings instead of

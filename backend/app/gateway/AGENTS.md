@@ -1,8 +1,13 @@
 ### Gateway API (`app/gateway/`)
 
-Agent Room preserves actor/admin isolation; read [its contract](../../docs/AGENT_ROOM.md).
-`supervisor` is a strict boolean, default off; persist and bind it to idempotency
-and resume. Preserve shared budgets and uncertain-admission holds.
+`public_news_channel` is internal runtime context only. Forward it through the
+authenticated internal channel boundary so assembly applies the managed public
+tool/privacy ceiling, and strip it from external request config. Direct assembly
+tests alone do not prove this boundary or sandbox-free Slack execution.
+
+Read [security](../../docs/SECURITY_HARDENING.md).
+
+Agent Room: keep actor/admin isolation, shared budgets, uncertain-admission holds; read [contract](../../docs/AGENT_ROOM.md). Bind persisted `supervisor` (strict boolean, default off) to idempotency/resume.
 
 Capability Center's `business` adapter uses bundled credential fields and normal
 MCP connections. Permit only the exact isolated launcher and credential key set
@@ -16,7 +21,7 @@ handler and off the event loop; cancellation drains owned workers before
 propagating. Backend `close()` must be quick or internally bounded. Budget its
 configured flush timeout, close, other hooks, and each extension service's
 30-second `stop()` timeout in the pod grace period. Drain `stop_services()`
-across host cancellation before later runtime resources unwind.
+across host cancellation before later resources unwind.
 
 `conversation_access.py` binds its opt-in read-only tool only to explicit
 `conversation_references` plus effective `runs:read`; never derive grants from
@@ -27,11 +32,11 @@ Request dependency; callers still own authorization, and non-text/internal
 content stays hidden. `RunCreateRequest` accepts the list at top level or as
 `context.conversation_references` for LangGraph SDK clients: a before-validator
 lifts the context form, shares bounds/errors, and removes it before context
-merging; sending both is 422. `conversation_references_enabled()` is the single
+merging; sending both is 422. `conversation_references_enabled()` is the one
 configured predicate for admission and `/api/features`.
 
 FastAPI listens on 8001. `GET /health` is liveness; `GET /health/ready`
-concurrently probes the configured ORM engine and effective LangGraph
+concurrently probes the ORM engine and effective LangGraph
 checkpointer/Store under one bounded deadline. It resolves the legacy
 `checkpointer:` section or derives it from `database:` using the startup snapshot
 on `app.state`, serializes connection-opening probes behind a per-process gate,
@@ -69,32 +74,7 @@ The client roster (`routers/clients.py`, `/api/clients`, migration `0034_clients
 
 Localhost persistence deliberately reads the direct request `Host` and ignores `Forwarded` / `X-Forwarded-Host`. Scheme and auth-origin reconstruction still consume forwarding headers. The bundled nginx sets `X-Forwarded-Proto`, but preserves an upstream HTTPS value and does not overwrite every forwarded header, so the outer trusted proxy must replace or strip client-supplied forwarding headers before traffic reaches DeerFlow.
 
-Standalone local LangGraph Studio is recognized only through the upstream
-`Auth.types.StudioUser` principal type, never by its reusable identity string.
-The type is resolved once at import; an older SDK without it degrades to normal
-owner scoping.
-For that principal's assistant reads/searches, `langgraph_auth.add_owner_filter`
-selects genuine server-registered assistants plus assistants owned by Studio;
-all other resources remain owner-scoped. Assistant create/update handlers make
-both `user_id` and `created_by=user` server-owned, because LangGraph gives
-`created_by=system` privileged ownership semantics during run creation. The
-custom application module in `langgraph_studio.py` is imported before the
-locked in-memory runtime lifespan. At that pre-runtime boundary it derives
-genuine system assistant IDs from the CLI-provided graph registry, removes
-their persisted active/version rows so graph registration recreates them, and
-demotes every other legacy `created_by=system` marker in both active assistants
-and version history. This must happen before runtime 0.30.0 loads and purges
-system-marked rows; a user application lifespan is too late. LangGraph executes
-this file-backed custom app without first registering its module in
-`sys.modules`; keep its annotations eager so dataclass processing remains
-compatible with that loader, and preserve the direct file-loader regression
-test. An empty graph registry or absent persistence file is a no-op, while
-persistence parse/write errors fail startup closed. The harness requires
-in-memory runtime 0.30.0 or newer, and a persisted store containing no
-expected registered assistant row emits a drift warning so changes to
-LangGraph's internal persistence contract are observable. With current
-create/update writes and all legacy versions sanitized, ordinary
-owner-scoped assistant version selection remains enabled.
+Standalone LangGraph Studio auth (the `StudioUser` principal, assistant owner filters, and startup persistence repair) is in [LangGraph Studio auth](../../docs/LANGGRAPH_STUDIO.md).
 
 **Routers**:
 
@@ -228,28 +208,18 @@ Batch workers pin `app.state.extensions`; never persist snapshots.
 
 Managed OpenAI retains owner/uncertain admissions: `backend/docs/OPENAI_AGENTS_APP.md`. Disabled Browserbase performs no I/O.
 
-Workflow routes (`routers/workflows.py`) require session auth, run permissions,
-CSRF and expected actor/org/storage scope; PATs stay denied. Paid create/resume
-uses the entitlement bridge; workers recheck membership, storage principal and
-`runs:create` before I/O.
-`workflow_service.py` owns its private SQLite job/attempt ledger, process lease,
-finite queue and immutable hash-checked artifacts. It consumes the existing
-native RunManager, thread/event stores and shared checkpointer; do not create a
-second client registry or canonical task queue. Native rows use a private
-owner in NULL-org quarantine; legacy journals abort pending migration. Replay retains
-native identity, journal once by call ID, and use per-native usage
-deltas while the logical job retains cumulative totals. Uncertain paid attempts
-fail closed on resume. Cancellation must drain admission and native cleanup.
+Workflow routes require session/CSRF/run permissions and expected
+actor/org/storage scope; deny PATs. Paid create/resume uses entitlement;
+reauthorize membership/storage/runs:create before I/O. WorkflowService owns
+private SQLite attempts, exclusive lease, finite queue and immutable artifacts.
+Reuse RunManager/thread/event stores/checkpointer; no client registry/task queue.
+Native rows use private-owner NULL-org quarantine; legacy migration fails closed.
+Replay preserves native identity, call-ID journaling and per-native usage deltas
+with cumulative job totals. Uncertain attempts cannot resume; cancel drains.
 
-`workflow_adapters.py` brokers all six finite framework adapters through one
-server-selected model/token budget. Stagehand inference uses that same meter,
-one owned Browserbase session and an operator-fixed top-level `extensionId`;
-rendered public snapshots expose no live target-origin interaction. Provider
-keys and `MOMOBOT_STAGEHAND_EXTENSION_ID` are Gateway-only. Availability is not
-accepted output or installation; billed cost remains unknown unless receipted.
-Details and scoped tests: [WORKFLOWS.md](../../docs/WORKFLOWS.md).
-
-HAI stays disabled; see WORKFLOWS.md.
+Existing adapters share model/token admission. Stagehand uses that meter,
+one owned Browserbase session, fixed extensionId and inert public snapshots.
+Keys stay Gateway-only; availability is not acceptance. HAI stays disabled.
 
 Pure unsent `jevbox_evidence.py`: trusted admission, no JSON authority or dispatch;
 see [contract](../../docs/JEVBOX_EVIDENCE.md).
@@ -257,3 +227,13 @@ see [contract](../../docs/JEVBOX_EVIDENCE.md).
 OIDC start redirects to the callback host, see [notes](../../docs/OIDC_CALLBACK_HOST.md).
 
 SDK review grants are host-only; default off. No HTTP or paid activation.
+
+Default-off claude_sdk admits one pinned synthetic line-edit fixture, no private
+sources/external tools. Verify exact worker ledger/output hashes; no uncertain
+replay. Three requests at $0.03 each. Details/tests: [WORKFLOWS.md](../../docs/WORKFLOWS.md).
+
+### Desktop lane and Slack roster
+
+`fleet_work` lane `desktop` is roster-gated at submit (`roster` config, `app.state.roster_config`), single-attempt, and unclaimable until `approval_state` is `approved` (`POST /api/fleet/work/batches/{id}/approve`, org owner/admin). See [FLEET_PROJECT_JOBS.md](../../docs/FLEET_PROJECT_JOBS.md). Tests: `tests/test_fleet_desktop_lane.py`, `tests/test_roster_scope.py`, `tests/test_momobot_desktop_runner.py`.
+
+`app/momobot_brand.py` and `routers/momobot_brand.py` serve the private About copy and Agents lineup from `momobot_brand.content_dir` (never committed; `scripts/stage_momobot_brand.sh` fills it). Prices leave only when agents.json has `show_pricing: true`; assets come from an allowlisted subfolder set with a resolve-inside-root check. Slack `/momobot about` and "@bot what is MomoBot" read the same folder.

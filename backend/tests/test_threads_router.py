@@ -4636,3 +4636,33 @@ def test_task_notes_state_write_normalizes_and_replaces(monkeypatch, mode, fallb
         read = client.get("/api/threads/note-replacement/state")
         assert read.status_code == 200, read.text
         assert read.json()["values"]["task_notes"] == {"new": {"content": "keep backups", "source_ids": [], "authority": "model_report"}}
+
+
+def test_get_thread_history_includes_latest_artifacts_list() -> None:
+    """The chat UI restores its file list from ``/history``; an explicit empty list clears it."""
+    app, _store, checkpointer = _build_thread_app()
+
+    async def _seed(thread_id: str, artifacts: list[str]) -> None:
+        from langgraph.checkpoint.base import empty_checkpoint
+
+        checkpoint = empty_checkpoint()
+        checkpoint["channel_values"] = {"artifacts": artifacts}
+        checkpoint["channel_versions"] = {"artifacts": 1}
+        await checkpointer.aput(
+            {"configurable": {"thread_id": thread_id, "checkpoint_ns": ""}},
+            checkpoint,
+            {"step": 1, "source": "loop", "writes": None, "parents": {}},
+            {"artifacts": 1},
+        )
+
+    import asyncio
+
+    asyncio.run(_seed("with-files", ["/mnt/user-data/outputs/report.md"]))
+    asyncio.run(_seed("cleared-files", []))
+
+    with TestClient(app) as client:
+        latest = client.post("/api/threads/with-files/history", json={"limit": 1}).json()[0]
+        cleared = client.post("/api/threads/cleared-files/history", json={"limit": 1}).json()[0]
+
+    assert latest["values"]["artifacts"] == ["/mnt/user-data/outputs/report.md"]
+    assert cleared["values"]["artifacts"] == []

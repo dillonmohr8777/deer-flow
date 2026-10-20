@@ -43,6 +43,7 @@ from app.gateway.csrf_middleware import CSRF_COOKIE_NAME, CSRF_HEADER_NAME, gene
 from app.gateway.github import run_policy as _github_run_policy  # noqa: F401
 from app.gateway.internal_auth import create_internal_auth_headers
 from app.gateway.path_utils import resolve_outputs_confined_path
+from app.momobot_brand import about_reply, configured_content_dir
 from deerflow.config.agents_config import list_custom_agents, load_agent_config
 from deerflow.config.paths import make_safe_user_id
 from deerflow.runtime import END_SENTINEL, StreamBridge
@@ -1307,6 +1308,12 @@ class ChannelManager:
 
     def _resolve_session_layer(self, msg: InboundMessage) -> tuple[dict[str, Any], dict[str, Any]]:
         channel_layer = _as_dict(self._channel_sessions.get(msg.channel_name))
+        if msg.channel_name == "slack":
+            # Scope operator-provided routing to both workspace and conversation.
+            team_id = str((msg.metadata or {}).get("team_id") or "")
+            chats = _as_dict(channel_layer.get("chats"))
+            if team_id and msg.chat_id:
+                channel_layer = _merge_dicts(channel_layer, _as_dict(chats.get(f"{team_id}:{msg.chat_id}")))
         users_layer = _as_dict(channel_layer.get("users"))
         user_layer = _as_dict(users_layer.get(msg.user_id))
         return channel_layer, user_layer
@@ -1732,6 +1739,14 @@ class ChannelManager:
                 run_config["recursion_limit"] = override
             else:
                 run_config["recursion_limit"] = max(run_config.get("recursion_limit", 100), policy.default_recursion_limit)
+
+        # Public news routing cannot be widened by user preferences or /agent state.
+        public_news = msg.channel_name == "slack" and msg.chat_id == "C04HXSVN2CS" and msg_metadata.get("team_id") == "T066HGS7N"
+        run_context["public_news_channel"] = public_news
+        if public_news:
+            assistant_id = "lead_agent"
+            _apply_explicit_agent_choice(run_config, run_context, "ai-tech-news")
+            run_context.update({"subagent_enabled": False, "is_bootstrap": False, "is_plan_mode": False})
 
         return assistant_id, run_config, run_context
 
@@ -2782,6 +2797,9 @@ class ChannelManager:
             reply = await self._fetch_gateway("/api/models", "models", msg=msg)
         elif reply is None and command == "memory":
             reply = await self._fetch_gateway("/api/memory", "memory", msg=msg)
+        elif reply is None and command == "momobot":
+            sub = (parts[1] if len(parts) > 1 else "about").strip().lower()
+            reply = about_reply(configured_content_dir()) if sub == "about" else "Try /momobot about"
         elif reply is None and command == "agent":
             reply = await self._handle_agent_command(msg, parts[1] if len(parts) > 1 else "")
         elif reply is None and command == "goal":
@@ -2797,6 +2815,7 @@ class ChannelManager:
                 "/status — Show current thread info\n"
                 "/models — List available models\n"
                 "/memory — Show memory status\n"
+                "/momobot about — What MomoBot is and how it works\n"
                 "/agent list — List your Custom Agents\n"
                 "/agent use <name> — Start a new conversation with an agent\n"
                 "/<skill-name> <task> — Activate an enabled skill for one turn\n"
