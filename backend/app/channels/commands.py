@@ -17,6 +17,7 @@ KNOWN_CHANNEL_COMMANDS: frozenset[str] = frozenset(
         "/status",
         "/models",
         "/memory",
+        "/momobot",
         "/help",
     }
 )
