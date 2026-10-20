@@ -1984,6 +1984,16 @@ roster:
   #  example-org/personal-notes
 
 # ============================================================================
+# MomoBot About and Agents lineup (private brand kit)
+# ============================================================================
+# Server-side folder with agents.json, about.md, icons/, mascot/, videos/,
+# stills/ and fonts/, filled by scripts/stage_momobot_brand.sh. Never commit
+# it. Unset (default) hides the About page, the lineup and the Slack About reply.
+momobot_brand:
+  content_dir: null
+  #  content_dir: /path/to/momobot-prod/brand
+
+# ============================================================================
 # Tool Result Verification
 # ============================================================================
 # Deterministic receipts are stamped onto tool results and injected into the
