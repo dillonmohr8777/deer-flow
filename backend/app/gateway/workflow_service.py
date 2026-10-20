@@ -22,11 +22,14 @@ from pathlib import Path
 from typing import Any, Literal, overload
 
 from app.gateway.workflow_adapters import HAI_MODEL, HAI_ROUTE, MODEL
+from app.gateway.workflow_claude_sdk import MAX_CALLS as CLAUDE_MAX_CALLS
+from app.gateway.workflow_claude_sdk import MODEL as CLAUDE_MODEL
+from app.gateway.workflow_claude_sdk import SOURCE_WORKFLOW
 from deerflow.runtime.runs.manager import RunStartOutcome
 from deerflow.runtime.runs.schemas import DisconnectMode, RunStatus
 from deerflow.runtime.user_context import WorkspaceStorageContext, reset_current_user, reset_storage_context, set_current_user, set_storage_context
 
-FRAMEWORKS = ("langgraph", "crewai", "mastra", "deepagents", "agno", "agentkit")
+FRAMEWORKS = ("langgraph", "crewai", "mastra", "deepagents", "agno", "agentkit", "claude_sdk")
 TERMINAL = ("completed", "failed", "cancelled")
 LIMITS = {
     "max_running": 3,
@@ -69,6 +72,8 @@ def _public(data: dict) -> dict:
     if isinstance(result.get("usage"), dict):
         result["usage"] = {**result["usage"]}
         result["usage"]["complete"] = result["usage"].get("unknown_model_calls", 0) == 0
+        if result.get("cost_is_estimate") is True:
+            result["usage"]["cost_is_estimate"] = True
     return result
 
 
@@ -290,6 +295,8 @@ class WorkflowService:
                     raise WorkflowServiceError("attempt_state_conflict", 409)
                 data["usage"]["input_tokens"] += result["usage"]["input_tokens"]
                 data["usage"]["output_tokens"] += result["usage"]["output_tokens"]
+                if data.get("framework") == "claude_sdk":
+                    data["cost_is_estimate"] = True
                 data["usage"]["unknown_model_calls"] = max(0, data["usage"].get("unknown_model_calls", 1) - 1)
                 # Missing served identity is recorded separately, never charged
                 # to the requested provider/model as if it were verified.
@@ -416,7 +423,14 @@ class WorkflowService:
         except (KeyError, ValueError, TypeError):
             raise WorkflowServiceError("input_invalid", 422) from None
         definition_data = _definition_dict(definition)
+        sdk_pin = {}
+        if framework == "claude_sdk":
+            if workflow_id != SOURCE_WORKFLOW or supervisor or definition.requires_browser or _json(inputs) != _json(definition.example_inputs):
+                raise WorkflowServiceError("claude_sdk_source_denied", 403)
+            sdk_pin = {"_claude_source_sha256": hashlib.sha256(_json(inputs).encode()).hexdigest(), "_sdk_configuration_sha256": self.adapter.claude_sdk.configuration_sha256}
         admission_identity = [workflow_id, inputs, framework] + ([{"supervisor": True}] if supervisor else [])
+        if sdk_pin:
+            admission_identity.append(sdk_pin)
         if self.model_route != "openai":
             admission_identity.append(self.model_route)
         fingerprint = hashlib.sha256(_json(admission_identity).encode()).hexdigest()
@@ -447,6 +461,7 @@ class WorkflowService:
             "_resume": False,
             "_resumes": 0,
             "_model_route": self.model_route,
+            **sdk_pin,
         }
         data, _created = await self._storage("admit", data, idempotency_key, fingerprint, self.limits)
         self._wake()
@@ -466,13 +481,36 @@ class WorkflowService:
         route = data.get("_model_route", "openai")
         if route != self.model_route:
             raise WorkflowServiceError("model_route_changed", 409)
+        if data.get("framework") == "claude_sdk":
+            self._claude_source(data)
+            return CLAUDE_MODEL
         return self.model
+
+    def _claude_source(self, data: dict) -> str:
+        from deerflow.workflows.catalog import get_workflow
+
+        definition = get_workflow(SOURCE_WORKFLOW)
+        expected = hashlib.sha256(_json(definition.example_inputs).encode()).hexdigest()
+        bridge = getattr(self.adapter, "claude_sdk", None)
+        if (
+            bridge is None
+            or self.model_route != "openai"
+            or data.get("workflow_id") != SOURCE_WORKFLOW
+            or data.get("supervisor", False)
+            or _json(data.get("_inputs")) != _json(definition.example_inputs)
+            or data.get("_claude_source_sha256") != expected
+            or data.get("_sdk_configuration_sha256") != bridge.configuration_sha256
+        ):
+            raise WorkflowServiceError("claude_sdk_source_denied", 403)
+        return expected
 
     async def _model(self, data: dict, **kwargs):
         await self._authorize(data)
         if self.closing:
             raise asyncio.CancelledError
         if kwargs.get("model") != self._bound_model(data) or kwargs.get("effort") not in ("low", "medium", "high"):
+            raise WorkflowServiceError("model_policy_denied", 403)
+        if data.get("framework") == "claude_sdk" and kwargs.get("effort") != "low":
             raise WorkflowServiceError("model_policy_denied", 403)
         if len(_json(kwargs).encode()) > 160 * 1024:
             raise WorkflowServiceError("model_context_too_large", 413)
@@ -484,7 +522,7 @@ class WorkflowService:
         # High-effort reasoning shares the provider's output ceiling with the
         # artifact itself. Keep the same overall run budget while allowing a
         # single producer enough room to complete its bounded structured draft.
-        per_call = 4096 if kwargs["effort"] == "high" else 2048
+        per_call = 4096 if kwargs["effort"] == "high" or data.get("framework") == "claude_sdk" else 2048
         reserve = min(per_call, max(0, remaining))
         reserve_input = max(0, self.limits["max_input_tokens_per_run"] - latest["usage"]["input_tokens"])
         fingerprint = hashlib.sha256(_json(kwargs).encode()).hexdigest()
@@ -493,14 +531,19 @@ class WorkflowService:
         # Completed receipts release the difference; uncertain attempts retain it.
         if reserve_input < 2048 and latest["usage"]["model_calls"] == 0:
             raise WorkflowServiceError("run_token_budget_exhausted", 429)
-        previous = await self._storage("reserve_call", data["id"], data["_scope"], call_id, fingerprint, reserve, self.limits, reserve_input)
+        call_limits = {**self.limits, "max_model_calls_per_run": CLAUDE_MAX_CALLS} if data.get("framework") == "claude_sdk" else self.limits
+        previous = await self._storage("reserve_call", data["id"], data["_scope"], call_id, fingerprint, reserve, call_limits, reserve_input)
         if previous is not None:
+            if previous.get("sdk_receipt"):
+                await self._persist_sdk_receipt(data, previous["sdk_receipt"])
             await self._journal_model(latest, previous, kwargs)
             if previous.get("error"):
                 raise WorkflowServiceError(previous["error"], 502)
             return previous
         try:
             options = {}
+            if data.get("framework") == "claude_sdk":
+                options["provider_admission_context"] = {"owner_scope": data["_scope"], "run_id": data["id"], "workflow_id": data["workflow_id"], "source_sha256": self._claude_source(data)}
             if self.model_route == HAI_ROUTE:
                 options["provider_admission_context"] = {
                     "owner_scope": data["_scope"],
@@ -521,7 +564,7 @@ class WorkflowService:
                     "output": {},
                     "model": (getattr(error, "served_model", None) or "unverified-provider-model") if code == "provider_model_mismatch" else kwargs["model"],
                     "effort": kwargs["effort"],
-                    "usage": {**usage, "cost": None},
+                    "usage": {**usage, "cost": usage.get("cost") if data.get("framework") == "claude_sdk" else None},
                     "error": code,
                     "_journal_context": {"run_id": latest.get("native_run_id"), "thread_id": latest.get("thread_id")},
                 }
@@ -542,10 +585,22 @@ class WorkflowService:
             raise WorkflowServiceError("provider_receipt_invalid", 502) from None
         result["_journal_context"] = {"run_id": latest.get("native_run_id"), "thread_id": latest.get("thread_id")}
         stored = await self._storage("finish_call", data["id"], data["_scope"], call_id, result)
+        if result.get("sdk_receipt"):
+            await self._persist_sdk_receipt(data, result["sdk_receipt"])
         await self._journal_model(stored, result, kwargs)
         if stored["usage"]["output_tokens"] > self.limits["max_output_tokens_per_run"] or stored["usage"]["input_tokens"] > self.limits["max_input_tokens_per_run"]:
             raise WorkflowServiceError("provider_token_limit_exceeded", 429)
         return result
+
+    async def _persist_sdk_receipt(self, data, receipt):
+        latest = await self._storage("get", data["id"], data["_scope"])
+        receipts = latest.get("sdk_receipts", [])
+        existing = [item for item in receipts if item["job_id"] == receipt["job_id"]]
+        if existing and existing != [receipt]:
+            raise WorkflowServiceError("claude_sdk_receipt_conflict", 409)
+        if not existing:
+            receipts = [*receipts, receipt]
+        await self._storage("patch", data["id"], data["_scope"], {"sdk_receipts": receipts, "source": {"data_class": "synthetic", "sha256": self._claude_source(data)}, "cost_is_estimate": True})
 
     async def _browser(self, data: dict, urls: list[str]):
         if self.browser_service is None:
@@ -699,7 +754,7 @@ class WorkflowService:
             if any(delta.values()):
                 model_usage[model] = delta
         if not model_usage:
-            model = HAI_MODEL if data.get("_model_route") == HAI_ROUTE else MODEL
+            model = CLAUDE_MODEL if data.get("framework") == "claude_sdk" else HAI_MODEL if data.get("_model_route") == HAI_ROUTE else MODEL
             model_usage[model] = {"input_tokens": usage["input_tokens"], "output_tokens": usage["output_tokens"]}
         await run_manager.update_run_completion(
             record.run_id,
@@ -771,6 +826,13 @@ class WorkflowService:
             reset_storage_context(token)
 
     async def _write_artifact(self, data, result):
+        if data.get("framework") == "claude_sdk":
+            latest = await self._storage("get", data["id"], data["_scope"])
+            receipts = latest.get("sdk_receipts", [])
+            source = {"data_class": "synthetic", "sha256": self._claude_source(data)}
+            if len(receipts) != CLAUDE_MAX_CALLS or len({item["job_id"] for item in receipts}) != CLAUDE_MAX_CALLS or latest.get("source") != source or any(item.get("source_sha256") != source["sha256"] for item in receipts):
+                raise WorkflowServiceError("claude_sdk_artifact_receipts_missing", 502)
+            result = {**result, "sdk_receipts": receipts, "source": source, "cost_is_estimate": True}
         raw = _json({"workflow_id": data["workflow_id"], "run_id": data["id"], "framework": data["framework"], **result}).encode()
         if len(raw) > MAX_ARTIFACT:
             raise WorkflowServiceError("artifact_too_large", 413)

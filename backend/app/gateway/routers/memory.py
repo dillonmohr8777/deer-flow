@@ -3,16 +3,17 @@
 import asyncio
 from typing import Any, Literal
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field, field_validator
 
+from app.gateway.authz import resource_permission_dependency
 from app.gateway.internal_auth import get_trusted_internal_owner_user_id
 from deerflow.agents.memory import MemoryConflictError, MemoryCorruptionError, MemoryManager, get_memory_manager
 from deerflow.config.memory_config import get_memory_config
 from deerflow.config.paths import make_safe_user_id
 from deerflow.runtime.user_context import get_effective_user_id
 
-router = APIRouter(prefix="/api", tags=["memory"])
+router = APIRouter(prefix="/api", tags=["memory"], dependencies=[Depends(resource_permission_dependency("threads"))])
 
 
 def _resolve_memory_user_id(request: Request) -> str:

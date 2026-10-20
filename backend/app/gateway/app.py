@@ -36,6 +36,7 @@ from app.gateway.routers import (
     features,
     feedback,
     fleet,
+    fleet_work,
     github_webhooks,
     input_polish,
     integrations,
@@ -938,6 +939,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
         batch_repo = getattr(app.state, "subagent_batch_repo", None)
         app.state.subagent_batches_available = False
+        # Fleet hosts read lease and result limits from the same config (routers/fleet_work.py).
+        app.state.subagent_batches_config = subagent_batches_config
         set_subagent_batch_submitter(None)
         if subagent_batches_config.enabled and batch_repo is None:
             raise RuntimeError("subagent_batches.enabled requires database.backend sqlite or postgres")
@@ -1372,6 +1375,7 @@ This gateway provides runtime endpoints for agent runs plus custom endpoints for
     # Durable MCP tasks are scoped to their owning thread.
     app.include_router(mcp_tasks.router)
     app.include_router(subagent_batches.router)
+    app.include_router(fleet_work.router)
 
     # Memory API is mounted at /api/memory
     app.include_router(memory.router)

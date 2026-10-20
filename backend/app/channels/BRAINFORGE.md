@@ -127,6 +127,11 @@ channels:
           queue/work-items.json: "<REVIEWED_SHA256>"
 ```
 
+By default Brain Forge is exclusive: every non-brief event is acknowledged and
+dropped. Set `agent_passthrough: true` to keep the normal agent path for
+everything that is not an admitted brief request. A brief request never
+reaches the agent path in either mode.
+
 `require_connection` defaults to true. `owner_user_id` is a Slack identity;
 `connection_owner_id` is the distinct backend owner identity. The authenticated
 sender must resolve to that backend owner through the existing channel
