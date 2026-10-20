@@ -551,7 +551,8 @@ class SlackChannel(Channel):
             return
 
         text = event.get("text", "").strip()
-        if event.get("type") == "app_mention":
+        # DMs arrive as plain message events, so they get the same mention strip and About alias.
+        if event.get("type") == "app_mention" or event.get("channel_type") == "im":
             text = _about_question_as_command(_strip_leading_slack_bot_mention(text, self._bot_user_id))
         if not text:
             if event.get("type") == "app_mention" and (not self._allowed_users or user_id in self._allowed_users):
