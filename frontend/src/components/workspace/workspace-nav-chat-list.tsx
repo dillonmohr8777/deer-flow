@@ -3,6 +3,8 @@
 import {
   BotIcon,
   GraduationCap,
+  Info,
+  UsersRound,
   Hash,
   CalendarClock,
   Inbox,
@@ -35,6 +37,7 @@ import { useAgentsApiEnabled } from "@/core/agents";
 import { useBoardThreads } from "@/core/board";
 import { useDeskEnabled, useMomentumInternalEnabled } from "@/core/features";
 import { useI18n } from "@/core/i18n/hooks";
+import { useBrandKit } from "@/core/momobot-brand";
 
 export function WorkspaceNavChatList() {
   const { t } = useI18n();
@@ -42,6 +45,7 @@ export function WorkspaceNavChatList() {
   const { enabled: agentsEnabled } = useAgentsApiEnabled();
   const { enabled: deskEnabled } = useDeskEnabled();
   const { enabled: internalEnabled } = useMomentumInternalEnabled();
+  const { data: brandKit } = useBrandKit();
   // Threads with a Momo draft waiting on the owner; same query Desk's
   // Approvals panel runs, so React Query shares one cache entry.
   const waitingApproval = useBoardThreads({
@@ -274,6 +278,36 @@ export function WorkspaceNavChatList() {
             </Link>
           </SidebarMenuButton>
         </SidebarMenuItem>
+        {/* Only when the server has the private brand kit mounted. */}
+        {brandKit && (
+          <>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                isActive={pathname === "/workspace/lineup"}
+                asChild
+              >
+                <Link
+                  className="text-muted-foreground"
+                  href="/workspace/lineup"
+                >
+                  <UsersRound />
+                  <span>MomoBot Agents</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                isActive={pathname === "/workspace/about"}
+                asChild
+              >
+                <Link className="text-muted-foreground" href="/workspace/about">
+                  <Info />
+                  <span>About MomoBot</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </>
+        )}
         {/* Momentum staff only, same gate as Team. */}
         {internalEnabled && (
           <SidebarMenuItem>

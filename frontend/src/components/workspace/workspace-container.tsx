@@ -139,6 +139,8 @@ export function nameOfSegment(
     projects: t.projects.title,
     trash: t.trash.title,
     "command-center": "Command Center",
+    lineup: "MomoBot Agents",
+    about: "About MomoBot",
   };
   // Unknown sections read as words in sentence case, never as a raw slug
   // ("Scheduled-tasks" was the old fallback).

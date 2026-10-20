@@ -74,6 +74,14 @@ def _normalize_allowed_users(allowed_users: Any) -> set[str]:
     return {str(user_id) for user_id in values if str(user_id)}
 
 
+_ABOUT_QUESTIONS = frozenset({"what is momobot", "what's momobot", "whats momobot", "about momobot"})
+
+
+def _about_question_as_command(text: str) -> str:
+    """Treat "what is MomoBot?" as ``/momobot about`` so it takes the command path."""
+    return "/momobot about" if text.strip().strip("?!. ").lower() in _ABOUT_QUESTIONS else text
+
+
 def _strip_leading_slack_bot_mention(text: str, bot_user_id: str | None) -> str:
     if not bot_user_id:
         return text
@@ -538,7 +546,7 @@ class SlackChannel(Channel):
 
         text = event.get("text", "").strip()
         if event.get("type") == "app_mention":
-            text = _strip_leading_slack_bot_mention(text, self._bot_user_id)
+            text = _about_question_as_command(_strip_leading_slack_bot_mention(text, self._bot_user_id))
         if not text:
             if event.get("type") == "app_mention" and (not self._allowed_users or user_id in self._allowed_users):
                 self._send_empty_mention_reply(event.get("channel", ""), event.get("thread_ts") or event.get("ts", ""))

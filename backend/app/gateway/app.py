@@ -46,6 +46,7 @@ from app.gateway.routers import (
     mcp_tasks,
     memory,
     models,
+    momobot_brand,
     openai_agents,
     plugins,
     project_documents,
@@ -1455,6 +1456,7 @@ This gateway provides runtime endpoints for agent runs plus custom endpoints for
     app.include_router(invitations.router)
     app.include_router(workspaces.router)
     app.include_router(workspace_branding.router)
+    app.include_router(momobot_brand.router)
     app.include_router(user_preferences.router)
 
     # System-admin controls (user disable/enable/force-logout, audit log) are

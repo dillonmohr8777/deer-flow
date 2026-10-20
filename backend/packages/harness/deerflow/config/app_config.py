@@ -32,6 +32,7 @@ from deerflow.config.loop_detection_config import LoopDetectionConfig
 from deerflow.config.mcp_tasks_config import McpTasksConfig
 from deerflow.config.memory_config import MemoryConfig, load_memory_config_from_dict
 from deerflow.config.model_config import ModelConfig
+from deerflow.config.momobot_brand_config import MomobotBrandConfig
 from deerflow.config.pii_redaction_config import PiiRedactionConfig
 from deerflow.config.projects_config import ProjectsConfig
 from deerflow.config.read_before_write_config import ReadBeforeWriteConfig
@@ -363,6 +364,10 @@ class AppConfig(BaseModel):
             "subagent_batches",
             field_doc="Durable native-subagent batch scheduling, lease, and recovery configuration.",
         ),
+    )
+    momobot_brand: MomobotBrandConfig = Field(
+        default_factory=MomobotBrandConfig,
+        description="Server-side folder holding the private MomoBot About copy and Agents lineup kit (never committed).",
     )
     roster: RosterConfig = Field(
         default_factory=RosterConfig,
