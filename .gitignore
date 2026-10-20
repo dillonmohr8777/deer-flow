@@ -85,4 +85,6 @@ backend/.deer-flow.bak-*/
 !fleet/agents/*/config.yaml
 
 # Private MomoBot brand kit (About copy, agents lineup, videos): never committed
-momobot-brand/
+/momobot-brand/
+/.deer-flow/momobot-brand/
+backend/.deer-flow/momobot-brand/
