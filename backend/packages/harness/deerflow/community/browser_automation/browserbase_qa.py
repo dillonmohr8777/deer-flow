@@ -97,7 +97,7 @@ class BrowserbaseAPI:
                 "timeout": 60,
                 "keepAlive": False,
                 "proxies": False,
-                "browserSettings": {"allowedDomains": list(policy.allowed_hosts), "recordSession": False, "logSession": False, "solveCaptchas": False, "blockAds": True},
+                "browserSettings": {"allowedDomains": list(policy.allowed_hosts), "recordSession": False, "logSession": False, "solveCaptchas": True, "blockAds": True},
                 "userMetadata": {"purpose": "momobot-public-readonly-qa", **({"reservation_id": reservation_id} if reservation_id else {})},
             },
         )

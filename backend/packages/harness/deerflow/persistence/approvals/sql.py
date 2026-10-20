@@ -16,7 +16,7 @@ from typing import Any
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from deerflow.approvals.workflow import STATUSES, validate_payload
+from deerflow.approvals.workflow import STATUSES, notify_created, validate_payload
 from deerflow.persistence.approvals.model import PendingActionRow
 from deerflow.persistence.organizations.identity import private_organization_id
 from deerflow.runtime.user_context import AUTO, _AutoSentinel, resolve_organization_id, resolve_user_id
@@ -83,7 +83,9 @@ class PendingActionRepository:
             session.add(row)
             await session.commit()
             await session.refresh(row)
-            return _to_dict(row)
+            created = _to_dict(row)
+        await notify_created(created)
+        return created
 
     async def get(self, action_id: str, *, user_id: str | None | _AutoSentinel = AUTO) -> dict | None:
         uid = resolve_user_id(user_id, method_name="PendingActionRepository.get")
