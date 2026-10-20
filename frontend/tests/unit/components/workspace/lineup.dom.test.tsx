@@ -130,8 +130,12 @@ describe("LineupContent", () => {
 
   it("labels a video with its kit title, else a title from its key", () => {
     render(<LineupContent kit={kit(false)} />);
-    expect(document.querySelector('video[aria-label^="Second Clip TV,"]')).not.toBeNull();
-    expect(document.querySelector('video[aria-label^="First video,"]')).not.toBeNull();
+    expect(
+      document.querySelector('video[aria-label^="Second Clip TV,"]'),
+    ).not.toBeNull();
+    expect(
+      document.querySelector('video[aria-label^="First video,"]'),
+    ).not.toBeNull();
   });
 
   it("uses the vertical cut on narrow screens", () => {

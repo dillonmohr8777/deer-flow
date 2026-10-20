@@ -146,7 +146,11 @@ export function LineupContent({ kit }: { kit: BrandKit }) {
 
       <section aria-label="Videos" className={styles.videos}>
         {Object.entries(kit.videos).map(([key, video]) => (
-          <LineupVideo key={key} name={video.title ?? titleOf(key)} video={video} />
+          <LineupVideo
+            key={key}
+            name={video.title ?? titleOf(key)}
+            video={video}
+          />
         ))}
       </section>
 
