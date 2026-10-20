@@ -253,9 +253,6 @@ Keep credentials server-side and paid operations idempotent. PWA offline caches
 hold generic public assets only. The `desktop/` Electron shell has no native
 renderer bridge; see `desktop/AGENTS.md` for branding/source checks and
 `docs/MOMOBOT_APP_RELEASE.md` for lifecycle and release checks.
-The desktop app ships by tag: `npm run release` in `desktop/` checks, packages,
-smoke-tests, tags `momobot-desktop-vX.Y.Z` and publishes the latest GitHub release
-that installed apps update from; see `docs/MOMOBOT_DESKTOP_DISTRIBUTION.md`.
 
 The offline backend suite includes actual isolated framework handoffs. Its CI
 shards install the frozen sibling worker environments and Node builds before
