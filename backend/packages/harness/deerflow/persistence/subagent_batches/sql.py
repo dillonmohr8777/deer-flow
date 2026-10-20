@@ -240,6 +240,19 @@ class SubagentBatchRepository:
             thread = await session.get(ThreadMetaRow, thread_id)
             return bool(thread and thread.user_id == user_id and thread.organization_id == organization_id)
 
+    async def approve_fleet_batch(self, batch_id: str, *, approver_id: str, now: datetime) -> dict[str, Any] | None:
+        """Flip a fleet batch's ``approval_state`` pending -> approved (idempotent). None if absent or not an approval-gated batch."""
+        async with self._sf() as session:
+            batch = (await session.execute(select(SubagentBatchRow).where(SubagentBatchRow.id == batch_id).with_for_update())).scalar_one_or_none()
+            spec = batch.execution_spec if batch is not None else None
+            if batch is None or not _batch_organization_visible(batch) or not isinstance(spec, dict) or spec.get("executor") != "fleet" or spec.get("approval_state") not in ("pending", "approved"):
+                return None
+            if spec["approval_state"] == "pending":
+                batch.execution_spec = {**spec, "approval_state": "approved", "approved_by": approver_id, "approved_at": now.isoformat()}
+                batch.updated_at = now
+                await session.commit()
+            return {**await self._with_counts(session, batch), "approval_state": batch.execution_spec["approval_state"], "approved_by": batch.execution_spec.get("approved_by")}
+
     async def owns_fleet_item_lease(self, item_id: str, *, lease_owner: str, owner_id: str, organization_id: str) -> bool:
         """Authorize a lease mutation against its immutable batch owner/org."""
         if not item_id or not lease_owner or not owner_id or not organization_id:
@@ -424,6 +437,9 @@ class SubagentBatchRepository:
                 if spec.get("executor", "native") != executor:
                     continue
                 if lanes is not None and spec.get("lane") not in lanes:
+                    continue
+                # Desktop jobs wait for an org owner/admin approval before any host may lease them.
+                if spec.get("approval_state") == "pending":
                     continue
                 # An older or manually inserted paid row must not gain implicit
                 # retries even if a host neglects its own admission check.

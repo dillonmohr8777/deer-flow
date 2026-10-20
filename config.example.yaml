@@ -20,7 +20,7 @@
 # ============================================================================
 # Bump this number when the config schema changes.
 # Run `make config-upgrade` to merge new fields into your local config.yaml.
-config_version: 46
+config_version: 47
 
 # Optional per-model request pacing (inside a models[] entry):
 # request_admission:
@@ -1966,6 +1966,24 @@ subagent_batches:
   result_preview_max_chars: 2000
 
 # ============================================================================
+# Slack Account-Manager Roster (MomoBot desktop bridge)
+# ============================================================================
+# Who may ask MomoBot for what. users: Slack user ID -> role (am | expert |
+# admin) -> client IDs (admin sees every client). repos: allow-list of repo full
+# name -> client ID, or "*" for every client. deny_repos are never visible, even
+# to admin. An empty roster denies everyone; desktop-lane jobs are checked
+# against it at submit time. Use your own Slack IDs, repo names and client IDs.
+roster:
+  users: {}
+  #  U0EXAMPLEAM1: {role: am, clients: [example-client]}
+  #  U0EXAMPLEADM: {role: admin}
+  repos: {}
+  #  example-org/example-client-site: example-client
+  #  example-org/shared-toolkit: "*"
+  deny_repos: []
+  #  example-org/personal-notes
+
+# ============================================================================
 # Tool Result Verification
 # ============================================================================
 # Deterministic receipts are stamped onto tool results and injected into the
@@ -2844,6 +2862,7 @@ run_ownership:
 #       enabled: false
 #       user_ids: []                  # Slack user IDs who receive the DM and may press the buttons
 #       base_url: http://127.0.0.1:2026  # Command Center URL used for the item link
+#     reply_in_thread: true           # false = post replies as top-level channel messages instead of thread replies
 #
 #   telegram:
 #     enabled: false

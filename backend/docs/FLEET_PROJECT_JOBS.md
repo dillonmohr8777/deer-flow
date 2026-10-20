@@ -98,3 +98,25 @@ bookmarks, source re-check, result acceptance and recurring owner binding.
 Windows Ultrafast transport currently has its own route; this controller change
 does not claim it is a fleet executor lane. Client credential resolution and
 multi-tenant rate/capacity controls remain separate acceptance gates.
+
+## Desktop lane (MomoBot desktop bridge)
+
+`lane: "desktop"` queues a prompt for a Mac host running
+`scripts/momobot_desktop_runner.py` (`claude -p ... --model haiku`, limited to the
+client's folder). Submit with `client_id` and `requester` (a Slack user ID), no
+`project`. Private data is allowed, `max_attempts` is always 1, and the
+`execution_spec` stores `requester`, `client_id` and `approval_state`.
+
+- **Roster gate.** Submit is refused (403) unless the `roster` config
+  (`deerflow/config/roster_config.py`, `scope_for`) lists the requester for that
+  client. An empty roster denies everyone.
+- **Approval.** New desktop batches are `approval_state: pending`.
+  `claim_items` skips pending batches; `POST /api/fleet/work/batches/{id}/approve`
+  (org owner/admin, `approvals:write`) flips it to `approved`. Repeat approvals
+  are no-ops. Other lanes report `approval_state: none`.
+- **Runner.** Polls outbound, honors a STOP file and the quiet-hours gate
+  command, kills claude after 20 minutes, and reports through the standard
+  running/renew/finalize routes. `--dry-run` prints gates and the command only.
+  Env vars and the client-folder mapping are in the script's docstring.
+- **Slack.** `channels.slack.reply_in_thread: false` posts replies top-level
+  (and skips the "Working on it" thread reply; the eyes reaction remains).
