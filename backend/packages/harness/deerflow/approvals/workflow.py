@@ -34,6 +34,35 @@ def register_action_type(name: str, validator: Callable[[str, dict[str, Any]], N
     _EXTENSION_TYPES[name] = validator
 
 
+# Observers told about every newly filed row (e.g. the Slack approvals DM). Registered by channels at start.
+_CREATED_HOOKS: list[Callable[[dict[str, Any]], Any]] = []
+
+
+def register_created_hook(hook: Callable[[dict[str, Any]], Any]) -> None:
+    if hook not in _CREATED_HOOKS:
+        _CREATED_HOOKS.append(hook)
+
+
+def unregister_created_hook(hook: Callable[[dict[str, Any]], Any]) -> None:
+    if hook in _CREATED_HOOKS:
+        _CREATED_HOOKS.remove(hook)
+
+
+async def notify_created(row: dict[str, Any]) -> None:
+    """Run created-row hooks (sync or async). A hook failure or hang never blocks filing."""
+    import asyncio
+    import inspect
+    import logging
+
+    for hook in list(_CREATED_HOOKS):
+        try:
+            result = hook(row)
+            if inspect.isawaitable(result):
+                await asyncio.wait_for(result, timeout=10)
+        except Exception:
+            logging.getLogger(__name__).warning("approval created-hook failed for %s", row.get("id"), exc_info=True)
+
+
 class InvalidPayloadError(ValueError):
     """The proposed or edited payload cannot be sent as the given action type."""
 

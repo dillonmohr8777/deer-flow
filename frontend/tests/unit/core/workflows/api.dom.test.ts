@@ -72,9 +72,7 @@ describe("Jevbox preparation transport", () => {
     expect(headers.get("Content-Type")).toBe("application/json");
     expect(headers.get("X-Expected-Workflow-Scope")).toBe("scope-one");
     expect(headers.get("X-CSRF-Token")).toBe("fixture-csrf");
-    expect(await new Response(init?.body).arrayBuffer()).toEqual(
-      bytes.buffer,
-    );
+    expect(await new Response(init?.body).arrayBuffer()).toEqual(bytes.buffer);
     expect(localStorage.length).toBe(0);
     expect(sessionStorage.length).toBe(0);
   });

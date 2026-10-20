@@ -32,6 +32,11 @@ docker run --rm --network none `
   --entrypoint python <gateway image> /tmp/backup.py
 ```
 
+The source mount must remain writable so SQLite can create or update WAL shared-memory
+sidecars. The snapshot script opens each source database with `mode=ro`, includes
+uncheckpointed committed WAL rows through SQLite's online backup API, and excludes
+source sidecars from the archive. The script bind mount remains read-only.
+
 ## Restore rehearsal (verified 2026-09-22)
 
 Snapshot into `deer-flow-rehearsal_gateway-data`, then:

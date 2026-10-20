@@ -1,0 +1,20 @@
+[Unit]
+Description=MomoBot (Momentum) stack on Lightsail
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+# Nothing to start until bootstrap.sh has written the secrets and the data is migrated.
+ConditionPathExists=/opt/momobot/.env
+ConditionPathExists=/opt/momobot/config.yaml
+
+[Service]
+# No EnvironmentFile: compose reads .env itself (systemd's parser differs).
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/momobot/src
+ExecStart=/opt/momobot/src/deploy/momentum/lightsail/up.sh
+ExecStop=/opt/momobot/src/deploy/momentum/lightsail/up.sh stop
+TimeoutStartSec=600
+
+[Install]
+WantedBy=multi-user.target
