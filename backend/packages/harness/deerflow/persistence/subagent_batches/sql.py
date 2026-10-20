@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import re
 import uuid
 from collections import Counter
+from collections.abc import Collection
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -23,6 +25,7 @@ BATCH_ACTIVE_STATUSES = ("queued", "running", "paused")
 BATCH_TERMINAL_STATUSES = ("completed", "failed", "cancelled")
 ITEM_ACTIVE_STATUSES = ("queued", "leased", "running")
 ITEM_TERMINAL_STATUSES = ("succeeded", "failed", "cancelled")
+_CANONICAL_CLIENT_ID = re.compile(r"[a-z0-9][a-z0-9-]{0,95}\Z")
 _BATCH_PUBLIC_FIELDS = (
     "id",
     "thread_id",
@@ -98,6 +101,7 @@ class SubagentBatchRepository:
             "user_id": row.user_id,
             "thread_id": row.thread_id,
             "run_id": row.run_id,
+            "max_attempts": row.max_attempts,
             "execution_spec": row.execution_spec,
         }
 
@@ -227,6 +231,104 @@ class SubagentBatchRepository:
             organization_id = resolve_organization_id()
             return organization_id is None or thread.organization_id == organization_id
 
+    async def owns_thread_for_fleet_project(self, *, thread_id: str, user_id: str) -> bool:
+        """Project batches require a real thread in the active organization."""
+        organization_id = resolve_organization_id()
+        if not organization_id:
+            return False
+        async with self._sf() as session:
+            thread = await session.get(ThreadMetaRow, thread_id)
+            return bool(thread and thread.user_id == user_id and thread.organization_id == organization_id)
+
+    async def owns_fleet_item_lease(self, item_id: str, *, lease_owner: str, owner_id: str, organization_id: str) -> bool:
+        """Authorize a lease mutation against its immutable batch owner/org."""
+        if not item_id or not lease_owner or not owner_id or not organization_id:
+            return False
+        async with self._sf() as session:
+            spec = (
+                await session.execute(
+                    select(SubagentBatchRow.execution_spec)
+                    .join(SubagentBatchItemRow, SubagentBatchItemRow.batch_id == SubagentBatchRow.id)
+                    .where(
+                        SubagentBatchItemRow.id == item_id,
+                        SubagentBatchItemRow.lease_owner == lease_owner,
+                        SubagentBatchRow.user_id == owner_id,
+                        SubagentBatchRow.organization_id == organization_id,
+                    )
+                )
+            ).scalar_one_or_none()
+            return isinstance(spec, dict) and spec.get("executor") == "fleet"
+
+    async def verify_private_fleet_lease(self, item_id: str, *, lease_owner: str, owner_id: str, now: datetime) -> dict[str, Any] | None:
+        """Read one joined durable lease without exposing its prompt or result.
+
+        The caller must establish internal delegation and scope separately.
+        This query only trusts current rows and the server-selected storage
+        owner, never a worker's claim body or previously returned projection.
+        """
+        organization_id = resolve_organization_id()
+        if not organization_id or not item_id or not lease_owner or not owner_id:
+            return None
+        async with self._sf() as session:
+            row = (
+                await session.execute(
+                    select(SubagentBatchItemRow, SubagentBatchRow)
+                    .join(SubagentBatchRow, SubagentBatchItemRow.batch_id == SubagentBatchRow.id)
+                    .where(
+                        SubagentBatchItemRow.id == item_id,
+                        SubagentBatchItemRow.lease_owner == lease_owner,
+                        SubagentBatchItemRow.status == "running",
+                        SubagentBatchItemRow.cancel_requested_at.is_(None),
+                        SubagentBatchRow.status == "running",
+                        SubagentBatchRow.user_id == owner_id,
+                        SubagentBatchRow.organization_id == organization_id,
+                    )
+                )
+            ).one_or_none()
+            if row is None:
+                return None
+            item, batch = row
+            expires = item.lease_expires_at
+            if expires is None:
+                return None
+            # SQLite discards tzinfo on read; fleet leases are written in UTC.
+            if expires.tzinfo is None:
+                expires = expires.replace(tzinfo=UTC)
+            if expires <= now:
+                return None
+            spec = batch.execution_spec
+            if not isinstance(spec, dict):
+                return None
+            client_id = spec.get("client_id")
+            project = spec.get("project")
+            source_ref = spec.get("source_ref")
+            if (
+                not isinstance(client_id, str)
+                or not _CANONICAL_CLIENT_ID.fullmatch(client_id)
+                or not isinstance(project, str)
+                or batch.subagent_type != f"fleet-haiku@{project}"
+                or source_ref != f"client-operations-canonical:client/{client_id}"
+                or spec.get("executor") != "fleet"
+                or spec.get("lane") != "haiku"
+                or spec.get("data_class") != "private"
+                or spec.get("output_policy") != "draft-only"
+            ):
+                return None
+            return {
+                "item_id": item.id,
+                "lease_owner": item.lease_owner,
+                "owner_id": batch.user_id,
+                "client_id": client_id,
+                "source_ref": source_ref,
+                "status": item.status,
+                "lease_expires_at": expires.timestamp(),
+                "executor": spec["executor"],
+                "lane": spec["lane"],
+                "data_class": spec["data_class"],
+                "output_policy": spec["output_policy"],
+                "cancel_requested": False,
+            }
+
     async def get_batch_by_submission_key(self, submission_key: str, *, user_id: str) -> dict[str, Any] | None:
         async with self._sf() as session:
             batch = (
@@ -289,16 +391,44 @@ class SubagentBatchRepository:
         lease_owner: str,
         lease_seconds: int,
         limit: int,
+        executor: str = "native",
+        lanes: Collection[str] | None = None,
+        owner_id: str | None = None,
+        organization_id: str | None = None,
+        batch_id: str | None = None,
     ) -> list[dict[str, Any]]:
-        """Promote pending work and atomically claim runnable items."""
+        """Promote pending work and atomically claim runnable items.
+
+        A batch declares who runs it in ``execution_spec["executor"]``:
+        ``"native"`` (default) is the Gateway's own subagent runtime, ``"fleet"``
+        is a remote host claiming over ``/api/fleet/work``. Each claimer only
+        sees its own executor's batches, so one item is never run by both.
+        ``lanes`` further restricts fleet claims to ``execution_spec["lane"]``.
+        """
         if limit <= 0:
+            return []
+        if owner_id is not None and not organization_id:
             return []
         claimed: list[dict[str, Any]] = []
         async with self._sf() as session:
-            batches = list((await session.execute(select(SubagentBatchRow).where(SubagentBatchRow.status.in_(("queued", "running"))).order_by(SubagentBatchRow.created_at, SubagentBatchRow.id).with_for_update(skip_locked=True))).scalars())
+            stmt = select(SubagentBatchRow).where(SubagentBatchRow.status.in_(("queued", "running")))
+            if owner_id is not None:
+                stmt = stmt.where(SubagentBatchRow.user_id == owner_id, SubagentBatchRow.organization_id == organization_id)
+            if batch_id is not None:
+                stmt = stmt.where(SubagentBatchRow.id == batch_id)
+            batches = list((await session.execute(stmt.order_by(SubagentBatchRow.created_at, SubagentBatchRow.id).with_for_update(skip_locked=True))).scalars())
             for batch in batches:
                 if len(claimed) >= limit:
                     break
+                spec = batch.execution_spec or {}
+                if spec.get("executor", "native") != executor:
+                    continue
+                if lanes is not None and spec.get("lane") not in lanes:
+                    continue
+                # An older or manually inserted paid row must not gain implicit
+                # retries even if a host neglects its own admission check.
+                if executor == "fleet" and spec.get("lane") == "ultrafast" and batch.max_attempts != 1:
+                    continue
 
                 expired = list(
                     (
@@ -534,6 +664,12 @@ class SubagentBatchRepository:
             if item is None:
                 return False
             batch = await session.get(SubagentBatchRow, item.batch_id, with_for_update=True)
+            # Ultrafast is a paid, single-attempt route. Once execution is
+            # marked running, an uncertain provider outcome must never be
+            # converted back into a fresh attempt via the admission release.
+            spec = batch.execution_spec if batch is not None else None
+            if item.status == "running" and isinstance(spec, dict) and spec.get("lane") == "ultrafast":
+                return False
             cancelled = item.cancel_requested_at is not None or batch is None or batch.status == "cancelled"
             item.lease_owner = None
             item.lease_expires_at = None

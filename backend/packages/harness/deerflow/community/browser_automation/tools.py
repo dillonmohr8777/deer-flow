@@ -32,6 +32,7 @@ from deerflow.config import get_app_config
 from deerflow.config.paths import VIRTUAL_PATH_PREFIX
 from deerflow.constants import BROWSER_FRAMES_DIRNAME
 from deerflow.tools.types import Runtime
+from deerflow.utils.capture_output import write_capture_output
 
 from .session import BrowserSession, BrowserSessionManager, PageSnapshot, ScreenshotType, get_browser_session_manager
 
@@ -412,9 +413,7 @@ def _thread_outputs_path(runtime: Runtime) -> Path | str:
 
 
 def _write_screenshot(outputs_path: Path, name: str, content: bytes) -> str:
-    outputs_path.mkdir(parents=True, exist_ok=True)
-    (outputs_path / name).write_bytes(content)
-    return name
+    return write_capture_output(outputs_path, name, content)
 
 
 @tool("browser_screenshot", parse_docstring=True)

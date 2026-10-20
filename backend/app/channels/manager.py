@@ -1307,6 +1307,12 @@ class ChannelManager:
 
     def _resolve_session_layer(self, msg: InboundMessage) -> tuple[dict[str, Any], dict[str, Any]]:
         channel_layer = _as_dict(self._channel_sessions.get(msg.channel_name))
+        if msg.channel_name == "slack":
+            # Scope operator-provided routing to both workspace and conversation.
+            team_id = str((msg.metadata or {}).get("team_id") or "")
+            chats = _as_dict(channel_layer.get("chats"))
+            if team_id and msg.chat_id:
+                channel_layer = _merge_dicts(channel_layer, _as_dict(chats.get(f"{team_id}:{msg.chat_id}")))
         users_layer = _as_dict(channel_layer.get("users"))
         user_layer = _as_dict(users_layer.get(msg.user_id))
         return channel_layer, user_layer
@@ -1732,6 +1738,14 @@ class ChannelManager:
                 run_config["recursion_limit"] = override
             else:
                 run_config["recursion_limit"] = max(run_config.get("recursion_limit", 100), policy.default_recursion_limit)
+
+        # Public news routing cannot be widened by user preferences or /agent state.
+        public_news = msg.channel_name == "slack" and msg.chat_id == "C04HXSVN2CS" and msg_metadata.get("team_id") == "T066HGS7N"
+        run_context["public_news_channel"] = public_news
+        if public_news:
+            assistant_id = "lead_agent"
+            _apply_explicit_agent_choice(run_config, run_context, "ai-tech-news")
+            run_context.update({"subagent_enabled": False, "is_bootstrap": False, "is_plan_mode": False})
 
         return assistant_id, run_config, run_context
 

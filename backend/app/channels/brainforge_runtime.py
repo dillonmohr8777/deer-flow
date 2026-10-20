@@ -52,6 +52,14 @@ class BrainForgeRuntime:
         if auth.get("ok") is not True or auth.get("team_id") != self.policy.team_id or auth.get("user_id") != self.policy.bot_user_id:
             raise ValueError("Slack runtime identity doesn't match reviewed scope")
 
+    def _brief_text(self, event: Any) -> bool:
+        """True when the event text, minus a leading bot mention, is a brief keyword."""
+        text = event.get("text") if isinstance(event, dict) else None
+        if not isinstance(text, str) or event.get("user") == self.policy.bot_user_id:
+            return False
+        text = re.sub(r"^<@!?" + re.escape(self.policy.bot_user_id) + r"(?:\|[^>\n]+)?>\s*", "", text.strip()).strip().casefold()
+        return text in {"brief", "forge brief", "/forge brief"}
+
     def _admit(self, event: dict, team_id: str | None) -> AdmittedEvent | None:
         followed = False
         try:
@@ -62,8 +70,19 @@ class BrainForgeRuntime:
         admitted = admit_event(self.policy, event, team_id=team_id, followed_thread=followed)
         if admitted is None or (admitted.client_id == "__owner__" and admitted.user_id != self.owner):
             return None
-        text = re.sub(r"^<@!?" + re.escape(self.policy.bot_user_id) + r"(?:\|[^>\n]+)?>\s*", "", admitted.text).strip().casefold()
-        return admitted if text in {"brief", "forge brief", "/forge brief"} else None
+        return admitted if self._brief_text({"text": admitted.text}) else None
+
+    def matches(self, event: dict, *, team_id: str | None) -> bool:
+        """True when this looks like a brief request, admitted or not.
+
+        Recognition is separate from admission so a refused brief is acked and never
+        falls through to the paid agent in passthrough mode. prepare() decides admission.
+        """
+        return self._brief_text(event)
+
+    def refused(self, event: dict, *, team_id: str | None) -> bool:
+        """True for a recognised brief that admission rejects (not owner/channel/team)."""
+        return self._brief_text(event) and self._admit(event, team_id) is None
 
     def prepare(self, event: dict, *, team_id: str | None) -> AdmittedEvent | None:
         """SDK thread: persist admitted identity before the transport ACK."""

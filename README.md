@@ -20,6 +20,15 @@ https://github.com/user-attachments/assets/a8bcadc4-e040-4cf2-8fda-dd768b999c18
 
 ### MomoBot Brain Forge workflow
 
+The default-off [Claude SDK synthetic workflow pilot](backend/docs/WORKFLOWS.md#opt-in-claude-sdk-synthetic-pilot)
+routes one exact fictional line-edit fixture through the existing isolated
+localhost SDK worker while retaining Gateway ownership, native bookkeeping,
+durable paid-attempt admission and artifact acceptance. It permits no external
+tools/private jobs and verifies actual worker model/usage and the receipt
+journal's exact hash before acceptance. A separate explicit acceptance driver
+checks isolated native state and artifacts; it does not install or enable the
+route in production.
+
 The optional [Brain Forge Slack workflow](backend/app/channels/BRAINFORGE.md) runs an explicitly scoped `@bot brief` request against reviewed, hash-pinned work sources. It retrieves the full thread, saves a private protected readback receipt and returns recorded counts without calling a model or modifying canonical work. It is disabled by default and requires an existing authenticated Slack runtime binding.
 
 The optional private project compiler joins the brief with reviewed research and existing Momo workflow requests for offers, SEO, social, CRM, reporting, developer blockers and security review. A single protected receipt binds the source brief and project artifact. `python -m app.channels.brainforge_cli` provides local preflight, build and independent readback; compiled requests remain unsent until the existing authenticated workflow service admits them. See the [unified project configuration](backend/app/channels/BRAINFORGE.md#unified-private-project).
@@ -682,6 +691,13 @@ for the supported interceptor flow and the required rotation and retained-copy
 cleanup when migrating from legacy metadata credentials.
 
 #### IM Channels
+
+Momo's managed AI-news persona uses only public web search and fetch tools and
+omits private knowledge scope. This keeps news requests usable when the selected
+provider has no knowledge integration. Choose a private model route for Slack
+channels containing client discussions, even when the channel is named for news.
+The authenticated channel gateway preserves that restricted profile through run
+admission; ordinary external requests cannot enable its internal mode flag.
 
 DeerFlow supports receiving tasks from messaging apps. Channels auto-start when configured — no public IP required for any of them.
 
@@ -2190,6 +2206,21 @@ See [backend/docs/TUI.md](backend/docs/TUI.md) for the full guide.
 - [Backend Architecture](backend/README.md) - Backend architecture and API reference
 
 ## ⚠️ Security Notice
+
+Browser screenshots and captures create fresh files without following output
+symlinks or overwriting earlier captures. Secure capture writes require no-follow
+directory operations; unsupported platforms return an error. Public web-tool
+URL screening also rejects shared-address and IPv6 site-local networks unless
+the operator explicitly enables private targets. Page-derived browser results
+receive the same framework-tag neutralization as fetched pages and MCP results;
+this reduces structural injection and does not replace tool authorization.
+
+Custom-agent/profile and memory management enforce the authenticated caller's
+thread permissions: reads require `threads:read`, writes require `threads:write`,
+and deletions require `threads:delete`. An enabled private workspace or a valid
+internal delegation does not widen token scopes. Run-only scheduled workers and
+the default IM channel worker cannot erase saved memory. Unexpected MCP config
+failures return generic errors and omit credential-bearing exception text.
 
 ### Improper Deployment May Introduce Security Risks
 

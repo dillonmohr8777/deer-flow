@@ -29,7 +29,9 @@ class BrainForgeSlackTests(unittest.IsolatedAsyncioTestCase):
         self.channel._running = True
         self.channel._SocketModeResponse = lambda **kwargs: kwargs
         self.channel._brainforge = SimpleNamespace(
+            matches=Mock(return_value=True),
             prepare=Mock(return_value=SimpleNamespace(message_ts="100.001")),
+            refused=Mock(return_value=False),
             recover=AsyncMock(return_value=0),
             recovery_has_more=False,
             next_recovery_delay=AsyncMock(return_value=None),
@@ -70,6 +72,70 @@ class BrainForgeSlackTests(unittest.IsolatedAsyncioTestCase):
         client.send_socket_mode_response.assert_called_once()
         legacy.assert_not_called()
         self.assertEqual(self.submissions, [])
+
+    async def test_non_brief_event_is_dropped_in_exclusive_mode(self):
+        self.channel._brainforge.matches.return_value = False
+        legacy = Mock()
+        self.channel._handle_message_event = legacy
+        client = SimpleNamespace(send_socket_mode_response=Mock())
+        self.channel._on_socket_event(client, self.request())
+        client.send_socket_mode_response.assert_called_once()
+        legacy.assert_not_called()
+        self.channel._brainforge.prepare.assert_not_called()
+
+    async def test_agent_passthrough_sends_only_non_brief_events_to_agent(self):
+        self.channel._brainforge_config = {"agent_passthrough": True}
+        legacy = Mock()
+        self.channel._handle_message_event = legacy
+        client = SimpleNamespace(send_socket_mode_response=Mock())
+        self.channel._on_socket_event(client, self.request())
+        legacy.assert_not_called()
+        self.assertEqual(len(self.submissions), 1)
+        self.channel._brainforge.matches.return_value = False
+        self.channel._on_socket_event(client, self.request())
+        legacy.assert_called_once()
+        self.assertEqual(client.send_socket_mode_response.call_count, 2)
+        self.assertEqual(self.channel._brainforge.prepare.call_count, 1)
+
+    async def test_refused_brief_in_passthrough_gets_owner_only_reply_not_the_agent(self):
+        self.channel._brainforge_config = {"agent_passthrough": True}
+        self.channel._brainforge.prepare.return_value = None
+        self.channel._brainforge.refused.return_value = True
+        self.channel._post_connection_reply = Mock(return_value=asyncio.sleep(0))
+        legacy = Mock()
+        self.channel._handle_message_event = legacy
+        client = SimpleNamespace(send_socket_mode_response=Mock())
+        req = self.request()
+        req.payload["event"].update(channel="C123", ts="100.002")
+        self.channel._on_socket_event(client, req)
+        legacy.assert_not_called()
+        client.send_socket_mode_response.assert_called_once()
+        self.channel._post_connection_reply.assert_called_once()
+        self.assertIn("owner-only", self.channel._post_connection_reply.call_args.args[1])
+        # The message-type twin of a channel mention is dropped silently, no duplicate reply.
+        req.payload["event"].update(type="message")
+        self.channel._on_socket_event(client, req)
+        self.channel._post_connection_reply.assert_called_once()
+        legacy.assert_not_called()
+
+    async def test_bot_id_event_with_non_string_user_is_ignored_not_raised(self):
+        for user in ({}, ["U123"]):
+            self.channel._handle_message_event({"type": "message", "bot_id": "B1", "user": user, "text": "hi", "channel": "C1", "ts": "1.1"})
+
+    async def test_passthrough_start_subscribes_outbound_for_agent_replies(self):
+        for passthrough, expected in ((False, 0), (True, 1)):
+            channel = slack.SlackChannel(MessageBus(), {"bot_token": "xoxb-synthetic", "app_token": "xapp-synthetic", "brain_forge": {"enabled": True, "agent_passthrough": passthrough}})
+            runtime = SimpleNamespace(validate_transport=AsyncMock(), close=AsyncMock())
+            socket = SimpleNamespace(socket_mode_request_listeners=[], connect=Mock(), close=Mock())
+            with (
+                patch.object(slack, "BrainForgeRuntime", return_value=runtime),
+                patch("slack_sdk.socket_mode.SocketModeClient", return_value=socket),
+                patch.object(channel, "_initialize_operator_web_client", AsyncMock()),
+                patch.object(channel, "_wake_brainforge"),
+                patch.object(channel.bus, "subscribe_outbound") as subscribe,
+            ):
+                await channel.start()
+            self.assertEqual(subscribe.call_count, expected)
 
     async def test_sdk_burst_schedules_one_drain(self):
         client = SimpleNamespace(send_socket_mode_response=Mock())
