@@ -16,6 +16,13 @@ from app.channels.brainforge_runtime import BrainForgeRuntime
 from app.channels.commands import is_known_channel_command
 from app.channels.connection_identity import attach_connection_identity
 from app.channels.message_bus import InboundMessageType, InboundReservation, MessageBus, OutboundMessage, ResolvedAttachment
+from app.channels.slack_approvals import ActionResult as ApprovalActionResult
+from app.channels.slack_approvals import DbApprovalStore, parse_block_action
+from app.channels.slack_approvals import build_message as build_approval_message
+from app.channels.slack_approvals import parse_config as parse_approvals_dm_config
+from app.channels.slack_approvals import route_action as route_approval_action
+from app.channels.slack_approvals import settled_blocks as settled_approval_blocks
+from deerflow.approvals import register_created_hook, unregister_created_hook
 
 logger = logging.getLogger(__name__)
 
@@ -122,6 +129,8 @@ class SlackChannel(Channel):
         self._brainforge_drain_token = None
         self._brainforge_drain_wakeup = False
         self._brainforge_recovery_timer: asyncio.TimerHandle | None = None
+        self._approvals_dm = parse_approvals_dm_config(config.get("approvals_dm"))
+        self._approvals_store = None
 
     async def start(self) -> None:
         if self._running:
@@ -181,6 +190,8 @@ class SlackChannel(Channel):
                 logger.error("Brain Forge Slack transport connection failed")
                 return
         self._running = True
+        if self._approvals_dm.enabled and not self._brainforge:
+            register_created_hook(self._notify_approval)
         # Passthrough mode still delivers agent replies, so it needs the outbound path.
         if not self._brainforge or self._brainforge_config.get("agent_passthrough"):
             self.bus.subscribe_outbound(self._on_outbound)
@@ -198,6 +209,7 @@ class SlackChannel(Channel):
             self._brainforge_recovery_timer.cancel()
             self._brainforge_recovery_timer = None
         self.bus.unsubscribe_outbound(self._on_outbound)
+        unregister_created_hook(self._notify_approval)
         await self._close_and_drain_threadsafe_futures()
         if self._brainforge:
             await self._brainforge.close()
@@ -354,6 +366,19 @@ class SlackChannel(Channel):
         except Exception:
             logger.exception("[Slack] failed to send running reply in channel=%s", channel_id)
 
+    def _send_empty_mention_reply(self, channel_id: str, thread_ts: str) -> None:
+        """Answer a bare @mention so the user knows to put the ask in the same message (called from SDK thread)."""
+        if not self._web_client:
+            return
+        try:
+            self._web_client.chat_postMessage(
+                channel=channel_id,
+                text="Hey, what do you need? Mention me with the ask in the same message.",
+                thread_ts=thread_ts,
+            )
+        except Exception:
+            logger.exception("[Slack] failed to send empty-mention reply in channel=%s", channel_id)
+
     def _on_socket_event(self, client, req) -> None:
         """Called by slack-sdk for each Socket Mode event."""
         if not self._running:
@@ -388,6 +413,9 @@ class SlackChannel(Channel):
             client.send_socket_mode_response(response)
 
             event_type = req.type
+            if event_type == "interactive" and self._approvals_dm.enabled:
+                self._handle_interactive(req.payload)
+                return
             if event_type != "events_api":
                 return
 
@@ -409,6 +437,59 @@ class SlackChannel(Channel):
 
         except Exception:
             logger.exception("Error processing Slack event")
+
+    # -- approvals DM (channels.slack.approvals_dm) --------------------------
+
+    async def _notify_approval(self, row: dict) -> None:
+        """Created-row hook: DM each configured user the new pending approval with buttons."""
+        if not self._approvals_dm.enabled or not self._web_client or row.get("status") != "pending":
+            return
+        text, blocks = build_approval_message(row, self._approvals_dm)
+        for user_id in sorted(self._approvals_dm.user_ids):
+            try:
+                opened = await asyncio.to_thread(self._web_client.conversations_open, users=user_id)
+                dm_channel = opened["channel"]["id"]
+                await asyncio.to_thread(self._web_client.chat_postMessage, channel=dm_channel, text=text, blocks=blocks)
+            except Exception:
+                logger.warning("[Slack] approvals DM to %s failed for item %s", user_id, row.get("id"), exc_info=True)
+
+    def _handle_interactive(self, payload: dict) -> None:
+        action = parse_block_action(payload)
+        if action is None:
+            return
+        if self._loop and self._loop.is_running():
+            self._submit_threadsafe_coroutine(self._process_approval_action(action), self._loop, name="approval_action", msg_id=action.item_id)
+
+    async def _process_approval_action(self, action) -> None:
+        if self._approvals_store is None:
+            from deerflow.persistence.engine import get_session_factory
+
+            session_factory = get_session_factory()
+            if session_factory is None:
+                result = ApprovalActionResult("missing", "The approvals inbox is unavailable.")
+            else:
+                self._approvals_store = DbApprovalStore(session_factory)
+        if self._approvals_store is not None:
+            try:
+                result = await route_approval_action(action, self._approvals_dm, self._approvals_store)
+            except Exception:
+                logger.exception("[Slack] approval action failed for %s", action.item_id)
+                result = ApprovalActionResult("missing", "Something went wrong; nothing changed. Use the web inbox.")
+        if not self._web_client or not action.channel:
+            return
+        try:
+            if result.kind in ("approved", "skipped") and action.message_ts:
+                await asyncio.to_thread(
+                    self._web_client.chat_update,
+                    channel=action.channel,
+                    ts=action.message_ts,
+                    text=result.text,
+                    blocks=settled_approval_blocks(action.blocks, result.text),
+                )
+            else:
+                await asyncio.to_thread(self._web_client.chat_postEphemeral, channel=action.channel, user=action.user_id, text=result.text)
+        except Exception:
+            logger.warning("[Slack] could not answer approval action for %s", action.item_id, exc_info=True)
 
     def _wake_brainforge(self) -> None:
         """Coalesce SDK bursts into one tracked durable-receipt drain."""
@@ -467,6 +548,8 @@ class SlackChannel(Channel):
         if event.get("type") == "app_mention":
             text = _about_question_as_command(_strip_leading_slack_bot_mention(text, self._bot_user_id))
         if not text:
+            if event.get("type") == "app_mention" and (not self._allowed_users or user_id in self._allowed_users):
+                self._send_empty_mention_reply(event.get("channel", ""), event.get("thread_ts") or event.get("ts", ""))
             return
 
         connect_code = self._pending_connect_code(text)

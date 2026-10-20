@@ -1,0 +1,7 @@
+[Unit]
+Description=MomoBot health check (receipt in /var/log/momobot/health.jsonl)
+After=momobot.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/momobot/src/deploy/momentum/lightsail/health.sh

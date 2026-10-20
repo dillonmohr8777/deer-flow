@@ -1,0 +1,8 @@
+# Pins Caddy to a fixed address on the compose network so nginx can trust the
+# X-Forwarded-For Caddy sets (see nginx-realip.conf). Layered after
+# ../vps/compose.public.yaml by up.sh; the subnet comes from ../mac/compose.funnel.yaml.
+services:
+  caddy:
+    networks:
+      deer-flow:
+        ipv4_address: 172.30.26.20

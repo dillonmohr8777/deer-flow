@@ -1,7 +1,14 @@
 # Always-on MomoBot on a Linux VPS
 
-The live Momentum instance (today `:2026` on Dillon's Windows PC, tailnet only)
-moves to an always-on Linux server at `https://momobot.needmomentum.com`, so
+> **Current plan (Oct 2026):** prod moves from the Mac mini to one AWS Lightsail
+> instance with SQLite, Caddy and SSM secrets. That kit is
+> [`../lightsail/`](../lightsail/RUNBOOK.md) and reuses `Caddyfile`,
+> `compose.public.yaml` and `dotenv-get.sh` from this folder. This README
+> describes the older Postgres-on-a-VPS variant (`restart.sh`, `backup.sh`); the
+> Windows PC and `hermes-vps` it mentions are retired.
+
+The live Momentum instance (originally `:2026` on Dillon's Windows PC, tailnet only;
+since Sep 2026 on the Mac mini behind Tailscale Funnel) moves to an always-on Linux server at `https://momobot.needmomentum.com`, so
 the team can sign in with Google from anywhere. `:2028` (Dillon's owner-only
 workspace, with host shell and personal Gmail/Drive) does **not** move here
 and is never merged into this instance.
@@ -20,11 +27,11 @@ and is never merged into this instance.
 
 | Step | Who | Why |
 |---|---|---|
-| Power on `hermes-vps`, run `sudo tailscale up --ssh` | Dillon | Provider console access |
+| Create the server and join it to the tailnet if you use Tailscale SSH (`sudo tailscale up --ssh`) | Dillon | Provider console access |
 | Google OAuth client (consent screen in **Testing**, the invitees as test users; redirect `https://momobot.needmomentum.com/api/v1/auth/callback/google`) | Dillon | Credentials |
 | DNS: `A momobot -> <VPS public IP>` at SiteGround | Dillon or Mac | Momentum's domain |
 | Everything else below | Claude, over Tailscale SSH | |
-| Data cutover from the PC (`:2026`) | Claude, **only on Dillon's go** | Moves client data |
+| Data cutover from the current host (Mac mini `:2026`) | Claude, **only on Dillon's go** | Moves client data |
 
 ## 1. Server basics (Ubuntu or Debian, once)
 
@@ -54,7 +61,7 @@ MOMENTUM_FRONTEND_IMAGE=<the frontend tag>
 POSTGRES_PASSWORD=<long random>
 GOOGLE_OAUTH_CLIENT_ID=<from Google Cloud>
 GOOGLE_OAUTH_CLIENT_SECRET=<from Google Cloud>
-OPENROUTER_API_KEY=<same keys the PC stack uses>
+OPENROUTER_API_KEY=<same keys the current prod stack uses>
 AI_GATEWAY_API_KEY=<same>
 ```
 
@@ -104,7 +111,7 @@ with only the invited people as test users.
 `restart.sh` never builds. Put the images on the server one of two ways:
 
 - **Load the verified tags** from a machine that has them:
-  `docker save deer-flow-gateway:<tag> deer-flow-frontend:<tag> | ssh hermes-vps docker load`
+  `docker save deer-flow-gateway:<tag> deer-flow-frontend:<tag> | ssh <server> docker load`
   then set `MOMENTUM_GATEWAY_IMAGE` / `MOMENTUM_FRONTEND_IMAGE` in `.env`.
 - **Build on the server** from a reviewed commit:
   `git checkout <commit> && docker compose -f docker/docker-compose.yaml build gateway frontend`,
@@ -134,7 +141,7 @@ Verify: `https://momobot.needmomentum.com/login` shows **Continue with Google**;
 created on first run: copy it into the password manager **that day**, or the
 backups can't be restored if the server dies. Off-machine copy: the Mac pulls
 the encrypted files nightly over Tailscale (launchd job running
-`rsync -a hermes-vps:/srv/momobot/backups/ ~/MomoBot-Backups/`); the files are
+`rsync -a <server>:/srv/momobot/backups/ ~/MomoBot-Backups/`); the files are
 useless without the key, which never leaves the password manager and the server.
 
 This server runs Postgres (`compose.postgres.yaml`), so **users, threads,
@@ -172,13 +179,13 @@ files, sandbox state) with none of the actual accounts, threads or messages —
 volume-only restore shows no tables at all, since Postgres owns its own data
 directory in `postgres-data`, separate from `deer-flow_gateway-data`.
 
-## 6. Data cutover from the PC (only on Dillon's go)
+## 6. Data cutover from the current host (only on Dillon's go)
 
-1. Freeze writes on the PC stack (announce a short window).
-2. On the PC: `python deploy/momentum/offsite_backup.py` (encrypted snapshot of `deer-flow_gateway-data`).
+1. Freeze writes on the current stack (announce a short window).
+2. On the current host: `python deploy/momentum/offsite_backup.py` (the Mac prod volume is `momobot-prod_gateway-data`; the SQLite-only path is `../lightsail/migrate-data.sh`) (encrypted snapshot of `deer-flow_gateway-data`).
 3. Copy the archive to the server over Tailscale; restore with `offsite_backup.py --restore FILE` into `deer-flow_gateway-data` before the first start.
-4. If the PC runs SQLite and the server runs Postgres, follow `../POSTGRES-REHEARSAL.md` for the SQLite to Postgres step. Rehearse on a copy first.
-5. Start the server, sign in, and check the Momentum workspace, a client workspace, and a recent thread against the PC.
+4. If the old host runs SQLite and the server runs Postgres, follow `../POSTGRES-REHEARSAL.md` for the SQLite to Postgres step. Rehearse on a copy first.
+5. Start the server, sign in, and check the Momentum workspace, a client workspace, and a recent thread against the old host. Slack Socket Mode must run in one place only: turn `channels.slack` off on the old host first.
 6. Only then create the team's invites (Momentum workspace, Invite member) and send each person their link in the same Slack DM they already have.
 
-Rollback: stop the server stack; the PC stack is untouched and can be unfrozen.
+Rollback: stop the server stack; the old host's stack is untouched and can be unfrozen (and its Slack channel turned back on).
