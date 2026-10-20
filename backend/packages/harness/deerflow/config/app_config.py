@@ -36,6 +36,7 @@ from deerflow.config.pii_redaction_config import PiiRedactionConfig
 from deerflow.config.projects_config import ProjectsConfig
 from deerflow.config.read_before_write_config import ReadBeforeWriteConfig
 from deerflow.config.reload_boundary import format_field_description
+from deerflow.config.roster_config import RosterConfig
 from deerflow.config.run_events_config import RunEventsConfig
 from deerflow.config.run_ownership_config import RunOwnershipConfig
 from deerflow.config.runtime_paths import existing_project_file
@@ -361,6 +362,13 @@ class AppConfig(BaseModel):
         description=format_field_description(
             "subagent_batches",
             field_doc="Durable native-subagent batch scheduling, lease, and recovery configuration.",
+        ),
+    )
+    roster: RosterConfig = Field(
+        default_factory=RosterConfig,
+        description=format_field_description(
+            "roster",
+            field_doc="Slack account-manager roster (user -> role -> clients) and the repo allow/deny lists the MomoBot desktop bridge honors.",
         ),
     )
     checkpointer: CheckpointerConfig | None = Field(

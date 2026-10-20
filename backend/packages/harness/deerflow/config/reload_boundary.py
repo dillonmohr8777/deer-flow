@@ -83,6 +83,7 @@ STARTUP_ONLY_FIELDS: dict[str, str] = {
     ),
     "subagent_runtime": ("the shared native-subagent admission controller and isolated execution loop are configured once during Gateway lifespan startup; changing process slots, queue policy, or queue bounds requires a restart."),
     "subagent_batches": ("the durable subagent batch service is constructed and started once during Gateway lifespan startup; scheduler limits, leases, and recovery behavior are captured by that service instance."),
+    "roster": ("the Slack roster and repo allow-list are copied onto app.state during Gateway lifespan startup; edits need a restart."),
     "run_ownership": (
         "RunOwnershipConfig is captured once into RunManager at langgraph_runtime() startup; the lease heartbeat background task is created and "
         "started there, and heartbeat_enabled / lease_seconds / grace_seconds are not re-read on config.yaml edits."

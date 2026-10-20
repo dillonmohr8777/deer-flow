@@ -97,6 +97,9 @@ class SlackChannel(Channel):
         - ``allowed_users``: (optional) List of allowed Slack user IDs, or a
           single Slack user ID string as shorthand. Empty = allow all. Other
           scalar values are treated as a single string with a warning.
+        - ``reply_in_thread``: (optional, default true) Set ``false`` to post
+          replies as top-level channel messages instead of thread replies.
+          Conversation continuity still keys on the originating thread/message.
     """
 
     def __init__(self, bus: MessageBus, config: dict[str, Any]) -> None:
@@ -105,6 +108,7 @@ class SlackChannel(Channel):
         self._web_client = None
         self._loop: asyncio.AbstractEventLoop | None = None
         self._allowed_users = _normalize_allowed_users(config.get("allowed_users", []))
+        self._reply_in_thread = config.get("reply_in_thread", True) is not False
         self._channel_policies = config.get("channel_policies", {})
         self._engaged_threads: dict[tuple[str, str, str], None] = {}
         self._web_client_factory = config.get("web_client_factory")
@@ -216,8 +220,9 @@ class SlackChannel(Channel):
             "channel": msg.chat_id,
             "text": _slack_md_converter.convert(_escape_slack_text(msg.text)),
         }
-        if msg.thread_ts:
-            kwargs["thread_ts"] = msg.thread_ts
+        reply_ts = msg.thread_ts if self._reply_in_thread else None
+        if reply_ts:
+            kwargs["thread_ts"] = reply_ts
 
         async def post_message() -> None:
             await asyncio.to_thread(web_client.chat_postMessage, **kwargs)
@@ -264,7 +269,7 @@ class SlackChannel(Channel):
                 "filename": attachment.filename,
                 "title": attachment.filename,
             }
-            if msg.thread_ts:
+            if msg.thread_ts and self._reply_in_thread:
                 kwargs["thread_ts"] = msg.thread_ts
 
             await asyncio.to_thread(web_client.files_upload_v2, **kwargs)
@@ -335,7 +340,12 @@ class SlackChannel(Channel):
         self._add_reaction_with_client(self._web_client, channel_id, timestamp, emoji)
 
     def _send_running_reply(self, channel_id: str, thread_ts: str) -> None:
-        """Send a 'Working on it......' reply in the thread (called from SDK thread)."""
+        """Send a 'Working on it......' reply in the thread (called from SDK thread).
+
+        Skipped when ``reply_in_thread`` is false: the eyes reaction already acknowledges.
+        """
+        if not self._reply_in_thread:
+            return
         if not self._web_client:
             return
         try:
@@ -699,7 +709,7 @@ class SlackChannel(Channel):
         if not self._web_client or not channel_id:
             return
         kwargs: dict[str, Any] = {"channel": channel_id, "text": text}
-        if thread_ts:
+        if thread_ts and self._reply_in_thread:
             kwargs["thread_ts"] = thread_ts
         try:
             await asyncio.to_thread(self._web_client.chat_postMessage, **kwargs)
