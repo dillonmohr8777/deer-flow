@@ -190,3 +190,19 @@ def test_allowlisted_user_posting_via_third_party_app_is_admitted():
     for event in ({**base, "user": "UMEMBER"}, {**base, "user": "UBOT"}, {**base, "user": "UOWNER", "subtype": "bot_message"}):
         adapter._handle_message_event(event, team_id=TEAM)
     assert adapter._make_inbound.call_count == 1
+
+
+@pytest.mark.parametrize("text", ["what is MomoBot", "<@UBOT> what is MomoBot?"])
+def test_dm_about_question_takes_command_path(text):
+    """A DM is a plain ``message`` event, so the About alias must not depend on app_mention."""
+    adapter = SlackChannel(bus=MessageBus(), config={"allowed_users": ["UOWNER"], "bot_user_id": "UBOT"})
+    adapter._make_inbound = MagicMock(wraps=adapter._make_inbound)
+    adapter._handle_message_event({"type": "message", "channel_type": "im", "channel": "DOWNER", "user": "UOWNER", "text": text, "ts": "1"}, team_id=TEAM)
+    assert adapter._make_inbound.call_args.kwargs["text"] == "/momobot about"
+
+
+def test_channel_message_without_mention_is_not_aliased():
+    adapter = SlackChannel(bus=MessageBus(), config={"allowed_users": ["UOWNER"], "bot_user_id": "UBOT"})
+    adapter._make_inbound = MagicMock(wraps=adapter._make_inbound)
+    adapter._handle_message_event({"type": "message", "channel_type": "channel", "channel": "COPEN", "user": "UOWNER", "text": "what is MomoBot", "ts": "1"}, team_id=TEAM)
+    assert adapter._make_inbound.call_args.kwargs["text"] == "what is MomoBot"

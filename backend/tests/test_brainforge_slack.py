@@ -122,6 +122,21 @@ class BrainForgeSlackTests(unittest.IsolatedAsyncioTestCase):
         for user in ({}, ["U123"]):
             self.channel._handle_message_event({"type": "message", "bot_id": "B1", "user": user, "text": "hi", "channel": "C1", "ts": "1.1"})
 
+    async def test_trusted_app_ids_gate_bot_id_events_in_the_agent_path(self):
+        channel = slack.SlackChannel(MessageBus(), {"allowed_users": ["U123"], "trusted_app_ids": ["ACOMPOSIO"]})
+        self.assertEqual(channel._brainforge_config["trusted_app_ids"], ["ACOMPOSIO"])
+        channel._pending_connect_code = Mock(return_value=None)
+        base = {"type": "message", "user": "U123", "text": "hi", "channel": "C1", "ts": "1.1"}
+        for extra, reaches_text_check in (({"bot_id": "B1", "app_id": "ACOMPOSIO"}, True), ({"bot_id": "B1", "app_id": "AOTHER"}, False), ({"bot_id": "B1"}, False), ({}, True)):
+            channel._pending_connect_code.reset_mock()
+            channel._handle_message_event({**base, **extra})
+            self.assertEqual(channel._pending_connect_code.called, reaches_text_check, extra)
+        # Default (no list) keeps the old behavior: any app posting as an allowlisted user.
+        open_channel = slack.SlackChannel(MessageBus(), {"allowed_users": ["U123"]})
+        open_channel._pending_connect_code = Mock(return_value=None)
+        open_channel._handle_message_event({**base, "bot_id": "B1", "app_id": "AOTHER"})
+        open_channel._pending_connect_code.assert_called_once()
+
     async def test_passthrough_start_subscribes_outbound_for_agent_replies(self):
         for passthrough, expected in ((False, 0), (True, 1)):
             channel = slack.SlackChannel(MessageBus(), {"bot_token": "xoxb-synthetic", "app_token": "xapp-synthetic", "brain_forge": {"enabled": True, "agent_passthrough": passthrough}})

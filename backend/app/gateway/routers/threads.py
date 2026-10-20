@@ -1725,6 +1725,10 @@ async def get_thread_history(
                 values["thread_data"] = thread_data
 
             if is_latest_checkpoint:
+                # The UI restores from history, so include its persisted file list.
+                # Preserve an explicit empty list to clear a stale client projection.
+                if isinstance(artifacts := materialized_values.get("artifacts"), list):
+                    values["artifacts"] = artifacts
                 messages = materialized_values.get("messages")
                 if messages:
                     serialized_msgs = serialize_channel_values_for_api({"messages": messages}).get("messages", [])
