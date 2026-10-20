@@ -61,6 +61,7 @@ function kit(showPricing: boolean): BrandKit {
         poster_vertical: "stills/a-tall.png",
       },
       second_video: {
+        title: "Second Clip TV",
         seconds: 7,
         landscape: "videos/b-wide.mp4",
         vertical: "videos/b-tall.mp4",
@@ -125,6 +126,16 @@ describe("LineupContent", () => {
     }
     expect(videos[0]!.getAttribute("src")).toContain("videos/a-wide.mp4");
     expect(videos[0]!.getAttribute("poster")).toContain("stills/a-wide.png");
+  });
+
+  it("labels a video with its kit title, else a title from its key", () => {
+    render(<LineupContent kit={kit(false)} />);
+    expect(
+      document.querySelector('video[aria-label^="Second Clip TV,"]'),
+    ).not.toBeNull();
+    expect(
+      document.querySelector('video[aria-label^="First video,"]'),
+    ).not.toBeNull();
   });
 
   it("uses the vertical cut on narrow screens", () => {
