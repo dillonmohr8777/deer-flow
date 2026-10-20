@@ -21,21 +21,26 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field, model_validator
 
 from app.gateway.authz import require_permission
-from app.gateway.deps import get_client_repo, get_current_user, get_subagent_batch_repo
+from app.gateway.deps import get_client_repo, get_current_user, get_current_user_from_request, get_subagent_batch_repo
 from app.gateway.internal_auth import get_trusted_internal_owner_user_id
-from app.gateway.routers.clients import _require_client_visible
+from app.gateway.routers.clients import _is_active_org_admin, _require_client_visible
+from deerflow.config.roster_config import RosterConfig, client_allowed, scope_for
 from deerflow.config.subagent_batches_config import SubagentBatchesConfig
 from deerflow.runtime.user_context import resolve_organization_id
 
 router = APIRouter(prefix="/api/fleet/work", tags=["fleet-work"])
 
 FLEET_EXECUTOR = "fleet"
-Lane = Literal["haiku", "spark", "morph", "sonnet", "luna", "ultrafast"]
+Lane = Literal["haiku", "spark", "morph", "sonnet", "luna", "ultrafast", "desktop"]
 DataClass = Literal["public", "synthetic", "private"]
 Project = Literal["philadelphia", "backend", "prospect-radar", "outreach"]
 PROJECTS = ("philadelphia", "backend", "prospect-radar", "outreach")
 # Contributor and Ultrafast routes are not admitted for client/private text.
 PUBLIC_ONLY_LANES = frozenset({"spark", "ultrafast"})
+# "desktop" runs on a Mac host through the MomoBot desktop bridge. Private data is
+# allowed, it never retries (a prompt can have side effects), and it stays
+# unclaimable until an org owner/admin approves it (approval_state).
+DESKTOP_LANE = "desktop"
 _MAX_ERROR_CHARS = 4_000
 _LEASE_OWNER_FIELD = Field(min_length=1, max_length=128)
 
@@ -59,9 +64,16 @@ class FleetBatchSubmit(BaseModel):
     project: Project | None = None
     source_ref: str | None = Field(default=None, min_length=1, max_length=256, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:/-]*$")
     client_id: str | None = Field(default=None, min_length=1, max_length=96, pattern=r"^[a-z0-9][a-z0-9-]{0,95}$")
+    requester: str | None = Field(default=None, min_length=1, max_length=64, pattern=r"^[A-Z0-9]+$")  # Slack user id, desktop lane only
 
     @model_validator(mode="after")
     def validate_project_binding(self) -> FleetBatchSubmit:
+        if self.lane == DESKTOP_LANE:
+            if self.client_id is None or self.requester is None or self.project is not None or self.source_ref is not None:
+                raise ValueError("Desktop jobs require client_id and requester, and take no project")
+            return self
+        if self.requester is not None:
+            raise ValueError("requester is only valid on the desktop lane")
         if (self.project is None) != (self.source_ref is None):
             raise ValueError("Project jobs require both project and a safe canonical source reference")
         if self.source_ref is not None and (".." in self.source_ref or "//" in self.source_ref):
@@ -98,6 +110,11 @@ class FinalizeRequest(LeaseRequest):
     model_name: str | None = Field(default=None, max_length=128)
     stop_reason: str | None = Field(default=None, max_length=64)
     token_usage: dict[str, Any] | None = None
+
+
+def _roster(request: Request) -> RosterConfig:
+    config = getattr(request.app.state, "roster_config", None)
+    return config if isinstance(config, RosterConfig) else RosterConfig()  # fail closed: empty roster denies everyone
 
 
 def _config(request: Request) -> SubagentBatchesConfig:
@@ -167,6 +184,8 @@ def claimed_view(item: dict[str, Any], *, lease_expires_at: str) -> dict[str, An
         "effort": spec.get("effort"),
         "project": spec.get("project"),
         "client_id": spec.get("client_id"),
+        "requester": spec.get("requester"),
+        "approval_state": spec.get("approval_state", "none"),
         "source_ref": spec.get("source_ref"),
         "output_policy": spec.get("output_policy", "draft-only"),
     }
@@ -183,6 +202,11 @@ async def submit_fleet_batch(request: Request, body: FleetBatchSubmit) -> dict[s
             raise HTTPException(status_code=422, detail="Ultrafast requires one attempt and at most 4096 output tokens")
         if any(len(item.prompt.encode("utf-8")) > 16_000 for item in body.items):
             raise HTTPException(status_code=422, detail="Ultrafast prompt exceeds 16000 UTF-8 bytes")
+    if body.lane == DESKTOP_LANE:
+        if body.max_attempts not in (None, 1):
+            raise HTTPException(status_code=422, detail="Desktop jobs run once (max_attempts 1)")
+        if not client_allowed(scope_for(_roster(request), body.requester), body.client_id):
+            raise HTTPException(status_code=403, detail="Requester is not rostered for this client")
     config = _config(request)
     if len(body.items) > config.max_items_per_batch:
         raise HTTPException(status_code=422, detail=f"Batch item count must be between 1 and {config.max_items_per_batch}")
@@ -192,7 +216,7 @@ async def submit_fleet_batch(request: Request, body: FleetBatchSubmit) -> dict[s
     max_running = config.default_max_running_items if body.max_running_items is None else body.max_running_items
     if max_running > config.max_running_items_per_batch:
         raise HTTPException(status_code=422, detail=f"max_running_items must not exceed {config.max_running_items_per_batch}")
-    max_attempts = 1 if body.lane == "ultrafast" else config.max_attempts if body.max_attempts is None else body.max_attempts
+    max_attempts = 1 if body.lane in ("ultrafast", DESKTOP_LANE) else config.max_attempts if body.max_attempts is None else body.max_attempts
     if max_attempts > config.max_attempts:
         raise HTTPException(status_code=422, detail=f"max_attempts must not exceed {config.max_attempts}")
     max_live = min(max(config.default_max_live_items, max_running), config.max_live_items_per_batch)
@@ -200,7 +224,7 @@ async def submit_fleet_batch(request: Request, body: FleetBatchSubmit) -> dict[s
     repo = get_subagent_batch_repo(request)
     if body.project is not None and not await repo.owns_thread_for_fleet_project(thread_id=body.thread_id, user_id=owner):
         raise HTTPException(status_code=404, detail="Project thread not found")
-    if body.client_id is not None:
+    if body.client_id is not None and body.lane != DESKTOP_LANE:
         await _require_canonical_client_access(request, body.client_id, owner_id=owner)
     try:
         return await repo.create_batch(
@@ -210,7 +234,11 @@ async def submit_fleet_batch(request: Request, body: FleetBatchSubmit) -> dict[s
             run_id=None,
             tool_call_id=None,
             submission_key=(
-                hashlib.sha256((f"project:{body.project}:client:{body.client_id}:{body.submission_key}" if body.client_id else f"project:{body.project}:{body.submission_key}").encode()).hexdigest() if body.project else body.submission_key
+                hashlib.sha256(f"desktop:{body.requester}:{body.client_id}:{body.submission_key}".encode()).hexdigest()
+                if body.lane == DESKTOP_LANE
+                else hashlib.sha256((f"project:{body.project}:client:{body.client_id}:{body.submission_key}" if body.client_id else f"project:{body.project}:{body.submission_key}").encode()).hexdigest()
+                if body.project
+                else body.submission_key
             ),
             title=body.title,
             subagent_type=f"fleet-{body.lane}@{body.project}" if body.project else f"fleet-{body.lane}",
@@ -226,10 +254,24 @@ async def submit_fleet_batch(request: Request, body: FleetBatchSubmit) -> dict[s
                 "max_tokens": 4096 if body.lane == "ultrafast" and body.max_tokens is None else body.max_tokens,
                 **({"project": body.project, "source_ref": body.source_ref, "output_policy": "draft-only"} if body.project else {}),
                 **({"client_id": body.client_id} if body.client_id else {}),
+                **({"requester": body.requester, "approval_state": "pending", "output_policy": "draft-only"} if body.lane == DESKTOP_LANE else {}),
             },
         )
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.post("/batches/{batch_id}/approve")
+@require_permission("approvals", "write")
+async def approve_desktop_batch(batch_id: str, request: Request) -> dict[str, Any]:
+    """Release a pending desktop batch to the host. Org owner/admin only; repeat approvals are no-ops."""
+    reviewer = str((await get_current_user_from_request(request)).id)
+    if not await _is_active_org_admin(reviewer):
+        raise HTTPException(status_code=403, detail="Only an organization owner or admin can approve desktop jobs.")
+    batch = await get_subagent_batch_repo(request).approve_fleet_batch(batch_id, approver_id=reviewer, now=datetime.now(UTC))
+    if batch is None:
+        raise HTTPException(status_code=404, detail="Desktop job not found")
+    return batch
 
 
 @router.post("/claim")

@@ -941,6 +941,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         app.state.subagent_batches_available = False
         # Fleet hosts read lease and result limits from the same config (routers/fleet_work.py).
         app.state.subagent_batches_config = subagent_batches_config
+        # Desktop-lane submissions are checked against the Slack roster (routers/fleet_work.py).
+        app.state.roster_config = getattr(startup_config, "roster", None)
         set_subagent_batch_submitter(None)
         if subagent_batches_config.enabled and batch_repo is None:
             raise RuntimeError("subagent_batches.enabled requires database.backend sqlite or postgres")

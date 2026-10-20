@@ -231,3 +231,7 @@ SDK review grants are host-only; default off. No HTTP or paid activation.
 Default-off claude_sdk admits one pinned synthetic line-edit fixture, no private
 sources/external tools. Verify exact worker ledger/output hashes; no uncertain
 replay. Three requests at $0.03 each. Details/tests: [WORKFLOWS.md](../../docs/WORKFLOWS.md).
+
+### Desktop lane and Slack roster
+
+`fleet_work` lane `desktop` is roster-gated at submit (`roster` config, `app.state.roster_config`), single-attempt, and unclaimable until `approval_state` is `approved` (`POST /api/fleet/work/batches/{id}/approve`, org owner/admin). See [FLEET_PROJECT_JOBS.md](../../docs/FLEET_PROJECT_JOBS.md). Tests: `tests/test_fleet_desktop_lane.py`, `tests/test_roster_scope.py`, `tests/test_momobot_desktop_runner.py`.
