@@ -22,6 +22,7 @@ class SlackAdapter:
     async def execute(self, action: dict[str, Any]) -> AdapterOutcome:
         from app.channels.message_bus import OutboundMessage
         from app.channels.service import get_channel_service
+        from app.channels.slack import SlackSendOutcomeUnknown
 
         service = get_channel_service()
         channel = service.get_channel("slack") if service is not None else None
@@ -30,20 +31,21 @@ class SlackAdapter:
             return AdapterOutcome("failed", error="Slack is not configured on this Gateway")
         payload = action["payload"]
         thread_ts = payload.get("thread_ts")
+        message = OutboundMessage(
+            channel_name="slack",
+            chat_id=action["target"],
+            thread_id=action.get("thread_id") or "",
+            text=payload["text"],
+            thread_ts=thread_ts if isinstance(thread_ts, str) and thread_ts else None,
+        )
         try:
-            await channel.send(
-                OutboundMessage(
-                    channel_name="slack",
-                    chat_id=action["target"],
-                    thread_id=action.get("thread_id") or "",
-                    text=payload["text"],
-                    thread_ts=thread_ts if isinstance(thread_ts, str) and thread_ts else None,
-                )
-            )
+            await channel.send(message)
+        except SlackSendOutcomeUnknown:
+            return AdapterOutcome("approved", message.metadata["slack_delivery"], error="outcome_unknown: reconcile Slack destination before retrying")
         except Exception as exc:
             logger.exception("Approved Slack action %s failed", action["id"])
             return AdapterOutcome("failed", error=f"Slack send failed: {type(exc).__name__}")
-        return AdapterOutcome("executed", {"channel": action["target"]})
+        return AdapterOutcome("executed", message.metadata.get("slack_delivery", {"channel": action["target"]}))
 
 
 class ReadyToSendStub:
