@@ -183,3 +183,7 @@ In the existing private config, append only the ten `composio-marketing_<tool-na
 targets from this policy to `authorization.provider.config.roles.user.tools.allow`.
 Preserve every other permission and role; do not add a wildcard or an execution helper.
 Verify all ten targets are allowed and private Composio tools remain denied.
+
+## Momo Daily staff portraits
+
+Keep the seven staff portraits outside Git in `/opt/momobot/data/brand/daily-people`, named by the slugs in `frontend/src/components/momentum/daily/staff-box.tsx`, as WebP files. The EC2 layer mounts that directory read-only into the frontend public assets. The existing encrypted brand backup includes it. Before release, compare each staged file SHA-256 with its source receipt; after release, fetch all seven rendered portraits and reject placeholder fallbacks. Never add these private images to the public repository or bake them into an untracked local build.

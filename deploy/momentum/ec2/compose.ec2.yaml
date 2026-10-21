@@ -3,6 +3,10 @@
 # with the Mac paths replaced by /opt/momobot. Brain and client_browser MCP stay off in the cloud
 # extensions_config: both call services that only run on the Mac.
 services:
+  frontend:
+    volumes:
+      # Private staff portraits survive image rebuilds and use the existing brand backup.
+      - /opt/momobot/data/brand/daily-people:/app/frontend/public/momentum/daily/people:ro
   gateway:
     environment:
       - MOMO_ADMISSION_DIR=/var/momo-admission
