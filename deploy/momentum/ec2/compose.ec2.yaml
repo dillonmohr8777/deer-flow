@@ -7,6 +7,8 @@ services:
     environment:
       - MOMO_ADMISSION_DIR=/var/momo-admission
       - MOMO_LOBBY_NOTES_DIR=/var/momo-lobby-notes
+      # The base compose sets GITHUB_TOKEN from GITHUB_PERSONAL_ACCESS_TOKEN (unset here), which would blank it.
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-}
     volumes:
       - /opt/momobot/data/skills:/app/skills:ro
       - /opt/momobot/data/admission:/var/momo-admission
