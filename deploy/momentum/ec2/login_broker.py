@@ -32,15 +32,14 @@ OWNER = "momobot-isolated-mcp"
 UUID = re.compile(r"[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}")
 EDITABLE = ":not([readonly]):not([disabled]):not([type=hidden])"
 # Priority order, best first: a catch-all text box is the last resort, never a search box.
-USER = [f"input{s}{EDITABLE}" for s in ("[autocomplete=username]", "[type=email]", "[name*=email i]", "[id*=email i]",
-                                        "[name*=user i]", "[id*=user i]", "[name=login]")] + \
-       [f"form:has(input[type=password]) input[type=text]{EDITABLE}:not([name*=search i])",
-        f"form:not([role=search]) input[type=text]{EDITABLE}:not([name*=search i])"]
+USER = [f"input{s}{EDITABLE}" for s in ("[autocomplete=username]", "[type=email]", "[name*=email i]", "[id*=email i]", "[name*=user i]", "[id*=user i]", "[name=login]")] + [
+    f"form:has(input[type=password]) input[type=text]{EDITABLE}:not([name*=search i])",
+    f"form:not([role=search]) input[type=text]{EDITABLE}:not([name*=search i])",
+]
 PASS = f"input[type=password]{EDITABLE}"
-OTP = [f"input{s}{EDITABLE}" for s in ("[autocomplete=one-time-code]", "[name*=otp i]", "[id*=otp i]", "[name*=totp i]",
-                                       "[name*=mfa i]", "[name*=2fa i]", "[name*=code i]", "[id*=code i]")]
-OTP_WORDS = ("verification code", "authentication code", "security code", "two-factor", "2-step", "two-step",
-             "one-time", "authenticator", "6-digit")
+OTP = [f"input{s}{EDITABLE}" for s in ("[autocomplete=one-time-code]", "[name*=otp i]", "[id*=otp i]", "[name*=totp i]", "[name*=mfa i]", "[name*=2fa i]", "[name*=code i]", "[id*=code i]")]
+OTP_WORDS = ("verification code", "authentication code", "security code", "two-factor", "2-step", "two-step", "one-time", "authenticator", "6-digit")
+
 
 def host_allowed(page_url: str, websites: list[str]) -> bool:
     host = (urlsplit(page_url).hostname or "").lower()
@@ -70,6 +69,7 @@ async def _visible(page, selectors, timeout_ms: int):
 async def fill_login(page, secret, allowed) -> str:
     """Username (one or two steps), password, then the 1Password OTP code on a real 2FA prompt.
     allowed(page) is re-checked before EVERY fill: a redirect between steps must not receive a value."""
+
     async def put(field, name):
         if not allowed(page):
             raise PermissionError("page left the item's website")
@@ -182,9 +182,9 @@ async def handle(broker: Broker, reader, writer) -> None:
 
 
 def ssm_token(name: str) -> str | None:
-    r = subprocess.run(["aws", "ssm", "get-parameter", "--region", os.environ.get("AWS_REGION", "us-east-2"), "--name", name,
-                        "--with-decryption", "--query", "Parameter.Value", "--output", "text"],
-                       capture_output=True, text=True, timeout=60)
+    r = subprocess.run(
+        ["aws", "ssm", "get-parameter", "--region", os.environ.get("AWS_REGION", "us-east-2"), "--name", name, "--with-decryption", "--query", "Parameter.Value", "--output", "text"], capture_output=True, text=True, timeout=60
+    )
     out = r.stdout.strip()
     return out if r.returncode == 0 and out.startswith("ops_") else None
 
@@ -200,8 +200,7 @@ async def main() -> None:
     if not tokens[0]:
         raise ValueError("service-account token missing")
     with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
-        ops = [await Client.authenticate(auth=t, integration_name="MomoBot EC2 login broker", integration_version="1.0.0")
-               for t in tokens if t]
+        ops = [await Client.authenticate(auth=t, integration_name="MomoBot EC2 login broker", integration_version="1.0.0") for t in tokens if t]
         bb_key = await ops[0].secrets.resolve(BROWSERBASE_REFS["BROWSERBASE_API_KEY"])
         project = await ops[0].secrets.resolve(BROWSERBASE_REFS["BROWSERBASE_PROJECT_ID"])
     broker = Broker(ops, bb_key, project, connect=async_playwright)

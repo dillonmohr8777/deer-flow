@@ -22,8 +22,7 @@ SECRETS = {"username": "synthetic-user", "password": "synthetic-pass-123"}
 
 class FakeOp:
     def __init__(self):
-        login = SimpleNamespace(id="i1", title="Demo", category="LOGIN", tags=["momobot"],
-                                websites=[SimpleNamespace(url="https://login.example.com/signin")])
+        login = SimpleNamespace(id="i1", title="Demo", category="LOGIN", tags=["momobot"], websites=[SimpleNamespace(url="https://login.example.com/signin")])
         untagged = SimpleNamespace(id="i2", title="Private", category="LOGIN", tags=[], websites=[])
         self.vaults = SimpleNamespace(list=self._async([SimpleNamespace(id="v1")]))
         self.items = SimpleNamespace(list=self._async([login, untagged]))
@@ -39,6 +38,7 @@ class FakeOp:
     def _async(value):
         async def call(*args):
             return value
+
         return call
 
 
@@ -50,6 +50,7 @@ def fake_connect(urls):
     async def connect():
         async def connect_over_cdp(url, timeout):
             return browser
+
         yield SimpleNamespace(chromium=SimpleNamespace(connect_over_cdp=connect_over_cdp))
 
     return connect, page
@@ -88,9 +89,11 @@ class BrokerTests(unittest.TestCase):
         self.assertEqual(filled, [])
 
     def test_foreign_or_stopped_session_is_rejected_before_any_secret(self):
-        for session in ({"status": "RUNNING", "projectId": "other", "userMetadata": {"owner": broker_mod.OWNER}},
-                        {"status": "COMPLETED", "projectId": "proj-1", "userMetadata": {"owner": broker_mod.OWNER}},
-                        {"status": "RUNNING", "projectId": "proj-1", "userMetadata": {"owner": "someone-else"}}):
+        for session in (
+            {"status": "RUNNING", "projectId": "other", "userMetadata": {"owner": broker_mod.OWNER}},
+            {"status": "COMPLETED", "projectId": "proj-1", "userMetadata": {"owner": broker_mod.OWNER}},
+            {"status": "RUNNING", "projectId": "proj-1", "userMetadata": {"owner": "someone-else"}},
+        ):
             b = make(session=session)
             result, filled = self.run_login(b, {"session": SID, "item": "Demo"})
             self.assertEqual(result["status"], "session_not_owned")
@@ -186,8 +189,7 @@ class FillTests(unittest.TestCase):
         self.assertEqual(page.filled, ["v:username", "v:password"])
 
     def test_real_2fa_prompt_gets_the_otp(self):
-        page = FakePage({"[type=email]", "input[type=password]"}, after_submit={"[autocomplete=one-time-code]"},
-                        text="Enter the 6-digit verification code")
+        page = FakePage({"[type=email]", "input[type=password]"}, after_submit={"[autocomplete=one-time-code]"}, text="Enter the 6-digit verification code")
         self.assertEqual(asyncio.run(broker_mod.fill_login(page, fake_secret, allowed)), "submitted")
         self.assertEqual(page.filled, ["v:username", "v:password", "v:one-time password"])
 
