@@ -30,6 +30,7 @@ import {
 } from "@/core/channels/provider-state";
 import type { ChannelProvider } from "@/core/channels/types";
 import { useI18n } from "@/core/i18n/hooks";
+import { useWorkspaceSelection } from "@/core/workspaces/hooks";
 import { cn } from "@/lib/utils";
 
 import { ChannelProviderIcon } from "./channel-provider-icon";
@@ -54,6 +55,8 @@ function getProviderUnavailableReason(
 export function WorkspaceChannelsList() {
   const { open: isSidebarOpen } = useSidebar();
   const { t } = useI18n();
+  const workspace = useWorkspaceSelection();
+  const sharedWorkspace = Boolean(workspace.data?.active_workspace_id);
   const { enabled, providers, isLoading, error } = useChannelProviders();
   const connectMutation = useConnectChannelProvider();
   const configureMutation = useConfigureChannelProvider();
@@ -114,7 +117,7 @@ export function WorkspaceChannelsList() {
     );
   }
 
-  if (error || !enabled || visibleProviders.length === 0) {
+  if (error || !enabled || visibleProviders.length === 0 || !workspace.data) {
     return null;
   }
 
@@ -125,6 +128,7 @@ export function WorkspaceChannelsList() {
         {visibleProviders.map((provider) => {
           const canEditRuntimeConfig = providerCanEditRuntimeConfig(provider);
           const isConnected =
+            !sharedWorkspace &&
             !provider.unavailable_reason &&
             provider.connection_status === "connected";
           const isPending =
@@ -153,9 +157,23 @@ export function WorkspaceChannelsList() {
                     "h-8 w-24 px-2 text-xs",
                     isConnected && "gap-1",
                   )}
-                  disabled={isPending}
-                  title={unavailableReason}
+                  disabled={isPending || workspace.busy}
+                  title={
+                    sharedWorkspace
+                      ? `Manage ${provider.display_name} in your private workspace`
+                      : unavailableReason
+                  }
                   onClick={() => {
+                    if (sharedWorkspace) {
+                      void workspace.selectWorkspace(null).catch((error) => {
+                        toast.error(
+                          error instanceof Error
+                            ? error.message
+                            : t.channels.unavailable,
+                        );
+                      });
+                      return;
+                    }
                     if (
                       providerNeedsRuntimeConfig(provider) ||
                       (isConnected && canEditRuntimeConfig)
@@ -179,7 +197,11 @@ export function WorkspaceChannelsList() {
                     <CheckIcon className="size-3.5" />
                   ) : null}
                   <span>
-                    {isConnected ? t.channels.connected : t.channels.connect}
+                    {sharedWorkspace
+                      ? "Manage"
+                      : isConnected
+                        ? t.channels.connected
+                        : t.channels.connect}
                   </span>
                 </Button>
               </div>
@@ -187,6 +209,11 @@ export function WorkspaceChannelsList() {
           );
         })}
       </SidebarMenu>
+      {sharedWorkspace && (
+        <p className="text-muted-foreground px-2 text-xs">
+          Channel connections use your private workspace.
+        </p>
+      )}
       <ChannelRuntimeConfigDialog
         onConfigured={() => {
           setSetupProvider(null);
