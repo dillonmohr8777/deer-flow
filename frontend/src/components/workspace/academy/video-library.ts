@@ -59,8 +59,14 @@ export const academyVideoSeries = [
     videos: [
       ["paper-built-not-templated", "Built, not templated 12s · silent"],
       ["paper-anatomy-of-a-lead", "Anatomy of a lead 15s · silent"],
-      ["paper-anatomy-of-a-search-term", "Anatomy of a search term 15s · silent"],
-      ["paper-anatomy-of-a-lead-rebuild", "Anatomy of a lead, extended cut 38s · silent"],
+      [
+        "paper-anatomy-of-a-search-term",
+        "Anatomy of a search term 15s · silent",
+      ],
+      [
+        "paper-anatomy-of-a-lead-rebuild",
+        "Anatomy of a lead, extended cut 38s · silent",
+      ],
     ],
   },
   {

@@ -115,7 +115,9 @@ function AcademyBody() {
           <details className={styles.lesson} key={series.title}>
             <summary className={styles.lessonSummary}>
               <span className={styles.lessonTitle}>{series.title}</span>
-              <span className={styles.count}>{series.videos.length} videos</span>
+              <span className={styles.count}>
+                {series.videos.length} videos
+              </span>
             </summary>
             <div className={styles.lessonBody}>
               {series.videos.map(([id, title]) => (
