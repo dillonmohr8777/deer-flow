@@ -235,7 +235,7 @@ export function ClientInbox() {
               New request
             </Button>
           </header>
-          {(error || roster.isError || list.isError) && (
+          {(Boolean(error) || roster.isError || list.isError) && (
             <p role="alert" className="mb-4 break-words text-red-700">
               {error ?? roster.error?.message ?? list.error?.message}
             </p>
@@ -287,7 +287,7 @@ export function ClientInbox() {
                         setError(null);
                       }}
                     >
-                      <span className="block break-words font-medium">
+                      <span className="block font-medium break-words">
                         {thread.subject}
                       </span>
                       <span className="text-muted-foreground text-sm">
@@ -333,7 +333,11 @@ export function ClientInbox() {
                     Client
                     <select
                       className="bg-background mt-1 min-h-11 w-full rounded border p-2"
-                      value={clientId || roster.data?.clients[0]?.id || ""}
+                      value={
+                        clientId
+                          ? clientId
+                          : (roster.data?.clients[0]?.id ?? "")
+                      }
                       onChange={(event) => setClientId(event.target.value)}
                     >
                       {roster.data?.clients.map((client) => (
@@ -381,7 +385,7 @@ export function ClientInbox() {
               ) : (
                 current && (
                   <>
-                    <h2 className="break-words text-xl font-semibold">
+                    <h2 className="text-xl font-semibold break-words">
                       {current.subject}
                     </h2>
                     <p
@@ -447,14 +451,14 @@ export function ClientInbox() {
                           <p className="text-sm font-medium">
                             {message.author}
                           </p>
-                          <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+                          <p className="[overflow-wrap:anywhere] break-words whitespace-pre-wrap">
                             {message.body}
                           </p>
                           {message.attachments.map((attachment) => (
                             <Button
                               variant="link"
                               key={attachment.name}
-                              className="max-w-full whitespace-normal break-all"
+                              className="max-w-full break-all whitespace-normal"
                               onClick={() =>
                                 void download(message, attachment.name)
                               }
@@ -587,7 +591,7 @@ export function ClientInbox() {
                       </div>
                     )}
                     {current.publish_receipt && (
-                      <p className="text-muted-foreground mt-5 break-all text-xs">
+                      <p className="text-muted-foreground mt-5 text-xs break-all">
                         Published in this portal · Receipt{" "}
                         {current.publish_receipt}
                       </p>

@@ -38,6 +38,7 @@ import { useBoardThreads } from "@/core/board";
 import { useDeskEnabled, useMomentumInternalEnabled } from "@/core/features";
 import { useI18n } from "@/core/i18n/hooks";
 import { useBrandKit } from "@/core/momobot-brand";
+
 import { WorkspaceSelector } from "./workspace-selector";
 
 /**
@@ -53,7 +54,10 @@ function ClientNavList({ showBrandKit }: { showBrandKit: boolean }) {
       <SidebarMenu>
         <SidebarMenuItem>
           <SidebarMenuButton isActive={pathname === "/workspace/inbox"} asChild>
-            <Link className="text-muted-foreground" href="/workspace/inbox"><Inbox /><span>Client inbox</span></Link>
+            <Link className="text-muted-foreground" href="/workspace/inbox">
+              <Inbox />
+              <span>Client inbox</span>
+            </Link>
           </SidebarMenuButton>
         </SidebarMenuItem>
 
@@ -124,7 +128,10 @@ export function WorkspaceNavChatList() {
       <SidebarMenu>
         <SidebarMenuItem>
           <SidebarMenuButton isActive={pathname === "/workspace/inbox"} asChild>
-            <Link className="text-muted-foreground" href="/workspace/inbox"><Inbox /><span>Client inbox</span></Link>
+            <Link className="text-muted-foreground" href="/workspace/inbox">
+              <Inbox />
+              <span>Client inbox</span>
+            </Link>
           </SidebarMenuButton>
         </SidebarMenuItem>
 
