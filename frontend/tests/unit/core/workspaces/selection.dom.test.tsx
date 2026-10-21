@@ -69,3 +69,38 @@ test("failed workspace selection reports failure and keeps the current page", as
   });
   expect(navigate).not.toHaveBeenCalled();
 });
+
+test("all mounted workspace controls stay busy during a selection", async () => {
+  rs.spyOn(window.location, "assign").mockImplementation(() => undefined);
+  let complete!: (response: Response) => void;
+  const pending = new Promise<Response>((resolve) => {
+    complete = resolve;
+  });
+  request
+    .mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ active_workspace_id: "momentum", workspaces: [] }),
+      ),
+    )
+    .mockReturnValueOnce(pending);
+  const { result } = renderHook(
+    () => [useWorkspaceSelection(), useWorkspaceSelection()] as const,
+    { wrapper },
+  );
+  await waitFor(() => expect(result.current[0].data).toBeTruthy());
+  let switching: Promise<void> | undefined;
+  act(() => {
+    switching = result.current[0].selectWorkspace(null);
+  });
+  try {
+    await waitFor(() => {
+      expect(result.current[0].busy).toBe(true);
+      expect(result.current[1].busy).toBe(true);
+    });
+  } finally {
+    await act(async () => {
+      complete(new Response("{}"));
+      await switching;
+    });
+  }
+});

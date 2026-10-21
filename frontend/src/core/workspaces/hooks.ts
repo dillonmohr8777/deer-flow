@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useIsMutating, useMutation, useQuery } from "@tanstack/react-query";
 
 import { fetch } from "@/core/api/fetcher";
 
@@ -16,7 +16,9 @@ export function useWorkspaceSelection() {
       return response.json() as Promise<WorkspaceList>;
     },
   });
+  const busy = useIsMutating({ mutationKey: ["workspace-selection"] }) > 0;
   const selection = useMutation({
+    mutationKey: ["workspace-selection"],
     mutationFn: async (workspaceId: string | null) => {
       const response = await fetch("/api/workspaces/select", {
         method: "POST",
@@ -33,7 +35,7 @@ export function useWorkspaceSelection() {
   return {
     data: query.data,
     isLoading: query.isLoading,
-    busy: selection.isPending,
+    busy,
     error: selection.error ?? query.error,
     selectWorkspace: selection.mutateAsync,
   };
