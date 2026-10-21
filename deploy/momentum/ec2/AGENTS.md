@@ -8,3 +8,8 @@ capture or search from snapshot mode. See the EC2 README.
 `Dockerfile.memory-profile` is a two-file overlay of reviewed PR198 onto a verified
 live gateway base. Export only the pinned source files into its build context.
 Do not replace the base with latest main or infer a global model-policy change.
+
+Production pins `memory.model_name` to the existing `claude-haiku-5-5` host profile
+after checking backend override absence. Preserve private/shared memory scope and
+the administrator's chat default; restart through the existing unit to rebuild
+the cached manager. See README for readback, rollback and the quiet-window gate.
