@@ -257,8 +257,9 @@ for (const width of [390, 768, 1440]) {
       await expect
         .poll(async () => Math.round((await drawer.boundingBox())?.x ?? -1))
         .toBe(0);
+      // Agent Room left the sidebar on Oct 20 (short sidebar); Desk still links it.
       await expect(
-        drawer.getByRole("link", { name: "Agent Room", exact: true }),
+        drawer.getByRole("link", { name: "Desk", exact: true }),
       ).toBeVisible();
       const controls = drawer.locator(
         "button:visible, a[href]:visible, select:visible",

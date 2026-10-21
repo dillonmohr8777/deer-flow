@@ -29,6 +29,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useAgentsApiEnabled } from "@/core/agents";
+import { useAuth } from "@/core/auth/AuthProvider";
 import { useBoardThreads } from "@/core/board";
 import { useDeskEnabled, useMomentumInternalEnabled } from "@/core/features";
 import { useI18n } from "@/core/i18n/hooks";
@@ -41,6 +42,8 @@ export function WorkspaceNavChatList() {
   const { enabled: deskEnabled } = useDeskEnabled();
   const { enabled: internalEnabled } = useMomentumInternalEnabled();
   const { data: brandKit } = useBrandKit();
+  const { user } = useAuth();
+  const isAdmin = user?.system_role === "admin";
   // Threads with a Momo draft waiting on the owner; same query Desk's
   // Approvals panel runs, so React Query shares one cache entry.
   const waitingApproval = useBoardThreads({
@@ -120,8 +123,8 @@ export function WorkspaceNavChatList() {
             </SidebarMenuButton>
           </SidebarMenuItem>
         )}
-        {/* Owner-only, keeps the team sidebar short. */}
-        {deskEnabled && (
+        {/* Admins only, keeps the team sidebar short. */}
+        {isAdmin && (
           <SidebarMenuItem>
             <SidebarMenuButton
               isActive={pathname === "/workspace/command-center"}
@@ -145,8 +148,8 @@ export function WorkspaceNavChatList() {
             </Link>
           </SidebarMenuButton>
         </SidebarMenuItem>
-        {/* Owner-only, keeps the team sidebar short. */}
-        {deskEnabled && (
+        {/* Admins only, keeps the team sidebar short. */}
+        {isAdmin && (
           <SidebarMenuItem>
             {agentsEnabled ? (
               <SidebarMenuButton

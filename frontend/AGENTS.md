@@ -215,7 +215,7 @@ delete helper accepts remote 404 (not 403) before retrying local cleanup, and
 
 ## Capability Center
 
-`/workspace/capabilities` owns Plugins and Skills navigation. Plugins composes the
+`/workspace/capabilities` owns Plugins and Skills navigation (linked from Command Center, not the sidebar). Plugins composes the
 MCP manager and a lazily loaded Lark configuration dialog; installation, OAuth,
 mutation permissions, and cache ownership remain in the existing hooks. Skill display names/summaries are presentation
 metadata; runtime names and full descriptions remain unchanged. Public, custom,
