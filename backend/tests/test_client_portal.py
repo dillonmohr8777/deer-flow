@@ -191,6 +191,8 @@ async def test_own_client_chat_in_dedicated_workspace_is_durable(org_world, monk
         chat = await client.post(path, headers=headers)
         assert chat.status_code == 200, chat.text
         assert (await client.post(path, headers=headers)).json() == chat.json()
+        # Random, not derived from the portal thread id, so nobody can pre-create it.
+        assert created.json()["id"] not in chat.json()["chat_id"]
     with acting_as(USER_B):
         saved = await ThreadMetaRepository(org_world).get(chat.json()["chat_id"])
         assert saved["assistant_id"] == "momobot-max" and saved["client_actor_id"] == USER_B

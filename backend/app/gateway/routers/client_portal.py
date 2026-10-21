@@ -449,15 +449,24 @@ async def _chat(thread_id: ThreadId, request: Request, *, work: bool):
 
     store = get_thread_store(request)
     column = "work_chat_id" if work else "client_chat_id"
-    chat_id = f"portal-{'work' if work else 'client'}-{thread_id}"
-    if await store.get(chat_id) is None:
-        try:
-            await store.create(chat_id, assistant_id="momobot-max", display_name=thread.subject)
-        except IntegrityError:
-            if await store.get(chat_id) is None:
-                raise
-    async with _sf()() as session, session.begin():
-        await session.execute(update(BoardPortalRow).where(BoardPortalRow.thread_id == thread_id, BoardPortalRow.organization_id == portal.organization_id).values(**{column: chat_id}))
+    # The chat id is random and bound to the portal row once (compare-and-set),
+    # never derived from thread_id: a predictable id could be pre-created by
+    # another account and then reused, putting staff work in a client's thread.
+    chat_id = getattr(portal, column)
+    if chat_id is None:
+        candidate = f"portal-{'work' if work else 'client'}-{uuid.uuid4().hex}"
+        await store.create(candidate, assistant_id="momobot-max", display_name=thread.subject)
+        async with _sf()() as session, session.begin():
+            bound = await session.execute(
+                update(BoardPortalRow).where(BoardPortalRow.thread_id == thread_id, BoardPortalRow.organization_id == portal.organization_id, getattr(BoardPortalRow, column).is_(None)).values(**{column: candidate})
+            )
+        if bound.rowcount == 1:
+            chat_id = candidate
+        else:  # a concurrent request bound its own chat first; use that one
+            _, portal, _, _ = await _load(request, thread_id)
+            chat_id = getattr(portal, column)
+    if chat_id is None or await store.get(chat_id) is None:
+        raise _missing()
     return {"chat_id": chat_id, "href": f"/workspace/agents/momobot-max/chats/{chat_id}"}
 
 
