@@ -38,7 +38,7 @@ import { TokenUsageIndicator } from "@/components/workspace/token-usage-indicato
 import { Tooltip } from "@/components/workspace/tooltip";
 import { useActiveGoal } from "@/components/workspace/use-active-goal";
 import { useAgent } from "@/core/agents";
-import { useAuth } from "@/core/auth/AuthProvider";
+import { useAuth, useIsClient } from "@/core/auth/AuthProvider";
 import { hasPermission, PERMISSIONS } from "@/core/auth/permissions";
 import {
   useBrowserControlEnabled,
@@ -78,6 +78,8 @@ import { cn } from "@/lib/utils";
 export default function AgentChatPage() {
   const { t } = useI18n();
   const { user } = useAuth();
+  // A client's header carries chat only: no internal task, browser or plugin tools.
+  const isClient = useIsClient();
   const canStopStreaming = hasPermission(user, PERMISSIONS.RUNS_CANCEL);
   const canCreateRuns = hasPermission(user, PERMISSIONS.RUNS_CREATE);
   const router = useRouter();
@@ -112,7 +114,9 @@ export default function AgentChatPage() {
 
   const { showNotification } = useNotification();
   const selectorVisible =
-    scopeSelectionEnabled && env.NEXT_PUBLIC_STATIC_WEBSITE_ONLY !== "true";
+    scopeSelectionEnabled &&
+    env.NEXT_PUBLIC_STATIC_WEBSITE_ONLY !== "true" &&
+    !isClient;
   const agentKnowledgeEnabled =
     agent !== null &&
     (agent.tool_groups == null || agent.tool_groups.includes("knowledge"));
@@ -318,7 +322,11 @@ export default function AgentChatPage() {
     agent !== null &&
     (agent.tool_groups == null || agent.tool_groups.includes("browser"));
   const browserEnabled =
-    !isNewThread && !isMock && browserControlEnabled && agentBrowserEnabled;
+    !isNewThread &&
+    !isMock &&
+    browserControlEnabled &&
+    agentBrowserEnabled &&
+    !isClient;
   const { activeGoal, hasGoal, setLocalGoal } = useActiveGoal(
     threadId,
     thread.values.goal,
@@ -378,11 +386,13 @@ export default function AgentChatPage() {
               <div className="flex shrink-0 items-center sm:mr-4">
                 {!isNewThread &&
                   !isMock &&
+                  !isClient &&
                   env.NEXT_PUBLIC_STATIC_WEBSITE_ONLY !== "true" && (
                     <ThreadBackgroundTasks threadId={threadId} />
                   )}
                 {!isNewThread &&
                   !isMock &&
+                  !isClient &&
                   env.NEXT_PUBLIC_STATIC_WEBSITE_ONLY !== "true" && (
                     <ThreadSubagentBatches threadId={threadId} />
                   )}
@@ -399,7 +409,7 @@ export default function AgentChatPage() {
                     <span className="hidden sm:inline">{t.agents.newChat}</span>
                   </Button>
                 </Tooltip>
-                {tokenUsageEnabled ? (
+                {isClient ? null : tokenUsageEnabled ? (
                   <TokenUsageIndicator
                     threadId={isNewThread ? undefined : threadId}
                     backendUsage={backendTokenUsage}
@@ -418,7 +428,7 @@ export default function AgentChatPage() {
                 <SidecarTrigger />
                 {browserEnabled && <BrowserTrigger />}
                 <ExportTrigger threadId={threadId} />
-                <ThreadExtensionActions threadId={threadId} />
+                {!isClient && <ThreadExtensionActions threadId={threadId} />}
                 <ArtifactTrigger />
               </div>
             </header>

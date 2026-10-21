@@ -33,6 +33,7 @@ from deerflow.config.mcp_tasks_config import McpTasksConfig
 from deerflow.config.memory_config import MemoryConfig, load_memory_config_from_dict
 from deerflow.config.model_config import ModelConfig
 from deerflow.config.momobot_brand_config import MomobotBrandConfig
+from deerflow.config.momobot_max_config import MomobotMaxConfig
 from deerflow.config.pii_redaction_config import PiiRedactionConfig
 from deerflow.config.projects_config import ProjectsConfig
 from deerflow.config.read_before_write_config import ReadBeforeWriteConfig
@@ -283,6 +284,7 @@ class AppConfig(BaseModel):
     agents_api: AgentsApiConfig = Field(default_factory=AgentsApiConfig, description="Custom-agent management API configuration")
     private_workspace: PrivateWorkspaceConfig = Field(default_factory=PrivateWorkspaceConfig, description="Owner-only private workspace switches (the Desk home)")
     momentum_internal: MomentumInternalConfig = Field(default_factory=MomentumInternalConfig, description="Staff-only Team channels and AI Academy for the agency's own workspace")
+    momobot_max: MomobotMaxConfig = Field(default_factory=MomobotMaxConfig, description="MomoBot Max, the built-in all-in-one agent for client accounts (off by default)")
     acp_agents: dict[str, ACPAgentConfig] = Field(default_factory=dict, description="ACP-compatible agent configuration")
     subagents: SubagentsAppConfig = Field(default_factory=SubagentsAppConfig, description="Subagent runtime configuration")
     guardrails: GuardrailsConfig = Field(default_factory=GuardrailsConfig, description="Guardrail middleware configuration")

@@ -135,6 +135,9 @@ export interface Translations {
     public: string;
     custom: string;
     notAvailableInDemoMode: string;
+    pageNotAvailableTitle: string;
+    pageNotAvailableDescription: string;
+    backToChat: string;
     loading: string;
     error: string;
     version: string;

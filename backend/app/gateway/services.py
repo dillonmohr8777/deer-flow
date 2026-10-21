@@ -35,6 +35,7 @@ from app.gateway.internal_auth import (
 )
 from app.gateway.knowledge_scope_admission import admit_message_knowledge_scope
 from app.gateway.momentum_internal import is_momentum_staff
+from app.gateway.momobot_max import apply_run_policy as apply_momobot_max_run_policy
 from app.gateway.run_models import RunCreateRequest
 from app.gateway.utils import sanitize_log_param
 from app.mcp_tasks.errors import PermanentNotificationError
@@ -1921,6 +1922,9 @@ async def start_run(
             # ``body.config`` is free-form and copied verbatim by
             # ``build_run_config``; scrub internal-only keys smuggled there.
             strip_internal_context_keys(config)
+        # Client runs are pinned to MomoBot Max, and every MomoBot Max run gets its
+        # config-owned effort and delegation settings, whatever the request said.
+        await apply_momobot_max_run_policy(config, user=user, actor_user_id=actor_user_id, app_config=get_app_config(), internal=is_internal_caller)
 
         replay_kind = run_metadata.get("replay_kind")
         target_message_id = run_metadata.get("regenerate_from_message_id")

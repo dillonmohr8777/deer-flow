@@ -105,15 +105,18 @@ export function AgentCard({ agent }: AgentCardProps) {
           {t.agents.chat}
           <span className="sr-only">{displayName}</span>
         </Button>
-        <Button
-          size="icon-lg"
-          variant="ghost"
-          onClick={() => setSettingsOpen(true)}
-          title={t.agents.settings}
-          aria-label={`${t.agents.settings}: ${displayName}`}
-        >
-          <Settings2Icon className="size-4" />
-        </Button>
+        {/* A built-in agent is defined on the server and cannot be edited. */}
+        {!agent.builtin && (
+          <Button
+            size="icon-lg"
+            variant="ghost"
+            onClick={() => setSettingsOpen(true)}
+            title={t.agents.settings}
+            aria-label={`${t.agents.settings}: ${displayName}`}
+          >
+            <Settings2Icon className="size-4" />
+          </Button>
+        )}
       </div>
 
       {/* Agent settings — mounted only while open so its form state always

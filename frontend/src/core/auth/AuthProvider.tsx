@@ -14,6 +14,7 @@ import { queryClient } from "@/components/query-client-provider";
 
 import { isStaticWebsiteOnly } from "../static-mode";
 
+import { isClientUser } from "./roles";
 import { type User, buildLoginUrl } from "./types";
 
 // Re-export for consumers
@@ -187,6 +188,11 @@ export function useAuth(): AuthContextType {
     throw new Error("useAuth must be used within an AuthProvider");
   }
   return context;
+}
+
+/** Whether the signed-in user is an external client (chat with MomoBot Max only). */
+export function useIsClient(): boolean {
+  return isClientUser(useAuth().user);
 }
 
 /**

@@ -64,3 +64,19 @@ created keep signing in after their invitation is used, because the gate only
 applies to creating a user.
 
 The PAT scope catalog includes Board, Team and Academy permissions. Scopes still intersect the owner's permissions; unlisted routes remain denied by `_PAT_ROUTE_RULES`, regardless of those scopes. Do not add route admission through a scope-catalog change.
+
+System roles: `admin`, `exec` (C-suite: premium models, never admin), `user`
+(teammate) and `client` (external customer; chat with MomoBot Max only). The
+literal type is `SystemRole` in `models.py`, so any other value cannot parse and
+can never authenticate. Every admin check compares `system_role == "admin"`;
+`tests/test_system_roles.py` scans the source so no `in (...)` check slips in.
+An admin sets a role with `PUT /api/admin/users/{id}/role` (audited, never your
+own role, 409 while `authorization.provider.config.roles` has no block for it,
+because RBAC denies an undefined role everywhere). A new account created from a
+`client` invitation starts as `client`; an existing account keeps its role.
+`client_boundary.py` is the default-deny route table `AuthMiddleware` applies to
+a client whatever `authorization.*` says, in the shape of the PAT policy above;
+`tests/test_client_route_boundary.py` pins every registered route it admits, so
+widening a client's reach is a reviewed one-line change. Within those routes
+the role's models, tools and skills come from `authorization` in `config.yaml`
+(example tiers in `config.example.yaml`; a test builds its policy from them).

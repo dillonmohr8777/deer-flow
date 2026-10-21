@@ -47,7 +47,9 @@ class CreateInvitationRequest(BaseModel):
     explicitly chooses it. "client" is for a client's own people joining the
     agency workspace: the same access as "member" everywhere except that it
     is never staff, so Momentum-internal surfaces (Team, AI Academy) stay
-    hidden from them even before they are given a client assignment.
+    hidden from them even before they are given a client assignment. An account
+    this creates for a "client" invitation also gets the `client` system role
+    (chat with MomoBot Max only); an existing account keeps its role.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -369,7 +371,9 @@ async def accept_invitation(body: AcceptInvitationRequest, request: Request, res
                             id=user_id,
                             email=invitation.email,
                             password_hash=password_hash,
-                            system_role="user",
+                            # A client's own people get the client tier from day one;
+                            # an existing account keeps whatever role it has.
+                            system_role="client" if invitation.role == "client" else "user",
                             needs_setup=False,
                             token_version=0,
                             created_at=now,

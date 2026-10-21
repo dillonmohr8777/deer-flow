@@ -34,17 +34,76 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useAgentsApiEnabled } from "@/core/agents";
+import { useIsClient } from "@/core/auth/AuthProvider";
 import { useBoardThreads } from "@/core/board";
-import { useDeskEnabled, useMomentumInternalEnabled } from "@/core/features";
+import {
+  useDeskEnabled,
+  useMomentumInternalEnabled,
+  useOpenAIAgentsConfigured,
+} from "@/core/features";
 import { useI18n } from "@/core/i18n/hooks";
 import { useBrandKit } from "@/core/momobot-brand";
+
+/**
+ * The client version of MomoBot: chats, the MomoBot lineup and About, nothing
+ * internal. (New chat lives in the sidebar header.)
+ */
+function ClientNavList({ showBrandKit }: { showBrandKit: boolean }) {
+  const { t } = useI18n();
+  const pathname = usePathname();
+  return (
+    <SidebarGroup className="pt-1">
+      <SidebarMenu>
+        <SidebarMenuItem>
+          <SidebarMenuButton isActive={pathname === "/workspace/chats"} asChild>
+            <Link className="text-muted-foreground" href="/workspace/chats">
+              <MessagesSquare />
+              <span>{t.sidebar.chats}</span>
+            </Link>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+        {showBrandKit && (
+          <>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                isActive={pathname === "/workspace/lineup"}
+                asChild
+              >
+                <Link
+                  className="text-muted-foreground"
+                  href="/workspace/lineup"
+                >
+                  <UsersRound />
+                  <span>MomoBot Agents</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                isActive={pathname === "/workspace/about"}
+                asChild
+              >
+                <Link className="text-muted-foreground" href="/workspace/about">
+                  <Info />
+                  <span>About MomoBot</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </>
+        )}
+      </SidebarMenu>
+    </SidebarGroup>
+  );
+}
 
 export function WorkspaceNavChatList() {
   const { t } = useI18n();
   const pathname = usePathname();
+  const isClient = useIsClient();
   const { enabled: agentsEnabled } = useAgentsApiEnabled();
   const { enabled: deskEnabled } = useDeskEnabled();
   const { enabled: internalEnabled } = useMomentumInternalEnabled();
+  const { configured: openaiConfigured } = useOpenAIAgentsConfigured();
   const { data: brandKit } = useBrandKit();
   // Threads with a Momo draft waiting on the owner; same query Desk's
   // Approvals panel runs, so React Query shares one cache entry.
@@ -53,6 +112,7 @@ export function WorkspaceNavChatList() {
     enabled: deskEnabled,
   });
   const waitingCount = deskEnabled ? (waitingApproval.data?.length ?? 0) : 0;
+  if (isClient) return <ClientNavList showBrandKit={Boolean(brandKit)} />;
   return (
     <SidebarGroup className="pt-1">
       <SidebarMenu>
@@ -155,17 +215,20 @@ export function WorkspaceNavChatList() {
             </Link>
           </SidebarMenuButton>
         </SidebarMenuItem>
-        <SidebarMenuItem>
-          <SidebarMenuButton
-            isActive={pathname === "/workspace/openai"}
-            asChild
-          >
-            <Link className="text-muted-foreground" href="/workspace/openai">
-              <Network />
-              <span>OpenAI crew</span>
-            </Link>
-          </SidebarMenuButton>
-        </SidebarMenuItem>
+        {/* Never used until the Gateway has an OpenAI key. */}
+        {openaiConfigured && (
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              isActive={pathname === "/workspace/openai"}
+              asChild
+            >
+              <Link className="text-muted-foreground" href="/workspace/openai">
+                <Network />
+                <span>OpenAI crew</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        )}
         <SidebarMenuItem>
           <SidebarMenuButton
             isActive={pathname === "/workspace/workflows"}

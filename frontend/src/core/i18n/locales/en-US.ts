@@ -149,6 +149,10 @@ export const enUS: Translations = {
     public: "Public",
     custom: "Custom",
     notAvailableInDemoMode: "Not available in demo mode",
+    pageNotAvailableTitle: "This page isn't available",
+    pageNotAvailableDescription:
+      "It isn't part of your account. You can pick up your chat with MomoBot Max any time.",
+    backToChat: "Back to chat",
     loading: "Loading...",
     error: "Error:",
     version: "Version",

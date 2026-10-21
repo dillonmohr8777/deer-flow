@@ -597,3 +597,34 @@ async def test_accept_verifies_a_real_access_token_cookie_like_production(invita
         membership = await session.get(OrganizationMemberRow, {"organization_id": organization_id, "user_id": invitee_id})
         assert membership is not None and membership.status == "active"
         assert await session.get(OrganizationMemberRow, {"organization_id": organization_id, "user_id": other_id}) is None
+
+
+@pytest.mark.asyncio
+async def test_client_invitation_creates_a_client_tier_account(invitation_db, monkeypatch):
+    """A client's own people get the confined `client` system role from day one."""
+    organization_id = await _seed_workspace(invitation_db)
+    for email, role, expected in (("owner@client.example", "client", "client"), ("mate@momentum.example", "member", "user")):
+        created = await _create(monkeypatch, invitation_db, organization_id, email=email, role=role)
+        await invitations.accept_invitation(
+            invitations.AcceptInvitationRequest(token=created.token, password="A-longer-new-password!"),
+            _request(),
+            Response(),
+        )
+        async with invitation_db() as session:
+            user = await session.scalar(select(UserRow).where(UserRow.email == email))
+            assert user is not None and user.system_role == expected
+
+
+@pytest.mark.asyncio
+async def test_client_invitation_never_changes_an_existing_accounts_role(invitation_db, monkeypatch):
+    organization_id = await _seed_workspace(invitation_db)
+    await _add_user(invitation_db, "existing-exec", "exec@example.com", password="Existing-password-123!")
+    async with invitation_db() as session:
+        async with session.begin():
+            (await session.get(UserRow, "existing-exec")).system_role = "exec"
+    created = await _create(monkeypatch, invitation_db, organization_id, email="exec@example.com", role="client")
+
+    await invitations.accept_invitation(invitations.AcceptInvitationRequest(token=created.token), _signed_in("existing-exec"), Response())
+
+    async with invitation_db() as session:
+        assert (await session.get(UserRow, "existing-exec")).system_role == "exec"

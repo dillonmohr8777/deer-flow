@@ -10,6 +10,8 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from app.gateway.authz import resource_permission_dependency
+from app.gateway.client_boundary import CLIENT_ROLE
+from app.gateway.momobot_max import momobot_max_available_to
 from deerflow.agents.memory.manager import get_memory_manager
 from deerflow.config.agents_api_config import get_agents_api_config
 from deerflow.config.agents_config import (
@@ -22,12 +24,13 @@ from deerflow.config.agents_config import (
     preserve_non_managed_fields,
 )
 from deerflow.config.app_config import get_app_config
+from deerflow.config.builtin_agents import MOMOBOT_MAX_NAME, get_builtin_agent_config, is_builtin_agent_name
 from deerflow.config.paths import get_paths
 from deerflow.knowledge_scope import KnowledgeScope, canonicalize_knowledge_scope
 from deerflow.persistence.agents import AgentDeleteOutcome, AgentExistsError, get_agent_store
 from deerflow.persistence.clients import ClientRepository
 from deerflow.persistence.organizations.model import OrganizationMemberRow
-from deerflow.runtime.user_context import get_effective_actor_user_id, get_effective_user_id, resolve_organization_id
+from deerflow.runtime.user_context import get_current_user, get_effective_actor_user_id, get_effective_user_id, resolve_organization_id
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["agents"], dependencies=[Depends(resource_permission_dependency("threads"))])
@@ -66,6 +69,7 @@ class AgentResponse(BaseModel):
     client_id: str | None = Field(default=None, description="Client this agent was stamped for, if any (fleet templates)")
     template_id: str | None = Field(default=None, description="Fleet template this agent was stamped from, if any")
     template_version: str | None = Field(default=None, description="Version of the fleet template this agent was stamped from, if any")
+    builtin: bool = Field(default=False, description="True for an agent defined in code (global and read-only)")
 
 
 class AgentsListResponse(BaseModel):
@@ -236,7 +240,27 @@ def _agent_config_to_response(agent_cfg: AgentConfig, include_soul: bool = False
         client_id=agent_cfg.client_id,
         template_id=agent_cfg.template_id,
         template_version=agent_cfg.template_version,
+        builtin=get_builtin_agent_config(agent_cfg.name) is not None,
     )
+
+
+def _client_agent_response(agent_cfg: AgentConfig) -> AgentResponse:
+    """What a client sees of an agent: a name and a description, never its model, tools or instructions."""
+    return AgentResponse(name=agent_cfg.name, display_name=agent_cfg.display_name, description=agent_cfg.description, builtin=True)
+
+
+def _reject_builtin_name(name: str) -> None:
+    """Built-in agents are global and read-only: no create, edit or delete, whatever the layout."""
+    if is_builtin_agent_name(name):
+        raise HTTPException(status_code=403, detail=f"'{name}' is a built-in agent and is read-only")
+
+
+def _builtin_visible_to(user) -> bool:
+    """Whether *user* may see the built-in agents (enabled, and the role may use its model)."""
+    try:
+        return user is not None and momobot_max_available_to(user, get_app_config())
+    except FileNotFoundError:  # no config.yaml: nothing is enabled
+        return False
 
 
 async def _is_active_org_admin(user_id: str) -> bool:
@@ -315,21 +339,30 @@ async def list_agents() -> AgentsListResponse:
     Returns:
         List of all custom agents with their metadata and soul content.
     """
-    _require_agents_api_enabled()
+    user = get_current_user()
+    is_client = getattr(user, "system_role", None) == CLIENT_ROLE
+    if not is_client:  # a client only reads MomoBot Max's name, which needs no management API
+        _require_agents_api_enabled()
 
     user_id = get_effective_user_id()
     visible_client_ids = await _visible_client_ids(get_effective_actor_user_id())
+    builtin_visible = _builtin_visible_to(user)
 
     def _list() -> AgentsListResponse:
         # Worker thread: the store read plus the per-agent SOUL read inside
         # _agent_config_to_response are filesystem IO (file backend) or DB round
         # trips (db backend) and must stay off the event loop.
-        agents = list_custom_agents(user_id=user_id)
+        # A client sees MomoBot Max and nothing else (no personal or legacy shared agents).
+        agents = [] if is_client else list_custom_agents(user_id=user_id)
         if visible_client_ids is not None:
             # An agent with no client_id isn't client-scoped (a personal or
             # staff agent); only a fleet-stamped agent needs this check.
             agents = [a for a in agents if a.client_id is None or a.client_id in visible_client_ids]
-        return AgentsListResponse(agents=[_agent_config_to_response(a, include_soul=True, user_id=user_id) for a in agents])
+        responses = [_agent_config_to_response(a, include_soul=True, user_id=user_id) for a in agents]
+        builtin = get_builtin_agent_config(MOMOBOT_MAX_NAME) if builtin_visible else None
+        if builtin is not None:
+            responses.insert(0, _client_agent_response(builtin) if is_client else _agent_config_to_response(builtin, include_soul=True, user_id=user_id))
+        return AgentsListResponse(agents=responses)
 
     try:
         return await asyncio.to_thread(_list)
@@ -358,6 +391,8 @@ async def check_agent_name(name: str) -> dict:
     _require_agents_api_enabled()
     _validate_agent_name(name)
     normalized = _normalize_agent_name(name)
+    if is_builtin_agent_name(normalized):
+        return {"available": False, "name": normalized}
     user_id = get_effective_user_id()
 
     # Availability is defined by the active backend and stays consistent with
@@ -388,15 +423,24 @@ async def get_agent(name: str) -> AgentResponse:
     Raises:
         HTTPException: 404 if agent not found.
     """
-    _require_agents_api_enabled()
+    user = get_current_user()
+    is_client = getattr(user, "system_role", None) == CLIENT_ROLE
+    if not is_client:  # a client only reads MomoBot Max's name, which needs no management API
+        _require_agents_api_enabled()
     _validate_agent_name(name)
     name = _normalize_agent_name(name)
     user_id = get_effective_user_id()
+    builtin_visible = _builtin_visible_to(user)
 
     def _get() -> AgentResponse:
         # Worker thread: config read + SOUL read must stay off the event loop.
+        if is_client:  # a client can read MomoBot Max and nothing else
+            builtin = get_builtin_agent_config(name) if builtin_visible else None
+            if builtin is None:
+                raise FileNotFoundError(f"Agent '{name}' not found")
+            return _client_agent_response(builtin)
         agent_cfg = load_agent_config(name, user_id=user_id)
-        if agent_cfg is None:
+        if agent_cfg is None or (get_builtin_agent_config(name) is not None and not builtin_visible):
             raise FileNotFoundError(f"Agent '{name}' config is unavailable")
         return _agent_config_to_response(agent_cfg, include_soul=True, user_id=user_id)
 
@@ -435,6 +479,7 @@ async def create_agent_endpoint(request: AgentCreateRequest) -> AgentResponse:
     _validate_agent_name(request.name)
     _validate_model_exists(request.model)
     normalized_name = _normalize_agent_name(request.name)
+    _reject_builtin_name(normalized_name)
     user_id = get_effective_user_id()
 
     # Config document — only the fields the caller set, matching the historical
@@ -505,6 +550,7 @@ async def update_agent(name: str, request: AgentUpdateRequest) -> AgentResponse:
     _require_agents_api_enabled()
     _validate_agent_name(name)
     name = _normalize_agent_name(name)
+    _reject_builtin_name(name)
     user_id = get_effective_user_id()
 
     try:
@@ -743,6 +789,7 @@ async def delete_agent(name: str) -> None:
     _require_agents_api_enabled()
     _validate_agent_name(name)
     name = _normalize_agent_name(name)
+    _reject_builtin_name(name)
     user_id = get_effective_user_id()
 
     try:

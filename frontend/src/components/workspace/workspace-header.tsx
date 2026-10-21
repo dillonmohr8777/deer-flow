@@ -12,6 +12,8 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { BrandMotionToggle } from "@/components/workspace/command-center/workspace-appearance";
+import { useIsClient } from "@/core/auth/AuthProvider";
+import { CLIENT_NEW_CHAT_PATH } from "@/core/auth/roles";
 import { useI18n } from "@/core/i18n/hooks";
 import { env } from "@/env";
 import { cn } from "@/lib/utils";
@@ -20,6 +22,12 @@ export function WorkspaceHeader({ className }: { className?: string }) {
   const { t } = useI18n();
   const { state } = useSidebar();
   const pathname = usePathname();
+  // A client has no Command Center, and every new chat is with MomoBot Max.
+  const isClient = useIsClient();
+  const homePath = isClient
+    ? CLIENT_NEW_CHAT_PATH
+    : "/workspace/command-center";
+  const newChatPath = isClient ? CLIENT_NEW_CHAT_PATH : "/workspace/chats/new";
   return (
     <>
       <div
@@ -48,9 +56,9 @@ export function WorkspaceHeader({ className }: { className?: string }) {
               // signature sits at the far end of the sidebar footer
               // (workspace-sidebar.tsx) instead of stacked under it.
               <Link
-                href="/workspace/command-center"
+                href={homePath}
                 className="ml-2 min-w-0 flex-1"
-                aria-label="MomoBot Command Center"
+                aria-label={isClient ? "MomoBot" : "MomoBot Command Center"}
               >
                 <span className="text-primary block font-serif text-2xl leading-none font-bold tracking-tight">
                   MomoBot
@@ -66,11 +74,8 @@ export function WorkspaceHeader({ className }: { className?: string }) {
       </div>
       <SidebarMenu>
         <SidebarMenuItem>
-          <SidebarMenuButton
-            isActive={pathname === "/workspace/chats/new"}
-            asChild
-          >
-            <Link className="text-muted-foreground" href="/workspace/chats/new">
+          <SidebarMenuButton isActive={pathname === newChatPath} asChild>
+            <Link className="text-muted-foreground" href={newChatPath}>
               <MessageSquarePlus size={16} />
               <span>{t.sidebar.newChat}</span>
             </Link>

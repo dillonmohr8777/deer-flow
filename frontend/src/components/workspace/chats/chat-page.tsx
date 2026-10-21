@@ -40,7 +40,7 @@ import { TodoList } from "@/components/workspace/todo-list";
 import { TokenUsageIndicator } from "@/components/workspace/token-usage-indicator";
 import { useActiveGoal } from "@/components/workspace/use-active-goal";
 import { Welcome } from "@/components/workspace/welcome";
-import { useAuth } from "@/core/auth/AuthProvider";
+import { useAuth, useIsClient } from "@/core/auth/AuthProvider";
 import { hasPermission, PERMISSIONS } from "@/core/auth/permissions";
 import {
   useBrowserControlEnabled,
@@ -90,6 +90,8 @@ import styles from "./chat-paper.module.css";
 export default function ChatPage() {
   const { t } = useI18n();
   const { user } = useAuth();
+  // A client's header carries chat only: no internal task, schedule, browser or plugin tools.
+  const isClient = useIsClient();
   const canStopStreaming = hasPermission(user, PERMISSIONS.RUNS_CANCEL);
   const canCreateRuns = hasPermission(user, PERMISSIONS.RUNS_CREATE);
   const router = useRouter();
@@ -137,7 +139,9 @@ export default function ChatPage() {
   const { showNotification } = useNotification();
   const { scopeSelectionEnabled } = useKnowledgeBaseEnabled();
   const selectorVisible =
-    scopeSelectionEnabled && env.NEXT_PUBLIC_STATIC_WEBSITE_ONLY !== "true";
+    scopeSelectionEnabled &&
+    env.NEXT_PUBLIC_STATIC_WEBSITE_ONLY !== "true" &&
+    !isClient;
   const [knowledgeScope, setKnowledgeScope] =
     useState<KnowledgeScopeSelection | null>(null);
   const previousConversationRef = useRef({ threadId, isNewThread });
@@ -421,7 +425,8 @@ export default function ChatPage() {
     ? localSettings.tokenUsage.inlineMode
     : "off";
   const hasTodos = (thread.values.todos?.length ?? 0) > 0;
-  const browserEnabled = !isNewThread && !isMock && browserControlEnabled;
+  const browserEnabled =
+    !isNewThread && !isMock && browserControlEnabled && !isClient;
   const { activeGoal, hasGoal, setLocalGoal } = useActiveGoal(
     threadId,
     thread.values.goal,
@@ -491,18 +496,20 @@ export default function ChatPage() {
               <div className="flex shrink-0 items-center gap-1 sm:gap-2">
                 {!isNewThread &&
                   !isMock &&
+                  !isClient &&
                   env.NEXT_PUBLIC_STATIC_WEBSITE_ONLY !== "true" && (
                     <ThreadBackgroundTasks threadId={threadId} />
                   )}
                 {!isNewThread &&
                   !isMock &&
+                  !isClient &&
                   env.NEXT_PUBLIC_STATIC_WEBSITE_ONLY !== "true" && (
                     <ThreadSubagentBatches threadId={threadId} />
                   )}
-                {!isNewThread && !isMock && (
+                {!isNewThread && !isMock && !isClient && (
                   <ThreadScheduledTasksLink threadId={threadId} />
                 )}
-                {tokenUsageEnabled ? (
+                {isClient ? null : tokenUsageEnabled ? (
                   <TokenUsageIndicator
                     threadId={isNewThread ? undefined : threadId}
                     backendUsage={backendTokenUsage}
@@ -521,7 +528,7 @@ export default function ChatPage() {
                 <SidecarTrigger />
                 {browserEnabled && <BrowserTrigger />}
                 <ExportTrigger threadId={threadId} />
-                <ThreadExtensionActions threadId={threadId} />
+                {!isClient && <ThreadExtensionActions threadId={threadId} />}
                 <ArtifactTrigger />
               </div>
             </header>
