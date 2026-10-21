@@ -8,4 +8,4 @@ Verified: 22 synthetic HTTP/security/restart tests pass; Ruff lint and format pa
 
 Production activation remains separate and fail-closed: the live extension list has no VHIN installation, and no production VHIN organization binding is established. Activation requires Justin's existing MomoBot membership, Grace's membership if she will use the desk, exact host-stamped IDs, a private persistent volume plus restore-tested backup, and the reviewed release/deploy path. The package creates no account, send, booking, charge, or model call.
 
-Next: commit, open the reviewed PR, and let the normal release owner install only after those account/storage facts are verified.
+Next: PR #202 is the release gate. The normal release owner may install only after those account/storage facts are verified.
