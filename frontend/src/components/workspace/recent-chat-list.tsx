@@ -48,6 +48,7 @@ import { ConversationExtensionActions } from "@/components/workspace/conversatio
 import { getAPIClient } from "@/core/api";
 import { useAuth } from "@/core/auth/AuthProvider";
 import { hasPermission, PERMISSIONS } from "@/core/auth/permissions";
+import { isClientUser } from "@/core/auth/roles";
 import { writeTextToClipboard } from "@/core/clipboard";
 import { useI18n } from "@/core/i18n/hooks";
 import { useProjects } from "@/core/projects";
@@ -104,6 +105,8 @@ export function ThreadSidebarItem({
 }) {
   const { t, locale } = useI18n();
   const { user } = useAuth();
+  // Projects are an internal surface: a client's chats are never filed into one.
+  const isClient = isClientUser(user);
   const canDeleteThreads = hasPermission(user, PERMISSIONS.THREADS_DELETE);
   const requestDelete = useThreadDeleteDialog();
   const { mutate: renameThread } = useRenameThread();
@@ -365,11 +368,13 @@ export function ThreadSidebarItem({
               <Archive className="text-muted-foreground" />
               <span>{t.chats.archiveChat}</span>
             </DropdownMenuItem>
-            <MoveToProjectMenu
-              thread={thread}
-              onNewProject={() => setNewProjectDialogOpen(true)}
-              onMoveProject={handleMoveProject}
-            />
+            {!isClient && (
+              <MoveToProjectMenu
+                thread={thread}
+                onNewProject={() => setNewProjectDialogOpen(true)}
+                onMoveProject={handleMoveProject}
+              />
+            )}
             {canDeleteThreads && (
               <>
                 <DropdownMenuSeparator />

@@ -12,6 +12,7 @@ EXPECTED_GUIDANCE_PATHS = {
     "backend/AGENTS.md",
     "backend/tests/AGENTS.md",
     "desktop/AGENTS.md",
+    "deploy/momentum/ec2/AGENTS.md",
     "frontend/AGENTS.md",
     "backend/app/gateway/AGENTS.md",
     "backend/app/gateway/auth/AGENTS.md",

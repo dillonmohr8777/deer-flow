@@ -7,6 +7,9 @@ from pydantic import BaseModel, Field
 
 class SlackChannelConnectionConfig(BaseModel):
     enabled: bool = False
+    # Bind roster members on their first message, no /connect code. Needs workspace_id.
+    auto_link_roster: bool = False
+    workspace_id: str = ""
 
     @property
     def configured(self) -> bool:

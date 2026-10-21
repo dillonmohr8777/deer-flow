@@ -24,6 +24,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { useIsClient } from "@/core/auth/AuthProvider";
+import { CLIENT_SETTINGS_SECTIONS } from "@/core/auth/roles";
 import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
 
@@ -137,7 +139,8 @@ type SettingsDialogProps = React.ComponentProps<typeof Dialog> & {
 export function SettingsDialog(props: SettingsDialogProps) {
   const { defaultSection = "appearance", ...dialogProps } = props;
   const { t } = useI18n();
-  const [activeSection, setActiveSection] =
+  const isClient = useIsClient();
+  const [selectedSection, setActiveSection] =
     useState<SettingsSection>(defaultSection);
   const navRef = useRef<HTMLElement>(null);
 
@@ -150,7 +153,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
     const frame = requestAnimationFrame(() => {
       const nav = navRef.current;
       const tab = nav?.querySelector<HTMLElement>(
-        `[data-section="${activeSection}"]`,
+        `[data-section="${selectedSection}"]`,
       );
       if (!nav || !tab || nav.scrollWidth <= nav.clientWidth) return;
       const navBox = nav.getBoundingClientRect();
@@ -159,7 +162,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
         tabBox.left - navBox.left - (navBox.width - tabBox.width) / 2;
     });
     return () => cancelAnimationFrame(frame);
-  }, [activeSection, open]);
+  }, [selectedSection, open]);
 
   useEffect(() => {
     // When opening the dialog, ensure the active section follows the caller's intent.
@@ -169,7 +172,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
     }
   }, [defaultSection, dialogProps.open]);
 
-  const sections = useMemo(
+  const allSections = useMemo(
     () => [
       { id: "models", label: t.settings.sections.models, icon: BotIcon },
       {
@@ -239,6 +242,18 @@ export function SettingsDialog(props: SettingsDialogProps) {
       t.settings.sections.about,
     ],
   );
+  // A client keeps account, appearance and about; the rest are internal or
+  // admin tools. A deep link to a hidden section falls back to appearance.
+  const sections = useMemo(
+    () =>
+      isClient
+        ? allSections.filter(({ id }) => CLIENT_SETTINGS_SECTIONS.has(id))
+        : allSections,
+    [allSections, isClient],
+  );
+  const activeSection = sections.some(({ id }) => id === selectedSection)
+    ? selectedSection
+    : "appearance";
   return (
     <Dialog
       {...dialogProps}

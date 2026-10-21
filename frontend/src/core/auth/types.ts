@@ -2,10 +2,14 @@ import { z } from "zod";
 
 // ── User schema (single source of truth) ──────────────────────────
 
+/** Mirrors `SystemRole` in `backend/app/gateway/auth/models.py`. */
+export const SYSTEM_ROLES = ["admin", "exec", "user", "client"] as const;
+export type SystemRole = (typeof SYSTEM_ROLES)[number];
+
 export const userSchema = z.object({
   id: z.string(),
   email: z.string().email(),
-  system_role: z.enum(["admin", "user"]),
+  system_role: z.enum(SYSTEM_ROLES),
   needs_setup: z.boolean().optional().default(false),
   oauth_provider: z.string().nullable().optional().default(null),
   // Effective route permissions (RFC #4063 Phase 4). Optional + nullable:

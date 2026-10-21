@@ -28,6 +28,7 @@ from app.gateway.auth_disabled import (
     is_auth_disabled,
 )
 from app.gateway.authz import AuthContext, resolve_route_permissions
+from app.gateway.client_boundary import CLIENT_ROLE, is_client_allowed_route
 from app.gateway.internal_auth import (
     INTERNAL_AUTH_HEADER_NAME,
     INTERNAL_DELEGATION_ID_HEADER_NAME,
@@ -328,6 +329,10 @@ class AuthMiddleware(BaseHTTPMiddleware):
         # JWT-decode + DB-lookup pipeline a second time per request).
         request.state.user = user
         request.state.auth_source = auth_source
+        # A client (external customer) reaches chat and nothing else; the table
+        # is default-deny, so it also closes routes added after it was written.
+        if getattr(user, "system_role", None) == CLIENT_ROLE and not is_client_allowed_route(request.method, get_request_route_path(request)):
+            return JSONResponse(status_code=403, content={"detail": "This area is not available for your account"})
         organization: ActiveOrganization | None = delegation.organization if delegation is not None else None
         if auth_source in {AUTH_SOURCE_SESSION, AUTH_SOURCE_PAT}:
             # A PAT is pinned to the organization active when it was minted

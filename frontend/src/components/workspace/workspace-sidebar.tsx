@@ -10,6 +10,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { useWorkspaceAppearance } from "@/components/workspace/command-center/appearance-provider";
+import { useIsClient, useIsRoleUnresolved } from "@/core/auth/AuthProvider";
 import { cn } from "@/lib/utils";
 
 import { WorkspaceChannelsList } from "./channels/workspace-channels-list";
@@ -31,20 +32,26 @@ export function WorkspaceSidebar({
 }: React.ComponentProps<typeof Sidebar>) {
   const { open: isSidebarOpen } = useSidebar();
   const { motionOn } = useWorkspaceAppearance();
+  // A client sees chats and nothing internal: no workspace switcher, plugin
+  // pages, channels, projects or background work.
+  const isClient = useIsClient();
+  // Until the role resolves the user may be a client: show no internal UI.
+  const unresolved = useIsRoleUnresolved();
+  const showInternal = !isClient && !unresolved;
   return (
     <ThreadDeleteDialogProvider>
       <Sidebar variant="sidebar" collapsible="icon" {...props}>
         <SidebarHeader className={cn("py-0", styles.phoneTargets)}>
           <WorkspaceHeader />
-          {isSidebarOpen && <WorkspaceSelector />}
+          {isSidebarOpen && showInternal && <WorkspaceSelector />}
         </SidebarHeader>
         <SidebarContent className={styles.phoneTargets}>
           <WorkspaceNavChatList />
-          <PluginNavigation />
-          <WorkspaceChannelsList />
+          {showInternal && <PluginNavigation />}
+          {showInternal && <WorkspaceChannelsList />}
           {isSidebarOpen && (
             <>
-              <ProjectsSection />
+              {showInternal && <ProjectsSection />}
               <RecentChatList />
             </>
           )}
@@ -59,7 +66,7 @@ export function WorkspaceSidebar({
               className={styles.scraps}
             />
           )}
-          <BackgroundJobs />
+          {!isClient && <BackgroundJobs />}
           <WorkspaceNavMenu />
           {/* The maker's signature, at the far end from the MomoBot name. */}
           {isSidebarOpen && (

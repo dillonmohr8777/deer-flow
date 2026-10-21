@@ -1854,6 +1854,12 @@ and the [request contract](backend/docs/API.md#referencing-a-previous-conversati
 
 ### Long-Term Memory
 
+`memory.model_name` selects a host `models[]` profile for DeerMem extraction,
+including its endpoint and provider restrictions. Null retains the app default;
+it does not follow the chat run's model. An explicit `memory.backend_config.model`
+still takes precedence. An unknown host profile disables extraction with a
+warning instead of falling back to another model. Memory reads remain available.
+
 The opt-in [DeerMem scope-isolation benchmark](backend/scripts/benchmark/deermem_scope_isolation/README.md)
 checks semantic safety across facts and summaries, and fact routing across users
 and agents. Failed extraction attempts are retryable execution errors, not safety passes.
@@ -2553,3 +2559,7 @@ rejects an omitted journal setting; previous memory-only pilot events remain
 historical. See the exact invocation in [private setup](docs/MOMOBOT_APP_RELEASE.md).
 
 Optional Momentum integration: [synthetic offline SDK review worker](examples/momentum-sdk-review/README.md). Disabled by default; does not perform live client work or inference.
+
+For EC2 operators, an optional [read-only Brain snapshot adapter](deploy/momentum/ec2/README.md#optional-read-only-brain-snapshot-prepared-not-enabled)
+can expose saved context without a Mac service or new collector. It is prepared only;
+production registration and private snapshot installation are separate release steps.

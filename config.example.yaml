@@ -20,7 +20,7 @@
 # ============================================================================
 # Bump this number when the config schema changes.
 # Run `make config-upgrade` to merge new fields into your local config.yaml.
-config_version: 47
+config_version: 48
 
 # Optional per-model request pacing (inside a models[] entry):
 # request_admission:
@@ -1977,6 +1977,8 @@ roster:
   users: {}
   #  U0EXAMPLEAM1: {role: am, clients: [example-client]}
   #  U0EXAMPLEADM: {role: admin}
+  # Optional email: {role: am, email: am@example.com} lets Slack auto-link
+  # (channel_connections.slack.auto_link_roster) match or create the account.
   # Slack channel ID -> client ID: the client "@MomoBot desktop <task>" posted in
   # that channel is for. Unlisted channels are refused; in a DM the user writes
   # "desktop <client-id>: <task>" and the client must be in their roster scope.
@@ -2196,6 +2198,7 @@ summarization:
 # Shared fields (host level, backend-agnostic):
 #   enabled             - Master switch for the memory mechanism (call-site gate)
 #   injection_enabled   - Whether to inject memory into the system prompt (call-site gate)
+#   model_name          - Host models[] profile for extraction; null retains app default
 #   shutdown_flush_timeout_seconds - Hard budget (s) to drain pending updates on Gateway graceful shutdown (default: 30)
 #   manager_class       - Backend selector: registered name (deermem/mem0/noop/openviking) or dotted path
 #   backend_config      - Backend-private config dict (passthrough; each backend self-interprets)
@@ -2204,7 +2207,7 @@ summarization:
 #   storage_path        - Data root. Empty = deer-flow base_dir (factory injects absolute
 #                         runtime_home). Absolute path = that root. Relative = CWD-relative.
 #   model               - LLM config for memory extraction: {provider, model, api_key, base_url,
-#                         temperature}. Omit all fields = no extraction (non-LLM ops still work).
+#                         temperature}. In DeerFlow, omit to use the host model profile.
 #   debounce_seconds    - Debounce wait before processing queued updates (default: 30)
 #   max_facts           - Maximum facts to store (default: 100)
 #   fact_confidence_threshold - Minimum confidence for storing facts (default: 0.7)
@@ -2229,6 +2232,9 @@ summarization:
 memory:
   enabled: true
   injection_enabled: true # Whether to inject memory into system prompt
+  # Resolves a models[] profile with its endpoint, credentials and provider filters.
+  # An explicit backend_config.model takes precedence. Does not follow each run's model.
+  model_name: null # null retains the existing app default
   # Hard budget (seconds) to drain pending memory updates on Gateway graceful
   # shutdown. Each pending item does one LLM call, so large IM batches may need
   # more. Must fit inside the pod's K8s terminationGracePeriodSeconds (channel
@@ -2411,6 +2417,20 @@ private_workspace:
 momentum_internal:
   enabled: false
   organization_slugs: []
+
+# MomoBot Max: the built-in all-in-one agent client accounts chat with. Global
+# (not per user), read-only, and absent until enabled. A caller sees it only if
+# their role may use `model` (authorization.provider.config.roles.<role>.models),
+# so teammates whose model list excludes it never get it. Every run of it uses
+# the effort resolved here, whatever the request asks for. A client user is
+# pinned to it and resolves their client from their client_contact assignment
+# (key = the client's registry id, else its id).
+# momobot_max:
+#   enabled: true
+#   model: claude-opus-5-5          # name of a models: entry
+#   default_effort: high            # low | medium | high
+#   client_effort:                  # per-client override
+#     vhin-cares: high
 
 # ============================================================================
 # Skill Self-Evolution Configuration
@@ -2802,6 +2822,12 @@ run_ownership:
 #
 #   slack:
 #     enabled: false
+#     # Bind anyone on the `roster` below at their first message, with no /connect
+#     # code. Only for senders from this Slack team id; creates a non-admin user
+#     # in the organization_slugs workspace if needed. Needs the email of each
+#     # person: set `email:` on their roster entry, or give the bot users:read.email.
+#     auto_link_roster: false
+#     workspace_id: T0000000000
 #
 #   discord:
 #     enabled: false
@@ -3017,18 +3043,29 @@ run_ownership:
 # See RFC: https://github.com/bytedance/deer-flow/issues/4063
 #
 # authorization:
-#   enabled: true
-#   fail_closed: true            # block on provider error / unresolved identity
+#   enabled: true                # the role tiers below only apply while this is true
+#   fail_closed: true            # block on provider error / unresolved identity; also denies a role that has no block below
 #   default_role: user           # applied when user_role is None; built-in RBAC requires this role below
 #   provider:
 #     use: deerflow.authz.rbac:RbacAuthorizationProvider
 #     config:
 #       # A known role with no policy for a resource is unrestricted for it.
-#       # Define both `tools` and `routes` wherever access should be constrained.
+#       # Define `tools`, `routes`, `models`, `skills` and `sandbox` wherever
+#       # access should be constrained. A role with no block at all is unknown
+#       # and fails closed (denied everywhere), so add a role's block BEFORE
+#       # assigning it: PUT /api/admin/users/{id}/role answers 409 until then.
 #       # `models` / `skills` govern the per-caller listing/detail surfaces
 #       # (which models/skills the caller sees on GET /api/models and the
 #       # GET /api/skills[.../custom, /{name}] skill routes); skill
 #       # management endpoints (install/edit/export) stay admin-gated.
+#       #
+#       # Role tiers (users.system_role):
+#       #   admin   everything, and the only role the admin-only routes accept
+#       #   exec    C-suite: premium models, user's tools and routes; never admin
+#       #   user    teammate: everyday models
+#       #   client  external customer: MomoBot Max only. The gateway also
+#       #           confines a client to chat (client_boundary.py), so a wrong
+#       #           or missing line here cannot open an internal route.
 #       roles:
 #         admin:
 #           tools: {allow: "*"}
@@ -3036,12 +3073,47 @@ run_ownership:
 #           models: {allow: "*"}
 #           sandbox: {allow: "*"}
 #           skills: {allow: "*"}
-#         user:
-#           tools: {allow: "*", deny: ["update_agent"]}
-#           routes: {allow: "*"}
-#           models: {allow: "*"}
+#         exec:
+#           tools: {allow: "*", deny: ["update_agent"]}   # narrow to the same approved list as user
+#           routes: {allow: "*", deny: ["fleet:work"]}
+#           models: {allow: ["claude-opus-5-5", "claude-haiku-5-5", "claude-sonnet-4"]}
 #           sandbox: {allow: "*"}
 #           skills: {allow: "*"}
+#         user:
+#           tools: {allow: "*", deny: ["update_agent"]}
+#           routes: {allow: "*", deny: ["fleet:work"]}
+#           models: {allow: ["claude-haiku-5-5"]}
+#           sandbox: {allow: "*"}
+#           skills: {allow: "*"}
+#         client:
+#           # Exactly what MomoBot Max may call; the agent carries the same
+#           # ceiling in code.
+#           tools: {allow: ["web_search", "web_fetch", "read_file", "write_file", "present_files", "ask_clarification", "view_image", "task", "tool_search"]}
+#           # Every internal surface that has a permission name. Scheduled tasks,
+#           # agents management, workflows, the capability center, the command
+#           # center, the OpenAI crew and the rest ride on threads:/runs: and
+#           # have no name here; the gateway's client route boundary closes them.
+#           routes:
+#             allow: "*"
+#             deny:
+#               - "team:read"
+#               - "team:write"
+#               - "board:read"
+#               - "board:write"
+#               - "academy:read"
+#               - "academy:write"
+#               - "approvals:read"
+#               - "approvals:write"
+#               - "fleet:work"
+#               - "projects:read"
+#               - "projects:write"
+#               - "projects:delete"
+#               - "clients:read"
+#               - "clients:write"
+#               - "clients:delete"
+#           models: {allow: ["claude-opus-5-5"]}   # must equal momobot_max.model
+#           sandbox: {allow: "*"}
+#           skills: {allow: []}
 #         guest:
 #           # web-only role: sandbox-dependent tools (read_file, bash, glob,
 #           # grep, write_file, ...) are omitted — with sandbox:execute denied

@@ -57,6 +57,11 @@ class AgentServiceError(Exception):
         self.status_code = status_code
 
 
+def openai_agents_configured() -> bool:
+    """Whether the hosted OpenAI agent service has an API key (the signal behind the sidebar link)."""
+    return bool(os.environ.get("OPENAI_API_KEY"))
+
+
 def _dict(value: Any) -> dict[str, Any]:
     if isinstance(value, dict):
         return value
@@ -129,7 +134,7 @@ class OpenAIAgentService:
 
     def status(self) -> dict[str, Any]:
         version = _SDK_VERSION
-        configured = bool(os.environ.get("OPENAI_API_KEY"))
+        configured = openai_agents_configured()
         compatible = version is not None and tuple(int(part) for part in version.split(".")[:3] if part.isdigit()) >= (3, 13, 0)
         enabled = os.environ.get("MOMOBOT_OPENAI_AGENTS_ENABLED", "").lower() == "true"
         reason = None if configured and compatible and enabled else "not_enabled" if not enabled else "missing_api_key" if not configured else "sdk_upgrade_required"

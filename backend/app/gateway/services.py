@@ -27,6 +27,7 @@ from langgraph.types import Command
 
 from app.gateway.auth_disabled import AUTH_SOURCE_INTERNAL
 from app.gateway.authz import require_cancel_permission_if
+from app.gateway.client_boundary import CLIENT_ROLE
 from app.gateway.deps import get_checkpointer, get_local_provider, get_run_context, get_run_manager, get_stream_bridge, get_thread_store
 from app.gateway.internal_auth import (
     INTERNAL_SYSTEM_ROLE,
@@ -35,6 +36,7 @@ from app.gateway.internal_auth import (
 )
 from app.gateway.knowledge_scope_admission import admit_message_knowledge_scope
 from app.gateway.momentum_internal import is_momentum_staff
+from app.gateway.momobot_max import apply_run_policy as apply_momobot_max_run_policy
 from app.gateway.run_models import RunCreateRequest
 from app.gateway.utils import sanitize_log_param
 from app.mcp_tasks.errors import PermanentNotificationError
@@ -1921,6 +1923,9 @@ async def start_run(
             # ``body.config`` is free-form and copied verbatim by
             # ``build_run_config``; scrub internal-only keys smuggled there.
             strip_internal_context_keys(config)
+        # Client runs are pinned to MomoBot Max, and every MomoBot Max run gets its
+        # config-owned effort and delegation settings, whatever the request said.
+        await apply_momobot_max_run_policy(config, user=user, actor_user_id=actor_user_id, app_config=get_app_config(), internal=is_internal_caller)
 
         replay_kind = run_metadata.get("replay_kind")
         target_message_id = run_metadata.get("regenerate_from_message_id")
@@ -2019,6 +2024,8 @@ async def start_run(
             agent_config=agent_config,
             recovery_scope=recovery_scope,
             recovery=is_scope_recovery,
+            # A client has no per-client dataset mapping, so any scope could reach another client's data.
+            deny_scope=getattr(user, "system_role", None) == CLIENT_ROLE,
         )
         if admitted_knowledge_scope is not None:
             await _validate_scope_thread_binding(

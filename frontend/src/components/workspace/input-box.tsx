@@ -67,6 +67,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { fetch } from "@/core/api/fetcher";
 import { useAuth } from "@/core/auth/AuthProvider";
+import { isClientUser } from "@/core/auth/roles";
 import { getBackendBaseURL } from "@/core/config";
 import {
   buildConversationReferenceMetadata,
@@ -379,6 +380,9 @@ export function InputBox({
   const [modelDialogOpen, setModelDialogOpen] = useState(false);
   const { models } = useModels();
   const { user } = useAuth();
+  // A client chats with one agent on one model and has no skills, polish or
+  // mode controls: those are Momentum's to set (see core/auth/roles.ts).
+  const isClient = isClientUser(user);
   const { thread, isMock } = useThread();
   const { attachments, textInput } = usePromptInputController();
   const setTextInput = textInput.setInput;
@@ -400,7 +404,9 @@ export function InputBox({
   // keeps it across a Strict-Mode effect replay.
   const [projectAttachments, setProjectAttachments] =
     useStagedProjectAttachments(threadId);
-  const { skills, isLoading: skillsLoading } = useSkills();
+  const { skills, isLoading: skillsLoading } = useSkills({
+    enabled: !isClient,
+  });
   const { data: uploadLimits } = useUploadLimits(threadId);
   const promptRootRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -2567,209 +2573,216 @@ export function InputBox({
               supported={voiceInputSupported}
               onToggle={toggleVoiceInput}
             />
-            <Tooltip
-              content={
-                polishingInput
-                  ? t.inputBox.inputPolishing
-                  : inputPolishUndoAvailable
-                    ? t.inputBox.inputPolishUndo
-                    : t.inputBox.inputPolish
-              }
-            >
-              <PromptInputButton
-                aria-label={
-                  inputPolishUndoAvailable
-                    ? t.inputBox.inputPolishUndo
-                    : t.inputBox.inputPolish
-                }
-                className="px-2!"
-                data-testid="polish-input-button"
-                disabled={inputPolishDisabled}
-                onClick={
-                  inputPolishUndoAvailable
-                    ? handleUndoInputPolish
-                    : handlePolishInput
+            {!isClient && (
+              <Tooltip
+                content={
+                  polishingInput
+                    ? t.inputBox.inputPolishing
+                    : inputPolishUndoAvailable
+                      ? t.inputBox.inputPolishUndo
+                      : t.inputBox.inputPolish
                 }
               >
-                {polishingInput ? (
-                  <Loader2Icon className="size-3 animate-spin" />
-                ) : inputPolishUndoAvailable ? (
-                  <Undo2Icon className="size-3" />
-                ) : (
-                  <SparklesIcon className="size-3" />
-                )}
-              </PromptInputButton>
-            </Tooltip>
-            <PromptInputActionMenu>
-              <ModeHoverGuide
-                mode={
-                  context.mode === "flash" ||
-                  context.mode === "thinking" ||
-                  context.mode === "pro" ||
-                  context.mode === "ultra"
-                    ? context.mode
-                    : "flash"
-                }
-              >
-                <PromptInputActionMenuTrigger
-                  className="max-w-28 gap-1! px-2! sm:max-w-none"
-                  disabled={composerLocked}
+                <PromptInputButton
+                  aria-label={
+                    inputPolishUndoAvailable
+                      ? t.inputBox.inputPolishUndo
+                      : t.inputBox.inputPolish
+                  }
+                  className="px-2!"
+                  data-testid="polish-input-button"
+                  disabled={inputPolishDisabled}
+                  onClick={
+                    inputPolishUndoAvailable
+                      ? handleUndoInputPolish
+                      : handlePolishInput
+                  }
                 >
-                  <div>
-                    {context.mode === "flash" && <ZapIcon className="size-3" />}
-                    {context.mode === "thinking" && (
-                      <LightbulbIcon className="size-3" />
-                    )}
-                    {context.mode === "pro" && (
-                      <GraduationCapIcon className="size-3" />
-                    )}
-                    {context.mode === "ultra" && (
-                      <RocketIcon className="size-3" />
-                    )}
-                  </div>
-                  {/* Ink like every other mode: brass is for objects, and
-                      the word carries the mode, not its colour. */}
-                  <div className="truncate text-[13px] font-semibold">
-                    {(context.mode === "flash" && t.inputBox.flashMode) ||
-                      (context.mode === "thinking" &&
-                        t.inputBox.reasoningMode) ||
-                      (context.mode === "pro" && t.inputBox.proMode) ||
-                      (context.mode === "ultra" && t.inputBox.ultraMode)}
-                  </div>
-                </PromptInputActionMenuTrigger>
-              </ModeHoverGuide>
-              <PromptInputActionMenuContent className="w-80">
-                <DropdownMenuGroup>
-                  <DropdownMenuLabel className="text-muted-foreground text-xs">
-                    {t.inputBox.mode}
-                  </DropdownMenuLabel>
-                  <PromptInputActionMenu>
-                    <PromptInputActionMenuItem
-                      className={cn(
-                        context.mode === "flash"
-                          ? "text-accent-foreground"
-                          : "text-muted-foreground/65",
+                  {polishingInput ? (
+                    <Loader2Icon className="size-3 animate-spin" />
+                  ) : inputPolishUndoAvailable ? (
+                    <Undo2Icon className="size-3" />
+                  ) : (
+                    <SparklesIcon className="size-3" />
+                  )}
+                </PromptInputButton>
+              </Tooltip>
+            )}
+            {!isClient && (
+              <PromptInputActionMenu>
+                <ModeHoverGuide
+                  mode={
+                    context.mode === "flash" ||
+                    context.mode === "thinking" ||
+                    context.mode === "pro" ||
+                    context.mode === "ultra"
+                      ? context.mode
+                      : "flash"
+                  }
+                >
+                  <PromptInputActionMenuTrigger
+                    className="max-w-28 gap-1! px-2! sm:max-w-none"
+                    disabled={composerLocked}
+                  >
+                    <div>
+                      {context.mode === "flash" && (
+                        <ZapIcon className="size-3" />
                       )}
-                      onSelect={() => handleModeSelect("flash")}
-                    >
-                      <div className="flex flex-col gap-2">
-                        <div className="flex items-center gap-1 font-bold">
-                          <ZapIcon
-                            className={cn(
-                              "mr-2 size-4",
-                              context.mode === "flash" &&
-                                "text-accent-foreground",
-                            )}
-                          />
-                          {t.inputBox.flashMode}
-                        </div>
-                        <div className="pl-7 text-xs">
-                          {t.inputBox.flashModeDescription}
-                        </div>
-                      </div>
-                      {context.mode === "flash" ? (
-                        <CheckIcon className="ml-auto size-4" />
-                      ) : (
-                        <div className="ml-auto size-4" />
+                      {context.mode === "thinking" && (
+                        <LightbulbIcon className="size-3" />
                       )}
-                    </PromptInputActionMenuItem>
-                    {supportThinking && (
+                      {context.mode === "pro" && (
+                        <GraduationCapIcon className="size-3" />
+                      )}
+                      {context.mode === "ultra" && (
+                        <RocketIcon className="size-3" />
+                      )}
+                    </div>
+                    {/* Ink like every other mode: brass is for objects, and
+                        the word carries the mode, not its colour. */}
+                    <div className="truncate text-[13px] font-semibold">
+                      {(context.mode === "flash" && t.inputBox.flashMode) ||
+                        (context.mode === "thinking" &&
+                          t.inputBox.reasoningMode) ||
+                        (context.mode === "pro" && t.inputBox.proMode) ||
+                        (context.mode === "ultra" && t.inputBox.ultraMode)}
+                    </div>
+                  </PromptInputActionMenuTrigger>
+                </ModeHoverGuide>
+                <PromptInputActionMenuContent className="w-80">
+                  <DropdownMenuGroup>
+                    <DropdownMenuLabel className="text-muted-foreground text-xs">
+                      {t.inputBox.mode}
+                    </DropdownMenuLabel>
+                    <PromptInputActionMenu>
                       <PromptInputActionMenuItem
                         className={cn(
-                          context.mode === "thinking"
+                          context.mode === "flash"
                             ? "text-accent-foreground"
                             : "text-muted-foreground/65",
                         )}
-                        onSelect={() => handleModeSelect("thinking")}
+                        onSelect={() => handleModeSelect("flash")}
                       >
                         <div className="flex flex-col gap-2">
                           <div className="flex items-center gap-1 font-bold">
-                            <LightbulbIcon
+                            <ZapIcon
                               className={cn(
                                 "mr-2 size-4",
-                                context.mode === "thinking" &&
+                                context.mode === "flash" &&
                                   "text-accent-foreground",
                               )}
                             />
-                            {t.inputBox.reasoningMode}
+                            {t.inputBox.flashMode}
                           </div>
                           <div className="pl-7 text-xs">
-                            {t.inputBox.reasoningModeDescription}
+                            {t.inputBox.flashModeDescription}
                           </div>
                         </div>
-                        {context.mode === "thinking" ? (
+                        {context.mode === "flash" ? (
                           <CheckIcon className="ml-auto size-4" />
                         ) : (
                           <div className="ml-auto size-4" />
                         )}
                       </PromptInputActionMenuItem>
-                    )}
-                    <PromptInputActionMenuItem
-                      className={cn(
-                        context.mode === "pro"
-                          ? "text-accent-foreground"
-                          : "text-muted-foreground/65",
+                      {supportThinking && (
+                        <PromptInputActionMenuItem
+                          className={cn(
+                            context.mode === "thinking"
+                              ? "text-accent-foreground"
+                              : "text-muted-foreground/65",
+                          )}
+                          onSelect={() => handleModeSelect("thinking")}
+                        >
+                          <div className="flex flex-col gap-2">
+                            <div className="flex items-center gap-1 font-bold">
+                              <LightbulbIcon
+                                className={cn(
+                                  "mr-2 size-4",
+                                  context.mode === "thinking" &&
+                                    "text-accent-foreground",
+                                )}
+                              />
+                              {t.inputBox.reasoningMode}
+                            </div>
+                            <div className="pl-7 text-xs">
+                              {t.inputBox.reasoningModeDescription}
+                            </div>
+                          </div>
+                          {context.mode === "thinking" ? (
+                            <CheckIcon className="ml-auto size-4" />
+                          ) : (
+                            <div className="ml-auto size-4" />
+                          )}
+                        </PromptInputActionMenuItem>
                       )}
-                      onSelect={() => handleModeSelect("pro")}
-                    >
-                      <div className="flex flex-col gap-2">
-                        <div className="flex items-center gap-1 font-bold">
-                          <GraduationCapIcon
-                            className={cn(
-                              "mr-2 size-4",
-                              context.mode === "pro" &&
-                                "text-accent-foreground",
-                            )}
-                          />
-                          {t.inputBox.proMode}
-                        </div>
-                        <div className="pl-7 text-xs">
-                          {t.inputBox.proModeDescription}
-                        </div>
-                      </div>
-                      {context.mode === "pro" ? (
-                        <CheckIcon className="ml-auto size-4" />
-                      ) : (
-                        <div className="ml-auto size-4" />
-                      )}
-                    </PromptInputActionMenuItem>
-                    {context.experience_mode !== "easy" && (
                       <PromptInputActionMenuItem
                         className={cn(
-                          context.mode === "ultra"
+                          context.mode === "pro"
                             ? "text-accent-foreground"
                             : "text-muted-foreground/65",
                         )}
-                        onSelect={() => handleModeSelect("ultra")}
+                        onSelect={() => handleModeSelect("pro")}
                       >
                         <div className="flex flex-col gap-2">
                           <div className="flex items-center gap-1 font-bold">
-                            <RocketIcon
+                            <GraduationCapIcon
                               className={cn(
                                 "mr-2 size-4",
-                                context.mode === "ultra" &&
+                                context.mode === "pro" &&
                                   "text-accent-foreground",
                               )}
                             />
-                            {t.inputBox.ultraMode}
+                            {t.inputBox.proMode}
                           </div>
                           <div className="pl-7 text-xs">
-                            {t.inputBox.ultraModeDescription}
+                            {t.inputBox.proModeDescription}
                           </div>
                         </div>
-                        {context.mode === "ultra" ? (
+                        {context.mode === "pro" ? (
                           <CheckIcon className="ml-auto size-4" />
                         ) : (
                           <div className="ml-auto size-4" />
                         )}
                       </PromptInputActionMenuItem>
-                    )}
-                  </PromptInputActionMenu>
-                </DropdownMenuGroup>
-              </PromptInputActionMenuContent>
-            </PromptInputActionMenu>
+                      {context.experience_mode !== "easy" && (
+                        <PromptInputActionMenuItem
+                          className={cn(
+                            context.mode === "ultra"
+                              ? "text-accent-foreground"
+                              : "text-muted-foreground/65",
+                          )}
+                          onSelect={() => handleModeSelect("ultra")}
+                        >
+                          <div className="flex flex-col gap-2">
+                            <div className="flex items-center gap-1 font-bold">
+                              <RocketIcon
+                                className={cn(
+                                  "mr-2 size-4",
+                                  context.mode === "ultra" &&
+                                    "text-accent-foreground",
+                                )}
+                              />
+                              {t.inputBox.ultraMode}
+                            </div>
+                            <div className="pl-7 text-xs">
+                              {t.inputBox.ultraModeDescription}
+                            </div>
+                          </div>
+                          {context.mode === "ultra" ? (
+                            <CheckIcon className="ml-auto size-4" />
+                          ) : (
+                            <div className="ml-auto size-4" />
+                          )}
+                        </PromptInputActionMenuItem>
+                      )}
+                    </PromptInputActionMenu>
+                  </DropdownMenuGroup>
+                </PromptInputActionMenuContent>
+              </PromptInputActionMenu>
+            )}
             {knowledgeScopeControl}
             {supportReasoningEffort &&
+              !isClient &&
               context.mode !== "flash" &&
               context.experience_mode !== "easy" && (
                 <PromptInputActionMenu>
@@ -2917,7 +2930,7 @@ export function InputBox({
                 {goalObjectiveCounter.length}/{goalObjectiveCounter.max}
               </span>
             )}
-            {context.experience_mode !== "easy" && (
+            {context.experience_mode !== "easy" && !isClient && (
               <ModelPicker
                 open={modelDialogOpen}
                 onOpenChange={setModelDialogOpen}

@@ -6,7 +6,8 @@ EC2 adds three things:
 
 - **Secrets in memory only.** The instance role (`momobot-ec2`) may read `/momobot/prod/*` in SSM Parameter Store
   and write the backup bucket, nothing else. `secrets.sh` runs before every start and writes `/run/momobot/.env`
-  (tmpfs, root 600). Nothing secret is on disk, in git or in the backups.
+  (tmpfs, root 600). These environment credentials stay out of git and backups;
+  the private gateway backup still contains its JWT signing secret and user data.
 - **The gateway's extra mounts** (`compose.ec2.yaml`): skills, admission, lobby notes, brand kit, evals and the
   two browser guard modules, from `/opt/momobot/data` and `/opt/momobot/code`.
 - **systemd drop-ins** (`systemd/`) that point the kit's units at the tmpfs env file and the EC2 layer.
@@ -35,7 +36,92 @@ sudo MOMOBOT_ENV_FILE=/run/momobot/.env MOMOBOT_EXTRA_COMPOSE=/opt/momobot/src/d
 Release: build `deer-flow-{gateway,frontend}:main-<sha8>` on the box from the merged commit, set both tags in
 `settings.env`, then `systemctl restart momobot`. Rollback: put the previous tags back and restart.
 
+## Nightly recovery contents
+
+The existing backup timer includes the consistent gateway SQLite snapshot, config and MCP settings,
+a Redis-native RDB snapshot verified by `redis-check-rdb`, and the seven EC2 bind mounts listed above.
+`ec2-recovery.json` carries only the known non-secret image/domain/frontend-owner settings needed to
+recreate `settings.env` and `frontend.env`. Environment files remain excluded; reload credentials
+from SSM. The gateway snapshot contains private user data and its JWT signing secret, so keep the
+S3 bucket private and encrypted.
+
+For a replacement host, install the merged source and EC2 kit, verify every `MANIFEST.sha256` entry,
+restore `gateway-data.tgz` into an empty gateway volume, and restore `ec2-mounts.tgz` under
+`/opt/momobot`. Recreate the two non-secret env files from `ec2-recovery.json`. With Redis stopped
+and an empty Redis volume, install `redis.rdb` as `dump.rdb` with the image's Redis ownership;
+start Redis once without AOF so it loads the snapshot, then enable AOF before starting the stack.
+Never overwrite a populated live volume. Snapshot checks are per service, not one atomic cross-service
+transaction. A failed Redis or required EC2 mount snapshot fails the backup before its success stamp.
+
+## Backup retention
+
+Only `nightly/` expires: current nightly backups after 30 days and their old versions after 7 days.
+The `mac-final-20261020/` archive contains originals removed from the Mac and must remain outside
+automatic expiration. A bucket-wide empty prefix would delete those originals too.
+
+Apply the checked-in policy from the repository root with the operator AWS profile, after reviewing
+the current bucket policy for other rules that must be preserved:
+
+```bash
+aws s3api get-bucket-lifecycle-configuration --profile sunlit-servers \
+  --bucket momobot-prod-backups-009688440435
+aws s3api put-bucket-lifecycle-configuration --profile sunlit-servers \
+  --bucket momobot-prod-backups-009688440435 \
+  --lifecycle-configuration file://deploy/momentum/ec2/backup-lifecycle.json
+aws s3api get-bucket-lifecycle-configuration --profile sunlit-servers \
+  --bucket momobot-prod-backups-009688440435 --query Rules
+```
+
 ## Not on the box (Mac-only, off in the cloud config)
 
 Brain MCP (Mac bridge :8787), client_browser MCP (:8788), the Jevbox evidence tool (:4310) and the local
 Ollama/oMLX models. Reaching them needs a tunnel back to the Mac. That is a follow-up, and MomoBot runs without them.
+
+
+## Minimal memory profile image (prepared, not deployed)
+
+`Dockerfile.memory-profile` copies only the two memory files reviewed in PR198 onto an
+operator-verified immutable alias of the existing live gateway image. It runs no build
+commands, installs no dependencies and changes no entrypoint, config, model default,
+frontend or Brain integration. Supply a context containing only these two files exported
+from commit `02c279db601a42ce731e5b3a8dd88e055aa6dcfc`, then build on EC2 with
+`docker build --pull=false --network=none --build-arg BASE_IMAGE=<verified-local-alias> -f Dockerfile.memory-profile -t <new-candidate-tag> <context>`.
+Verify the base image ID and candidate file hashes before changing a runtime tag. Keep the
+previous gateway tag and settings snapshot for rollback through the existing systemd unit.
+A named-profile probe does not authorize a global memory model change: preserve the current
+profile until its intended scope is established. Production acceptance needs the deployed
+file hashes, readiness, authenticated output and an approved public-synthetic model receipt.
+
+## Optional read-only Brain snapshot (prepared, not enabled)
+
+`brain_readonly_adapter.py` preserves the existing fixed-destination HTTP adapter and adds
+an offline mode selected by `BRAIN_SNAPSHOT_DIR`. It does not enable an MCP server or alter
+production configuration. The existing collector remains the only Brain writer.
+
+For snapshot mode, the deployment owner installs one coherent private directory containing
+`brain.json`, `NOW.md`, and the unchanged trusted `brain.py` renderer. Mount it read-only on
+EC2 and run the adapter with the existing gateway Python interpreter:
+
+```sh
+BRAIN_SNAPSHOT_DIR=/opt/momobot/brain-snapshot python3 brain_readonly_adapter.py
+```
+
+Keep those three files outside Git and model prompts. Only `brain_now`, `brain_client`,
+`brain_open_items`, and `brain_systems` are exposed; calls go directly to pure renderer
+functions. The adapter never invokes Brain's auto-refreshing `load`, collector, capture,
+search, or HTTP service in snapshot mode. No bearer token or new network endpoint is needed.
+Every result includes the saved `generated_at` as `sourceObservedAt`, even if the files are
+old. These are saved observations, not live health or a fresh communication sweep.
+
+The deployment owner must independently review the change, stage the private renderer/cache
+and adapter, add a read-only mount, replace the missing `/run/momo-security` adapter path in
+the existing disabled MCP entry, then verify useful MCP output before enabling it. Do not
+add a collector, timer, Mac bridge or competing writer. Cache transfer, authentication,
+production integration and client-scoped access remain unverified by the offline test.
+
+Offline contract check (synthetic fixture only):
+
+```sh
+cd backend
+python -m pytest tests/test_ec2_brain_snapshot.py -q --noconftest
+```
