@@ -1,11 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, rs } from "@rstest/core";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { RoleRouteGuard } from "@/components/workspace/role-route-guard";
 import { WorkspaceHeader } from "@/components/workspace/workspace-header";
 import { WorkspaceNavChatList } from "@/components/workspace/workspace-nav-chat-list";
+import { WorkspaceNavMenu } from "@/components/workspace/workspace-nav-menu";
 import { AuthProvider } from "@/core/auth/AuthProvider";
 import type { User } from "@/core/auth/types";
 import { DEFAULT_LOCALE } from "@/core/i18n";
@@ -14,11 +15,16 @@ import { I18nProvider } from "@/core/i18n/context";
 const mocks = rs.hoisted(() => ({
   pathname: "/workspace/chats",
   replace: rs.fn(),
+  openSettings: rs.fn(),
   desk: false,
   internal: false,
   openai: false,
   agents: true,
   brandKit: true,
+}));
+
+rs.mock("@/components/workspace/settings", () => ({
+  useSettingsDialog: () => ({ openSettings: mocks.openSettings }),
 }));
 
 rs.mock("next/navigation", () => ({
@@ -73,6 +79,7 @@ function hrefs(container: HTMLElement) {
 beforeEach(() => {
   mocks.pathname = "/workspace/chats";
   mocks.replace.mockClear();
+  mocks.openSettings.mockClear();
   mocks.desk = false;
   mocks.internal = false;
   mocks.openai = false;
@@ -80,6 +87,38 @@ beforeEach(() => {
   mocks.brandKit = true;
 });
 afterEach(cleanup);
+
+describe("experience mode access", () => {
+  it.each(["user", "admin", "exec"] as const)(
+    "opens the existing mode settings directly for a %s",
+    (role) => {
+      renderAs(role, <WorkspaceNavMenu />);
+      fireEvent.keyDown(
+        screen.getByRole("button", { name: "Settings and more" }),
+        {
+          key: "Enter",
+        },
+      );
+      fireEvent.click(
+        screen.getByRole("menuitem", { name: "Easy / Medium / Hard" }),
+      );
+      expect(mocks.openSettings).toHaveBeenCalledWith("experience");
+    },
+  );
+
+  it("keeps internal mode settings out of the client menu", () => {
+    renderAs("client", <WorkspaceNavMenu />);
+    fireEvent.keyDown(
+      screen.getByRole("button", { name: "Settings and more" }),
+      {
+        key: "Enter",
+      },
+    );
+    expect(
+      screen.queryByRole("menuitem", { name: "Easy / Medium / Hard" }),
+    ).toBeNull();
+  });
+});
 
 describe("the client sidebar", () => {
   it("shows Chats, MomoBot Agents and About, and nothing internal", () => {
