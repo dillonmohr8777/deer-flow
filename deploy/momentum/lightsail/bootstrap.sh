@@ -49,7 +49,7 @@ tmp="$(umask 077; mktemp "$DEPLOY/.env.XXXXXX")"
 trap 'rm -f "$tmp"' EXIT
 aws ssm get-parameters-by-path --path "$MOMOBOT_SSM_PATH" --with-decryption --recursive \
   --query 'Parameters[].[Name,Value]' --output json |
-  jq -r --arg skip 'MOMOBOT_DOMAIN MOMOBOT_ACME_EMAIL MOMENTUM_GATEWAY_IMAGE MOMENTUM_FRONTEND_IMAGE' --arg q "'" '
+  jq -r --arg skip 'MOMOBOT_DOMAIN MOMOBOT_ACME_EMAIL MOMENTUM_GATEWAY_IMAGE MOMENTUM_FRONTEND_IMAGE OP_SERVICE_ACCOUNT_TOKEN OP_CLIENTS_TOKEN' --arg q "'" '
     ($skip | split(" ")) as $s
     | .[] | (.[0] | split("/") | last) as $k | select($k | IN($s[]) | not)
     | if (.[1] | (contains("\n") or contains($q))) then error("secret \($k) has a newline or single quote; store it without")

@@ -123,7 +123,9 @@ form. It replies with a status and page host/path only. Values never reach the g
 
 Guards: Login items tagged `momobot` only; session RUNNING in our project with `userMetadata.owner`
 `momobot-isolated-mcp`; https page whose host equals or is under one of the item's websites. An OTP field
-gets the item's `one-time password` code. MCP sessions use `keepAlive: true`, so the broker's CDP attach
+gets the item's `one-time password` code only when the page reads like a 2FA prompt. The host is re-checked
+before every fill, a password left in a failed form is cleared, titles used twice are refused, and the item
+index is cached for 60 s so retries cannot exhaust the service-account rate limit. MCP sessions use `keepAlive: true`, so the broker's CDP attach
 does not end them. `browser_close` and the 300 s provider timeout still release them.
 
 Add a login: put a Login item (website set; one-time password field for TOTP) in a vault the service
@@ -135,12 +137,14 @@ broker after adding it). `render_secrets.py` drops it, like `OP_SERVICE_ACCOUNT_
 Install or update (under `/run/momobot-release.lock`):
 
 ```sh
-sudo install -d -m 700 /opt/momobot/login-broker /var/lib/docker/volumes/momobot-prod_gateway-data/_data/run
-sudo install -m 600 login_broker.py render_secrets.py /opt/momobot/login-broker/   # from the merged commit
+# pinned git worktree of the merged commit (no hand-copied files); move it to update
+sudo git -C /opt/momobot/src fetch origin main
+sudo git -C /opt/momobot/src worktree add --detach /opt/momobot/login-broker <merged-sha>
+sudo install -d -m 700 /var/lib/docker/volumes/momobot-prod_gateway-data/_data/run
 sudo /opt/momobot/onepassword-sdk/bin/pip install 'playwright==1.58.0'          # client only; no browser download
 sudo install -m 644 systemd/momobot-login-broker.service /etc/systemd/system/
 sudo systemctl daemon-reload && sudo systemctl enable --now momobot-login-broker
-journalctl -u momobot-login-broker -n 5   # {"broker": "ready", "items": N}; one status line per login
+journalctl -u momobot-login-broker -n 5   # {"broker": "ready", "accounts": N, "items": N}; one status line per login
 ```
 
 Copy the reviewed MCP files (`server.mjs cloud.mjs policy.mjs login.mjs`) into the volume directory.

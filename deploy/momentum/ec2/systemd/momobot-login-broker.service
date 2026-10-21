@@ -6,7 +6,7 @@ After=network-online.target docker.service
 Wants=network-online.target
 
 [Service]
-ExecStart=/opt/momobot/onepassword-sdk/bin/python /opt/momobot/login-broker/login_broker.py
+ExecStart=/opt/momobot/onepassword-sdk/bin/python /opt/momobot/login-broker/deploy/momentum/ec2/login_broker.py
 Environment=AWS_REGION=us-east-2
 Restart=on-failure
 RestartSec=10

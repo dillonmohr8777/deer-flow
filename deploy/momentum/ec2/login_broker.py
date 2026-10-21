@@ -30,12 +30,17 @@ CLIENTS_PARAM = "/momobot/prod/OP_CLIENTS_TOKEN"  # optional read-only service a
 TAG = "momobot"
 OWNER = "momobot-isolated-mcp"
 UUID = re.compile(r"[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}")
-USER = ("input[type=email], input[autocomplete=username], input[name*=user i], input[name*=email i], "
-        "input[id*=user i], input[id*=email i], input[name=login], input[type=text]")
-PASS = "input[type=password]"
-OTP = ("input[autocomplete=one-time-code], input[name*=otp i], input[name*=code i], input[id*=otp i], "
-       "input[id*=code i], input[inputmode=numeric]")
-
+EDITABLE = ":not([readonly]):not([disabled]):not([type=hidden])"
+# Priority order, best first: a catch-all text box is the last resort, never a search box.
+USER = [f"input{s}{EDITABLE}" for s in ("[autocomplete=username]", "[type=email]", "[name*=email i]", "[id*=email i]",
+                                        "[name*=user i]", "[id*=user i]", "[name=login]")] + \
+       [f"form:has(input[type=password]) input[type=text]{EDITABLE}:not([name*=search i])",
+        f"form:not([role=search]) input[type=text]{EDITABLE}:not([name*=search i])"]
+PASS = f"input[type=password]{EDITABLE}"
+OTP = [f"input{s}{EDITABLE}" for s in ("[autocomplete=one-time-code]", "[name*=otp i]", "[id*=otp i]", "[name*=totp i]",
+                                       "[name*=mfa i]", "[name*=2fa i]", "[name*=code i]", "[id*=code i]")]
+OTP_WORDS = ("verification code", "authentication code", "security code", "two-factor", "2-step", "two-step",
+             "one-time", "authenticator", "6-digit")
 
 def host_allowed(page_url: str, websites: list[str]) -> bool:
     host = (urlsplit(page_url).hostname or "").lower()
@@ -48,41 +53,55 @@ def where(page_url: str) -> str:
     return f"{parts.hostname or ''}{parts.path}"  # no query or fragment: tokens can live there
 
 
-async def _first_visible(page, selector: str, timeout_ms: int):
-    loc = page.locator(selector)
-    try:
-        await loc.first.wait_for(state="visible", timeout=timeout_ms)
-    except Exception:  # noqa: BLE001 - Playwright timeout
-        return None
-    for i in range(await loc.count()):
-        if await loc.nth(i).is_visible():
-            return loc.nth(i)
-    return None
+async def _visible(page, selectors, timeout_ms: int):
+    """First visible match, trying selectors in priority order (DOM order would let a header box win)."""
+    selectors = [selectors] if isinstance(selectors, str) else selectors
+    deadline = asyncio.get_running_loop().time() + timeout_ms / 1000
+    while True:
+        for sel in selectors:
+            loc = page.locator(sel).filter(visible=True)
+            if await loc.count():
+                return loc.first
+        if asyncio.get_running_loop().time() >= deadline:
+            return None
+        await asyncio.sleep(0.25)
 
 
-async def fill_login(page, secret) -> str:
-    """Username (one or two steps), password, then an OTP field if one appears. secret(field) -> value."""
-    password = await _first_visible(page, PASS, 4000)
-    user = await _first_visible(page, USER, 1500)
+async def fill_login(page, secret, allowed) -> str:
+    """Username (one or two steps), password, then the 1Password OTP code on a real 2FA prompt.
+    allowed(page) is re-checked before EVERY fill: a redirect between steps must not receive a value."""
+    async def put(field, name):
+        if not allowed(page):
+            raise PermissionError("page left the item's website")
+        await field.fill(await secret(name))
+
+    password = await _visible(page, PASS, 4000)
+    user = await _visible(page, USER, 1000)
     if user is not None:
-        await user.fill(await secret("username"))
+        await put(user, "username")
         if password is None:
             await user.press("Enter")
-            password = await _first_visible(page, PASS, 12000)
+            password = await _visible(page, PASS, 12000)
     if password is None:
         return "login_form_not_found"
-    await password.fill(await secret("password"))
+    await put(password, "password")
     await password.press("Enter")
-    otp = await _first_visible(page, OTP, 8000)
-    if otp is not None and not await page.locator(PASS).first.is_visible():
-        try:
-            code = await secret("one-time password?attribute=otp")
-        except LookupError:
-            return "needs_2fa"
-        await otp.fill(code)
-        await otp.press("Enter")
     await page.wait_for_timeout(3000)
-    return "password_form_still_visible" if await _first_visible(page, PASS, 500) else "submitted"
+    text = (await page.locator("body").inner_text(timeout=5000)).lower()
+    if await _visible(page, PASS, 500) is None and any(w in text for w in OTP_WORDS):
+        otp = await _visible(page, OTP, 5000)
+        if otp is not None:
+            try:
+                await put(otp, "one-time password?attribute=otp")
+            except LookupError:
+                return "needs_2fa"
+            await otp.press("Enter")
+            await page.wait_for_timeout(3000)
+    still = await _visible(page, PASS, 500)
+    if still is not None:
+        await still.fill("")  # never leave a typed password in the page for a later snapshot
+        return "password_form_still_visible"
+    return "submitted"
 
 
 class Broker:
@@ -90,14 +109,22 @@ class Broker:
         self.ops, self.bb_key, self.project = ops, bb_key, project
         self.connect = connect
         self.lock = asyncio.Lock()  # ponytail: one login at a time on this host; per-session locks if it ever queues
+        self._index, self._index_at = None, 0.0
 
-    async def items(self) -> dict[str, tuple]:
+    async def items(self) -> dict[str, tuple | None]:
+        """title -> (account, vault, item, websites); None marks a title used by two items (refused, never guessed).
+        Cached 60 s so retries cannot burn the service-account rate limit secrets.sh also needs."""
+        now = asyncio.get_running_loop().time()
+        if self._index is not None and now - self._index_at < 60:
+            return self._index
         out = {}
         for op in self.ops:  # each service account sees only its own vaults
             for vault in await op.vaults.list():
                 for item in await op.items.list(vault.id):
                     if str(getattr(item.category, "value", item.category)).upper() == "LOGIN" and TAG in (item.tags or []):
-                        out.setdefault(item.title, (op, vault.id, item.id, [w.url for w in item.websites or []]))
+                        entry = (op, vault.id, item.id, [w.url for w in item.websites or []])
+                        out[item.title] = None if item.title in out else entry
+        self._index, self._index_at = out, now
         return out
 
     def _session(self, session_id: str) -> dict:
@@ -109,13 +136,15 @@ class Broker:
         session_id, title = request.get("session"), request.get("item")
         if not isinstance(session_id, str) or not UUID.fullmatch(session_id) or not isinstance(title, str) or len(title) > 200:
             return {"status": "bad_request"}
-        items = await self.items()
-        if title not in items:
-            return {"status": "unknown_item", "available": sorted(items)}
-        op, vault_id, item_id, websites = items[title]
         session = await asyncio.to_thread(self._session, session_id)
         if session.get("status") != "RUNNING" or session.get("projectId") != self.project or (session.get("userMetadata") or {}).get("owner") != OWNER:
             return {"status": "session_not_owned"}
+        items = await self.items()
+        if title not in items:
+            return {"status": "unknown_item", "available": sorted(items)}
+        if items[title] is None:
+            return {"status": "ambiguous_item", "note": "two 1Password items share this title; rename one"}
+        op, vault_id, item_id, websites = items[title]
         ref = f"op://{vault_id}/{item_id}/"
 
         async def secret(field: str) -> str:
@@ -132,7 +161,10 @@ class Broker:
                 if not pages:
                     return {"status": "open_login_page_first", "hosts": [where(w) for w in websites]}
                 page = pages[-1]
-                status = await fill_login(page, secret)
+                try:
+                    status = await fill_login(page, secret, lambda pg: host_allowed(pg.url, websites))
+                except PermissionError:
+                    status = "stopped_page_left_site"
                 return {"status": status, "page": where(page.url)}
 
 

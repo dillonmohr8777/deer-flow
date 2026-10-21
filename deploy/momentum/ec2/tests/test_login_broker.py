@@ -66,7 +66,7 @@ class BrokerTests(unittest.TestCase):
     def run_login(self, b, request):
         filled = []
 
-        async def fake_fill(page, secret):
+        async def fake_fill(page, secret, allowed):
             filled.extend([await secret("username"), await secret("password")])
             return "submitted"
 
@@ -107,9 +107,94 @@ class BrokerTests(unittest.TestCase):
         for req in ({"session": "not-a-uuid", "item": "Demo"}, {"session": SID}, {"session": SID, "item": "x" * 201}):
             self.assertEqual(self.run_login(make(), req)[0], {"status": "bad_request"})
 
+    def test_session_is_checked_before_any_vault_listing(self):
+        b = make(session={"status": "RUNNING", "projectId": "other", "userMetadata": {}})
+        listed = []
+        b.items = lambda: listed.append(1)
+        self.assertEqual(self.run_login(b, {"session": SID, "item": "Demo"})[0]["status"], "session_not_owned")
+        self.assertEqual(listed, [])
+
+    def test_duplicate_titles_are_refused(self):
+        b = make()
+        dup = SimpleNamespace(id="i3", title="Demo", category="LOGIN", tags=["momobot"], websites=[])
+        b.ops[0].items = SimpleNamespace(list=FakeOp._async([dup, dup]))
+        result, filled = self.run_login(b, {"session": SID, "item": "Demo"})
+        self.assertEqual((result["status"], filled), ("ambiguous_item", []))
+
     def test_subdomain_allowed(self):
         self.assertTrue(broker_mod.host_allowed("https://a.login.example.com/x", ["login.example.com"]))
         self.assertFalse(broker_mod.host_allowed("https://notlogin.example.com/x", ["https://login.example.com"]))
+
+
+class FakeLoc:
+    def __init__(self, page, sel):
+        self.page, self.sel = page, sel
+
+    def filter(self, visible):
+        return self
+
+    @property
+    def first(self):
+        return self
+
+    async def count(self):
+        return int(any(k in self.sel for k in self.page.present))
+
+    async def fill(self, value):
+        self.page.filled.append(value)
+        if self.page.redirect_after_fill:
+            self.page.url = "https://evil.example.net/"
+
+    async def press(self, key):
+        if "type=password" in self.sel and key == "Enter":
+            self.page.present = self.page.after_submit
+
+    async def inner_text(self, timeout):
+        return self.page.text
+
+
+class FakePage:
+    def __init__(self, present, after_submit=(), text="", redirect_after_fill=False):
+        self.url, self.present, self.after_submit = "https://login.example.com/", set(present), set(after_submit)
+        self.text, self.redirect_after_fill, self.filled = text, redirect_after_fill, []
+
+    def locator(self, sel):
+        return FakeLoc(self, sel)
+
+    async def wait_for_timeout(self, ms):
+        pass
+
+
+async def fake_secret(name):
+    return "v:" + name.split("?")[0]
+
+
+def allowed(page):
+    return broker_mod.host_allowed(page.url, ["login.example.com"])
+
+
+class FillTests(unittest.TestCase):
+    def test_redirect_after_username_stops_before_password(self):
+        page = FakePage({"[type=email]", "input[type=password]"}, redirect_after_fill=True)
+        with self.assertRaises(PermissionError):
+            asyncio.run(broker_mod.fill_login(page, fake_secret, allowed))
+        self.assertEqual(page.filled, ["v:username"])
+
+    def test_code_field_without_2fa_words_gets_no_otp(self):
+        page = FakePage({"[type=email]", "input[type=password]"}, after_submit={"[name*=code i]"}, text="welcome back")
+        self.assertEqual(asyncio.run(broker_mod.fill_login(page, fake_secret, allowed)), "submitted")
+        self.assertEqual(page.filled, ["v:username", "v:password"])
+
+    def test_real_2fa_prompt_gets_the_otp(self):
+        page = FakePage({"[type=email]", "input[type=password]"}, after_submit={"[autocomplete=one-time-code]"},
+                        text="Enter the 6-digit verification code")
+        self.assertEqual(asyncio.run(broker_mod.fill_login(page, fake_secret, allowed)), "submitted")
+        self.assertEqual(page.filled, ["v:username", "v:password", "v:one-time password"])
+
+    def test_failed_login_clears_the_password_field(self):
+        page = FakePage({"[type=email]", "input[type=password]"}, after_submit={"[type=email]", "input[type=password]"})
+        self.assertEqual(asyncio.run(broker_mod.fill_login(page, fake_secret, allowed)), "password_form_still_visible")
+        self.assertEqual(page.filled[-1], "")
 
 
 if __name__ == "__main__":
