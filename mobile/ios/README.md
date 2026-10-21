@@ -10,8 +10,7 @@ The app fails closed unless the device has a passcode, Face ID, or Touch ID.
 
 - macOS with full Xcode 16 or newer selected with `xcode-select`
 - XcodeGen (`brew install xcodegen`)
-- Tailscale on the test device or simulator, signed into the Tailnet that can
-  resolve and reach the private workspace host supplied at build time
+- Network access to `https://momobot.needmomentum.com`
 
 The app deliberately uses a non-persistent `WKWebsiteDataStore`. Server cookies
 remain in memory while the app is running, but a cold launch can require server
@@ -28,10 +27,11 @@ open MomoBot.xcodeproj
 
 Select the `MomoBot` scheme and a simulator or registered device. The checked-in
 project source is `project.yml`; do not commit a hand-edited `.pbxproj`.
-The checked-in URL is the non-routable `https://momobot.invalid/workspace`.
-For a private build, set the generated project's user-defined
+The checked-in build opens the production workspace at
+`https://momobot.needmomentum.com/workspace`. To target an authorized staging
+environment, override the generated project's user-defined
 `MOMOBOT_WORKSPACE_URL` build setting or pass it to `xcodebuild`/`archive` on the
-command line. Keep the real private HTTPS URL out of source and CI logs.
+command line. Never put credentials in the URL, source, or CI logs.
 
 ## Unsigned CI checks
 
@@ -70,8 +70,8 @@ swift test --package-path MomoMobileCore \
    and test-instructions fields. Privacy answers must include data handled by
    the hosted workspace, not only the native shell.
 4. Add internal testers as App Store Connect users and separately authorize
-   their devices on the required Tailnet. A processed build plus both access
-   grants are required before testing works.
+   their MomoBot accounts. A processed build plus both access grants are
+   required before testing works.
 
 External TestFlight additionally requires Beta App Review, public privacy and
 support URLs, and a reviewer account plus a working network path to the workspace.
@@ -80,9 +80,8 @@ support URLs, and a reviewer account plus a working network path to the workspac
 
 All TestFlight gates still apply, plus:
 
-1. Apple App Review must be able to reach the workspace and sign in. The private
-   Tailnet is a release blocker unless Apple receives an authorized review path
-   and review credentials in App Review Information.
+1. Apple App Review must receive a working review account and sign-in steps in
+   App Review Information.
 2. Publish a privacy policy and support URL; complete the age rating, category,
    content-rights, account-deletion, and regional compliance questions; and
    provide current iPhone/iPad screenshots and review notes for device auth.

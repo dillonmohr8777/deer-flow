@@ -88,6 +88,11 @@ struct WorkspaceWebView: UIViewRepresentable {
                 return
             }
 
+            if let targetFrame = navigationAction.targetFrame, !targetFrame.isMainFrame {
+                decisionHandler(policy.allowsSubframe(url) ? .allow : .cancel)
+                return
+            }
+
             switch policy.decision(for: url) {
             case .allowInApp:
                 if navigationAction.targetFrame == nil {
@@ -136,7 +141,7 @@ struct WorkspaceWebView: UIViewRepresentable {
             model.synchronize(with: webView)
             guard (error as NSError).code != NSURLErrorCancelled else { return }
             model.isLoading = false
-            model.errorMessage = "Check your Tailnet connection, then try again."
+            model.errorMessage = "Check your internet connection, then try again."
         }
     }
 }

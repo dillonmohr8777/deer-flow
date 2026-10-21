@@ -6,6 +6,7 @@ struct WorkspaceView: View {
     var body: some View {
         ZStack {
             WorkspaceWebView(model: browser)
+                .accessibilityHidden(browser.errorMessage != nil)
 
             if let errorMessage = browser.errorMessage {
                 FailureView(message: errorMessage, retry: browser.retry)

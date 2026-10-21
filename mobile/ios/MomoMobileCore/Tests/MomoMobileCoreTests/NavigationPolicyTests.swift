@@ -42,6 +42,17 @@ struct NavigationPolicyTests {
         #expect(policy.decision(for: URL(string: value)!) == .reject)
     }
 
+    @Test("Allows only trusted or empty-document subframes", arguments: [
+        ("https://momobot.example/workspace/embed", true),
+        ("about:blank", true),
+        ("about:srcdoc", true),
+        ("https://example.com/embed", false),
+        ("data:text/html,blocked", false),
+    ])
+    func boundsSubframes(value: String, expected: Bool) {
+        #expect(policy.allowsSubframe(URL(string: value)!) == expected)
+    }
+
     @Test("Rejects an invalid trusted origin")
     func rejectsInvalidTrustedOrigin() {
         #expect(throws: NavigationPolicy.ConfigurationError.self) {

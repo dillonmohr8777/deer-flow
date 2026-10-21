@@ -44,4 +44,11 @@ public struct NavigationPolicy: Sendable {
             return .reject
         }
     }
+
+    public func allowsSubframe(_ url: URL) -> Bool {
+        if decision(for: url) == .allowInApp {
+            return true
+        }
+        return url.absoluteString.lowercased() == "about:blank" || url.absoluteString.lowercased() == "about:srcdoc"
+    }
 }

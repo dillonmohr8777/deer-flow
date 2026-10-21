@@ -8,7 +8,7 @@ struct MomoBotApp: App {
 
     var body: some Scene {
         WindowGroup {
-            RootView()
+            RootView(isActive: scenePhase == .active)
                 .environmentObject(authentication)
                 .task { await authentication.authenticateIfNeeded() }
                 .onChange(of: scenePhase) { _, phase in
@@ -28,17 +28,18 @@ struct MomoBotApp: App {
 private struct RootView: View {
     @EnvironmentObject private var authentication: DeviceAuthenticationController
     @State private var hasLoadedWorkspace = false
+    let isActive: Bool
 
     var body: some View {
         ZStack {
             if hasLoadedWorkspace {
                 WorkspaceView()
                     .privacySensitive()
-                    .allowsHitTesting(authentication.isUnlocked)
-                    .accessibilityHidden(!authentication.isUnlocked)
+                    .allowsHitTesting(authentication.isUnlocked && isActive)
+                    .accessibilityHidden(!authentication.isUnlocked || !isActive)
             }
 
-            if !authentication.isUnlocked {
+            if !authentication.isUnlocked || !isActive {
                 LockView()
             }
         }
