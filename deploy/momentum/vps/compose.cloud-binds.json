@@ -1,0 +1,101 @@
+{
+  "services": {
+    "gateway": {
+      "volumes": [
+        {
+          "type": "bind",
+          "source": "/srv/momobot/runtime/skills",
+          "target": "/app/skills",
+          "read_only": true,
+          "bind": {
+            "create_host_path": false
+          }
+        },
+        {
+          "type": "bind",
+          "source": "/srv/momobot/runtime/admission",
+          "target": "/var/momo-admission",
+          "bind": {
+            "create_host_path": false
+          }
+        },
+        {
+          "type": "bind",
+          "source": "/srv/momobot/runtime/lobby-notes",
+          "target": "/var/momo-lobby-notes",
+          "read_only": true,
+          "bind": {
+            "create_host_path": false
+          }
+        },
+        {
+          "type": "bind",
+          "source": "/srv/momobot/runtime/brand",
+          "target": "/var/momobot-brand",
+          "read_only": true,
+          "bind": {
+            "create_host_path": false
+          }
+        },
+        {
+          "type": "bind",
+          "source": "/srv/momobot/runtime/evals",
+          "target": "/app/backend/.deer-flow/agency-evals",
+          "read_only": true,
+          "bind": {
+            "create_host_path": false
+          }
+        },
+        {
+          "type": "bind",
+          "source": "/srv/momobot/runtime/code/brain_readonly_adapter.py",
+          "target": "/run/momo-security/brain_readonly_adapter.py",
+          "read_only": true,
+          "bind": {
+            "create_host_path": false
+          }
+        },
+        {
+          "type": "bind",
+          "source": "/srv/momobot/runtime/code/momo_guard.py",
+          "target": "/app/backend/packages/harness/deerflow/community/browser_automation/momo_guard.py",
+          "read_only": true,
+          "bind": {
+            "create_host_path": false
+          }
+        },
+        {
+          "type": "bind",
+          "source": "/srv/momobot/runtime/code/momo_protocol.py",
+          "target": "/app/backend/packages/harness/deerflow/community/browser_automation/momo_protocol.py",
+          "read_only": true,
+          "bind": {
+            "create_host_path": false
+          }
+        }
+      ]
+    },
+    "nginx": {
+      "volumes": [
+        {
+          "type": "bind",
+          "source": "/srv/momobot/runtime/nginx/nginx.conf",
+          "target": "/etc/nginx/nginx.conf.template",
+          "read_only": true,
+          "bind": {
+            "create_host_path": false
+          }
+        },
+        {
+          "type": "bind",
+          "source": "/srv/momobot/runtime/nginx/nginx-realip.conf",
+          "target": "/etc/nginx/momentum-realip.conf",
+          "read_only": true,
+          "bind": {
+            "create_host_path": false
+          }
+        }
+      ]
+    }
+  }
+}
