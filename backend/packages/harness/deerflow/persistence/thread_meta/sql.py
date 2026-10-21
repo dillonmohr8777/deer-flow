@@ -27,7 +27,7 @@ def _in_active_organization(model) -> tuple:
     return () if organization_id is None else (model.organization_id == organization_id,)
 
 
-def _visible(row: ThreadMetaRow | None, user_id: str | None) -> bool:
+async def _visible(row: ThreadMetaRow | None, user_id: str | None, session) -> bool:
     """Whether ``row`` passes the user filter (skipped for an explicit ``None``) and the organization filter.
 
     The organization filter holds even past an explicit user bypass: a request with an
@@ -36,8 +36,36 @@ def _visible(row: ThreadMetaRow | None, user_id: str | None) -> bool:
     """
     if row is None or (user_id is not None and row.user_id != user_id):
         return False
+    actor = await _client_actor(session)
+    if actor is not None and row.client_actor_id != actor:
+        return False
     organization_id = resolve_organization_id()
     return organization_id is None or row.organization_id == organization_id
+
+
+async def _client_actor(session) -> str | None:
+    """Client chats are creator-scoped even inside a shared storage bucket."""
+    from deerflow.persistence.clients.model import ClientAssignmentRow
+    from deerflow.runtime.user_context import get_current_user, get_effective_actor_user_id
+
+    user = get_current_user()
+    actor = get_effective_actor_user_id()
+    if getattr(user, "system_role", None) == "client":
+        return actor
+    org = resolve_organization_id()
+    if org is not None:
+        contact = await session.scalar(
+            select(ClientAssignmentRow.client_id)
+            .where(
+                ClientAssignmentRow.organization_id == org,
+                ClientAssignmentRow.user_id == actor,
+                ClientAssignmentRow.role == "client_contact",
+            )
+            .limit(1)
+        )
+        if contact is not None:
+            return actor
+    return None
 
 
 class ThreadMetaRepository(ThreadMetaStore):
@@ -103,6 +131,7 @@ class ThreadMetaRepository(ThreadMetaStore):
                 organization_id = await private_organization_for_user(session, resolved_user_id)
             row = ThreadMetaRow(
                 thread_id=thread_id,
+                client_actor_id=await _client_actor(session),
                 incarnation=uuid.uuid4().hex,
                 assistant_id=assistant_id,
                 user_id=resolved_user_id,
@@ -127,6 +156,8 @@ class ThreadMetaRepository(ThreadMetaStore):
             column(ThreadMetaRow.organization_id.key),
         )
         async with self._sf() as session:
+            if await _client_actor(session) is not None:
+                return False
             organization_id = await private_organization_for_user(session, owner)
             result = await session.execute(
                 update(claim_target)
@@ -191,6 +222,9 @@ class ThreadMetaRepository(ThreadMetaStore):
             )
             if resolved_user_id is not None:
                 stmt = stmt.where(ThreadMetaRow.user_id == resolved_user_id)
+            client_actor = await _client_actor(session)
+            if client_actor is not None:
+                stmt = stmt.where(ThreadMetaRow.client_actor_id == client_actor)
             result = await session.execute(stmt)
             await session.commit()
             return result.rowcount > 0
@@ -204,7 +238,7 @@ class ThreadMetaRepository(ThreadMetaStore):
         resolved_user_id = resolve_user_id(user_id, method_name="ThreadMetaRepository.get")
         async with self._sf() as session:
             row = await session.get(ThreadMetaRow, thread_id)
-            return self._row_to_dict(row) if _visible(row, resolved_user_id) else None
+            return self._row_to_dict(row) if await _visible(row, resolved_user_id, session) else None
 
     async def check_access(self, thread_id: str, user_id: str, *, require_existing: bool = False) -> bool:
         """Check if ``user_id`` has access to ``thread_id``.
@@ -224,7 +258,7 @@ class ThreadMetaRepository(ThreadMetaStore):
             row = await session.get(ThreadMetaRow, thread_id)
             if row is None:
                 return not require_existing
-            return row.user_id is not None and _visible(row, user_id)
+            return row.user_id is not None and await _visible(row, user_id, session)
 
     async def search(
         self,
@@ -243,6 +277,8 @@ class ThreadMetaRepository(ThreadMetaStore):
         context. Pass ``user_id=None`` to bypass (migration/CLI).
         """
         resolved_user_id = resolve_user_id(user_id, method_name="ThreadMetaRepository.search")
+        async with self._sf() as client_session:
+            client_actor = await _client_actor(client_session)
         pinned_order = case(
             (json_match(ThreadMetaRow.metadata_json, THREAD_PINNED_METADATA_KEY, True), 1),
             else_=0,
@@ -256,6 +292,8 @@ class ThreadMetaRepository(ThreadMetaStore):
                 ThreadMetaRow.thread_id.desc(),
             )
         )
+        if client_actor is not None:
+            stmt = stmt.where(ThreadMetaRow.client_actor_id == client_actor)
         if resolved_user_id is not None:
             stmt = stmt.where(ThreadMetaRow.user_id == resolved_user_id)
         if status:
@@ -294,7 +332,7 @@ class ThreadMetaRepository(ThreadMetaStore):
 
     async def _check_ownership(self, session: AsyncSession, thread_id: str, resolved_user_id: str | None) -> bool:
         """Return True if the row exists and is visible (see :func:`_visible`)."""
-        return _visible(await session.get(ThreadMetaRow, thread_id), resolved_user_id)
+        return await _visible(await session.get(ThreadMetaRow, thread_id), resolved_user_id, session)
 
     async def update_display_name(
         self,
@@ -313,7 +351,7 @@ class ThreadMetaRepository(ThreadMetaStore):
             else:
                 result = await session.execute(select(ThreadMetaRow).where(ThreadMetaRow.thread_id == thread_id).with_for_update())
                 row = result.scalar_one_or_none()
-            if not _visible(row, resolved_user_id):
+            if not await _visible(row, resolved_user_id, session):
                 return
             row.display_name = display_name
             metadata = dict(row.metadata_json or {})
@@ -368,7 +406,7 @@ class ThreadMetaRepository(ThreadMetaStore):
             else:
                 result = await session.execute(select(ThreadMetaRow).where(ThreadMetaRow.thread_id == thread_id).with_for_update())
                 row = result.scalar_one_or_none()
-            if not _visible(row, resolved_user_id):
+            if not await _visible(row, resolved_user_id, session):
                 return
             merged = dict(row.metadata_json or {})
             merged.update(metadata)
@@ -398,7 +436,7 @@ class ThreadMetaRepository(ThreadMetaStore):
                 row = await session.get(ThreadMetaRow, thread_id)
             else:
                 row = (await session.execute(select(ThreadMetaRow).where(ThreadMetaRow.thread_id == thread_id).with_for_update())).scalar_one_or_none()
-            if not _visible(row, resolved_user_id):
+            if not await _visible(row, resolved_user_id, session):
                 return
             row.user_id = owner_user_id
             if row.project_id is None:
@@ -424,7 +462,7 @@ class ThreadMetaRepository(ThreadMetaStore):
                 row = await session.get(ThreadMetaRow, thread_id)
             else:
                 row = (await session.execute(select(ThreadMetaRow).where(ThreadMetaRow.thread_id == thread_id).with_for_update())).scalar_one_or_none()
-            if not _visible(row, resolved_user_id):
+            if not await _visible(row, resolved_user_id, session):
                 return
             await session.delete(row)
             await session.commit()

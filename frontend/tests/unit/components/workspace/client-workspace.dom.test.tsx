@@ -52,6 +52,9 @@ rs.mock("@/core/agents", () => ({
   useAgentsApiEnabled: () => ({ enabled: mocks.agents, isLoading: false }),
 }));
 rs.mock("@/core/board", () => ({ useBoardThreads: () => ({ data: [] }) }));
+rs.mock("@/components/workspace/workspace-selector", () => ({
+  WorkspaceSelector: () => null,
+}));
 rs.mock("@/core/momobot-brand", () => ({
   useBrandKit: () => ({ data: mocks.brandKit ? { agents: [] } : undefined }),
 }));
@@ -128,6 +131,7 @@ describe("the client sidebar", () => {
     mocks.openai = true;
     const { container } = renderAs("client", <WorkspaceNavChatList />);
     expect(hrefs(container)).toEqual([
+      "/workspace/inbox",
       "/workspace/chats",
       "/workspace/lineup",
       "/workspace/about",
@@ -153,7 +157,7 @@ describe("the client sidebar", () => {
   it("drops the brand kit links when the server has none", () => {
     mocks.brandKit = false;
     const { container } = renderAs("client", <WorkspaceNavChatList />);
-    expect(hrefs(container)).toEqual(["/workspace/chats"]);
+    expect(hrefs(container)).toEqual(["/workspace/inbox", "/workspace/chats"]);
   });
 
   it("sends New chat and the logo to the chat with MomoBot Max", () => {

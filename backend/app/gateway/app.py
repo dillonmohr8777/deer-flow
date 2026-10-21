@@ -29,6 +29,7 @@ from app.gateway.routers import (
     capabilities,
     channel_connections,
     channels,
+    client_portal,
     clients,
     command_center,
     console,
@@ -1419,6 +1420,7 @@ This gateway provides runtime endpoints for agent runs plus custom endpoints for
     app.include_router(trash.router)
     # Client roster API (+ admin registry import) is mounted at /api/clients
     app.include_router(clients.router)
+    app.include_router(client_portal.router)
     # Momo Board API (client posts/tickets/concerns/DMs) is mounted at /api/board
     app.include_router(board.router)
 

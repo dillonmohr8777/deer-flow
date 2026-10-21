@@ -15,6 +15,7 @@ class ThreadMetaRow(Base):
 
     thread_id: Mapped[str] = mapped_column(String(64), primary_key=True)
     incarnation: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    client_actor_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     assistant_id: Mapped[str | None] = mapped_column(String(128), index=True)
     user_id: Mapped[str | None] = mapped_column(String(64), index=True)
     organization_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)

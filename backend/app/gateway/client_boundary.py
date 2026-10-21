@@ -29,6 +29,13 @@ _POST = frozenset({"POST"})
 _RULES: tuple[tuple[frozenset[str], re.Pattern[str]], ...] = tuple(
     (methods, re.compile(pattern))
     for methods, pattern in (
+        (_GET, r"^/api/workspaces$"),
+        (_POST, r"^/api/workspaces/select$"),
+        (_GET, r"^/api/client-portal/clients$"),
+        (frozenset({"GET", "POST"}), r"^/api/client-portal/threads$"),
+        (_GET, rf"^/api/client-portal/threads/{_ID}$"),
+        (_POST, rf"^/api/client-portal/threads/{_ID}/chat$"),
+        (_GET, rf"^/api/client-portal/threads/{_ID}/messages/{_ID}/attachments/{_ID}$"),
         # Identity, account security, preferences, feature flags, model list,
         # the MomoBot kit behind "About" and "MomoBot Agents".
         (_GET, r"^/api/v1/auth/me$"),

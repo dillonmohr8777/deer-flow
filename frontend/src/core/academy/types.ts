@@ -9,6 +9,9 @@ export interface AcademyLesson {
   try_it: string;
   video_slot: string | null;
   video_url: string | null;
+  video_poster_url?: string | null;
+  video_captions_url?: string | null;
+  video_transcript_url?: string | null;
   completed: boolean;
 }
 

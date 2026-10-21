@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import sqlite3
 
 import pytest
@@ -16,15 +17,37 @@ from deerflow.persistence.bootstrap import _get_alembic_config, bootstrap_schema
 
 PREVIOUS = "0047_merge_agent_room_exec"
 REPAIR = "0048_repair_audit_events"
-HEAD = "0051_client_corrections"  # later revisions chain after the repair; their table is outside this test
+HEAD = "0052_board_portal"  # later revisions chain after the repair; their table is outside this test
 INDEXES = {"ix_audit_events_occurred_at", "ix_audit_events_action", "ix_audit_events_organization_id", "ix_audit_events_actor_user_id"}
+
+
+# Later revisions (0052) add these columns to pre-existing tables; the repair
+# under test must preserve everything else, so the snapshot leaves them out.
+LATER_COLUMNS = {"organizations": ("customer_client_id",), "threads_meta": ("client_actor_id",), "board_messages": ("visibility", "attachments")}
+SKIP = "('audit_events','pending_actions','client_corrections','alembic_version')"
+LATER_OBJECTS = ("board_portal", "ix_threads_meta_client_actor_id", "ix_board_portal_organization_id")
+
+
+def _without_later_columns(table, sql):
+    for column in LATER_COLUMNS.get(table, ()):
+        sql = re.sub(r",\s*" + column + r" (VARCHAR\(\d+\)|JSON)( DEFAULT '[a-z]+')?( NOT NULL)?", "", sql)
+    return sql
 
 
 def preserved_snapshot(db):
     with sqlite3.connect(db) as conn:
-        schema = conn.execute("SELECT type,name,tbl_name,sql FROM sqlite_master WHERE tbl_name NOT IN ('audit_events','pending_actions','client_corrections','alembic_version') ORDER BY type,name,tbl_name").fetchall()
-        tables = [r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT IN ('audit_events','pending_actions','client_corrections','alembic_version') ORDER BY name")]
-        rows = {table: conn.execute('SELECT * FROM "' + table + '"').fetchall() for table in tables}
+        schema = [
+            (kind, name, table, sql if sql is None else _without_later_columns(table, sql))
+            for kind, name, table, sql in conn.execute(
+                "SELECT type,name,tbl_name,sql FROM sqlite_master WHERE tbl_name NOT IN ('audit_events','pending_actions','client_corrections','alembic_version') ORDER BY type,name,tbl_name"
+            ).fetchall()
+            if name not in LATER_OBJECTS and table not in LATER_OBJECTS
+        ]
+        tables = [r[0] for r in conn.execute(f"SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT IN {SKIP} ORDER BY name") if r[0] not in LATER_OBJECTS]
+        rows = {}
+        for table in tables:
+            columns = [c[1] for c in conn.execute('PRAGMA table_info("' + table + '")') if c[1] not in LATER_COLUMNS.get(table, ())]
+            rows[table] = conn.execute("SELECT " + ",".join('"' + c + '"' for c in columns) + ' FROM "' + table + '"').fetchall()
         return schema, rows
 
 
