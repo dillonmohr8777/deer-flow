@@ -13,7 +13,16 @@ from deerflow.config.memory_config import get_memory_config
 from deerflow.config.paths import make_safe_user_id
 from deerflow.runtime.user_context import get_effective_user_id
 
-router = APIRouter(prefix="/api", tags=["memory"], dependencies=[Depends(resource_permission_dependency("threads"))])
+
+async def _staff_memory_only(request: Request):
+    from app.gateway.client_workspace import is_client_contact
+    from app.gateway.deps import get_current_user_from_request
+
+    if await is_client_contact(await get_current_user_from_request(request)):
+        raise HTTPException(403, "Client memory is available only through your private Momo conversation")
+
+
+router = APIRouter(prefix="/api", tags=["memory"], dependencies=[Depends(resource_permission_dependency("threads")), Depends(_staff_memory_only)])
 
 
 def _resolve_memory_user_id(request: Request) -> str:

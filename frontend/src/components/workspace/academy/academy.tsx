@@ -101,45 +101,11 @@ function AcademyBody() {
         <p className={pageStyles.eyebrow}>Momentum only</p>
         <h1 className="mt-1">AI Academy</h1>
         <p className={cn(pageStyles.lede, "mt-1")}>
-          Short lessons on MomoBot and the AI tools we use for clients. Each one
-          ends with something to try. Clients never see this page.
+          Build your work stack with AI. Start with MomoBot, choose your
+          Momentum role, then improve your workflow week by week. Every lesson
+          ends with a task to try and a result to check.
         </p>
       </header>
-
-      <section className={styles.track} aria-labelledby="academy-films">
-        <h2 id="academy-films">AI film library</h2>
-        <p className={pageStyles.lede}>
-          All 39 published Momentum AI films, explainers and creative examples,
-          grouped by their original series. Pick a series to watch.
-        </p>
-        {academyVideoSeries.map((series) => (
-          <details className={styles.lesson} key={series.title}>
-            <summary className={styles.lessonSummary}>
-              <span className={styles.lessonTitle}>{series.title}</span>
-              <span className={styles.count}>
-                {series.videos.length} videos
-              </span>
-            </summary>
-            <div className={styles.lessonBody}>
-              {series.videos.map(([id, title]: readonly [string, string]) => (
-                <figure key={id}>
-                  <video
-                    className={styles.video}
-                    src={`https://momentum-ai-division-hub.netlify.app/media/${id}.mp4`}
-                    poster={`https://momentum-ai-division-hub.netlify.app/media/${id}.jpg`}
-                    aria-label={title}
-                    controls
-                    playsInline
-                    muted
-                    preload="none"
-                  />
-                  <figcaption>{title}</figcaption>
-                </figure>
-              ))}
-            </div>
-          </details>
-        ))}
-      </section>
 
       <section className={styles.progressCard} aria-label="Your progress">
         <div className={styles.progressRow}>
@@ -177,6 +143,44 @@ function AcademyBody() {
           onToggle={(id, open) => setOpenId(open ? id : null)}
         />
       ))}
+
+      <details className={styles.library} aria-labelledby="academy-films">
+        <summary className={styles.librarySummary}>
+          <h2 id="academy-films">AI film library</h2>
+          <span className={styles.count}>39 creative examples</span>
+        </summary>
+        <p className={pageStyles.lede}>
+          All 39 published Momentum AI films and creative examples, grouped by
+          their original series. Pick a series to watch.
+        </p>
+        {academyVideoSeries.map((series) => (
+          <details className={styles.lesson} key={series.title}>
+            <summary className={styles.lessonSummary}>
+              <span className={styles.lessonTitle}>{series.title}</span>
+              <span className={styles.count}>
+                {series.videos.length} videos
+              </span>
+            </summary>
+            <div className={styles.lessonBody}>
+              {series.videos.map(([id, title]: readonly [string, string]) => (
+                <figure key={id}>
+                  <video
+                    className={styles.video}
+                    src={`https://momentum-ai-division-hub.netlify.app/media/${id}.mp4`}
+                    poster={`https://momentum-ai-division-hub.netlify.app/media/${id}.jpg`}
+                    aria-label={title}
+                    controls
+                    playsInline
+                    muted
+                    preload="none"
+                  />
+                  <figcaption>{title}</figcaption>
+                </figure>
+              ))}
+            </div>
+          </details>
+        ))}
+      </details>
     </div>
   );
 }
@@ -260,16 +264,37 @@ function Lesson({
             <video
               className={styles.video}
               src={lesson.video_url}
+              poster={lesson.video_poster_url ?? undefined}
+              aria-label={lesson.title}
+              crossOrigin="use-credentials"
               controls
+              playsInline
               preload="metadata"
             >
-              <track kind="captions" />
+              {lesson.video_captions_url ? (
+                <track
+                  kind="captions"
+                  src={lesson.video_captions_url}
+                  srcLang="en"
+                  label="English"
+                />
+              ) : null}
             </video>
           ) : (
             <p className={styles.videoPending}>
               Momo explainer video for this lesson is in production.
             </p>
           )
+        ) : null}
+        {lesson.video_transcript_url ? (
+          <a
+            className="underline underline-offset-4"
+            href={lesson.video_transcript_url}
+            target="_blank"
+            rel="noreferrer"
+          >
+            Read the transcript
+          </a>
         ) : null}
         <ol className={styles.steps}>
           {lesson.steps.map((step) => (

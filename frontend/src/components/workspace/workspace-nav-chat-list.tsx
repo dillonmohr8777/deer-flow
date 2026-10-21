@@ -38,6 +38,7 @@ import { useBoardThreads } from "@/core/board";
 import { useDeskEnabled, useMomentumInternalEnabled } from "@/core/features";
 import { useI18n } from "@/core/i18n/hooks";
 import { useBrandKit } from "@/core/momobot-brand";
+import { WorkspaceSelector } from "./workspace-selector";
 
 /**
  * The client version of MomoBot: chats, the MomoBot lineup and About, nothing
@@ -48,7 +49,14 @@ function ClientNavList({ showBrandKit }: { showBrandKit: boolean }) {
   const pathname = usePathname();
   return (
     <SidebarGroup className="pt-1">
+      <WorkspaceSelector />
       <SidebarMenu>
+        <SidebarMenuItem>
+          <SidebarMenuButton isActive={pathname === "/workspace/inbox"} asChild>
+            <Link className="text-muted-foreground" href="/workspace/inbox"><Inbox /><span>Client inbox</span></Link>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+
         <SidebarMenuItem>
           <SidebarMenuButton isActive={pathname === "/workspace/chats"} asChild>
             <Link className="text-muted-foreground" href="/workspace/chats">
@@ -114,6 +122,12 @@ export function WorkspaceNavChatList() {
   return (
     <SidebarGroup className="pt-1">
       <SidebarMenu>
+        <SidebarMenuItem>
+          <SidebarMenuButton isActive={pathname === "/workspace/inbox"} asChild>
+            <Link className="text-muted-foreground" href="/workspace/inbox"><Inbox /><span>Client inbox</span></Link>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+
         {/* Owner-only: exists solely on the private instance. */}
         {deskEnabled && (
           <SidebarMenuItem>

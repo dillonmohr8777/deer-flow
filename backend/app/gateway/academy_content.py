@@ -5,14 +5,16 @@ client account never receives it, not even inside a JavaScript bundle.
 Lesson ids are stable: ``academy_progress`` rows reference them, so rename a
 title freely but never reuse or change an id.
 
-``video_slot`` names one of the six MomoBot explainer videos. ``video_url``
-stays ``None`` until the finished file is approved; the page shows the slot
-as coming soon instead of a broken player.
+``video_slot`` identifies a work-course video. Media URLs appear only after
+all four accepted media files have been staged in the private Academy folder.
+The original written lessons retain their IDs and completion history.
 """
 
 from __future__ import annotations
 
-from typing import TypedDict
+from typing import NotRequired, TypedDict
+
+from app.gateway.academy_work_courses import WORK_TRACKS
 
 
 class Lesson(TypedDict):
@@ -24,6 +26,9 @@ class Lesson(TypedDict):
     try_it: str
     video_slot: str | None
     video_url: str | None
+    video_poster_url: NotRequired[str | None]
+    video_captions_url: NotRequired[str | None]
+    video_transcript_url: NotRequired[str | None]
 
 
 class Track(TypedDict):
@@ -49,7 +54,7 @@ TRACKS: list[Track] = [
     Track(
         id="momobot",
         title="MomoBot, start to finish",
-        summary="Six short lessons, each paired with a Momo explainer video. Start here.",
+        summary="Written MomoBot reference lessons. Your previous completion history is preserved.",
         lessons=[
             _lesson(
                 "momobot-01-meet-momo",
@@ -73,7 +78,7 @@ TRACKS: list[Track] = [
                 5,
                 "Six habits that turn a vague ask into work you can use.",
                 [
-                    "Name the client first, every time. Momo never mixes clients, and naming one keeps it that way.",
+                    "Select the correct client workspace, then name the client in your brief. A client name does not grant access.",
                     'Give Momo a role: "You\'re my account manager for this client."',
                     "Number what you want back. Three numbered asks beat one long paragraph.",
                     'Say "missing, not zero." If data isn\'t there, Momo should say so instead of guessing.',
@@ -236,6 +241,16 @@ TRACKS: list[Track] = [
         ],
     ),
 ]
+
+
+# Original lessons remain as written references; only the new work courses have video slots.
+for _track in TRACKS:
+    for _reference in _track["lessons"]:
+        _reference["video_slot"] = None
+TRACKS = [*WORK_TRACKS, *TRACKS]
+
+ACADEMY_VIDEO_STEMS = frozenset(lesson["video_slot"] for track in WORK_TRACKS for lesson in track["lessons"])
+ACADEMY_MEDIA_NAMES = frozenset(f"{stem}.{extension}" for stem in ACADEMY_VIDEO_STEMS for extension in ("mp4", "jpg", "vtt", "txt"))
 
 
 def lesson_ids() -> set[str]:

@@ -12,7 +12,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Literal
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from app.gateway.approval_adapters import execute_approved
@@ -27,7 +27,16 @@ from deerflow.persistence.organizations.delegation import OrganizationDelegation
 from deerflow.runtime.user_context import resolve_organization_id
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/api/approvals", tags=["approvals"])
+
+
+async def _staff_approvals_only(request: Request):
+    from app.gateway.client_workspace import is_client_contact
+
+    if await is_client_contact(await get_current_user_from_request(request)):
+        raise HTTPException(403, "Staff approval access required")
+
+
+router = APIRouter(prefix="/api/approvals", tags=["approvals"], dependencies=[Depends(_staff_approvals_only)])
 
 LOOP_FILING_SCOPE = "approvals:propose"
 ActionStatus = Literal["pending", "approved", "rejected", "executed", "failed"]

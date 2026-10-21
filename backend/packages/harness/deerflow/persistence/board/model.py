@@ -17,7 +17,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from enum import StrEnum
 
-from sqlalchemy import DateTime, String, Text
+from sqlalchemy import JSON, DateTime, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from deerflow.persistence.base import Base
@@ -74,4 +74,26 @@ class BoardMessageRow(Base):
     author_kind: Mapped[str] = mapped_column(String(16), default="client")
     author_user_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     body: Mapped[str] = mapped_column(Text, default="")
+    visibility: Mapped[str] = mapped_column(String(16), default="internal", server_default="internal")
+    attachments: Mapped[list | None] = mapped_column(JSON, default=list, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
+
+
+class BoardPortalRow(Base):
+    """Opt-in portal projection. Legacy Board threads have no row and stay internal."""
+
+    __tablename__ = "board_portal"
+    __table_args__ = (UniqueConstraint("organization_id", "actor_id", "submission_key", name="uq_board_portal_submission"),)
+
+    thread_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    organization_id: Mapped[str] = mapped_column(String(64), index=True)
+    actor_id: Mapped[str] = mapped_column(String(64))
+    submission_key: Mapped[str] = mapped_column(String(64))
+    submission_hash: Mapped[str] = mapped_column(String(64))
+    revision: Mapped[int] = mapped_column(Integer, default=0)
+    draft_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    approval_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    published_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    client_chat_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    work_chat_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    work_run_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
