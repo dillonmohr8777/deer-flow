@@ -1,0 +1,24 @@
+name: MomoBot uptime
+# Every 15 minutes, check the public MomoBot health endpoint. A failed run notifies the repo owner by email.
+# The URL lives in the repository variable MOMOBOT_HEALTH_URL so it isn't hard-coded here.
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+permissions: {}
+jobs:
+  health:
+    if: vars.MOMOBOT_HEALTH_URL != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Health check (3 tries)
+        env:
+          URL: ${{ vars.MOMOBOT_HEALTH_URL }}
+        run: |
+          for i in 1 2 3; do
+            code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "$URL" || true)"
+            [ "$code" = 200 ] && { echo "healthy ($code)"; exit 0; }
+            echo "attempt $i: HTTP $code"; sleep 20
+          done
+          echo "::error::MomoBot health check failed"; exit 1
