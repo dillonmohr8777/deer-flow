@@ -156,3 +156,25 @@ Offline contract check (synthetic fixture only):
 cd backend
 python -m pytest tests/test_ec2_brain_snapshot.py -q --noconftest
 ```
+
+## Account-manager public research
+
+`composio-marketing.policy.json` restricts the shared public-research session to ten
+named public-query tools. It disables connection management, remote workbench,
+proxy execution, search/meta execution and multi-execution; the provider-returned
+configuration and tool list must match this policy before installation. Existing
+private Gmail, Slack, Drive, analytics and advertising connections are excluded.
+
+Create this session once in the existing Composio project, using the existing
+protected credential. Save only its ordinary session ID in the release receipt.
+Store the credential in SSM as `/momobot/prod/COMPOSIO_USER_API_KEY`, then bind the
+returned official HTTPS MCP endpoint to an HTTP server named `composio-marketing`
+in the existing private `extensions_config.json`. Pass `x-user-api-key` as the
+`$COMPOSIO_USER_API_KEY` environment reference, plus the existing project/org scope
+headers. Never commit or display the credential, returned URL or full MCP config.
+
+Promote the reviewed policy through the existing EC2 release lock and systemd unit;
+retain the prior extension/config files and image tags for rollback. Verify the
+provider rejects an excluded private-app call, an ordinary AM can execute a public
+read, and AM config access remains 403. Health stays unknown until those reads pass.
+Public queries only; per-person/private client connections require their own scope.
