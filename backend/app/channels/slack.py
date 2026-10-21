@@ -16,6 +16,7 @@ from app.channels.brainforge_intake import bot_app_trusted
 from app.channels.brainforge_runtime import BrainForgeRuntime
 from app.channels.commands import is_known_channel_command
 from app.channels.connection_identity import attach_connection_identity
+from app.channels.desktop_jobs import as_command as desktop_as_command
 from app.channels.message_bus import InboundMessageType, InboundReservation, MessageBus, OutboundMessage, ResolvedAttachment
 from app.channels.slack_approvals import ActionResult as ApprovalActionResult
 from app.channels.slack_approvals import DbApprovalStore, parse_block_action
@@ -553,7 +554,7 @@ class SlackChannel(Channel):
         text = event.get("text", "").strip()
         # DMs arrive as plain message events, so they get the same mention strip and About alias.
         if event.get("type") == "app_mention" or event.get("channel_type") == "im":
-            text = _about_question_as_command(_strip_leading_slack_bot_mention(text, self._bot_user_id))
+            text = desktop_as_command(_about_question_as_command(_strip_leading_slack_bot_mention(text, self._bot_user_id)))
         if not text:
             if event.get("type") == "app_mention" and (not self._allowed_users or user_id in self._allowed_users):
                 self._send_empty_mention_reply(event.get("channel", ""), event.get("thread_ts") or event.get("ts", ""))
