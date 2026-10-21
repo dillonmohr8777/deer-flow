@@ -262,6 +262,7 @@ class SlackChannel(Channel):
             if response.status_code >= 500 or response.status_code == 408 or response.get("error") in {"internal_error", "fatal_error", "request_timeout", "service_unavailable"}:
                 raise SlackSendOutcomeUnknown("outcome_unknown: reconcile Slack destination before retrying") from exc
             msg.metadata["slack_delivery"]["state"] = "failed"
+            await self._mark_thread_failed(web_client, msg)
             raise
         except Exception as exc:
             raise SlackSendOutcomeUnknown("outcome_unknown: reconcile Slack destination before retrying") from exc
@@ -272,6 +273,11 @@ class SlackChannel(Channel):
         msg.metadata["slack_delivery"] = {"state": "sent", "channel": channel, "ts": timestamp}
         if msg.thread_ts:
             await asyncio.to_thread(self._add_reaction_with_client, web_client, msg.chat_id, msg.thread_ts, "white_check_mark")
+
+    async def _mark_thread_failed(self, web_client, msg: OutboundMessage) -> None:
+        """Best-effort failure mark for a definite rejection; an unknown outcome may be live, so it gets none."""
+        if msg.thread_ts:
+            await asyncio.to_thread(self._add_reaction_with_client, web_client, msg.chat_id, msg.thread_ts, "x")
 
     async def send_file(self, msg: OutboundMessage, attachment: ResolvedAttachment) -> bool:
         web_client = await self._get_web_client_for_message(msg)

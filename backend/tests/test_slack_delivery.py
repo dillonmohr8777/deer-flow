@@ -2,7 +2,8 @@
 
 import asyncio
 import threading
-from unittest.mock import AsyncMock, MagicMock
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock, patch
 from urllib.error import URLError
 
 import pytest
@@ -159,3 +160,22 @@ async def test_approval_adapter_keeps_receipt_or_explicit_unknown(monkeypatch, a
     if not ambiguous:
         assert outcome.detail["ts"] == "101.2"
     channel._web_client.chat_postMessage.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_unknown_outcome_reply_never_says_nothing_sent():
+    from app.channels.slack_approvals import ParsedAction, route_action
+
+    row = {"id": "a1", "status": "pending"}
+
+    class Store:
+        async def get(self, _id):
+            return row
+
+        async def decide(self, _row, *, approve, decided_by):
+            return {**row, "status": "approved", "error": "outcome_unknown: reconcile Slack destination before retrying"}
+
+    cfg = SimpleNamespace(allowed_user_ids=["U1"])
+    with patch("app.channels.slack_approvals.is_allowed", return_value=True):
+        result = await route_action(ParsedAction(verb="approve", item_id="a1", user_id="U1", channel=None, message_ts=None, blocks=[]), cfg, Store())
+    assert "nothing sent" not in result.text and "may be live" in result.text
