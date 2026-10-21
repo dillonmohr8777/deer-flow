@@ -35,7 +35,7 @@ function makeThread(
 }
 
 const LONG_TITLE =
-  "Pull the September leads for Omega Landscaping and flag the calls that never booked";
+  "Pull the September leads for Fernhill Landscaping and flag the calls that never booked";
 
 function renderList() {
   const queryClient = new QueryClient({
@@ -53,7 +53,7 @@ function renderList() {
       pageParams: [0],
     },
   );
-  const project = { id: "p1", name: "Omega relaunch" };
+  const project = { id: "p1", name: "Fernhill relaunch" };
   queryClient.setQueryData(["projects", { status: "active" }], [project]);
   queryClient.setQueryData(["projects", { status: "archived" }], []);
   return render(
@@ -120,7 +120,7 @@ describe("RecentChatList", () => {
         "2026-01-02T00:00:00Z",
       );
     }
-    expect(metas[1]?.textContent).toContain("Omega relaunch");
+    expect(metas[1]?.textContent).toContain("Fernhill relaunch");
     expect(metas[0]?.textContent).not.toContain("·");
   });
 });

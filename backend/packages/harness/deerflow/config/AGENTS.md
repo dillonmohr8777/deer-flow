@@ -1,5 +1,9 @@
 ### Configuration System
 
+Extensions loader failures report only path and exception class and suppress
+the original exception chain. Pydantic validation may render already-resolved
+environment credentials, so never embed its full exception in logs or errors.
+
 The user-profile management API stores ``USER.md`` under the active storage
 bucket at ``{base_dir}/users/{storage_user_id}/USER.md``. Private users resolve
 to their own bucket; members of an active shared workspace resolve to that
@@ -138,3 +142,16 @@ or an explicitly injected AppConfig. See `../models/AGENTS.md` for storage and r
 boundaries. `managed_model_providers.py` derives provider defaults from validated
 endpoints; `ManagedModel.runtime_config()` combines them with profile fields.
 `AppConfig.from_file()` remains YAML-only.
+
+**Built-in agents** (`builtin_agents/`): global, read-only agents defined in
+code, today only `momobot-max` (MomoBot Max, the client-facing all-in-one
+agent). `load_agent_config` and `load_agent_soul` consult the registry before any
+store, so no per-user or legacy agent can shadow one; the agents router refuses
+to create, edit or delete the name. It exists only while `momobot_max.enabled`
+(`momobot_max_config.py`, off by default). Its SOUL (`momobot_max.md`) is written
+for the client and must never name the machinery behind it; a test pins the
+words it may not contain. It carries a `tool_names` ceiling (the client tool
+list), so it can never call more than a client may, whoever runs it. Reasoning
+effort, thinking and delegation are not agent config: the Gateway stamps them on
+every run from `momobot_max.default_effort` / `client_effort`
+(`app/gateway/momobot_max.py`), so the request cannot change them.

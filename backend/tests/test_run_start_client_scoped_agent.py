@@ -15,7 +15,7 @@ missing one.
 from __future__ import annotations
 
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi import HTTPException
@@ -57,7 +57,9 @@ def _body(*, assistant_id: str = "lead_agent", config: dict | None = None) -> Si
 async def _start(actor: str, body: SimpleNamespace, thread_id: str):
     """Start a run as *actor* in shared workspace S, returning the record or the HTTPException."""
     thread_store = MemoryThreadMetaStore(InMemoryStore())
-    await thread_store.create(thread_id, user_id=STORAGE_S, metadata={})
+    # Client-contact chats are creator-scoped, so the actor creates its own thread.
+    with acting_as(actor, ORG_S):
+        await thread_store.create(thread_id, user_id=STORAGE_S, metadata={})
     state = SimpleNamespace(
         stream_bridge=SimpleNamespace(),
         run_manager=RunManager(store=MemoryRunStore()),
@@ -86,6 +88,9 @@ async def _start(actor: str, body: SimpleNamespace, thread_id: str):
         acting_as(actor, ORG_S),
         patch("app.gateway.services.resolve_agent_factory", return_value=object()),
         patch("app.gateway.services.run_agent", side_effect=fake_run_agent),
+        # The dedicated-workspace gate has its own suite (test_client_portal);
+        # these cases exercise agent scoping behind it.
+        patch("app.gateway.client_workspace.require_client_workspace", new=AsyncMock()),
     ):
         try:
             record = await start_run(body, thread_id, request)

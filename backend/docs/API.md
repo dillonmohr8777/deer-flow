@@ -1286,6 +1286,28 @@ issued to that account without touching its password or disabled state.
 }
 ```
 
+#### Set a user's role
+
+```http
+PUT /api/admin/users/{user_id}/role
+Content-Type: application/json
+
+{"system_role": "exec"}
+```
+
+`system_role` is one of `admin`, `exec` (C-suite: premium models, never admin),
+`user` (teammate) or `client` (external customer; chat with MomoBot Max only).
+The change takes effect on the user's next request without ending sessions, and
+is audited as `admin.user.role_changed`. You cannot change your own role (`400`),
+which also keeps at least one admin. While `authorization.enabled` is true the
+role must have a block under `authorization.provider.config.roles`, because
+an undefined role is denied everywhere; otherwise the call answers `409`.
+
+**Response (`200`):**
+```json
+{"id": "0f0c6e6a-...", "email": "person@example.com", "system_role": "exec"}
+```
+
 #### List audit events
 
 ```http

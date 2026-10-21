@@ -28,3 +28,18 @@ returns to idle independently of that.
 UI copy: `core/i18n/locales/{en-US,zh-CN,types}.ts`, under `settings.security`
 and `login.mfa*`. Follows the repo-wide no-dash punctuation rule; en-US uses
 contractions.
+
+### Client role (`roles.ts`)
+
+`system_role` is `admin | exec | user | client`; an unknown value fails the zod
+parse, so it never signs in. A `client` (external customer) gets the client
+version of MomoBot: the sidebar shows New chat, Chats, MomoBot Agents and About
+only (`ClientNavList`), Settings keeps account, security, appearance,
+notifications and About, the composer hides model, mode, effort, skills and
+polish controls, and every new chat is `/workspace/agents/momobot-max/chats/new`.
+`RoleRouteGuard` shows other pages a polite "not available" page and moves
+`/workspace/chats/new` to the MomoBot Max chat. All of this is convenience: the
+Gateway's client route boundary and role policy answer 403 to anything else, so
+add a new client page to `isClientPath` and the Gateway table together. The
+OpenAI crew link shows for nobody until `/api/features` reports
+`openai_agents.configured`.

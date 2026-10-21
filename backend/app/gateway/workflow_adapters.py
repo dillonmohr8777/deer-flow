@@ -23,11 +23,14 @@ from urllib.parse import urlsplit
 
 from jsonschema import Draft202012Validator
 
+from app.gateway.workflow_claude_sdk import MODEL as CLAUDE_MODEL
+from app.gateway.workflow_claude_sdk import ClaudeSDKBridge
+
 if TYPE_CHECKING:
     from openai.types.responses import EasyInputMessageParam, ResponseInputParam
 
 WORKERS = Path(__file__).resolve().parents[3] / "workers" / "browser-teams"
-FRAMEWORKS = {"langgraph", "crewai", "mastra", "deepagents", "agno", "agentkit"}
+FRAMEWORKS = {"langgraph", "crewai", "mastra", "deepagents", "agno", "agentkit", "claude_sdk"}
 MODEL = "gpt-6.1-sol"
 HAI_MODEL = "glm-5.3-uncensored"
 HAI_ROUTE = "hai-glm-5.3-uncensored"
@@ -43,7 +46,7 @@ class AdapterError(RuntimeError):
         super().__init__(code)
         self.code = code
         self.usage = usage
-        self.served_model = served_model if isinstance(served_model, str) and served_model in {MODEL, HAI_MODEL} else None
+        self.served_model = served_model if isinstance(served_model, str) and served_model in {MODEL, HAI_MODEL, CLAUDE_MODEL} else None
 
 
 def worker_environment() -> dict[str, str]:
@@ -154,7 +157,7 @@ def _usage(response: Any) -> dict | None:
 
 
 class WorkflowModelAdapter:
-    def __init__(self, *, client=None, worker_root: Path = WORKERS, timeout: float = 90.0, provider_admission=None):
+    def __init__(self, *, client=None, worker_root: Path = WORKERS, timeout: float = 90.0, provider_admission=None, claude_sdk=None):
         self.route = os.environ.get(ROUTE_ENV, "openai")
         if self.route not in {"openai", HAI_ROUTE}:
             raise ValueError("workflow_model_route_invalid")
@@ -172,6 +175,7 @@ class WorkflowModelAdapter:
             raise ValueError("worker_root must be absolute")
         self.timeout = min(max(timeout, 1), 120)
         self.active_workers: set[asyncio.subprocess.Process] = set()
+        self.claude_sdk = claude_sdk if claude_sdk is not None else ClaudeSDKBridge()
 
     def capabilities(self) -> dict:
         configured = self.client is not None or bool(self._hai_api_key if self.route == HAI_ROUTE else os.environ.get(self.key_env))
@@ -192,6 +196,7 @@ class WorkflowModelAdapter:
         result["agentkit"] = {"available": inngest and configured, "detail": "isolated_inngest_agentkit_worker" if inngest else "worker_not_installed"}
         stagehand = bool(node) and (self.worker_root / "dist" / "src" / "browser-worker.js").is_file()
         result["stagehand"] = {"available": stagehand, "detail": "installed_v4; brokered_observe_extract; existing_session_extension_required; inert_public_snapshots" if stagehand else "worker_not_installed"}
+        result["claude_sdk"] = self.claude_sdk.capability()
         if self.route == HAI_ROUTE:
             admitted = self.provider_admission is not None
             result["langgraph"] = {"available": native and configured and admitted, "detail": "hai_responses_low; owner_admission_required" if admitted else "provider_allowance_unverified"}
@@ -200,6 +205,10 @@ class WorkflowModelAdapter:
         return result
 
     async def call(self, *, provider_admission_context: dict | None = None, **kwargs) -> dict:
+        if kwargs.get("framework") == "claude_sdk":
+            if self.route != "openai":
+                raise AdapterError("provider_policy_denied")
+            return await self.claude_sdk.call(_validate(kwargs, model=CLAUDE_MODEL), provider_admission_context)
         data = _validate(kwargs, model=self.model)
         if self.route == HAI_ROUTE and (data["framework"] != "langgraph" or data["effort"] != "low"):
             raise AdapterError("provider_policy_denied")

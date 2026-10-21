@@ -16,6 +16,7 @@ from deerflow.community.url_safety import validate_public_http_url
 from deerflow.config import get_app_config
 from deerflow.config.paths import VIRTUAL_PATH_PREFIX
 from deerflow.tools.types import Runtime
+from deerflow.utils.capture_output import write_capture_output
 from deerflow.utils.readability import ReadabilityExtractor
 
 from .browserless_client import BrowserlessClient, BrowserlessFetchResult, BrowserlessScreenshotResult
@@ -201,10 +202,7 @@ def _dedupe_output_name(outputs_path: Path, output_name: str) -> str:
 
 def _write_capture_output(outputs_path: Path, output_name: str, content: bytes) -> str:
     """Write ``content`` into ``outputs_path`` and return the actual filename used."""
-    outputs_path.mkdir(parents=True, exist_ok=True)
-    final_name = _dedupe_output_name(outputs_path, output_name)
-    (outputs_path / final_name).write_bytes(content)
-    return final_name
+    return write_capture_output(outputs_path, output_name, content, collision_probes=_MAX_FILENAME_COLLISION_PROBES)
 
 
 def _target_status_warning(result: BrowserlessScreenshotResult | BrowserlessFetchResult) -> str:

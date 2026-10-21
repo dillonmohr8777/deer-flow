@@ -9,6 +9,11 @@ from app.gateway.deps import get_config
 from app.gateway.routers import features
 
 
+@pytest.fixture(autouse=True)
+def _no_openai_key(monkeypatch) -> None:
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+
 def _app_with_config(
     *,
     agents_api_enabled: bool,
@@ -79,6 +84,7 @@ def test_features_reports_agents_api_enabled() -> None:
         },
         "desk": {"enabled": False},
         "momentum_internal": {"enabled": False},
+        "openai_agents": {"configured": False},
     }
 
 
@@ -102,7 +108,15 @@ def test_features_reports_agents_api_disabled() -> None:
         },
         "desk": {"enabled": False},
         "momentum_internal": {"enabled": False},
+        "openai_agents": {"configured": False},
     }
+
+
+def test_features_reports_openai_agents_configured_only_with_an_api_key(monkeypatch) -> None:
+    with TestClient(_app_with_config(agents_api_enabled=True)) as client:
+        assert client.get("/api/features").json()["openai_agents"] == {"configured": False}
+        monkeypatch.setenv("OPENAI_API_KEY", "test-key-not-real")
+        assert client.get("/api/features").json()["openai_agents"] == {"configured": True}
 
 
 def test_features_reports_conversation_references_when_the_tool_is_configured() -> None:

@@ -72,10 +72,10 @@ async def _seed(session_factory) -> None:
         # Private organizations keep a NULL storage principal. A NOT IN exclusion
         # over that nullable column would match nothing and stamp no real user.
         for user in (A, B, C, E):
-            session.add(OrganizationRow(id=ORG[user], slug=private_organization_slug(user), name="Private organization", status="suspended" if user == E else "active"))
+            await session.execute(insert(OrganizationRow.__table__).values(id=ORG[user], slug=private_organization_slug(user), name="Private organization", status="suspended" if user == E else "active"))
             session.add(OrganizationMemberRow(organization_id=ORG[user], user_id=user, role="owner", status="active"))
         # S as workspaces.py creates it: s is the storage principal and never a member.
-        session.add(OrganizationRow(id=ORG[S], slug=private_organization_slug(S), name="Shared S", status="active", storage_user_id=S))
+        await session.execute(insert(OrganizationRow.__table__).values(id=ORG[S], slug=private_organization_slug(S), name="Shared S", status="active", storage_user_id=S))
         session.add(OrganizationMemberRow(organization_id=ORG[S], user_id=A, role="owner", status="active"))
         session.add(OrganizationMemberRow(organization_id=ORG[S], user_id=C, role="admin", status="revoked"))
         # Core insert(), not the ProjectRow ORM object: this seed runs against
@@ -85,17 +85,21 @@ async def _seed(session_factory) -> None:
         # yet. Naming only the columns 0030 actually owns keeps this test
         # immune to future ProjectRow columns.
         await session.execute(insert(ProjectRow.__table__), [{"id": "p-a", "user_id": A, "name": "a"}, {"id": "p-b", "user_id": B, "name": "b"}, {"id": "p-d", "user_id": D, "name": "d"}])
+        # Core insert: ThreadMetaRow now also carries 0052's client_actor_id.
+        for row in (
+            dict(thread_id="t-a", user_id=A, **thread),
+            dict(thread_id="t-s", user_id=S, **thread),
+            dict(thread_id="t-pa", user_id=A, project_id="p-a", **thread),
+            dict(thread_id="t-conflict", user_id=A, project_id="p-b", **thread),
+            dict(thread_id="t-ghost", user_id="ghost", **thread),
+            dict(thread_id="t-ownerless", user_id=None, **thread),
+            dict(thread_id="t-kept", user_id=A, organization_id="kept-org", **thread),
+        ):
+            await session.execute(insert(ThreadMetaRow.__table__).values(**row))
         session.add_all(
             [
                 AgentRow(id="agent-s", user_id=S, name="agent-s", config={}, soul=""),
                 AgentRow(id="agent-e", user_id=E, name="agent-e", config={}, soul=""),
-                ThreadMetaRow(thread_id="t-a", user_id=A, **thread),
-                ThreadMetaRow(thread_id="t-s", user_id=S, **thread),
-                ThreadMetaRow(thread_id="t-pa", user_id=A, project_id="p-a", **thread),
-                ThreadMetaRow(thread_id="t-conflict", user_id=A, project_id="p-b", **thread),
-                ThreadMetaRow(thread_id="t-ghost", user_id="ghost", **thread),
-                ThreadMetaRow(thread_id="t-ownerless", user_id=None, **thread),
-                ThreadMetaRow(thread_id="t-kept", user_id=A, organization_id="kept-org", **thread),
                 RunRow(run_id="r-a", thread_id="t-a", user_id=A, **run),
                 RunRow(run_id="r-s", thread_id="t-s", user_id=S, **run),
                 RunRow(run_id="r-cross", thread_id="t-a", user_id=B, **run),

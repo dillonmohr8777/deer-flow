@@ -13,7 +13,8 @@ token_budget:
   max_output_tokens: null
   warn_threshold: 0.8
   hard_stop_threshold: 1.0
-recursion_limit: 100
+# Middleware steps count too; 100 stopped an eight-call AM plugin check.
+recursion_limit: 300
 max_recursion_limit: 1000
 models:
 - name: deepseek-v4-flash

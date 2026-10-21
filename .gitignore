@@ -83,3 +83,8 @@ backend/.deer-flow.bak-*/
 
 # Fleet agent definitions are deployment source, not local app config.
 !fleet/agents/*/config.yaml
+
+# Private MomoBot brand kit (About copy, agents lineup, videos): never committed
+/momobot-brand/
+/.deer-flow/momobot-brand/
+backend/.deer-flow/momobot-brand/

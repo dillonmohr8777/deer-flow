@@ -12,9 +12,11 @@ from typing import Any
 from markdown_to_mrkdwn import SlackMarkdownConverter
 
 from app.channels.base import Channel
+from app.channels.brainforge_intake import bot_app_trusted
 from app.channels.brainforge_runtime import BrainForgeRuntime
 from app.channels.commands import is_known_channel_command
 from app.channels.connection_identity import attach_connection_identity
+from app.channels.desktop_jobs import as_command as desktop_as_command
 from app.channels.message_bus import InboundMessageType, InboundReservation, MessageBus, OutboundMessage, ResolvedAttachment
 from app.channels.slack_approvals import ActionResult as ApprovalActionResult
 from app.channels.slack_approvals import DbApprovalStore, parse_block_action
@@ -27,6 +29,10 @@ from deerflow.approvals import register_created_hook, unregister_created_hook
 logger = logging.getLogger(__name__)
 
 _slack_md_converter = SlackMarkdownConverter()
+
+
+class SlackSendOutcomeUnknown(RuntimeError):
+    """A Slack post may have committed; reconcile its destination before retrying."""
 
 
 def _escape_slack_text(text: str) -> str:
@@ -74,6 +80,14 @@ def _normalize_allowed_users(allowed_users: Any) -> set[str]:
     return {str(user_id) for user_id in values if str(user_id)}
 
 
+_ABOUT_QUESTIONS = frozenset({"what is momobot", "what's momobot", "whats momobot", "about momobot"})
+
+
+def _about_question_as_command(text: str) -> str:
+    """Treat "what is MomoBot?" as ``/momobot about`` so it takes the command path."""
+    return "/momobot about" if text.strip().strip("?!. ").lower() in _ABOUT_QUESTIONS else text
+
+
 def _strip_leading_slack_bot_mention(text: str, bot_user_id: str | None) -> str:
     if not bot_user_id:
         return text
@@ -97,6 +111,11 @@ class SlackChannel(Channel):
         - ``allowed_users``: (optional) List of allowed Slack user IDs, or a
           single Slack user ID string as shorthand. Empty = allow all. Other
           scalar values are treated as a single string with a warning.
+        - ``reply_in_thread``: (optional, default true) Set ``false`` to post
+          replies as top-level channel messages instead of thread replies.
+          Conversation continuity still keys on the originating thread/message.
+        - ``trusted_app_ids``: (optional) Slack app IDs (A...) allowed to post as an
+          allowlisted user via a user token (e.g. Composio). Empty = any app.
     """
 
     def __init__(self, bus: MessageBus, config: dict[str, Any]) -> None:
@@ -105,12 +124,19 @@ class SlackChannel(Channel):
         self._web_client = None
         self._loop: asyncio.AbstractEventLoop | None = None
         self._allowed_users = _normalize_allowed_users(config.get("allowed_users", []))
+        self._reply_in_thread = config.get("reply_in_thread", True) is not False
+        self._channel_policies = config.get("channel_policies", {})
+        self._engaged_threads: dict[tuple[str, str, str], None] = {}
         self._web_client_factory = config.get("web_client_factory")
+        self._roster_auto_linker = config.get("roster_auto_linker")
         self._connection_web_clients: dict[str, tuple[str, Any]] = {}
         configured_bot_user_id = config.get("bot_user_id")
         self._bot_user_id = str(configured_bot_user_id).lstrip("@") if configured_bot_user_id else None
         self._brainforge: BrainForgeRuntime | None = None
-        self._brainforge_config = config.get("brain_forge") or {}
+        # trusted_app_ids: when set, a bot_id event from an allowlisted user is only
+        # accepted if its Slack app id is listed (empty = any app, the old behavior).
+        self._trusted_app_ids = frozenset(_normalize_allowed_users(config.get("trusted_app_ids", [])))
+        self._brainforge_config = {"trusted_app_ids": sorted(self._trusted_app_ids), **(config.get("brain_forge") or {})}
         self._brainforge_drain_lock = threading.Lock()
         self._brainforge_drain_token = None
         self._brainforge_drain_wakeup = False
@@ -178,7 +204,8 @@ class SlackChannel(Channel):
         self._running = True
         if self._approvals_dm.enabled and not self._brainforge:
             register_created_hook(self._notify_approval)
-        if not self._brainforge:
+        # Passthrough mode still delivers agent replies, so it needs the outbound path.
+        if not self._brainforge or self._brainforge_config.get("agent_passthrough"):
             self.bus.subscribe_outbound(self._on_outbound)
 
         # Start socket mode in background thread
@@ -205,49 +232,52 @@ class SlackChannel(Channel):
         logger.info("Slack channel stopped")
 
     async def send(self, msg: OutboundMessage, *, _max_retries: int = 3) -> None:
+        from slack_sdk.errors import SlackApiError
+
+        # Keep the legacy argument, but never replay a possibly committed post.
+        if _max_retries <= 0:
+            raise RuntimeError("Slack send exhausted retries without an exception")
         web_client = await self._get_web_client_for_message(msg)
         if not web_client:
             return
-
+        delivery = msg.metadata.get("slack_delivery", {})
+        if delivery.get("state") == "outcome_unknown":
+            raise SlackSendOutcomeUnknown("outcome_unknown: reconcile Slack destination before retrying")
+        if delivery.get("state") == "sent":
+            return
         kwargs: dict[str, Any] = {
             "channel": msg.chat_id,
             "text": _slack_md_converter.convert(_escape_slack_text(msg.text)),
         }
-        if msg.thread_ts:
-            kwargs["thread_ts"] = msg.thread_ts
+        reply_ts = msg.thread_ts if self._reply_in_thread else None
+        if reply_ts:
+            kwargs["thread_ts"] = reply_ts
 
-        async def post_message() -> None:
-            await asyncio.to_thread(web_client.chat_postMessage, **kwargs)
-            # Add a completion reaction to the thread root
-            if msg.thread_ts:
-                await asyncio.to_thread(
-                    self._add_reaction_with_client,
-                    web_client,
-                    msg.chat_id,
-                    msg.thread_ts,
-                    "white_check_mark",
-                )
-
+        # Cancellation cannot stop the synchronous HTTP worker after submission.
+        msg.metadata["slack_delivery"] = {"state": "outcome_unknown", "channel": msg.chat_id}
         try:
-            await self._send_with_retry(
-                post_message,
-                max_retries=_max_retries,
-                log_prefix="[Slack]",
-            )
-        except Exception:
-            # Add failure reaction on error
-            if msg.thread_ts:
-                try:
-                    await asyncio.to_thread(
-                        self._add_reaction_with_client,
-                        web_client,
-                        msg.chat_id,
-                        msg.thread_ts,
-                        "x",
-                    )
-                except Exception:
-                    pass
+            response = await asyncio.to_thread(web_client.chat_postMessage, **kwargs)
+        except SlackApiError as exc:
+            response = exc.response
+            if response.status_code >= 500 or response.status_code == 408 or response.get("error") in {"internal_error", "fatal_error", "request_timeout", "service_unavailable"}:
+                raise SlackSendOutcomeUnknown("outcome_unknown: reconcile Slack destination before retrying") from exc
+            msg.metadata["slack_delivery"]["state"] = "failed"
+            await self._mark_thread_failed(web_client, msg)
             raise
+        except Exception as exc:
+            raise SlackSendOutcomeUnknown("outcome_unknown: reconcile Slack destination before retrying") from exc
+
+        channel, timestamp = response.get("channel"), response.get("ts")
+        if response.get("ok") is not True or not isinstance(channel, str) or not channel or not isinstance(timestamp, str) or not timestamp:
+            raise SlackSendOutcomeUnknown("outcome_unknown: Slack returned no delivery receipt; reconcile before retrying")
+        msg.metadata["slack_delivery"] = {"state": "sent", "channel": channel, "ts": timestamp}
+        if msg.thread_ts:
+            await asyncio.to_thread(self._add_reaction_with_client, web_client, msg.chat_id, msg.thread_ts, "white_check_mark")
+
+    async def _mark_thread_failed(self, web_client, msg: OutboundMessage) -> None:
+        """Best-effort failure mark for a definite rejection; an unknown outcome may be live, so it gets none."""
+        if msg.thread_ts:
+            await asyncio.to_thread(self._add_reaction_with_client, web_client, msg.chat_id, msg.thread_ts, "x")
 
     async def send_file(self, msg: OutboundMessage, attachment: ResolvedAttachment) -> bool:
         web_client = await self._get_web_client_for_message(msg)
@@ -261,7 +291,7 @@ class SlackChannel(Channel):
                 "filename": attachment.filename,
                 "title": attachment.filename,
             }
-            if msg.thread_ts:
+            if msg.thread_ts and self._reply_in_thread:
                 kwargs["thread_ts"] = msg.thread_ts
 
             await asyncio.to_thread(web_client.files_upload_v2, **kwargs)
@@ -277,7 +307,7 @@ class SlackChannel(Channel):
         factory = self._web_client_factory
         if factory is None:
             raise RuntimeError("Slack web client factory required")
-        self._web_client = factory(token=bot_token)
+        self._web_client = factory(token=bot_token, retry_handlers=[])
         if self._bot_user_id is not None:
             return
         try:
@@ -308,7 +338,7 @@ class SlackChannel(Channel):
                 from slack_sdk import WebClient
 
                 self._web_client_factory = WebClient
-            web_client = self._web_client_factory(token=access_token)
+            web_client = self._web_client_factory(token=access_token, retry_handlers=[])
             self._connection_web_clients[msg.connection_id] = (access_token, web_client)
             return web_client
         return self._web_client
@@ -332,7 +362,12 @@ class SlackChannel(Channel):
         self._add_reaction_with_client(self._web_client, channel_id, timestamp, emoji)
 
     def _send_running_reply(self, channel_id: str, thread_ts: str) -> None:
-        """Send a 'Working on it......' reply in the thread (called from SDK thread)."""
+        """Send a 'Working on it......' reply in the thread (called from SDK thread).
+
+        Skipped when ``reply_in_thread`` is false: the eyes reaction already acknowledges.
+        """
+        if not self._reply_in_thread:
+            return
         if not self._web_client:
             return
         try:
@@ -365,14 +400,28 @@ class SlackChannel(Channel):
         try:
             if self._brainforge:
                 admitted = None
+                is_brief = False
                 if req.type == "events_api":
                     event = req.payload.get("event", {})
-                    admitted = self._brainforge.prepare(event, team_id=req.payload.get("team_id") or req.payload.get("team") or event.get("team"))
-                # Rejected events are acknowledged but never sent to the paid dispatcher.
-                client.send_socket_mode_response(self._SocketModeResponse(envelope_id=req.envelope_id))
-                if admitted and self._loop and self._loop.is_running():
-                    self._wake_brainforge()
-                return
+                    team = req.payload.get("team_id") or req.payload.get("team") or event.get("team")
+                    is_brief = self._brainforge.matches(event, team_id=team)
+                    admitted = self._brainforge.prepare(event, team_id=team) if is_brief else None
+                    # A refused brief is answered once (app_mention or DM only, since a channel
+                    # mention also fires a message event) instead of reaching the paid agent.
+                    if is_brief and not admitted and self._loop and self._loop.is_running() and (event.get("type") == "app_mention" or event.get("channel_type") == "im") and self._brainforge.refused(event, team_id=team):
+                        self._submit_threadsafe_coroutine(
+                            self._post_connection_reply(event.get("channel", ""), "Brief is owner-only and runs in the approved client channels.", event.get("thread_ts") or event.get("ts")),
+                            self._loop,
+                            name="brainforge_refused",
+                            msg_id=str(event.get("ts") or ""),
+                        )
+                # Exclusive mode (default): non-brief events are acknowledged but never sent
+                # to the paid dispatcher. agent_passthrough lets them reach the normal agent path.
+                if is_brief or not self._brainforge_config.get("agent_passthrough"):
+                    client.send_socket_mode_response(self._SocketModeResponse(envelope_id=req.envelope_id))
+                    if admitted and self._loop and self._loop.is_running():
+                        self._wake_brainforge()
+                    return
             # Acknowledge the event
             response = self._SocketModeResponse(envelope_id=req.envelope_id)
             client.send_socket_mode_response(response)
@@ -500,15 +549,19 @@ class SlackChannel(Channel):
             self._wake_brainforge()
 
     def _handle_message_event(self, event: dict, *, team_id: str | None = None) -> None:
-        # Ignore bot messages
-        if event.get("bot_id") or event.get("subtype"):
+        # Ignore bot messages and subtyped events (edits, joins, broadcasts).
+        if event.get("subtype"):
+            return
+        user_id = event.get("user", "")
+        # An allowlisted human posting through another app with their own user
+        # token (e.g. Composio) carries that app's bot_id but is still the human.
+        if event.get("bot_id") and not (isinstance(user_id, str) and user_id in self._allowed_users and user_id != self._bot_user_id and bot_app_trusted(event, self._trusted_app_ids)):
             return
 
-        user_id = event.get("user", "")
-
         text = event.get("text", "").strip()
-        if event.get("type") == "app_mention":
-            text = _strip_leading_slack_bot_mention(text, self._bot_user_id)
+        # DMs arrive as plain message events, so they get the same mention strip and About alias.
+        if event.get("type") == "app_mention" or event.get("channel_type") == "im":
+            text = desktop_as_command(_about_question_as_command(_strip_leading_slack_bot_mention(text, self._bot_user_id)))
         if not text:
             if event.get("type") == "app_mention" and (not self._allowed_users or user_id in self._allowed_users):
                 self._send_empty_mention_reply(event.get("channel", ""), event.get("thread_ts") or event.get("ts", ""))
@@ -531,14 +584,31 @@ class SlackChannel(Channel):
                     logger.info("[Slack] main loop stopped before channel connection bind could be scheduled")
             return
 
-        # Check allowed users after connect-code handling so browser-initiated
-        # binding can bootstrap a new external identity.
-        if self._allowed_users and user_id not in self._allowed_users:
+        channel_id = str(event.get("channel") or "")
+        thread_ts = event.get("thread_ts") or event.get("ts", "")
+        policy_key = f"{team_id}:{channel_id}"
+        policy = self._channel_policies.get(policy_key, {}) if isinstance(self._channel_policies, dict) else {}
+        policy = policy if isinstance(policy, dict) else {}
+        globally_allowed = not self._allowed_users or user_id in self._allowed_users
+        if not globally_allowed and not (user_id and team_id and channel_id and policy.get("allow_all_users") is True):
             logger.debug("Ignoring message from non-allowed user: %s", user_id)
             return
+        if not globally_allowed:
+            from app.gateway.auth_disabled import is_auth_disabled
 
-        channel_id = event.get("channel", "")
-        thread_ts = event.get("thread_ts") or event.get("ts", "")
+            # Public-channel admission must never inherit the operator/default
+            # identity. Existing connection validation still binds each sender.
+            if self._connection_repo is None or is_auth_disabled():
+                logger.warning("Slack channel member requires an authenticated personal connection")
+                return
+        # Channel-wide participation does not grant operator commands.
+        if not globally_allowed and is_known_channel_command(text):
+            return
+        engagement_key = (str(team_id or ""), channel_id, str(thread_ts))
+        if policy.get("mentions_and_threads_only") is True:
+            is_mention = event.get("type") == "app_mention" or bool(self._bot_user_id and f"<@{self._bot_user_id}>" in event.get("text", ""))
+            if not is_mention and not (event.get("thread_ts") and engagement_key in self._engaged_threads):
+                return
 
         if is_known_channel_command(text):
             msg_type = InboundMessageType.COMMAND
@@ -557,6 +627,7 @@ class SlackChannel(Channel):
             metadata={
                 # team_id is already resolved (payload team_id/team, else event team) by the caller.
                 "team_id": team_id,
+                "requires_personal_connection": not globally_allowed,
                 "message_id": event.get("ts"),
                 "client_msg_id": event.get("client_msg_id"),
             },
@@ -567,10 +638,8 @@ class SlackChannel(Channel):
             reservation = self._reserve_inbound(inbound)
             if reservation is None:
                 return
-            # Acknowledge with an eyes reaction
-            self._add_reaction(channel_id, event.get("ts", thread_ts), "eyes")
-            # Send "running" reply first (fire-and-forget from SDK thread)
-            self._send_running_reply(channel_id, thread_ts)
+            if globally_allowed:
+                self._acknowledge_inbound(inbound)
             try:
                 if self._connection_repo is None:
                     # Reservation bounds callbacks scheduled from the SDK
@@ -599,18 +668,40 @@ class SlackChannel(Channel):
     ) -> None:
         try:
             inbound = await self._attach_connection_identity(inbound, team_id=team_id)
+            if inbound.metadata.get("requires_personal_connection") and not (inbound.connection_id and inbound.owner_user_id and inbound.workspace_id == team_id):
+                logger.warning("Slack channel member has no personal workspace binding")
+                return
+            if inbound.metadata.get("requires_personal_connection"):
+                self._acknowledge_inbound(inbound)
             self._commit_reserved_inbound(reservation, inbound)
         finally:
             reservation.release()
 
+    def _acknowledge_inbound(self, inbound) -> None:
+        """Acknowledge only after expanded participants have a personal binding."""
+        team_id = str(inbound.metadata.get("team_id") or "")
+        policy = self._channel_policies.get(f"{team_id}:{inbound.chat_id}", {}) if isinstance(self._channel_policies, dict) else {}
+        if isinstance(policy, dict) and policy.get("mentions_and_threads_only") is True:
+            key = (team_id, inbound.chat_id, str(inbound.thread_ts))
+            self._engaged_threads[key] = None
+            if len(self._engaged_threads) > 256:
+                self._engaged_threads.pop(next(iter(self._engaged_threads)))
+        self._add_reaction(inbound.chat_id, inbound.metadata.get("message_id") or inbound.thread_ts, "eyes")
+        self._send_running_reply(inbound.chat_id, inbound.thread_ts)
+
     async def _attach_connection_identity(self, inbound, *, team_id: str | None = None):
         workspace_id = str(team_id or inbound.metadata.get("team_id") or "")
-        return await attach_connection_identity(
-            inbound,
-            repo=self._connection_repo,
-            provider="slack",
-            workspace_id=workspace_id,
-        )
+
+        async def attach():
+            return await attach_connection_identity(inbound, repo=self._connection_repo, provider="slack", workspace_id=workspace_id)
+
+        inbound = await attach()
+        linker = self._roster_auto_linker
+        if inbound.connection_id or linker is None or not linker.eligible(inbound.user_id, workspace_id):
+            return inbound
+        if await linker.link(slack_user_id=inbound.user_id, team_id=workspace_id, web_client=self._web_client):
+            inbound = await attach()
+        return inbound
 
     async def _bind_connection_from_connect_code(self, *, event: dict, team_id: str, code: str) -> bool:
         if self._connection_repo is None or not code:
@@ -646,7 +737,7 @@ class SlackChannel(Channel):
         if not self._web_client or not channel_id:
             return
         kwargs: dict[str, Any] = {"channel": channel_id, "text": text}
-        if thread_ts:
+        if thread_ts and self._reply_in_thread:
             kwargs["thread_ts"] = thread_ts
         try:
             await asyncio.to_thread(self._web_client.chat_postMessage, **kwargs)

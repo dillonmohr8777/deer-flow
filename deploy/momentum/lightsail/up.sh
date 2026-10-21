@@ -17,13 +17,13 @@ DEPLOY="${MOMOBOT_DEPLOY_DIR:-/opt/momobot}"
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 LS="$REPO/deploy/momentum/lightsail"
 PROJECT="${MOMOBOT_PROJECT:-momobot-prod}"   # same name as the Mac: volume names carry over
-ENV_FILE="$DEPLOY/.env"
+ENV_FILE="${MOMOBOT_ENV_FILE:-$DEPLOY/.env}"   # EC2 keeps it on tmpfs: /run/momobot/.env
 PORT="${PORT:-2026}"
 
 for f in "$ENV_FILE" "$DEPLOY/config.yaml" "$DEPLOY/extensions_config.json"; do
   [[ -f "$f" ]] || { echo "Missing $f (bootstrap.sh writes .env; migrate-data.sh import brings the rest)" >&2; exit 2; }
 done
-[[ "$(stat -c %a "$ENV_FILE")" == "600" ]] || { echo "$ENV_FILE must be mode 600" >&2; exit 2; }
+[[ "$(stat -L -c %a "$ENV_FILE")" == "600" ]] || { echo "$ENV_FILE must be mode 600" >&2; exit 2; }
 
 # docker/docker-compose.yaml reads ../.env and ../frontend/.env relative to itself.
 mkdir -p "$DEPLOY/deer-flow-home"
@@ -50,6 +50,8 @@ compose=(docker compose --env-file "$ENV_FILE" -p "$PROJECT"
   -f "$REPO/deploy/momentum/mac/compose.funnel.yaml"
   -f "$REPO/deploy/momentum/vps/compose.public.yaml"
   -f "$LS/compose.caddy-ip.yaml")
+# Host-specific layers (EC2: deploy/momentum/ec2/compose.ec2.yaml), space-separated paths.
+for extra in ${MOMOBOT_EXTRA_COMPOSE:-}; do compose+=(-f "$extra"); done
 
 case "${1:-up}" in
   --what-if) exec "${compose[@]}" config ;;

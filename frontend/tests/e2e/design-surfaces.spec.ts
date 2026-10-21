@@ -62,9 +62,10 @@ const AGENTS = [
     skills: null,
   },
   {
-    name: "omega-reporting",
-    display_name: "Omega weekly reporting",
-    description: "Builds the Monday performance summary for Omega Landscaping.",
+    name: "fernhill-reporting",
+    display_name: "Fernhill weekly reporting",
+    description:
+      "Builds the Monday performance summary for Fernhill Landscaping.",
     model: "gpt-5-mini",
     tool_groups: ["web", "file:read"],
     skills: ["data-analysis"],
@@ -132,7 +133,7 @@ const RUNS = [
   {
     run_id: "run-0009",
     thread_id: "thread-0009",
-    thread_title: "Prepare the Fagan Painting onboarding checklist",
+    thread_title: "Prepare the Harlow Painting onboarding checklist",
     assistant_id: "dillon-client-operations",
     status: "pending",
     model_name: "claude-sonnet",
@@ -163,7 +164,7 @@ const RUNS = [
   {
     run_id: "run-0001",
     thread_id: MOCK_THREAD_ID,
-    thread_title: "Omega Landscaping September lead review",
+    thread_title: "Fernhill Landscaping September lead review",
     assistant_id: "dillon-brain",
     status: "running",
     model_name: "claude-sonnet",
@@ -193,7 +194,7 @@ const RUNS = [
   {
     run_id: "run-0003",
     thread_id: "thread-0003",
-    thread_title: "Rebuild the Bridge directory search page",
+    thread_title: "Rebuild the Harborlight directory search page",
     assistant_id: "dillon-builder",
     status: "error",
     model_name: "gpt-5-mini",
@@ -210,7 +211,7 @@ const RUNS = [
   {
     run_id: "run-0008",
     thread_id: "thread-0008",
-    thread_title: "Review the Pro Fence & Deck landing page copy",
+    thread_title: "Review the Maple Run Fence & Deck landing page copy",
     assistant_id: "dillon-critic",
     status: "interrupted",
     model_name: "claude-sonnet",
@@ -243,19 +244,19 @@ const RUNS = [
     [
       "run-0005",
       "thread-0005",
-      "Pull the September leads for Omega Landscaping and split them by campaign source",
+      "Pull the September leads for Fernhill Landscaping and split them by campaign source",
       780,
     ],
     [
       "run-0006",
       "thread-0006",
-      "Pull the September leads for Omega Landscaping and flag the calls that never booked",
+      "Pull the September leads for Fernhill Landscaping and flag the calls that never booked",
       1_500,
     ],
     [
       "run-0007",
       "thread-0007",
-      "Pull the September leads for Kimberly James Bridal and match them to appointments",
+      "Pull the September leads for Willow Lane Bridal and match them to appointments",
       2_900,
     ],
   ].map(([run_id, thread_id, thread_title, minutes]) => ({
@@ -282,7 +283,7 @@ const THREAD_MESSAGES = [
     content: [
       {
         type: "text",
-        text: "Pull September leads for Omega Landscaping and tell me which campaigns actually converted.",
+        text: "Pull September leads for Fernhill Landscaping and tell me which campaigns actually converted.",
       },
     ],
   },
@@ -292,7 +293,7 @@ const THREAD_MESSAGES = [
     content: [
       "## September lead review",
       "",
-      "Omega logged **41 form leads** and **17 calls** in September. Only the branded search campaign converted leads into booked estimates at a useful rate.",
+      "Fernhill logged **41 form leads** and **17 calls** in September. Only the branded search campaign converted leads into booked estimates at a useful rate.",
       "",
       "### What converted",
       "",
@@ -302,7 +303,7 @@ const THREAD_MESSAGES = [
       "",
       "> Performance Max spent 38% of budget for 6% of booked work.",
       "",
-      "Next step: move the Performance Max budget into branded search and add a service-area exclusion list. The raw export is in `omega-sept-leads.csv`.",
+      "Next step: move the Performance Max budget into branded search and add a service-area exclusion list. The raw export is in `fernhill-sept-leads.csv`.",
     ].join("\n"),
   },
 ];
@@ -310,7 +311,7 @@ const THREAD_MESSAGES = [
 const THREADS = [
   {
     thread_id: MOCK_THREAD_ID,
-    title: "Omega Landscaping September lead review",
+    title: "Fernhill Landscaping September lead review",
     updated_at: minutesAgo(1),
     messages: THREAD_MESSAGES,
   },
@@ -321,7 +322,7 @@ const THREADS = [
   },
   {
     thread_id: "00000000-0000-0000-0000-000000000003",
-    title: "Rebuild the Bridge directory search page",
+    title: "Rebuild the Harborlight directory search page",
     updated_at: minutesAgo(126),
     metadata: { deerflow_project_id: PROJECT_ID },
   },
@@ -333,13 +334,13 @@ const THREADS = [
   {
     thread_id: "00000000-0000-0000-0000-000000000005",
     title:
-      "Pull the September leads for Omega Landscaping and split them by campaign source",
+      "Pull the September leads for Fernhill Landscaping and split them by campaign source",
     updated_at: minutesAgo(776),
   },
   {
     thread_id: "00000000-0000-0000-0000-000000000006",
     title:
-      "Pull the September leads for Omega Landscaping and flag the calls that never booked",
+      "Pull the September leads for Fernhill Landscaping and flag the calls that never booked",
     updated_at: minutesAgo(1_496),
   },
   {
@@ -355,10 +356,10 @@ const SCHEDULED_TASKS = [
     id: "task-weekly-report",
     thread_id: null,
     context_mode: "fresh_thread_per_run" as const,
-    assistant_id: "omega-reporting",
-    title: "Omega Monday performance summary",
+    assistant_id: "fernhill-reporting",
+    title: "Fernhill Monday performance summary",
     prompt:
-      "Summarize last week's leads, spend and booked estimates for Omega Landscaping.",
+      "Summarize last week's leads, spend and booked estimates for Fernhill Landscaping.",
     schedule_type: "cron" as const,
     schedule_spec: { cron: "0 8 * * 1" },
     timezone: "America/New_York",
@@ -409,9 +410,9 @@ async function mockDesignAPI(page: Page, { empty = false } = {}) {
     projects: [
       {
         id: PROJECT_ID,
-        name: "Bridge directory relaunch",
+        name: "Harborlight directory relaunch",
         instructions:
-          "Tori's cannabis-industry directory. Keep search fast and listings accurate.",
+          "Dana's craft-brewery directory. Keep search fast and listings accurate.",
       },
     ],
   });
@@ -515,13 +516,13 @@ async function mockDesignAPI(page: Page, { empty = false } = {}) {
           ? []
           : [
               {
-                id: "client-omega",
-                display_name: "Omega Landscaping",
-                aliases: ["Omega"],
+                id: "client-fernhill",
+                display_name: "Fernhill Landscaping",
+                aliases: ["Fernhill"],
                 status: "active",
-                email_domains: ["omegalandscaping.com"],
+                email_domains: ["fernhilllandscaping.example"],
                 slack_channel_ids: [],
-                registry_id: "omega",
+                registry_id: "fernhill",
                 notes: "Priority conversion lane.",
                 created_at: "2026-03-01T12:00:00Z",
                 updated_at: "2026-09-20T12:00:00Z",
@@ -536,8 +537,8 @@ async function mockDesignAPI(page: Page, { empty = false } = {}) {
                 project_count: 2,
               },
               {
-                id: "client-bridge",
-                display_name: "Bridge Software Development",
+                id: "client-harborlight",
+                display_name: "Harborlight Software Development",
                 aliases: [],
                 status: "prospect",
                 email_domains: [],
@@ -623,7 +624,7 @@ const SIGNED_IN: Surface[] = [
         if (content) content.scrollTop = content.scrollHeight;
       });
       const row = page.getByTitle(
-        "Pull the September leads for Omega Landscaping and flag the calls that never booked",
+        "Pull the September leads for Fernhill Landscaping and flag the calls that never booked",
       );
       if (await row.isVisible()) {
         await row.focus();
@@ -799,7 +800,7 @@ test.describe("design surfaces", () => {
         await page.route("**/api/v1/auth/invitations/inspect", (route) =>
           route.fulfill({
             json: {
-              email: "tori@bridgesoftware.dev",
+              email: "dana@harborlightsoftware.example",
               workspace_name: "Momentum",
               expires_at: "2026-10-01T12:00:00Z",
               requires_login: false,

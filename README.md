@@ -20,6 +20,15 @@ https://github.com/user-attachments/assets/a8bcadc4-e040-4cf2-8fda-dd768b999c18
 
 ### MomoBot Brain Forge workflow
 
+The default-off [Claude SDK synthetic workflow pilot](backend/docs/WORKFLOWS.md#opt-in-claude-sdk-synthetic-pilot)
+routes one exact fictional line-edit fixture through the existing isolated
+localhost SDK worker while retaining Gateway ownership, native bookkeeping,
+durable paid-attempt admission and artifact acceptance. It permits no external
+tools/private jobs and verifies actual worker model/usage and the receipt
+journal's exact hash before acceptance. A separate explicit acceptance driver
+checks isolated native state and artifacts; it does not install or enable the
+route in production.
+
 The optional [Brain Forge Slack workflow](backend/app/channels/BRAINFORGE.md) runs an explicitly scoped `@bot brief` request against reviewed, hash-pinned work sources. It retrieves the full thread, saves a private protected readback receipt and returns recorded counts without calling a model or modifying canonical work. It is disabled by default and requires an existing authenticated Slack runtime binding.
 
 The optional private project compiler joins the brief with reviewed research and existing Momo workflow requests for offers, SEO, social, CRM, reporting, developer blockers and security review. A single protected receipt binds the source brief and project artifact. `python -m app.channels.brainforge_cli` provides local preflight, build and independent readback; compiled requests remain unsent until the existing authenticated workflow service admits them. See the [unified project configuration](backend/app/channels/BRAINFORGE.md#unified-private-project).
@@ -683,6 +692,13 @@ cleanup when migrating from legacy metadata credentials.
 
 #### IM Channels
 
+Momo's managed AI-news persona uses only public web search and fetch tools and
+omits private knowledge scope. This keeps news requests usable when the selected
+provider has no knowledge integration. Choose a private model route for Slack
+channels containing client discussions, even when the channel is named for news.
+The authenticated channel gateway preserves that restricted profile through run
+admission; ordinary external requests cannot enable its internal mode flag.
+
 DeerFlow supports receiving tasks from messaging apps. Channels auto-start when configured — no public IP required for any of them.
 
 DeerFlow can also expose user-owned IM channel connections in the workspace UI. When `channel_connections` is enabled, logged-in users can bind Telegram, Slack, Discord, Feishu/Lark, DingTalk, WeChat, WeCom, or Buzz from the sidebar / Settings > Channels. It reuses the existing outbound `channels.*` transports, so no public IP or provider callback URL is required. Incoming IM messages then run under the connected DeerFlow user account. See [IM Channel Connections](backend/docs/IM_CHANNEL_CONNECTIONS.md) for setup and security notes.
@@ -835,6 +851,8 @@ DINGTALK_CLIENT_SECRET=your_client_secret
 3. The bot accepts inbound text, photos, and documents (with or without captions). Hosted Bot API downloads are limited to 20 MB per attachment.
 
 **Slack Setup**
+
+Slack text posts are attempted once. A lost acknowledgment or server-side ambiguity is held as `outcome_unknown` and must be reconciled with the destination before another attempt. Successful posts retain the provider channel and message timestamp; this is not an exactly-once delivery guarantee.
 
 1. Create a Slack App at [api.slack.com/apps](https://api.slack.com/apps) → Create New App → From scratch.
 2. Under **OAuth & Permissions**, add Bot Token Scopes: `app_mentions:read`, `chat:write`, `im:history`, `im:read`, `im:write`, `files:write`.
@@ -1312,7 +1330,7 @@ Installation is interactive because package installation can execute Python buil
 and the loaded extension later runs with Gateway privileges. For an already-reviewed
 source, automation can acknowledge that boundary explicitly with
 `cd backend && uv run --frozen --no-group extensions deerflow extensions install <source> --yes`.
-The manager requires uv 0.8.0 or newer; the provided Docker images pin uv 0.11.1.
+The manager requires uv 0.8.0 or newer; the provided Docker images pin uv 0.13.4.
 The other direct
 commands are `deerflow extensions upgrade SOURCE`, `list`, `enable NAME`, `disable NAME`, and `remove NAME`;
 `NAME` may be the extension name, Python distribution, or `module:install` value. Do not
@@ -1838,6 +1856,12 @@ and the [request contract](backend/docs/API.md#referencing-a-previous-conversati
 
 ### Long-Term Memory
 
+`memory.model_name` selects a host `models[]` profile for DeerMem extraction,
+including its endpoint and provider restrictions. Null retains the app default;
+it does not follow the chat run's model. An explicit `memory.backend_config.model`
+still takes precedence. An unknown host profile disables extraction with a
+warning instead of falling back to another model. Memory reads remain available.
+
 The opt-in [DeerMem scope-isolation benchmark](backend/scripts/benchmark/deermem_scope_isolation/README.md)
 checks semantic safety across facts and summaries, and fact routing across users
 and agents. Failed extraction attempts are retryable execution errors, not safety passes.
@@ -2191,6 +2215,21 @@ See [backend/docs/TUI.md](backend/docs/TUI.md) for the full guide.
 
 ## ⚠️ Security Notice
 
+Browser screenshots and captures create fresh files without following output
+symlinks or overwriting earlier captures. Secure capture writes require no-follow
+directory operations; unsupported platforms return an error. Public web-tool
+URL screening also rejects shared-address and IPv6 site-local networks unless
+the operator explicitly enables private targets. Page-derived browser results
+receive the same framework-tag neutralization as fetched pages and MCP results;
+this reduces structural injection and does not replace tool authorization.
+
+Custom-agent/profile and memory management enforce the authenticated caller's
+thread permissions: reads require `threads:read`, writes require `threads:write`,
+and deletions require `threads:delete`. An enabled private workspace or a valid
+internal delegation does not widen token scopes. Run-only scheduled workers and
+the default IM channel worker cannot erase saved memory. Unexpected MCP config
+failures return generic errors and omit credential-bearing exception text.
+
 ### Improper Deployment May Introduce Security Risks
 
 DeerFlow has key high-privilege capabilities including **system command execution, resource operations, and business logic invocation**, and is designed by default to be **deployed in a local trusted environment (accessible only via the 127.0.0.1 loopback interface)**. If you deploy the agent in untrusted environments — such as LAN networks, public cloud servers, or other multi-endpoint accessible environments — without strict security measures, it may introduce security risks, including:
@@ -2522,3 +2561,7 @@ rejects an omitted journal setting; previous memory-only pilot events remain
 historical. See the exact invocation in [private setup](docs/MOMOBOT_APP_RELEASE.md).
 
 Optional Momentum integration: [synthetic offline SDK review worker](examples/momentum-sdk-review/README.md). Disabled by default; does not perform live client work or inference.
+
+For EC2 operators, an optional [read-only Brain snapshot adapter](deploy/momentum/ec2/README.md#optional-read-only-brain-snapshot-prepared-not-enabled)
+can expose saved context without a Mac service or new collector. It is prepared only;
+production registration and private snapshot installation are separate release steps.

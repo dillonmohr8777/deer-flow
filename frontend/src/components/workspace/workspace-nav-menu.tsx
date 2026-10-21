@@ -22,6 +22,7 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar";
+import { useIsClient, useIsRoleUnresolved } from "@/core/auth/AuthProvider";
 import { useI18n } from "@/core/i18n/hooks";
 
 import { useSettingsDialog } from "./settings";
@@ -51,6 +52,8 @@ export function WorkspaceNavMenu() {
   const [mounted, setMounted] = useState(false);
   const { open: isSidebarOpen } = useSidebar();
   const { t } = useI18n();
+  const isClient = useIsClient();
+  const unresolved = useIsRoleUnresolved();
 
   useEffect(() => {
     setMounted(true);
@@ -86,6 +89,18 @@ export function WorkspaceNavMenu() {
                     <Settings2Icon />
                     {t.common.settings}
                   </DropdownMenuItem>
+                  {!isClient && !unresolved && (
+                    <DropdownMenuItem
+                      onClick={() => openSettings("experience")}
+                    >
+                      <Settings2Icon />
+                      {[
+                        t.settings.experience.easyLabel,
+                        t.settings.experience.mediumLabel,
+                        t.settings.experience.hardLabel,
+                      ].join(" / ")}
+                    </DropdownMenuItem>
+                  )}
                 </DropdownMenuGroup>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem

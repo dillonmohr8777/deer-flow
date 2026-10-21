@@ -160,6 +160,7 @@
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
+  min-height: 2.75rem;
   padding: 0.45rem 0.8rem;
   border: 1px solid var(--paper-line);
   background: var(--paper-cream-hi);
@@ -177,6 +178,15 @@
 .motionToggle:focus-visible {
   outline: 2px solid var(--paper-focus);
   outline-offset: 2px;
+}
+
+@media (width <= 40rem) {
+  .signInPage .motionToggle {
+    top: 1rem;
+    right: auto;
+    bottom: auto;
+    left: 1rem;
+  }
 }
 
 /* ---- Split lockup: product name and maker ------------------------------ */

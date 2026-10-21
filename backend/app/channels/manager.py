@@ -43,6 +43,7 @@ from app.gateway.csrf_middleware import CSRF_COOKIE_NAME, CSRF_HEADER_NAME, gene
 from app.gateway.github import run_policy as _github_run_policy  # noqa: F401
 from app.gateway.internal_auth import create_internal_auth_headers
 from app.gateway.path_utils import resolve_outputs_confined_path
+from app.momobot_brand import about_reply, configured_content_dir
 from deerflow.config.agents_config import list_custom_agents, load_agent_config
 from deerflow.config.paths import make_safe_user_id
 from deerflow.runtime import END_SENTINEL, StreamBridge
@@ -1276,6 +1277,7 @@ class ChannelManager:
         # bursts remain as bounded queue entries instead of semaphore-waiting
         # task-per-message fan-out.
         self._worker_tasks: set[asyncio.Task[None]] = set()
+        self._desktop_notify_task: asyncio.Task[None] | None = None
         # Inbound webhook dedupe store. Defaults to the in-process Memory store
         # (pre-#4120 behavior). Multi-pod deployments inject a shared store so
         # duplicate deliveries landing on different pods are collapsed.
@@ -1307,6 +1309,12 @@ class ChannelManager:
 
     def _resolve_session_layer(self, msg: InboundMessage) -> tuple[dict[str, Any], dict[str, Any]]:
         channel_layer = _as_dict(self._channel_sessions.get(msg.channel_name))
+        if msg.channel_name == "slack":
+            # Scope operator-provided routing to both workspace and conversation.
+            team_id = str((msg.metadata or {}).get("team_id") or "")
+            chats = _as_dict(channel_layer.get("chats"))
+            if team_id and msg.chat_id:
+                channel_layer = _merge_dicts(channel_layer, _as_dict(chats.get(f"{team_id}:{msg.chat_id}")))
         users_layer = _as_dict(channel_layer.get("users"))
         user_layer = _as_dict(users_layer.get(msg.user_id))
         return channel_layer, user_layer
@@ -1733,6 +1741,14 @@ class ChannelManager:
             else:
                 run_config["recursion_limit"] = max(run_config.get("recursion_limit", 100), policy.default_recursion_limit)
 
+        # Public news routing cannot be widened by user preferences or /agent state.
+        public_news = msg.channel_name == "slack" and msg.chat_id == "C04HXSVN2CS" and msg_metadata.get("team_id") == "T066HGS7N"
+        run_context["public_news_channel"] = public_news
+        if public_news:
+            assistant_id = "lead_agent"
+            _apply_explicit_agent_choice(run_config, run_context, "ai-tech-news")
+            run_context.update({"subagent_enabled": False, "is_bootstrap": False, "is_plan_mode": False})
+
         return assistant_id, run_config, run_context
 
     async def _apply_channel_policy(self, msg: InboundMessage, run_context: dict[str, Any]) -> ChannelRunPolicy | None:
@@ -1852,6 +1868,9 @@ class ChannelManager:
         for task in self._worker_tasks:
             task.add_done_callback(self._log_task_error)
             task.add_done_callback(self._worker_tasks.discard)
+        from app.channels import desktop_jobs
+
+        self._desktop_notify_task = asyncio.create_task(desktop_jobs.notify_loop(self._desktop_repo, self.bus.publish_outbound), name="deerflow-desktop-results")
         logger.info(
             "ChannelManager started (workers=%d, inbound_queue_maxsize=%d, shutdown_grace=%.1fs)",
             self._max_concurrency,
@@ -1887,6 +1906,10 @@ class ChannelManager:
         # allowed to finish their current/queued messages during the grace.
         for task in watcher_tasks:
             task.cancel()
+        notify_task, self._desktop_notify_task = self._desktop_notify_task, None
+        if notify_task is not None:
+            notify_task.cancel()
+            watcher_tasks.append(notify_task)  # awaited with the other owned tasks below
 
         join_task = asyncio.create_task(self.bus.join_inbound(), name="deerflow-channel-inbound-drain")
         drained = False
@@ -2782,6 +2805,25 @@ class ChannelManager:
             reply = await self._fetch_gateway("/api/models", "models", msg=msg)
         elif reply is None and command == "memory":
             reply = await self._fetch_gateway("/api/memory", "memory", msg=msg)
+        elif reply is None and command == "momobot":
+            sub, _, rest = (parts[1] if len(parts) > 1 else "about").strip().partition(" ")
+            sub = sub.lower()
+            if sub in ("desktop", "approve", "reject"):
+                reply = await self._handle_desktop_command(msg, sub, rest)
+                # Top-level in the channel, not a thread reply.
+                await self.bus.publish_outbound(
+                    OutboundMessage(
+                        channel_name=msg.channel_name,
+                        chat_id=msg.chat_id,
+                        thread_id="",
+                        text=reply,
+                        connection_id=msg.connection_id,
+                        owner_user_id=msg.owner_user_id,
+                        metadata=_slim_metadata(msg.metadata),
+                    )
+                )
+                return
+            reply = about_reply(configured_content_dir()) if sub == "about" else "Try /momobot about"
         elif reply is None and command == "agent":
             reply = await self._handle_agent_command(msg, parts[1] if len(parts) > 1 else "")
         elif reply is None and command == "goal":
@@ -2797,6 +2839,9 @@ class ChannelManager:
                 "/status — Show current thread info\n"
                 "/models — List available models\n"
                 "/memory — Show memory status\n"
+                "/momobot about — What MomoBot is and how it works\n"
+                "/momobot desktop <task> — Queue a job for the Mac desktop (needs approval)\n"
+                "/momobot approve|reject <job id> — Admins only\n"
                 "/agent list — List your Custom Agents\n"
                 "/agent use <name> — Start a new conversation with an agent\n"
                 "/<skill-name> <task> — Activate an enabled skill for one turn\n"
@@ -2835,6 +2880,59 @@ class ChannelManager:
             metadata=_slim_metadata(msg.metadata),
         )
         await self.bus.publish_outbound(outbound)
+
+    @staticmethod
+    def _desktop_repo():
+        from deerflow.persistence.engine import get_session_factory
+        from deerflow.persistence.subagent_batches import SubagentBatchRepository
+
+        factory = get_session_factory()
+        return SubagentBatchRepository(factory) if factory is not None else None
+
+    async def _handle_desktop_command(self, msg: InboundMessage, sub: str, rest: str) -> str:
+        """``desktop`` / ``approve`` / ``reject``: roster-gated, run as the bound owner through the fleet-work routes."""
+        from app.channels import desktop_jobs
+        from deerflow.config.app_config import get_app_config
+        from deerflow.config.roster_config import RosterConfig
+
+        owner = _owner_headers(msg)
+        if owner is None:
+            return "Link your MomoBot account first, then try again."
+        try:
+            roster = get_app_config().roster
+        except Exception:
+            logger.exception("Could not load the roster; refusing desktop command")
+            roster = RosterConfig()  # fail closed: empty roster denies everyone
+        headers = {**owner, CSRF_HEADER_NAME: self._csrf_token, "Cookie": f"{CSRF_COOKIE_NAME}={self._csrf_token}"}
+
+        async def api(method: str, path: str, body: dict | None) -> tuple[int, dict]:
+            try:
+                async with httpx.AsyncClient() as http:
+                    resp = await http.request(method, f"{self._gateway_url}{path}", json=body, headers=headers, timeout=15)
+                try:
+                    data = resp.json()
+                except ValueError:
+                    data = {}
+                return resp.status_code, data if isinstance(data, dict) else {}
+            except Exception:
+                logger.exception("Desktop job request failed: %s", path)
+                return 0, {}
+
+        async def thread_id() -> str:
+            return await self._lookup_thread_id(msg) or await self._create_thread(self._get_client(), msg)
+
+        return await desktop_jobs.handle(
+            sub=sub,
+            rest=rest,
+            user_id=msg.user_id,
+            chat_id=msg.chat_id,
+            message_id=str((msg.metadata or {}).get("message_id") or msg.thread_ts or ""),
+            team_id=(msg.metadata or {}).get("team_id"),
+            connection_id=msg.connection_id,
+            roster=roster,
+            api=api,
+            thread_id=thread_id,
+        )
 
     async def _handle_agent_command(self, msg: InboundMessage, args: str) -> str:
         """List owner-scoped agents or pin one to a fresh conversation."""

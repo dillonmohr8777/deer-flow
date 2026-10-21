@@ -32,10 +32,13 @@ from deerflow.config.loop_detection_config import LoopDetectionConfig
 from deerflow.config.mcp_tasks_config import McpTasksConfig
 from deerflow.config.memory_config import MemoryConfig, load_memory_config_from_dict
 from deerflow.config.model_config import ModelConfig
+from deerflow.config.momobot_brand_config import MomobotBrandConfig
+from deerflow.config.momobot_max_config import MomobotMaxConfig
 from deerflow.config.pii_redaction_config import PiiRedactionConfig
 from deerflow.config.projects_config import ProjectsConfig
 from deerflow.config.read_before_write_config import ReadBeforeWriteConfig
 from deerflow.config.reload_boundary import format_field_description
+from deerflow.config.roster_config import RosterConfig
 from deerflow.config.run_events_config import RunEventsConfig
 from deerflow.config.run_ownership_config import RunOwnershipConfig
 from deerflow.config.runtime_paths import existing_project_file
@@ -281,6 +284,7 @@ class AppConfig(BaseModel):
     agents_api: AgentsApiConfig = Field(default_factory=AgentsApiConfig, description="Custom-agent management API configuration")
     private_workspace: PrivateWorkspaceConfig = Field(default_factory=PrivateWorkspaceConfig, description="Owner-only private workspace switches (the Desk home)")
     momentum_internal: MomentumInternalConfig = Field(default_factory=MomentumInternalConfig, description="Staff-only Team channels and AI Academy for the agency's own workspace")
+    momobot_max: MomobotMaxConfig = Field(default_factory=MomobotMaxConfig, description="MomoBot Max, the built-in all-in-one agent for client accounts (off by default)")
     acp_agents: dict[str, ACPAgentConfig] = Field(default_factory=dict, description="ACP-compatible agent configuration")
     subagents: SubagentsAppConfig = Field(default_factory=SubagentsAppConfig, description="Subagent runtime configuration")
     guardrails: GuardrailsConfig = Field(default_factory=GuardrailsConfig, description="Guardrail middleware configuration")
@@ -361,6 +365,17 @@ class AppConfig(BaseModel):
         description=format_field_description(
             "subagent_batches",
             field_doc="Durable native-subagent batch scheduling, lease, and recovery configuration.",
+        ),
+    )
+    momobot_brand: MomobotBrandConfig = Field(
+        default_factory=MomobotBrandConfig,
+        description="Server-side folder holding the private MomoBot About copy and Agents lineup kit (never committed).",
+    )
+    roster: RosterConfig = Field(
+        default_factory=RosterConfig,
+        description=format_field_description(
+            "roster",
+            field_doc="Slack account-manager roster (user -> role -> clients) and the repo allow/deny lists the MomoBot desktop bridge honors.",
         ),
     )
     checkpointer: CheckpointerConfig | None = Field(

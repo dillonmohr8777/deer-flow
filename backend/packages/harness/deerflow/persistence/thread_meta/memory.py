@@ -22,6 +22,20 @@ THREADS_NS: tuple[str, ...] = ("threads",)
 SEARCH_PAGE_SIZE = 500
 
 
+async def _client_actor_id():
+    from deerflow.persistence.engine import get_session_factory
+    from deerflow.persistence.thread_meta.sql import _client_actor
+    from deerflow.runtime.user_context import get_current_user, get_effective_actor_user_id
+
+    if getattr(get_current_user(), "system_role", None) == "client":
+        return get_effective_actor_user_id()
+    factory = get_session_factory()
+    if factory is None:
+        return None
+    async with factory() as session:
+        return await _client_actor(session)
+
+
 class MemoryThreadMetaStore(ThreadMetaStore):
     def __init__(self, store: BaseStore) -> None:
         self._store = store
@@ -40,6 +54,9 @@ class MemoryThreadMetaStore(ThreadMetaStore):
             return None
         record = dict(item.value)
         if resolved is not None and record.get("user_id") != resolved:
+            return None
+        client_actor = await _client_actor_id()
+        if client_actor is not None and record.get("client_actor_id") != client_actor:
             return None
         return record
 
@@ -68,9 +85,13 @@ class MemoryThreadMetaStore(ThreadMetaStore):
             existing = await self._store.aget(THREADS_NS, thread_id)
             if existing is not None and resolved_user_id is not None and existing.value.get("user_id") != resolved_user_id:
                 raise ThreadOwnershipConflictError(thread_id)
+            client_actor = await _client_actor_id()
+            if existing is not None and client_actor is not None and existing.value.get("client_actor_id") != client_actor:
+                raise ThreadOwnershipConflictError(thread_id)
             now = now_iso()
             record: dict[str, Any] = {
                 "thread_id": thread_id,
+                "client_actor_id": client_actor,
                 "incarnation": (existing.value.get("incarnation") if existing is not None else None) or uuid.uuid4().hex,
                 "assistant_id": assistant_id,
                 "user_id": resolved_user_id,
@@ -85,6 +106,8 @@ class MemoryThreadMetaStore(ThreadMetaStore):
             return record
 
     async def claim_unowned(self, thread_id: str, owner: str) -> bool:
+        if await _client_actor_id() is not None:
+            return False
         async with self._thread_locks.hold(thread_id):
             item = await self._store.aget(THREADS_NS, thread_id)
             if item is None or item.value.get("user_id") is not None:
@@ -124,6 +147,9 @@ class MemoryThreadMetaStore(ThreadMetaStore):
             # Memory mode has no projects backend: no thread can be a member.
             return []
         filter_dict: dict[str, Any] = {}
+        client_actor = await _client_actor_id()
+        if client_actor is not None:
+            filter_dict["client_actor_id"] = client_actor
         if status:
             filter_dict["status"] = status
         if resolved_user_id is not None:
@@ -158,8 +184,8 @@ class MemoryThreadMetaStore(ThreadMetaStore):
         if item is None:
             return not require_existing
         # Ownerless legacy records fail closed for every caller, as in the SQL store.
-        record_user_id = item.value.get("user_id")
-        return record_user_id is not None and record_user_id == user_id
+        record = await self._get_owned_record(thread_id, user_id, "MemoryThreadMetaStore.check_access")
+        return record is not None and record.get("user_id") is not None
 
     async def update_display_name(
         self,

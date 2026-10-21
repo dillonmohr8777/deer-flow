@@ -363,6 +363,14 @@ html:not(.dark) .momentum-page {
   body {
     @apply bg-background text-foreground;
   }
+  /* Tailwind's preflight fades placeholders to 50% of the text colour, and a
+     bare <input> falls back to the browser's grey: both measured 3.0-3.2:1.
+     Placeholders use the muted token (5.4:1 light, 6.9:1 dark) at full opacity;
+     a component's own placeholder:text-* utility still wins. */
+  ::placeholder {
+    color: var(--muted-foreground);
+    opacity: 1;
+  }
 
   .container-md {
     width: 100%;

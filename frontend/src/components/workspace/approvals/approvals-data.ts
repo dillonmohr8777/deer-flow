@@ -18,6 +18,7 @@ export const TYPE_LABEL: Record<ApprovalActionType, string> = {
   email: "Email",
   ad_change: "Ad change",
   deploy_report: "Report deploy",
+  portal_publish: "Portal reply",
   other: "Other",
 };
 

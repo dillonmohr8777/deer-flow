@@ -7,14 +7,18 @@ instance. Progress is always read and written for the caller's own id.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from app.gateway.academy_content import TRACKS, lesson_ids
+from app.gateway.academy_content import ACADEMY_MEDIA_NAMES, TRACKS, Lesson, lesson_ids
 from app.gateway.authz import require_permission
 from app.gateway.deps import get_academy_progress_repo, get_config
 from app.gateway.momentum_internal import momentum_staff_only, require_momentum_staff
 from deerflow.config.app_config import AppConfig
+from deerflow.config.paths import get_paths
 
 # Gate first (404 for anyone who isn't Momentum staff), and keep these
 # routes out of the public OpenAPI schema.
@@ -30,6 +34,9 @@ class AcademyLessonResponse(BaseModel):
     try_it: str
     video_slot: str | None
     video_url: str | None
+    video_poster_url: str | None = None
+    video_captions_url: str | None = None
+    video_transcript_url: str | None = None
     completed: bool
 
 
@@ -50,6 +57,43 @@ class AcademyProgressRequest(BaseModel):
     completed: bool
 
 
+def _media_path(filename: str) -> Path:
+    root = (get_paths().base_dir / "academy-media").resolve()
+    path = (root / filename).resolve()
+    if filename not in ACADEMY_MEDIA_NAMES or not path.is_relative_to(root) or not path.is_file():
+        raise HTTPException(status_code=404, detail="Academy media not found")
+    return path
+
+
+def _published_media(lesson: Lesson) -> Lesson:
+    stem = lesson["video_slot"]
+    if stem is None:
+        return lesson
+    # Release stages the accepted set together; incomplete uploads stay out of the player.
+    try:
+        for extension in ("mp4", "jpg", "vtt", "txt"):
+            _media_path(f"{stem}.{extension}")
+    except HTTPException:
+        return lesson
+    return {
+        **lesson,
+        "video_url": f"/api/academy/media/{stem}.mp4",
+        "video_poster_url": f"/api/academy/media/{stem}.jpg",
+        "video_captions_url": f"/api/academy/media/{stem}.vtt",
+        "video_transcript_url": f"/api/academy/media/{stem}.txt",
+    }
+
+
+@router.get("/media/{filename}", response_class=FileResponse)
+@require_permission("academy", "read")
+async def get_academy_media(filename: str, request: Request, config: AppConfig = Depends(get_config)) -> FileResponse:
+    await require_momentum_staff(request, config)
+    path = _media_path(filename)
+    for extension in ("mp4", "jpg", "vtt", "txt"):
+        _media_path(f"{Path(filename).stem}.{extension}")
+    return FileResponse(path, headers={"Cache-Control": "private, no-store"})
+
+
 @router.get("", response_model=AcademyResponse)
 @require_permission("academy", "read")
 async def get_academy(request: Request, config: AppConfig = Depends(get_config)) -> AcademyResponse:
@@ -62,7 +106,7 @@ async def get_academy(request: Request, config: AppConfig = Depends(get_config))
             id=track["id"],
             title=track["title"],
             summary=track["summary"],
-            lessons=[AcademyLessonResponse(**lesson, completed=lesson["id"] in done) for lesson in track["lessons"]],
+            lessons=[AcademyLessonResponse(**_published_media(lesson), completed=lesson["id"] in done) for lesson in track["lessons"]],
         )
         for track in TRACKS
     ]

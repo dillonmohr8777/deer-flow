@@ -3,17 +3,14 @@
 import {
   BotIcon,
   GraduationCap,
+  Info,
+  UsersRound,
   Hash,
   CalendarClock,
   Inbox,
   MessagesSquare,
-  BlocksIcon,
   LampDesk,
   Network,
-  Newspaper,
-  Radio,
-  Globe,
-  ListChecks,
   ShieldCheck,
 } from "lucide-react";
 import Link from "next/link";
@@ -32,16 +29,91 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useAgentsApiEnabled } from "@/core/agents";
+import {
+  useAuth,
+  useIsClient,
+  useIsRoleUnresolved,
+} from "@/core/auth/AuthProvider";
 import { useBoardThreads } from "@/core/board";
 import { useDeskEnabled, useMomentumInternalEnabled } from "@/core/features";
 import { useI18n } from "@/core/i18n/hooks";
+import { useBrandKit } from "@/core/momobot-brand";
+
+import { WorkspaceSelector } from "./workspace-selector";
+
+/**
+ * The client version of MomoBot: chats, the MomoBot lineup and About, nothing
+ * internal. (New chat lives in the sidebar header.)
+ */
+function ClientNavList({ showBrandKit }: { showBrandKit: boolean }) {
+  const { t } = useI18n();
+  const pathname = usePathname();
+  return (
+    <SidebarGroup className="pt-1">
+      <WorkspaceSelector />
+      <SidebarMenu>
+        <SidebarMenuItem>
+          <SidebarMenuButton isActive={pathname === "/workspace/inbox"} asChild>
+            <Link className="text-muted-foreground" href="/workspace/inbox">
+              <Inbox />
+              <span>Client inbox</span>
+            </Link>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+
+        <SidebarMenuItem>
+          <SidebarMenuButton isActive={pathname === "/workspace/chats"} asChild>
+            <Link className="text-muted-foreground" href="/workspace/chats">
+              <MessagesSquare />
+              <span>{t.sidebar.chats}</span>
+            </Link>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+        {showBrandKit && (
+          <>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                isActive={pathname === "/workspace/lineup"}
+                asChild
+              >
+                <Link
+                  className="text-muted-foreground"
+                  href="/workspace/lineup"
+                >
+                  <UsersRound />
+                  <span>{t.sidebar.momobotAgents}</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                isActive={pathname === "/workspace/about"}
+                asChild
+              >
+                <Link className="text-muted-foreground" href="/workspace/about">
+                  <Info />
+                  <span>{t.sidebar.aboutMomobot}</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </>
+        )}
+      </SidebarMenu>
+    </SidebarGroup>
+  );
+}
 
 export function WorkspaceNavChatList() {
   const { t } = useI18n();
   const pathname = usePathname();
+  const isClient = useIsClient();
+  const unresolved = useIsRoleUnresolved();
   const { enabled: agentsEnabled } = useAgentsApiEnabled();
   const { enabled: deskEnabled } = useDeskEnabled();
   const { enabled: internalEnabled } = useMomentumInternalEnabled();
+  const { data: brandKit } = useBrandKit();
+  const { user } = useAuth();
+  const isAdmin = user?.system_role === "admin";
   // Threads with a Momo draft waiting on the owner; same query Desk's
   // Approvals panel runs, so React Query shares one cache entry.
   const waitingApproval = useBoardThreads({
@@ -49,9 +121,20 @@ export function WorkspaceNavChatList() {
     enabled: deskEnabled,
   });
   const waitingCount = deskEnabled ? (waitingApproval.data?.length ?? 0) : 0;
+  if (unresolved) return null;
+  if (isClient) return <ClientNavList showBrandKit={Boolean(brandKit)} />;
   return (
     <SidebarGroup className="pt-1">
       <SidebarMenu>
+        <SidebarMenuItem>
+          <SidebarMenuButton isActive={pathname === "/workspace/inbox"} asChild>
+            <Link className="text-muted-foreground" href="/workspace/inbox">
+              <Inbox />
+              <span>Client inbox</span>
+            </Link>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+
         {/* Owner-only: exists solely on the private instance. */}
         {deskEnabled && (
           <SidebarMenuItem>
@@ -62,22 +145,6 @@ export function WorkspaceNavChatList() {
               <Link className="text-muted-foreground" href="/workspace/desk">
                 <LampDesk />
                 <span>Desk</span>
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        )}
-        {deskEnabled && (
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              isActive={pathname.startsWith("/workspace/desk/agent-room")}
-              asChild
-            >
-              <Link
-                className="text-muted-foreground"
-                href="/workspace/desk/agent-room"
-              >
-                <Radio />
-                <span>Agent Room</span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
@@ -137,57 +204,23 @@ export function WorkspaceNavChatList() {
             </SidebarMenuButton>
           </SidebarMenuItem>
         )}
-        <SidebarMenuItem>
-          <SidebarMenuButton
-            isActive={pathname === "/workspace/command-center"}
-            asChild
-          >
-            <Link
-              className="text-muted-foreground"
-              href="/workspace/command-center"
+        {/* Admins only, keeps the team sidebar short. */}
+        {isAdmin && (
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              isActive={pathname === "/workspace/command-center"}
+              asChild
             >
-              <Network />
-              <span>Command Center</span>
-            </Link>
-          </SidebarMenuButton>
-        </SidebarMenuItem>
-        <SidebarMenuItem>
-          <SidebarMenuButton
-            isActive={pathname === "/workspace/openai"}
-            asChild
-          >
-            <Link className="text-muted-foreground" href="/workspace/openai">
-              <Network />
-              <span>OpenAI crew</span>
-            </Link>
-          </SidebarMenuButton>
-        </SidebarMenuItem>
-        <SidebarMenuItem>
-          <SidebarMenuButton
-            isActive={pathname === "/workspace/workflows"}
-            className="min-h-11"
-            asChild
-          >
-            <Link className="text-muted-foreground" href="/workspace/workflows">
-              <ListChecks />
-              <span>Workflows</span>
-            </Link>
-          </SidebarMenuButton>
-        </SidebarMenuItem>
-        <SidebarMenuItem>
-          <SidebarMenuButton
-            isActive={pathname === "/workspace/browser-research"}
-            asChild
-          >
-            <Link
-              className="text-muted-foreground"
-              href="/workspace/browser-research"
-            >
-              <Globe />
-              <span>Browser research</span>
-            </Link>
-          </SidebarMenuButton>
-        </SidebarMenuItem>
+              <Link
+                className="text-muted-foreground"
+                href="/workspace/command-center"
+              >
+                <Network />
+                <span>Command Center</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        )}
         <SidebarMenuItem>
           <SidebarMenuButton isActive={pathname === "/workspace/chats"} asChild>
             <Link className="text-muted-foreground" href="/workspace/chats">
@@ -196,48 +229,54 @@ export function WorkspaceNavChatList() {
             </Link>
           </SidebarMenuButton>
         </SidebarMenuItem>
-        <SidebarMenuItem>
-          {agentsEnabled ? (
-            <SidebarMenuButton
-              isActive={pathname.startsWith("/workspace/agents")}
-              asChild
-            >
-              <Link className="text-muted-foreground" href="/workspace/agents">
-                <BotIcon />
-                <span>{t.sidebar.agents}</span>
-              </Link>
-            </SidebarMenuButton>
-          ) : (
-            // Disabled: aria-disabled drives the sidebar CVA to suppress
-            // pointer events on the button, so wrap it in a hoverable span
-            // that still surfaces the "feature not enabled" tooltip for mouse
-            // users. The button stays in the tab order (no tabIndex={-1}) and
-            // is wired via aria-describedby to a visually-hidden reason, so
-            // keyboard and screen-reader users also learn why it is disabled.
-            <Tooltip>
-              <TooltipTrigger asChild>
-                {/* cursor-not-allowed lives on the span (the element that
+        {/* Admins only, keeps the team sidebar short. */}
+        {isAdmin && (
+          <SidebarMenuItem>
+            {agentsEnabled ? (
+              <SidebarMenuButton
+                isActive={pathname.startsWith("/workspace/agents")}
+                asChild
+              >
+                <Link
+                  className="text-muted-foreground"
+                  href="/workspace/agents"
+                >
+                  <BotIcon />
+                  <span>{t.sidebar.agents}</span>
+                </Link>
+              </SidebarMenuButton>
+            ) : (
+              // Disabled: aria-disabled drives the sidebar CVA to suppress
+              // pointer events on the button, so wrap it in a hoverable span
+              // that still surfaces the "feature not enabled" tooltip for mouse
+              // users. The button stays in the tab order (no tabIndex={-1}) and
+              // is wired via aria-describedby to a visually-hidden reason, so
+              // keyboard and screen-reader users also learn why it is disabled.
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  {/* cursor-not-allowed lives on the span (the element that
                     still receives pointer events), not the inert button. */}
-                <span className="block w-full cursor-not-allowed">
-                  <SidebarMenuButton
-                    className="text-muted-foreground/50"
-                    aria-disabled
-                    aria-describedby="agents-disabled-reason"
-                  >
-                    <BotIcon />
-                    <span>{t.sidebar.agents}</span>
-                  </SidebarMenuButton>
-                  <span id="agents-disabled-reason" className="sr-only">
-                    {t.sidebar.agentsDisabledTooltip}
+                  <span className="block w-full cursor-not-allowed">
+                    <SidebarMenuButton
+                      className="text-muted-foreground/50"
+                      aria-disabled
+                      aria-describedby="agents-disabled-reason"
+                    >
+                      <BotIcon />
+                      <span>{t.sidebar.agents}</span>
+                    </SidebarMenuButton>
+                    <span id="agents-disabled-reason" className="sr-only">
+                      {t.sidebar.agentsDisabledTooltip}
+                    </span>
                   </span>
-                </span>
-              </TooltipTrigger>
-              <TooltipContent side="right">
-                {t.sidebar.agentsDisabledTooltip}
-              </TooltipContent>
-            </Tooltip>
-          )}
-        </SidebarMenuItem>
+                </TooltipTrigger>
+                <TooltipContent side="right">
+                  {t.sidebar.agentsDisabledTooltip}
+                </TooltipContent>
+              </Tooltip>
+            )}
+          </SidebarMenuItem>
+        )}
         <SidebarMenuItem>
           <SidebarMenuButton
             isActive={pathname.startsWith("/workspace/scheduled-tasks")}
@@ -252,28 +291,36 @@ export function WorkspaceNavChatList() {
             </Link>
           </SidebarMenuButton>
         </SidebarMenuItem>
-        <SidebarMenuItem>
-          <SidebarMenuButton
-            isActive={pathname.startsWith("/workspace/capabilities")}
-            asChild
-          >
-            <Link
-              className="text-muted-foreground"
-              href="/workspace/capabilities"
-            >
-              <BlocksIcon />
-              <span>{t.capabilities.title}</span>
-            </Link>
-          </SidebarMenuButton>
-        </SidebarMenuItem>
-        <SidebarMenuItem>
-          <SidebarMenuButton isActive={pathname.startsWith("/daily")} asChild>
-            <Link className="text-muted-foreground" href="/daily">
-              <Newspaper />
-              <span>The Momo Daily</span>
-            </Link>
-          </SidebarMenuButton>
-        </SidebarMenuItem>
+        {/* Only when the server has the private brand kit mounted. */}
+        {brandKit && (
+          <>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                isActive={pathname === "/workspace/lineup"}
+                asChild
+              >
+                <Link
+                  className="text-muted-foreground"
+                  href="/workspace/lineup"
+                >
+                  <UsersRound />
+                  <span>{t.sidebar.momobotAgents}</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                isActive={pathname === "/workspace/about"}
+                asChild
+              >
+                <Link className="text-muted-foreground" href="/workspace/about">
+                  <Info />
+                  <span>{t.sidebar.aboutMomobot}</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </>
+        )}
         {/* Momentum staff only, same gate as Team. */}
         {internalEnabled && (
           <SidebarMenuItem>

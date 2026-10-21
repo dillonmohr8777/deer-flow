@@ -101,21 +101,13 @@ class DbRunEventStore(RunEventStore):
 
     @staticmethod
     def _user_id_from_context() -> str | None:
-        """Soft read of user_id from contextvar for write paths.
+        """Stamp the same storage principal used by owner-scoped reads.
 
-        Returns ``None`` (no filter / no stamp) if contextvar is unset,
-        which is the expected case for background worker writes. HTTP
-        request writes will have the contextvar set by auth middleware
-        and get their user_id stamped automatically.
-
-        Coerces ``user.id`` to ``str`` at the boundary: ``User.id`` is
-        typed as ``UUID`` by the auth layer, but ``run_events.user_id``
-        is ``VARCHAR(64)`` and aiosqlite cannot bind a raw UUID object
-        to a VARCHAR column ("type 'UUID' is not supported") — the
-        INSERT would silently roll back and the worker would hang.
+        Shared workspaces use their storage principal, private requests use
+        the actor's string id, and contextless background writes stay unstamped.
         """
         user = get_current_user()
-        return str(user.id) if user is not None else None
+        return resolve_user_id(AUTO) if user is not None else None
 
     #: Characters json.dumps escapes in the stored content (``ensure_ascii``
     #: is False, so non-ASCII survives verbatim and stays matchable).

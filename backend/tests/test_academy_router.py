@@ -10,7 +10,7 @@ import pytest
 from fastapi import FastAPI
 from org_isolation_fixtures import ORG_S, STORAGE_S, USER_A, USER_B, USER_C, auth_headers, org_world  # noqa: F401
 
-from app.gateway.academy_content import TRACKS, lesson_ids
+from app.gateway.academy_content import ACADEMY_VIDEO_STEMS, TRACKS, lesson_ids
 from app.gateway.auth_middleware import AuthMiddleware
 from app.gateway.deps import get_config
 from app.gateway.routers import academy
@@ -84,6 +84,7 @@ async def test_clients_and_unconfigured_instances_get_404(org_world):  # noqa: F
         headers = auth_headers(USER_CLIENT, ORG_S)
         assert (await client.get("/api/academy", headers=headers)).status_code == 404
         assert (await client.put(f"/api/academy/lessons/{first}/progress", json={"completed": True}, headers=headers)).status_code == 404
+        assert (await client.get("/api/academy/media/00-platform-tour.mp4", headers=headers)).status_code == 404
 
     # The owner of a different (client) workspace on the same instance.
     async with _client(_build_app(org_world)) as client:
@@ -101,9 +102,16 @@ def test_curriculum_is_well_formed():
     assert len(ids) == len(set(ids)), "lesson ids must be unique; progress rows key on them"
     assert all(len(lesson_id) <= 64 for lesson_id in ids), "academy_progress.lesson_id is String(64)"
 
-    # The MomoBot track pairs one lesson with each of the six explainer videos.
+    # Existing reference IDs remain valid so old completion rows are preserved.
     momobot = next(track for track in TRACKS if track["id"] == "momobot")
-    assert [lesson["video_slot"] for lesson in momobot["lessons"]] == [f"momo-0{n}" for n in range(1, 7)]
+    assert len(momobot["lessons"]) == 6
+    assert momobot["lessons"][0]["id"] == "momobot-01-meet-momo"
+    assert all(lesson["video_slot"] is None for lesson in momobot["lessons"])
+    assert len(ACADEMY_VIDEO_STEMS) == 16
+    assert {"00-platform-tour", "14-week-by-week", "15-month-by-month"} <= ACADEMY_VIDEO_STEMS
+    roles = next(track for track in TRACKS if track["id"] == "work-roles")
+    assert len(roles["lessons"]) == 10
+    assert TRACKS[0]["id"] == "work-foundations"
 
     for track in TRACKS:
         for lesson in track["lessons"]:
@@ -127,3 +135,51 @@ async def test_a_real_client_member_cannot_open_the_academy(org_world):  # noqa:
         headers = auth_headers("acme-contact", ORG_S)
         assert (await client.get("/api/academy", headers=headers)).status_code == 404
         assert (await client.put(f"/api/academy/lessons/{first}/progress", json={"completed": True}, headers=headers)).status_code == 404
+        assert (await client.get("/api/academy/media/00-platform-tour.mp4", headers=headers)).status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_private_media_requires_staff_and_a_complete_bundle(org_world, tmp_path, monkeypatch):  # noqa: F811
+    monkeypatch.setattr(academy, "get_paths", lambda: SimpleNamespace(base_dir=tmp_path))
+    media = tmp_path / "academy-media"
+    media.mkdir()
+    stem = "00-platform-tour"
+    video = b"accepted-video-byte-range"
+    (media / f"{stem}.mp4").write_bytes(video)
+
+    app = _build_app(org_world)
+    owner = auth_headers(USER_A, ORG_S)
+    async with _client(app) as client:
+        payload = (await client.get("/api/academy", headers=owner)).json()
+        assert payload["tracks"][0]["lessons"][0]["video_url"] is None
+        assert (await client.get(f"/api/academy/media/{stem}.mp4", headers=owner)).status_code == 404
+
+        for extension in ("jpg", "vtt", "txt"):
+            (media / f"{stem}.{extension}").write_text("accepted")
+        payload = (await client.get("/api/academy", headers=owner)).json()
+        lesson = payload["tracks"][0]["lessons"][0]
+        assert lesson["video_url"] == f"/api/academy/media/{stem}.mp4"
+        assert lesson["video_captions_url"].endswith(".vtt")
+        assert lesson["video_transcript_url"].endswith(".txt")
+
+        response = await client.get(lesson["video_url"], headers={**owner, "Range": "bytes=0-7"})
+        assert response.status_code == 206, response.text
+        assert response.content == video[:8]
+        assert response.headers["cache-control"] == "private, no-store"
+        assert response.headers["content-range"] == f"bytes 0-7/{len(video)}"
+
+        # Another customer's workspace gets neither the private video nor text.
+        for extension in ("mp4", "jpg", "vtt", "txt"):
+            url = f"/api/academy/media/{stem}.{extension}"
+            assert (await client.get(url, headers=auth_headers(USER_B))).status_code == 404
+        assert (await client.get("/api/academy/media/not-a-course.mp4", headers=owner)).status_code == 404
+
+        # An allowlisted name still cannot resolve out of the private media root.
+        outside = tmp_path / "private.txt"
+        outside.write_text("never exposed")
+        target = media / f"{stem}.txt"
+        target.unlink()
+        target.symlink_to(outside)
+        assert (await client.get(f"/api/academy/media/{stem}.txt", headers=owner)).status_code == 404
+        hidden = (await client.get("/api/academy", headers=owner)).json()
+        assert hidden["tracks"][0]["lessons"][0]["video_url"] is None

@@ -74,7 +74,7 @@ async def test_runner_releases_only_its_created_session_even_when_capture_fails(
             assert body["keepAlive"] is False and body["proxies"] is False
             assert body["browserSettings"]["recordSession"] is False
             assert body["browserSettings"]["logSession"] is False
-            assert body["browserSettings"]["solveCaptchas"] is False
+            assert body["browserSettings"]["solveCaptchas"] is True  # Dillon, Oct 20: Browserbase solver on
             assert body["browserSettings"]["allowedDomains"] == ["example.com"]
             return httpx.Response(200, json={"id": SESSION, "connectUrl": "wss://connect.browserbase.com/?apiKey=secret"})
         if request.method == "POST":

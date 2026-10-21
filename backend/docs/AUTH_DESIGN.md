@@ -55,7 +55,7 @@ graph TB
 | `id` | 用户主键，JWT `sub` 使用该值 |
 | `email` | 唯一登录名 |
 | `password_hash` | bcrypt hash，OAuth 用户可为空 |
-| `system_role` | `admin` 或 `user` |
+| `system_role` | `admin`、`exec`（高管，享有高级模型，但不是管理员）、`user` 或 `client`（外部客户，只能聊天）；仅 `admin` 通过管理员检查，管理员用 `PUT /api/admin/users/{id}/role` 设置 |
 | `needs_setup` | reset 后要求用户完成邮箱 / 密码设置 |
 | `token_version` | 改密码或 reset 时递增，用于废弃旧 JWT；管理员强制登出也走这个字段 |
 | `disabled_at` | 管理员禁用该账号的时间，为空表示账号可用 |

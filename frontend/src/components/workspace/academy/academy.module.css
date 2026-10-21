@@ -58,6 +58,20 @@
   font-weight: 600;
 }
 
+.librarySummary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-height: 2.75rem;
+  cursor: pointer;
+}
+
+.library[open] > * + * {
+  margin-top: 0.75rem;
+}
+
 .lessons {
   display: flex;
   flex-direction: column;

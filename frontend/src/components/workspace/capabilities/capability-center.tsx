@@ -61,7 +61,7 @@ export function CapabilityCenter() {
       <div className="text-muted-foreground flex h-14 shrink-0 items-center gap-3 border-b px-4 text-xs md:px-8">
         <SidebarTrigger className="md:hidden" />
         <span>{t.breadcrumb.workspace}</span>
-        <span className="opacity-40">/</span>
+        <span aria-hidden="true">/</span>
         <span className="text-foreground">{t.capabilities.title}</span>
       </div>
       <div className="flex-1 overflow-y-auto">
