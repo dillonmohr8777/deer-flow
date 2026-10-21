@@ -35,10 +35,7 @@ import {
   useIsRoleUnresolved,
 } from "@/core/auth/AuthProvider";
 import { useBoardThreads } from "@/core/board";
-import {
-  useDeskEnabled,
-  useMomentumInternalEnabled,
-} from "@/core/features";
+import { useDeskEnabled, useMomentumInternalEnabled } from "@/core/features";
 import { useI18n } from "@/core/i18n/hooks";
 import { useBrandKit } from "@/core/momobot-brand";
 
