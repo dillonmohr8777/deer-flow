@@ -134,7 +134,10 @@ export function ApprovalsBody() {
                     <StatusTag tone={statusTone(row.status)}>
                       {isReadyToSend(row)
                         ? "Ready to send"
-                        : row.action_type === "portal_publish" && row.status === "executed" ? "Published in portal" : STATUS_LABEL[row.status]}
+                        : row.action_type === "portal_publish" &&
+                            row.status === "executed"
+                          ? "Published in portal"
+                          : STATUS_LABEL[row.status]}
                     </StatusTag>
                   </button>
                 </li>
@@ -227,7 +230,10 @@ function ApprovalDetail({ approval }: { approval: Approval }) {
         <StatusTag tone={statusTone(approval.status)}>
           {isReadyToSend(approval)
             ? "Ready to send"
-            : (approval.action_type === "portal_publish" && approval.status === "executed" ? "Published in portal" : STATUS_LABEL[approval.status])}
+            : approval.action_type === "portal_publish" &&
+                approval.status === "executed"
+              ? "Published in portal"
+              : STATUS_LABEL[approval.status]}
         </StatusTag>
       </header>
 
@@ -376,7 +382,10 @@ function ApprovalDetail({ approval }: { approval: Approval }) {
         </div>
       ) : approval.decided_at ? (
         <p className={boardStyles.muted}>
-          {(approval.action_type === "portal_publish" && approval.status === "executed" ? "Published in portal" : STATUS_LABEL[approval.status])}{" "}
+          {approval.action_type === "portal_publish" &&
+          approval.status === "executed"
+            ? "Published in portal"
+            : STATUS_LABEL[approval.status]}{" "}
           {new Date(approval.decided_at).toLocaleString()}
         </p>
       ) : null}

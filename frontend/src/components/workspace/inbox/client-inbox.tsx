@@ -230,7 +230,7 @@ export function ClientInbox() {
                 setComposing(true);
                 setSelected(null);
               }}
-              disabled={!roster.data?.clients.length}
+              disabled={busy || !roster.data?.clients.length}
             >
               New request
             </Button>
@@ -281,6 +281,7 @@ export function ClientInbox() {
                     <button
                       className="hover:bg-muted min-h-16 w-full p-3 text-left"
                       aria-current={selected === thread.id}
+                      disabled={busy}
                       onClick={() => {
                         setSelected(thread.id);
                         setComposing(false);
@@ -332,7 +333,9 @@ export function ClientInbox() {
                   <label className="block">
                     Client
                     <select
+                      aria-label="Client"
                       className="bg-background mt-1 min-h-11 w-full rounded border p-2"
+                      disabled={busy}
                       value={
                         clientId
                           ? clientId
@@ -351,6 +354,7 @@ export function ClientInbox() {
                     Subject
                     <Input
                       required
+                      disabled={busy}
                       maxLength={255}
                       value={subject}
                       onChange={(event) => setSubject(event.target.value)}
@@ -360,6 +364,7 @@ export function ClientInbox() {
                     Your request
                     <Textarea
                       required
+                      disabled={busy}
                       maxLength={12000}
                       className="min-h-40 text-base"
                       value={body}
@@ -478,6 +483,7 @@ export function ClientInbox() {
                         </p>
                         <Textarea
                           aria-label="Internal reply draft"
+                          disabled={busy}
                           className="min-h-40 text-base"
                           value={draft}
                           maxLength={12000}
@@ -486,6 +492,7 @@ export function ClientInbox() {
                         {attachments.map((attachment, index) => (
                           <fieldset
                             key={index}
+                            disabled={busy}
                             className="min-w-0 space-y-2 rounded border p-3"
                           >
                             <label className="block text-sm">
