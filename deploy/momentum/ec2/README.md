@@ -36,6 +36,12 @@ sudo MOMOBOT_ENV_FILE=/run/momobot/.env MOMOBOT_EXTRA_COMPOSE=/opt/momobot/src/d
 Release: build `deer-flow-{gateway,frontend}:main-<sha8>` on the box from the merged commit, set both tags in
 `settings.env`, then `systemctl restart momobot`. Rollback: put the previous tags back and restart.
 
+The Momentum templates use a 300-super-step default with the existing 1000-step ceiling.
+Middleware nodes consume super-steps too: the former 100-step default interrupted an
+eight-model-call AM plugin check. For an existing EC2 config, promote only this top-level
+`recursion_limit` value; preserve model, memory, credential and workspace settings. Verify
+the effective default and ceiling and a complete AM tool run without a request override.
+
 ## Nightly recovery contents
 
 The existing backup timer includes the consistent gateway SQLite snapshot, config and MCP settings,
