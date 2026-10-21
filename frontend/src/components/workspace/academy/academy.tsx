@@ -27,6 +27,8 @@ import { writeTextToClipboard } from "@/core/clipboard";
 import { useMomentumInternalEnabled } from "@/core/features";
 import { cn } from "@/lib/utils";
 
+import { academyVideoSeries } from "./video-library";
+
 import styles from "./academy.module.css";
 
 /**
@@ -103,6 +105,41 @@ function AcademyBody() {
           ends with something to try. Clients never see this page.
         </p>
       </header>
+
+      <section className={styles.track} aria-labelledby="academy-films">
+        <h2 id="academy-films">AI film library</h2>
+        <p className={pageStyles.lede}>
+          All 39 published Momentum AI films, explainers and creative examples,
+          grouped by their original series. Pick a series to watch.
+        </p>
+        {academyVideoSeries.map((series) => (
+          <details className={styles.lesson} key={series.title}>
+            <summary className={styles.lessonSummary}>
+              <span className={styles.lessonTitle}>{series.title}</span>
+              <span className={styles.count}>
+                {series.videos.length} videos
+              </span>
+            </summary>
+            <div className={styles.lessonBody}>
+              {series.videos.map(([id, title]: readonly [string, string]) => (
+                <figure key={id}>
+                  <video
+                    className={styles.video}
+                    src={`https://momentum-ai-division-hub.netlify.app/media/${id}.mp4`}
+                    poster={`https://momentum-ai-division-hub.netlify.app/media/${id}.jpg`}
+                    aria-label={title}
+                    controls
+                    playsInline
+                    muted
+                    preload="none"
+                  />
+                  <figcaption>{title}</figcaption>
+                </figure>
+              ))}
+            </div>
+          </details>
+        ))}
+      </section>
 
       <section className={styles.progressCard} aria-label="Your progress">
         <div className={styles.progressRow}>
