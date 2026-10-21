@@ -1977,6 +1977,11 @@ roster:
   users: {}
   #  U0EXAMPLEAM1: {role: am, clients: [example-client]}
   #  U0EXAMPLEADM: {role: admin}
+  # Slack channel ID -> client ID: the client "@MomoBot desktop <task>" posted in
+  # that channel is for. Unlisted channels are refused; in a DM the user writes
+  # "desktop <client-id>: <task>" and the client must be in their roster scope.
+  channel_clients: {}
+  #  C0EXAMPLE001: example-client
   repos: {}
   #  example-org/example-client-site: example-client
   #  example-org/shared-toolkit: "*"
