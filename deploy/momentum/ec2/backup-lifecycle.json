@@ -1,0 +1,11 @@
+{
+  "Rules": [
+    {
+      "ID": "expire-30d",
+      "Status": "Enabled",
+      "Filter": {"Prefix": "nightly/"},
+      "Expiration": {"Days": 30},
+      "NoncurrentVersionExpiration": {"NoncurrentDays": 7}
+    }
+  ]
+}
