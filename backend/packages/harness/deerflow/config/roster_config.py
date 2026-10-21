@@ -18,6 +18,7 @@ ALL = "*"
 class RosterUser(BaseModel):
     role: Role
     clients: list[str] = Field(default_factory=list)
+    email: str = Field(default="", description="Optional work email; Slack auto-link uses it first, so the bot needs no users:read.email scope")
 
 
 class RosterConfig(BaseModel):

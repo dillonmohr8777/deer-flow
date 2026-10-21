@@ -1977,6 +1977,8 @@ roster:
   users: {}
   #  U0EXAMPLEAM1: {role: am, clients: [example-client]}
   #  U0EXAMPLEADM: {role: admin}
+  # Optional email: {role: am, email: am@example.com} lets Slack auto-link
+  # (channel_connections.slack.auto_link_roster) match or create the account.
   # Slack channel ID -> client ID: the client "@MomoBot desktop <task>" posted in
   # that channel is for. Unlisted channels are refused; in a DM the user writes
   # "desktop <client-id>: <task>" and the client must be in their roster scope.
@@ -2802,6 +2804,12 @@ run_ownership:
 #
 #   slack:
 #     enabled: false
+#     # Bind anyone on the `roster` below at their first message, with no /connect
+#     # code. Only for senders from this Slack team id; creates a non-admin user
+#     # in the organization_slugs workspace if needed. Needs the email of each
+#     # person: set `email:` on their roster entry, or give the bot users:read.email.
+#     auto_link_roster: false
+#     workspace_id: T0000000000
 #
 #   discord:
 #     enabled: false

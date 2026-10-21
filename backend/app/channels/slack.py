@@ -124,6 +124,7 @@ class SlackChannel(Channel):
         self._channel_policies = config.get("channel_policies", {})
         self._engaged_threads: dict[tuple[str, str, str], None] = {}
         self._web_client_factory = config.get("web_client_factory")
+        self._roster_auto_linker = config.get("roster_auto_linker")
         self._connection_web_clients: dict[str, tuple[str, Any]] = {}
         configured_bot_user_id = config.get("bot_user_id")
         self._bot_user_id = str(configured_bot_user_id).lstrip("@") if configured_bot_user_id else None
@@ -684,12 +685,17 @@ class SlackChannel(Channel):
 
     async def _attach_connection_identity(self, inbound, *, team_id: str | None = None):
         workspace_id = str(team_id or inbound.metadata.get("team_id") or "")
-        return await attach_connection_identity(
-            inbound,
-            repo=self._connection_repo,
-            provider="slack",
-            workspace_id=workspace_id,
-        )
+
+        async def attach():
+            return await attach_connection_identity(inbound, repo=self._connection_repo, provider="slack", workspace_id=workspace_id)
+
+        inbound = await attach()
+        linker = self._roster_auto_linker
+        if inbound.connection_id or linker is None or not linker.eligible(inbound.user_id, workspace_id):
+            return inbound
+        if await linker.link(slack_user_id=inbound.user_id, team_id=workspace_id, web_client=self._web_client):
+            inbound = await attach()
+        return inbound
 
     async def _bind_connection_from_connect_code(self, *, event: dict, team_id: str, code: str) -> bool:
         if self._connection_repo is None or not code:

@@ -387,6 +387,14 @@ Slack:
 - The UI shows `Send /connect <code> to the DeerFlow Slack bot.`
 - The existing Slack Socket Mode worker receives the message and binds the Slack user/team to the current DeerFlow user.
 
+Slack roster auto-link (optional, off by default):
+
+- Set `channel_connections.slack.auto_link_roster: true` and `channel_connections.slack.workspace_id: T...` (the Slack team id existing bindings use). A sender with no active connection who is in `roster.users` and writes from that team is bound on the first message, with no `/connect` code. Anyone else keeps the connect-first reply.
+- The email comes from the roster entry's optional `email`, else Slack `users.info` (needs the bot scope `users:read.email`). With neither, the worker logs once and falls back to `/connect`; it retries `users.info` every 10 minutes.
+- The account is the existing user with that email (case-insensitive), or a new user with `system_role: user`, no password and no OAuth link. A roster `admin` role never makes a MomoBot admin. A disabled user is not linked. The user is added as a `member` of the first active organization in `momentum_internal.organization_slugs`; an inactive membership is left alone and the link is refused.
+- The binding goes through the same `upsert_connection` as `/connect`, so the connection lives in the user's private organization and gets the same worker delegation. One lock per Slack user makes two quick messages link once. Each link writes a `channel_connection.auto_linked` audit event.
+- A new account has no password. Google sign-in with the same email still hits the OIDC rule that never auto-links an existing local account (409), so an admin links that sign-in.
+
 Discord:
 
 - The frontend creates a short one-time code.
