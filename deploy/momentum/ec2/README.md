@@ -178,3 +178,8 @@ retain the prior extension/config files and image tags for rollback. Verify the
 provider rejects an excluded private-app call, an ordinary AM can execute a public
 read, and AM config access remains 403. Health stays unknown until those reads pass.
 Public queries only; per-person/private client connections require their own scope.
+
+In the existing private config, append only the ten `composio-marketing_<tool-name>`
+targets from this policy to `authorization.provider.config.roles.user.tools.allow`.
+Preserve every other permission and role; do not add a wildcard or an execution helper.
+Verify all ten targets are allowed and private Composio tools remain denied.
