@@ -19,6 +19,7 @@ def main():
     parser.add_argument('--remote-root', default='C:/MacTransfer/academy-explainers-20261021')
     args = parser.parse_args()
     root = args.evidence
+    assert not (root / "HOLD.json").exists(), "Production is held; reconcile the newest role-specific Academy scope first"
     python = str(root / 'voice/.venv/bin/python')
     environment = dict(os.environ, HF_HUB_OFFLINE='1')
     results = []
