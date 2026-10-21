@@ -1854,6 +1854,12 @@ and the [request contract](backend/docs/API.md#referencing-a-previous-conversati
 
 ### Long-Term Memory
 
+`memory.model_name` selects a host `models[]` profile for DeerMem extraction,
+including its endpoint and provider restrictions. Null retains the app default;
+it does not follow the chat run's model. An explicit `memory.backend_config.model`
+still takes precedence. An unknown host profile disables extraction with a
+warning instead of falling back to another model. Memory reads remain available.
+
 The opt-in [DeerMem scope-isolation benchmark](backend/scripts/benchmark/deermem_scope_isolation/README.md)
 checks semantic safety across facts and summaries, and fact routing across users
 and agents. Failed extraction attempts are retryable execution errors, not safety passes.
