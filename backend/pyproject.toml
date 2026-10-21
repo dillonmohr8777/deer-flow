@@ -38,7 +38,7 @@ dependencies = [
     "wecom-aibot-python-sdk>=0.1.6",
     "dingtalk-stream>=0.24.3",
     "bcrypt>=4.0.0",
-    "pyjwt>=2.13.0",
+    "pyjwt>=2.14.0",
     "email-validator>=2.0.0",
     "e2b-code-interpreter>=2.8.1",
 ]
@@ -90,6 +90,7 @@ markers = [
 [tool.uv]
 index-url = "https://pypi.org/simple"
 default-groups = ["dev", "extensions"]
+constraint-dependencies = ["pillow>=13.0.0", "certifi>=2026.10.19"]
 # langgraph-sdk 0.4.2 (pulled in by langgraph 1.2.9 for DeltaChannel) pins
 # `websockets<16,>=14`, silently downgrading websockets 16.0 -> 15.0.1. The
 # pin is not grounded in any API incompatibility: websockets 16's only
