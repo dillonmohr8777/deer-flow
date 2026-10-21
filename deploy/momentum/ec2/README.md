@@ -78,6 +78,20 @@ Brain MCP (Mac bridge :8787), client_browser MCP (:8788), the Jevbox evidence to
 Ollama/oMLX models. Reaching them needs a tunnel back to the Mac. That is a follow-up, and MomoBot runs without them.
 
 
+## Minimal memory profile image (prepared, not deployed)
+
+`Dockerfile.memory-profile` copies only the two memory files reviewed in PR198 onto an
+operator-verified immutable alias of the existing live gateway image. It runs no build
+commands, installs no dependencies and changes no entrypoint, config, model default,
+frontend or Brain integration. Supply a context containing only these two files exported
+from commit `02c279db601a42ce731e5b3a8dd88e055aa6dcfc`, then build on EC2 with
+`docker build --pull=false --network=none --build-arg BASE_IMAGE=<verified-local-alias> -f Dockerfile.memory-profile -t <new-candidate-tag> <context>`.
+Verify the base image ID and candidate file hashes before changing a runtime tag. Keep the
+previous gateway tag and settings snapshot for rollback through the existing systemd unit.
+A named-profile probe does not authorize a global memory model change: preserve the current
+profile until its intended scope is established. Production acceptance needs the deployed
+file hashes, readiness, authenticated output and an approved public-synthetic model receipt.
+
 ## Optional read-only Brain snapshot (prepared, not enabled)
 
 `brain_readonly_adapter.py` preserves the existing fixed-destination HTTP adapter and adds
