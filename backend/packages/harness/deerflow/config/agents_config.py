@@ -351,6 +351,9 @@ def load_agent_config(name: str | None, *, user_id: str | None = None) -> AgentC
         user_id: Owner of the agent. Defaults to the effective user from the
             current request context.
 
+    A built-in agent (``deerflow.config.builtin_agents``) is returned ahead of any
+    stored agent of the same name, so it can never be shadowed.
+
     Returns:
         AgentConfig instance, or ``None`` if ``name`` is ``None``.
 
@@ -360,9 +363,13 @@ def load_agent_config(name: str | None, *, user_id: str | None = None) -> AgentC
     """
     if name is None:
         return None
-    # Lazy import: the store package imports back from this module.
+    # Lazy imports: the built-in registry and the store package import back from this module.
+    from deerflow.config.builtin_agents import get_builtin_agent_config
     from deerflow.persistence.agents import get_agent_store
 
+    builtin = get_builtin_agent_config(name)
+    if builtin is not None:
+        return builtin
     return get_agent_store().get(name, user_id=user_id)
 
 
@@ -389,8 +396,12 @@ def load_agent_soul(agent_name: str | None, *, user_id: str | None = None) -> st
             return None
         content = soul_path.read_text(encoding="utf-8").strip()
         return content or None
+    from deerflow.config.builtin_agents import get_builtin_agent_soul
     from deerflow.persistence.agents import get_agent_store
 
+    builtin_soul = get_builtin_agent_soul(agent_name)
+    if builtin_soul is not None:
+        return builtin_soul
     return get_agent_store().get_soul(agent_name, user_id=user_id)
 
 

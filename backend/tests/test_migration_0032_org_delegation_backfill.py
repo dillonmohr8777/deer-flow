@@ -46,9 +46,9 @@ async def _seed(session_factory) -> None:
             )
         )
         for user in (A, B, C):
-            session.add(OrganizationRow(id=ORG[user], slug=private_organization_slug(user), name="Private organization", status="active"))
+            await session.execute(insert(OrganizationRow.__table__).values(id=ORG[user], slug=private_organization_slug(user), name="Private organization", status="active"))
             session.add(OrganizationMemberRow(organization_id=ORG[user], user_id=user, role="owner", status="revoked" if user == B else "active"))
-        session.add(OrganizationRow(id=ORG[S], slug=private_organization_slug(S), name="Shared S", status="active", storage_user_id=S))
+        await session.execute(insert(OrganizationRow.__table__).values(id=ORG[S], slug=private_organization_slug(S), name="Shared S", status="active", storage_user_id=S))
         session.add(OrganizationMemberRow(organization_id=ORG[S], user_id=A, role="owner", status="active"))
         session.add(OrganizationMemberRow(organization_id=ORG[S], user_id=C, role="admin", status="active"))
         for task_id, owner, organization_id in (("task-a", A, ORG[A]), ("task-s", S, ORG[S]), ("task-b", B, ORG[B]), ("task-quarantined", A, None)):

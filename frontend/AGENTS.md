@@ -215,7 +215,7 @@ delete helper accepts remote 404 (not 403) before retrying local cleanup, and
 
 ## Capability Center
 
-`/workspace/capabilities` owns Plugins and Skills navigation. Plugins composes the
+`/workspace/capabilities` owns Plugins and Skills navigation (linked from Command Center, not the sidebar). Plugins composes the
 MCP manager and a lazily loaded Lark configuration dialog; installation, OAuth,
 mutation permissions, and cache ownership remain in the existing hooks. Skill display names/summaries are presentation
 metadata; runtime names and full descriptions remain unchanged. Public, custom,
@@ -397,3 +397,7 @@ retention, the private gate and 390/768/1440 geometry with mocked APIs.
 ## Approvals inbox (`/workspace/approvals`)
 
 List/detail page over `GET/PATCH/POST /api/approvals` (`src/core/approvals/`, `src/components/workspace/approvals/`). It reuses the Board's two-pane layout module. Edits save through `PATCH` and Approve is disabled while the form is dirty, so what is approved is always what was saved. Slack and email get typed fields; ad changes and other types edit as JSON. Keys the form does not show are preserved on save.
+
+Channel connection setup belongs to the caller's private workspace. Use `core/workspaces/hooks.ts` for the sidebar setup handoff and workspace selector; never submit channel setup against a shared workspace. A successful switch hard-navigates to discard old workspace caches.
+
+The sidebar's Easy / Medium / Hard entry opens the existing Experience settings for staff, including account managers. Keep it hidden for client or unresolved roles, matching the Settings dialog's section policy.

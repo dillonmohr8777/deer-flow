@@ -20,6 +20,8 @@ export interface BrandAgent {
 }
 
 export interface BrandVideo {
+  /** Display title from the kit, e.g. "Meet Max Plus"; falls back to the key. */
+  title?: string;
   seconds: number;
   landscape: string;
   vertical: string;

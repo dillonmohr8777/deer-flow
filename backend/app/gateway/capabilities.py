@@ -15,7 +15,7 @@ from deerflow.capabilities.catalog import PluginManifest
 from deerflow.capabilities.runtime import ambiguous_installation_ids, installation_id
 from deerflow.config.app_config import AppConfig
 from deerflow.integrations.lark_cli import get_lark_integration_status
-from deerflow.runtime.user_context import get_effective_user_id
+from deerflow.runtime.user_context import get_effective_actor_user_id, get_effective_user_id
 
 
 class CapabilityInstallation(BaseModel):
@@ -96,7 +96,7 @@ class MCPAdapter:
             metadata = metadata if isinstance(metadata, dict) else {}
             auth = server.user_auth
             if auth and auth.enabled:
-                auth_status = "configured" if auth.users.get(context.user_id) else "required"
+                auth_status = "configured" if auth.users.get(get_effective_actor_user_id()) else "required"
             elif server.oauth or server.headers or server.env:
                 auth_status = "configured"
             else:

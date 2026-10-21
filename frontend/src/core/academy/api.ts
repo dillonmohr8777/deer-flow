@@ -30,7 +30,22 @@ export async function getAcademy(): Promise<Academy> {
       await readAcademyAPIError(response, "Failed to load the Academy."),
     );
   }
-  return (await response.json()) as Academy;
+  const data = (await response.json()) as Academy;
+  const base = getBackendBaseURL();
+  for (const track of data.tracks) {
+    for (const lesson of track.lessons) {
+      for (const key of [
+        "video_url",
+        "video_poster_url",
+        "video_captions_url",
+        "video_transcript_url",
+      ] as const) {
+        const url = lesson[key];
+        if (url?.startsWith("/")) lesson[key] = `${base}${url}`;
+      }
+    }
+  }
+  return data;
 }
 
 /** ``PUT /api/academy/lessons/{id}/progress`` -- mark or unmark a lesson. */

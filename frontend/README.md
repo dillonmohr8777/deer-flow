@@ -150,7 +150,7 @@ src/
 
 ## Workflow room
 
-`/workspace/workflows` lists the Gateway's agency and personal workflow catalog.
+`/workspace/workflows` (reachable by URL; not in the sidebar since Oct 20) lists the Gateway's agency and personal workflow catalog.
 The count, categories, input schemas, steps and acceptance checks come from the
 catalog response; the UI does not start a runner for each definition. Search and
 category filters help select a recipe, then the bounded schema form collects its
@@ -187,3 +187,7 @@ physical iPhone installation or live provider acceptance.
 ## License
 
 MIT License. See [LICENSE](../LICENSE) for details.
+
+Channel setup in a shared workspace opens the user's private workspace, where personal Slack connections are managed. Workspace switches clear the previous workspace view.
+
+Account managers can open Easy / Medium / Hard directly from Settings and more. The entry opens the existing Experience preferences on mobile and desktop.

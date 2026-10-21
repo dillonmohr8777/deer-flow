@@ -8,6 +8,7 @@ const { execFileSync } = require("node:child_process");
 const { packager } = require("@electron/packager");
 const manifest = require("../package.json");
 const { releaseSigning, validateSourceRevision, publicReleaseMetadata } = require("../src/release-config.cjs");
+const { scanSecrets } = require("./scan-secrets.cjs");
 
 const root = path.resolve(__dirname, "..");
 
@@ -65,6 +66,8 @@ async function main() {
   const appPath = path.join(bundleDirectory, "MomoBot.app");
   if (signing.mode === "ad-hoc") run("codesign", ["--force", "--deep", "--sign", "-", appPath]);
   run("codesign", ["--verify", "--deep", "--strict", appPath]);
+  const leaks = scanSecrets(path.join(appPath, "Contents/Resources"));
+  if (leaks.length) throw new Error(`Secret scan failed: ${leaks.map((hit) => `${hit.file} (${hit.pattern})`).join(", ")}`);
   const zipPath = path.join(destination, "MomoBot-mac-arm64.zip");
   const dmgPath = path.join(destination, "MomoBot-mac-arm64.dmg");
   run("ditto", ["-c", "-k", "--sequesterRsrc", "--keepParent", appPath, zipPath]);
@@ -101,6 +104,7 @@ async function main() {
   });
   await fs.writeFile(path.join(destination, "release.json"), `${JSON.stringify(artifact, null, 2)}\n`);
   await fs.writeFile(path.join(destination, "build-paths.json"), `${JSON.stringify({ appPath, zipPath, dmgPath }, null, 2)}\n`, { mode: 0o600 });
+  await fs.copyFile(path.join(__dirname, "install.sh"), path.join(destination, "install.sh"));
   await fs.writeFile(path.join(destination, "SHA256SUMS"), Object.entries(checksums).map(([filename, digest]) => `${digest}  ${filename}\n`).join(""));
   process.stdout.write(`${JSON.stringify(artifact, null, 2)}\n`);
 }

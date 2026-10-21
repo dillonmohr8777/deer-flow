@@ -13,11 +13,12 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 
 from app.gateway.authz import require_entitlement, require_permission
-from app.gateway.deps import get_feedback_repo, get_run_event_store, get_run_manager, get_run_store, get_stream_bridge
+from app.gateway.deps import get_feedback_repo, get_run_event_store, get_run_manager, get_run_store, get_stream_bridge, get_thread_store
 from app.gateway.pagination import trim_run_message_page
 from app.gateway.run_models import RunCreateRequest
 from app.gateway.services import abuild_checkpoint_state_accessor, sse_consumer, start_run, wait_for_run_completion
 from deerflow.runtime import serialize_channel_values_for_api
+from deerflow.runtime.user_context import get_effective_user_id
 from deerflow.utils.thread_id import resolve_thread_id
 
 logger = logging.getLogger(__name__)
@@ -99,10 +100,10 @@ async def stateless_wait(body: RunCreateRequest, request: Request) -> dict:
 
 
 async def _resolve_run(run_id: str, request: Request) -> dict:
-    """Fetch run by run_id with user ownership check. Raises 404 if not found."""
+    """Resolve a run only when its parent conversation is visible to this actor."""
     run_store = get_run_store(request)
     record = await run_store.get(run_id)  # user_id=AUTO filters by contextvar
-    if record is None:
+    if record is None or not await get_thread_store(request).check_access(record["thread_id"], get_effective_user_id(), require_existing=True):
         raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
     return record
 

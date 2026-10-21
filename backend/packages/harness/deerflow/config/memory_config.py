@@ -3,7 +3,7 @@
 DeerMem-private fields live in ``backends/deermem/config.py`` (``DeerMemConfig``),
 reached via ``backend_config`` (a dict the factory passes to the backend's
 ``__init__``). This module holds ONLY the host-shared fields every backend /
-call site / factory reads: ``enabled`` / ``injection_enabled`` /
+call site / factory reads: ``enabled`` / ``injection_enabled`` / ``model_name`` /
 ``shutdown_flush_timeout_seconds`` / ``manager_class`` / ``backend_config``.
 Keeping the shared schema slim is what
 makes backends swappable and portable (DeerMem's knobs do not leak onto the
@@ -18,13 +18,12 @@ from pydantic import BaseModel, Field
 logger = logging.getLogger(__name__)
 
 # Host-shared MemoryConfig fields (read by every backend / call site / factory).
-_SHARED_FIELDS = frozenset({"enabled", "mode", "injection_enabled", "shutdown_flush_timeout_seconds", "manager_class", "backend_config"})
+_SHARED_FIELDS = frozenset({"enabled", "mode", "injection_enabled", "model_name", "shutdown_flush_timeout_seconds", "manager_class", "backend_config"})
 
 # DeerMem-private fields that used to live at the top level of `memory:` in
 # config.yaml (pre-abstraction). On load they are auto-migrated into
 # `backend_config` so an upgrade does NOT silently revert customized settings
-# to defaults. `model_name` maps to `backend_config.model.model` (the new nested
-# model sub-config); the rest are 1:1.
+# to defaults. These fields map 1:1; model_name remains a host model profile.
 _LEGACY_DEERMEM_FIELDS = frozenset(
     {
         "storage_path",
@@ -47,7 +46,6 @@ _LEGACY_DEERMEM_FIELDS = frozenset(
         "consolidation_min_facts",
         "consolidation_max_groups_per_cycle",
         "consolidation_max_sources",
-        "model_name",
     }
 )
 
@@ -68,6 +66,10 @@ class MemoryConfig(BaseModel):
     injection_enabled: bool = Field(
         default=True,
         description="Whether to inject memory into the system prompt (call-site gate).",
+    )
+    model_name: str | None = Field(
+        default=None,
+        description="Host model profile for memory extraction. Null uses the app default; an explicit backend model takes precedence.",
     )
     shutdown_flush_timeout_seconds: float = Field(
         default=30.0,
@@ -163,11 +165,11 @@ def set_memory_config(config: MemoryConfig) -> None:
 def load_memory_config_from_dict(config_dict: dict) -> None:
     """Load memory configuration from a dictionary.
 
-    Host-shared fields (``enabled`` / ``mode`` / ``injection_enabled`` /
+    Host-shared fields (``enabled`` / ``mode`` / ``injection_enabled`` / ``model_name`` /
     ``manager_class`` / ``backend_config``) are read directly. DeerMem-private
     fields that used to live at the top level of ``memory:`` in config.yaml
     (pre-abstraction: ``storage_path``, ``max_facts``, ``debounce_seconds``,
-    ``model_name``, ``token_counting``, ``staleness_*``, ``consolidation_*``,
+    ``token_counting``, ``staleness_*``, ``consolidation_*``,
     ...) are **auto-migrated into ``backend_config``** with a warning, so an
     upgrade from a pre-abstraction config does NOT silently revert customized
     settings to defaults. Unknown top-level keys (likely typos) are warned and
@@ -184,14 +186,7 @@ def load_memory_config_from_dict(config_dict: dict) -> None:
             value = config_dict.pop(key)
             if value is None or value == "":
                 continue  # default / empty value, no migration needed
-            if key == "model_name":
-                # old top-level model_name -> backend_config.model.model
-                model_cfg = dict(backend_config.get("model") or {})
-                if "model" not in model_cfg:
-                    model_cfg["model"] = value
-                    backend_config["model"] = model_cfg
-                    migrated.append(f"{key} -> backend_config.model.model")
-            elif key == "storage_path" and str(value).endswith(".json"):
+            if key == "storage_path" and str(value).endswith(".json"):
                 # Pre-abstraction storage_path was a FILE path (absolute = shared
                 # file opting out of per-user; a relative value like the old default
                 # "memory.json" was ignored for per-user). DeerMem now treats it as a

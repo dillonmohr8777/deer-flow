@@ -1,0 +1,30 @@
+[project]
+name = "deerflow-vhin-placement"
+version = "0.1.0"
+description = "Authenticated, draft-only VHIN placement operations"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = ["deerflow-extension-api>=0.2.2,<0.3", "fastapi>=0.115,<1", "pydantic>=2.7,<3"]
+
+[project.entry-points."deerflow.extensions"]
+vhin = "vhin_placement:install"
+
+[project.optional-dependencies]
+dev = ["httpx>=0.28,<1", "pytest>=9,<10", "ruff>=0.14,<1"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["vhin_placement"]
+
+[tool.ruff]
+line-length = 160
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

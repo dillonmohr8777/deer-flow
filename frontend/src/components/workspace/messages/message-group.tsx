@@ -366,7 +366,7 @@ function MessageGroupComponent({
         >
           <ChainOfThoughtStep
             label={
-              <span className="opacity-60">
+              <span className="text-muted-foreground">
                 {showAbove
                   ? t.toolCalls.lessSteps
                   : t.toolCalls.moreSteps(

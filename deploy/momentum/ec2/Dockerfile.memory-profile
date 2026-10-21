@@ -1,0 +1,7 @@
+# Build only the two reviewed memory files onto the verified live gateway image.
+# The operator supplies an immutable alias of the accepted live image as BASE_IMAGE.
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE}
+COPY backend/packages/harness/deerflow/config/memory_config.py /app/backend/packages/harness/deerflow/config/memory_config.py
+COPY backend/packages/harness/deerflow/agents/memory/manager.py /app/backend/packages/harness/deerflow/agents/memory/manager.py
+LABEL momobot.memory_source_revision="02c279db601a42ce731e5b3a8dd88e055aa6dcfc"

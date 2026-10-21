@@ -9,6 +9,7 @@ import { CommandPalette } from "@/components/workspace/command-palette";
 import { ExperienceModeChooser } from "@/components/workspace/experience-mode-chooser";
 import { GatewayOfflineBanner } from "@/components/workspace/gateway-offline-banner";
 import { ModelLoadErrorBanner } from "@/components/workspace/model-load-error-banner";
+import { RoleRouteGuard } from "@/components/workspace/role-route-guard";
 import { SettingsDialogHost } from "@/components/workspace/settings";
 import {
   SkipToContent,
@@ -73,7 +74,7 @@ export async function WorkspaceContent({
               >
                 <GatewayOfflineBanner gatewayUnavailable={gatewayUnavailable} />
                 <ModelLoadErrorBanner gatewayUnavailable={gatewayUnavailable} />
-                {children}
+                <RoleRouteGuard>{children}</RoleRouteGuard>
               </div>
             </SidebarInset>
           </SidebarProvider>

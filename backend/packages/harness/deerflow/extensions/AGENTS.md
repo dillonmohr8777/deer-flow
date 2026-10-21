@@ -52,7 +52,7 @@ project, working directory, sync mode, lock policy, or target environment — in
 and `UV_INSECURE_HOST`, which would remove the TLS validation the HTTPS-only source rule
 depends on; index, proxy, cache, and credential-provider settings remain available.
 The `--no-workspace` boundary requires uv 0.8.0 or newer. The stock Docker paths pin uv
-0.11.1, and the manager fails before mutation when the host uv is older.
+0.13.4, and the manager fails before mutation when the host uv is older.
 All install/upgrade/remove/enable/disable mutations for a checkout hold the cross-process
 `.deer-flow/extension-manager.lock`; remove deactivates config before changing the package
 declaration, and rollback preserves a concurrent external config edit instead of replacing

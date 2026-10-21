@@ -47,6 +47,22 @@ def test_discovery_never_exposes_connection_secrets_and_tolerates_legacy_extras(
         assert excluded not in result.text
 
 
+@pytest.mark.parametrize("credential_owner,expected", [("signed-in-actor", "configured"), ("shared-workspace", "required")])
+def test_mcp_auth_status_uses_actor_in_shared_workspace(capability_client, monkeypatch, credential_owner, expected):
+    client, path = capability_client
+    raw = json.loads(path.read_text())
+    raw["mcpServers"]["legacy"]["user_auth"] = {"enabled": True, "users": {credential_owner: "Bearer actor-secret"}, "on_missing": "deny"}
+    path.write_text(json.dumps(raw))
+    monkeypatch.setattr(capabilities, "get_effective_user_id", lambda: "shared-workspace")
+    monkeypatch.setattr(capabilities, "get_effective_actor_user_id", lambda: "signed-in-actor")
+
+    response = client.get("/api/capabilities/installations/mcp", headers={"test-role": "user"})
+    assert response.status_code == 200
+    assert response.json()["items"][0]["auth_status"] == expected
+    for excluded in ("actor-secret", "signed-in-actor", "shared-workspace", "private-secret"):
+        assert excluded not in response.text
+
+
 def test_catalog_install_edit_disable_delete_preserves_existing_store_and_identity(capability_client):
     client, path = capability_client
     body = {"plugin_id": "github", "name": "team-code", "configuration": {"enabled": True, "type": "http", "url": "https://example.test/mcp", "headers": {"Authorization": "Bearer team-secret"}}}

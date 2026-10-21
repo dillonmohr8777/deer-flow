@@ -7,6 +7,7 @@ import {
   fetchKnowledgeBaseFeature,
   fetchMcpTasksEnabled,
   fetchMomentumInternalEnabled,
+  fetchOpenAIAgentsConfigured,
   fetchSubagentBatchesCapability,
 } from "./api";
 
@@ -106,4 +107,16 @@ export function useMomentumInternalEnabled() {
     retry: false,
   });
   return { enabled: data ?? false, isLoading: isPending };
+}
+
+/** The OpenAI crew link shows only once the Gateway has an OpenAI key. */
+export function useOpenAIAgentsConfigured() {
+  const { data, isPending } = useQuery({
+    queryKey: ["features", "openai_agents"],
+    queryFn: fetchOpenAIAgentsConfigured,
+    staleTime: 0,
+    refetchOnMount: true,
+    retry: false,
+  });
+  return { configured: data ?? false, isLoading: isPending };
 }

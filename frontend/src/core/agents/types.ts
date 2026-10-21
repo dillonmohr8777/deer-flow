@@ -27,6 +27,8 @@ export interface Agent {
   template_id?: string | null;
   /** Version of the fleet template this agent was stamped from, if any. */
   template_version?: string | null;
+  /** Defined in code on the server: global and read-only (MomoBot Max). */
+  builtin?: boolean;
 }
 
 export interface CreateAgentRequest {

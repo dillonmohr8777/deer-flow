@@ -25,6 +25,7 @@ BATCH_ACTIVE_STATUSES = ("queued", "running", "paused")
 BATCH_TERMINAL_STATUSES = ("completed", "failed", "cancelled")
 ITEM_ACTIVE_STATUSES = ("queued", "leased", "running")
 ITEM_TERMINAL_STATUSES = ("succeeded", "failed", "cancelled")
+_SHORT_BATCH_ID = re.compile(r"[0-9a-f]{6,31}")
 _CANONICAL_CLIENT_ID = re.compile(r"[a-z0-9][a-z0-9-]{0,95}\Z")
 _BATCH_PUBLIC_FIELDS = (
     "id",
@@ -240,10 +241,65 @@ class SubagentBatchRepository:
             thread = await session.get(ThreadMetaRow, thread_id)
             return bool(thread and thread.user_id == user_id and thread.organization_id == organization_id)
 
+    @staticmethod
+    async def _locked_fleet_batch(session: AsyncSession, batch_id: str) -> SubagentBatchRow | None:
+        """Row-lock a batch by full id, or by a unique hex prefix of it (the short id Slack shows)."""
+        if _SHORT_BATCH_ID.fullmatch(batch_id):
+            rows = (await session.execute(select(SubagentBatchRow).where(SubagentBatchRow.id.like(f"fleet-batch-{batch_id}%")).limit(2).with_for_update())).scalars().all()
+            return rows[0] if len(rows) == 1 else None
+        return (await session.execute(select(SubagentBatchRow).where(SubagentBatchRow.id == batch_id).with_for_update())).scalar_one_or_none()
+
+    async def reject_fleet_batch(self, batch_id: str, *, approver_id: str, now: datetime) -> dict[str, Any] | None:
+        """Cancel a still-pending fleet batch (pending -> rejected). Already approved batches are left alone; None if absent."""
+        async with self._sf() as session:
+            batch = await self._locked_fleet_batch(session, batch_id)
+            spec = batch.execution_spec if batch is not None else None
+            if batch is None or not _batch_organization_visible(batch) or not isinstance(spec, dict) or spec.get("executor") != "fleet" or spec.get("approval_state") not in ("pending", "approved", "rejected"):
+                return None
+            if spec["approval_state"] == "pending":
+                batch.execution_spec = {**spec, "approval_state": "rejected", "rejected_by": approver_id, "rejected_at": now.isoformat()}
+                batch.status = "cancelled"
+                batch.completed_at = now
+                batch.updated_at = now
+                for item in (await session.execute(select(SubagentBatchItemRow).where(SubagentBatchItemRow.batch_id == batch.id, SubagentBatchItemRow.status.not_in(ITEM_TERMINAL_STATUSES)).with_for_update())).scalars():
+                    item.status, item.error, item.cancel_requested_at, item.completed_at, item.updated_at = "cancelled", "Rejected by approver", now, now, now
+                await session.commit()
+            return {**await self._with_counts(session, batch), "approval_state": batch.execution_spec["approval_state"]}
+
+    async def desktop_results_to_notify(self, *, since: datetime, limit: int = 20) -> list[dict[str, Any]]:
+        """Finished desktop batches that carry a Slack origin and were not announced yet (background caller, no org filter)."""
+        async with self._sf() as session:
+            batches = (
+                (
+                    await session.execute(
+                        select(SubagentBatchRow).where(SubagentBatchRow.subagent_type == "fleet-desktop", SubagentBatchRow.status.in_(("completed", "failed")), SubagentBatchRow.completed_at >= since).order_by(SubagentBatchRow.completed_at)
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            out: list[dict[str, Any]] = []
+            for batch in batches:
+                spec = batch.execution_spec if isinstance(batch.execution_spec, dict) else {}
+                if not isinstance(spec.get("slack_origin"), dict) or spec.get("notified_at"):
+                    continue
+                item = (await session.execute(select(SubagentBatchItemRow).where(SubagentBatchItemRow.batch_id == batch.id).order_by(SubagentBatchItemRow.position).limit(1))).scalar_one_or_none()
+                out.append({"id": batch.id, "user_id": batch.user_id, "status": batch.status, "spec": spec, "result": item.result if item else None, "error": item.error if item else None})
+                if len(out) >= limit:
+                    break
+            return out
+
+    async def mark_desktop_notified(self, batch_id: str, *, now: datetime) -> None:
+        async with self._sf() as session:
+            batch = await session.get(SubagentBatchRow, batch_id, with_for_update=True)
+            if batch is not None and isinstance(batch.execution_spec, dict):
+                batch.execution_spec = {**batch.execution_spec, "notified_at": now.isoformat()}
+                await session.commit()
+
     async def approve_fleet_batch(self, batch_id: str, *, approver_id: str, now: datetime) -> dict[str, Any] | None:
         """Flip a fleet batch's ``approval_state`` pending -> approved (idempotent). None if absent or not an approval-gated batch."""
         async with self._sf() as session:
-            batch = (await session.execute(select(SubagentBatchRow).where(SubagentBatchRow.id == batch_id).with_for_update())).scalar_one_or_none()
+            batch = await self._locked_fleet_batch(session, batch_id)
             spec = batch.execution_spec if batch is not None else None
             if batch is None or not _batch_organization_visible(batch) or not isinstance(spec, dict) or spec.get("executor") != "fleet" or spec.get("approval_state") not in ("pending", "approved"):
                 return None

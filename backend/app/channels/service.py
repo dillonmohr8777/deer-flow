@@ -121,6 +121,32 @@ def _warn_if_chat_channels_cannot_authenticate(channels_config: dict[str, Any], 
         )
 
 
+def _make_slack_auto_linker(app_config: AppConfig, connection_repo: Any | None):
+    """Build the roster auto-linker when ``channel_connections.slack.auto_link_roster`` is on."""
+    slack = getattr(getattr(app_config, "channel_connections", None), "slack", None)
+    if connection_repo is None or getattr(slack, "auto_link_roster", False) is not True:
+        return None
+    if not app_config.momentum_internal.enabled:
+        logger.warning("channel_connections.slack.auto_link_roster is on but momentum_internal is off; roster auto-link is disabled")
+        return None
+    if not str(getattr(slack, "workspace_id", "")).strip():
+        logger.warning("channel_connections.slack.auto_link_roster is on but workspace_id is empty; roster auto-link is disabled")
+        return None
+    from app.channels.slack_autolink import SlackRosterAutoLinker
+    from deerflow.persistence.engine import get_session_factory
+
+    session_factory = get_session_factory()
+    if session_factory is None:
+        return None
+    return SlackRosterAutoLinker(
+        repo=connection_repo,
+        roster=app_config.roster,
+        workspace_id=slack.workspace_id,
+        organization_slugs=list(app_config.momentum_internal.organization_slugs),
+        session_factory=session_factory,
+    )
+
+
 def _make_connection_repo(connection_config: ChannelConnectionsConfig | None):
     if connection_config is None or not getattr(connection_config, "enabled", False):
         return None
@@ -154,6 +180,7 @@ class ChannelService:
         require_bound_identity: bool = False,
         app_config: AppConfig | None = None,
         get_stream_bridge: Callable[[], StreamBridge | None] | None = None,
+        slack_auto_linker: Any | None = None,
     ) -> None:
         config = dict(channels_config or {})
         inbound_queue_maxsize = _resolve_positive_int(config, "inbound_queue_maxsize", DEFAULT_INBOUND_QUEUE_MAXSIZE)
@@ -162,6 +189,7 @@ class ChannelService:
         self.bus = MessageBus(inbound_queue_maxsize=inbound_queue_maxsize)
         self.store = ChannelStore()
         self._connection_repo = connection_repo
+        self._slack_auto_linker = slack_auto_linker
         self._get_stream_bridge = get_stream_bridge
         langgraph_url = _resolve_service_url(config, "langgraph_url", _CHANNELS_LANGGRAPH_URL_ENV, DEFAULT_LANGGRAPH_URL)
         gateway_url = _resolve_service_url(config, "gateway_url", _CHANNELS_GATEWAY_URL_ENV, DEFAULT_GATEWAY_URL)
@@ -216,12 +244,14 @@ class ChannelService:
         connections_enabled = connection_config is not None and getattr(connection_config, "enabled", False)
         require_bound_identity = bool(connections_enabled and getattr(connection_config, "require_bound_identity", True))
         _warn_if_chat_channels_cannot_authenticate(channels_config, bool(connections_enabled))
+        connection_repo = _make_connection_repo(connection_config)
         return cls(
             channels_config=channels_config,
-            connection_repo=_make_connection_repo(connection_config),
+            connection_repo=connection_repo,
             require_bound_identity=require_bound_identity,
             app_config=app_config,
             get_stream_bridge=get_stream_bridge,
+            slack_auto_linker=_make_slack_auto_linker(app_config, connection_repo),
         )
 
     async def start(self) -> None:
@@ -501,6 +531,8 @@ class ChannelService:
                 config["seen_event_store_path"] = str(Path(get_paths().base_dir) / "channels" / "buzz_seen_events.json")
             if self._connection_repo is not None:
                 config["connection_repo"] = self._connection_repo
+            if name == "slack" and self._slack_auto_linker is not None:
+                config["roster_auto_linker"] = self._slack_auto_linker
             channel = channel_cls(bus=self.bus, config=config)
             self._channels[name] = channel
             # A restart can run inside an HTTP request; the channel's

@@ -73,6 +73,7 @@ def test_slack_send_uses_connection_bot_token_when_connection_id_is_present():
         repo = AsyncMock()
         repo.get_credentials.return_value = {"access_token": "xoxb-connection-token"}
         web_client = MagicMock()
+        web_client.chat_postMessage.return_value = {"ok": True, "channel": "C123", "ts": "101.2"}
         web_client_factory = MagicMock(return_value=web_client)
         channel = SlackChannel(
             bus=MessageBus(),
@@ -93,7 +94,7 @@ def test_slack_send_uses_connection_bot_token_when_connection_id_is_present():
         await channel.send(msg)
 
         repo.get_credentials.assert_awaited_once_with("connection-1", owner_user_id="deerflow-user-1")
-        web_client_factory.assert_called_once_with(token="xoxb-connection-token")
+        web_client_factory.assert_called_once_with(token="xoxb-connection-token", retry_handlers=[])
         web_client.chat_postMessage.assert_called_once()
 
     anyio.run(go)

@@ -1,0 +1,65 @@
+{
+  "user_id": "momobot-public-research",
+  "toolkits": {
+    "enable": [
+      "composio_search",
+      "inspo_mcp",
+      "godaddy_mcp"
+    ]
+  },
+  "tools": {
+    "composio_search": {
+      "enable": [
+        "COMPOSIO_SEARCH_WEB",
+        "COMPOSIO_SEARCH_NEWS",
+        "COMPOSIO_SEARCH_TRENDS",
+        "COMPOSIO_SEARCH_GOOGLE_MAPS",
+        "COMPOSIO_SEARCH_EXA_SIMILARLINK",
+        "COMPOSIO_SEARCH_NPPESNPI_LOOKUP"
+      ]
+    },
+    "inspo_mcp": {
+      "enable": [
+        "INSPO_MCP_SEARCH_SCREENS",
+        "INSPO_MCP_GET_SCREEN"
+      ]
+    },
+    "godaddy_mcp": {
+      "enable": [
+        "GODADDY_MCP_DOMAINS_CHECK_AVAILABILITY",
+        "GODADDY_MCP_DOMAINS_SUGGEST"
+      ]
+    }
+  },
+  "instant": {},
+  "manage_connections": {
+    "enable": false,
+    "enable_connection_removal": false
+  },
+  "workbench": {
+    "enable": false
+  },
+  "proxy_execute": {
+    "enable": false
+  },
+  "search": {
+    "enable": false
+  },
+  "execute": {
+    "enable_multi_execute": false
+  },
+  "preload": {
+    "tools": [
+      "COMPOSIO_SEARCH_WEB",
+      "COMPOSIO_SEARCH_NEWS",
+      "COMPOSIO_SEARCH_TRENDS",
+      "COMPOSIO_SEARCH_GOOGLE_MAPS",
+      "COMPOSIO_SEARCH_EXA_SIMILARLINK",
+      "COMPOSIO_SEARCH_NPPESNPI_LOOKUP",
+      "INSPO_MCP_SEARCH_SCREENS",
+      "INSPO_MCP_GET_SCREEN",
+      "GODADDY_MCP_DOMAINS_CHECK_AVAILABILITY",
+      "GODADDY_MCP_DOMAINS_SUGGEST"
+    ]
+  }
+}

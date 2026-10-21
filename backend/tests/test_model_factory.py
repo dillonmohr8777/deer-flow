@@ -1864,3 +1864,55 @@ def test_codex_still_strips_overridden_max_tokens(monkeypatch):
     factory_module.create_chat_model(name="codex", model_overrides={"max_tokens": 9999})
 
     assert "max_tokens" not in captured
+
+
+@pytest.mark.parametrize("profile,expected_model", [(None, "claude-opus-5-5"), ("worker-client", "openai/gpt-6-luna"), ("claude-haiku-5-5", "claude-haiku-5-5")])
+def test_memory_host_profile_preserves_provider_settings(monkeypatch, profile, expected_model):
+    from deerflow.agents.memory import manager as memory_manager
+    from deerflow.config.memory_config import MemoryConfig
+
+    privacy = {"provider": {"data_collection": "deny", "zdr": True, "only": ["azure"]}}
+    config = _make_app_config(
+        [
+            ModelConfig(name="claude-opus-5-5", use="langchain_anthropic:ChatAnthropic", model="claude-opus-5-5"),
+            ModelConfig(name="worker-client", use="langchain_openai:ChatOpenAI", model="openai/gpt-6-luna", base_url="https://openrouter.ai/api/v1", extra_body=privacy),
+            ModelConfig(name="claude-haiku-5-5", use="langchain_anthropic:ChatAnthropic", model="claude-haiku-5-5"),
+        ]
+    )
+    _patch_factory(monkeypatch, config)
+    monkeypatch.setattr(memory_manager, "get_memory_config", lambda: MemoryConfig(model_name=profile))
+    assert memory_manager._host_default_llm() is not None
+    assert FakeChatModel.captured_kwargs["model"] == expected_model
+    if profile == "worker-client":
+        assert FakeChatModel.captured_kwargs["extra_body"] == privacy
+        assert FakeChatModel.captured_kwargs["base_url"] == "https://openrouter.ai/api/v1"
+
+
+def test_memory_model_name_remains_a_host_profile(monkeypatch):
+    from deerflow.config import memory_config as module
+
+    monkeypatch.setattr(module, "_memory_config", module.MemoryConfig())
+    module.load_memory_config_from_dict({"model_name": "worker-client"})
+    assert module._memory_config.model_name == "worker-client"
+    assert module._memory_config.backend_config == {}
+
+
+def test_memory_host_profile_preserves_explicit_backend_model(monkeypatch):
+    from deerflow.config import memory_config as module
+
+    backend = {"model": {"provider": "openai", "model": "standalone-model"}}
+    monkeypatch.setattr(module, "_memory_config", module.MemoryConfig())
+    module.load_memory_config_from_dict({"model_name": "worker-client", "backend_config": backend})
+    assert module._memory_config.model_name == "worker-client"
+    assert module._memory_config.backend_config == backend
+
+
+def test_invalid_memory_host_profile_does_not_fall_back(monkeypatch):
+    from deerflow.agents.memory import manager as memory_manager
+    from deerflow.config.memory_config import MemoryConfig
+
+    _patch_factory(monkeypatch, _make_app_config([ModelConfig(name="first", use="langchain_openai:ChatOpenAI", model="app-default")]))
+    monkeypatch.setattr(memory_manager, "get_memory_config", lambda: MemoryConfig(model_name="missing"))
+    FakeChatModel.captured_kwargs = {}
+    assert memory_manager._host_default_llm() is None
+    assert FakeChatModel.captured_kwargs == {}

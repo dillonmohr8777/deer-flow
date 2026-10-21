@@ -9,7 +9,7 @@ visible to anyone.
 
 from typing import Literal, TypedDict
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 Role = Literal["am", "expert", "admin"]
 ALL = "*"
@@ -18,6 +18,16 @@ ALL = "*"
 class RosterUser(BaseModel):
     role: Role
     clients: list[str] = Field(default_factory=list)
+    email: str = Field(default="", description="Optional work email; Slack auto-link uses it first, so the bot needs no users:read.email scope")
+
+    @field_validator("email")
+    @classmethod
+    def _plain_email(cls, value: str) -> str:
+        value = value.strip().lower()
+        local, at, domain = value.partition("@")
+        if value and (not at or not local or "." not in domain or any(c.isspace() for c in value)):
+            raise ValueError(f"roster email is not an email address: {value!r}")
+        return value
 
 
 class RosterConfig(BaseModel):
@@ -25,6 +35,7 @@ class RosterConfig(BaseModel):
 
     users: dict[str, RosterUser] = Field(default_factory=dict)
     repos: dict[str, str] = Field(default_factory=dict, description="repo full name -> client id, or '*' for every client")
+    channel_clients: dict[str, str] = Field(default_factory=dict, description="Slack channel id -> client id; the client a '@MomoBot desktop' job in that channel is for")
     deny_repos: list[str] = Field(default_factory=list, description="personal repos that are never visible, even to admin")
 
 

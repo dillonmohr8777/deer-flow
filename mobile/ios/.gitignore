@@ -1,0 +1,5 @@
+MomoBot.xcodeproj/
+MomoMobileCore/.build/
+DerivedData/
+*.xcuserstate
+xcuserdata/

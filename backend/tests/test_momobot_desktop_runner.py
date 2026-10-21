@@ -121,3 +121,48 @@ def test_dry_run_never_contacts_gateway_or_claude(env, monkeypatch, capsys) -> N
     assert runner.main(["--dry-run"]) == 0
     out = capsys.readouterr().out
     assert "--model haiku" in out and "host_key_set=True" in out and "super-secret-key" not in out
+
+
+def test_gateway_calls_carry_a_matching_csrf_pair(monkeypatch):
+    """The Gateway's CSRF double-submit check applies to internal-token calls too."""
+    seen = {}
+
+    class _Resp:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def read(self):
+            return b"{}"
+
+    def fake_urlopen(request, timeout=30):
+        seen.update({k.lower(): v for k, v in request.header_items()})
+        return _Resp()
+
+    monkeypatch.setenv("MOMOBOT_GATEWAY_URL", "http://gw")
+    monkeypatch.setenv("MOMOBOT_HOST_KEY", "k")
+    monkeypatch.setenv("MOMOBOT_DELEGATION_ID", "d")
+    monkeypatch.setattr(runner.urllib.request, "urlopen", fake_urlopen)
+    runner.api("POST", "/api/fleet/work/claim", {"lanes": ["desktop"]})
+    token = seen["x-csrf-token"]
+    assert token and seen["cookie"] == f"csrf_token={token}"
+
+
+def test_run_once_polls_each_delegation_and_keeps_the_claiming_one(monkeypatch):
+    calls = []
+
+    def fake_api(method, path, body=None):
+        calls.append((path, runner._delegation))
+        if path == "/api/fleet/work/claim":
+            return {"items": [{"id": "i1"}]} if runner._delegation == "d2" else {"items": []}
+        return {}
+
+    monkeypatch.setenv("MOMOBOT_DELEGATION_ID", "d1, d2")
+    monkeypatch.setattr(runner, "api", fake_api)
+    monkeypatch.setattr(runner, "in_quiet_hours", lambda: False)
+    monkeypatch.setattr(runner, "stop_file", lambda: Path("/nonexistent/STOP"))
+    monkeypatch.setattr(runner, "handle_item", lambda cfg, item, owner: f"handled:{runner._delegation}")
+    assert runner.run_once({"clients": {}}) == "handled:d2"
+    assert [c for c in calls if c[0] == "/api/fleet/work/claim"] == [("/api/fleet/work/claim", "d1"), ("/api/fleet/work/claim", "d2")]

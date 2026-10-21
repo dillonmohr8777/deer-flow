@@ -4,8 +4,9 @@ Drives the real ``board`` router behind the real ``AuthMiddleware`` and the
 shared ``org_isolation_fixtures`` world, mirroring
 ``test_org_isolation_h_clients.py``'s shape. Beyond the organization boundary
 that lane already covers for ``clients``, this file adds the board's own
-per-client access rule: an org owner/admin sees every thread, a plain member
+per-client access rule: an org owner/admin sees every thread, a plain staff member
 sees only threads for clients they hold a ``client_assignments`` row for.
+Client contacts use the private inbox and cannot enter this internal Board.
 """
 
 from __future__ import annotations
@@ -128,7 +129,7 @@ async def test_board_thread_crud_and_messages(org_world):  # noqa: F811
         assert (await client.post("/api/board/threads", json={"client_id": "does-not-exist", "subject": "x"}, headers=headers_a)).status_code == 404
 
 
-async def test_client_member_sees_only_assigned_client_owner_sees_all(org_world):  # noqa: F811
+async def test_staff_member_sees_only_assigned_client_owner_sees_all(org_world):  # noqa: F811
     session_factory = org_world
     app = _build_app(session_factory)
     headers_a = auth_headers(USER_A, ORG_S)
@@ -141,7 +142,7 @@ async def test_client_member_sees_only_assigned_client_owner_sees_all(org_world)
         client1 = await _create_client(client, headers_a, "Client One")
         client2 = await _create_client(client, headers_a, "Client Two")
 
-        assign = await client.post(f"/api/clients/{client1['id']}/assignments", json={"user_id": USER_D, "role": "client_contact"}, headers=headers_a)
+        assign = await client.post(f"/api/clients/{client1['id']}/assignments", json={"user_id": USER_D, "role": "contributor"}, headers=headers_a)
         assert assign.status_code == 201
 
         thread1 = (await client.post("/api/board/threads", json={"client_id": client1["id"], "subject": "T1"}, headers=headers_a)).json()
@@ -166,6 +167,36 @@ async def test_client_member_sees_only_assigned_client_owner_sees_all(org_world)
         assert {t["id"] for t in c_list.json()["threads"]} == {thread1["id"], thread2["id"]}
         assert (await client.get(f"/api/board/threads/{thread2['id']}", headers=headers_c)).status_code == 200
         assert (await client.get("/api/board/threads", params={"client_id": client2["id"]}, headers=headers_c)).status_code == 200
+
+
+async def test_client_contact_cannot_enter_internal_board(org_world):  # noqa: F811
+    app = _build_app(org_world)
+    headers_a = auth_headers(USER_A, ORG_S)
+    await _add_plain_member(org_world, USER_D, ORG_S)
+    headers_d = auth_headers(USER_D, ORG_S)
+
+    async with _client(app) as client:
+        acme = await _create_client(client, headers_a, "Acme")
+        assignment = await client.post(f"/api/clients/{acme['id']}/assignments", json={"user_id": USER_D, "role": "client_contact"}, headers=headers_a)
+        assert assignment.status_code == 201
+        created = await client.post("/api/board/threads", json={"client_id": acme["id"], "subject": "Internal work"}, headers=headers_a)
+        assert created.status_code == 201
+        tid = created.json()["id"]
+
+        for method, path, body in (
+            ("get", "/api/board/threads", None),
+            ("post", "/api/board/threads", {"client_id": acme["id"], "subject": "Sneaky"}),
+            ("get", f"/api/board/threads/{tid}", None),
+            ("patch", f"/api/board/threads/{tid}", {"subject": "Changed"}),
+            ("get", f"/api/board/threads/{tid}/messages", None),
+            ("post", f"/api/board/threads/{tid}/messages", {"body": "Injected"}),
+            ("post", f"/api/board/threads/{tid}/draft", {"body": "Draft"}),
+            ("post", f"/api/board/threads/{tid}/approve", None),
+            ("post", f"/api/board/threads/{tid}/reply", {"body": "Reply"}),
+        ):
+            response = await client.request(method, path, json=body, headers=headers_d)
+            assert response.status_code == 403, (method, path, response.text)
+            assert response.json() == {"detail": "Use your client inbox for approved conversations"}
 
 
 async def test_board_routes_404_across_organizations(org_world):  # noqa: F811
@@ -325,7 +356,7 @@ async def test_reply_ignores_a_momo_message_forged_by_a_non_admin(org_world):  #
 
     async with _client(app) as client:
         client1 = await _create_client(client, headers_a, "Client One")
-        assign = await client.post(f"/api/clients/{client1['id']}/assignments", json={"user_id": USER_D, "role": "client_contact"}, headers=headers_a)
+        assign = await client.post(f"/api/clients/{client1['id']}/assignments", json={"user_id": USER_D, "role": "contributor"}, headers=headers_a)
         assert assign.status_code == 201
 
         thread = (await client.post("/api/board/threads", json={"client_id": client1["id"], "subject": "T"}, headers=headers_a)).json()
@@ -347,8 +378,9 @@ async def test_reply_ignores_a_momo_message_forged_by_a_non_admin(org_world):  #
         assert legit.json()["status"] == "replied"
 
 
-async def test_client_contact_cannot_run_the_patch_draft_patch_exploit_chain(org_world):  # noqa: F811
-    """Review follow-up on f34 (2026-09-28): a client contact (client access, not owner/admin)
+@pytest.mark.parametrize("assignment_role", ["client_contact", "contributor"])
+async def test_assigned_non_admin_cannot_run_the_patch_draft_patch_exploit_chain(org_world, assignment_role):  # noqa: F811
+    """Review follow-up on f34 (2026-09-28): an assigned non-admin
     used to be able to (1) PATCH status to ``triaged``, (2) POST ``/draft`` with their own
     body, (3) PATCH status to ``approved`` -- reaching ``approved`` with their own text as the
     only ``momo`` message, so the owner's real approved text got 409 and the injected text
@@ -363,7 +395,7 @@ async def test_client_contact_cannot_run_the_patch_draft_patch_exploit_chain(org
 
     async with _client(app) as client:
         client1 = await _create_client(client, headers_a, "Client One")
-        assign = await client.post(f"/api/clients/{client1['id']}/assignments", json={"user_id": USER_D, "role": "client_contact"}, headers=headers_a)
+        assign = await client.post(f"/api/clients/{client1['id']}/assignments", json={"user_id": USER_D, "role": assignment_role}, headers=headers_a)
         assert assign.status_code == 201
 
         thread = (await client.post("/api/board/threads", json={"client_id": client1["id"], "subject": "T"}, headers=headers_a)).json()
@@ -395,7 +427,7 @@ async def test_non_owner_cannot_approve_or_reply(org_world):  # noqa: F811
 
     async with _client(app) as client:
         client1 = await _create_client(client, headers_a, "Client One")
-        assign = await client.post(f"/api/clients/{client1['id']}/assignments", json={"user_id": USER_D, "role": "client_contact"}, headers=headers_a)
+        assign = await client.post(f"/api/clients/{client1['id']}/assignments", json={"user_id": USER_D, "role": "contributor"}, headers=headers_a)
         assert assign.status_code == 201
 
         thread = (await client.post("/api/board/threads", json={"client_id": client1["id"], "subject": "T1"}, headers=headers_a)).json()
@@ -440,7 +472,7 @@ async def test_null_client_thread_is_owner_admin_only(org_world):  # noqa: F811
 
     async with _client(app) as client:
         acme = await _create_client(client, headers_a, "Acme")
-        assign = await client.post(f"/api/clients/{acme['id']}/assignments", json={"user_id": USER_D, "role": "client_contact"}, headers=headers_a)
+        assign = await client.post(f"/api/clients/{acme['id']}/assignments", json={"user_id": USER_D, "role": "contributor"}, headers=headers_a)
         assert assign.status_code == 201
         tid = (await client.post("/api/board/threads", json={"client_id": acme["id"], "subject": "orphan"}, headers=headers_a)).json()["id"]
 
@@ -474,7 +506,7 @@ async def test_null_client_thread_is_owner_admin_only(org_world):  # noqa: F811
 
 async def test_urgency_and_summary_hidden_from_non_admin(org_world, monkeypatch):  # noqa: F811
     """Momo's internal triage (urgency/summary) can read like "client is angry,
-    churn risk" -- a client_contact must never see it, only an org owner/admin.
+    churn risk" -- a non-admin staff member must never see it, only an org owner/admin.
     """
     _mock_triage_model(monkeypatch, '{"kind":"concern","urgency":"urgent","summary":"INTERNAL: client is angry, churn risk."}')
     session_factory = org_world
@@ -486,7 +518,7 @@ async def test_urgency_and_summary_hidden_from_non_admin(org_world, monkeypatch)
 
     async with _client(app) as client:
         acme = await _create_client(client, headers_a, "Acme")
-        assign = await client.post(f"/api/clients/{acme['id']}/assignments", json={"user_id": USER_D, "role": "client_contact"}, headers=headers_a)
+        assign = await client.post(f"/api/clients/{acme['id']}/assignments", json={"user_id": USER_D, "role": "contributor"}, headers=headers_a)
         assert assign.status_code == 201
 
         created = await client.post("/api/board/threads", json={"client_id": acme["id"], "subject": "Angry email"}, headers=headers_a)
@@ -496,8 +528,7 @@ async def test_urgency_and_summary_hidden_from_non_admin(org_world, monkeypatch)
         assert created.json()["urgency"] == "urgent"
         assert created.json()["summary"] == "INTERNAL: client is angry, churn risk."
 
-        # The client_contact assigned to this thread's client never sees either field,
-        # on any read path: list, get, or a status patch's echoed response.
+        # Assigned non-admin staff can read and edit its subject without private triage fields.
         d_list = await client.get("/api/board/threads", headers=headers_d)
         assert d_list.status_code == 200
         [d_thread] = d_list.json()["threads"]
