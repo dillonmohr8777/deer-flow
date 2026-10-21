@@ -1770,6 +1770,44 @@ async def _validate_scope_thread_binding(
 # ---------------------------------------------------------------------------
 
 
+async def _admit_effective_run_model(config: dict, *, agent_config: Any | None, app_config: Any, run_store: Any, task_class: str | None) -> str | None:
+    """Admit and pin the same model the lead-agent assembly will actually use.
+
+    Called after agent policy and authenticated identity injection, before any
+    checkpoint seed, run row or worker. Reuse assembly's authorization fallback;
+    a client-supplied model scrubbed by policy must never meter a different model.
+    """
+    from deerflow.agents.lead_agent.agent import _authorize_model_name, _resolve_model_name
+
+    runtime_config = dict(config.get("configurable") or {})
+    runtime_config.update(config.get("context") or {})
+    model_name = runtime_config.get("model_name") or runtime_config.get("model") or getattr(agent_config, "model", None)
+    router = app_config.cost_router
+    # Task routing supplies an otherwise unspecified model. An agent-owned
+    # model has the same precedence over the global route as at assembly.
+    route_key = task_class or router.default_route
+    if not model_name and router.enabled and route_key is not None:
+        route = router.routes.get(route_key)
+        if route is None:
+            raise HTTPException(status_code=400, detail=f"Unknown task class {route_key!r}. Configured: {sorted(router.routes)}.")
+        model_name = route.model
+    if model_name is not None and not isinstance(model_name, str):
+        model_name = str(model_name)
+    if model_name and app_config.get_model_config(model_name) is None:
+        raise HTTPException(status_code=400, detail=f"Model {model_name!r} is not in the configured model allowlist")
+    if model_name or app_config.models:
+        model_name = _resolve_model_name(model_name, app_config=app_config)
+        model_name = _authorize_model_name(model_name, context=runtime_config, app_config=app_config)
+    try:
+        model_name = await admit_run(app_config, run_store, model_name, None)
+    except CostRouterRefusal as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
+    if model_name:
+        for section in ("configurable", "context"):
+            config.setdefault(section, {})["model_name"] = model_name
+    return model_name
+
+
 async def start_run(
     body: RunCreateRequest,
     thread_id: str,
@@ -1822,33 +1860,6 @@ async def start_run(
     disconnect = DisconnectMode.cancel if body.on_disconnect == "cancel" else DisconnectMode.continue_
 
     body_context = getattr(body, "context", None) or {}
-    model_name = body_context.get("model_name")
-    # Coerce non-string model_name values to str before truncation.
-    if model_name is not None and not isinstance(model_name, str):
-        model_name = str(model_name)
-
-    # Cost router: route by task class, then refuse denylisted, unpriced or
-    # over-cap models before any run row exists.
-    try:
-        router_config = get_app_config()
-    except FileNotFoundError:  # no config.yaml: nothing to route, and the run cannot start anyway
-        router_config = None
-    if router_config is not None:
-        try:
-            model_name = await admit_run(router_config, getattr(request.app.state, "run_store", None), model_name, body_context.get("task_class"))
-        except CostRouterRefusal as exc:
-            raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
-
-    # Validate model against the allowlist when a model_name is provided.
-    if model_name:
-        app_config = get_app_config()
-        resolved = app_config.get_model_config(model_name)
-        if resolved is None:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Model {model_name!r} is not in the configured model allowlist",
-            )
-
     # Set only for a delegated internal caller (verified by AuthMiddleware or an
     # in-process launcher): the delegation organization's storage principal.
     owner_user_id = get_trusted_internal_owner_user_id(request)
@@ -2047,6 +2058,23 @@ async def start_run(
             internal_owner_user=internal_owner_user,
             request_context=getattr(body, "context", None),
             momentum_staff=momentum_staff,
+        )
+
+        cost_agent_config = agent_config
+        if cost_agent_config is None and scope_runtime_config.get("is_bootstrap") and scope_assistant_id != _DEFAULT_ASSISTANT_ID:
+            # Existing bootstrap agents still contribute their configured model
+            # at assembly; a genuinely new bootstrap has no model default yet.
+            try:
+                cost_agent_config = await _load_scope_agent_config(assistant_id=scope_assistant_id, user_id=content_user_id)
+            except HTTPException as exc:
+                if exc.status_code != 422:
+                    raise
+        model_name = await _admit_effective_run_model(
+            config,
+            agent_config=cost_agent_config,
+            app_config=get_app_config(),
+            run_store=getattr(request.app.state, "run_store", None),
+            task_class=body_context.get("task_class"),
         )
 
         conversation_references = list(getattr(body, "conversation_references", None) or [])
