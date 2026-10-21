@@ -20,6 +20,7 @@ export interface FeaturesResponse {
   };
   desk?: { enabled?: boolean };
   momentum_internal?: { enabled?: boolean };
+  openai_agents?: { configured?: boolean };
 }
 
 export interface ConversationReferencesCapability {
@@ -107,4 +108,16 @@ export function isMomentumInternalEnabled(features: FeaturesResponse): boolean {
 
 export async function fetchMomentumInternalEnabled(): Promise<boolean> {
   return isMomentumInternalEnabled(await fetchFeatures());
+}
+
+/**
+ * The OpenAI crew page needs an API key on the Gateway. Anything but an
+ * explicit true reads as not set up, so the sidebar link stays hidden.
+ */
+export function isOpenAIAgentsConfigured(features: FeaturesResponse): boolean {
+  return features.openai_agents?.configured === true;
+}
+
+export async function fetchOpenAIAgentsConfigured(): Promise<boolean> {
+  return isOpenAIAgentsConfigured(await fetchFeatures());
 }

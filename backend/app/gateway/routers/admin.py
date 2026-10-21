@@ -1,4 +1,4 @@
-"""System-admin controls: user disable/enable/force-logout and the audit log.
+"""System-admin controls: user disable/enable/force-logout, role changes and the audit log.
 
 Every endpoint here requires ``system_role == "admin"`` (``require_admin_user``,
 the same predicate ``managed_models`` and ``mcp`` config routes use) and is
@@ -11,8 +11,10 @@ from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
+from app.gateway.auth.models import SystemRole
+from app.gateway.authz import role_has_policy
 from app.gateway.deps import get_audit_repo, get_current_user_from_request, get_local_provider, record_audit_event, require_admin_user
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -86,6 +88,50 @@ async def force_logout_user(user_id: str, request: Request) -> AdminUserActionRe
     user = await get_local_provider().update_user(user)
     await record_audit_event(request, action="admin.user.force_logout", outcome="success", actor_user_id=str(actor.id), target_type="user", target_id=user_id, **_network_meta(request))
     return _user_action_response(user)
+
+
+class SetUserRoleRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    system_role: SystemRole
+
+
+class AdminUserRoleResponse(BaseModel):
+    id: str
+    email: str
+    system_role: SystemRole
+
+
+@router.put("/users/{user_id}/role", response_model=AdminUserRoleResponse)
+async def set_user_role(user_id: str, body: SetUserRoleRequest, request: Request) -> AdminUserRoleResponse:
+    """Set a user's system role (admin, exec, user or client).
+
+    The role is read from the database on every request, so it takes effect
+    immediately without ending the user's sessions.
+    """
+    await require_admin_user(request, detail=_ADMIN_REQUIRED_DETAIL)
+    actor = await get_current_user_from_request(request)
+    if str(actor.id) == user_id:
+        # Also guarantees the instance never ends up without an admin.
+        raise HTTPException(status_code=400, detail="You can't change your own role")
+    if not role_has_policy(body.system_role):
+        # RBAC fails closed on a role it has no block for: the user would be locked out.
+        raise HTTPException(status_code=409, detail=f"Role '{body.system_role}' is not defined under authorization.provider.config.roles; add it before assigning it")
+    user = await _load_target_user(user_id)
+    previous_role = user.system_role
+    user.system_role = body.system_role
+    user = await get_local_provider().update_user(user)
+    await record_audit_event(
+        request,
+        action="admin.user.role_changed",
+        outcome="success",
+        actor_user_id=str(actor.id),
+        target_type="user",
+        target_id=user_id,
+        details={"from": previous_role, "to": user.system_role},
+        **_network_meta(request),
+    )
+    return AdminUserRoleResponse(id=str(user.id), email=user.email, system_role=user.system_role)
 
 
 class AuditEventResponse(BaseModel):

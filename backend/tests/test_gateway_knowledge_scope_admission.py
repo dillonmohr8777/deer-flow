@@ -210,3 +210,35 @@ def test_free_form_runtime_scope_fields_are_scrubbed() -> None:
     strip_internal_context_keys(config)
 
     assert config == {"context": {}, "configurable": {}}
+
+
+@pytest.mark.parametrize("recovery", [False, True])
+def test_deny_scope_refuses_any_scope_for_a_client(recovery: bool) -> None:
+    scope = {"version": 1, "mode": "all"}
+    graph_input = _input(HumanMessage(content="q", additional_kwargs={} if recovery else {KNOWLEDGE_SCOPE_KEY: scope}))
+    with pytest.raises(HTTPException) as refused:
+        admit_message_knowledge_scope(
+            graph_input,
+            assistant_id="lead_agent",
+            app_config=_app_config(),
+            agent_config=None,
+            recovery_scope=scope if recovery else None,
+            recovery=recovery,
+            deny_scope=True,
+        )
+    assert refused.value.status_code == 422
+    assert "not supported" in refused.value.detail
+
+
+def test_deny_scope_leaves_scopeless_client_runs_alone() -> None:
+    graph_input = _input(HumanMessage(content="q"))
+    assert (
+        admit_message_knowledge_scope(
+            graph_input,
+            assistant_id="lead_agent",
+            app_config=_app_config(),
+            agent_config=None,
+            deny_scope=True,
+        )
+        is None
+    )

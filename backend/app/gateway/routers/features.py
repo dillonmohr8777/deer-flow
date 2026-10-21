@@ -15,6 +15,7 @@ from app.gateway.conversation_access import conversation_references_enabled
 from app.gateway.deps import get_config, is_admin_user
 from app.gateway.knowledge_scope_admission import RAGFLOW_KNOWLEDGE_SEARCH_PROVIDER
 from app.gateway.momentum_internal import is_momentum_staff
+from app.gateway.openai_agent_service import openai_agents_configured
 from app.gateway.run_models import MAX_CONVERSATION_REFERENCES
 from deerflow.config.app_config import AppConfig
 from deerflow.subagents.capacity import configured_subagent_max_running
@@ -77,6 +78,12 @@ class MomentumInternalFeature(BaseModel):
     enabled: bool = Field(..., description="Whether the caller is staff in the agency's own workspace, so Team and Academy are shown")
 
 
+class OpenAIAgentsFeature(BaseModel):
+    """Whether the hosted OpenAI agent service (the OpenAI crew page) has been set up."""
+
+    configured: bool = Field(..., description="Whether OPENAI_API_KEY is set, so the OpenAI crew page is shown")
+
+
 class FeaturesResponse(BaseModel):
     """Frontend-facing feature availability flags."""
 
@@ -88,6 +95,7 @@ class FeaturesResponse(BaseModel):
     knowledge_base: KnowledgeBaseFeature
     desk: DeskFeature
     momentum_internal: MomentumInternalFeature
+    openai_agents: OpenAIAgentsFeature
 
 
 @router.get(
@@ -133,6 +141,7 @@ async def list_features(request: Request, config: AppConfig = Depends(get_config
         # from config) plus a staff role in it. The routes behind it enforce
         # the same predicate.
         momentum_internal=MomentumInternalFeature(enabled=await is_momentum_staff(request, config)),
+        openai_agents=OpenAIAgentsFeature(configured=openai_agents_configured()),
     )
 
 

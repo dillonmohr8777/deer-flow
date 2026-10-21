@@ -351,6 +351,30 @@ async def resolve_route_permissions_for_request(request: Request, user: Any) -> 
     return await resolve_route_permissions(user, is_internal=_is_internal_caller(request, user))
 
 
+def role_has_policy(role: str) -> bool:
+    """Whether *role* has a policy block, so assigning it cannot lock the user out.
+
+    False only when RBAC is enabled and certain to treat *role* as undefined (it
+    would then fail closed on every check). A disabled or unresolvable provider
+    answers True: there is no role table to be missing from.
+    """
+    config = _get_route_authorization_config()
+    if config.enabled is not True:
+        return True
+    try:
+        provider = _get_cached_route_provider(config)
+    except Exception:
+        return True
+    validate_role = getattr(provider, "validate_role", None)
+    if validate_role is None:
+        return True
+    try:
+        validate_role(role)
+    except ValueError:
+        return False
+    return True
+
+
 class _AuthorizationUnavailable(Exception):
     """Raised internally when the provider cannot be resolved for a route check.
 
@@ -402,6 +426,29 @@ def resolve_model_authorization(user: User, *, is_internal: bool) -> tuple[Autho
     ``_AuthorizationUnavailable`` (carrying ``fail_closed``).
     """
     return _resolve_route_scoped_authorization(user, is_internal=is_internal)
+
+
+def model_use_allowed(user: User, model_name: str, *, is_internal: bool, fail_closed: bool) -> bool:
+    """Whether *user*'s role may ``use`` *model_name* (``authorize("model", "use")``).
+
+    Disabled authorization allows. A provider that cannot be resolved or that
+    raises answers ``not fail_closed``. Shared by ``GET /api/models/{name}`` and
+    the built-in-agent visibility checks so they can never disagree.
+    """
+    try:
+        provider, principal = resolve_model_authorization(user, is_internal=is_internal)
+    except _AuthorizationUnavailable:
+        return not fail_closed
+    if provider is None or principal is None:
+        return True
+    try:
+        decision = provider.authorize(AuthzRequest(principal=principal, resource="model", action="use", target=model_name))
+        if not isinstance(decision, AuthzDecision):
+            raise TypeError("AuthorizationProvider.authorize must return AuthzDecision")
+        return decision.allow
+    except Exception:
+        logger.warning("Authorization provider failed while checking model:use for %s", model_name, exc_info=True)
+        return not fail_closed
 
 
 def resolve_skill_authorization(user: User, *, is_internal: bool) -> tuple[AuthorizationProvider | None, Principal | None]:

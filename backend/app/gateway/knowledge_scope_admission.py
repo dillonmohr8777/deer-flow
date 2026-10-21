@@ -60,12 +60,16 @@ def admit_message_knowledge_scope(
     agent_config: Any | None,
     recovery_scope: object | None = None,
     recovery: bool = False,
+    deny_scope: bool = False,
 ) -> dict[str, Any] | None:
     """Canonicalize the sole eligible HumanMessage and return execution scope.
 
     New turns without an explicit scope inherit the custom agent default.
     During regenerate/resume recovery, the server-resolved source snapshot is
     authoritative and replaces any client-supplied value.
+
+    ``deny_scope`` fails closed for callers (clients) that have no per-client
+    dataset mapping: any scope, supplied or inherited, is refused.
     """
     messages = graph_input.get("messages")
     if not isinstance(messages, list):
@@ -111,7 +115,7 @@ def admit_message_knowledge_scope(
 
     canonical: dict[str, Any] | None = None
     if raw_scope is not None:
-        if not assistant_supports_knowledge_scope(
+        if deny_scope or not assistant_supports_knowledge_scope(
             assistant_id=assistant_id,
             app_config=app_config,
             agent_config=agent_config,
