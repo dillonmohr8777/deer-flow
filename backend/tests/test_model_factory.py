@@ -1866,7 +1866,7 @@ def test_codex_still_strips_overridden_max_tokens(monkeypatch):
     assert "max_tokens" not in captured
 
 
-@pytest.mark.parametrize("profile,expected_model", [(None, "app-default"), ("worker-client", "openai/gpt-6-luna")])
+@pytest.mark.parametrize("profile,expected_model", [(None, "claude-opus-5-5"), ("worker-client", "openai/gpt-6-luna"), ("claude-haiku-5-5", "claude-haiku-5-5")])
 def test_memory_host_profile_preserves_provider_settings(monkeypatch, profile, expected_model):
     from deerflow.agents.memory import manager as memory_manager
     from deerflow.config.memory_config import MemoryConfig
@@ -1874,15 +1874,16 @@ def test_memory_host_profile_preserves_provider_settings(monkeypatch, profile, e
     privacy = {"provider": {"data_collection": "deny", "zdr": True, "only": ["azure"]}}
     config = _make_app_config(
         [
-            ModelConfig(name="first", use="langchain_openai:ChatOpenAI", model="app-default"),
+            ModelConfig(name="claude-opus-5-5", use="langchain_anthropic:ChatAnthropic", model="claude-opus-5-5"),
             ModelConfig(name="worker-client", use="langchain_openai:ChatOpenAI", model="openai/gpt-6-luna", base_url="https://openrouter.ai/api/v1", extra_body=privacy),
+            ModelConfig(name="claude-haiku-5-5", use="langchain_anthropic:ChatAnthropic", model="claude-haiku-5-5"),
         ]
     )
     _patch_factory(monkeypatch, config)
     monkeypatch.setattr(memory_manager, "get_memory_config", lambda: MemoryConfig(model_name=profile))
     assert memory_manager._host_default_llm() is not None
     assert FakeChatModel.captured_kwargs["model"] == expected_model
-    if profile:
+    if profile == "worker-client":
         assert FakeChatModel.captured_kwargs["extra_body"] == privacy
         assert FakeChatModel.captured_kwargs["base_url"] == "https://openrouter.ai/api/v1"
 

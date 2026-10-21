@@ -88,9 +88,34 @@ from commit `02c279db601a42ce731e5b3a8dd88e055aa6dcfc`, then build on EC2 with
 `docker build --pull=false --network=none --build-arg BASE_IMAGE=<verified-local-alias> -f Dockerfile.memory-profile -t <new-candidate-tag> <context>`.
 Verify the base image ID and candidate file hashes before changing a runtime tag. Keep the
 previous gateway tag and settings snapshot for rollback through the existing systemd unit.
-A named-profile probe does not authorize a global memory model change: preserve the current
-profile until its intended scope is established. Production acceptance needs the deployed
-file hashes, readiness, authenticated output and an approved public-synthetic model receipt.
+A named-profile probe alone does not establish production scope. Production acceptance needs
+the deployed file hashes, readiness, authenticated output and a public-synthetic model receipt.
+
+## Production memory model
+
+Keep `memory.model_name: claude-haiku-5-5` in the cloud config. A null profile inherits the first
+chat model, which is Opus for the administrator; account-manager chat permissions do not limit
+this separate background extraction model. This pin applies to extraction for every role and
+does not change the chat default, storage paths, user/agent scope or existing memories.
+
+Before applying it, verify the configured Haiku profile exists, `memory.manager_class` is
+`deermem`, `memory.backend_config.model.model` is empty and `memory.backend_config` has no
+`host_llm` override. Preserve a private copy of the complete config and change only
+`memory.model_name`, using the existing single-writer release lock. Restart `momobot` through
+the existing unit so the cached memory manager rebuilds its model; `/api/memory/reload` reloads
+stored data only. Read back the effective profile and readiness without printing credentials
+or memory content. Rollback restores the saved config and restarts the same unit.
+
+The offline profile-selection and workspace-scope checks are:
+
+```sh
+cd backend
+python -m pytest tests/test_model_factory.py -k memory -q --noconftest
+python -m pytest tests/test_org_isolation_g_memory.py -q
+```
+
+Do not trigger a Claude extraction probe during the 01:30–08:30 ET quiet window. A config
+readback proves profile selection, not a completed provider extraction.
 
 ## Optional read-only Brain snapshot (prepared, not enabled)
 
