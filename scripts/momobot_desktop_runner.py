@@ -28,6 +28,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import secrets
 import signal
 import socket
 import subprocess
@@ -43,6 +44,11 @@ DEFAULT_TOOLS = ["Read", "Grep", "Glob", "Edit", "Write"]  # no Bash: a Slack pr
 POLL_SECONDS = 30
 RENEW_SECONDS = 30
 MAX_RESULT_CHARS = 100_000
+
+
+def _csrf_pair() -> dict[str, str]:
+    value = secrets.token_urlsafe(16)
+    return {"Cookie": f"csrf_token={value}", "X-CSRF-Token": value}
 
 
 def load_config(path: str | None = None) -> dict[str, Any]:
@@ -78,6 +84,9 @@ def api(method: str, path: str, body: dict[str, Any] | None = None) -> dict[str,
             "Content-Type": "application/json",
             "X-DeerFlow-Internal-Token": os.environ["MOMOBOT_HOST_KEY"],
             "X-DeerFlow-Delegation-Id": os.environ["MOMOBOT_DELEGATION_ID"],
+            # The Gateway's CSRF double-submit check covers internal callers too; a per-call
+            # random pair satisfies it (it guards browsers, the internal token guards this).
+            **_csrf_pair(),
         },
     )
     try:
