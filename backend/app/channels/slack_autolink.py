@@ -26,6 +26,8 @@ logger = logging.getLogger(__name__)
 
 # Wait this long before asking users.info again after a miss (missing scope, no email, Slack error).
 _SCOPE_RETRY_SECONDS = 600
+# The only role auto-link may bind; admin, exec and client accounts always link with /connect.
+_LINKABLE_ROLE = "user"
 
 
 class SlackRosterAutoLinker:
@@ -120,7 +122,7 @@ class SlackRosterAutoLinker:
                 user = await users.get_user_by_email(email)  # lost a race to another creator
         if user is None or user.disabled_at is not None:
             return None
-        if user.system_role != "user":
+        if user.system_role != _LINKABLE_ROLE:
             # Never hand an admin (or any elevated) account to a Slack sender; they link with /connect.
             logger.warning("[Slack] roster auto-link skipped: the matching account is not a plain user")
             return None
