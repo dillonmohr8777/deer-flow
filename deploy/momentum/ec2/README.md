@@ -111,6 +111,47 @@ PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s deploy/momentum/ec2/te
 bash -n deploy/momentum/ec2/secrets.sh
 ```
 
+## 1Password logins for the isolated Browserbase MCP (Oct 21, 2026)
+
+MomoBot's `browserbase` MCP (`operator-tools/browserbase-mcp` in the gateway data volume; source:
+`browser-agents/mcp`) exposes `browser_login {item}`. The model passes only a 1Password item name.
+The MCP sends `{session, item}` to `login_broker.py` over the Unix socket
+`/var/lib/docker/volumes/momobot-prod_gateway-data/_data/run/login.sock` (container path
+`/app/backend/.deer-flow/run/login.sock`). The broker runs on the host, outside every container, with the
+SSM service-account token. It resolves the item, attaches to that exact Browserbase session and fills the
+form. It replies with a status and page host/path only. Values never reach the gateway, the model or the journal.
+
+Guards: Login items tagged `momobot` only; session RUNNING in our project with `userMetadata.owner`
+`momobot-isolated-mcp`; https page whose host equals or is under one of the item's websites. An OTP field
+gets the item's `one-time password` code only when the page reads like a 2FA prompt. The host is re-checked
+before every fill, a password left in a failed form is cleared, titles used twice are refused, and the item
+index is cached for 60 s so retries cannot exhaust the service-account rate limit. MCP sessions use `keepAlive: true`, so the broker's CDP attach
+does not end them. `browser_close` and the 300 s provider timeout still release them.
+
+Add a login: put a Login item (website set; one-time password field for TOTP) in a vault the service
+account can read and tag it `momobot`. Client logins belong in a shared `Clients` vault. Service-account
+vault access is fixed at creation, so `Clients` needs its own read-only service account. Store its token as
+SSM SecureString `/momobot/prod/OP_CLIENTS_TOKEN`. The broker reads it at start when present (restart the
+broker after adding it). `render_secrets.py` drops it, like `OP_SERVICE_ACCOUNT_TOKEN`, so it never reaches the app env.
+
+Install or update (under `/run/momobot-release.lock`):
+
+```sh
+# pinned git worktree of the merged commit (no hand-copied files); move it to update
+sudo git -C /opt/momobot/src fetch origin main
+sudo git -C /opt/momobot/src worktree add --detach /opt/momobot/login-broker <merged-sha>
+sudo install -d -m 700 /var/lib/docker/volumes/momobot-prod_gateway-data/_data/run
+sudo /opt/momobot/onepassword-sdk/bin/pip install 'playwright==1.58.0'          # client only; no browser download
+sudo install -m 644 systemd/momobot-login-broker.service /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable --now momobot-login-broker
+journalctl -u momobot-login-broker -n 5   # {"broker": "ready", "accounts": N, "items": N}; one status line per login
+```
+
+Copy the reviewed MCP files (`server.mjs cloud.mjs policy.mjs login.mjs`) into the volume directory.
+New MCP processes pick them up, and no gateway restart is needed. Rollback: `systemctl disable --now
+momobot-login-broker`. `browser_login` then answers `login_broker_unavailable`, and the other 15 tools are
+unchanged.
+
 ## Nightly recovery contents
 
 The existing backup timer includes the consistent gateway SQLite snapshot, config and MCP settings,
