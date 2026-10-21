@@ -1,0 +1,20 @@
+# Host-only 1Password login broker for the isolated Browserbase MCP (login_broker.py).
+# Reads its service-account token from SSM through the instance role; nothing secret in this unit.
+[Unit]
+Description=MomoBot 1Password login broker
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+ExecStart=/opt/momobot/onepassword-sdk/bin/python /opt/momobot/login-broker/login_broker.py
+Environment=AWS_REGION=us-east-2
+Restart=on-failure
+RestartSec=10
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/docker/volumes/momobot-prod_gateway-data/_data/run
+
+[Install]
+WantedBy=multi-user.target

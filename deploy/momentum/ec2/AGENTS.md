@@ -11,6 +11,11 @@ tool. Resolution and validation must finish before stdout or the atomic env
 replacement; SDK diagnostics and error values stay private. Keep the SSM-only
 path dependency-free beyond host Python. See README for provisioning/rollback.
 
+`login_broker.py` is the one exception that touches login items: a host systemd
+service that fills a tagged 1Password login into an owned Browserbase session and
+returns status only. Never return or log a value, never relax its tag, session-owner
+or host checks, and never move it into a container. See README.
+
 The optional Brain adapter (`brain_readonly_adapter.py`) can serve a read-only
 private snapshot with four tools and `sourceObservedAt`. Its cache and unchanged
 renderer stay outside Git; never call the Brain collector, auto-refreshing load,
