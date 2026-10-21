@@ -93,6 +93,7 @@ def build(source, output, assets, burn_captions=False):
         rows = content.splitlines()
         row_html = ''.join(f'<div class="row {"command" if key == "03" else ""}" id="{cid}-row-{j}">{escape(line)}</div>' for j, line in enumerate(rows))
         if board[1] == 'EXPERIENCE MODES':
+            assert (assets / 'experience.png').is_file(), 'Inspected Experience screenshot required'
             row_html = f'<div class="mode-example"><img class="shot" src="assets/experience.png" alt="Actual Easy, Medium and Hard experience settings"><div>{row_html}</div></div>'
         duration = chapter['duration']
         animation = [f'const tl=gsap.timeline({{paused:true}});']

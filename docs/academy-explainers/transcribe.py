@@ -28,7 +28,7 @@ def normalize(text):
         text = re.sub(rf'\b{name}\b', str(value), text)
     for name, value in NUMBERS.items():
         text = re.sub(rf'\b{name}\b', value, text)
-    return [word for word in re.findall(r'[a-z0-9]+', text) if word not in ('dollar', 'dollars')]
+    return re.findall(r'[a-z0-9]+', text)
 
 
 def critical_differences(differences):
