@@ -42,6 +42,66 @@ eight-model-call AM plugin check. For an existing EC2 config, promote only this 
 `recursion_limit` value; preserve model, memory, credential and workspace settings. Verify
 the effective default and ceiling and a complete AM tool run without a request override.
 
+## Optional 1Password Browserbase credentials (prepared, not deployed)
+
+The existing `secrets.sh` SSM read passes its decrypted JSON directly to
+`render_secrets.py`. Without `/momobot/prod/OP_SERVICE_ACCOUNT_TOKEN`, the loader
+uses SSM values and needs only host Python 3, with no SDK import or vault call.
+When that parameter exists, a host-only SDK client resolves exactly these fields:
+
+- `BROWSERBASE_API_KEY`: `op://ezfukkmm4vt7wqw6vp7l7eli3m/bjil477nt5c433kto6ys3qejw4/credential`
+- `BROWSERBASE_PROJECT_ID`: `op://ezfukkmm4vt7wqw6vp7l7eli3m/bjil477nt5c433kto6ys3qejw4/project_id`
+
+The resolved values replace the SSM Browserbase pair. All other app secrets and
+non-secret settings retain their existing order and behavior. The service-account
+token is never emitted, and `settings.env` must contain neither that token nor
+Browserbase overrides when 1Password is enabled. Empty token/resolved values,
+invalid env names, quotes, newlines, carriage returns and NULs fail closed.
+Legacy empty app-secret values remain permitted. Validation and resolution finish
+before any env output; failure leaves the prior `/run/momobot/.env` intact and
+prevents systemd startup. Diagnostics contain no submitted value or traceback.
+
+Deployment owner prerequisites and sequence, through the existing release lock:
+
+1. Promote the reviewed commit containing both loader files. Keep the existing
+   SSM Browserbase pair for rollback. Do not enable the token before host SDK setup.
+2. Install a root-owned, host-only Python 3.12 venv outside the app/container:
+
+   ```sh
+   sudo python3.12 -m venv /opt/momobot/onepassword-sdk
+   sudo /opt/momobot/onepassword-sdk/bin/pip install 'onepassword-sdk==0.4.1'
+   ```
+
+3. Add `/etc/systemd/system/momobot.service.d/onepassword.conf` with only:
+
+   ```ini
+   [Service]
+   Environment=MOMOBOT_SECRETS_PYTHON=/opt/momobot/onepassword-sdk/bin/python
+   ```
+
+   Use the existing protected provisioning process to store the scoped service
+   account token as SSM SecureString `/momobot/prod/OP_SERVICE_ACCOUNT_TOKEN`.
+   The instance role already reads that path. No token belongs in this drop-in,
+   `settings.env`, command arguments, app env, logs, model prompts or Git.
+4. Run `sudo systemctl daemon-reload`, then restart `momobot` through the existing
+   unit. Verify root `0600` env permissions and token-key absence with a boolean
+   check that never prints env contents. Verify authenticated Browserbase session
+   creation and release with a public synthetic target, then MomoBot readiness.
+   A successful env write alone does not prove Browserbase runtime acceptance.
+
+Rollback: remove only the service-account parameter via the protected provisioning
+process, then restart the existing unit. The retained SSM Browserbase pair is used
+again; the host interpreter can remain configured without vault calls. A source
+rollback must preserve token exclusion before startup, so never run the previous
+unfiltered loader while the SSM service-account token still exists.
+
+Offline checks (stdlib only, fake AWS/SDK, no credentials or provider calls):
+
+```sh
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s deploy/momentum/ec2/tests -v
+bash -n deploy/momentum/ec2/secrets.sh
+```
+
 ## Nightly recovery contents
 
 The existing backup timer includes the consistent gateway SQLite snapshot, config and MCP settings,
