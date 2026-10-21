@@ -1,0 +1,1072 @@
+{
+  "00-platform-tour": [
+    [
+      "Welcome and the one example",
+      "ONE WORKSPACE",
+      "Sample Dental Group\nWeekly report draft\nSource sheet + practice notes\nNamed reviewer",
+      "Follow one brief from input to checked output."
+    ],
+    [
+      "Start with the brief",
+      "WEEKLY REPORT BRIEF",
+      "Owner: account manager\nWindow: last seven days\nSources: weekly.csv + notes.txt\nDone: checked report draft",
+      "Define the job before asking for the answer."
+    ],
+    [
+      "Chat is where the work starts",
+      "EXPERIENCE MODES",
+      "Easy: Guide me\nMedium: Balanced\nHard: Expert\nStyle changes, access stays scoped",
+      "Keep the brief and follow-up in one saved chat."
+    ],
+    [
+      "Files: what goes in and what comes out",
+      "INPUT \u2192 OUTPUT",
+      "weekly.csv \u2192 source figures\nnotes.txt \u2192 context\nreport-draft.txt \u2192 deliverable\ncheck.txt \u2192 comparison",
+      "Open the source beside the saved draft."
+    ],
+    [
+      "Agents: the specialists doing the parts",
+      "ASSIGN THE PARTS",
+      "Extract: sheet \u2192 figures\nCheck: figures \u2192 flags\nWrite: checked figures \u2192 summary",
+      "Each part has a source and an output."
+    ],
+    [
+      "Run history: what actually happened",
+      "INSPECT THE RECORD",
+      "Brief \u2192 saved chat\nSource \u2192 attached file\nRun \u2192 status and artifacts\nCheck \u2192 finished or failed",
+      "A status is useful when you inspect its evidence."
+    ],
+    [
+      "Scheduled tasks: repeat without sending",
+      "WEEKLY DRAFT",
+      "When: Monday morning\nTask: prepare a report draft\nReview: named owner\nRelease: separate decision",
+      "Verify the actual configured schedule and permissions."
+    ],
+    [
+      "Approvals: the checkpoint before anything goes out",
+      "REVIEW CHECKPOINT",
+      "Read the exact draft\nCompare every figure\nReturn the wrong line\nRecord the decision",
+      "The person approving reads the work."
+    ],
+    [
+      "Momo Daily and Academy",
+      "STAFF LEARNING",
+      "Momo Daily \u2192 daily staff view\nAcademy \u2192 work lessons\nPractice \u2192 checked exercise\nLive work \u2192 normal review",
+      "Use lessons to build a repeatable work habit."
+    ],
+    [
+      "Desktop and mobile",
+      "SAME SAVED WORK",
+      "Desktop \u2192 prepare the brief\nSaved chat \u2192 one record\nPhone \u2192 read status and draft\nNext action \u2192 same owner",
+      "Reopen the record instead of copying the task."
+    ],
+    [
+      "Proposed inbox: not built yet",
+      "INBOX STATUS",
+      "Current \u2192 run history\nCurrent \u2192 approval controls\nProposed \u2192 gathered exceptions\nVerify \u2192 your actual account",
+      "Use only the features that are available today."
+    ],
+    [
+      "Closing: the checked draft and your try",
+      "YOUR FIRST TRY",
+      "Attach your practice sheet\nPrepare a draft only\nOpen the run and output\nAsk a reviewer to compare",
+      "A checked draft is the first useful result."
+    ]
+  ],
+  "01-ai-at-work": [
+    [
+      "From request to checked work",
+      "WORK PATH",
+      "Request \u2192 model\nContext \u2192 tools\nSaved work \u2192 review\nIndependent check \u2192 accept",
+      "Every stage changes what you can trust."
+    ],
+    [
+      "What a model does and doesn't do",
+      "MODEL JOB",
+      "Draft a summary\nCompare supplied rows\nFlag missing figures\nLeave decisions with the owner",
+      "Fluent writing still needs source evidence."
+    ],
+    [
+      "Context: what the model is allowed to see",
+      "CONTEXT PACKET",
+      "Brief: weekly report\nSheet: weekly.csv\nNotes: practice-notes.txt\nMissing source: say missing",
+      "A model cannot use a source it was never given."
+    ],
+    [
+      "Tools: connected and scoped",
+      "ACCESS TABLE",
+      "Weekly sheet: verify connection\nClient scope: verify match\nOther account: exclude\nMissing access: name the gap",
+      "Check the connection and scope before the job."
+    ],
+    [
+      "Memory: what's saved",
+      "SAVED RECORDS",
+      "Chat \u2192 brief and follow-up\nFile \u2192 supplied evidence\nRun \u2192 status and outputs\nReopen \u2192 inspect the same record",
+      "Know what is saved and where it lives."
+    ],
+    [
+      "Step one: the sheet",
+      "SOURCE ROWS",
+      "Category \u2192 source row\nFigure \u2192 exact cell\nWindow \u2192 export dates\nBlank \u2192 keep missing",
+      "Missing is different from zero."
+    ],
+    [
+      "Step two: the draft",
+      "DRAFT WITH REFERENCES",
+      "Weekly figure \u2192 row reference\nSummary \u2192 checked source\nComparison \u2192 matching window\nUnsupported claim \u2192 remove",
+      "Write the conclusion the evidence supports."
+    ],
+    [
+      "Step three: the independent check",
+      "OUTSIDE CHECK",
+      "Draft figure \u2192 source figure\nMatch \u2192 keep\nDifference \u2192 investigate\nResolution \u2192 record reason",
+      "Compare the actual output to the source."
+    ],
+    [
+      "Approvals come last",
+      "REVIEW DECISION",
+      "Draft version \u2192 exact file\nReviewer \u2192 named person\nDecision \u2192 accept or return\nRelease \u2192 separate authorized action",
+      "The model does not sign off on its own work."
+    ],
+    [
+      "Roles: who does what",
+      "TEAM RESPONSIBILITY",
+      "Owner \u2192 defines done\nSpecialist \u2192 checks substance\nReviewer \u2192 accepts output\nConnection owner \u2192 scope",
+      "A handoff needs an accountable person."
+    ],
+    [
+      "Try this in Momo",
+      "TRY THE WORKFLOW",
+      "Input: sheet + brief\nOutput: saved report draft\nCheck: every figure\nProof: reviewer comparison",
+      "Start with one useful job you already do."
+    ]
+  ],
+  "02-momo-handoff": [
+    [
+      "Why handoffs break",
+      "BROKEN HANDOFF",
+      "Chat link: present\nSheet reference: missing\nChecking step: unfinished\nNext owner: unclear",
+      "Make the next person able to act."
+    ],
+    [
+      "The six fields",
+      "SIX FIELDS",
+      "Owner + sources\nTime range + files\nApproval status\nNext action",
+      "A short complete brief beats a long vague one."
+    ],
+    [
+      "Save the work where the next person can find it",
+      "SAVED WORK NOTE",
+      "Done: sheet read\nOpen: check draft\nSource: weekly.csv\nOwner: account manager",
+      "Record done and open in the same place."
+    ],
+    [
+      "Reopen on another surface",
+      "REOPEN AND CONFIRM",
+      "Same saved chat\nSame client and week\nSame attached sources\nSame next action",
+      "Confirm context on the second surface."
+    ],
+    [
+      "Inspect run status and artifacts",
+      "RUN AND ARTIFACTS",
+      "Extract \u2192 finished\nDraft \u2192 saved output\nCheck \u2192 unfinished\nSend \u2192 separate decision",
+      "Inspect the step status and the file."
+    ],
+    [
+      "Resume only what failed",
+      "RESUME THE FAILED PART",
+      "Succeeded extraction \u2192 keep\nFailed check \u2192 inspect\nRerun check \u2192 verify\nExternal action \u2192 reconcile first",
+      "A retry must not duplicate a real side effect."
+    ],
+    [
+      "The approval and the next action",
+      "NEXT OWNER",
+      "Approval: pending review\nReviewer: named owner\nNext action: compare figures\nDestination: saved draft",
+      "Put the decision beside the action."
+    ],
+    [
+      "What a clean handoff looks like",
+      "CLEAN HANDOFF",
+      "Input sheet \u2192 linked\nDraft file \u2192 linked\nFailed check \u2192 named\nNext owner \u2192 assigned",
+      "Let the receiver identify the next step."
+    ],
+    [
+      "Roles that pick up the work",
+      "ROLE PICKUP",
+      "Manager \u2192 dates and promises\nSpecialist \u2192 source and scope\nDeveloper \u2192 failed step\nReviewer \u2192 final output",
+      "Different roles need the same clear record."
+    ],
+    [
+      "Check your own handoff",
+      "SELF CHECK",
+      "Can they find the source?\nCan they see what failed?\nCan they name the next action?\nCan they verify the output?",
+      "The handoff must work without guessing."
+    ],
+    [
+      "Try this in Momo",
+      "TRY A HANDOFF",
+      "Send the saved record internally\nReceiver confirms client/week\nReceiver opens source and output\nRecord remaining questions",
+      "Judge the handoff by the receiver's pickup."
+    ]
+  ],
+  "03-terminal-work-stack": [
+    [
+      "What the terminal is for",
+      "PRACTICE FOLDER",
+      "academy-practice/\nnotes.txt\nweekly.csv\ncheck.py",
+      "Keep this exercise in an isolated folder."
+    ],
+    [
+      "Where you are: cwd and paths",
+      "WHERE AM I?",
+      "pwd\n./notes.txt\nAbsolute path \u2192 full location\nRelative path \u2192 current folder",
+      "Read the location before the command."
+    ],
+    [
+      "List and read first",
+      "READ FIRST",
+      "ls\nhead -n 5 notes.txt\nhead -n 3 weekly.csv\nRead the output before continuing",
+      "List and inspect the practice files."
+    ],
+    [
+      "Output and exit status",
+      "EXIT STATUS",
+      "python3 check.py\nRows: 3\nHeader present: yes\necho $? \u2192 0",
+      "Output explains what the exit code reports."
+    ],
+    [
+      "Run the small check",
+      "SMALL CHECK",
+      "Required header: campaign\nRows read: 3\nMissing header \u2192 nonzero exit\nFix the input, then rerun",
+      "A failed check is a useful result."
+    ],
+    [
+      "Logs you can read later",
+      "KEEP A LOG",
+      "python3 check.py > check.log\nhead -n 5 check.log\n> replaces the practice log\n>> appends to the practice log",
+      "Use a new practice file when preserving evidence."
+    ],
+    [
+      "Developers go deeper",
+      "READ THE SCRIPT",
+      "Input: local practice CSV\nRead-only: open and inspect\nResult: printed checks\nNetwork/write lines: inspect",
+      "Understand the command's effect first."
+    ],
+    [
+      "How this fits your work stack",
+      "WORK STACK",
+      "Source file \u2192 terminal check\nTerminal result \u2192 run note\nRun note \u2192 Momo draft\nReviewer \u2192 compare to source",
+      "The terminal supplies evidence for the work."
+    ],
+    [
+      "What this lesson does not do",
+      "BOUNDARIES",
+      "No installs\nNo credentials\nNo permission changes\nNo live system commands",
+      "This exercise stays inside the practice folder."
+    ],
+    [
+      "Write down what you saw",
+      "RUN NOTE",
+      "Folder: academy-practice\nCommand: python3 check.py\nResult: header present\nExit status: 0",
+      "Record the command and what it actually did."
+    ],
+    [
+      "Try this in Momo",
+      "TRY AND COMPARE",
+      "Run the local check\nPaste the run note into Momo\nDraft a short summary\nReviewer reruns and compares",
+      "A second run is stronger than a confident sentence."
+    ]
+  ],
+  "04-account-client-success": [
+    [
+      "Who this is for",
+      "ACCOUNT WORK",
+      "Weekly report\nClient reply draft\nProject handoff\nSample Dental Group",
+      "Managers turn source records into clear next actions."
+    ],
+    [
+      "What MomoBot already holds",
+      "WORKSPACE CONTEXT",
+      "Saved chat \u2192 client brief\nRun \u2192 status and outputs\nFiles \u2192 current sources\nMode \u2192 response style",
+      "Response style does not grant account access."
+    ],
+    [
+      "Gather the sources",
+      "SOURCE CHECKLIST",
+      "KPI export + promise list\nProject plan + risk log\nCustomer question\nExact report link",
+      "Give each source its date and location."
+    ],
+    [
+      "Reconcile the KPIs",
+      "RECONCILE FIGURES",
+      "Report figure \u2192 export figure\nExport date \u2192 report window\nDifference \u2192 reason\nMissing value \u2192 missing",
+      "Keep the explanation beside the mismatch."
+    ],
+    [
+      "Promises and dates",
+      "PROMISE REGISTER",
+      "Promise \u2192 source document\nOwner \u2192 accountable role\nDue date \u2192 confirmed date\nChange \u2192 dated record",
+      "Do not invent or silently move a commitment."
+    ],
+    [
+      "Owners and risk",
+      "RISK REGISTER",
+      "Risk \u2192 specific issue\nOwner \u2192 one person\nNext check \u2192 date\nEvidence \u2192 linked source",
+      "A risk with no owner stays open."
+    ],
+    [
+      "Next action and handoff",
+      "HANDOFF RECORD",
+      "Next action \u2192 exact task\nOwner \u2192 named role\nDate \u2192 confirmed deadline\nOpen items \u2192 source links",
+      "Make the next step easy to pick up."
+    ],
+    [
+      "Draft the client reply",
+      "CLIENT REPLY DRAFT",
+      "Answer the actual question\nUse checked figures\nPreserve open items\nStatus: pending review",
+      "Draft a useful response without promising new work."
+    ],
+    [
+      "Judge the work",
+      "ACCEPTANCE CHECK",
+      "Figures match source\nPromises have dates\nOwners are clear\nReport URL is exact",
+      "The reviewer checks what the client will receive."
+    ],
+    [
+      "Approval, not sending",
+      "REVIEW STATUS",
+      "Draft file \u2192 exact version\nApprover \u2192 named owner\nDecision \u2192 pending\nSend \u2192 no action yet",
+      "An approval request is different from a sent reply."
+    ],
+    [
+      "Try this in Momo",
+      "TRY THE ACCOUNT PACKET",
+      "Input: export + promises\nQuestion: supplied customer ask\nOutput: report + reply draft\nCheck: outside reviewer",
+      "Judge the packet against the actual source records."
+    ]
+  ],
+  "05-sales-outbound": [
+    [
+      "Who this is for",
+      "SALES PACKET",
+      "Verified prospect brief\nSource-backed audit\nDiscovery questions\nPitch + CRM next action",
+      "Start with a real finding you can show."
+    ],
+    [
+      "Who owns each step",
+      "SALES OWNERS",
+      "Director \u2192 direction\nManager \u2192 quality\nRepresentative \u2192 next action\nOutbound \u2192 contact log",
+      "Name who owns each step."
+    ],
+    [
+      "Ownership and ledger first",
+      "OWNERSHIP AND DEDUPE",
+      "Owning representative\nSender ledger one\nSender ledger two\nConflict \u2192 hold contact",
+      "Check all sender records before outreach."
+    ],
+    [
+      "Source-backed audit",
+      "AUDIT EVIDENCE",
+      "Finding \u2192 exact source line\nSource \u2192 captured page\nDate \u2192 capture date\nInference \u2192 label separately",
+      "A pitch starts with a defensible observation."
+    ],
+    [
+      "The verified brief",
+      "PROSPECT BRIEF",
+      "Confirmed \u2192 source-backed\nInferred \u2192 clearly marked\nUnknown \u2192 question\nDate \u2192 evidence age",
+      "Separate what you know from what you think."
+    ],
+    [
+      "Discovery questions",
+      "DISCOVERY QUESTIONS",
+      "Question \u2192 linked finding\nPurpose \u2192 clarify the gap\nAnswer \u2192 prospect's words\nUnknown \u2192 keep open",
+      "Use questions to test the brief."
+    ],
+    [
+      "Pitch draft",
+      "PITCH DRAFT",
+      "One verified finding\nOne relevant service\nOne easy next step\nStatus: draft",
+      "Do not invent a price, promise or guarantee."
+    ],
+    [
+      "Judge the brief",
+      "MANAGER REVIEW",
+      "Identity matches source\nFinding matches evidence\nClaims stay supported\nAccepted date is recorded",
+      "Judge the brief before approving contact."
+    ],
+    [
+      "One CRM next action",
+      "CRM NEXT ACTION",
+      "Owner \u2192 representative\nDue date \u2192 confirmed\nChannel \u2192 exact destination\nNote \u2192 one next step",
+      "Verify the CRM connection before claiming a write."
+    ],
+    [
+      "Approval before contact",
+      "CONTACT DECISION",
+      "Outreach draft \u2192 review\nRecipient \u2192 verified\nDuplicate check \u2192 current\nSpend \u2192 separate decision",
+      "Contact only through the authorized action."
+    ],
+    [
+      "Try this in Momo",
+      "TRY THE PROSPECT PACKET",
+      "Input: captured public page\nInput: contact ledger export\nOutput: brief + questions\nCheck: sales reviewer",
+      "Use a synthetic prospect in the exercise."
+    ]
+  ],
+  "06-360-operations": [
+    [
+      "Why shoot coordination goes wrong",
+      "SHOOT PACKET",
+      "Practice: Sample Dental Group\nIntake: complete or missing\nPhotographer: requested\nConfirmation: pending",
+      "Requested availability is not a booked shoot."
+    ],
+    [
+      "Start with the intake",
+      "INTAKE FIELDS",
+      "Street address + entrance\nOn-site contact + backup\nAccess window + timezone\nRooms + scope",
+      "A blank access field is a real gap."
+    ],
+    [
+      "Check the access contact",
+      "ACCESS READBACK",
+      "Contact \u2192 supplied number\nBackup \u2192 supplied contact\nWindow \u2192 written reply\nConfirmation date \u2192 source",
+      "Verify someone can open the location."
+    ],
+    [
+      "Photographer and availability",
+      "PHOTOGRAPHER REQUEST",
+      "Date + local window\nRooms + capture needs\nEquipment requirements\nStatus: requested",
+      "Record the actual availability reply."
+    ],
+    [
+      "Set the time zone",
+      "TIMEZONE CHECK",
+      "Client: 09:00\u201311:00 Eastern\nPhotographer: 08:00\u201310:00 Central\nSame two-hour window\nConfirm the date and location",
+      "Match the actual timezone on the shoot date."
+    ],
+    [
+      "Scope the deliverables",
+      "DELIVERABLE SCOPE",
+      "Item \u2192 agreed deliverable\nCount \u2192 source packet\nFormat \u2192 requested file\nFloor plan \u2192 confirmation pending",
+      "Keep scope separate from assumptions."
+    ],
+    [
+      "Build the editing handoff",
+      "EDITING HANDOFF",
+      "Room order \u2192 capture list\nFilename \u2192 source asset\nRights \u2192 owned or licensed\nGap \u2192 missing record",
+      "The editor needs usable files and context."
+    ],
+    [
+      "Draft the confirmation",
+      "CONFIRMATION DRAFT",
+      "Client's local window\nAddress and access contact\nConfirmed scope\nStatus: pending approval",
+      "Use the verified packet in the message."
+    ],
+    [
+      "Acceptance and readback",
+      "PACKET CHECK",
+      "Intake \u2192 packet line\nMatch \u2192 keep\nMismatch \u2192 resolve\nConfirmation \u2192 read back",
+      "Compare each detail before the shoot."
+    ],
+    [
+      "Try this in Momo",
+      "TRY THE SHOOT PACKET",
+      "Add a backup contact\nPrepare the packet\nDraft the confirmation\nHuman confirms availability",
+      "A useful packet leaves no access guessing."
+    ]
+  ],
+  "07-editing-design": [
+    [
+      "Organize before you cut",
+      "PROJECT INPUTS",
+      "brief.txt\nclips/\nmusic/\nlicenses/",
+      "Organize sources before opening the timeline."
+    ],
+    [
+      "Build the asset manifest",
+      "ASSET MANIFEST",
+      "Filename \u2192 asset identity\nDuration \u2192 actual media\nRights \u2192 owned/licensed/missing\nScene \u2192 intended use",
+      "Flag duplicates and missing rights."
+    ],
+    [
+      "Write the cut plan",
+      "45-SECOND CUT PLAN",
+      "00:00\u201300:05 \u2192 opening\n00:05\u201300:20 \u2192 spaces\n00:20\u201300:38 \u2192 key details\n00:38\u201300:45 \u2192 close",
+      "Check the beat lengths against the brief."
+    ],
+    [
+      "Judge the picture and color",
+      "PICTURE REVIEW",
+      "00:12 \u2192 reception exposure\nChair color \u2192 source reference\nCrop \u2192 intended format\nNote \u2192 exact timecode",
+      "A specialist judges the actual picture."
+    ],
+    [
+      "Judge the audio",
+      "AUDIO REVIEW",
+      "Voice \u2192 clear\nMusic \u2192 below voice\nPeaks \u2192 checked\nLicense \u2192 linked file",
+      "Listen to the export, not only the timeline."
+    ],
+    [
+      "Set up the review versions",
+      "VERSION LOG",
+      "v01 \u2192 first review\nv02 \u2192 addressed notes\nRequest \u2192 named reviewer\nOpen/closed \u2192 each note",
+      "Keep the original and a clear change record."
+    ],
+    [
+      "Check permissions and technical QA",
+      "EXPORT QA",
+      "Format + resolution\nFrame rate + audio channels\nCaption file + sync\nRelease record + shot list",
+      "Check permissions and actual media properties."
+    ],
+    [
+      "Draft the delivery note",
+      "DELIVERY DRAFT",
+      "Final version name\nRuntime + format\nCaption filename\nOpen rights items",
+      "Point the reviewer to the exact export."
+    ],
+    [
+      "Acceptance check for the cut",
+      "ACCEPT THE CUT",
+      "Matches the brief\nPicture and audio checked\nRights complete\nOpen notes resolved",
+      "Craft quality still needs a specialist."
+    ],
+    [
+      "Try this in Momo",
+      "TRY THE EDITING PACKET",
+      "Six practice clip names\nOne music filename\nAsset manifest + cut plan\nReviewer compares to brief",
+      "Use Momo for organization and a clear review."
+    ]
+  ],
+  "08-web-development": [
+    [
+      "Who this is for",
+      "STAGING REQUEST",
+      "Synthetic practice brief\nTarget: staging form\nScope: requested fix\nLive release: separate step",
+      "Keep the request attached to the work."
+    ],
+    [
+      "Scope the branch",
+      "SCOPED BRANCH",
+      "Repository \u2192 verified connection\nBranch \u2192 short-lived fix\nScope \u2192 one issue\nDone \u2192 reproducible check",
+      "Name the repository and the boundary."
+    ],
+    [
+      "Reproduce first",
+      "REPRODUCE",
+      "Open staging page\nSet viewport to 390\nRecord the failing step\nSave screenshot and result",
+      "Show the bug before changing code."
+    ],
+    [
+      "Make the small fix",
+      "SMALL DIFF",
+      "Requested behavior \u2192 fix\nTouched lines \u2192 explain\nUnrelated code \u2192 preserve\nCheck \u2192 reproduce again",
+      "Make the smallest change that solves the issue."
+    ],
+    [
+      "Check assets and logo",
+      "ASSET RECORD",
+      "Logo \u2192 transparent original\nPhoto \u2192 licensed source\nRights \u2192 linked record\nMissing asset \u2192 name the gap",
+      "Check real assets before release."
+    ],
+    [
+      "QA at three widths",
+      "THREE WIDTHS",
+      "390 \u2192 phone\n768 \u2192 tablet\n1440 \u2192 desktop\nOverflow + form + hero \u2192 inspect",
+      "Judge phone behavior first."
+    ],
+    [
+      "Check the form destination",
+      "FORM READBACK",
+      "Synthetic test entry\nMapped fields \u2192 expected values\nConfirmation \u2192 exact message\nDestination \u2192 actual received row",
+      "A success screen alone does not prove delivery."
+    ],
+    [
+      "Review",
+      "INDEPENDENT REVIEW",
+      "Diff \u2192 reviewer\nFinding \u2192 reproduce\nFix \u2192 rerun check\nHistory \u2192 preserve earlier attempt",
+      "The author does not approve the same change."
+    ],
+    [
+      "Approved release",
+      "RELEASE REQUEST",
+      "Exact reviewed diff\nThree viewport screenshots\nDestination test result\nApprover \u2192 pending",
+      "Attach concrete evidence to the release decision."
+    ],
+    [
+      "Read the run record",
+      "WORK RECORD",
+      "Scope + reproduction\nDiff + screenshots\nForm destination result\nApproval status",
+      "Anyone should be able to inspect what changed."
+    ],
+    [
+      "Try this in Momo",
+      "TRY THE STAGING FIX",
+      "Use a practice request\nReproduce at 390\nVerify synthetic form entry\nReviewer compares result",
+      "Stop before an unapproved production release."
+    ]
+  ],
+  "09-seo-local-ai": [
+    [
+      "Who this is for",
+      "AUDIT OWNERS",
+      "Technical SEO\nLocal and GBP\nContent and web SEO\nAccount review",
+      "Each section has an accountable specialist."
+    ],
+    [
+      "Source inventory",
+      "SOURCE INVENTORY",
+      "Search Console \u2192 verify scope\nCrawl \u2192 dated export\nGBP \u2192 verified profile\nMissing source \u2192 missing",
+      "Missing is different from no traffic."
+    ],
+    [
+      "Search Console dates",
+      "COMPARABLE WINDOWS",
+      "Current window \u2192 exact dates\nComparison \u2192 matching length\nTimezone \u2192 export setting\nSource \u2192 Search Console",
+      "Dates are part of the evidence."
+    ],
+    [
+      "Crawl evidence",
+      "CRAWL FINDINGS",
+      "Status code \u2192 source URL\nNoindex \u2192 exact page\nCount \u2192 filtered export\nExample \u2192 linked row",
+      "Make the issue reproducible."
+    ],
+    [
+      "GBP consistency",
+      "LOCAL CONSISTENCY",
+      "Name + address\nPhone + hours\nCategory \u2192 profile\nSite footer \u2192 compare",
+      "Check the same business across sources."
+    ],
+    [
+      "Measured AI answers",
+      "AI ANSWER LOG",
+      "Question \u2192 exact wording\nDate + location setting\nAnswer \u2192 saved text\nPractice named \u2192 yes/no",
+      "Record repeat observations separately."
+    ],
+    [
+      "Evidence rows",
+      "EVIDENCE ROW",
+      "Finding \u2192 exact source\nSource row \u2192 link\nSupport \u2192 observed detail\nUnsupported \u2192 open question",
+      "Every recommendation needs evidence."
+    ],
+    [
+      "Ranked fixes",
+      "RANKED FIXES",
+      "Evidence strength\nEffort + owner\nDue date + source row\nAcceptance check",
+      "Prioritize work that can be checked."
+    ],
+    [
+      "Judge acceptance",
+      "AUDIT REVIEW",
+      "Same dates and scope\nFinding matches source\nNo missing-as-zero claim\nReturned row \u2192 correction",
+      "An outside check tests the actual audit."
+    ],
+    [
+      "Client summary and approval",
+      "CLIENT SUMMARY DRAFT",
+      "Supported findings\nPrioritized next work\nExact report link\nApproval \u2192 pending",
+      "Promise work, not rankings or placement."
+    ],
+    [
+      "Try this in Momo",
+      "TRY THE AUDIT",
+      "Practice GSC export\nPractice profile details\nAudit evidence table\nSpecialist comparison",
+      "Compare every claim to the same source window."
+    ]
+  ],
+  "10-paid-media": [
+    [
+      "Who this is for",
+      "READ-ONLY ANALYSIS",
+      "Synthetic campaign export\nSynthetic CRM export\nNo live account changes\nProposal \u2192 review",
+      "Start with evidence before a budget decision."
+    ],
+    [
+      "Synthetic ad export",
+      "PLATFORM EXPORT",
+      "Campaign + day\nClicks + spend\nPlatform conversions\nConversion action name",
+      "Name what the platform is counting."
+    ],
+    [
+      "CRM lead export",
+      "CRM EXPORT",
+      "Created date\nSource field\nLead status\nBlank source \u2192 separate",
+      "Keep contact details out of the practice table."
+    ],
+    [
+      "Date windows",
+      "MATCH WINDOWS",
+      "Same start and end dates\nSame timezone\nSettling period noted\nExport capture dates",
+      "Compare the same period before interpreting gaps."
+    ],
+    [
+      "Attribution",
+      "ATTRIBUTION",
+      "Platform \u2192 its model\nCRM \u2192 its source rule\nDifferent counts \u2192 expected gap\nReason \u2192 investigate",
+      "A platform conversion is not automatically a qualified lead."
+    ],
+    [
+      "Reconcile the funnel",
+      "FUNNEL RECONCILIATION",
+      "Clicks \u2192 platform conversions\nLeads \u2192 qualified leads\nCampaign \u2192 source join\nGap \u2192 reason code",
+      "Keep each funnel stage distinct."
+    ],
+    [
+      "Judge the reconciliation",
+      "CHECK THE TABLE",
+      "Tolerance set before reading\nEvery open gap explained\nMissing values preserved\nSource rows linked",
+      "Judge the reconciliation before the recommendation."
+    ],
+    [
+      "Analysis",
+      "SUPPORTED ANALYSIS",
+      "Observed pattern\nSupporting source rows\nUnknown cause\nQuestion to test",
+      "Separate the observation from the explanation."
+    ],
+    [
+      "Experiment proposal",
+      "EXPERIMENT PROPOSAL",
+      "Hypothesis + control\nRun length\nSpend cap\nStop rule",
+      "Prepare a bounded decision for the owner."
+    ],
+    [
+      "Approval, no live change",
+      "APPROVAL RECORD",
+      "Proposal \u2192 exact version\nCap \u2192 stated amount\nApprover \u2192 named person\nAccount change \u2192 none",
+      "A proposal does not authorize live spend."
+    ],
+    [
+      "Try this in Momo",
+      "TRY THE COMPARISON",
+      "Same-window platform export\nSame-window CRM export\nQualified count \u2192 compare\nReviewer \u2192 actual source",
+      "Use Momo to explain a checked funnel."
+    ]
+  ],
+  "11-content-social": [
+    [
+      "One brief, several channels",
+      "APPROVED BRIEF",
+      "Synthetic open house\nConfirmed event details\nApproved claims\nExact booking link",
+      "One factual source drives the channel drafts."
+    ],
+    [
+      "Write for each channel",
+      "CHANNEL VERSIONS",
+      "Social \u2192 short post\nWeb \u2192 supporting article\nEmail \u2192 direct invitation\nEach \u2192 own length and purpose",
+      "Adapt the writing without changing the facts."
+    ],
+    [
+      "Run the factual check",
+      "FACT CHECK",
+      "Sentence \u2192 brief line\nDate \u2192 confirmed source\nClaim \u2192 approved wording\nUnmatched \u2192 return",
+      "Every factual sentence needs support."
+    ],
+    [
+      "Check rights on every image",
+      "IMAGE RIGHTS",
+      "Asset \u2192 exact filename\nStatus \u2192 owned/licensed\nRecord \u2192 file link\nMissing \u2192 replace before release",
+      "Check every image in the post."
+    ],
+    [
+      "Alt text and captions",
+      "ACCESSIBLE CONTENT",
+      "Alt text \u2192 visible details\nCaption file \u2192 spoken words\nSync \u2192 actual playback\nImage \u2192 appropriate crop",
+      "Make the content usable in its channel."
+    ],
+    [
+      "Email and Slack drafts",
+      "MESSAGE DRAFTS",
+      "Email \u2192 verified recipient\nSlack \u2192 exact channel\nMentions \u2192 verified people\nFooter \u2192 none",
+      "Review the real destination before sending."
+    ],
+    [
+      "Review and the publishing request",
+      "PUBLISHING REQUEST",
+      "Channel + selected version\nOptional scheduled slot\nRights status\nApprover \u2192 pending",
+      "A prepared post is different from a published post."
+    ],
+    [
+      "Outreach with a contact log",
+      "CONTACT LOG",
+      "Handle \u2192 verified identity\nDraft date \u2192 recorded\nStatus \u2192 draft\nDuplicate contact \u2192 check",
+      "Keep outreach bounded and deduplicated."
+    ],
+    [
+      "Acceptance check for content",
+      "CONTENT REVIEW",
+      "Facts match brief\nRights are complete\nCaptions and alt text checked\nFailed line \u2192 return",
+      "Judge the exact version for the channel."
+    ],
+    [
+      "Try this in Momo",
+      "TRY THE CONTENT PACKET",
+      "Input: practice open house\nOutput: channel drafts\nOutput: publishing request\nReviewer compares to brief",
+      "Keep every practice output in draft status."
+    ]
+  ],
+  "12-leadership-ops": [
+    [
+      "Who this is for",
+      "WEEKLY LEADERSHIP READ",
+      "Accepted work\nAging promises\nBlockers and approvals\nRevenue + measured costs",
+      "Make the decisions visible with source dates."
+    ],
+    [
+      "Who owns what",
+      "DECISION OWNERS",
+      "Leadership \u2192 priorities\nOperations \u2192 handoffs\nSales \u2192 next revenue action\nSpecialists \u2192 accepted work",
+      "Assign a decision to the right person."
+    ],
+    [
+      "Accepted work",
+      "ACCEPTED WORK",
+      "Item \u2192 actual deliverable\nAccount \u2192 correct scope\nAcceptor \u2192 outside owner\nDate \u2192 acceptance record",
+      "Pending is different from accepted."
+    ],
+    [
+      "Aging promises",
+      "AGING PROMISES",
+      "Promise \u2192 original source\nAge \u2192 measured days\nOwner \u2192 accountable person\nUnowned \u2192 flag first",
+      "Find the promise that needs a decision."
+    ],
+    [
+      "Blockers and approvals",
+      "BLOCKERS AND APPROVALS",
+      "Blocker \u2192 clearing action\nAction \u2192 owner\nApproval \u2192 decision owner\nWaiting time \u2192 measured",
+      "Name what changes the state."
+    ],
+    [
+      "Revenue and retainer truth",
+      "BILLING TRUTH",
+      "Revenue \u2192 billing export\nRetainer \u2192 current agreement\nSource date \u2192 recorded\nAbsent figure \u2192 missing",
+      "Verify revenue through the billing record."
+    ],
+    [
+      "Ad spend and measured cost",
+      "COST TRUTH",
+      "Ad spend \u2192 platform export\nRevenue \u2192 separate block\nModel cost \u2192 measured receipt\nUnmeasured \u2192 say unmeasured",
+      "Do not substitute spend for revenue."
+    ],
+    [
+      "Delegate one bounded outcome",
+      "BOUNDED DELEGATION",
+      "Outcome \u2192 one deliverable\nOwner + due date\nAcceptance rule \u2192 runnable\nAcceptor \u2192 another person",
+      "Delegate a result someone else can check."
+    ],
+    [
+      "Judge the read",
+      "JUDGE THE READ",
+      "Sources dated\nPending separated\nNumbers reconciled\nGaps shown at the top",
+      "A useful read changes a real decision."
+    ],
+    [
+      "Approval and spend limits",
+      "SPEND DECISION",
+      "Exact proposal\nStated cap\nNamed approver\nRecorded outcome",
+      "Review consequential changes before they run."
+    ],
+    [
+      "Try this in Momo",
+      "TRY THE WEEKLY READ",
+      "Input: five practice exports\nOutput: one clear read\nCheck: source comparisons\nAcceptance: operations owner",
+      "Measure the work that was actually accepted."
+    ]
+  ],
+  "13-crm-automation-admin": [
+    [
+      "Why lead intake breaks",
+      "LEAD PATH",
+      "Intake \u2192 dedupe\nOwner \u2192 paused automation\nTest event \u2192 readback\nHandoff \u2192 named owner",
+      "Keep one clean record through the workflow."
+    ],
+    [
+      "Intake to one clean record",
+      "CLEAN INTAKE",
+      "Name + email + phone\nSource + consent flag\nRequired field \u2192 check\nDuplicate key \u2192 search",
+      "Missing required data stays visible."
+    ],
+    [
+      "Assign the owner",
+      "OWNER RULE",
+      "Roster \u2192 source rule\nOwner field \u2192 read back\nMissing rule \u2192 wait\nAssignment \u2192 recorded",
+      "Do not guess who owns the lead."
+    ],
+    [
+      "Confirm the automation is paused",
+      "PAUSED WORKFLOW",
+      "Status \u2192 paused\nFirst message \u2192 inspect\nAudience \u2192 test contact\nLive action \u2192 separate decision",
+      "Verify the state in the actual CRM."
+    ],
+    [
+      "Run a test event, not a live message",
+      "TEST EVENT",
+      "Practice contact only\nExpected tag\nExpected owner and source\nEvent log \u2192 inspect",
+      "Test the mapping without messaging a real lead."
+    ],
+    [
+      "Readback and compare",
+      "READBACK TABLE",
+      "Intake value \u2192 record value\nConsent \u2192 preserved\nOwner and tag \u2192 expected\nMismatch \u2192 flag",
+      "Read the destination after the write."
+    ],
+    [
+      "Retries without double sends",
+      "RETRY BEHAVIOR",
+      "Same lead key\nRepeated request\nExpected \u2192 one record\nProvider support \u2192 verify",
+      "Never assume duplicate protection exists."
+    ],
+    [
+      "The account support handoff",
+      "SUPPORT HANDOFF",
+      "Record link + owner\nSource + test result\nPaused status\nMissing fields + do-not-do",
+      "The next person needs the actual state."
+    ],
+    [
+      "The virtual assistant pass",
+      "ASSISTANT CHECKLIST",
+      "Known source \u2192 proceed\nMissing field \u2192 record\nNew scope \u2192 stop\nNew login \u2192 authorized route",
+      "Keep the task inside the agreed access."
+    ],
+    [
+      "Try this in Momo",
+      "TRY THE CRM PACKET",
+      "Synthetic intake\nRecord summary\nReadback comparison\nHuman checks actual CRM",
+      "Judge the destination, not the drafted summary."
+    ]
+  ],
+  "14-week-by-week": [
+    [
+      "Improvement in small weeks",
+      "FOUR-WEEK PATH",
+      "Week 1 \u2192 baseline\nWeek 2 \u2192 reusable brief\nWeek 3 \u2192 read-only source\nWeek 4 \u2192 paused workflow",
+      "Add one checked habit at a time."
+    ],
+    [
+      "Week one: the baseline",
+      "WEEK 1 BASELINE",
+      "Job name\nSource locations\nMeasured start and finish\nReview time included",
+      "Record how the work is done today."
+    ],
+    [
+      "Week one exercise and proof",
+      "WEEK 1 PROOF",
+      "Saved chat\nRun record\nBaseline note\nReviewer comparison",
+      "Keep a small bundle someone can inspect."
+    ],
+    [
+      "Week two: reusable brief and working context",
+      "WEEK 2 BRIEF",
+      "Owner + sources\nTime range + files\nApproval + next action\nStanding context \u2192 scoped",
+      "Reuse a complete brief, not a vague prompt."
+    ],
+    [
+      "Week two exercise and proof",
+      "WEEK 2 COMPARISON",
+      "Run one \u2192 correction list\nRun two \u2192 correction list\nSame job and sources\nCount actual fixes",
+      "Improvement means less correction on comparable work."
+    ],
+    [
+      "Week three: one read-only source",
+      "WEEK 3 CONNECTION",
+      "One read-only source\nConnection \u2192 verified\nClient scope \u2192 matched\nAccess gap \u2192 recorded",
+      "Add a connection only after the workflow is clear."
+    ],
+    [
+      "Week three exercise and proof",
+      "WEEK 3 PROOF",
+      "Week 2 draft\nWeek 3 draft\nChanged figures \u2192 source rows\nReviewer \u2192 compare",
+      "Verify what the new source actually changed."
+    ],
+    [
+      "Week four: the paused workflow",
+      "WEEK 4 WORKFLOW",
+      "Repeatable draft job\nStatus \u2192 paused\nOutputs \u2192 run record\nApprover \u2192 named owner",
+      "Prepare the workflow before allowing it to run."
+    ],
+    [
+      "Week four exercise and outside check",
+      "WEEK 4 OUTSIDE CHECK",
+      "Three draft references\nIndependent verdict\nDecision log\nKeep / revise / stop",
+      "A schedule needs evidence and a real decision."
+    ],
+    [
+      "Each role's part",
+      "TEAM RESPONSIBILITIES",
+      "Owner \u2192 brief\nSpecialist \u2192 source check\nManager \u2192 handoff\nApprover \u2192 final decision",
+      "Each week ends with an accountable review."
+    ],
+    [
+      "Try this in Momo",
+      "TRY YOUR FOUR WEEKS",
+      "Source list\nBaseline minutes\nWeekly proof bundle\nSummary \u2192 claims checked",
+      "Use real measured work to choose the next habit."
+    ]
+  ],
+  "15-month-by-month": [
+    [
+      "AI as your operating driver",
+      "MONTHLY LOOP",
+      "Measure \u2192 compare\nKeep \u2192 improve\nRetire \u2192 failed work\nHuman \u2192 decision",
+      "AI improves work through measured repetition."
+    ],
+    [
+      "Month one: one reliable workflow",
+      "MONTH 1 WORKFLOW",
+      "One repeatable job\nMinutes before AI\nDraft run minutes\nReview and correction minutes",
+      "Measure the complete cost of accepted work."
+    ],
+    [
+      "Month one exercise and acceptance",
+      "MONTH 1 ACCEPTANCE",
+      "Draft \u2192 accepted/returned\nReviewer \u2192 outside owner\nSource comparison \u2192 saved\nLog \u2192 actual outcome",
+      "A fast rejected draft is still rejected."
+    ],
+    [
+      "Month two: context and handoffs",
+      "MONTH 2 HANDOFF",
+      "Shared brief\nRole-specific source access\nReceiver \u2192 confirm context\nMissing access \u2192 stop",
+      "Make team pickup reliable before scaling."
+    ],
+    [
+      "Month two exercise and handoff time",
+      "MONTH 2 MEASUREMENT",
+      "Sender + receiver\nPickup time\nQuestions needed\nApproval step confirmed",
+      "Judge the handoff through the receiver's work."
+    ],
+    [
+      "Month three: a measured queue",
+      "MONTH 3 QUEUE",
+      "Reviewed workflow rows\nManual exceptions\nCurrent run records\nProposed inbox \u2192 future",
+      "Use only the controls that actually exist."
+    ],
+    [
+      "Month three exercise and retirement",
+      "MONTH 3 COMPARISON",
+      "Accepted count\nReturned count\nMinutes including review\nRetire list",
+      "Keep useful workflows and retire failures."
+    ],
+    [
+      "The monthly review",
+      "MONTHLY REVIEW",
+      "This month \u2192 same job\nLast month \u2192 comparable source\nChange \u2192 measured result\nDecision \u2192 one per workflow",
+      "Do not turn anecdotes into a trend."
+    ],
+    [
+      "Each role's part in the plan",
+      "ROLE RESPONSIBILITY",
+      "Owner \u2192 context\nManager \u2192 handoff\nSpecialist \u2192 quality\nDeveloper \u2192 bounded implementation",
+      "Consequential decisions keep an accountable person."
+    ],
+    [
+      "The proof you keep",
+      "PROOF SHEET",
+      "Source date\nAccepted output\nTime + measured cost\nUnavailable figure \u2192 missing",
+      "Keep enough evidence to test the claim."
+    ],
+    [
+      "Try this in Momo",
+      "TRY THE MONTHLY ROW",
+      "Baseline minutes\nAccepted practice draft\nSource list\nReviewer sign-off",
+      "Make the next improvement from the actual result."
+    ]
+  ]
+}

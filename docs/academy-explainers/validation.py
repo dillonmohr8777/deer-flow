@@ -3,17 +3,23 @@ import hashlib
 import json
 import math
 import re
+import os
+import tempfile
 
 
 def atomic_json(path, value):
-    temporary = path.with_suffix(path.suffix + '.pending')
-    temporary.write_text(json.dumps(value, indent=2))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(mode='w', dir=path.parent, prefix=path.name + '.', suffix='.pending', delete=False) as stream:
+        temporary = type(path)(stream.name)
+        json.dump(value, stream, indent=2)
+        stream.flush()
+        os.fsync(stream.fileno())
     temporary.replace(path)
 
 
 def fingerprints(directory):
     return {name: hashlib.sha256((directory / name).read_bytes()).hexdigest()
-            for name in ('narration.wav', 'lesson.json', 'asr.json')}
+            for name in ('narration.wav', 'lesson.json', 'asr.json', 'generation.json', 'timing.json')}
 
 
 def timing_errors(asr, duration):
@@ -42,9 +48,16 @@ def timing_errors(asr, duration):
 
 
 def require_approved(directory):
+    from contract import require_course, duration_ok
+    require_course(directory)
+    assert not (directory / 'ASR-RUNNING.json').exists(), 'ASR incomplete; resume the check'
     report = json.loads((directory / 'voice-check.json').read_text())
-    assert report['pass'], 'Voice review gate'
+    assert report.get('pass') is True, 'Narration review required; see voice-check.json'
     assert report.get('sha256') == fingerprints(directory), 'Voice receipt is stale'
+    if report.get('differences'):
+        judgment = json.loads((directory / 'audio-judgment.json').read_text())
+        assert judgment.get('accepted') is True and judgment.get('sha256') == report['sha256'] and judgment.get('differences') == report['differences'], 'Audio judgment is stale'
     lesson = json.loads((directory / 'lesson.json').read_text())
+    assert duration_ok(lesson), 'Narration duration gate'
     asr = json.loads((directory / 'asr.json').read_text())
     assert not timing_errors(asr, lesson['duration']), 'Caption timing gate'

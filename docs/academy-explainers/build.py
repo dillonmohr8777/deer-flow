@@ -3,8 +3,11 @@ import argparse
 import html
 import json
 import shutil
+import os
+import time
 from pathlib import Path
 from validation import require_approved
+from contract import duration_ok, require_course
 
 HERE = Path(__file__).parent
 STYLE = """
@@ -44,19 +47,28 @@ def timestamp(value, separator='.'):
     return f'{hours:02}:{minutes:02}:{seconds:02}{separator}{ms:03}'
 
 
-def captions(asr):
+def captions(asr, lesson=None):
     words = [w for segment in asr['segments'] for w in segment.get('words', [])]
     assert words, 'Word timestamps are required; do not invent caption timing.'
+    # Caption text follows the reviewed script while timing comes from ASR. Only
+    # use a one-to-one raw-word mapping; contractions can legitimately change it.
+    if lesson is not None:
+        import re
+        expected = re.findall(r'\S+', ' '.join(c['narration'] for c in lesson['chapters']))
+        if len(expected) == len(words):
+            words = [dict(word, word=text) for word, text in zip(words, expected)]
     return [dict(start=batch[0]['start'], end=batch[-1]['end'],
                  text=' '.join(w['word'].strip() for w in batch))
             for offset in range(0, len(words), 7) if (batch := words[offset:offset + 7])]
 
 
-def build(source, output, assets):
+def build(source, output, assets, burn_captions=False):
     lesson = json.loads(source.read_text())
-    assert 300 <= lesson['duration'] <= 360, lesson['duration']
+    assert duration_ok(lesson), lesson['duration']
     require_approved(source.parent)
-    project = output / source.parent.name
+    _, packet = require_course(source.parent)
+    stem = lesson['course_stem']
+    project = output / stem
     project.mkdir(parents=True, exist_ok=True)
     (project / 'compositions').mkdir(exist_ok=True)
     (project / 'assets').mkdir(exist_ok=True)
@@ -64,11 +76,15 @@ def build(source, output, assets):
         shutil.copy2(assets / name, project / 'assets' / name)
     if (assets / 'experience.png').exists():
         shutil.copy2(assets / 'experience.png', project / 'assets/experience.png')
-    shutil.copy2(source.parent / 'narration.wav', project / 'assets/narration.wav')
-    key = source.parent.name[:2]
-    visuals = json.loads((HERE / 'visuals.json').read_text())[key]
-    assert len(visuals) == len(lesson['chapters']) == 10
-    word_caps = captions(json.loads((source.parent / 'asr.json').read_text()))
+    audio_link = project / 'assets' / ('narration-' + str(time.time_ns()) + '.wav')
+    os.link(source.parent / 'narration.wav', audio_link)
+    audio_link.replace(project / 'assets/narration.wav')
+    key = stem[:2]
+    visuals = json.loads((HERE / 'work-visuals.json').read_text())[stem]
+    assert len(visuals) == len(lesson['chapters']), 'Chapter/visual mismatch'
+    chapter_total = len(lesson['chapters'])
+    course_total = packet.get('course_total', len(packet['lessons']))
+    word_caps = captions(json.loads((source.parent / 'asr.json').read_text()), lesson)
     vtt = ['WEBVTT', '']
     hosts, boards = [], []
     for index, (chapter, board) in enumerate(zip(lesson['chapters'], visuals)):
@@ -76,7 +92,7 @@ def build(source, output, assets):
         title, label, content, principle = board
         rows = content.splitlines()
         row_html = ''.join(f'<div class="row {"command" if key == "03" else ""}" id="{cid}-row-{j}">{escape(line)}</div>' for j, line in enumerate(rows))
-        if key == '02' and index == 2:
+        if board[1] == 'EXPERIENCE MODES':
             row_html = f'<div class="mode-example"><img class="shot" src="assets/experience.png" alt="Actual Easy, Medium and Hard experience settings"><div>{row_html}</div></div>'
         duration = chapter['duration']
         animation = [f'const tl=gsap.timeline({{paused:true}});']
@@ -89,7 +105,7 @@ def build(source, output, assets):
         frame = f'''<!doctype html><html><body><template>
 <style>#{cid}{{position:absolute;inset:0;width:100%;height:100%}}</style>
 <div id="{cid}" data-composition-id="{cid}" data-width="1920" data-height="1080" data-duration="{duration}">
-<section class="scene"><div class="layout"><div><p class="chapter-no">CHAPTER {index+1:02} / 10</p><h1 class="title">{escape(title)}</h1><p class="principle">{escape(principle)}</p></div>
+<section class="scene"><div class="layout"><div><p class="chapter-no">CHAPTER {index+1:02} / {chapter_total}</p><h1 class="title">{escape(title)}</h1><p class="principle">{escape(principle)}</p></div>
 <div class="board"><div class="board-label">{escape(label)}</div>{row_html}<div id="{cid}-bar" class="bar"></div></div></div></section></div>
 <script>{''.join(animation)}</script></template></body></html>'''
         (project / f'compositions/{cid}.html').write_text(frame)
@@ -105,8 +121,8 @@ def build(source, output, assets):
     document = f'''<!doctype html><html lang="en"><head><meta charset="UTF-8"><title>{escape(lesson["title"])}</title>
 <script src="assets/gsap.min.js"></script><style>{STYLE}</style></head><body>
 <div id="root" data-composition-id="main" data-width="1920" data-height="1080" data-duration="{duration}">
-<header class="header"><img class="logo" src="assets/momo-mark.svg" alt="MomoBot"><span class="brand">Momentum AI Academy</span><span class="lesson-no">LESSON {int(key)} / 7</span></header>
-{''.join(hosts)}{''.join(cap_html)}
+<header class="header"><img class="logo" src="assets/momo-mark.svg" alt="MomoBot"><span class="brand">Momentum Academy</span><span class="lesson-no">LESSON {int(key)+1} / {course_total}</span></header>
+{''.join(hosts)}{''.join(cap_html) if burn_captions else ''}
 <audio id="narration" class="clip" src="assets/narration.wav" data-start="0" data-duration="{duration}" data-track-index="1"></audio>
 <footer class="footer"><span>{escape(title)}</span><span>Dillon Mohr</span></footer></div>
 <script>const tl=gsap.timeline({{paused:true}});window.__timelines["main"]=tl;</script></body></html>'''
@@ -116,7 +132,8 @@ def build(source, output, assets):
     (project / 'captions.vtt').write_text('\n'.join(vtt))
     (project / 'transcript.txt').write_text('\n\n'.join(c['title'] + '\n' + c['narration'] for c in lesson['chapters']))
     (project / 'lesson.json').write_text(json.dumps(lesson, indent=2))
-    (project / 'BRIEF.md').write_text('---\nworkflow: general-video\nflow: automation\nstoryboard: no\n---\nFive to six minutes of useful instruction in Dillon\'s own voice; no music bed so the lesson stays easy to hear. Existing Momo brand assets, ten practical chapters, word-timed captions. Parent owns final integration.\n')
+    shutil.copy2(source.parent / 'generation.json', project / 'generation.json')
+    (project / 'BRIEF.md').write_text('---\nworkflow: general-video\nflow: automation\nstoryboard: no\n---\nFive to six minutes of useful instruction in Dillon\'s own voice; no music bed so the lesson stays easy to hear. Existing Momo brand assets, work examples, variable practical chapters, sidecar word-timed captions default off. Parent owns final integration.\n')
     (project / 'design.md').write_text('Existing Momentum tokens: deep #0E1417, onDeep #F4F1EC, signal #E27113. Lighter #F6A765 for readable accent text. Exact transparent Momo mark, existing Archivo headline and Nunito body files. Focal element: concrete teaching example; left edge: chapter/title; bottom: word-timed captions. Stepped highlight follows teaching beats. No decorative movement competing with commands.\n')
     print(project, round(duration, 3), 'seconds', len(word_caps), 'captions')
 
@@ -126,7 +143,8 @@ if __name__ == '__main__':
     parser.add_argument('voice', type=Path)
     parser.add_argument('output', type=Path)
     parser.add_argument('assets', type=Path)
+    parser.add_argument('--burn-captions', action='store_true')
     args = parser.parse_args()
-    for source in sorted(args.voice.glob('*/lesson.json')):
+    for source in sorted(args.voice.glob('*/*/lesson.json')):
         if (source.parent / 'asr.json').exists():
-            build(source, args.output, args.assets)
+            build(source, args.output, args.assets, args.burn_captions)

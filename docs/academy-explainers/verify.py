@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import time
 from validation import require_approved
+from contract import duration_ok, voice_directory, accepted_sources, sha
 
 
 def main():
@@ -18,7 +19,8 @@ def main():
     root, video = args.evidence, args.video
     name = video.stem
     project = root / 'projects' / name
-    voice = root / 'voice-sentences' / name
+    accepted_sources(root)
+    voice, _ = voice_directory(root, root / 'scripts' / (name + '.json'), root / 'ref.wav')
     require_approved(voice)
     lesson = json.loads((project / 'lesson.json').read_text())
     qa = root / 'qa' / (name + '-' + time.strftime('%H%M%S'))
@@ -28,7 +30,7 @@ def main():
     duration = float(probe['format']['duration'])
     visual = next(s for s in probe['streams'] if s['codec_type'] == 'video')
     audio = next(s for s in probe['streams'] if s['codec_type'] == 'audio')
-    assert 300 <= duration <= 360 and abs(duration - lesson['duration']) < .2
+    assert duration_ok(dict(lesson, duration=duration)) and abs(duration - lesson['duration']) < .2
     assert visual['width'] >= 1280 and visual['height'] >= 720 and audio['codec_name'] == 'aac'
     assert abs(float(audio['duration']) - lesson['duration']) < .2
     vtt = (project / 'captions.vtt').read_text()
@@ -53,9 +55,13 @@ def main():
         subprocess.run(['ffmpeg', '-v', 'error', '-ss', str(at), '-i', str(video), '-frames:v', '1', '-vf', 'scale=480:270', str(frame)], check=True)
         assert frame.stat().st_size > 5000
         frames.append(dict(chapter=index+1, title=chapter['title'], at=at, frame=frame.name))
-    subprocess.run(['ffmpeg', '-v', 'error', '-framerate', '1', '-i', str(qa / 'chapter-%02d.jpg'), '-vf', 'tile=2x5', '-frames:v', '1', str(qa / 'contact-sheet.jpg')], check=True)
+    subprocess.run(['ffmpeg', '-v', 'error', '-framerate', '1', '-i', str(qa / 'chapter-%02d.jpg'), '-vf', f'tile=2x{(len(frames)+1)//2}', '-frames:v', '1', str(qa / 'contact-sheet.jpg')], check=True)
     for source, suffix in [('captions.vtt', '.vtt'), ('transcript.txt', '.txt'), ('lesson.json', '.json')]:
         shutil.copy2(project / source, video.with_suffix(suffix))
+    shutil.copy2(qa / frames[0]['frame'], video.with_suffix('.jpg'))
+    exported = [video, video.with_suffix('.jpg'), video.with_suffix('.vtt'), video.with_suffix('.txt')]
+    manifest = dict(stem=name, duration=duration, files=[dict(name=item.name, bytes=item.stat().st_size, sha256=sha(item)) for item in exported])
+    (video.parent / (name + '-manifest.json')).write_text(json.dumps(manifest, indent=2))
     report = dict(video=str(video), duration=duration, width=visual['width'], height=visual['height'], fps=visual['r_frame_rate'], audio_codec=audio['codec_name'], mean_dbfs=mean, peak_dbfs=peak, captions=len(cues), chapters=frames, sha256=hashlib.sha256(video.read_bytes()).hexdigest(), voice_check=json.loads((voice/'voice-check.json').read_text()), passed=True)
     (qa / 'verification.json').write_text(json.dumps(report, indent=2))
     print(json.dumps({k: v for k, v in report.items() if k not in ('chapters', 'voice_check')}), flush=True)

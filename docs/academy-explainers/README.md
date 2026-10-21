@@ -1,23 +1,35 @@
-# MomoBot Academy teaching series
+# Momentum Academy work course
 
-Seven ten-chapter lessons, each with 5–6 minutes of Dillon-authorized own-voice narration, practical visual examples, independent ASR, and WebVTT captions. Keep these lessons separate from the short-film example library.
+The corrected course covers sixteen initial lessons: four foundations, ten work-role families and two growth lessons. A seventeenth client-communication module follows verified working portal UI. The platform tour is480–<600seconds; all other lessons are300–360seconds. These are work lessons with concrete synthetic records and exercises. The original seven generic lessons and their media remain held and preserved as engine evidence, never promoted as this course.
 
-## Reproduce
+`work-visuals.json` holds173 concrete teaching boards. The parent owns factual script acceptance, Academy UI/progress compatibility, private media hosting and production release. This branch owns only `docs/academy-explainers/`.
 
-Use the existing cached F5-TTS MLX environment on Apple Silicon, offline. The authorized voice reference is a protected local input and is intentionally not in Git. F5 0.2.6 on MLX 0.32.4 needs integer duration tensors in cfm.py: cast per-example dur with int(dur), and mx.full duration with dtype=mx.int32. No model downloads are required when caches exist.
+## Accepted inputs and production
 
-1. Read disk/RAM guard status. Synthesize one process only: `HF_HUB_OFFLINE=1 python synthesize.py scripts OUTPUT --ref AUTHORIZED_REF.wav`.
-2. `HF_HUB_OFFLINE=1 python transcribe.py OUTPUT`. Each voice-check binds audio, lesson, and ASR SHA-256. All lessons must be 300–360 seconds, coverage >=99.5%, alignment >=99%, with valid word timing. Review every mismatch; repair real lost words before promotion. Raw ASR and rejected audio remain in evidence.
-3. `python build.py OUTPUT PROJECTS ASSETS`. Assets require exact transparent Momo mark, Archivo Black, Nunito Sans, local GSAP, and the current verified Experience screenshot.
-4. Run HyperFrames 0.8.61 `check --snapshots` per project; inspect frames and preview before final render. Stream final MP4 on the Windows worker; do not create a full PNG frame set or render on the memory-constrained Mac.
-5. Probe all exports, compare actual durations, inspect sampled frames/audio and verify captions in the consuming HTML video player before publication. Parent session owns integration and destination acceptance.
+Use a new evidence root with `scripts/<exact-stem>.json`, protected `ref.wav`, exact brand `assets/`, and parent-written `SCRIPT-ACCEPTED.json`:
 
-## Checks
+```json
+{"accepted":true,"course":"momentum-work","course_total":16,"lessons":[{"stem":"04-account-client-success","sha256":"exact-script-file-sha256"}]}
+```
 
-`python -m unittest discover -s . -p 'test_*.py'`
+Partial acceptance may list fewer than the total course. It authorizes only the exact listed bytes. A missing acceptance file or `HOLD.json` stops generation before any model import. Old generic evidence remains separate.
 
-`python -m py_compile synthesize.py transcribe.py build.py validation.py`
+1. Read disk/RAM guard status and coordinate the existing storage owner. One model process only. The existing cached Apple Silicon environment uses F5-TTS MLX offline. `cpu-setup.ps1` is the separately authorized Windows CPU fallback setup, with a6GiB setup budget and10GiB free-space floor. No CUDA, purchases or concurrent CPU voice/render jobs.
+2. `HF_HUB_OFFLINE=1 EXISTING_PYTHON synthesize.py ROOT --only EXACT_STEM` generates immutable sentence versions. Source hash, authorized reference hash/transcript and synthesis settings determine a generation directory. WAV files and complete receipts publish atomically. Changed scripts or settings cannot inherit old chunks. Originals stay intact.
+3. `HF_HUB_OFFLINE=1 EXISTING_PYTHON transcribe.py GENERATION_DIRECTORY` preserves raw ASR, rejects incomplete timed-word tracks and reports every word difference. Missing negations, numbers and other protected instruction tokens cannot hide beneath a coverage tolerance. Actual omitted words require repair. Harmless ASR differences require a source-bound `audio-judgment.json` by an outside reviewer who listened; ASR does not prove speaker identity.
+4. Initial generation plus at most two targeted repair passes. Repairs write new versions and selection pointers, preserving originals and exact sampler/seed metadata. Interrupted checks retain their last complete receipt and an explicit incomplete marker that blocks promotion.
+5. `python build.py ROOT/voice-sentences ROOT/projects ROOT/assets` builds accepted compositions. Captions are sidecar WebVTT by default; `--burn-captions` is explicit. Variable chapter counts and actual accepted course total drive labels. Assets are exact transparent Momo mark, Archivo Black, Nunito Sans, local GSAP and inspected Experience screenshot.
+6. The finite `produce.py ROOT --python EXISTING_PYTHON` job stages only accepted exact stems to the sole PC queue. Its PID lock must be reconciled before a crashed run resumes. No new scheduler. Windows `render.ps1` rejects missing or mismatched projects before changing directories, checks HyperFrames, then exports4workers at15fps. The renderer's compressed capture scratch stays on PC; it is not a full PNG sequence or a claimed streaming path.
+7. `verify.py VIDEO --evidence ROOT` checks real duration and audio/video streams, decodes audio, checks levels/silence, validates captions, samples every chapter, exports a poster and writes MP4/JPG/VTT/TXT hashes. These checks complement actual voice/content/frame review. Parent independently spot-plays, verifies caption CORS/textTracks and integrates privately.
 
-Production evidence and media: `/Users/dillonmohr/Documents/Codex/2026-10-21/momobot-prod-readiness/academy-explainers/`.
+The complete production command is finite and stops at PC staging; parent release and consumer acceptance remain separate. A staged archive is never described as a finished MP4.
 
-No client material, new model download, paid generation, external messages, or hosting mutation is required by this source package. Narrations are generic personal examples; source scripts do not promise connectors or capabilities that have not been verified.
+## Focused checks
+
+`python -m unittest discover -s docs/academy-explainers -p 'test_*.py' -v`
+
+`python -m py_compile docs/academy-explainers/*.py`
+
+New evidence: `/Users/dillonmohr/Documents/Codex/2026-10-21/momobot-prod-readiness/academy-work/`.
+
+The authorized reference, narration, client data and model weights never enter Git. No public voice publication, Netlify deployment or external messages are part of this worker's scope.
