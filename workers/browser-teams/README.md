@@ -21,7 +21,7 @@ npm run check
 ```
 
 Backend CI installs all isolated workers in every duration-balanced shard using
-Python3.13 and Node24.21.0. Real framework tests still assert availability and
+Python3.13 and Node24.22.1. Real framework tests still assert availability and
 one admitted native relay; missing workers fail rather than being skipped.
 These tests use synthetic offline responses and never enable paid providers.
 ## Optional private container image
