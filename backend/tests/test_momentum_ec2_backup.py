@@ -39,6 +39,8 @@ def test_snapshot_roundtrip_and_credentials_excluded(tmp_path):
     deploy, stage = make_deploy(tmp_path)
     (deploy / "data/skills/.env").write_text("do-not-back-up")
     (deploy / "data/skills/private.env").write_text("do-not-back-up")
+    (deploy / "data/skills/.env.production").write_text("do-not-back-up")
+    (deploy / "data/skills/.env.local").write_text("do-not-back-up")
     module.snapshot(deploy, stage)
     with tarfile.open(stage / "ec2-mounts.tgz") as archive:
         names = archive.getnames()
@@ -65,5 +67,15 @@ def test_symlink_is_refused_instead_of_archiving_external_data(tmp_path):
     outside = tmp_path / "external-secret"
     outside.write_text("do-not-back-up")
     (deploy / "data/skills/link").symlink_to(outside)
+    with pytest.raises(ValueError, match="symlink"):
+        module.snapshot(deploy, stage)
+
+
+def test_symlinked_mount_ancestor_is_refused(tmp_path):
+    module = load_module()
+    deploy, stage = make_deploy(tmp_path)
+    outside = tmp_path / "external-data"
+    (deploy / "data").rename(outside)
+    (deploy / "data").symlink_to(outside, target_is_directory=True)
     with pytest.raises(ValueError, match="symlink"):
         module.snapshot(deploy, stage)

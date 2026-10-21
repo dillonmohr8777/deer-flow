@@ -28,10 +28,16 @@ def snapshot(deploy: Path, stage: Path) -> None:
     def keep(member: tarfile.TarInfo) -> tarfile.TarInfo | None:
         if member.issym() or member.islnk():
             raise ValueError(f"EC2 backup refuses symlink/hardlink: {member.name}")
-        return None if Path(member.name).name.endswith(".env") else member
+        name = Path(member.name).name
+        return None if name.endswith(".env") or name.startswith(".env.") else member
 
     with tarfile.open(stage / "ec2-mounts.tgz", "w:gz") as archive:
         for name in MOUNTS:
+            for parent in (deploy / name).parents:
+                if parent == deploy:
+                    break
+                if parent.is_symlink():
+                    raise ValueError(f"EC2 backup refuses symlink ancestor: {parent}")
             archive.add(deploy / name, arcname=name, filter=keep)
     getter = Path(__file__).resolve().parents[1] / "vps/dotenv-get.sh"
     settings = {}
