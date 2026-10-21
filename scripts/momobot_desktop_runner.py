@@ -9,7 +9,8 @@ to the client's folder, and reports the result through the fleet lease routes
 Environment (values are never printed):
     MOMOBOT_GATEWAY_URL      Gateway base URL, e.g. https://momobot.example.com
     MOMOBOT_HOST_KEY         X-DeerFlow-Internal-Token for this host
-    MOMOBOT_DELEGATION_ID    X-DeerFlow-Delegation-Id (an org delegation with fleet:work)
+    MOMOBOT_DELEGATION_ID    X-DeerFlow-Delegation-Id (an org delegation with fleet:work); comma-separate
+                             several to serve more than one workspace, each polled in turn
     MOMOBOT_RUNNER_CONFIG    JSON file (default ~/.momobot/desktop-runner.json):
                              {"clients": {"<client_id>": "/abs/client/folder"},
                               "allowed_tools": ["Read", "Grep", "Glob", "Edit", "Write"],
@@ -74,6 +75,13 @@ def in_quiet_hours() -> bool:
         return True
 
 
+_delegation: str | None = None  # the workspace being served; a lease's calls must stay on the delegation that claimed it
+
+
+def delegations() -> list[str]:
+    return [d.strip() for d in os.environ.get("MOMOBOT_DELEGATION_ID", "").split(",") if d.strip()] or [""]
+
+
 def api(method: str, path: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
     """Call the Gateway. Errors carry the status only, never headers or the key."""
     request = urllib.request.Request(
@@ -83,7 +91,7 @@ def api(method: str, path: str, body: dict[str, Any] | None = None) -> dict[str,
         headers={
             "Content-Type": "application/json",
             "X-DeerFlow-Internal-Token": os.environ["MOMOBOT_HOST_KEY"],
-            "X-DeerFlow-Delegation-Id": os.environ["MOMOBOT_DELEGATION_ID"],
+            "X-DeerFlow-Delegation-Id": _delegation or delegations()[0],
             # The Gateway's CSRF double-submit check covers internal callers too; a per-call
             # random pair satisfies it (it guards browsers, the internal token guards this).
             **_csrf_pair(),
@@ -141,9 +149,13 @@ def run_once(cfg: dict[str, Any]) -> str:
         return "stopped"
     if in_quiet_hours():
         return "quiet"
+    global _delegation
     owner = f"{socket.gethostname()}:desktop"
-    items = api("POST", "/api/fleet/work/claim", {"lease_owner": owner, "lanes": ["desktop"], "limit": 1}).get("items", [])
-    return handle_item(cfg, items[0], owner) if items else "idle"
+    for _delegation in delegations():
+        items = api("POST", "/api/fleet/work/claim", {"lease_owner": owner, "lanes": ["desktop"], "limit": 1}).get("items", [])
+        if items:
+            return handle_item(cfg, items[0], owner)
+    return "idle"
 
 
 def dry_run(cfg: dict[str, Any]) -> int:
