@@ -22,7 +22,7 @@ spec:
     spec:
       {{- include "deer-flow.imagePullSecrets" . | nindent 6 }}
       securityContext:
-        # Non-root: node:22-alpine ships a `node` user (uid 1000). fsGroup 1000
+        # Non-root: node:22.23.4-alpine ships a `node` user (uid 1000). fsGroup 1000
         # is harmless here (no PVC) but keeps the pod spec uniform.
         runAsNonRoot: true
         runAsUser: 1000
