@@ -22,6 +22,9 @@ def _utc_now() -> datetime:
 class OrganizationRow(Base):
     __tablename__ = "organizations"
 
+    # Explicit server-owned customer binding. Agency and legacy workspaces stay NULL.
+    customer_client_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     slug: Mapped[str] = mapped_column(String(128), unique=True, index=True)
     name: Mapped[str] = mapped_column(String(256))

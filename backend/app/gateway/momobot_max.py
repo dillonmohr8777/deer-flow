@@ -51,6 +51,10 @@ async def client_keys_for_user(user_id: str) -> tuple[str, ...]:
 
 async def apply_run_policy(config: dict[str, Any], *, user: Any, actor_user_id: str | None, app_config: AppConfig, internal: bool = False) -> None:
     """Mutate the run *config* in place; raise when the caller may not run MomoBot Max."""
+    if not internal and user is not None:
+        from app.gateway.client_workspace import require_client_workspace
+
+        await require_client_workspace(user)
     if getattr(user, "system_role", None) == CLIENT_ROLE:
         if not app_config.momobot_max.enabled:
             raise HTTPException(status_code=503, detail="MomoBot Max is not available yet")

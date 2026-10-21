@@ -36,11 +36,80 @@ sudo MOMOBOT_ENV_FILE=/run/momobot/.env MOMOBOT_EXTRA_COMPOSE=/opt/momobot/src/d
 Release: build `deer-flow-{gateway,frontend}:main-<sha8>` on the box from the merged commit, set both tags in
 `settings.env`, then `systemctl restart momobot`. Rollback: put the previous tags back and restart.
 
+The existing `momobot-health.timer` checks gateway readiness, public API and UI,
+backup freshness, and at least 10 GiB free on the deployment filesystem. Its JSON
+receipt includes `publicUi` and `diskAvailableMiB`; unknown capacity fails the check.
+Before a release, recover headroom under `/run/momobot-release.lock` using unused
+Docker build cache or verified unused builder images. Preserve running containers,
+volumes, production and rollback images. Compare filesystem bytes before and after;
+Docker's advertised reclaimable size is not recovered space. Larger builds still
+need a budget for their own peak temporary storage.
+
 The Momentum templates use a 300-super-step default with the existing 1000-step ceiling.
 Middleware nodes consume super-steps too: the former 100-step default interrupted an
 eight-model-call AM plugin check. For an existing EC2 config, promote only this top-level
 `recursion_limit` value; preserve model, memory, credential and workspace settings. Verify
 the effective default and ceiling and a complete AM tool run without a request override.
+
+## Optional 1Password Browserbase credentials (prepared, not deployed)
+
+The existing `secrets.sh` SSM read passes its decrypted JSON directly to
+`render_secrets.py`. Without `/momobot/prod/OP_SERVICE_ACCOUNT_TOKEN`, the loader
+uses SSM values and needs only host Python 3, with no SDK import or vault call.
+When that parameter exists, a host-only SDK client resolves exactly these fields:
+
+- `BROWSERBASE_API_KEY`: `op://ezfukkmm4vt7wqw6vp7l7eli3m/bjil477nt5c433kto6ys3qejw4/credential`
+- `BROWSERBASE_PROJECT_ID`: `op://ezfukkmm4vt7wqw6vp7l7eli3m/bjil477nt5c433kto6ys3qejw4/project_id`
+
+The resolved values replace the SSM Browserbase pair. All other app secrets and
+non-secret settings retain their existing order and behavior. The service-account
+token is never emitted, and `settings.env` must contain neither that token nor
+Browserbase overrides when 1Password is enabled. Empty token/resolved values,
+invalid env names, quotes, newlines, carriage returns and NULs fail closed.
+Legacy empty app-secret values remain permitted. Validation and resolution finish
+before any env output; failure leaves the prior `/run/momobot/.env` intact and
+prevents systemd startup. Diagnostics contain no submitted value or traceback.
+
+Deployment owner prerequisites and sequence, through the existing release lock:
+
+1. Promote the reviewed commit containing both loader files. Keep the existing
+   SSM Browserbase pair for rollback. Do not enable the token before host SDK setup.
+2. Install a root-owned, host-only Python 3.12 venv outside the app/container:
+
+   ```sh
+   sudo python3.12 -m venv /opt/momobot/onepassword-sdk
+   sudo /opt/momobot/onepassword-sdk/bin/pip install 'onepassword-sdk==0.4.1'
+   ```
+
+3. Add `/etc/systemd/system/momobot.service.d/onepassword.conf` with only:
+
+   ```ini
+   [Service]
+   Environment=MOMOBOT_SECRETS_PYTHON=/opt/momobot/onepassword-sdk/bin/python
+   ```
+
+   Use the existing protected provisioning process to store the scoped service
+   account token as SSM SecureString `/momobot/prod/OP_SERVICE_ACCOUNT_TOKEN`.
+   The instance role already reads that path. No token belongs in this drop-in,
+   `settings.env`, command arguments, app env, logs, model prompts or Git.
+4. Run `sudo systemctl daemon-reload`, then restart `momobot` through the existing
+   unit. Verify root `0600` env permissions and token-key absence with a boolean
+   check that never prints env contents. Verify authenticated Browserbase session
+   creation and release with a public synthetic target, then MomoBot readiness.
+   A successful env write alone does not prove Browserbase runtime acceptance.
+
+Rollback: remove only the service-account parameter via the protected provisioning
+process, then restart the existing unit. The retained SSM Browserbase pair is used
+again; the host interpreter can remain configured without vault calls. A source
+rollback must preserve token exclusion before startup, so never run the previous
+unfiltered loader while the SSM service-account token still exists.
+
+Offline checks (stdlib only, fake AWS/SDK, no credentials or provider calls):
+
+```sh
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s deploy/momentum/ec2/tests -v
+bash -n deploy/momentum/ec2/secrets.sh
+```
 
 ## Nightly recovery contents
 
@@ -183,3 +252,7 @@ In the existing private config, append only the ten `composio-marketing_<tool-na
 targets from this policy to `authorization.provider.config.roles.user.tools.allow`.
 Preserve every other permission and role; do not add a wildcard or an execution helper.
 Verify all ten targets are allowed and private Composio tools remain denied.
+
+## Momo Daily staff portraits
+
+Keep the seven staff portraits outside Git in `/opt/momobot/data/brand/daily-people`, named by the slugs in `frontend/src/components/momentum/daily/staff-box.tsx`, as WebP files. The EC2 layer mounts that directory read-only into the frontend public assets. The existing encrypted brand backup includes it. Before release, compare each staged file SHA-256 with its source receipt; after release, fetch all seven rendered portraits and reject placeholder fallbacks. Never add these private images to the public repository or bake them into an untracked local build.

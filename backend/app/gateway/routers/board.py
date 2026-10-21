@@ -16,7 +16,7 @@ import asyncio
 import logging
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
@@ -31,7 +31,15 @@ from deerflow.utils.thread_id import ThreadId
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/board", tags=["board"])
+
+async def _staff_board_only(request: Request):
+    from app.gateway.client_workspace import is_client_contact, request_user
+
+    if await is_client_contact(await request_user(request)):
+        raise HTTPException(403, "Use your client inbox for approved conversations")
+
+
+router = APIRouter(prefix="/api/board", tags=["board"], dependencies=[Depends(_staff_board_only)])
 
 # Bounds the triage-on-create model call so a hung provider can't hang thread
 # creation; a timeout is treated the same as any other triage failure.

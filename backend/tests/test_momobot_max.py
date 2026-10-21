@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 import pytest_asyncio
@@ -256,7 +256,9 @@ async def _policy(config: dict, user, *, keys=(), app_config=None, internal=Fals
     async def fake_keys(_user_id):
         return keys
 
-    with patch.object(momobot_max, "client_keys_for_user", fake_keys):
+    # This helper exercises model/effort pinning in isolation. Real workspace
+    # admission is covered with SQL memberships/binding in test_client_portal.
+    with patch.object(momobot_max, "client_keys_for_user", fake_keys), patch("app.gateway.client_workspace.require_client_workspace", new=AsyncMock()):
         await apply_run_policy(config, user=user, actor_user_id=actor, app_config=app_config or _config(momobot_max={"enabled": True, "client_effort": {"vhin-cares": "medium"}}), internal=internal)
 
 
@@ -412,7 +414,7 @@ async def _start_run_as(role: str, context: dict, *, app_config: AppConfig):
 
     set_app_config(app_config)
     try:
-        with patch("app.gateway.services.resolve_agent_factory", return_value=object()), patch("app.gateway.services.run_agent", side_effect=fake_run_agent):
+        with patch("app.gateway.services.resolve_agent_factory", return_value=object()), patch("app.gateway.services.run_agent", side_effect=fake_run_agent), patch("app.gateway.client_workspace.require_client_workspace", new=AsyncMock()):
             record = await start_run(body, "thread-max", request)
             await record.task
     finally:

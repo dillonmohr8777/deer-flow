@@ -852,6 +852,8 @@ DINGTALK_CLIENT_SECRET=your_client_secret
 
 **Slack Setup**
 
+Slack text posts are attempted once. A lost acknowledgment or server-side ambiguity is held as `outcome_unknown` and must be reconciled with the destination before another attempt. Successful posts retain the provider channel and message timestamp; this is not an exactly-once delivery guarantee.
+
 1. Create a Slack App at [api.slack.com/apps](https://api.slack.com/apps) → Create New App → From scratch.
 2. Under **OAuth & Permissions**, add Bot Token Scopes: `app_mentions:read`, `chat:write`, `im:history`, `im:read`, `im:write`, `files:write`.
 3. Enable **Socket Mode** → generate an App-Level Token (`xapp-…`) with `connections:write` scope.
