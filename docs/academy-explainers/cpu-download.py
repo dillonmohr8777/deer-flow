@@ -7,11 +7,15 @@ import sys
 from huggingface_hub import hf_hub_download
 
 root = Path(sys.argv[1])
-start = json.loads((root / 'setup-receipt.json').read_text(encoding='utf-8-sig'))['initial_free_bytes']
+setup = json.loads((root / 'setup-receipt.json').read_text(encoding='utf-8-sig'))
+start = setup['initial_free_bytes']
+volume = Path('/mnt/c') if sys.platform == 'linux' else root
+budget = setup.get('budget_bytes', 6*1024**3)
+minimum = setup.get('minimum_free_bytes', 10*1024**3)
 
 def check(extra=0):
-    free = shutil.disk_usage(root).free
-    assert free-extra >= 10*1024**3 and start-free+extra <= 6*1024**3, 'CPU setup/cache budget reached'
+    free = shutil.disk_usage(volume).free
+    assert free-extra >= minimum and start-free+extra <= budget, 'CPU setup/cache budget reached'
 
 check(1_500_000_000)
 paths = []
@@ -26,6 +30,6 @@ for repo, name in [('SWivid/F5-TTS', 'F5TTS_v1_Base/model_1250000.safetensors'),
     paths.append(dict(repo=repo, file=str(target), bytes=target.stat().st_size, sha256=digest))
     check()
 receipt = dict(status='weights-downloaded-not-loaded', initial_free_bytes=start,
-               free_bytes=shutil.disk_usage(root).free, files=paths)
+               free_bytes=shutil.disk_usage(volume).free, files=paths)
 (root / 'models-receipt.json').write_text(json.dumps(receipt, indent=2))
 print(json.dumps(receipt), flush=True)

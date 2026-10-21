@@ -1,0 +1,62 @@
+{
+  "title": "Sales, prospecting and outbound",
+  "slug": "work-05-sales-outbound",
+  "description": "Verified prospect brief, source-backed audit, discovery questions, pitch draft and CRM next action for a synthetic prospect, Sample Dental Group. Checks ownership and the cross-sender duplicate ledger before any contact. Draft only, with no promised results and no send.",
+  "chapters": [
+    {
+      "title": "Who this is for",
+      "narration": "Hi, I'm Dillon. This lesson is for the people who find, qualify and contact new business. If you are a Sales Director, a Sales Manager, a sales representative, or on the outbound team, you will leave with one verified prospect brief, a source-backed audit, discovery questions, a pitch draft and a CRM next action. The prospect here is Sample Dental Group, a synthetic example. Treat every name, page and figure as example material. Nothing in this lesson contacts anyone.",
+      "visual": "Lesson card listing the five deliverables, with a tag reading synthetic prospect, Sample Dental Group."
+    },
+    {
+      "title": "Who owns each step",
+      "narration": "Each role has a job here. The Sales Director sets the ledger rule and the contact window, so everyone works from the same limits. The Sales Manager reviews the brief and decides whether the pitch is worth a conversation. The sales representative owns the contact and the CRM record. The outbound team runs the list checks before anyone is contacted. If a step belongs to someone else, hand it over in writing, do not do it quietly.",
+      "visual": "Diagram with four boxes, Sales Director, Sales Manager, sales representative and outbound team, each showing the step it owns, with arrows showing the hand-off order."
+    },
+    {
+      "title": "Ownership and ledger first",
+      "narration": "Before any research, check ownership. Confirm which representative owns the account in your CRM, or in the ownership sheet if no CRM connection is verified. Then open the duplicate ledger export your team keeps for this window, and search the organization and each contact. If another sender has touched this prospect inside the window your Sales Director set, stop and tell the Sales Manager. Do not start a second thread. A clean ledger is the only green light for the rest of the work.",
+      "visual": "Ownership field showing the owning representative, beside duplicate ledger search results with sender, date and a status of clean or conflict."
+    },
+    {
+      "title": "Source-backed audit",
+      "narration": "Now the audit, and every finding needs a source. Paste in the captured public pages with their capture dates. For each finding, write one line: what the source says, the date, and the source name. Example only: a listing that shows several locations, or a booking page with no online scheduling link on the capture date. If a point comes from your own guess, label it inferred. A finding with no source is not a finding.",
+      "visual": "Audit table with columns for finding, source name, capture date, exact line from the source and an inferred label column."
+    },
+    {
+      "title": "The verified brief",
+      "narration": "Now write the prospect brief in three columns: confirmed, inferred and unknown. Confirmed items have a source and a date. Inferred items are your best reading, and they say so. Unknown items stay unknown. Keep the brief to one page. The Sales Manager should be able to read it in two minutes and see exactly what is solid and what still needs checking.",
+      "visual": "Three-column brief with confirmed, inferred and unknown headings, each item carrying its source and date or its label."
+    },
+    {
+      "title": "Discovery questions",
+      "narration": "Next come the discovery questions. Write four, and tie each one to a finding in the brief. For example, if the audit found no online scheduling, ask how new patients book today and who answers the phone at peak times. Ask open questions, not yes or no questions. Do not ask about anyone's private life. Keep every question about the business.",
+      "visual": "Discovery question list with the question, the linked finding and a blank notes field beside each one."
+    },
+    {
+      "title": "Pitch draft",
+      "narration": "Now the pitch draft. Keep it short. Name the one thing the audit found, say what a conversation could check, and ask for twenty minutes. Do not promise a result, a lift in bookings or a timeline you cannot back up with data. Use plain language and no urgency tricks. The draft is for the rep to edit and for the Sales Manager to approve, not for sending as written.",
+      "visual": "Pitch draft in an editor with the single finding highlighted and a status line reading draft, not for sending."
+    },
+    {
+      "title": "Judge the brief",
+      "narration": "Judge the work before it moves. The specialist checks that every claim in the brief has a dated source or is marked inferred, that the ledger search was clean, that the owner is named, and that the pitch promises nothing. Then the Sales Manager reads the discovery questions against the findings. If a question does not trace to a finding, cut it. Accepted means the Sales Manager writes accepted and a date on the brief.",
+      "visual": "Acceptance checklist with the specialist checks marked, and an accepted line with a date field for the Sales Manager."
+    },
+    {
+      "title": "One CRM next action",
+      "narration": "Finish with one CRM next action. Write the owner, the due date, the channel and a one-line note, for example: the sales representative checks for a reply Tuesday and logs the result. If a verified CRM connection exists, the rep logs the note there. If not, the note is text that the rep pastes into the CRM by hand. Either way, the note records the next step and nothing more.",
+      "visual": "Next action card with owner, due date, channel and one-line note, plus a status line reading CRM connection verified or missing from source."
+    },
+    {
+      "title": "Approval before contact",
+      "narration": "Nothing in this lesson contacts a prospect. Any outreach, email, call script or list purchase goes to the approval queue first, and any spend needs its own approval. A person sends the message outside this lesson, after that approval. If the approval is missing, the message stays a draft.",
+      "visual": "Approval queue entry showing the outreach draft as pending, with a separate spend line marked needs its own approval."
+    },
+    {
+      "title": "Try this in Momo",
+      "narration": "Try this in Momo. Input: a test prospect name, one public page you capture for that test prospect, and the ledger export for the same test window. Acceptance: someone who did not draft the brief, such as the Sales Manager, checks the ledger result and every sourced line against the captured page before the pitch goes to the approval queue.",
+      "visual": "Try-this worksheet with the test prospect, captured page and ledger export on the left, and a reviewer line on the right."
+    }
+  ]
+}
