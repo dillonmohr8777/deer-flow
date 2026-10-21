@@ -258,3 +258,8 @@ The offline backend suite includes actual isolated framework handoffs. Its CI
 shards install the frozen sibling worker environments and Node builds before
 pytest; preserve the real availability, relay and cleanup assertions. Worker
 installation does not enable paid adapters or change native guard admission.
+
+The optional EC2 Brain adapter (`deploy/momentum/ec2/brain_readonly_adapter.py`)
+can serve a read-only private snapshot with four tools and `sourceObservedAt`.
+Its cache and unchanged renderer stay outside Git; never call the Brain collector,
+auto-refreshing load, capture or search from snapshot mode. See the EC2 README.

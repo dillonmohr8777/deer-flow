@@ -39,3 +39,38 @@ Release: build `deer-flow-{gateway,frontend}:main-<sha8>` on the box from the me
 
 Brain MCP (Mac bridge :8787), client_browser MCP (:8788), the Jevbox evidence tool (:4310) and the local
 Ollama/oMLX models. Reaching them needs a tunnel back to the Mac. That is a follow-up, and MomoBot runs without them.
+
+
+## Optional read-only Brain snapshot (prepared, not enabled)
+
+`brain_readonly_adapter.py` preserves the existing fixed-destination HTTP adapter and adds
+an offline mode selected by `BRAIN_SNAPSHOT_DIR`. It does not enable an MCP server or alter
+production configuration. The existing collector remains the only Brain writer.
+
+For snapshot mode, the deployment owner installs one coherent private directory containing
+`brain.json`, `NOW.md`, and the unchanged trusted `brain.py` renderer. Mount it read-only on
+EC2 and run the adapter with the existing gateway Python interpreter:
+
+```sh
+BRAIN_SNAPSHOT_DIR=/opt/momobot/brain-snapshot python3 brain_readonly_adapter.py
+```
+
+Keep those three files outside Git and model prompts. Only `brain_now`, `brain_client`,
+`brain_open_items`, and `brain_systems` are exposed; calls go directly to pure renderer
+functions. The adapter never invokes Brain's auto-refreshing `load`, collector, capture,
+search, or HTTP service in snapshot mode. No bearer token or new network endpoint is needed.
+Every result includes the saved `generated_at` as `sourceObservedAt`, even if the files are
+old. These are saved observations, not live health or a fresh communication sweep.
+
+The deployment owner must independently review the change, stage the private renderer/cache
+and adapter, add a read-only mount, replace the missing `/run/momo-security` adapter path in
+the existing disabled MCP entry, then verify useful MCP output before enabling it. Do not
+add a collector, timer, Mac bridge or competing writer. Cache transfer, authentication,
+production integration and client-scoped access remain unverified by the offline test.
+
+Offline contract check (synthetic fixture only):
+
+```sh
+cd backend
+python -m pytest tests/test_ec2_brain_snapshot.py -q --noconftest
+```
