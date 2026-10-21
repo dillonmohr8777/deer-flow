@@ -111,3 +111,4 @@ preparation keeps the feature disabled and requires a connection. Both the
 service and Gateway router construct credential repositories through
 `connection_repository.py`, which reads only the optional protected host
 `CHANNEL_CONNECTIONS_ENCRYPTION_KEY` and never generates or rotates a key.
+- **Slack roster auto-link** (`slack_autolink.py`, off unless `channel_connections.slack.auto_link_roster` + `workspace_id`): for an unbound roster sender from that team, finds or creates the user by email (roster `email`, else `users.info`), always `system_role: user`, adds an agency `member` row, then `upsert_connection` like `/connect`. Per-sender lock, audit `channel_connection.auto_linked`; any failure keeps the connect-first reply. See `docs/IM_CHANNEL_CONNECTIONS.md`.
