@@ -150,7 +150,7 @@ src/
 
 ## Workflow room
 
-`/workspace/workflows` lists the Gateway's agency and personal workflow catalog.
+`/workspace/workflows` (reachable by URL; not in the sidebar since Oct 20) lists the Gateway's agency and personal workflow catalog.
 The count, categories, input schemas, steps and acceptance checks come from the
 catalog response; the UI does not start a runner for each definition. Search and
 category filters help select a recipe, then the bounded schema form collects its
