@@ -1,5 +1,9 @@
 # EC2 deployment
 
+The existing health timer runs lightsail/health.sh. It must check the public UI
+as well as gateway readiness and fail on unknown disk space or less than 10 GiB
+available on the deployment filesystem. Reuse this timer; never add a second watcher.
+
 `secrets.sh` optionally resolves two fixed Browserbase references through the
 host-only 1Password SDK when SSM contains `OP_SERVICE_ACCOUNT_TOKEN`. Never
 render that token into the gateway env or expose a general secret-resolution
