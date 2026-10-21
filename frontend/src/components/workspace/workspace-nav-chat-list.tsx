@@ -29,15 +29,73 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useAgentsApiEnabled } from "@/core/agents";
-import { useAuth } from "@/core/auth/AuthProvider";
+import {
+  useAuth,
+  useIsClient,
+  useIsRoleUnresolved,
+} from "@/core/auth/AuthProvider";
 import { useBoardThreads } from "@/core/board";
 import { useDeskEnabled, useMomentumInternalEnabled } from "@/core/features";
 import { useI18n } from "@/core/i18n/hooks";
 import { useBrandKit } from "@/core/momobot-brand";
 
+/**
+ * The client version of MomoBot: chats, the MomoBot lineup and About, nothing
+ * internal. (New chat lives in the sidebar header.)
+ */
+function ClientNavList({ showBrandKit }: { showBrandKit: boolean }) {
+  const { t } = useI18n();
+  const pathname = usePathname();
+  return (
+    <SidebarGroup className="pt-1">
+      <SidebarMenu>
+        <SidebarMenuItem>
+          <SidebarMenuButton isActive={pathname === "/workspace/chats"} asChild>
+            <Link className="text-muted-foreground" href="/workspace/chats">
+              <MessagesSquare />
+              <span>{t.sidebar.chats}</span>
+            </Link>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+        {showBrandKit && (
+          <>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                isActive={pathname === "/workspace/lineup"}
+                asChild
+              >
+                <Link
+                  className="text-muted-foreground"
+                  href="/workspace/lineup"
+                >
+                  <UsersRound />
+                  <span>{t.sidebar.momobotAgents}</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                isActive={pathname === "/workspace/about"}
+                asChild
+              >
+                <Link className="text-muted-foreground" href="/workspace/about">
+                  <Info />
+                  <span>{t.sidebar.aboutMomobot}</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </>
+        )}
+      </SidebarMenu>
+    </SidebarGroup>
+  );
+}
+
 export function WorkspaceNavChatList() {
   const { t } = useI18n();
   const pathname = usePathname();
+  const isClient = useIsClient();
+  const unresolved = useIsRoleUnresolved();
   const { enabled: agentsEnabled } = useAgentsApiEnabled();
   const { enabled: deskEnabled } = useDeskEnabled();
   const { enabled: internalEnabled } = useMomentumInternalEnabled();
@@ -51,6 +109,8 @@ export function WorkspaceNavChatList() {
     enabled: deskEnabled,
   });
   const waitingCount = deskEnabled ? (waitingApproval.data?.length ?? 0) : 0;
+  if (unresolved) return null;
+  if (isClient) return <ClientNavList showBrandKit={Boolean(brandKit)} />;
   return (
     <SidebarGroup className="pt-1">
       <SidebarMenu>
@@ -223,7 +283,7 @@ export function WorkspaceNavChatList() {
                   href="/workspace/lineup"
                 >
                   <UsersRound />
-                  <span>MomoBot Agents</span>
+                  <span>{t.sidebar.momobotAgents}</span>
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
@@ -234,7 +294,7 @@ export function WorkspaceNavChatList() {
               >
                 <Link className="text-muted-foreground" href="/workspace/about">
                   <Info />
-                  <span>About MomoBot</span>
+                  <span>{t.sidebar.aboutMomobot}</span>
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>

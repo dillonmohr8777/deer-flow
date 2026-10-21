@@ -135,6 +135,9 @@ export interface Translations {
     public: string;
     custom: string;
     notAvailableInDemoMode: string;
+    pageNotAvailableTitle: string;
+    pageNotAvailableDescription: string;
+    backToChat: string;
     loading: string;
     error: string;
     version: string;
@@ -380,6 +383,8 @@ export interface Translations {
     chats: string;
     demoChats: string;
     agents: string;
+    momobotAgents: string;
+    aboutMomobot: string;
     scheduledTasks: string;
     agentsDisabledTooltip: string;
     channels: string;

@@ -525,7 +525,11 @@ _KNOWN_TEST_MODELS = frozenset({"deepseek-v3"})
 
 def _stub_app_config():
     """App config that knows only ``_KNOWN_TEST_MODELS``."""
-    return SimpleNamespace(get_model_config=lambda name: SimpleNamespace(name=name) if name in _KNOWN_TEST_MODELS else None)
+    return SimpleNamespace(
+        get_model_config=lambda name: SimpleNamespace(name=name) if name in _KNOWN_TEST_MODELS else None,
+        momobot_max=SimpleNamespace(enabled=False, model=None),
+        authorization=SimpleNamespace(fail_closed=True),
+    )
 
 
 def _make_test_app(tmp_path: Path):

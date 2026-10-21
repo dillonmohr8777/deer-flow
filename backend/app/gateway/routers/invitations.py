@@ -23,6 +23,7 @@ from app.gateway.auth import create_access_token
 from app.gateway.auth.password import hash_password_async
 from app.gateway.auth.session_cookie import ACCESS_TOKEN_COOKIE_NAME, set_session_cookie
 from app.gateway.auth_disabled import AUTH_SOURCE_AUTH_DISABLED, AUTH_SOURCE_INTERNAL, AUTH_SOURCE_PAT, AUTH_SOURCE_SESSION
+from app.gateway.authz import role_has_policy
 from app.gateway.csrf_middleware import CSRF_COOKIE_NAME, CSRF_HEADER_NAME, is_secure_request
 from app.gateway.deps import get_current_user_from_request, record_audit_event
 from deerflow.persistence.engine import get_session_factory
@@ -47,7 +48,9 @@ class CreateInvitationRequest(BaseModel):
     explicitly chooses it. "client" is for a client's own people joining the
     agency workspace: the same access as "member" everywhere except that it
     is never staff, so Momentum-internal surfaces (Team, AI Academy) stay
-    hidden from them even before they are given a client assignment.
+    hidden from them even before they are given a client assignment. An account
+    this creates for a "client" invitation also gets the `client` system role
+    (chat with MomoBot Max only); an existing account keeps its role.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -303,6 +306,10 @@ async def accept_invitation(body: AcceptInvitationRequest, request: Request, res
                 invitation = await session.scalar(select(InvitationRow).where(InvitationRow.token_hash == token_digest))
                 if invitation is None or invitation.consumed_at is not None or _as_utc(invitation.expires_at) <= now:
                     raise _forbidden()
+                if invitation.role == "client" and not role_has_policy("client"):
+                    # Same guard as the admin role route: RBAC fails closed on a role it has
+                    # no block for, so the invitee would be locked out. Nothing is consumed.
+                    raise HTTPException(status_code=409, detail="Role 'client' is not defined under authorization.provider.config.roles; add it before inviting clients")
 
                 # Reserve the single-use token before password work.  The
                 # conditional update is the cross-worker fence; a concurrent
@@ -369,7 +376,9 @@ async def accept_invitation(body: AcceptInvitationRequest, request: Request, res
                             id=user_id,
                             email=invitation.email,
                             password_hash=password_hash,
-                            system_role="user",
+                            # A client's own people get the client tier from day one;
+                            # an existing account keeps whatever role it has.
+                            system_role="client" if invitation.role == "client" else "user",
                             needs_setup=False,
                             token_version=0,
                             created_at=now,
