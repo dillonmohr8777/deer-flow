@@ -121,3 +121,30 @@ def test_dry_run_never_contacts_gateway_or_claude(env, monkeypatch, capsys) -> N
     assert runner.main(["--dry-run"]) == 0
     out = capsys.readouterr().out
     assert "--model haiku" in out and "host_key_set=True" in out and "super-secret-key" not in out
+
+
+def test_gateway_calls_carry_a_matching_csrf_pair(monkeypatch):
+    """The Gateway's CSRF double-submit check applies to internal-token calls too."""
+    seen = {}
+
+    class _Resp:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def read(self):
+            return b"{}"
+
+    def fake_urlopen(request, timeout=30):
+        seen.update({k.lower(): v for k, v in request.header_items()})
+        return _Resp()
+
+    monkeypatch.setenv("MOMOBOT_GATEWAY_URL", "http://gw")
+    monkeypatch.setenv("MOMOBOT_HOST_KEY", "k")
+    monkeypatch.setenv("MOMOBOT_DELEGATION_ID", "d")
+    monkeypatch.setattr(runner.urllib.request, "urlopen", fake_urlopen)
+    runner.api("POST", "/api/fleet/work/claim", {"lanes": ["desktop"]})
+    token = seen["x-csrf-token"]
+    assert token and seen["cookie"] == f"csrf_token={token}"
