@@ -155,11 +155,7 @@
   font-weight: 700;
   border: 1px solid var(--accent);
   border-radius: 2px;
-  background: color-mix(
-    in srgb,
-    var(--accent) 12%,
-    var(--card)
-  );
+  background: color-mix(in srgb, var(--accent) 12%, var(--card));
 }
 
 .chip::before {

@@ -32,9 +32,9 @@ const ratio = (a: number, b: number) =>
 function darkToken(name: string): number {
   const css = read("styles", "globals.css");
   const dark = css.slice(css.indexOf("\n.dark {"));
-  const m = new RegExp(`--${name}:\\s*oklch\\(([\\d.]+) ([\\d.]+) ([\\d.]+)\\)`).exec(
-    dark,
-  );
+  const m = new RegExp(
+    `--${name}:\\s*oklch\\(([\\d.]+) ([\\d.]+) ([\\d.]+)\\)`,
+  ).exec(dark);
   if (!m) throw new Error(`--${name} not found in .dark`);
   return oklchLuminance(+m[1]!, +m[2]!, +m[3]!);
 }
