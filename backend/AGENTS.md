@@ -137,10 +137,7 @@ uv run python scripts/benchmark/concurrency/run_concurrency_bench.py \
 uv run pytest tests/test_bench_concurrency.py tests/test_bench_worker.py -q
 ```
 
-The production UV binary, both Compose defaults and every setup-uv workflow pin
-must stay synchronized. Keep UV at 0.13.4 or newer for the patched bundled TLS
-trust store; run `tests/test_ci_uv_version_pin.py` and the extension-manager
-CLI contract checks when changing the pin.
+Keep UV>=0.13.4 aligned in Docker, Compose and CI; test pins and extension CLI.
 
 ## Commands
 
