@@ -1,0 +1,57 @@
+{
+  "title": "MomoBot: A Practical First Session",
+  "slug": "momobot",
+  "description": "Use MomoBot chat, persisted Easy, Medium, and Hard mode selections, files, and workspace persistence deliberately, with a practical study walkthrough.",
+  "chapters": [
+    {
+      "title": "Open with one useful outcome",
+      "narration": "Let's use MomoBot to turn a messy study note into a useful practice session. I open momobot dot needmomentum dot com and start with one outcome: help me understand the water cycle well enough to explain it without reading. I am choosing a small task because I can check the result. During this walkthrough, I will ask questions, review the answers, and save the parts I want to keep. That is the rhythm I use.",
+      "visual": "Large address bar: https://momobot.needmomentum.com. Transition to a simplified chat walkthrough with task card: explain the water cycle from memory."
+    },
+    {
+      "title": "Give the chat a clear request",
+      "narration": "In chat, I write what I need in plain language. Explain evaporation, condensation, and precipitation for a beginner. Use one everyday example for each, then ask me three questions. That request tells MomoBot the subject, the level, and the response format. I can add that I have ten minutes to study. I do not need to guess special commands. I start with the ordinary words I would use when asking a patient tutor for help.",
+      "visual": "Chat prompt appears in three large lines. Highlight subject, beginner level, and explanation plus questions. A ten-minute study constraint appears below."
+    },
+    {
+      "title": "Choose a mode deliberately",
+      "narration": "MomoBot gives me three experience modes. Easy says Guide me: plain language, short answers, and quick questions so Momo gets to know me. Medium says Balanced: the standard MomoBot experience. Hard says Expert: concise technical language, with more detail about the model and tools used. The selection is retained, so I can change it and check it again later. This changes the explanation style. It does not grant account access or change security permissions. I choose Easy here.",
+      "visual": "Show the actual Experience settings screenshot, focus Easy Guide me, Medium Balanced, Hard Expert. Caption: explanation style; account permissions remain separate."
+    },
+    {
+      "title": "Read before asking for more",
+      "narration": "The response arrives, and I read it before sending another request. Does evaporation describe liquid becoming vapor? Does condensation describe vapor becoming liquid? Does the example make the difference clear? If two explanations sound too similar, I ask for a comparison using a cold glass and a drying puddle. I keep the correction specific. MomoBot can help me work through the confusion, while I remain responsible for checking what I am learning against a reliable source.",
+      "visual": "Two-column comparison: drying puddle \u2192 evaporation; droplets on cold glass \u2192 condensation. Highlight the different direction of each change. Source-check icon beside the explanation."
+    },
+    {
+      "title": "Use context instead of repetition",
+      "narration": "As we continue, the conversation gives MomoBot context for follow up questions. I can say, explain that cold glass example more slowly, because the example is already in this chat. If I start a different conversation, I provide the important facts again instead of assuming everything carries over. I also restate anything that really matters, such as beginner level or the study goal. A short reminder can prevent several rounds of correcting the wrong kind of answer.",
+      "visual": "Conversation stack shows original request, cold-glass explanation, follow-up. New conversation panel starts with a compact task and level reminder rather than an assumed context arrow."
+    },
+    {
+      "title": "Bring in a file with purpose",
+      "narration": "Now I have a study note I want to use. Before adding a file, I decide what it is for. In this case, I want a summary of my own water cycle notes and questions based on those notes. I use the file controls available in my workspace and confirm the intended file is present. Then I name it in my request. I do not assume every uploaded file is automatically understood or that unrelated files should be included.",
+      "visual": "File card: water-cycle-notes.txt. Purpose card: summarize this note and build questions from it. Visible confirmation check on the intended file; unrelated file stays unselected."
+    },
+    {
+      "title": "Check the file was actually used",
+      "narration": "I ask MomoBot to summarize the note and identify the part it used for each question. That gives me something I can compare with the original. If the answer discusses a topic missing from my note, I ask whether it added background information. I want the distinction clear. A filename in a message is useful context, but it does not prove the file was read successfully. I check a few specific details before trusting the resulting study guide.",
+      "visual": "Original note on left; generated guide on right. Three connecting lines match note details to questions. One extra background point is labeled separately."
+    },
+    {
+      "title": "Save work deliberately",
+      "narration": "Files and workspace persistence deserve a deliberate check. I decide which version of the study guide I want to keep, use the available save or workspace controls, and confirm the result at its destination. Then I reopen it and compare a recognizable line. Seeing text in chat is different from confirming a saved file. I also keep clear names, such as water cycle practice, so that tomorrow I can find the useful result without reconstructing this whole conversation.",
+      "visual": "Chat draft \u2192 deliberate save action \u2192 workspace file \u2192 reopen. Compare the same recognizable sentence in both. Filename displayed large: water-cycle-practice."
+    },
+    {
+      "title": "Verify what persists",
+      "narration": "Before I finish, I check the things I expect to persist. I revisit the mode selector and confirm my choice. I return to the workspace and reopen the saved study guide. If something is missing, I fix that now while the context is fresh. Persistence should be demonstrated by finding the same thing again. It is not a promise that every conversation detail becomes permanent memory, or that MomoBot will continue doing work after I stop asking.",
+      "visual": "Return visit checklist: mode label retained; workspace file found; content reopened. Put conversation context and future autonomous work outside the checklist, with no automatic arrows."
+    },
+    {
+      "title": "Finish with a useful result",
+      "narration": "To finish, I answer the three practice questions without looking. Then I ask MomoBot to explain the gaps in my answers, and I compare the correction with my notes. That leaves me with evidence that the session helped: I can explain more clearly, and I can reopen the study guide I saved. Use the same pattern for your own task. Ask clearly, inspect the response, verify the important parts, and confirm the result is where you expect it.",
+      "visual": "Three practice cards receive answers. One gap is corrected against the note. Finish on a reopened study guide and the loop: ask \u2192 inspect \u2192 verify \u2192 confirm."
+    }
+  ]
+}
