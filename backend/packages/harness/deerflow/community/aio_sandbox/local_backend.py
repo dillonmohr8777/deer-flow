@@ -276,14 +276,17 @@ def _docker_bridge_gateway_ip() -> str | None:
     return candidate
 
 
-_DOCKER_SERVER_IS_DESKTOP: bool | None = None
+_DOCKER_SERVER_OPERATING_SYSTEM: str | None = None
 
 
-def _docker_server_is_desktop() -> bool:
-    """Detect Desktop from the daemon, including a Linux DooD Gateway."""
-    global _DOCKER_SERVER_IS_DESKTOP
-    if _DOCKER_SERVER_IS_DESKTOP is not None:
-        return _DOCKER_SERVER_IS_DESKTOP
+def _docker_server_operating_system() -> str:
+    """Return the daemon's lowercased OperatingSystem, or "" when it cannot be read.
+
+    Only a successful probe is cached, so a transient failure is retried.
+    """
+    global _DOCKER_SERVER_OPERATING_SYSTEM
+    if _DOCKER_SERVER_OPERATING_SYSTEM is not None:
+        return _DOCKER_SERVER_OPERATING_SYSTEM
     try:
         result = subprocess.run(
             ["docker", "info", "--format", "{{json .OperatingSystem}}"],
@@ -293,23 +296,41 @@ def _docker_server_is_desktop() -> bool:
         )
     except (FileNotFoundError, subprocess.TimeoutExpired, OSError) as exc:
         logger.warning("Could not identify the Docker server platform; assuming non-Desktop: %s", exc)
-        return False
+        return ""
     if result.returncode != 0:
         logger.warning("Could not identify the Docker server platform; assuming non-Desktop: %s", (result.stderr or "").strip())
-        return False
+        return ""
     raw = (result.stdout or "").strip()
     try:
         operating_system = json.loads(raw)
     except json.JSONDecodeError:
         operating_system = raw
-    is_desktop = isinstance(operating_system, str) and "docker desktop" in operating_system.lower()
-    _DOCKER_SERVER_IS_DESKTOP = is_desktop
-    return is_desktop
+    _DOCKER_SERVER_OPERATING_SYSTEM = operating_system.lower() if isinstance(operating_system, str) else ""
+    return _DOCKER_SERVER_OPERATING_SYSTEM
+
+
+def _docker_server_is_desktop() -> bool:
+    """Detect Desktop from the daemon, including a Linux DooD Gateway.
+
+    OrbStack counts too: like Docker Desktop it forwards ``host.docker.internal``
+    to host loopback, so the published sandbox relay must bind 127.0.0.1.
+    """
+    operating_system = _docker_server_operating_system()
+    return "docker desktop" in operating_system or "orbstack" in operating_system
+
+
+def _docker_server_is_docker_desktop() -> bool:
+    """Detect Docker Desktop itself, whose DNS layer maps public names into 198.18.0.0/15.
+
+    Narrower than ``_docker_server_is_desktop``: the sandbox egress proxy accepts
+    that range only for this daemon.
+    """
+    return "docker desktop" in _docker_server_operating_system()
 
 
 def _clear_docker_desktop_cache() -> None:
-    global _DOCKER_SERVER_IS_DESKTOP
-    _DOCKER_SERVER_IS_DESKTOP = None
+    global _DOCKER_SERVER_OPERATING_SYSTEM
+    _DOCKER_SERVER_OPERATING_SYSTEM = None
 
 
 _docker_server_is_desktop.cache_clear = _clear_docker_desktop_cache  # type: ignore[attr-defined]
@@ -599,7 +620,8 @@ class LocalContainerBackend(SandboxBackend):
             if self._runtime != "docker":
                 raise RuntimeError("sandbox.network restricted modes require Docker; Apple Container is not supported")
             self._require_restricted_network_support()
-            self._allow_synthetic_dns = self._docker_server_is_desktop()
+            # Only Docker Desktop's DNS layer needs the 198.18.0.0/15 allowance; OrbStack keeps rejecting it.
+            self._allow_synthetic_dns = _docker_server_is_docker_desktop()
 
     @property
     def runtime(self) -> str:

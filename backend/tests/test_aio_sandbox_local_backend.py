@@ -170,6 +170,7 @@ def test_restricted_network_requires_docker_engine_28(monkeypatch):
     ("operating_system", "expected"),
     [
         ('"Docker Desktop"', True),
+        ('"OrbStack"', True),
         ('"Ubuntu 24.04.3 LTS"', False),
     ],
 )
@@ -191,6 +192,40 @@ def test_docker_desktop_detection_uses_daemon_operating_system(monkeypatch, oper
 
     try:
         assert backend._docker_server_is_desktop() is expected
+    finally:
+        _docker_server_is_desktop.cache_clear()
+
+
+@pytest.mark.parametrize(
+    ("operating_system", "expected"),
+    [
+        ('"Docker Desktop"', True),
+        ('"OrbStack"', False),
+    ],
+)
+def test_restricted_network_allows_synthetic_dns_only_on_docker_desktop(monkeypatch, operating_system, expected):
+    """Docker Desktop's 198.18.0.0/15 DNS allowance must not leak to OrbStack, which keeps rejecting that range."""
+    monkeypatch.setattr(LocalContainerBackend, "_detect_runtime", lambda _self: "docker")
+
+    def fake_run(cmd, **_kwargs):
+        if cmd[:2] == ["docker", "version"]:
+            return SimpleNamespace(stdout="28.0.0\n", stderr="", returncode=0)
+        assert cmd == ["docker", "info", "--format", "{{json .OperatingSystem}}"]
+        return SimpleNamespace(stdout=operating_system, stderr="", returncode=0)
+
+    _docker_server_is_desktop.cache_clear()
+    monkeypatch.setattr("subprocess.run", fake_run)
+
+    try:
+        backend = LocalContainerBackend(
+            image="sandbox:latest",
+            base_port=8080,
+            container_prefix="sandbox",
+            config_mounts=[],
+            environment={},
+            network_config={"mode": "isolated"},
+        )
+        assert backend._allow_synthetic_dns is expected
     finally:
         _docker_server_is_desktop.cache_clear()
 
