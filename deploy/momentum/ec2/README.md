@@ -53,6 +53,25 @@ start Redis once without AOF so it loads the snapshot, then enable AOF before st
 Never overwrite a populated live volume. Snapshot checks are per service, not one atomic cross-service
 transaction. A failed Redis or required EC2 mount snapshot fails the backup before its success stamp.
 
+## Backup retention
+
+Only `nightly/` expires: current nightly backups after 30 days and their old versions after 7 days.
+The `mac-final-20261020/` archive contains originals removed from the Mac and must remain outside
+automatic expiration. A bucket-wide empty prefix would delete those originals too.
+
+Apply the checked-in policy from the repository root with the operator AWS profile, after reviewing
+the current bucket policy for other rules that must be preserved:
+
+```bash
+aws s3api get-bucket-lifecycle-configuration --profile sunlit-servers \
+  --bucket momobot-prod-backups-009688440435
+aws s3api put-bucket-lifecycle-configuration --profile sunlit-servers \
+  --bucket momobot-prod-backups-009688440435 \
+  --lifecycle-configuration file://deploy/momentum/ec2/backup-lifecycle.json
+aws s3api get-bucket-lifecycle-configuration --profile sunlit-servers \
+  --bucket momobot-prod-backups-009688440435 --query Rules
+```
+
 ## Not on the box (Mac-only, off in the cloud config)
 
 Brain MCP (Mac bridge :8787), client_browser MCP (:8788), the Jevbox evidence tool (:4310) and the local
