@@ -14,7 +14,7 @@ export function RememberSessionOption({
   const { t } = useI18n();
 
   return (
-    <label className="text-muted-foreground flex items-start gap-2 text-sm">
+    <label className="text-muted-foreground flex min-h-11 cursor-pointer items-start gap-2 text-sm">
       <input
         type="checkbox"
         checked={checked}

@@ -321,6 +321,7 @@ export default function LoginPage() {
           </p>
           <Input
             type="text"
+            className="min-h-11"
             inputMode={mfaUseRecoveryCode ? "text" : "numeric"}
             placeholder={
               mfaUseRecoveryCode
@@ -337,7 +338,7 @@ export default function LoginPage() {
               {error}
             </p>
           )}
-          <Button type="submit" className="w-full" disabled={loading}>
+          <Button type="submit" className="min-h-11 w-full" disabled={loading}>
             {loading ? t.login.pleaseWait : t.login.mfaVerifyButton}
           </Button>
           <div className="flex items-center justify-between text-sm">
@@ -348,7 +349,10 @@ export default function LoginPage() {
                 setMfaCode("");
                 setError("");
               }}
-              className={cn("hover:underline", linkClass)}
+              className={cn(
+                "inline-flex min-h-11 items-center hover:underline",
+                linkClass,
+              )}
               style={linkStyle}
             >
               {mfaUseRecoveryCode
@@ -363,7 +367,10 @@ export default function LoginPage() {
                 setPassword("");
                 setError("");
               }}
-              className={cn(mutedClass, "hover:underline")}
+              className={cn(
+                mutedClass,
+                "inline-flex min-h-11 items-center hover:underline",
+              )}
               style={mutedStyle}
             >
               {t.login.mfaBackToLogin}
@@ -391,7 +398,7 @@ export default function LoginPage() {
             type="button"
             variant="outline"
             size="sm"
-            className="mt-3"
+            className="mt-3 min-h-11"
             disabled={setupStatusPhase === "checking"}
             onClick={() => {
               setSetupStatusPhase("checking");
@@ -414,7 +421,7 @@ export default function LoginPage() {
           <Link
             href="/setup"
             className={cn(
-              "mt-2 inline-block font-medium hover:underline",
+              "mt-2 inline-flex min-h-11 items-center font-medium hover:underline",
               linkClass,
             )}
             style={linkStyle}
@@ -434,6 +441,7 @@ export default function LoginPage() {
               <Input
                 id="email"
                 type="email"
+                className="min-h-11"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder={t.login.emailPlaceholder}
@@ -447,6 +455,7 @@ export default function LoginPage() {
               <Input
                 id="password"
                 type="password"
+                className="min-h-11"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder={t.login.passwordPlaceholder}
@@ -468,7 +477,7 @@ export default function LoginPage() {
 
             <Button
               type="submit"
-              className="w-full"
+              className="min-h-11 w-full"
               disabled={loading}
               style={
                 paper
@@ -532,7 +541,7 @@ export default function LoginPage() {
                   key={provider.id}
                   type="button"
                   variant="outline"
-                  className="w-full"
+                  className="min-h-11 w-full"
                   disabled={loading}
                   onClick={() => {
                     window.location.href = `/api/v1/auth/oauth/${provider.id}?next=${encodeURIComponent(redirectPath)}&remember_me=${String(rememberMe)}`;
@@ -553,7 +562,10 @@ export default function LoginPage() {
                   setError("");
                   setShowSsoHint(false);
                 }}
-                className={cn("hover:underline", linkClass)}
+                className={cn(
+                  "inline-flex min-h-11 items-center hover:underline",
+                  linkClass,
+                )}
                 style={linkStyle}
               >
                 {isLogin ? t.login.noAccountSignUp : t.login.haveAccountSignIn}
@@ -564,7 +576,10 @@ export default function LoginPage() {
       )}
 
       <div className={cn("text-center text-xs", mutedClass)} style={mutedStyle}>
-        <Link href="/" className="hover:underline">
+        <Link
+          href="/"
+          className="inline-flex min-h-11 items-center hover:underline"
+        >
           {t.login.backToHome}
         </Link>
       </div>
@@ -575,6 +590,7 @@ export default function LoginPage() {
     <div
       className={cn(
         "relative min-h-screen overflow-x-hidden overflow-y-auto",
+        paper && momoStyles.signInPage,
         paper
           ? inviteStyles.field
           : "bg-background flex items-center justify-center",
