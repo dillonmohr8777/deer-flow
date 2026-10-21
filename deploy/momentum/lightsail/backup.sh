@@ -12,7 +12,7 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 source /etc/momobot/bootstrap.env
 : "${MOMOBOT_BACKUP_BUCKET:?set MOMOBOT_BACKUP_BUCKET in /etc/momobot/bootstrap.env}"
 PROJECT="${MOMOBOT_PROJECT:-momobot-prod}"
-IMAGE="$("$REPO/deploy/momentum/vps/dotenv-get.sh" "$DEPLOY/.env" MOMENTUM_GATEWAY_IMAGE)"
+IMAGE="$("$REPO/deploy/momentum/vps/dotenv-get.sh" "${MOMOBOT_ENV_FILE:-$DEPLOY/.env}" MOMENTUM_GATEWAY_IMAGE)"
 STAGE="$(mktemp -d "$DEPLOY/backup-stage.XXXXXX")"
 SNAP="${PROJECT}_backup-snap-$$"
 cleanup() { docker volume rm -f "$SNAP" >/dev/null 2>&1 || true; rm -rf "$STAGE"; }
