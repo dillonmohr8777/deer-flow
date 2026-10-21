@@ -64,15 +64,16 @@ def require_course(directory):
     sources, packet = accepted_sources(root)
     source = root / 'scripts' / (provenance['stem'] + '.json')
     assert source in sources and sha(source) == provenance['binding']['source_sha256'], 'Stale narration source'
-    assert sha(root / 'ref.wav') == provenance['binding']['reference_sha256'], 'Changed voice reference'
+    assert sha(root / 'ref.wav') == provenance['binding']['reference_sha256'] == packet.get('reference_sha256'), 'Changed or unaccepted voice reference'
     assert digest(provenance['binding'])[:16] == directory.name, 'Wrong generation directory'
     return provenance, packet
 
 
-def ensure_generation(root, source, ref):
-    sources, _ = accepted_sources(root)
+def ensure_generation(root, source, ref, settings=None):
+    sources, packet = accepted_sources(root)
+    assert sha(ref) == packet.get('reference_sha256'), 'Unaccepted voice reference'
     assert source in sources, 'Only accepted exact stems may synthesize'
-    directory, binding = voice_directory(root, source, ref)
+    directory, binding = voice_directory(root, source, ref, settings)
     directory.mkdir(parents=True, exist_ok=True)
     value = dict(stem=source.stem, evidence_root=str(Path(root).resolve()), binding=binding)
     path = directory / 'generation.json'

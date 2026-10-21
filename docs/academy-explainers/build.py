@@ -83,7 +83,8 @@ def build(source, output, assets, burn_captions=False):
     visuals = json.loads((HERE / 'work-visuals.json').read_text())[stem]
     assert len(visuals) == len(lesson['chapters']), 'Chapter/visual mismatch'
     chapter_total = len(lesson['chapters'])
-    course_total = packet.get('course_total', len(packet['lessons']))
+    course_total = packet.get('course_total')
+    assert isinstance(course_total, int) and max(int(row['stem'][:2])+1 for row in packet['lessons']) <= course_total <= 17, 'Explicit complete-course total required'
     word_caps = captions(json.loads((source.parent / 'asr.json').read_text()), lesson)
     vtt = ['WEBVTT', '']
     hosts, boards = [], []

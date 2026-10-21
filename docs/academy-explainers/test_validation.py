@@ -5,7 +5,7 @@ import unittest
 from validation import atomic_json, fingerprints, require_approved, timing_errors
 from contract import accepted_sources, identity, voice_directory, ensure_generation, duration_ok, sha, SETTINGS
 from synthesize import chunks
-from transcribe import critical_differences, normalize
+from transcribe import critical_differences, normalize, provider_transcript
 
 
 class ValidationTest(unittest.TestCase):
@@ -14,7 +14,7 @@ class ValidationTest(unittest.TestCase):
         source = root / 'scripts/00-platform-tour.json'
         atomic_json(source, {'title': 'Tour', 'chapters': [{'title': 'A', 'narration': 'Do not send 5 drafts.'}]})
         (root / 'ref.wav').write_bytes(b'authorized reference')
-        atomic_json(root / 'SCRIPT-ACCEPTED.json', {'accepted': True, 'course': 'momentum-work', 'lessons': [{'stem': source.stem, 'sha256': sha(source)}]})
+        atomic_json(root / 'SCRIPT-ACCEPTED.json', {'accepted': True, 'course': 'momentum-work', 'reference_sha256': sha(root / 'ref.wav'), 'lessons': [{'stem': source.stem, 'sha256': sha(source)}]})
         return source
 
     def test_caption_complete_valid(self):
@@ -61,6 +61,13 @@ class ValidationTest(unittest.TestCase):
             source.write_text('{}')
             self.assertNotEqual(before, voice_directory(root, source, ref)[0])
 
+    def test_unaccepted_reference_rejected_before_model(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary); source = self.fixture(root)
+            (root / 'ref.wav').write_bytes(b'changed reference')
+            with self.assertRaisesRegex(AssertionError, 'Unaccepted voice reference'):
+                ensure_generation(root, source, root / 'ref.wav')
+
     def test_receipt_and_pending_marker_gate(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary); source = self.fixture(root)
@@ -78,6 +85,18 @@ class ValidationTest(unittest.TestCase):
             atomic_json(directory / 'timing.json', [{'text': 'changed'}])
             with self.assertRaisesRegex(AssertionError, 'stale'):
                 require_approved(directory)
+
+    def test_provider_words_preserved_and_audio_hash_checked(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary); audio = root / 'narration.wav'; audio.write_bytes(b'fixture')
+            response = root / 'provider.json'
+            words = [{'word': 'do', 'start': 0, 'end': .2}, {'word': 'not', 'start': .2, 'end': .5}]
+            atomic_json(response, {'successful': True, 'data': {'text': 'do not', 'duration': 1, 'words': words}})
+            original, parsed = provider_transcript(response, audio, sha(audio))
+            self.assertEqual(parsed['segments'][0]['words'], words)
+            self.assertFalse(timing_errors(parsed, 1))
+            with self.assertRaisesRegex(AssertionError, 'input audio hash'):
+                provider_transcript(response, audio, 'wrong')
 
     def test_protected_words_do_not_hide_under_coverage_tolerance(self):
         for token in ['not', 'no', 'never', '5', 'before', 'without']:
@@ -105,7 +124,7 @@ class BuildContractTest(unittest.TestCase):
             source = root / 'scripts/00-platform-tour.json'
             atomic_json(source, {'title': 'Test fixture tour', 'chapters': chapters})
             (root / 'ref.wav').write_bytes(b'fixture reference')
-            atomic_json(root / 'SCRIPT-ACCEPTED.json', {'accepted': True, 'course': 'momentum-work', 'course_total': 16,
+            atomic_json(root / 'SCRIPT-ACCEPTED.json', {'accepted': True, 'course': 'momentum-work', 'reference_sha256': sha(root / 'ref.wav'), 'course_total': 16,
                         'lessons': [{'stem': source.stem, 'sha256': sha(source)}]})
             directory = ensure_generation(root, source, root / 'ref.wav')
             lesson = json.loads(source.read_text()); lesson.update(duration=520, course='momentum-work', course_stem=source.stem)
