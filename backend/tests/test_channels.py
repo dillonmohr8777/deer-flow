@@ -8707,29 +8707,18 @@ class TestChannelService:
 
 
 class TestSlackSendRetry:
-    def test_retries_on_failure_then_succeeds(self):
-        from app.channels.slack import SlackChannel
+    def test_connection_failure_is_held_without_retry(self):
+        from app.channels.slack import SlackChannel, SlackSendOutcomeUnknown
 
         async def go():
-            bus = MessageBus()
-            ch = SlackChannel(bus=bus, config={"bot_token": "xoxb-test", "app_token": "xapp-test"})
-
-            mock_web = MagicMock()
-            call_count = 0
-
-            def post_message(**kwargs):
-                nonlocal call_count
-                call_count += 1
-                if call_count < 3:
-                    raise ConnectionError("network error")
-                return MagicMock()
-
-            mock_web.chat_postMessage = post_message
-            ch._web_client = mock_web
-
+            ch = SlackChannel(bus=MessageBus(), config={})
+            ch._web_client = MagicMock()
+            ch._web_client.chat_postMessage.side_effect = ConnectionError("network error")
             msg = OutboundMessage(channel_name="slack", chat_id="C123", thread_id="t1", text="hello")
-            await ch.send(msg)
-            assert call_count == 3
+            with pytest.raises(SlackSendOutcomeUnknown):
+                await ch.send(msg)
+            ch._web_client.chat_postMessage.assert_called_once()
+            assert msg.metadata["slack_delivery"]["state"] == "outcome_unknown"
 
         _run(go())
 
@@ -9091,7 +9080,7 @@ class TestSlackAllowedUsers:
         assert inbound.user_id == "123456"
 
     def test_raises_after_all_retries_exhausted(self):
-        from app.channels.slack import SlackChannel
+        from app.channels.slack import SlackChannel, SlackSendOutcomeUnknown
 
         async def go():
             bus = MessageBus()
@@ -9102,10 +9091,10 @@ class TestSlackAllowedUsers:
             ch._web_client = mock_web
 
             msg = OutboundMessage(channel_name="slack", chat_id="C123", thread_id="t1", text="hello")
-            with pytest.raises(ConnectionError):
+            with pytest.raises(SlackSendOutcomeUnknown):
                 await ch.send(msg)
 
-            assert mock_web.chat_postMessage.call_count == 3
+            assert mock_web.chat_postMessage.call_count == 1
 
         _run(go())
 
@@ -10482,7 +10471,7 @@ class TestSlackTextEscaping:
 
             def post_message(**kwargs):
                 captured.update(kwargs)
-                return MagicMock()
+                return {"ok": True, "channel": "C123", "ts": "101.2"}
 
             mock_web.chat_postMessage = post_message
             ch._web_client = mock_web

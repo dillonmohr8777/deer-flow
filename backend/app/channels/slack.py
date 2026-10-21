@@ -31,6 +31,10 @@ logger = logging.getLogger(__name__)
 _slack_md_converter = SlackMarkdownConverter()
 
 
+class SlackSendOutcomeUnknown(RuntimeError):
+    """A Slack post may have committed; reconcile its destination before retrying."""
+
+
 def _escape_slack_text(text: str) -> str:
     """Escape Slack's reserved characters (``&``, ``<``, ``>``) in raw message text,
     except a ``>`` at the very start of a line -- Slack's own blockquote marker.
@@ -228,10 +232,19 @@ class SlackChannel(Channel):
         logger.info("Slack channel stopped")
 
     async def send(self, msg: OutboundMessage, *, _max_retries: int = 3) -> None:
+        from slack_sdk.errors import SlackApiError
+
+        # Keep the legacy argument, but never replay a possibly committed post.
+        if _max_retries <= 0:
+            raise RuntimeError("Slack send exhausted retries without an exception")
         web_client = await self._get_web_client_for_message(msg)
         if not web_client:
             return
-
+        delivery = msg.metadata.get("slack_delivery", {})
+        if delivery.get("state") == "outcome_unknown":
+            raise SlackSendOutcomeUnknown("outcome_unknown: reconcile Slack destination before retrying")
+        if delivery.get("state") == "sent":
+            return
         kwargs: dict[str, Any] = {
             "channel": msg.chat_id,
             "text": _slack_md_converter.convert(_escape_slack_text(msg.text)),
@@ -240,38 +253,25 @@ class SlackChannel(Channel):
         if reply_ts:
             kwargs["thread_ts"] = reply_ts
 
-        async def post_message() -> None:
-            await asyncio.to_thread(web_client.chat_postMessage, **kwargs)
-            # Add a completion reaction to the thread root
-            if msg.thread_ts:
-                await asyncio.to_thread(
-                    self._add_reaction_with_client,
-                    web_client,
-                    msg.chat_id,
-                    msg.thread_ts,
-                    "white_check_mark",
-                )
-
+        # Cancellation cannot stop the synchronous HTTP worker after submission.
+        msg.metadata["slack_delivery"] = {"state": "outcome_unknown", "channel": msg.chat_id}
         try:
-            await self._send_with_retry(
-                post_message,
-                max_retries=_max_retries,
-                log_prefix="[Slack]",
-            )
-        except Exception:
-            # Add failure reaction on error
-            if msg.thread_ts:
-                try:
-                    await asyncio.to_thread(
-                        self._add_reaction_with_client,
-                        web_client,
-                        msg.chat_id,
-                        msg.thread_ts,
-                        "x",
-                    )
-                except Exception:
-                    pass
+            response = await asyncio.to_thread(web_client.chat_postMessage, **kwargs)
+        except SlackApiError as exc:
+            response = exc.response
+            if response.status_code >= 500 or response.status_code == 408 or response.get("error") in {"internal_error", "fatal_error", "request_timeout", "service_unavailable"}:
+                raise SlackSendOutcomeUnknown("outcome_unknown: reconcile Slack destination before retrying") from exc
+            msg.metadata["slack_delivery"]["state"] = "failed"
             raise
+        except Exception as exc:
+            raise SlackSendOutcomeUnknown("outcome_unknown: reconcile Slack destination before retrying") from exc
+
+        channel, timestamp = response.get("channel"), response.get("ts")
+        if response.get("ok") is not True or not isinstance(channel, str) or not channel or not isinstance(timestamp, str) or not timestamp:
+            raise SlackSendOutcomeUnknown("outcome_unknown: Slack returned no delivery receipt; reconcile before retrying")
+        msg.metadata["slack_delivery"] = {"state": "sent", "channel": channel, "ts": timestamp}
+        if msg.thread_ts:
+            await asyncio.to_thread(self._add_reaction_with_client, web_client, msg.chat_id, msg.thread_ts, "white_check_mark")
 
     async def send_file(self, msg: OutboundMessage, attachment: ResolvedAttachment) -> bool:
         web_client = await self._get_web_client_for_message(msg)
@@ -301,7 +301,7 @@ class SlackChannel(Channel):
         factory = self._web_client_factory
         if factory is None:
             raise RuntimeError("Slack web client factory required")
-        self._web_client = factory(token=bot_token)
+        self._web_client = factory(token=bot_token, retry_handlers=[])
         if self._bot_user_id is not None:
             return
         try:
@@ -332,7 +332,7 @@ class SlackChannel(Channel):
                 from slack_sdk import WebClient
 
                 self._web_client_factory = WebClient
-            web_client = self._web_client_factory(token=access_token)
+            web_client = self._web_client_factory(token=access_token, retry_handlers=[])
             self._connection_web_clients[msg.connection_id] = (access_token, web_client)
             return web_client
         return self._web_client
