@@ -27,8 +27,9 @@ import { writeTextToClipboard } from "@/core/clipboard";
 import { useMomentumInternalEnabled } from "@/core/features";
 import { cn } from "@/lib/utils";
 
-import styles from "./academy.module.css";
 import { academyVideoSeries } from "./video-library";
+
+import styles from "./academy.module.css";
 
 /**
  * AI Academy: Momentum staff training. Same gate as Team
