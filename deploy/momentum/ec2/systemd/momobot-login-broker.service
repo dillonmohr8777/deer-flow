@@ -11,7 +11,7 @@ Environment=AWS_REGION=us-east-2
 Restart=on-failure
 RestartSec=10
 UMask=0077
-NoNewPrivileges=yes
+# No NoNewPrivileges: the snap-packaged aws CLI must change its AppArmor profile at exec.
 PrivateTmp=yes
 ProtectSystem=strict
 ReadWritePaths=/var/lib/docker/volumes/momobot-prod_gateway-data/_data/run
