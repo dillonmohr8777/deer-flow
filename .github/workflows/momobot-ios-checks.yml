@@ -1,0 +1,40 @@
+name: MomoBot iOS checks
+
+on:
+  pull_request:
+    paths:
+      - 'mobile/ios/**'
+      - '.github/workflows/momobot-ios-checks.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: momobot-ios-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ios-checks:
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - name: Checkout reviewed source
+        uses: actions/checkout@v6
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Record Apple toolchain
+        run: xcodebuild -version && xcodegen --version
+      - name: Test core policy
+        run: swift test --package-path mobile/ios/MomoMobileCore
+      - name: Generate Xcode project
+        run: xcodegen generate --spec mobile/ios/project.yml
+      - name: Build unsigned simulator app
+        run: >-
+          xcodebuild
+          -project mobile/ios/MomoBot.xcodeproj
+          -scheme MomoBot
+          -sdk iphonesimulator
+          -destination 'generic/platform=iOS Simulator'
+          CODE_SIGNING_ALLOWED=NO
+          build

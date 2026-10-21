@@ -86,6 +86,8 @@ self.addEventListener("fetch", (event) => {
   const request = event.request;
   const url = new URL(request.url);
   if (url.protocol !== "http:" && url.protocol !== "https:") return;
+  // Let the browser load external media; the worker's CSP permits only self.
+  if (url.origin !== self.location.origin) return;
 
   event.respondWith(
     // Bypass the HTTP cache too: a new account/session must always reach the

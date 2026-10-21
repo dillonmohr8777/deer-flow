@@ -475,11 +475,11 @@
 }
 
 /* Inactive tabs are foreground at 60% opacity upstream, about 4.2:1 on cream.
-   Paper uses the muted ink token instead (7.59:1); hover returns to full ink. */
+   Paper uses the muted-foreground token instead (ink-muted 7.59:1 in light, a light grey in dark); hover returns to full foreground. */
 [data-treatment="paper"] [data-slot="tabs-trigger"]:not([data-state="active"]) {
-  color: var(--paper-ink-muted);
+  color: var(--muted-foreground);
 }
 [data-treatment="paper"]
   [data-slot="tabs-trigger"]:not([data-state="active"]):hover {
-  color: var(--paper-ink);
+  color: var(--foreground);
 }

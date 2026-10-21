@@ -120,3 +120,51 @@ client's folder). Submit with `client_id` and `requester` (a Slack user ID), no
   Env vars and the client-folder mapping are in the script's docstring.
 - **Slack.** `channels.slack.reply_in_thread: false` posts replies top-level
   (and skips the "Working on it" thread reply; the eyes reaction remains).
+
+### Slack handoff to the desktop lane
+
+`app/channels/desktop_jobs.py`, wired into the channel manager's `/momobot`
+command path. In a DM or after an @mention, `desktop <task>`, `approve <job id>`
+and `reject <job id>` are aliased to `/momobot ...` (and `/momobot desktop ...`
+works directly). Who may do what comes from the bound Slack user id and the
+`roster` config, never from the message text.
+
+- **Submit.** `@MomoBot desktop <task>`. The client comes from
+  `roster.channel_clients` (Slack channel ID -> client ID); an unlisted channel is
+  refused. In a DM write `desktop <client-id>: <task>`; the client must be in the
+  user's roster scope (`scope_for` / `client_allowed`). Unknown users and
+  out-of-scope clients get a short refusal and no job. The manager posts to
+  `POST /api/fleet/work/batches` as the bound owner (the same identity path and
+  CSRF pair as its other gateway calls), with `requester` set to the Slack user id
+  and `slack_origin` (`channel`, `team`, `connection`) stored on the batch spec.
+  The reply is top-level: `Queued desktop job <short id> for <client>. Waiting for
+  approval from Dillon or Sean ...`, naming the roster admins. The short id is the
+  first 8 hex characters of the batch id.
+- **Approve and reject.** `@MomoBot approve <id>` / `@MomoBot reject <id>`, roster
+  role `admin` only (non-admins are refused before any call). `approve` uses the
+  existing approve route; `reject` is `POST /api/fleet/work/batches/{id}/reject`
+  (org owner/admin, `approvals:write`), which cancels a still-pending batch and its
+  items (`approval_state: rejected`). An already approved batch answers 409 and is
+  left alone. Both routes accept the full batch id or a unique hex prefix of it.
+  Both layers apply: the roster role by Slack id, and the router's org-admin check
+  on the bound DeerFlow account.
+- **Result post.** The channel manager polls every 30 seconds
+  (`SubagentBatchRepository.desktop_results_to_notify`, last 24 hours). A finished
+  desktop batch with a `slack_origin` is announced once, top-level in the origin
+  channel: the first 1500 characters of the result, or a failure note. It is
+  marked `notified_at` on the spec after the post is queued.
+- **Buttons.** Approve/Reject Block Kit buttons are not included. The Slack Socket
+  Mode handler only routes `block_actions` for the approvals inbox
+  (`channels.slack.approvals_dm`), and interactivity needs the Slack app reinstall,
+  so approval is by command for now.
+
+Example config (`config.example.yaml`, no real ids):
+
+```yaml
+roster:
+  users:
+    U0EXAMPLEAM1: {role: am, clients: [example-client]}
+    U0EXAMPLEADM: {role: admin}
+  channel_clients:
+    C0EXAMPLE001: example-client
+```

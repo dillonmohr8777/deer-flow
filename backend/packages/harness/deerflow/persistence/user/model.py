@@ -48,8 +48,10 @@ class UserRow(Base):
     email: Mapped[str] = mapped_column(String(320), unique=True, nullable=False, index=True)
     password_hash: Mapped[str | None] = mapped_column(String(128), nullable=True)
 
-    # "admin" | "user" — kept as plain string to avoid ALTER TABLE pain
-    # when new roles are introduced.
+    # "admin" | "exec" | "user" | "client" — kept as plain string to avoid ALTER
+    # TABLE pain when new roles are introduced. The gateway's ``SystemRole``
+    # type (app/gateway/auth/models.py) is the validator: any other value
+    # cannot be loaded as a User, so it can never authenticate.
     system_role: Mapped[str] = mapped_column(String(16), nullable=False, default="user")
 
     created_at: Mapped[datetime] = mapped_column(

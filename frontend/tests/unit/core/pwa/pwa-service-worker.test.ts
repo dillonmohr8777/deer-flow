@@ -211,7 +211,6 @@ describe("MomoBot public-only service worker", () => {
       "/auth/callback?code=private-code",
       "/artifacts/view?path=private-file",
       "/api/artifacts/private-file",
-      "https://private-api.example.test/api/runs",
     ]) {
       expect(await (await worker.request(path)).text()).toBe(
         "private owner A data",
@@ -227,6 +226,24 @@ describe("MomoBot public-only service worker", () => {
         .slice(PUBLIC_PATHS.length)
         .every(({ options }) => options?.cache === "no-store"),
     ).toBe(true);
+  });
+
+  it("leaves external videos, posters and API requests to the browser", async () => {
+    const worker = createWorker();
+    await worker.lifecycle("install");
+    const calls = worker.calls.length;
+    for (const url of [
+      "https://momentum-ai-division-hub.netlify.app/media/launch-30s.mp4",
+      "https://momentum-ai-division-hub.netlify.app/media/launch-30s.jpg",
+      "https://private-api.example.test/api/runs",
+      "https://other.example.test/icons/icon-192.png",
+    ]) {
+      await expect(worker.request(url)).rejects.toThrow(
+        "Fetch was not handled",
+      );
+    }
+    expect(worker.calls).toHaveLength(calls);
+    expect(worker.writes).toHaveLength(PUBLIC_PATHS.length);
   });
 
   it("never serves a previous account response after logout or an account switch", async () => {
@@ -289,7 +306,6 @@ describe("MomoBot public-only service worker", () => {
       "/mock/api/threads",
       "/workspace?_rsc=private",
       "/icons/icon-192.png?owner=private",
-      "https://other.example.test/icons/icon-192.png",
     ]) {
       await expect(worker.request(path)).rejects.toThrow("offline");
     }

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Nightly backup to S3: online-safe snapshot of the gateway volume (SQLite via
 # the backup API, see ../backup_volume.py), plus config.yaml and
-# extensions_config.json. NEVER .env: SSM is the source of truth for secrets.
+# extensions_config.json, Redis RDB, and EC2 bind mounts when that layer is enabled.
+# NEVER .env: SSM is the source of truth for environment credentials.
 # Needs AWS credentials for the IAM user in iam-policy.json (root's ~/.aws) and
 # MOMOBOT_BACKUP_BUCKET in /etc/momobot/bootstrap.env. The bucket should have
 # default encryption on and block public access (RUNBOOK step 3).
@@ -12,7 +13,7 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 source /etc/momobot/bootstrap.env
 : "${MOMOBOT_BACKUP_BUCKET:?set MOMOBOT_BACKUP_BUCKET in /etc/momobot/bootstrap.env}"
 PROJECT="${MOMOBOT_PROJECT:-momobot-prod}"
-IMAGE="$("$REPO/deploy/momentum/vps/dotenv-get.sh" "$DEPLOY/.env" MOMENTUM_GATEWAY_IMAGE)"
+IMAGE="$("$REPO/deploy/momentum/vps/dotenv-get.sh" "${MOMOBOT_ENV_FILE:-$DEPLOY/.env}" MOMENTUM_GATEWAY_IMAGE)"
 STAGE="$(mktemp -d "$DEPLOY/backup-stage.XXXXXX")"
 SNAP="${PROJECT}_backup-snap-$$"
 cleanup() { docker volume rm -f "$SNAP" >/dev/null 2>&1 || true; rm -rf "$STAGE"; }
@@ -28,6 +29,13 @@ docker run --rm --network none \
 docker run --rm --network none --mount "type=volume,source=$SNAP,target=/b,readonly" \
   -v "$STAGE:/out" alpine tar czf /out/gateway-data.tgz -C /b --exclude=./agency-evals .
 cp "$DEPLOY/config.yaml" "$DEPLOY/extensions_config.json" "$STAGE/"
+docker exec "${PROJECT}-redis" redis-cli --rdb - >"$STAGE/redis.rdb"
+REDIS_IMAGE="$(docker inspect "${PROJECT}-redis" --format '{{.Config.Image}}')"
+docker run --rm --network none --mount "type=bind,source=$STAGE,target=/backup,readonly" \
+  --entrypoint redis-check-rdb "$REDIS_IMAGE" /backup/redis.rdb >/dev/null
+if [[ "${MOMOBOT_EXTRA_COMPOSE:-}" == */ec2/compose.ec2.yaml ]]; then
+  python3 "$REPO/deploy/momentum/ec2/backup_extra.py" "$DEPLOY" "$STAGE"
+fi
 (cd "$STAGE" && sha256sum ./* >MANIFEST.sha256)   # same layout migrate-data.sh import reads
 tar czf "$DEPLOY/backup-$stamp.tgz" -C "$STAGE" .
 trap 'rm -f "$DEPLOY/backup-$stamp.tgz"; cleanup' EXIT

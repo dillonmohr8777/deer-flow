@@ -898,7 +898,7 @@ def test_apply_prompt_template_includes_user_profile_when_present(monkeypatch, t
     paths = _patch_paths(monkeypatch, tmp_path)
     profile_path = paths.user_md_file_for("beth")
     profile_path.parent.mkdir(parents=True, exist_ok=True)
-    profile_path.write_text("Beth handles Deborah Mara and GT Clinic.", encoding="utf-8")
+    profile_path.write_text("Beth handles Maren Ashby Realty and Pine Row Clinic.", encoding="utf-8")
 
     config = _make_minimal_app_config()
     monkeypatch.setattr("deerflow.config.get_app_config", lambda: config)
@@ -911,7 +911,7 @@ def test_apply_prompt_template_includes_user_profile_when_present(monkeypatch, t
     prompt = prompt_module.apply_prompt_template(app_config=config, user_id="beth", skill_names=frozenset())
 
     assert "<user_profile>" in prompt
-    assert "Beth handles Deborah Mara and GT Clinic." in prompt
+    assert "Beth handles Maren Ashby Realty and Pine Row Clinic." in prompt
 
 
 def test_apply_prompt_template_omits_user_profile_when_absent(monkeypatch, tmp_path):

@@ -3,6 +3,7 @@ export type ApprovalActionType =
   | "email"
   | "ad_change"
   | "deploy_report"
+  | "portal_publish"
   | "other";
 
 export type ApprovalStatus =

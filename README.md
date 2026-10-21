@@ -852,6 +852,8 @@ DINGTALK_CLIENT_SECRET=your_client_secret
 
 **Slack Setup**
 
+Slack text posts are attempted once. A lost acknowledgment or server-side ambiguity is held as `outcome_unknown` and must be reconciled with the destination before another attempt. Successful posts retain the provider channel and message timestamp; this is not an exactly-once delivery guarantee.
+
 1. Create a Slack App at [api.slack.com/apps](https://api.slack.com/apps) → Create New App → From scratch.
 2. Under **OAuth & Permissions**, add Bot Token Scopes: `app_mentions:read`, `chat:write`, `im:history`, `im:read`, `im:write`, `files:write`.
 3. Enable **Socket Mode** → generate an App-Level Token (`xapp-…`) with `connections:write` scope.
@@ -1328,7 +1330,7 @@ Installation is interactive because package installation can execute Python buil
 and the loaded extension later runs with Gateway privileges. For an already-reviewed
 source, automation can acknowledge that boundary explicitly with
 `cd backend && uv run --frozen --no-group extensions deerflow extensions install <source> --yes`.
-The manager requires uv 0.8.0 or newer; the provided Docker images pin uv 0.11.1.
+The manager requires uv 0.8.0 or newer; the provided Docker images pin uv 0.13.4.
 The other direct
 commands are `deerflow extensions upgrade SOURCE`, `list`, `enable NAME`, `disable NAME`, and `remove NAME`;
 `NAME` may be the extension name, Python distribution, or `module:install` value. Do not
@@ -1853,6 +1855,12 @@ in the composer and in the transcript. There is no automatic history search. See
 and the [request contract](backend/docs/API.md#referencing-a-previous-conversation).
 
 ### Long-Term Memory
+
+`memory.model_name` selects a host `models[]` profile for DeerMem extraction,
+including its endpoint and provider restrictions. Null retains the app default;
+it does not follow the chat run's model. An explicit `memory.backend_config.model`
+still takes precedence. An unknown host profile disables extraction with a
+warning instead of falling back to another model. Memory reads remain available.
 
 The opt-in [DeerMem scope-isolation benchmark](backend/scripts/benchmark/deermem_scope_isolation/README.md)
 checks semantic safety across facts and summaries, and fact routing across users
@@ -2553,3 +2561,7 @@ rejects an omitted journal setting; previous memory-only pilot events remain
 historical. See the exact invocation in [private setup](docs/MOMOBOT_APP_RELEASE.md).
 
 Optional Momentum integration: [synthetic offline SDK review worker](examples/momentum-sdk-review/README.md). Disabled by default; does not perform live client work or inference.
+
+For EC2 operators, an optional [read-only Brain snapshot adapter](deploy/momentum/ec2/README.md#optional-read-only-brain-snapshot-prepared-not-enabled)
+can expose saved context without a Mac service or new collector. It is prepared only;
+production registration and private snapshot installation are separate release steps.

@@ -34,7 +34,7 @@ proxy, persistent browser context, client mutation or report login is introduced
 Only operator-defined job IDs reach the tool. The private 0600 config pins the
 canonical registry, explicit source-proven exact hosts, authenticated owner ID,
 Browserbase project, output path and a shared SQLite ledger. Registry email
-addresses are not treated as website provenance. Historical Align HCM is refused.
+addresses are not treated as website provenance. Historical Larkfield HCM is refused.
 No Gateway database or canonical client queue is modified.
 
 The account proof must identify a current billing cycle, expiration, independently

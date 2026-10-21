@@ -33,6 +33,7 @@ from app.gateway.workflow_authority import workflow_actor_authorized
 from app.gateway.workflow_service import WorkflowService
 from deerflow.config.authorization_config import AuthorizationConfig, AuthorizationProviderConfig
 from deerflow.persistence.base import Base
+from deerflow.persistence.clients.model import ClientAssignmentRow, ClientRow
 from deerflow.persistence.models import RunChangeClockRow, RunEventRow, RunRow, ThreadMetaRow
 from deerflow.persistence.organizations.model import OrganizationMemberRow, OrganizationRow
 from deerflow.persistence.projects.model import ProjectRow
@@ -291,7 +292,19 @@ async def api(tmp_path, monkeypatch, request):
     async with engine.begin() as connection:
         await connection.run_sync(
             lambda connection: Base.metadata.create_all(
-                connection, tables=[OrganizationRow.__table__, OrganizationMemberRow.__table__, UserRow.__table__, ProjectRow.__table__, ThreadMetaRow.__table__, RunRow.__table__, RunChangeClockRow.__table__, RunEventRow.__table__]
+                connection,
+                tables=[
+                    OrganizationRow.__table__,
+                    OrganizationMemberRow.__table__,
+                    UserRow.__table__,
+                    ProjectRow.__table__,
+                    ThreadMetaRow.__table__,
+                    RunRow.__table__,
+                    RunChangeClockRow.__table__,
+                    RunEventRow.__table__,
+                    ClientRow.__table__,
+                    ClientAssignmentRow.__table__,
+                ],
             )
         )
     async with factory() as session:

@@ -96,3 +96,24 @@ it("gives phones the sidebar menu trigger the other workspace pages carry", () =
     screen.getByRole("heading", { level: 1, name: "Agents" }),
   ).toBeDefined();
 });
+
+it("gives a built-in agent a chat button and no settings, since the server owns it", () => {
+  render(
+    <ul>
+      <AgentCard
+        agent={{
+          name: "momobot-max",
+          display_name: "MomoBot Max",
+          description: "Your all-in-one marketing teammate.",
+          model: "claude-opus-5-5",
+          tool_groups: null,
+          skills: [],
+          builtin: true,
+        }}
+      />
+    </ul>,
+  );
+  expect(screen.getByRole("heading", { name: "MomoBot Max" })).toBeDefined();
+  expect(screen.getByRole("button", { name: /chat/i })).toBeDefined();
+  expect(screen.queryByTitle("Agent settings")).toBeNull();
+});

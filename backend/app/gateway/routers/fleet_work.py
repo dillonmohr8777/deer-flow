@@ -50,6 +50,14 @@ class FleetItemInput(BaseModel):
     prompt: str = Field(min_length=1)
 
 
+class SlackOrigin(BaseModel):
+    """Where a Slack-submitted desktop job posts its result (desktop lane only)."""
+
+    channel: str = Field(min_length=1, max_length=32, pattern=r"^[A-Z0-9]+$")
+    team: str | None = Field(default=None, max_length=32, pattern=r"^[A-Z0-9]+$")
+    connection: str | None = Field(default=None, max_length=64)
+
+
 class FleetBatchSubmit(BaseModel):
     thread_id: str = Field(min_length=1, max_length=64)
     title: str = Field(min_length=1, max_length=256)
@@ -65,6 +73,7 @@ class FleetBatchSubmit(BaseModel):
     source_ref: str | None = Field(default=None, min_length=1, max_length=256, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:/-]*$")
     client_id: str | None = Field(default=None, min_length=1, max_length=96, pattern=r"^[a-z0-9][a-z0-9-]{0,95}$")
     requester: str | None = Field(default=None, min_length=1, max_length=64, pattern=r"^[A-Z0-9]+$")  # Slack user id, desktop lane only
+    slack_origin: SlackOrigin | None = None  # desktop lane only
 
     @model_validator(mode="after")
     def validate_project_binding(self) -> FleetBatchSubmit:
@@ -72,8 +81,8 @@ class FleetBatchSubmit(BaseModel):
             if self.client_id is None or self.requester is None or self.project is not None or self.source_ref is not None:
                 raise ValueError("Desktop jobs require client_id and requester, and take no project")
             return self
-        if self.requester is not None:
-            raise ValueError("requester is only valid on the desktop lane")
+        if self.requester is not None or self.slack_origin is not None:
+            raise ValueError("requester and slack_origin are only valid on the desktop lane")
         if (self.project is None) != (self.source_ref is None):
             raise ValueError("Project jobs require both project and a safe canonical source reference")
         if self.source_ref is not None and (".." in self.source_ref or "//" in self.source_ref):
@@ -255,6 +264,7 @@ async def submit_fleet_batch(request: Request, body: FleetBatchSubmit) -> dict[s
                 **({"project": body.project, "source_ref": body.source_ref, "output_policy": "draft-only"} if body.project else {}),
                 **({"client_id": body.client_id} if body.client_id else {}),
                 **({"requester": body.requester, "approval_state": "pending", "output_policy": "draft-only"} if body.lane == DESKTOP_LANE else {}),
+                **({"slack_origin": body.slack_origin.model_dump(exclude_none=True)} if body.slack_origin else {}),
             },
         )
     except ValueError as exc:
@@ -271,6 +281,21 @@ async def approve_desktop_batch(batch_id: str, request: Request) -> dict[str, An
     batch = await get_subagent_batch_repo(request).approve_fleet_batch(batch_id, approver_id=reviewer, now=datetime.now(UTC))
     if batch is None:
         raise HTTPException(status_code=404, detail="Desktop job not found")
+    return batch
+
+
+@router.post("/batches/{batch_id}/reject")
+@require_permission("approvals", "write")
+async def reject_desktop_batch(batch_id: str, request: Request) -> dict[str, Any]:
+    """Cancel a pending desktop batch before it reaches the host. Org owner/admin only."""
+    reviewer = str((await get_current_user_from_request(request)).id)
+    if not await _is_active_org_admin(reviewer):
+        raise HTTPException(status_code=403, detail="Only an organization owner or admin can reject desktop jobs.")
+    batch = await get_subagent_batch_repo(request).reject_fleet_batch(batch_id, approver_id=reviewer, now=datetime.now(UTC))
+    if batch is None:
+        raise HTTPException(status_code=404, detail="Desktop job not found")
+    if batch["approval_state"] != "rejected":
+        raise HTTPException(status_code=409, detail="Desktop job was already approved")
     return batch
 
 

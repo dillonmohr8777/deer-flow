@@ -16,6 +16,7 @@ from app.channels.brainforge_intake import bot_app_trusted
 from app.channels.brainforge_runtime import BrainForgeRuntime
 from app.channels.commands import is_known_channel_command
 from app.channels.connection_identity import attach_connection_identity
+from app.channels.desktop_jobs import as_command as desktop_as_command
 from app.channels.message_bus import InboundMessageType, InboundReservation, MessageBus, OutboundMessage, ResolvedAttachment
 from app.channels.slack_approvals import ActionResult as ApprovalActionResult
 from app.channels.slack_approvals import DbApprovalStore, parse_block_action
@@ -28,6 +29,10 @@ from deerflow.approvals import register_created_hook, unregister_created_hook
 logger = logging.getLogger(__name__)
 
 _slack_md_converter = SlackMarkdownConverter()
+
+
+class SlackSendOutcomeUnknown(RuntimeError):
+    """A Slack post may have committed; reconcile its destination before retrying."""
 
 
 def _escape_slack_text(text: str) -> str:
@@ -123,6 +128,7 @@ class SlackChannel(Channel):
         self._channel_policies = config.get("channel_policies", {})
         self._engaged_threads: dict[tuple[str, str, str], None] = {}
         self._web_client_factory = config.get("web_client_factory")
+        self._roster_auto_linker = config.get("roster_auto_linker")
         self._connection_web_clients: dict[str, tuple[str, Any]] = {}
         configured_bot_user_id = config.get("bot_user_id")
         self._bot_user_id = str(configured_bot_user_id).lstrip("@") if configured_bot_user_id else None
@@ -226,10 +232,19 @@ class SlackChannel(Channel):
         logger.info("Slack channel stopped")
 
     async def send(self, msg: OutboundMessage, *, _max_retries: int = 3) -> None:
+        from slack_sdk.errors import SlackApiError
+
+        # Keep the legacy argument, but never replay a possibly committed post.
+        if _max_retries <= 0:
+            raise RuntimeError("Slack send exhausted retries without an exception")
         web_client = await self._get_web_client_for_message(msg)
         if not web_client:
             return
-
+        delivery = msg.metadata.get("slack_delivery", {})
+        if delivery.get("state") == "outcome_unknown":
+            raise SlackSendOutcomeUnknown("outcome_unknown: reconcile Slack destination before retrying")
+        if delivery.get("state") == "sent":
+            return
         kwargs: dict[str, Any] = {
             "channel": msg.chat_id,
             "text": _slack_md_converter.convert(_escape_slack_text(msg.text)),
@@ -238,38 +253,31 @@ class SlackChannel(Channel):
         if reply_ts:
             kwargs["thread_ts"] = reply_ts
 
-        async def post_message() -> None:
-            await asyncio.to_thread(web_client.chat_postMessage, **kwargs)
-            # Add a completion reaction to the thread root
-            if msg.thread_ts:
-                await asyncio.to_thread(
-                    self._add_reaction_with_client,
-                    web_client,
-                    msg.chat_id,
-                    msg.thread_ts,
-                    "white_check_mark",
-                )
-
+        # Cancellation cannot stop the synchronous HTTP worker after submission.
+        msg.metadata["slack_delivery"] = {"state": "outcome_unknown", "channel": msg.chat_id}
         try:
-            await self._send_with_retry(
-                post_message,
-                max_retries=_max_retries,
-                log_prefix="[Slack]",
-            )
-        except Exception:
-            # Add failure reaction on error
-            if msg.thread_ts:
-                try:
-                    await asyncio.to_thread(
-                        self._add_reaction_with_client,
-                        web_client,
-                        msg.chat_id,
-                        msg.thread_ts,
-                        "x",
-                    )
-                except Exception:
-                    pass
+            response = await asyncio.to_thread(web_client.chat_postMessage, **kwargs)
+        except SlackApiError as exc:
+            response = exc.response
+            if response.status_code >= 500 or response.status_code == 408 or response.get("error") in {"internal_error", "fatal_error", "request_timeout", "service_unavailable"}:
+                raise SlackSendOutcomeUnknown("outcome_unknown: reconcile Slack destination before retrying") from exc
+            msg.metadata["slack_delivery"]["state"] = "failed"
+            await self._mark_thread_failed(web_client, msg)
             raise
+        except Exception as exc:
+            raise SlackSendOutcomeUnknown("outcome_unknown: reconcile Slack destination before retrying") from exc
+
+        channel, timestamp = response.get("channel"), response.get("ts")
+        if response.get("ok") is not True or not isinstance(channel, str) or not channel or not isinstance(timestamp, str) or not timestamp:
+            raise SlackSendOutcomeUnknown("outcome_unknown: Slack returned no delivery receipt; reconcile before retrying")
+        msg.metadata["slack_delivery"] = {"state": "sent", "channel": channel, "ts": timestamp}
+        if msg.thread_ts:
+            await asyncio.to_thread(self._add_reaction_with_client, web_client, msg.chat_id, msg.thread_ts, "white_check_mark")
+
+    async def _mark_thread_failed(self, web_client, msg: OutboundMessage) -> None:
+        """Best-effort failure mark for a definite rejection; an unknown outcome may be live, so it gets none."""
+        if msg.thread_ts:
+            await asyncio.to_thread(self._add_reaction_with_client, web_client, msg.chat_id, msg.thread_ts, "x")
 
     async def send_file(self, msg: OutboundMessage, attachment: ResolvedAttachment) -> bool:
         web_client = await self._get_web_client_for_message(msg)
@@ -299,7 +307,7 @@ class SlackChannel(Channel):
         factory = self._web_client_factory
         if factory is None:
             raise RuntimeError("Slack web client factory required")
-        self._web_client = factory(token=bot_token)
+        self._web_client = factory(token=bot_token, retry_handlers=[])
         if self._bot_user_id is not None:
             return
         try:
@@ -330,7 +338,7 @@ class SlackChannel(Channel):
                 from slack_sdk import WebClient
 
                 self._web_client_factory = WebClient
-            web_client = self._web_client_factory(token=access_token)
+            web_client = self._web_client_factory(token=access_token, retry_handlers=[])
             self._connection_web_clients[msg.connection_id] = (access_token, web_client)
             return web_client
         return self._web_client
@@ -553,7 +561,7 @@ class SlackChannel(Channel):
         text = event.get("text", "").strip()
         # DMs arrive as plain message events, so they get the same mention strip and About alias.
         if event.get("type") == "app_mention" or event.get("channel_type") == "im":
-            text = _about_question_as_command(_strip_leading_slack_bot_mention(text, self._bot_user_id))
+            text = desktop_as_command(_about_question_as_command(_strip_leading_slack_bot_mention(text, self._bot_user_id)))
         if not text:
             if event.get("type") == "app_mention" and (not self._allowed_users or user_id in self._allowed_users):
                 self._send_empty_mention_reply(event.get("channel", ""), event.get("thread_ts") or event.get("ts", ""))
@@ -683,12 +691,17 @@ class SlackChannel(Channel):
 
     async def _attach_connection_identity(self, inbound, *, team_id: str | None = None):
         workspace_id = str(team_id or inbound.metadata.get("team_id") or "")
-        return await attach_connection_identity(
-            inbound,
-            repo=self._connection_repo,
-            provider="slack",
-            workspace_id=workspace_id,
-        )
+
+        async def attach():
+            return await attach_connection_identity(inbound, repo=self._connection_repo, provider="slack", workspace_id=workspace_id)
+
+        inbound = await attach()
+        linker = self._roster_auto_linker
+        if inbound.connection_id or linker is None or not linker.eligible(inbound.user_id, workspace_id):
+            return inbound
+        if await linker.link(slack_user_id=inbound.user_id, team_id=workspace_id, web_client=self._web_client):
+            inbound = await attach()
+        return inbound
 
     async def _bind_connection_from_connect_code(self, *, event: dict, team_id: str, code: str) -> bool:
         if self._connection_repo is None or not code:

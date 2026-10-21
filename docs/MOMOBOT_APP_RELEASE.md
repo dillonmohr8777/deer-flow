@@ -5,6 +5,27 @@ on `codex/momobot-openai-app-20260929`. This document separates source validatio
 bounded provider evidence, and the final installed runtime. A successful build or
 HTTP response alone does not establish useful autonomous work or publication.
 
+## Native iOS track (October 20, 2026)
+
+The current phone route is the private Tailnet `/workspace` endpoint distributed
+out of band. It redirects anonymous sessions to the existing MomoBot login. The
+older `:8445` route recorded below is historical and no longer points at the
+production MomoBot frontend.
+
+The native source lives under `mobile/ios/`. It reuses the authenticated hosted
+workspace without bundling credentials or caching private workspace data. The
+SwiftUI shell adds device-owner unlock, strict same-origin navigation, native
+browser/share controls, and connection retry UI. Its dependency-free core URL
+policy has focused Swift tests, and `.github/workflows/momobot-ios-checks.yml`
+generates and builds the app unsigned on a GitHub macOS runner.
+
+This source and unsigned CI build are not a TestFlight or App Store release. The
+current Mac has Command Line Tools only, no signing identity, and no provisioning
+profile; the repository has no App Store signing secrets. Upload therefore waits
+on an existing Apple Developer team, registered bundle ID, distribution signing,
+an App Store Connect app record, and a stable reviewer-accessible backend. The
+tailnet endpoint is suitable for an internal staff build, not public App Review.
+
 ## Release record
 
 The following records have independent read-back:
@@ -116,9 +137,11 @@ Intended launchd labels are `com.dillon.momobot-openai-gateway` and
 `com.dillon.momobot-openai-frontend`; both jobs are installed and their launchctl state is running. Never run a second worker against the same private agent
 database. Provider keys stay on the gateway.
 
-The verified private phone endpoint is
-`https://dillons-mac-mini.tailade026.ts.net:8445/workspace/openai`.
-Tailnet Serve on8445 proxies the authenticated loopback frontend. It is available within the owner's tailnet, with no Funnel on8445; existing443/8443/8444 routing remains unchanged. The installed native app's connection file targets this verified URL; the source fallback is loopback3040.
+The historical private phone endpoint used Tailnet Serve on8445 to proxy the
+authenticated loopback frontend. It was available only within the owner's
+tailnet, with no Funnel on8445; existing443/8443/8444 routing was unchanged.
+The installed native app's connection file targeted that private URL; the source
+fallback was loopback3040.
 
 ## Execution and safety behavior
 

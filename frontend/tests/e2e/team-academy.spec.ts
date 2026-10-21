@@ -31,7 +31,7 @@ function lesson(id: string, title: string, videoSlot: string | null = null) {
     title,
     minutes: 5,
     summary: `${title} summary.`,
-    steps: ["Name the client first.", "Say draft only."],
+    steps: ["Select the correct client workspace.", "Say draft only."],
     try_it: `Try ${title}.`,
     video_slot: videoSlot,
     video_url: null,
@@ -122,7 +122,11 @@ async function mockInternal(
   const done = new Set<string>();
   await page.route("**/api/academy", (route) => {
     const lessons = [
-      lesson("momobot-01-meet-momo", "Meet Momo", "momo-01"),
+      lesson(
+        "work-00-platform-tour",
+        "MomoBot platform tour",
+        "00-platform-tour",
+      ),
       lesson(
         "momobot-02-prompting",
         "Prompt like an account manager",
@@ -133,8 +137,8 @@ async function mockInternal(
       json({
         tracks: [
           {
-            id: "momobot",
-            title: "MomoBot, start to finish",
+            id: "work-foundations",
+            title: "AI and MomoBot at work",
             summary: "Start here.",
             lessons,
           },
@@ -220,19 +224,66 @@ test.describe("AI Academy", () => {
     ).toBeVisible();
     await expect(academy.getByText("0 of 2 lessons done")).toBeVisible();
 
-    await academy.getByText("Meet Momo", { exact: true }).click();
+    // Work courses lead; the creative library stays available below them.
+    const library = academy.locator('details[aria-labelledby="academy-films"]');
+    await expect(library).not.toHaveAttribute("open", "");
+    await academy.getByText("MomoBot platform tour", { exact: true }).click();
     await expect(
       page
-        .locator("#lesson-momobot-01-meet-momo")
+        .locator("#lesson-work-00-platform-tour")
         .getByText("Momo explainer video for this lesson is in production."),
     ).toBeVisible();
-    await expect(academy.getByText("Try Meet Momo.")).toBeVisible();
+    await expect(academy.getByText("Try MomoBot platform tour.")).toBeVisible();
 
     await academy.getByLabel("Mark this lesson done").first().check();
     await expect(academy.getByText("1 of 2 lessons done")).toBeVisible();
     expect(progress).toEqual([
-      { lesson: "momobot-01-meet-momo", completed: true },
+      { lesson: "work-00-platform-tour", completed: true },
     ]);
+  });
+
+  test("accepted media has captions, a transcript and inline phone playback", async ({
+    page,
+  }) => {
+    await mockInternal(page);
+    const ready = {
+      ...lesson(
+        "work-04-account-client-success",
+        "Account management at work",
+        "04-account-client-success",
+      ),
+      video_url: "/api/academy/media/04-account-client-success.mp4",
+      video_poster_url: "/api/academy/media/04-account-client-success.jpg",
+      video_captions_url: "/api/academy/media/04-account-client-success.vtt",
+      video_transcript_url: "/api/academy/media/04-account-client-success.txt",
+    };
+    await page.route("**/api/academy", (route) =>
+      route.fulfill(
+        json({
+          tracks: [
+            {
+              id: "work-roles",
+              title: "Choose your Momentum role",
+              summary: "A complete role workflow.",
+              lessons: [ready],
+            },
+          ],
+          completed_count: 0,
+          lesson_count: 1,
+        }),
+      ),
+    );
+    await page.goto("/workspace/academy");
+    await page.getByText(ready.title, { exact: true }).click();
+    const player = page.getByLabel(ready.title, { exact: true });
+    await expect(player).toHaveAttribute("playsinline", "");
+    await expect(player).toHaveAttribute("poster", ready.video_poster_url);
+    const captions = player.locator('track[kind="captions"]');
+    await expect(captions).toHaveAttribute("src", ready.video_captions_url);
+    await expect(captions).not.toHaveAttribute("default", "");
+    await expect(
+      page.getByRole("link", { name: "Read the transcript" }),
+    ).toHaveAttribute("href", ready.video_transcript_url);
   });
 
   test("a client-facing instance never shows the Academy", async ({ page }) => {

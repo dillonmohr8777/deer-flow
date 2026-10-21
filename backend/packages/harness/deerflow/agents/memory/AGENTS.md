@@ -58,6 +58,13 @@ Public agent names use lowercase canonical form.
 
 #### Operating modes
 
+`memory.model_name` is a host model profile, resolved through `create_chat_model`.
+Keep its endpoint, credentials and provider filters intact; never migrate the
+profile name into DeerMem's standalone `backend_config.model.model` identifier.
+Null retains the app default, and an explicit backend model still takes precedence.
+This selection is independent of the run model and requires rebuilding the memory
+manager to apply. Offline regressions belong in `tests/test_model_factory.py`.
+
 `memory.mode: middleware` is the default passive mode.
 `MemoryMiddleware` queues filtered user and final assistant messages.
 It captures `user_id` when it enqueues work.
