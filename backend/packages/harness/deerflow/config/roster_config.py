@@ -25,6 +25,7 @@ class RosterConfig(BaseModel):
 
     users: dict[str, RosterUser] = Field(default_factory=dict)
     repos: dict[str, str] = Field(default_factory=dict, description="repo full name -> client id, or '*' for every client")
+    channel_clients: dict[str, str] = Field(default_factory=dict, description="Slack channel id -> client id; the client a '@MomoBot desktop' job in that channel is for")
     deny_repos: list[str] = Field(default_factory=list, description="personal repos that are never visible, even to admin")
 
 
