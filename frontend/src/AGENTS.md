@@ -221,9 +221,9 @@ binding; explicit page-local overrides survive new-thread route replacement and
 reset on conversation changes. Gateway supplies defaults for clients without a
 selector; frontend visibility must not become a runtime enforcement boundary.
 
-## Hosted crew, Browserbase, and iPhone installation
+## Browserbase and iPhone installation
 
-`core/openai-agents` and `core/browserbase` preserve caller receipts and
+`core/browserbase` preserves caller receipts and
 workspace scopes; mutating fetches use the shared CSRF fetcher. Do not retry
 uncertain paid submissions or use a root/child completion as semantic proof.
 `components/pwa` is lazy; `public/sw.js` may cache only the five generic
