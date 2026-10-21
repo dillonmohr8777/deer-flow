@@ -16,5 +16,6 @@ for unit in momobot momobot-backup momobot-health; do
 done
 install -m 644 "$SRC/ec2/systemd/momobot-secrets.conf" /etc/systemd/system/momobot.service.d/secrets.conf
 systemctl daemon-reload
-systemctl enable momobot.service momobot-backup.timer momobot-health.timer >/dev/null
+systemctl enable momobot.service >/dev/null
+systemctl enable --now momobot-backup.timer momobot-health.timer >/dev/null
 echo "units installed: momobot (starts on boot), backup (nightly to S3), health (every 15 min)"
