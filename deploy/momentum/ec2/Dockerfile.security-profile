@@ -1,0 +1,6 @@
+# Patch only the four reviewed packages on an operator-verified immutable live base.
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE}
+RUN uv pip install --system --python /usr/local/bin/python --no-deps \
+    aiohttp==3.14.4 urllib3==2.8.0 langgraph-sdk==0.4.4 yarl==1.25.1 \
+    && /usr/local/bin/python -c 'import importlib.metadata as m; expected={"aiohttp":"3.14.4","urllib3":"2.8.0","langgraph-sdk":"0.4.4","yarl":"1.25.1"}; actual={name:m.version(name) for name in expected}; assert actual == expected, actual'
