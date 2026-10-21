@@ -35,7 +35,9 @@ def snapshot(tmp_path):
         "def systems_text(data): return json.dumps(data['systems'])\n",
         encoding="utf-8",
     )
-    (tmp_path / "brain.json").write_text(json.dumps({"generated_at": "2020-01-01T00:00:00Z", "clients": {"sample": {"name": "Synthetic Client"}}, "open_items": ["Synthetic open item"], "systems": {"sample": "saved"}}), encoding="utf-8")
+    (tmp_path / "brain.json").write_text(
+        json.dumps({"generated_at": "2020-01-01T00:00:00Z", "clients": {"sample": {"name": "Synthetic Client"}}, "open_items": ["Synthetic open item"], "loop_cards": [], "systems": {"sample": "saved"}}), encoding="utf-8"
+    )
     (tmp_path / "NOW.md").write_text("Synthetic saved digest", encoding="utf-8")
     for path in tmp_path.iterdir():
         os.utime(path, (1, 1))
@@ -74,7 +76,7 @@ def test_snapshot_protocol_without_network_or_rebuild(snapshot, monkeypatch):
     assert len(result.stdout.splitlines()) == len(messages)
 
 
-@pytest.mark.parametrize("contents", ["{}", '{"generated_at":"undated"}', '{"generated_at":"2020-01-01"}', "not JSON"])
+@pytest.mark.parametrize("contents", ["{}", '{"generated_at":"undated"}', '{"generated_at":"2020-01-01"}', '{"generated_at":"2020-01-01T00:00:00Z"}', "not JSON"])
 def test_bad_snapshot_fails_closed(snapshot, contents):
     path = snapshot / "brain.json"
     path.chmod(0o644)

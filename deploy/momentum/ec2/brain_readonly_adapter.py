@@ -119,6 +119,16 @@ class SnapshotRequester:
             self._read(root / "brain.json"), parse_constant=_invalid_constant
         )
         self.now = self._read(root / "NOW.md")
+        required = {
+            "clients": dict,
+            "open_items": list,
+            "loop_cards": list,
+            "systems": dict,
+        }
+        if not isinstance(self.data, dict) or any(
+            not isinstance(self.data.get(key), kind) for key, kind in required.items()
+        ):
+            raise ConfigurationError()
         self.observed_at = self.data["generated_at"]
         if (
             not isinstance(self.observed_at, str)
