@@ -1,5 +1,9 @@
 # EC2 deployment
 
+The existing health timer runs lightsail/health.sh. It must check the public UI
+as well as gateway readiness and fail on unknown disk space or less than 10 GiB
+available on the deployment filesystem. Reuse this timer; never add a second watcher.
+
 The optional Brain adapter (`brain_readonly_adapter.py`) can serve a read-only
 private snapshot with four tools and `sourceObservedAt`. Its cache and unchanged
 renderer stay outside Git; never call the Brain collector, auto-refreshing load,

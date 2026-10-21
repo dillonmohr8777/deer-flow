@@ -36,6 +36,15 @@ sudo MOMOBOT_ENV_FILE=/run/momobot/.env MOMOBOT_EXTRA_COMPOSE=/opt/momobot/src/d
 Release: build `deer-flow-{gateway,frontend}:main-<sha8>` on the box from the merged commit, set both tags in
 `settings.env`, then `systemctl restart momobot`. Rollback: put the previous tags back and restart.
 
+The existing `momobot-health.timer` checks gateway readiness, public API and UI,
+backup freshness, and at least 10 GiB free on the deployment filesystem. Its JSON
+receipt includes `publicUi` and `diskAvailableMiB`; unknown capacity fails the check.
+Before a release, recover headroom under `/run/momobot-release.lock` using unused
+Docker build cache or verified unused builder images. Preserve running containers,
+volumes, production and rollback images. Compare filesystem bytes before and after;
+Docker's advertised reclaimable size is not recovered space. Larger builds still
+need a budget for their own peak temporary storage.
+
 The Momentum templates use a 300-super-step default with the existing 1000-step ceiling.
 Middleware nodes consume super-steps too: the former 100-step default interrupted an
 eight-model-call AM plugin check. For an existing EC2 config, promote only this top-level
