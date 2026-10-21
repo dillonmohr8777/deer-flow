@@ -424,6 +424,8 @@ export const zhCN: Translations = {
     recentChats: "最近的对话",
     demoChats: "演示对话",
     agents: "智能体",
+    momobotAgents: "MomoBot 智能体",
+    aboutMomobot: "关于 MomoBot",
     scheduledTasks: "定时任务",
     agentsDisabledTooltip: "功能未启用",
   },

@@ -354,6 +354,10 @@ async def list_agents() -> AgentsListResponse:
         # trips (db backend) and must stay off the event loop.
         # A client sees MomoBot Max and nothing else (no personal or legacy shared agents).
         agents = [] if is_client else list_custom_agents(user_id=user_id)
+        # While the built-in exists its name is reserved and loaders return it first, so a stored row
+        # that predates the reservation must not be listed beside it (off, the row is an agent again).
+        if get_builtin_agent_config(MOMOBOT_MAX_NAME) is not None:
+            agents = [a for a in agents if not is_builtin_agent_name(_normalize_agent_name(a.name))]
         if visible_client_ids is not None:
             # An agent with no client_id isn't client-scoped (a personal or
             # staff agent); only a fleet-stamped agent needs this check.

@@ -27,6 +27,7 @@ from langgraph.types import Command
 
 from app.gateway.auth_disabled import AUTH_SOURCE_INTERNAL
 from app.gateway.authz import require_cancel_permission_if
+from app.gateway.client_boundary import CLIENT_ROLE
 from app.gateway.deps import get_checkpointer, get_local_provider, get_run_context, get_run_manager, get_stream_bridge, get_thread_store
 from app.gateway.internal_auth import (
     INTERNAL_SYSTEM_ROLE,
@@ -2023,6 +2024,8 @@ async def start_run(
             agent_config=agent_config,
             recovery_scope=recovery_scope,
             recovery=is_scope_recovery,
+            # A client has no per-client dataset mapping, so any scope could reach another client's data.
+            deny_scope=getattr(user, "system_role", None) == CLIENT_ROLE,
         )
         if admitted_knowledge_scope is not None:
             await _validate_scope_thread_binding(

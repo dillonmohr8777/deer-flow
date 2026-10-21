@@ -34,7 +34,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useAgentsApiEnabled } from "@/core/agents";
-import { useIsClient } from "@/core/auth/AuthProvider";
+import { useIsClient, useIsRoleUnresolved } from "@/core/auth/AuthProvider";
 import { useBoardThreads } from "@/core/board";
 import {
   useDeskEnabled,
@@ -74,7 +74,7 @@ function ClientNavList({ showBrandKit }: { showBrandKit: boolean }) {
                   href="/workspace/lineup"
                 >
                   <UsersRound />
-                  <span>MomoBot Agents</span>
+                  <span>{t.sidebar.momobotAgents}</span>
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
@@ -85,7 +85,7 @@ function ClientNavList({ showBrandKit }: { showBrandKit: boolean }) {
               >
                 <Link className="text-muted-foreground" href="/workspace/about">
                   <Info />
-                  <span>About MomoBot</span>
+                  <span>{t.sidebar.aboutMomobot}</span>
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
@@ -100,6 +100,7 @@ export function WorkspaceNavChatList() {
   const { t } = useI18n();
   const pathname = usePathname();
   const isClient = useIsClient();
+  const unresolved = useIsRoleUnresolved();
   const { enabled: agentsEnabled } = useAgentsApiEnabled();
   const { enabled: deskEnabled } = useDeskEnabled();
   const { enabled: internalEnabled } = useMomentumInternalEnabled();
@@ -112,6 +113,7 @@ export function WorkspaceNavChatList() {
     enabled: deskEnabled,
   });
   const waitingCount = deskEnabled ? (waitingApproval.data?.length ?? 0) : 0;
+  if (unresolved) return null;
   if (isClient) return <ClientNavList showBrandKit={Boolean(brandKit)} />;
   return (
     <SidebarGroup className="pt-1">
@@ -354,7 +356,7 @@ export function WorkspaceNavChatList() {
                   href="/workspace/lineup"
                 >
                   <UsersRound />
-                  <span>MomoBot Agents</span>
+                  <span>{t.sidebar.momobotAgents}</span>
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
@@ -365,7 +367,7 @@ export function WorkspaceNavChatList() {
               >
                 <Link className="text-muted-foreground" href="/workspace/about">
                   <Info />
-                  <span>About MomoBot</span>
+                  <span>{t.sidebar.aboutMomobot}</span>
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>

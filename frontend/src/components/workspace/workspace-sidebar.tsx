@@ -10,7 +10,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { useWorkspaceAppearance } from "@/components/workspace/command-center/appearance-provider";
-import { useIsClient } from "@/core/auth/AuthProvider";
+import { useIsClient, useIsRoleUnresolved } from "@/core/auth/AuthProvider";
 import { cn } from "@/lib/utils";
 
 import { WorkspaceChannelsList } from "./channels/workspace-channels-list";
@@ -35,20 +35,23 @@ export function WorkspaceSidebar({
   // A client sees chats and nothing internal: no workspace switcher, plugin
   // pages, channels, projects or background work.
   const isClient = useIsClient();
+  // Until the role resolves the user may be a client: show no internal UI.
+  const unresolved = useIsRoleUnresolved();
+  const showInternal = !isClient && !unresolved;
   return (
     <ThreadDeleteDialogProvider>
       <Sidebar variant="sidebar" collapsible="icon" {...props}>
         <SidebarHeader className={cn("py-0", styles.phoneTargets)}>
           <WorkspaceHeader />
-          {isSidebarOpen && !isClient && <WorkspaceSelector />}
+          {isSidebarOpen && showInternal && <WorkspaceSelector />}
         </SidebarHeader>
         <SidebarContent className={styles.phoneTargets}>
           <WorkspaceNavChatList />
-          {!isClient && <PluginNavigation />}
-          {!isClient && <WorkspaceChannelsList />}
+          {showInternal && <PluginNavigation />}
+          {showInternal && <WorkspaceChannelsList />}
           {isSidebarOpen && (
             <>
-              {!isClient && <ProjectsSection />}
+              {showInternal && <ProjectsSection />}
               <RecentChatList />
             </>
           )}

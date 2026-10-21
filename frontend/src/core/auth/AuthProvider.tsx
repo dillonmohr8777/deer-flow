@@ -14,7 +14,7 @@ import { queryClient } from "@/components/query-client-provider";
 
 import { isStaticWebsiteOnly } from "../static-mode";
 
-import { isClientUser } from "./roles";
+import { isClientUser, isRoleUnresolved } from "./roles";
 import { type User, buildLoginUrl } from "./types";
 
 // Re-export for consumers
@@ -193,6 +193,14 @@ export function useAuth(): AuthContextType {
 /** Whether the signed-in user is an external client (chat with MomoBot Max only). */
 export function useIsClient(): boolean {
   return isClientUser(useAuth().user);
+}
+
+/**
+ * Whether the role is still unknown. Treat it as "maybe a client": render
+ * nothing internal until it resolves.
+ */
+export function useIsRoleUnresolved(): boolean {
+  return isRoleUnresolved(useAuth().user, isStaticWebsiteOnly());
 }
 
 /**

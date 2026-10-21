@@ -383,6 +383,8 @@ export interface Translations {
     chats: string;
     demoChats: string;
     agents: string;
+    momobotAgents: string;
+    aboutMomobot: string;
     scheduledTasks: string;
     agentsDisabledTooltip: string;
     channels: string;

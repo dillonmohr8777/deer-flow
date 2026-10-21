@@ -103,7 +103,7 @@ export default function AgentChatPage() {
   const { tokenUsageEnabled } = useModels();
   const threadTokenUsage = useThreadTokenUsage(
     isNewThread || isMock ? undefined : threadId,
-    { enabled: !isMock },
+    { enabled: !isMock && !isClient },
   );
   const threadMetadata = useThreadMetadata(threadId, {
     enabled: !isNewThread && !isMock,

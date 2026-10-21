@@ -15,6 +15,18 @@ export function isClientUser(
   return user?.system_role === "client";
 }
 
+/**
+ * True while there is no signed-in user to read a role from (loading, or
+ * mid-logout). Internal UI must render nothing then: the user may turn out to
+ * be a client. A static website has no sign-in, so it is never unresolved.
+ */
+export function isRoleUnresolved(
+  user: { system_role?: string } | null | undefined,
+  staticMode: boolean,
+) {
+  return !staticMode && !user;
+}
+
 /** Workspace pages a client may open. Everything else shows "not available". */
 const CLIENT_PATHS: readonly RegExp[] = [
   // The chat list and existing chats. `/workspace/chats/new` is not here: it

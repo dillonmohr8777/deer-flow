@@ -27,6 +27,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { KnowledgeSourcesProvider } from "@/components/workspace/citations/knowledge-source";
 import { extractArtifactsFromThread } from "@/core/artifacts/utils";
+import { useIsClient } from "@/core/auth/AuthProvider";
 import { useI18n } from "@/core/i18n/hooks";
 import { getArtifactArchiveCandidatesByGroupIndex } from "@/core/messages/artifact-archive";
 import {
@@ -354,6 +355,9 @@ export function MessageList({
   deepReasoning?: boolean;
 }) {
   const { t } = useI18n();
+  // A client sees the answer only: no subagent cards or workspace-change
+  // badges, whose data (run events, file changes) the Gateway keeps internal.
+  const isClient = useIsClient();
   const sidecar = useMaybeSidecar();
   const [{ context: activeContext }] = useLocalSettings();
   const [selectionToolbar, setSelectionToolbar] =
@@ -1183,9 +1187,10 @@ export function MessageList({
                               : undefined
                           }
                           showCopyButton={group.type !== "assistant"}
-                          showWorkspaceChanges={workspaceChangeAnchorGroupIndices.has(
-                            groupIndex,
-                          )}
+                          showWorkspaceChanges={
+                            !isClient &&
+                            workspaceChangeAnchorGroupIndices.has(groupIndex)
+                          }
                           canEdit={
                             group.type === "human" &&
                             Boolean(msg.id) &&
@@ -1443,7 +1448,7 @@ export function MessageList({
                       ? [toolCall.id]
                       : [],
                   );
-                  for (const taskId of taskIds ?? []) {
+                  for (const taskId of isClient ? [] : (taskIds ?? [])) {
                     results.push(
                       <SubtaskCard
                         key={"task-group-" + taskId}

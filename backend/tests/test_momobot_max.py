@@ -438,3 +438,32 @@ async def test_start_run_leaves_a_teammates_ordinary_run_alone():
 
     assert config["context"]["model_name"] == "cheap-model" and config["context"]["reasoning_effort"] == "low"
     assert "agent_name" not in config["context"]
+
+
+@pytest.mark.asyncio
+async def test_the_total_subagent_cap_is_config_owned_not_request_owned():
+    app_config = _config(momobot_max={"enabled": True})
+    cap = app_config.subagents.max_total_per_run
+    for user in (_user("client"), _user("exec")):
+        config = _run_config(
+            configurable={"max_total_subagents": 50},
+            context={"agent_name": "momobot-max", "max_total_subagents": 50},
+        )
+        await _policy(config, user, app_config=app_config)
+        assert config["context"]["max_total_subagents"] == cap
+        assert config["configurable"]["max_total_subagents"] == cap
+
+
+@pytest.mark.asyncio
+async def test_a_stored_row_with_the_reserved_name_is_not_listed_beside_the_builtin(agent_env, as_role):
+    from deerflow.persistence.agents import get_agent_store
+
+    get_agent_store().create("momobot-max", {"name": "momobot-max", "model": "cheap-model"}, "A user wrote this.", user_id="u-1")
+    get_agent_store().create("writer", {"name": "writer"}, "Writes.", user_id="u-1")
+    as_role("admin")
+    listed = (await list_agents()).agents
+    assert [a.name for a in listed] == ["momobot-max", "writer"]
+    assert listed[0].builtin is True
+    # Off, the stored row is an ordinary agent again and is listed.
+    set_app_config(_config())
+    assert sorted(a.name for a in (await list_agents()).agents) == ["momobot-max", "writer"]

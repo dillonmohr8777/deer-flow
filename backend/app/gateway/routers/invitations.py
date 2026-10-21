@@ -23,6 +23,7 @@ from app.gateway.auth import create_access_token
 from app.gateway.auth.password import hash_password_async
 from app.gateway.auth.session_cookie import ACCESS_TOKEN_COOKIE_NAME, set_session_cookie
 from app.gateway.auth_disabled import AUTH_SOURCE_AUTH_DISABLED, AUTH_SOURCE_INTERNAL, AUTH_SOURCE_PAT, AUTH_SOURCE_SESSION
+from app.gateway.authz import role_has_policy
 from app.gateway.csrf_middleware import CSRF_COOKIE_NAME, CSRF_HEADER_NAME, is_secure_request
 from app.gateway.deps import get_current_user_from_request, record_audit_event
 from deerflow.persistence.engine import get_session_factory
@@ -305,6 +306,10 @@ async def accept_invitation(body: AcceptInvitationRequest, request: Request, res
                 invitation = await session.scalar(select(InvitationRow).where(InvitationRow.token_hash == token_digest))
                 if invitation is None or invitation.consumed_at is not None or _as_utc(invitation.expires_at) <= now:
                     raise _forbidden()
+                if invitation.role == "client" and not role_has_policy("client"):
+                    # Same guard as the admin role route: RBAC fails closed on a role it has
+                    # no block for, so the invitee would be locked out. Nothing is consumed.
+                    raise HTTPException(status_code=409, detail="Role 'client' is not defined under authorization.provider.config.roles; add it before inviting clients")
 
                 # Reserve the single-use token before password work.  The
                 # conditional update is the cross-worker fence; a concurrent

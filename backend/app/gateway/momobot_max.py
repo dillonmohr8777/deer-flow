@@ -8,7 +8,7 @@ This module owns the parts that need a caller:
   excludes it never get it;
 * ``apply_run_policy``: client runs are pinned to the agent (any agent or model
   the request names is dropped), and every run of the agent gets the
-  config-owned reasoning effort, thinking and delegation settings, whatever
+  config-owned reasoning effort, thinking and delegation settings (including the total subagent cap), whatever
   the request says.
 """
 
@@ -68,7 +68,7 @@ async def apply_run_policy(config: dict[str, Any], *, user: Any, actor_user_id: 
         raise HTTPException(status_code=422, detail=_UNRESOLVED_AGENT_DETAIL)
     effort = app_config.momobot_max.effort_for(await client_keys_for_user(actor_user_id) if actor_user_id else ())
     for section in sections:
-        section.update(reasoning_effort=effort, thinking_enabled=True, subagent_enabled=True)
+        section.update(reasoning_effort=effort, thinking_enabled=True, subagent_enabled=True, max_total_subagents=app_config.subagents.max_total_per_run)
 
 
 def _sections(config: dict[str, Any]) -> list[dict[str, Any]]:

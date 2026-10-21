@@ -41,19 +41,21 @@ _RULES: tuple[tuple[frozenset[str], re.Pattern[str]], ...] = tuple(
         # The agents API, read-only. The router narrows it to MomoBot Max.
         (_GET, r"^/api/agents$"),
         (_GET, rf"^/api/agents/{MOMOBOT_MAX_NAME}$"),
-        # Chat: threads, runs, files, follow-ups, feedback.
+        # Chat: threads, runs, files, follow-ups, feedback. Deliberately absent:
+        # run events and workspace-changes (tool and subagent internals, file
+        # paths) and token-usage (model names, per-caller breakdown).
         (_POST, r"^/api/threads$"),
         (_POST, r"^/api/threads/search$"),
         (frozenset({"GET", "PATCH", "DELETE"}), rf"^/api/threads/{_ID}$"),
         (frozenset({"GET", "PUT", "DELETE"}), rf"^/api/threads/{_ID}/goal$"),
         (frozenset({"GET", "POST"}), rf"^/api/threads/{_ID}/state$"),
         (_POST, rf"^/api/threads/{_ID}/(compact|history|branches)$"),
-        (_GET, rf"^/api/threads/{_ID}/(token-usage|messages|messages/page)$"),
+        (_GET, rf"^/api/threads/{_ID}/(messages|messages/page)$"),
         (frozenset({"GET", "POST"}), rf"^/api/threads/{_ID}/runs$"),
         (_POST, rf"^/api/threads/{_ID}/runs/(stream|wait|regenerate/prepare|edit-regenerate/prepare)$"),
         (_GET, rf"^/api/threads/{_ID}/runs/(?!stream$|wait$|regenerate$|edit-regenerate$){_ID}$"),
         (_POST, rf"^/api/threads/{_ID}/runs/{_ID}/cancel$"),
-        (_GET, rf"^/api/threads/{_ID}/runs/{_ID}/(join|messages|events|workspace-changes)$"),
+        (_GET, rf"^/api/threads/{_ID}/runs/{_ID}/(join|messages)$"),
         (frozenset({"GET", "POST"}), rf"^/api/threads/{_ID}/runs/{_ID}/(artifacts/archive|stream)$"),
         (frozenset({"GET", "POST", "PUT", "DELETE"}), rf"^/api/threads/{_ID}/runs/{_ID}/feedback(/{_ID})?$"),
         (_POST, r"^/api/runs/(stream|wait)$"),

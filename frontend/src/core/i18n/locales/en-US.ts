@@ -453,6 +453,8 @@ export const enUS: Translations = {
     recentChats: "Recent chats",
     demoChats: "Demo chats",
     agents: "Agents",
+    momobotAgents: "MomoBot Agents",
+    aboutMomobot: "About MomoBot",
     scheduledTasks: "Scheduled tasks",
     agentsDisabledTooltip: "Feature not enabled",
   },

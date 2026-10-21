@@ -6,6 +6,7 @@ import {
   CLIENT_SETTINGS_SECTIONS,
   isClientPath,
   isClientUser,
+  isRoleUnresolved,
 } from "@/core/auth/roles";
 import { SYSTEM_ROLES, userSchema } from "@/core/auth/types";
 import { isOpenAIAgentsConfigured } from "@/core/features";
@@ -125,5 +126,19 @@ describe("OpenAI crew availability", () => {
         openai_agents: { configured: true },
       }),
     ).toBe(true);
+  });
+});
+
+describe("unresolved role", () => {
+  it("is unresolved while there is no user, so internal UI waits", () => {
+    expect(isRoleUnresolved(null, false)).toBe(true);
+    expect(isRoleUnresolved(undefined, false)).toBe(true);
+  });
+
+  it("is resolved for every signed-in role and for a static website", () => {
+    for (const role of ["admin", "exec", "user", "client"]) {
+      expect(isRoleUnresolved({ system_role: role }, false)).toBe(false);
+    }
+    expect(isRoleUnresolved(null, true)).toBe(false);
   });
 });

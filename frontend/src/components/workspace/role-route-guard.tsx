@@ -6,7 +6,7 @@ import { useEffect, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/workspace/page-body";
-import { useIsClient } from "@/core/auth/AuthProvider";
+import { useIsClient, useIsRoleUnresolved } from "@/core/auth/AuthProvider";
 import { CLIENT_NEW_CHAT_PATH, isClientPath } from "@/core/auth/roles";
 import { useI18n } from "@/core/i18n/hooks";
 
@@ -17,6 +17,7 @@ import { useI18n } from "@/core/i18n/hooks";
  */
 export function RoleRouteGuard({ children }: { children: ReactNode }) {
   const isClient = useIsClient();
+  const unresolved = useIsRoleUnresolved();
   const pathname = usePathname();
   const router = useRouter();
   const { t } = useI18n();
@@ -27,6 +28,7 @@ export function RoleRouteGuard({ children }: { children: ReactNode }) {
     if (startsDefaultChat) router.replace(CLIENT_NEW_CHAT_PATH);
   }, [router, startsDefaultChat]);
 
+  if (unresolved) return null;
   if (!isClient || isClientPath(pathname)) return <>{children}</>;
   if (startsDefaultChat) return null;
   return (
