@@ -121,7 +121,7 @@ function AcademyBody() {
               </span>
             </summary>
             <div className={styles.lessonBody}>
-              {series.videos.map(([id, title]) => (
+              {series.videos.map(([id, title]: readonly [string, string]) => (
                 <figure key={id}>
                   <video
                     className={styles.video}
