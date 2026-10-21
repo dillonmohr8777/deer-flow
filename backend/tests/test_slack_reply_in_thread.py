@@ -11,6 +11,7 @@ from app.channels.slack import SlackChannel
 def _channel(**config):
     ch = SlackChannel(bus=MessageBus(), config=config)
     ch._web_client = MagicMock()
+    ch._web_client.chat_postMessage.return_value = {"ok": True, "channel": "C1", "ts": "112.333"}
     ch._get_web_client_for_message = lambda _msg: _as_awaitable(ch._web_client)
     return ch
 
