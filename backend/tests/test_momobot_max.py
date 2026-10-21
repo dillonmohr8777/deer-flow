@@ -429,7 +429,8 @@ async def test_start_run_pins_a_client_to_the_agent_before_anything_reads_the_ag
 
     for section in (config["configurable"], config["context"]):
         assert section["agent_name"] == "momobot-max"
-        assert "model_name" not in section
+        # The client's own model is scrubbed; start_run pins the model it admitted and meters.
+        assert section["model_name"] != "cheap-model"
         assert (section["reasoning_effort"], section["subagent_enabled"], section["thinking_enabled"]) == ("medium", True, True)
     assert config["context"]["user_role"] == "client"
 

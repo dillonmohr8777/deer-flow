@@ -4681,7 +4681,7 @@ async def test_start_run_strips_forged_trace_id_from_the_kwargs_echo(_stub_app_c
 
     forged_config = {
         "metadata": {DEERFLOW_TRACE_METADATA_KEY: "forged-in-config", "caller_key": "kept"},
-        "context": {DEERFLOW_TRACE_METADATA_KEY: "forged-in-context", "model_name": "default"},
+        "context": {DEERFLOW_TRACE_METADATA_KEY: "forged-in-context"},
     }
     body = _run_create_request(
         metadata={DEERFLOW_TRACE_METADATA_KEY: "forged-by-caller"},
@@ -5059,14 +5059,18 @@ async def test_initially_unbound_agent_retry_preserves_original_run(_stub_app_co
 async def test_knowledge_default_lookup_does_not_break_new_agent_bootstrap(_stub_app_config, bootstrap_kwargs):
     from unittest.mock import AsyncMock, patch
 
+    from fastapi import HTTPException
+
     from app.gateway.routers.thread_runs import RunCreateRequest
     from app.gateway.services import start_run
     from deerflow.runtime import RunManager
     from deerflow.runtime.runs.store.memory import MemoryRunStore
 
     request = _make_start_run_request(RunManager(store=MemoryRunStore()))
-    load = AsyncMock(side_effect=FileNotFoundError("not created yet"))
+    # The real loader answers a not-yet-created agent with this 422; start_run must tolerate it.
+    load = AsyncMock(side_effect=HTTPException(status_code=422, detail="knowledge_scope assistant configuration could not be resolved"))
     with patch("app.gateway.services.resolve_agent_factory", return_value=object()), patch("app.gateway.services.run_agent", new=AsyncMock()), patch("app.gateway.services._load_scope_agent_config", new=load):
         record = await start_run(RunCreateRequest(assistant_id="new-researcher", input={"messages": [{"type": "human", "content": "Create this agent"}]}, **bootstrap_kwargs), "thread-bootstrap-default", request)
         await record.task
-    load.assert_not_awaited()
+    # start_run reads the agent's configured model for cost admission; a 422 means a brand-new agent.
+    load.assert_awaited()
