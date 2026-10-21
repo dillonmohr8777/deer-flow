@@ -299,7 +299,9 @@ test("pending saves preserve request and deliverable inputs", async ({
   try {
     await expect(subject).toBeDisabled();
     await expect(request).toBeDisabled();
-    await expect(page.getByLabel("Client", { exact: true })).toBeDisabled();
+    await expect(
+      page.getByRole("combobox", { name: "Client", exact: true }),
+    ).toBeDisabled();
     await expect(newRequest).toBeDisabled();
     await expect(request).toHaveValue("Preserve my request");
   } finally {
