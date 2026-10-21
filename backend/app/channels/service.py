@@ -126,6 +126,9 @@ def _make_slack_auto_linker(app_config: AppConfig, connection_repo: Any | None):
     slack = getattr(getattr(app_config, "channel_connections", None), "slack", None)
     if connection_repo is None or getattr(slack, "auto_link_roster", False) is not True:
         return None
+    if not app_config.momentum_internal.enabled:
+        logger.warning("channel_connections.slack.auto_link_roster is on but momentum_internal is off; roster auto-link is disabled")
+        return None
     if not str(getattr(slack, "workspace_id", "")).strip():
         logger.warning("channel_connections.slack.auto_link_roster is on but workspace_id is empty; roster auto-link is disabled")
         return None

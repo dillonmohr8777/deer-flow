@@ -24,7 +24,7 @@ from deerflow.persistence.organizations.model import OrganizationMemberRow, Orga
 
 logger = logging.getLogger(__name__)
 
-# Retry users.info this often after a missing_scope answer (a reinstall can add the scope).
+# Wait this long before asking users.info again after a miss (missing scope, no email, Slack error).
 _SCOPE_RETRY_SECONDS = 600
 
 
@@ -45,6 +45,7 @@ class SlackRosterAutoLinker:
         self._sf = session_factory
         self._locks: dict[str, asyncio.Lock] = {}
         self._scope_retry_at = 0.0
+        self._email_retry_at: dict[str, float] = {}
 
     def eligible(self, slack_user_id: str, team_id: str) -> bool:
         return bool(self._workspace_id and team_id == self._workspace_id and slack_user_id in self._roster.users)
@@ -56,12 +57,12 @@ class SlackRosterAutoLinker:
         # One lock per sender: two quick messages link once, the second finds the row.
         lock = self._locks.setdefault(slack_user_id, asyncio.Lock())
         async with lock:
-            if await self._repo.find_connection_by_external_identity(provider="slack", external_account_id=slack_user_id, workspace_id=team_id):
-                return True
-            email = await self._email(slack_user_id, web_client)
-            if not email:
-                return False
             try:
+                if await self._repo.find_connection_by_external_identity(provider="slack", external_account_id=slack_user_id, workspace_id=team_id):
+                    return True
+                email = await self._email(slack_user_id, web_client)
+                if not email:
+                    return False
                 user = await self._find_or_create_user(email)
                 if user is None:
                     return False
@@ -76,18 +77,22 @@ class SlackRosterAutoLinker:
                     metadata={"team_id": team_id, "auto_linked": "roster"},
                     status="connected",
                 )
+                await self._audit(user_id=str(user.id), org_id=org_id, connection_id=connection["id"], slack_user_id=slack_user_id, team_id=team_id)
             except Exception:
+                # Any failure keeps today's "connect first" reply instead of dropping the message.
                 logger.exception("[Slack] roster auto-link failed for %s", slack_user_id)
                 return False
-            await self._audit(user_id=str(user.id), org_id=org_id, connection_id=connection["id"], slack_user_id=slack_user_id, team_id=team_id)
             return True
 
     async def _email(self, slack_user_id: str, web_client: Any) -> str | None:
         configured = self._roster.users[slack_user_id].email.strip().lower()
         if configured:
             return configured
-        if web_client is None or time.monotonic() < self._scope_retry_at:
+        now = time.monotonic()
+        if web_client is None or now < self._scope_retry_at or now < self._email_retry_at.get(slack_user_id, 0.0):
             return None
+        # Any miss below waits _SCOPE_RETRY_SECONDS before this sender is looked up again.
+        self._email_retry_at[slack_user_id] = now + _SCOPE_RETRY_SECONDS
         try:
             info = await asyncio.to_thread(web_client.users_info, user=slack_user_id)
         except Exception as exc:
@@ -114,6 +119,10 @@ class SlackRosterAutoLinker:
             except ValueError:
                 user = await users.get_user_by_email(email)  # lost a race to another creator
         if user is None or user.disabled_at is not None:
+            return None
+        if user.system_role != "user":
+            # Never hand an admin (or any elevated) account to a Slack sender; they link with /connect.
+            logger.warning("[Slack] roster auto-link skipped: the matching account is not a plain user")
             return None
         return user
 

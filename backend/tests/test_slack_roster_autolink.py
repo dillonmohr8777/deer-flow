@@ -134,7 +134,7 @@ async def test_existing_user_is_matched_by_email_case_insensitively(env):
     from app.gateway.auth.models import User
     from app.gateway.auth.repositories.sqlite import SQLiteUserRepository
 
-    existing = await SQLiteUserRepository(sf).create_user(User(email="ana@example.com", password_hash="hash", system_role="admin"))
+    existing = await SQLiteUserRepository(sf).create_user(User(email="ana@example.com", password_hash="hash", system_role="user"))
     channel, _ = _channel(env, {"U1": RosterUser(role="am")}, slack_email="ANA@EXAMPLE.COM")
 
     inbound = await channel._attach_connection_identity(_msg(), team_id=TEAM)
@@ -144,8 +144,29 @@ async def test_existing_user_is_matched_by_email_case_insensitively(env):
     async with sf() as session:
         # An existing account keeps its own role and password; the link only adds membership.
         row = (await session.execute(select(UserRow))).scalar_one()
-        assert row.system_role == "admin" and row.password_hash == "hash"
+        assert row.system_role == "user" and row.password_hash == "hash"
         assert await session.get(OrganizationMemberRow, {"organization_id": AGENCY_ID, "user_id": row.id}) is not None
+
+
+@pytest.mark.anyio
+async def test_existing_admin_account_is_never_auto_linked(env):
+    sf, _ = env
+    from app.gateway.auth.models import User
+    from app.gateway.auth.repositories.sqlite import SQLiteUserRepository
+
+    await SQLiteUserRepository(sf).create_user(User(email="boss@example.com", password_hash="hash", system_role="admin"))
+    channel, _ = _channel(env, {"U1": RosterUser(role="admin")}, slack_email="boss@example.com")
+
+    inbound = await channel._attach_connection_identity(_msg(), team_id=TEAM)
+
+    assert inbound.connection_id is None
+    assert await _count(sf, ChannelConnectionRow) == 0
+
+
+def test_roster_email_must_look_like_an_email():
+    assert RosterUser(role="am", email=" Ana@Example.COM ").email == "ana@example.com"
+    with pytest.raises(ValueError):
+        RosterUser(role="am", email="not an email")
 
 
 @pytest.mark.anyio
@@ -209,7 +230,7 @@ async def test_service_builds_the_linker_only_when_flag_and_workspace_are_set(en
         return SimpleNamespace(
             channel_connections=SimpleNamespace(slack=SimpleNamespace(**slack)),
             roster=RosterConfig(),
-            momentum_internal=SimpleNamespace(organization_slugs=["momentum"]),
+            momentum_internal=SimpleNamespace(enabled=True, organization_slugs=["momentum"]),
         )
 
     assert _make_slack_auto_linker(cfg(auto_link_roster=False, workspace_id=TEAM), repo) is None
