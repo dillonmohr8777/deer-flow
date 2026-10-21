@@ -17,6 +17,7 @@ export const RESERVED_SLASH_SKILL_NAMES = new Set([
   "help",
   "memory",
   "models",
+  "momobot",
   "new",
   "status",
 ]);
