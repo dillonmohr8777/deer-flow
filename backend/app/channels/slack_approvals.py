@@ -156,6 +156,8 @@ async def route_action(action: ParsedAction, cfg: ApprovalsDmConfig, store: Appr
         who = f"Approved by <@{action.user_id}>"
         if decided["status"] == "failed":
             return ActionResult("approved", f"{who}, but the action failed: {decided.get('error') or 'unknown error'}")
+        if str(decided.get("error") or "").startswith("outcome_unknown"):
+            return ActionResult("approved", f"{who}, but Slack did not confirm the post. It may be live: check the channel before resending.")
         # Only a real adapter effect reaches "executed"; email and the like stay approved + ready_to_send.
         return ActionResult("approved", who if decided["status"] == "executed" else f"{who} (draft kept, nothing sent)")
     return ActionResult("skipped", f"Skipped by <@{action.user_id}>")
