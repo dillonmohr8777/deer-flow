@@ -5,7 +5,7 @@
 set -uo pipefail
 DEPLOY="${MOMOBOT_DEPLOY_DIR:-/opt/momobot}"
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
-DOMAIN="$("$REPO/deploy/momentum/vps/dotenv-get.sh" "$DEPLOY/.env" MOMOBOT_DOMAIN)"
+DOMAIN="$("$REPO/deploy/momentum/vps/dotenv-get.sh" "${MOMOBOT_ENV_FILE:-$DEPLOY/.env}" MOMOBOT_DOMAIN)"
 LOG="${MOMOBOT_HEALTH_LOG:-/var/log/momobot/health.jsonl}"
 STAMP="$DEPLOY/last-backup-ok"            # touched by backup.sh after a verified S3 upload
 MAX_AGE_H="${MOMOBOT_MAX_BACKUP_AGE_HOURS:-26}"

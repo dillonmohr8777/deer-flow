@@ -1,0 +1,17 @@
+# EC2 layer on top of the Lightsail kit's layers (lightsail/up.sh adds it via MOMOBOT_EXTRA_COMPOSE).
+# Gives the gateway the same extra mounts the Mac stack had from ops/compose.admission-20261005.yaml,
+# with the Mac paths replaced by /opt/momobot. Brain and client_browser MCP stay off in the cloud
+# extensions_config: both call services that only run on the Mac.
+services:
+  gateway:
+    environment:
+      - MOMO_ADMISSION_DIR=/var/momo-admission
+      - MOMO_LOBBY_NOTES_DIR=/var/momo-lobby-notes
+    volumes:
+      - /opt/momobot/data/skills:/app/skills:ro
+      - /opt/momobot/data/admission:/var/momo-admission
+      - /opt/momobot/data/lobby-notes:/var/momo-lobby-notes:ro
+      - /opt/momobot/data/brand:/var/momobot-brand:ro
+      - /opt/momobot/data/evals:/app/backend/.deer-flow/agency-evals:ro
+      - /opt/momobot/code/momo_guard.py:/app/backend/packages/harness/deerflow/community/browser_automation/momo_guard.py:ro
+      - /opt/momobot/code/momo_protocol.py:/app/backend/packages/harness/deerflow/community/browser_automation/momo_protocol.py:ro
