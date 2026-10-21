@@ -214,10 +214,13 @@ def build_router(service):
             updated = {**referral, **fields, "version": referral["version"] + 1}
             if updated["status"] != "New" and missing_info(updated):
                 raise HTTPException(409, "A qualified referral must retain its required intake information")
-            if is_suppressed(connection, referral):
+            if is_suppressed(connection, updated):
                 updated["contact_status"] = "stopped"
                 for kind, value in contacts(updated).items():
                     connection.execute("INSERT OR IGNORE INTO suppressed VALUES (?,?)", (kind, value))
+                for draft in records(connection, "draft"):
+                    if draft["referral_id"] == referral_id:
+                        put(connection, "draft", {**draft, "status": "suppressed"})
             return referral_view(connection, put(connection, "referral", updated))
 
         return store.mutate(key, f"referral.update:{referral_id}", data, operation)
@@ -280,6 +283,9 @@ def build_router(service):
             community = get(connection, "community", community_id)
             if payload.verified_at > now() or payload.expires_at <= now():
                 raise HTTPException(422, "Availability needs a past verification and a future expiry")
+            current = community.get("availability")
+            if current and payload.verified_at <= datetime.fromisoformat(current["verified_at"]):
+                raise HTTPException(409, "Availability verification must be newer than the current record")
             if community["licensed_beds"] is not None and payload.vacancies > community["licensed_beds"]:
                 raise HTTPException(422, "Verified vacancies exceed the sourced licensed capacity")
             community["availability"] = {**payload.model_dump(mode="json"), "verified_by": store.user_id}
@@ -317,6 +323,8 @@ def build_router(service):
         def operation(connection):
             referral = get(connection, "referral", payload.referral_id)
             get(connection, "community", payload.community_id)
+            if any(p["referral_id"] == payload.referral_id for p in records(connection, "placement")):
+                raise HTTPException(409, "This referral already has a placement")
             if referral["status"] not in ("Qualified", "Touring") or missing_info(referral):
                 raise HTTPException(409, "Placement requires a qualified referral with no existing placement")
             if payload.move_in_date > business_date() or payload.agreement_signed_on > payload.move_in_date:

@@ -53,6 +53,12 @@ struct NavigationPolicyTests {
         #expect(policy.allowsSubframe(URL(string: value)!) == expected)
     }
 
+    @Test("Only a main frame can drive top-level or new-window navigation")
+    func boundsTopLevelNavigation() {
+        #expect(policy.allowsTopLevelNavigation(fromMainFrame: true))
+        #expect(!policy.allowsTopLevelNavigation(fromMainFrame: false))
+    }
+
     @Test("Rejects an invalid trusted origin")
     func rejectsInvalidTrustedOrigin() {
         #expect(throws: NavigationPolicy.ConfigurationError.self) {

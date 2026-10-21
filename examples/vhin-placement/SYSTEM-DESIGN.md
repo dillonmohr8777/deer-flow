@@ -55,7 +55,7 @@ The source AHCA export contains 248 licensed facilities and 6,940 licensed beds 
 ## State and event rules
 
 1. `New`: referral accepted durably. Missing facts remain missing; urgent and human requests appear in the human-action briefing. A submission is acknowledged only after commit.
-2. `Qualified`: completeness reviewed. Duplicate source ID or normalized contact reuses the same case within the same authenticated owner. If identifiers point to different cases, reject and ask Grace to reconcile; do not merge families automatically.
+2. `Qualified`: completeness reviewed. Replaying the same unchanged source submission reuses its referral. A normalized contact collision returns the matching case IDs for human reconciliation; do not merge families automatically.
 3. `Touring`: tour proposed with case/community linkage. Only a real calendar readback plus family/community acceptance can support a confirmed booking. Collision checks use absolute times, not local text labels.
 4. `Placed`: Justin confirms move-in and an agreement reference establishes fee terms. Day 30 and day 60 are calculated from move-in, not the date the screen was opened. A normal $6,000 signed agreement produces two $3,000 milestones, not collected cash.
 5. Reply, decline, stop or changed contact preference governs subsequent follow-up. Stop wins even if an old draft was already open in another tab. Every eventual sender rechecks suppression immediately before dispatch.

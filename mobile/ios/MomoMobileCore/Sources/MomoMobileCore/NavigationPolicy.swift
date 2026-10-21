@@ -51,4 +51,8 @@ public struct NavigationPolicy: Sendable {
         }
         return url.absoluteString.lowercased() == "about:blank" || url.absoluteString.lowercased() == "about:srcdoc"
     }
+
+    public func allowsTopLevelNavigation(fromMainFrame: Bool) -> Bool {
+        fromMainFrame
+    }
 }

@@ -1,6 +1,7 @@
 """Synthetic HTTP acceptance; no real accounts, credentials, or network calls."""
 
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
@@ -11,6 +12,7 @@ from fastapi.testclient import TestClient
 
 from vhin_placement import install
 from vhin_placement.api import Service, build_router
+from vhin_placement.store import Store, put
 
 BASE = datetime(2026, 10, 20, 20, tzinfo=UTC)
 
@@ -127,6 +129,7 @@ def test_auth_fails_closed(tmp_path, identity):
     with TestClient(app) as client:
         assert client.get("/api/vhin/state").status_code in (401, 403)
         assert client.get("/api/vhin/dashboard/").status_code in (401, 403)
+        assert post(client, "/referrals", referral_data()).status_code in (401, 403)
     assert not list(tmp_path.iterdir())
 
 
@@ -141,6 +144,14 @@ def test_identity_isolation_and_restart(client, tmp_path):
     app, _ = build_test_app(tmp_path, user_id="grace")
     with TestClient(app) as grace:
         assert grace.get(f"/api/vhin/referrals/{referral['id']}").json()["name"] == "Synthetic Family"
+        grace_referral = post(
+            grace,
+            "/referrals",
+            referral_data(source_ref="synthetic-form:grace", email="grace@example.test", phone="813-555-0199"),
+            "import-001",
+        )
+        assert grace_referral.status_code == 201
+        assert grace_referral.json()["id"] != referral["id"]
         response = grace.patch(
             f"/api/vhin/referrals/{referral['id']}", json={"expected_version": 1, "name": "Synthetic Grace update"}, headers={"Idempotency-Key": "update"}
         )
@@ -181,6 +192,8 @@ def test_intake_missing_info_attention_and_version(client):
     assert client.patch(f"/api/vhin/referrals/{referral['id']}", json=patch, headers={"Idempotency-Key": "stale"}).status_code == 409
     invalid = {"expected_version": 2, "name": None}
     assert client.patch(f"/api/vhin/referrals/{referral['id']}", json=invalid, headers={"Idempotency-Key": "invalid"}).status_code == 422
+    immutable = {"expected_version": 2, "source_ref": "manual:changed"}
+    assert client.patch(f"/api/vhin/referrals/{referral['id']}", json=immutable, headers={"Idempotency-Key": "immutable"}).status_code == 409
     assert client.get("/api/vhin/state").json()["briefing"]["human_callback_needed"] == 1
 
 
@@ -205,6 +218,30 @@ def test_stop_suppression_survives_restart_and_contact_change(client, tmp_path):
         assert restarted.get("/api/vhin/state").json()["drafts"][0]["status"] == "suppressed"
         returning = post(restarted, "/referrals", referral_data(source_ref="old-contact-return")).json()
         assert returning["contact_status"] == "stopped"
+        assert (
+            restarted.patch(
+                f"/api/vhin/referrals/{returning['id']}",
+                json={"expected_version": 1, "email": "archived@example.test", "phone": "8135550188"},
+                headers={"Idempotency-Key": "archive-returning-contact"},
+            ).status_code
+            == 200
+        )
+
+        active = post(
+            restarted,
+            "/referrals",
+            referral_data(source_ref="second-family", email="second@example.test", phone="8135550199"),
+        ).json()
+        assert post(restarted, f"/referrals/{active['id']}/drafts", {"reason": "planning", "body": "Do not send"}).status_code == 201
+        response = restarted.patch(
+            f"/api/vhin/referrals/{active['id']}",
+            json={"expected_version": 1, "email": "family@example.test"},
+            headers={"Idempotency-Key": "suppressed-contact-edit"},
+        )
+        assert response.status_code == 200
+        assert response.json()["contact_status"] == "stopped"
+        draft = next(d for d in restarted.get("/api/vhin/state").json()["drafts"] if d["referral_id"] == active["id"])
+        assert draft["status"] == "suppressed"
 
 
 @pytest.mark.parametrize("event", ["reply", "decline", "booking"])
@@ -235,6 +272,12 @@ def test_capacity_never_becomes_availability_and_expiry(client, monkeypatch):
     expired = client.get("/api/vhin/state").json()["communities"][0]["availability"]
     assert expired["status"] == "expired" and expired["vacancies"] is None
     assert post(client, f"/communities/{record['id']}/availability", {**payload, "expires_at": (BASE + timedelta(days=9)).isoformat()}).status_code == 422
+    newer = {**payload, "verified_at": (BASE + timedelta(days=1)).isoformat(), "expires_at": (BASE + timedelta(days=3)).isoformat()}
+    assert post(client, f"/communities/{record['id']}/availability", newer).status_code == 200
+    stale = {**payload, "verified_at": (BASE + timedelta(hours=12)).isoformat(), "expires_at": (BASE + timedelta(days=3)).isoformat()}
+    assert post(client, f"/communities/{record['id']}/availability", stale).status_code == 409
+    stored = client.get("/api/vhin/state").json()["communities"][0]["availability"]["verified_at"]
+    assert datetime.fromisoformat(stored) == datetime.fromisoformat(newer["verified_at"])
 
 
 def test_tours_proposed_only_collisions_and_adjacent_slots(client):
@@ -257,6 +300,23 @@ def test_tours_proposed_only_collisions_and_adjacent_slots(client):
 def test_fees_exact_cents_receipts_and_separate_totals(client):
     referral, place = qualified(client), community(client)
     record = placement(client, referral["id"], place["id"])
+    assert (
+        post(
+            client,
+            "/placements",
+            {
+                "referral_id": referral["id"],
+                "community_id": place["id"],
+                "move_in_date": "2026-08-01",
+                "agreement_signed_on": "2026-07-30",
+                "agreement_ref": "synthetic-signed-agreement:002",
+                "fee_cents": 600001,
+                "terms": "50_50_day30_day60",
+                "refund_terms": "Synthetic signed no-refund term",
+            },
+        ).status_code
+        == 409
+    )
     assert record["installments"] == [
         {"day": 30, "due_date": "2026-08-31", "amount_cents": 300000},
         {"day": 60, "due_date": "2026-09-30", "amount_cents": 300001},
@@ -272,6 +332,20 @@ def test_fees_exact_cents_receipts_and_separate_totals(client):
     brief = client.get("/api/vhin/state").json()["briefing"]
     assert (brief["contracted_cents"], brief["invoiced_cents"], brief["collected_cents"], brief["due_cents"]) == (600001, 300000, 300000, 300001)
     assert brief["costs_cents"] is None
+
+
+def test_store_serializes_retries_and_separates_workspaces(tmp_path):
+    store = Store(tmp_path, "vhin", "workspace-a", "justin")
+
+    def write_once():
+        return store.mutate("same-key", "test.write", {"value": 1}, lambda connection: put(connection, "test", {"id": "record-1", "value": 1}))
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        assert list(pool.map(lambda _: write_once(), range(2))) == [{"id": "record-1", "value": 1}] * 2
+    with store.transaction() as connection:
+        assert connection.execute("SELECT COUNT(*) FROM audit").fetchone()[0] == 1
+    assert store.path != Store(tmp_path, "other", "workspace-a", "justin").path
+    assert store.path != Store(tmp_path, "vhin", "workspace-b", "justin").path
 
 
 def test_placement_requires_configured_confirmer_and_signed_terms(tmp_path, monkeypatch):

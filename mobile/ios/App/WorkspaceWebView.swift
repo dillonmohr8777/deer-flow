@@ -88,8 +88,15 @@ struct WorkspaceWebView: UIViewRepresentable {
                 return
             }
 
-            if let targetFrame = navigationAction.targetFrame, !targetFrame.isMainFrame {
+            if navigationAction.targetFrame?.isMainFrame == false {
                 decisionHandler(policy.allowsSubframe(url) ? .allow : .cancel)
+                return
+            }
+
+            guard policy.allowsTopLevelNavigation(
+                fromMainFrame: navigationAction.sourceFrame.isMainFrame
+            ) else {
+                decisionHandler(.cancel)
                 return
             }
 
