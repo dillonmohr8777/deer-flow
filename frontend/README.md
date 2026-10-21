@@ -187,3 +187,7 @@ physical iPhone installation or live provider acceptance.
 ## License
 
 MIT License. See [LICENSE](../LICENSE) for details.
+
+Channel setup in a shared workspace opens the user's private workspace, where personal Slack connections are managed. Workspace switches clear the previous workspace view.
+
+Account managers can open Easy / Medium / Hard directly from Settings and more. The entry opens the existing Experience preferences on mobile and desktop.
