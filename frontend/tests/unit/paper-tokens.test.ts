@@ -8,6 +8,20 @@ import { describe, expect, it } from "@rstest/core";
 // contrast, this is what catches it.
 const paperCssPath = join(__dirname, "..", "..", "src", "styles", "paper.css");
 const paperCss = readFileSync(paperCssPath, "utf8");
+// The comic intro's module uses the orange; it must never letter with it.
+const comicCss = readFileSync(
+  join(
+    __dirname,
+    "..",
+    "..",
+    "src",
+    "components",
+    "momentum",
+    "momobot",
+    "comic.module.css",
+  ),
+  "utf8",
+);
 
 /** Parses every `--paper-<name>: #rrggbb;` declaration out of paper.css. */
 function parseTokens(css: string): Record<string, string> {
@@ -75,6 +89,8 @@ describe("paper token palette (WCAG contrast)", () => {
       "paper-ok",
       "paper-brass",
       "paper-cyan",
+      "paper-white",
+      "paper-signal",
     ]) {
       expect(tokens[name]).toBeDefined();
     }
@@ -102,6 +118,11 @@ describe("paper token palette (WCAG contrast)", () => {
     ["paper-focus", "paper-cream", "focus on cream", 8.14],
     ["paper-danger", "paper-cream", "danger on cream", 6.46],
     ["paper-ok", "paper-cream", "ok on cream", 5.57],
+    // The comic intro (2026-09-24): white page paper and the orange hits.
+    ["paper-white", "paper-ink", "white vs ink", 16.41],
+    ["paper-royal-deep", "paper-white", "royal-deep caption on white", 12.03],
+    ["paper-white", "paper-royal", "white logo word on royal", 8.25],
+    ["paper-ink", "paper-signal", "ink lettering on the orange", 5.16],
   ];
 
   it.each(pairings)(
@@ -128,6 +149,26 @@ describe("paper token palette (WCAG contrast)", () => {
     expect(cyanRatio).toBeLessThan(4.5);
   });
 
+  it("keeps the orange (--paper-signal) object-only on cream and on white", () => {
+    // Momentum's orange fails as text on both light papers, which is why the
+    // comic intro only fills with it (hits, stripe) and letters on it in ink.
+    for (const surface of ["paper-cream", "paper-white"]) {
+      expect(
+        contrastRatio(requireToken("paper-signal"), requireToken(surface)),
+      ).toBeLessThan(4.5);
+    }
+  });
+
+  it("never letters with the orange or brass in the comic intro", () => {
+    const colorDeclarations =
+      comicCss.match(/(?<![-\w])color\s*:[^;]+;/g) ?? [];
+    expect(colorDeclarations.length).toBeGreaterThan(0);
+    for (const declaration of colorDeclarations) {
+      expect(declaration).not.toMatch(/--paper-signal\b/);
+      expect(declaration).not.toMatch(/--paper-brass\b(?!-text)/);
+    }
+  });
+
   it("never uses the object-only brass or cyan tokens as a text color", () => {
     // Any `color:` (or color-mix feeding one) built directly from the
     // object-only tokens would silently produce unreadable text. Only the
@@ -136,6 +177,7 @@ describe("paper token palette (WCAG contrast)", () => {
     for (const declaration of colorDeclarations) {
       expect(declaration).not.toMatch(/--paper-brass\b(?!-text)/);
       expect(declaration).not.toMatch(/--paper-cyan\b(?!-text)/);
+      expect(declaration).not.toMatch(/--paper-signal\b/);
     }
   });
 });

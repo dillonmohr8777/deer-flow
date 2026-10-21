@@ -803,7 +803,8 @@ def test_concurrent_lark_skill_reinstalls_serialize_atomic_replacement(monkeypat
     "fork" not in multiprocessing.get_all_start_methods() or lark_cli.fcntl is None,
     reason="requires POSIX fork and fcntl",
 )
-def test_concurrent_lark_skill_reinstalls_serialize_across_processes(monkeypatch, tmp_path) -> None:
+@pytest.mark.parametrize("result_padding", [0, 65536])
+def test_concurrent_lark_skill_reinstalls_serialize_across_processes(monkeypatch, tmp_path, result_padding) -> None:
     _patch_paths(monkeypatch, tmp_path / "home")
     archive = _make_lark_cli_source_zip(tmp_path)
     real_extract = lark_cli._extract_lark_skills
@@ -828,23 +829,39 @@ def test_concurrent_lark_skill_reinstalls_serialize_across_processes(monkeypatch
         try:
             start.wait(timeout=5)
             installed, digest = lark_cli._install_lark_skills_from_archive("alice", archive, version="v1.0.65")
-            results.put((installed, digest, None))
+            results.put((installed, digest, None, "x" * result_padding))
         except BaseException as exc:  # noqa: BLE001 - propagate child failure
-            results.put((None, None, repr(exc)))
+            results.put((None, None, repr(exc), ""))
 
     monkeypatch.setattr(lark_cli, "_extract_lark_skills", _slow_extract)
     processes = [context.Process(target=_install) for _ in range(2)]
-    for process in processes:
-        process.start()
-    for process in processes:
-        process.join(timeout=10)
+    started = []
+    try:
+        for process in processes:
+            process.start()
+            started.append(process)
+        # A child waits for its queue feeder to flush before exiting. Drain
+        # results before joining, including payloads larger than a pipe buffer.
+        child_results = [results.get(timeout=10) for _ in processes]
+        for process in started:
+            process.join(timeout=10)
 
-    assert [process.exitcode for process in processes] == [0, 0]
-    child_results = [results.get(timeout=2) for _ in processes]
-    assert all(error is None for _installed, _digest, error in child_results), child_results
-    assert child_results[0][:2] == child_results[1][:2]
-    assert max_active.value == 1
-    assert not list(lark_cli.lark_integration_root().parent.glob(".replacing-lark-cli-*"))
+        assert [process.exitcode for process in processes] == [0, 0]
+        assert all(error is None for _installed, _digest, error, _padding in child_results), child_results
+        assert child_results[0][:2] == child_results[1][:2]
+        assert max_active.value == 1
+        assert not list(lark_cli.lark_integration_root().parent.glob(".replacing-lark-cli-*"))
+    finally:
+        for process in started:
+            if process.is_alive():
+                process.terminate()
+            process.join(timeout=5)
+            if process.is_alive():
+                process.kill()
+                process.join(timeout=5)
+            process.close()
+        results.close()
+        results.join_thread()
 
 
 def test_install_lark_integration_succeeds_when_backup_cleanup_fails(monkeypatch, tmp_path):
