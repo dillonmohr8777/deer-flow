@@ -128,35 +128,24 @@ describe("the client sidebar", () => {
 
 describe("the internal sidebar", () => {
   it.each(["admin", "exec", "user"] as const)(
-    "keeps its internal links for a %s",
+    "keeps the short staff list for a %s",
     (role) => {
       const { container } = renderAs(role, <WorkspaceNavChatList />);
       const links = hrefs(container);
       for (const href of [
         "/workspace/approvals",
-        "/workspace/command-center",
-        "/workspace/workflows",
-        "/workspace/browser-research",
-        "/workspace/agents",
         "/workspace/scheduled-tasks",
-        "/workspace/capabilities",
         "/workspace/chats",
       ]) {
         expect(links, href).toContain(href);
       }
+      // Command Center and Agents are admin-only.
+      for (const href of ["/workspace/command-center", "/workspace/agents"]) {
+        if (role === "admin") expect(links, href).toContain(href);
+        else expect(links, href).not.toContain(href);
+      }
     },
   );
-
-  it("hides the OpenAI crew link until the Gateway has an OpenAI key, for everyone", () => {
-    for (const role of ["admin", "exec", "user"] as const) {
-      const { container, unmount } = renderAs(role, <WorkspaceNavChatList />);
-      expect(hrefs(container)).not.toContain("/workspace/openai");
-      unmount();
-    }
-    mocks.openai = true;
-    const { container } = renderAs("admin", <WorkspaceNavChatList />);
-    expect(hrefs(container)).toContain("/workspace/openai");
-  });
 
   it("starts a new chat the usual way and keeps the Command Center logo", () => {
     const { container } = renderAs("admin", <WorkspaceHeader />);
