@@ -1328,7 +1328,7 @@ Installation is interactive because package installation can execute Python buil
 and the loaded extension later runs with Gateway privileges. For an already-reviewed
 source, automation can acknowledge that boundary explicitly with
 `cd backend && uv run --frozen --no-group extensions deerflow extensions install <source> --yes`.
-The manager requires uv 0.8.0 or newer; the provided Docker images pin uv 0.11.1.
+The manager requires uv 0.8.0 or newer; the provided Docker images pin uv 0.13.4.
 The other direct
 commands are `deerflow extensions upgrade SOURCE`, `list`, `enable NAME`, `disable NAME`, and `remove NAME`;
 `NAME` may be the extension name, Python distribution, or `module:install` value. Do not

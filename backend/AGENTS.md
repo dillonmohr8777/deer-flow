@@ -137,8 +137,6 @@ uv run python scripts/benchmark/concurrency/run_concurrency_bench.py \
 uv run pytest tests/test_bench_concurrency.py tests/test_bench_worker.py -q
 ```
 
-Keep UV>=0.13.4 aligned in Docker, Compose and CI; test pins and extension CLI.
-
 ## Commands
 
 **Root directory** (for full application):
