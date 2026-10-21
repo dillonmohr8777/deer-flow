@@ -90,7 +90,7 @@ class BoardPortalRow(Base):
     actor_id: Mapped[str] = mapped_column(String(64))
     submission_key: Mapped[str] = mapped_column(String(64))
     submission_hash: Mapped[str] = mapped_column(String(64))
-    revision: Mapped[int] = mapped_column(Integer, default=0)
+    revision: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     draft_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     approval_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     published_id: Mapped[str | None] = mapped_column(String(64), nullable=True)

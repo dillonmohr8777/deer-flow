@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 import yaml
@@ -69,6 +70,8 @@ async def _assemble(monkeypatch, tmp_path, *, role: str, app: AppConfig, keys=()
         return keys
 
     monkeypatch.setattr("app.gateway.momobot_max.client_keys_for_user", client_keys)
+    # The dedicated-workspace gate has its own suite; assembly runs behind it.
+    monkeypatch.setattr("app.gateway.client_workspace.require_client_workspace", AsyncMock())
     created = {}
 
     def create_chat_model(**kwargs):

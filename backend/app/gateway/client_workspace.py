@@ -8,6 +8,16 @@ from deerflow.persistence.organizations.model import OrganizationRow
 from deerflow.runtime.user_context import resolve_organization_id
 
 
+async def request_user(request):
+    """The authenticated user AuthMiddleware stamped (the same context permission checks read)."""
+    auth = getattr(request.state, "auth", None)
+    if auth is not None and getattr(auth, "user", None) is not None:
+        return auth.user
+    from app.gateway.deps import get_current_user_from_request
+
+    return await get_current_user_from_request(request)
+
+
 async def is_client_contact(user) -> bool:
     if getattr(user, "system_role", None) == "client":
         return True

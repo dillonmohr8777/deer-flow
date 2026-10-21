@@ -33,9 +33,9 @@ logger = logging.getLogger(__name__)
 
 
 async def _staff_board_only(request: Request):
-    from app.gateway.client_workspace import is_client_contact
+    from app.gateway.client_workspace import is_client_contact, request_user
 
-    if await is_client_contact(await get_current_user_from_request(request)):
+    if await is_client_contact(await request_user(request)):
         raise HTTPException(403, "Use your client inbox for approved conversations")
 
 

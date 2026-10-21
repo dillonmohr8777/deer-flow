@@ -19,6 +19,7 @@ from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 
 from app.gateway.approval_adapters import register_adapter
+from app.gateway.client_boundary import CLIENT_ROLE
 from app.gateway.deps import get_current_user_from_request
 from app.gateway.routers.clients import _is_active_org_admin
 from deerflow.approvals import AdapterOutcome, InvalidPayloadError, register_action_type
@@ -27,6 +28,7 @@ from deerflow.persistence.board.model import BoardMessageRow, BoardPortalRow, Bo
 from deerflow.persistence.clients.model import ClientAssignmentRow, ClientRow
 from deerflow.persistence.organizations.model import OrganizationMemberRow, OrganizationRow
 from deerflow.runtime.user_context import get_effective_user_id, resolve_organization_id
+from deerflow.utils.thread_id import ThreadId
 
 router = APIRouter(prefix="/api/client-portal", tags=["client-portal"])
 MAX_CHAT = "/workspace/agents/momobot-max/chats/new"
@@ -169,7 +171,7 @@ async def provision_customer_workspace(body: CustomerWorkspace, request: Request
         customer = await session.get(UserRow, body.user_id)
         if canonical is None or canonical.organization_id != org or canonical.status != "active":
             raise _missing()
-        if customer is None or customer.system_role != "client" or customer.disabled_at is not None:
+        if customer is None or customer.system_role != CLIENT_ROLE or customer.disabled_at is not None:
             raise HTTPException(422, "Choose an existing active client account")
         existing = await session.scalar(select(ClientAssignmentRow.client_id).where(ClientAssignmentRow.user_id == body.user_id).limit(1))
         shared = await session.scalar(
@@ -273,7 +275,7 @@ async def compose(body: Compose, request: Request):
 
 
 @router.get("/threads/{thread_id}")
-async def detail(thread_id: str, request: Request):
+async def detail(thread_id: ThreadId, request: Request):
     thread, portal, admin, external = await _load(request, thread_id)
     async with _sf()() as session:
         stmt = select(BoardMessageRow).where(BoardMessageRow.thread_id == thread_id)
@@ -293,7 +295,7 @@ def _snapshot(thread_id, revision, draft):
 
 
 @router.post("/threads/{thread_id}/draft")
-async def save_draft(thread_id: str, body: Draft, request: Request):
+async def save_draft(thread_id: ThreadId, body: Draft, request: Request):
     thread, portal, admin, external = await _load(request, thread_id)
     if external:
         raise HTTPException(403, "Staff access required")
@@ -387,7 +389,7 @@ register_adapter("portal_publish", PortalPublishAdapter())
 
 
 @router.post("/threads/{thread_id}/publish")
-async def publish(thread_id: str, body: Publish, request: Request):
+async def publish(thread_id: ThreadId, body: Publish, request: Request):
     thread, portal, admin, external = await _load(request, thread_id)
     if not admin:
         raise HTTPException(403, "An organization owner or admin must approve publication")
@@ -422,7 +424,7 @@ async def publish(thread_id: str, body: Publish, request: Request):
 
 
 @router.get("/threads/{thread_id}/messages/{message_id}/attachments/{name}")
-async def attachment(thread_id: str, message_id: str, name: str, request: Request):
+async def attachment(thread_id: ThreadId, message_id: str, name: str, request: Request):
     _, _, _, external = await _load(request, thread_id)
     async with _sf()() as session:
         message = await session.get(BoardMessageRow, message_id)
@@ -434,7 +436,7 @@ async def attachment(thread_id: str, message_id: str, name: str, request: Reques
     return Response(item["content"], media_type="text/plain", headers={"Content-Disposition": f'attachment; filename="{name}"', "Cache-Control": "no-store", "X-Content-SHA256": item["sha256"]})
 
 
-async def _chat(thread_id: str, request: Request, *, work: bool):
+async def _chat(thread_id: ThreadId, request: Request, *, work: bool):
     thread, portal, admin, external = await _load(request, thread_id)
     actor = str((await get_current_user_from_request(request)).id)
     if (work and external) or (not work and actor != portal.actor_id):
@@ -460,12 +462,12 @@ async def _chat(thread_id: str, request: Request, *, work: bool):
 
 
 @router.post("/threads/{thread_id}/chat")
-async def client_chat(thread_id: str, request: Request):
+async def client_chat(thread_id: ThreadId, request: Request):
     return await _chat(thread_id, request, work=False)
 
 
 @router.post("/threads/{thread_id}/work")
-async def start_work(thread_id: str, request: Request):
+async def start_work(thread_id: ThreadId, request: Request):
     chat = await _chat(thread_id, request, work=True)
     thread, portal, _, external = await _load(request, thread_id)
     if portal.published_id or portal.approval_id:
