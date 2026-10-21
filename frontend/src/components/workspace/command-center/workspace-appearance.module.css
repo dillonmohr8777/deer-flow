@@ -456,6 +456,11 @@
 .motionToggle[data-compact="true"]:hover {
   background: var(--accent);
 }
+/* The base cobalt is for the light panel; the ghost icon sits on the dark
+   sidebar, where #06439d measured 1.76:1. */
+:global(.dark) .motionToggle[data-compact="true"] {
+  color: var(--foreground);
+}
 @media (max-width: 900px) {
   .panelBody {
     grid-template-columns: 1fr;

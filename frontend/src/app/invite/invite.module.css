@@ -53,6 +53,12 @@
   border: 1px solid var(--paper-line);
   padding: 2.5rem 2rem 2rem;
   color: var(--paper-ink);
+  /* The sheet is cream in both themes. Without these, the dark theme's light
+     --foreground and --muted-foreground reach shadcn text inside it (Keep me
+     signed in 1.03:1, placeholders 2.4:1). */
+  --foreground: var(--paper-ink);
+  --muted-foreground: var(--paper-ink-muted);
+  --input: var(--paper-line);
 }
 
 /* Pin, centred over the sheet's top edge (paper.css's .pinned::before). */
