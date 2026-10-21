@@ -238,7 +238,9 @@ describe("MomoBot public-only service worker", () => {
       "https://private-api.example.test/api/runs",
       "https://other.example.test/icons/icon-192.png",
     ]) {
-      await expect(worker.request(url)).rejects.toThrow("Fetch was not handled");
+      await expect(worker.request(url)).rejects.toThrow(
+        "Fetch was not handled",
+      );
     }
     expect(worker.calls).toHaveLength(calls);
     expect(worker.writes).toHaveLength(PUBLIC_PATHS.length);
