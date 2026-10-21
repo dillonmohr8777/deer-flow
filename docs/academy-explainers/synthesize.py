@@ -32,6 +32,7 @@ def main():
     parser.add_argument('--ref', type=Path, required=True)
     parser.add_argument('--only')
     parser.add_argument('--limit-chapters', type=int)
+    parser.add_argument('--pause', type=float, default=.35)
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
     # Keep one model resident; the upstream convenience helper reloads each call.
@@ -67,8 +68,8 @@ def main():
                 duration = len(samples) / rate
                 records.append(dict(chapter=chapter_index, title=chapter['title'], text=text,
                                     start=cursor, duration=duration, wav=target.name))
-                waveforms.extend([samples, np.zeros(8400)])
-                cursor += duration + .35
+                waveforms.extend([samples, np.zeros(round(24000 * args.pause))])
+                cursor += duration + args.pause
                 checkpoint[target.name] = records[-1]
                 atomic_json(directory / 'timing.json', list(checkpoint.values()))
                 print(json.dumps(dict(lesson=source.stem, chapter=chapter_index, chunk=part_index,

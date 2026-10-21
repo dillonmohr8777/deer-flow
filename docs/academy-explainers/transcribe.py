@@ -15,7 +15,8 @@ TENS = dict(zip('twenty thirty forty fifty sixty seventy eighty ninety'.split(),
 
 
 def normalize(text):
-    text = text.lower().replace('momo bot', 'momobot')
+    text = text.lower().replace('momo bot', 'momobot').replace('file name', 'filename')
+    text = text.replace('momobot dot needmomentum dot com', 'momobot needmomentum com')
     for letters, command in [('p w d', 'pwd'), ('l s', 'ls'), ('c d', 'cd'), ('m k d i r', 'mkdir')]:
         text = re.sub(r'\b' + letters.replace(' ', r'\s*') + r'\b', command, text)
     text = text.replace("let's", 'let us').replace("don't", 'do not').replace("can't", 'cannot')
