@@ -27,7 +27,7 @@ def make_deploy(tmp_path):
         path.mkdir(parents=True)
         (path / "keep.txt").write_text(name)
     (deploy / "code").mkdir()
-    for name in ("momo_guard.py", "momo_protocol.py"):
+    for name in ("momo_guard.py", "momo_protocol.py", "brain_readonly_adapter.py"):
         (deploy / "code" / name).write_text("# recovery module")
     (deploy / "settings.env").write_text("MOMOBOT_DOMAIN=example.test\nMOMENTUM_GATEWAY_IMAGE=gateway:test\nSECRET=do-not-back-up\n")
     (deploy / "frontend.env").write_text("MOMO_DAILY_CLOUD_OWNER_USER_ID=owner-test\nSECRET=do-not-back-up\n")
@@ -47,7 +47,7 @@ def test_snapshot_roundtrip_and_credentials_excluded(tmp_path):
     module.snapshot(deploy, stage)
     with tarfile.open(stage / "ec2-mounts.tgz") as archive:
         names = archive.getnames()
-        assert len([m for m in archive.getmembers() if m.isfile()]) == 8
+        assert len([m for m in archive.getmembers() if m.isfile()]) == 9
         assert not any(name.endswith(".env") for name in names)
         assert archive.extractfile("data/skills/keep.txt").read() == b"skills"
         assert archive.extractfile("data/brand/daily-people/sean-boyle.webp").read() == b"portrait-fixture"
