@@ -56,8 +56,16 @@ consumes it for task-local admission and excludes it from graph/runtime context.
 
 This source change does not register a server, mount private data, change an
 agent's tool permissions, or activate retrieval. The built-in `momobot-max`
-still has `mcp_plugins=[]` and its existing fixed tool-name ceiling. Deployment
-and any narrowly scoped agent wiring require separate review. Before any Brain
+still has `mcp_plugins=[]` and its existing fixed tool-name ceiling globally.
+During an authenticated private Max run only, lead assembly selects the exact
+enabled, scope-authorized `brain` installation and locally adds four read names:
+`brain_now`, `brain_client`, `brain_open_items`, and `brain_systems`, honoring
+`tool_name_prefix` (default final names are `brain_brain_now`,
+`brain_brain_client`, `brain_brain_open_items`, `brain_brain_systems`). It keeps
+normal capability selection, authorization, and execution-time scope/revocation
+guards. Search/capture/refresh and other MCP tools are excluded. The local
+selection is not written to agent configuration or delegated subagent metadata.
+Deployment still requires separate review. Before any Brain
 registration, privately verify the authenticated actor, exact private
 organization, storage provenance, adapter contents, and destination-side
 denials for another actor, shared/client workspace, channel, and background run.
@@ -69,3 +77,8 @@ changes, discovery filtering, public-cache separation, real adapter/ToolNode
 runtime forwarding, and denial before background connections. These are
 synthetic checks; they do not establish production account binding or live
 adapter isolation.
+
+The synthetic `tests/test_momobot_private_brain.py` suite exercises real tool
+loading and lead authorization, both prefix modes, four fake adapter reads,
+per-tool authorization denial, concurrent actor isolation, and configuration
+change during discovery. It performs no production retrieval or model call.

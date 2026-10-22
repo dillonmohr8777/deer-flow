@@ -61,3 +61,10 @@ intersects active skills with the ceiling and denies fabricated calls.
 Bootstrap reads an existing agent's permissions before constructing a model;
 disabled self-update or excluded setup is denied. The setup upsert independently
 enforces and preserves these owner controls; unreadable records fail closed.
+
+**Private Brain in Max**: normal lead assembly may locally add the exact `brain`
+installation and its four read schemas only when `private_brain_for_max` proves
+the existing trusted private MCP context and enabled policy. Keep global Max
+config, delegated metadata, models and subagents unchanged. Preserve MCP source
+checks, the selection-snapshot guard, role authorization, and prefix handling.
+Regression: `tests/test_momobot_private_brain.py`; no provider or real Brain data.

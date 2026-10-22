@@ -1256,16 +1256,29 @@ def _assemble_lead_agent(config: RunnableConfig, *, app_config: AppConfig) -> Le
     extra_tools = [update_agent] if agent_name and self_update_enabled and not is_webhook_channel else []
     # Resolve the model once so tool guidance uses the same effective settings.
     chat_model = create_chat_model(name=model_name, thinking_enabled=thinking_enabled, reasoning_effort=reasoning_effort, app_config=resolved_app_config, attach_tracing=False, model_overrides=agent_model_overrides)
+    from deerflow.agents.lead_agent.private_brain import private_brain_for_max
+    from deerflow.mcp.private_scope import guard_private_mcp_tool
+    from deerflow.tools.mcp_metadata import get_mcp_source
+
+    mcp_plugins = getattr(agent_config, "mcp_plugins", None)
+    private_brain = private_brain_for_max(agent_name) if tool_names is not None else None
+    if private_brain is not None:
+        brain_server, brain_installation, brain_names = private_brain
+        mcp_plugins = [brain_installation]
+        tool_names = [*tool_names, *brain_names]
     raw_tools = get_available_tools(
         model_name=model_name,
         groups=agent_config.tool_groups if agent_config else None,
-        mcp_plugins=getattr(agent_config, "mcp_plugins", None),
+        mcp_plugins=mcp_plugins,
         subagent_enabled=subagent_enabled,
         include_conversation_reader=callable(cfg.get(CONVERSATION_READER_CONTEXT_KEY)) and not bool(cfg.get("is_subagent")),
         include_momentum_sdk=callable(cfg.get(MOMENTUM_SDK_CONTEXT_KEY)) and not bool(cfg.get("is_subagent")),
         app_config=resolved_app_config,
         chat_model=chat_model,
     )
+    if private_brain is not None:
+        # Bind the selected policy even if configuration changed during discovery.
+        raw_tools = [guard_private_mcp_tool(tool, brain_server, server_name="brain") if tool.name in brain_names else tool for tool in raw_tools if tool.name not in brain_names or (get_mcp_source(tool) or {}).get("server_name") == "brain"]
     configured_tools = raw_tools + extra_tools
     # Withhold the private Agent Room tools from any channel run. A channel
     # run (GitHub webhook fan-out, a Telegram bot, etc.) resolves the runtime
