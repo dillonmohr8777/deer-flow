@@ -2437,6 +2437,8 @@ momentum_internal:
 #     acme-dental: high
 #   clients: []                     # clients unlocked for MomoBot Max (registry id or id)
 #   base_model: claude-haiku-5-5    # every other client: the base MomoBot chat on this model
+#   staff_model: claude-haiku-5-5   # non-admin staff run Max on this (clients and admins keep `model`)
+#   staff_effort: high
 #   base_effort: medium             # ...at this effort, with no subagent team
 
 # ============================================================================

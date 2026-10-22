@@ -565,3 +565,53 @@ def test_a_client_side_job_always_runs_on_the_base_model():
             assert momobot_max.client_side_model(_user(role), "claude-opus-5-5") == "claude-opus-5-5"
     finally:
         reset_app_config()
+
+
+# -- staff on a cheaper model (Dillon, Oct 22: clients get Opus, the team Haiku 5.5) --
+
+_STAFF_CHEAP = {"enabled": True, "model": "claude-opus-5-5", "staff_model": "claude-haiku-5-5", "staff_effort": "high", "clients": ["acme-dental"]}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("role", ["user", "exec"])
+async def test_non_admin_staff_run_max_on_the_staff_model(role):
+    config = _run_config(context={"agent_name": "momobot-max", "model_name": "claude-opus-5-5", "reasoning_effort": "low"})
+    await _policy(config, _user(role), app_config=_config(momobot_max=_STAFF_CHEAP, authorization=example_authorization()))
+    assert config["context"]["model_name"] == "claude-haiku-5-5"
+    assert (config["context"]["reasoning_effort"], config["context"]["momobot_tier"]) == ("high", "max")
+
+
+@pytest.mark.asyncio
+async def test_admins_and_max_clients_keep_the_max_model():
+    for user, keys in ((_user("admin"), ()), (_user("client"), ("acme-dental",))):
+        config = _run_config(context={"agent_name": "momobot-max"})
+        await _policy(config, user, keys=keys, app_config=_config(momobot_max=_STAFF_CHEAP, authorization=example_authorization()))
+        assert config["context"].get("model_name") != "claude-haiku-5-5"
+
+
+def test_staff_whose_role_may_use_the_staff_model_can_open_max():
+    config = _config(momobot_max=_STAFF_CHEAP, authorization=example_authorization())
+    set_app_config(config)
+    try:
+        assert momobot_max_available_to(_user("user"), config) is True
+        assert momobot_max_available_to(_user("user"), _config(momobot_max={"enabled": True}, authorization=example_authorization())) is False
+    finally:
+        reset_app_config()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("role", ["internal", None, "mystery"])
+async def test_internal_channel_runs_and_unknown_roles_keep_the_max_model(role):
+    config = _run_config(context={"agent_name": "momobot-max"})
+    await _policy(config, _user(role) if role else SimpleNamespace(id="u-1"), app_config=_config(momobot_max=_STAFF_CHEAP, authorization=example_authorization()), internal=True)
+    assert config["context"].get("model_name") != "claude-haiku-5-5"
+
+
+def test_staff_who_may_not_use_the_staff_model_fall_back_to_the_max_model():
+    settings = _config(momobot_max={**_STAFF_CHEAP, "staff_model": "not-in-any-role"}, authorization=example_authorization())
+    set_app_config(settings)
+    try:
+        assert momobot_max.staff_runs_cheap(_user("exec"), settings.momobot_max) is False
+        assert momobot_max_available_to(_user("exec"), settings) is True
+    finally:
+        reset_app_config()

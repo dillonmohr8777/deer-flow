@@ -37,10 +37,28 @@ from deerflow.runtime.user_context import resolve_organization_id
 _UNRESOLVED_AGENT_DETAIL = "knowledge_scope assistant configuration could not be resolved"
 
 
+_STAFF_ROLES = ("user", "exec")
+
+
+def staff_runs_cheap(user: Any, settings: Any, *, fail_closed: bool = True) -> bool:
+    """Employees (user, exec) run MomoBot Max on ``staff_model`` when one is set and their role may use it
+    (Dillon, Oct 22: the team on Haiku 5.5). Admins, clients and internal channel/scheduler runs keep ``model``."""
+    if not settings.staff_model or user is None or getattr(user, "system_role", None) not in _STAFF_ROLES:
+        return False
+    return model_use_allowed(user, settings.staff_model, is_internal=False, fail_closed=fail_closed)
+
+
 def momobot_max_available_to(user: Any, config: AppConfig, *, is_internal: bool = False, tier: str = "max") -> bool:
     """Whether *user* may chat with the agent at *tier*: it is enabled and their role may use that tier's model."""
     settings = config.momobot_max
-    model = settings.model if tier == "max" else settings.base_model
+    if not settings.enabled:
+        return False
+    if tier != "max":
+        model = settings.base_model
+    elif staff_runs_cheap(user, settings, fail_closed=config.authorization.fail_closed):
+        model = settings.staff_model
+    else:
+        model = settings.model
     return settings.enabled and model_use_allowed(user, model, is_internal=is_internal, fail_closed=config.authorization.fail_closed)
 
 
@@ -121,6 +139,10 @@ async def apply_run_policy(config: dict[str, Any], *, user: Any, actor_user_id: 
             section.update(model_name=settings.base_model, reasoning_effort=settings.base_effort, thinking_enabled=False, subagent_enabled=False, momobot_tier="base")
         return
     effort = settings.effort_for(client_keys)
+    if staff_runs_cheap(user, settings, fail_closed=app_config.authorization.fail_closed):
+        effort = settings.staff_effort
+        for section in sections:
+            section["model_name"] = settings.staff_model
     for section in sections:
         section.update(reasoning_effort=effort, thinking_enabled=True, subagent_enabled=True, max_total_subagents=app_config.subagents.max_total_per_run, momobot_tier="max")
 
