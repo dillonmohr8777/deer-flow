@@ -41,7 +41,7 @@
   --paper-kraft: #d8c3a0;
 
   /* The landing's 5% grain as a background tile, so it sits under content. */
-  --paper-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E");
+  --paper-grain: none; /* Oct 22: the 5% feTurbulence grain read as static on phones and cost scroll paint; flat cream instead. */
 
   /* Ink */
   --paper-ink: #101e3f;
@@ -292,20 +292,6 @@
     border: 1px solid var(--paper-line);
     border-radius: 2px 5px 3px 6px;
   }
-}
-
-/*
- * Grain — intended for .sheet::after. A 180px feTurbulence tile at 5%
- * opacity, laid over the sheet. aria-hidden by contract; decoration only.
- */
-[data-treatment="paper"] .sheet::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-  background-size: 180px 180px;
-  opacity: 0.05;
 }
 
 /*
