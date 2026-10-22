@@ -9,6 +9,11 @@ SETTINGS = dict(model='lucasnewman/f5-tts-mlx', steps=32, method='euler', seed=7
                 words_per_second=2.5, duration_allowance=.3, pause=.35, sample_rate=24000)
 
 
+
+# Oct 22: the course grew past the original 17: tour 00, lessons 01-15, 16-client-communication and the
+# 16-20 video family (PR 230) make 22 possible stems.
+COURSE_MAX = 22
+
 def sha(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
@@ -31,7 +36,7 @@ def accepted_sources(root):
     packet = json.loads(path.read_text())
     assert packet.get('accepted') is True and packet.get('course') == 'momentum-work', 'Wrong course acceptance'
     rows = packet.get('lessons', [])
-    assert 1 <= len(rows) <= 17, 'Acceptance must list exact lessons'
+    assert 1 <= len(rows) <= COURSE_MAX, 'Acceptance must list exact lessons'
     stems = [row['stem'] for row in rows]
     assert len(stems) == len(set(stems)), 'Duplicate accepted stem'
     output = []

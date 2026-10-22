@@ -9,7 +9,7 @@ import re
 import time
 from pathlib import Path
 from validation import require_approved
-from contract import duration_ok, require_course
+from contract import COURSE_MAX, duration_ok, require_course
 
 HERE = Path(__file__).parent
 STYLE = """
@@ -106,7 +106,7 @@ def build(source, output, assets, burn_captions=False):
     assert len(visuals) == len(lesson['chapters']), 'Chapter/visual mismatch'
     chapter_total = len(lesson['chapters'])
     course_total = packet.get('course_total')
-    assert isinstance(course_total, int) and max(int(row['stem'][:2])+1 for row in packet['lessons']) <= course_total <= 17, 'Explicit complete-course total required'
+    assert isinstance(course_total, int) and max(int(row['stem'][:2])+1 for row in packet['lessons']) <= course_total <= COURSE_MAX, 'Explicit complete-course total required'
     word_caps = captions(json.loads((source.parent / 'asr.json').read_text()), lesson)
     vtt = ['WEBVTT', '']
     hosts, boards = [], []
