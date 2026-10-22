@@ -182,21 +182,31 @@ describe("the internal sidebar", () => {
       const { container } = renderAs(role, <WorkspaceNavChatList />);
       const links = hrefs(container);
       for (const href of [
-        "/workspace/approvals",
+        "/workspace/agents/momobot-max/chats/new",
         "/workspace/scheduled-tasks",
         "/workspace/chats",
       ]) {
         expect(links, href).toContain(href);
       }
-      // Command Center is admin-only; Agents is for admins and execs.
-      if (role === "admin")
-        expect(links).toContain("/workspace/command-center");
-      else expect(links).not.toContain("/workspace/command-center");
-      if (role === "admin" || role === "exec")
-        expect(links).toContain("/workspace/agents");
-      else expect(links).not.toContain("/workspace/agents");
+      // Oct 22: approvals, the Command Center and agents sit in the admin group.
+      for (const href of [
+        "/workspace/approvals",
+        "/workspace/command-center",
+        "/workspace/agents",
+      ]) {
+        if (role === "admin") expect(links, href).toContain(href);
+        else expect(links, href).not.toContain(href);
+      }
     },
   );
+
+  it("shows the Easy / Medium / Hard switch to every employee", () => {
+    for (const role of ["admin", "exec", "user"] as const) {
+      const { container, unmount } = renderAs(role, <WorkspaceNavChatList />);
+      expect(container.querySelectorAll('[role="radio"]').length).toBe(3);
+      unmount();
+    }
+  });
 
   it("starts a new chat the usual way and keeps the Command Center logo", () => {
     const { container } = renderAs("admin", <WorkspaceHeader />);

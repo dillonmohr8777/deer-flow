@@ -7,12 +7,79 @@ import { useAuth } from "@/core/auth/AuthProvider";
 import { getBackendBaseURL } from "@/core/config";
 import { useI18n } from "@/core/i18n/hooks";
 import { useLocalSettings } from "@/core/settings";
+import { MODE_FOR_EXPERIENCE } from "@/core/settings/local";
 import { isStaticWebsiteOnly } from "@/core/static-mode";
 import { cn } from "@/lib/utils";
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
 
 type ExperienceMode = "easy" | "medium" | "hard";
+
+const MODES: ExperienceMode[] = ["easy", "medium", "hard"];
+
+function saveExperienceMode(userId: string, mode: ExperienceMode) {
+  return apiFetch(`${getBackendBaseURL()}/api/v1/auth/preferences`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Expected-User-Id": userId,
+    },
+    body: JSON.stringify({
+      experience_mode: mode,
+      mode: MODE_FOR_EXPERIENCE[mode],
+    }),
+  }).catch(() => undefined);
+}
+
+/*
+ * Always-visible Easy / Medium / Hard switch for the sidebar (Dillon, Oct 22:
+ * "where's the easy mode, the hard mode, the medium?"). Same preference as the
+ * first-sign-in chooser below.
+ */
+export function ExperienceModeSwitch() {
+  const { t } = useI18n();
+  const { user } = useAuth();
+  const [settings, setSettings] = useLocalSettings();
+  const userId =
+    !isStaticWebsiteOnly() && user?.id !== "default" ? user?.id : undefined;
+  const current = settings.context.experience_mode ?? "medium";
+  const labels: Record<ExperienceMode, string> = {
+    easy: t.settings.experience.easyLabel,
+    medium: t.settings.experience.mediumLabel,
+    hard: t.settings.experience.hardLabel,
+  };
+  return (
+    <div
+      role="radiogroup"
+      aria-label={t.settings.experience.chooserTitle}
+      className="bg-muted/60 mx-2 mt-2 grid grid-cols-3 gap-1 rounded-lg p-1"
+    >
+      {MODES.map((mode) => (
+        <button
+          key={mode}
+          type="button"
+          role="radio"
+          aria-checked={current === mode}
+          onClick={() => {
+            setSettings("context", {
+        experience_mode: mode,
+        mode: MODE_FOR_EXPERIENCE[mode],
+      });
+            if (userId) void saveExperienceMode(userId, mode);
+          }}
+          className={cn(
+            "min-h-9 rounded-md text-xs font-semibold transition-colors",
+            current === mode
+              ? "bg-background text-foreground shadow-xs"
+              : "text-muted-foreground hover:text-foreground",
+          )}
+        >
+          {labels[mode]}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 /*
  * First-sign-in chooser: shown once for an account with no saved
@@ -51,20 +118,14 @@ export function ExperienceModeChooser() {
   const choose = (mode: ExperienceMode) => {
     if (!userId || saving) return;
     setSaving(mode);
-    apiFetch(`${getBackendBaseURL()}/api/v1/auth/preferences`, {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Expected-User-Id": userId,
-      },
-      body: JSON.stringify({ experience_mode: mode }),
-    })
-      .catch(() => undefined)
-      .finally(() => {
-        setSettings("context", { experience_mode: mode });
-        setSaving(null);
-        setOpen(false);
+    void saveExperienceMode(userId, mode).finally(() => {
+      setSettings("context", {
+        experience_mode: mode,
+        mode: MODE_FOR_EXPERIENCE[mode],
       });
+      setSaving(null);
+      setOpen(false);
+    });
   };
 
   const cards: {

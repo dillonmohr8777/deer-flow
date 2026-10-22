@@ -37,10 +37,21 @@ from deerflow.runtime.user_context import resolve_organization_id
 _UNRESOLVED_AGENT_DETAIL = "knowledge_scope assistant configuration could not be resolved"
 
 
+def staff_runs_cheap(user: Any, settings: Any) -> bool:
+    """Non-admin staff run MomoBot Max on ``staff_model`` when one is set (Dillon, Oct 22: the team on Haiku 5.5)."""
+    role = getattr(user, "system_role", None)
+    return bool(settings.staff_model) and user is not None and role not in (CLIENT_ROLE, "admin")
+
+
 def momobot_max_available_to(user: Any, config: AppConfig, *, is_internal: bool = False, tier: str = "max") -> bool:
     """Whether *user* may chat with the agent at *tier*: it is enabled and their role may use that tier's model."""
     settings = config.momobot_max
-    model = settings.model if tier == "max" else settings.base_model
+    if tier != "max":
+        model = settings.base_model
+    elif staff_runs_cheap(user, settings):
+        model = settings.staff_model
+    else:
+        model = settings.model
     return settings.enabled and model_use_allowed(user, model, is_internal=is_internal, fail_closed=config.authorization.fail_closed)
 
 
@@ -121,6 +132,10 @@ async def apply_run_policy(config: dict[str, Any], *, user: Any, actor_user_id: 
             section.update(model_name=settings.base_model, reasoning_effort=settings.base_effort, thinking_enabled=False, subagent_enabled=False, momobot_tier="base")
         return
     effort = settings.effort_for(client_keys)
+    if staff_runs_cheap(user, settings):
+        effort = settings.staff_effort
+        for section in sections:
+            section["model_name"] = settings.staff_model
     for section in sections:
         section.update(reasoning_effort=effort, thinking_enabled=True, subagent_enabled=True, max_total_subagents=app_config.subagents.max_total_per_run, momobot_tier="max")
 

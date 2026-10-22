@@ -4,6 +4,7 @@ import { CheckIcon } from "lucide-react";
 
 import { useI18n } from "@/core/i18n/hooks";
 import { useLocalSettings } from "@/core/settings";
+import { MODE_FOR_EXPERIENCE } from "@/core/settings/local";
 import { cn } from "@/lib/utils";
 
 import { SettingsSection } from "./settings-section";
@@ -55,7 +56,10 @@ export function ExperienceSettingsPage() {
               type="button"
               aria-pressed={selected}
               onClick={() =>
-                setSettings("context", { experience_mode: card.mode })
+                setSettings("context", {
+                  experience_mode: card.mode,
+                  mode: MODE_FOR_EXPERIENCE[card.mode],
+                })
               }
               className={cn(
                 "flex flex-col gap-2 rounded-lg border p-4 text-left transition-colors",
