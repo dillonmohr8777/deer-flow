@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Mapping
 from contextvars import ContextVar, Token
 from dataclasses import dataclass
@@ -9,7 +10,7 @@ from typing import Any
 
 from langchain_core.tools import BaseTool, StructuredTool, ToolException
 
-from deerflow.config.extensions_config import McpServerConfig
+from deerflow.config.extensions_config import ExtensionsConfig, McpServerConfig
 from deerflow.runtime.user_context import (
     AUTHENTICATED_CONTEXT_MARKER,
     AUTHENTICATED_CONTEXT_MARKER_KEY,
@@ -17,6 +18,9 @@ from deerflow.runtime.user_context import (
     get_storage_context,
 )
 from deerflow.tools.types import Runtime
+
+PRIVATE_MCP_SESSION_CONTEXT_KEY = "__deerflow_private_mcp_session"
+PRIVATE_MCP_SESSION_MARKER = object()
 
 
 @dataclass(frozen=True)
@@ -40,6 +44,8 @@ def bind_private_mcp_context(context: object) -> Token[PrivateMcpContext | None]
     if (
         isinstance(context, Mapping)
         and context.get(AUTHENTICATED_CONTEXT_MARKER_KEY) is AUTHENTICATED_CONTEXT_MARKER
+        and context.get(PRIVATE_MCP_SESSION_CONTEXT_KEY) is PRIVATE_MCP_SESSION_MARKER
+        and context.get("is_internal") is False
         and "channel_name" not in context
         and "public_news_channel" not in context
         and not context.get("non_interactive")
@@ -83,15 +89,26 @@ def require_private_mcp_access(server: McpServerConfig, expected: PrivateMcpCont
         raise ToolException("This MCP server requires its operator-bound private web workspace.")
 
 
-def guard_private_mcp_tool(tool: BaseTool, server: McpServerConfig) -> BaseTool:
+def guard_private_mcp_tool(tool: BaseTool, server: McpServerConfig, *, server_name: str) -> BaseTool:
     """Check again before any adapter/pool coroutine can open a connection."""
     if server.private_scope is None:
         return tool
     require_private_mcp_access(server)
     expected = current_private_mcp_context()
+    discovered_config = server.model_dump()
 
     async def private_call(runtime: Runtime | None = None, **arguments: Any) -> Any:
         require_private_mcp_access(server, expected)
+        try:
+            config = await asyncio.to_thread(ExtensionsConfig.from_file)
+            current = config.get_enabled_mcp_servers().get(server_name)
+        except Exception:
+            raise ToolException("Private MCP configuration is unavailable; rediscover the tool.") from None
+        # The adapter/pool closes over its discovered connection. Any config
+        # change requires rediscovery rather than using stale authority/transport.
+        if current is None or current.private_scope is None or current.model_dump() != discovered_config:
+            raise ToolException("Private MCP configuration changed; rediscover the tool.")
+        require_private_mcp_access(current, expected)
         return await tool.coroutine(runtime=runtime, **arguments)
 
     return StructuredTool(

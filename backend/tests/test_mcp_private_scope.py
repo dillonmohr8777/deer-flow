@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from contextlib import asynccontextmanager, contextmanager
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -14,6 +15,8 @@ from pydantic import ValidationError
 from deerflow.config.extensions_config import ExtensionsConfig, McpServerConfig
 from deerflow.mcp import cache, tools
 from deerflow.mcp.private_scope import (
+    PRIVATE_MCP_SESSION_CONTEXT_KEY,
+    PRIVATE_MCP_SESSION_MARKER,
     bind_private_mcp_context,
     current_private_mcp_context,
     guard_private_mcp_tool,
@@ -32,6 +35,7 @@ from deerflow.runtime.user_context import (
 
 ACTOR = "synthetic-owner"
 ORG = "synthetic-private-org"
+_REAL_EXTENSIONS_LOADER = ExtensionsConfig.from_file
 
 
 def _server(**overrides):
@@ -41,11 +45,20 @@ def _server(**overrides):
 def _context(**overrides):
     return {
         AUTHENTICATED_CONTEXT_MARKER_KEY: AUTHENTICATED_CONTEXT_MARKER,
+        PRIVATE_MCP_SESSION_CONTEXT_KEY: PRIVATE_MCP_SESSION_MARKER,
+        "is_internal": False,
         "actor_user_id": ACTOR,
         "organization_id": ORG,
         "storage_user_id": ACTOR,
         **overrides,
     }
+
+
+@pytest.fixture(autouse=True)
+def current_server_config(monkeypatch):
+    servers = {"private": _server()}
+    monkeypatch.setattr(ExtensionsConfig, "from_file", lambda: ExtensionsConfig(mcp_servers=servers))
+    return servers
 
 
 @contextmanager
@@ -97,6 +110,11 @@ def test_policy_requires_exact_private_actor_organization_and_storage():
         _context(public_news_channel=False),
         _context(public_news_channel=True),
         _context(non_interactive=True),
+        _context(is_internal=True),
+        _context(is_internal=None),
+        {key: value for key, value in _context().items() if key != "is_internal"},
+        _context(**{PRIVATE_MCP_SESSION_CONTEXT_KEY: True}),
+        {key: value for key, value in _context().items() if key != PRIVATE_MCP_SESSION_CONTEXT_KEY},
     ],
 )
 def test_unknown_forged_background_and_channel_contexts_deny(context):
@@ -128,12 +146,13 @@ def test_inherited_binding_checks_live_principal_and_workspace():
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("transport", ["http", "sse", "stdio"])
-async def test_captured_tool_cannot_cross_principals_or_trust_runtime_fields(transport):
+async def test_captured_tool_cannot_cross_principals_or_trust_runtime_fields(transport, current_server_config):
     calls = []
     server = _server()
     server.type = transport
+    current_server_config["private"] = server
     with _identity():
-        guarded = guard_private_mcp_tool(_tool(calls=calls), server)
+        guarded = guard_private_mcp_tool(_tool(calls=calls), server, server_name="private")
         assert await guarded.coroutine() == "synthetic-result"
     with _identity(actor="synthetic-other"):
         forged_runtime = SimpleNamespace(context=_context(user_id=ACTOR, private_scope=True, user_role="owner"))
@@ -199,7 +218,7 @@ def test_global_cache_never_publishes_private_tools_and_discovery_preserves_cont
         assert private_only
         assert current_private_mcp_context() is not None
         seen.append("private-discovery")
-        return [guard_private_mcp_tool(_tool(), _server())]
+        return [guard_private_mcp_tool(_tool(), _server(), server_name="private")]
 
     monkeypatch.setattr(cache, "_cache_initialized", True)
     monkeypatch.setattr(cache, "_mcp_tools_cache", [public])
@@ -251,7 +270,7 @@ async def test_private_discovery_from_sync_cache_in_running_loop_preserves_trust
 
 
 @pytest.mark.asyncio
-async def test_real_adapter_and_toolnode_preserve_runtime_and_deny_before_new_session(monkeypatch):
+async def test_real_adapter_and_toolnode_preserve_runtime_and_deny_before_new_session(monkeypatch, current_server_config):
     from langchain_core.messages import AIMessage
     from langchain_mcp_adapters import tools as adapter
     from langgraph.graph import END, START, MessagesState, StateGraph
@@ -275,7 +294,7 @@ async def test_real_adapter_and_toolnode_preserve_runtime_and_deny_before_new_se
         None, Tool(name="query", description="Synthetic", inputSchema={"type": "object", "properties": {}}), connection={"transport": "http", "url": "https://synthetic.invalid/mcp"}, tool_interceptors=[interceptor]
     )
     with _identity():
-        guarded = guard_private_mcp_tool(raw, _server())
+        guarded = guard_private_mcp_tool(raw, _server(), server_name="private")
         builder = StateGraph(MessagesState)
         builder.add_node("tools", ToolNode([guarded], handle_tool_errors=False))
         builder.add_edge(START, "tools")
@@ -285,6 +304,9 @@ async def test_real_adapter_and_toolnode_preserve_runtime_and_deny_before_new_se
         result = await graph.ainvoke(state, context={"synthetic": "runtime"})
         assert result["messages"][-1].content[0]["text"] == "synthetic-result"
         assert runtimes[0].context == {"synthetic": "runtime"}
+        current_server_config["private"] = _server(enabled=False)
+        with pytest.raises(ToolException, match="configuration changed"):
+            await graph.ainvoke(state)
     with _identity(actor="synthetic-other"):
         with pytest.raises(ToolException):
             await graph.ainvoke(state, context=_context())
@@ -292,7 +314,7 @@ async def test_real_adapter_and_toolnode_preserve_runtime_and_deny_before_new_se
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("origin", ["private", "forged", "channel", "background", "factory-error"])
+@pytest.mark.parametrize("origin", ["private", "forged", "channel", "background", "factory-error", "internal-owner", "pat", "auth_disabled"])
 async def test_worker_binds_through_assembly_and_graph_then_resets(origin):
     from deerflow.runtime.runs.manager import RunRecord, RunStartOutcome
     from deerflow.runtime.runs.schemas import DisconnectMode, RunStatus
@@ -309,6 +331,7 @@ async def test_worker_binds_through_assembly_and_graph_then_resets(origin):
 
         async def astream(self, *_args, **_kwargs):
             observed.append(("graph", current_private_mcp_context() is not None))
+            assert PRIVATE_MCP_SESSION_CONTEXT_KEY not in _kwargs["config"]["context"]
             return
             yield
 
@@ -326,13 +349,15 @@ async def test_worker_binds_through_assembly_and_graph_then_resets(origin):
     bridge = SimpleNamespace(publish=AsyncMock(), publish_end=AsyncMock(), cleanup=AsyncMock())
     record = RunRecord(run_id="synthetic-run", thread_id="synthetic-thread", assistant_id="lead-agent", status=RunStatus.pending, on_disconnect=DisconnectMode.cancel)
     record.abort_event = asyncio.Event()
-    context = _context()
+    context = _service_context("session")
     if origin == "forged":
         context[AUTHENTICATED_CONTEXT_MARKER_KEY] = True
     elif origin == "channel":
         context["channel_name"] = "slack"
     elif origin == "background":
         context["non_interactive"] = True
+    elif origin in {"internal-owner", "pat", "auth_disabled"}:
+        context = _service_context("internal" if origin == "internal-owner" else origin)
     # Auth identity exists, but no private binding is inherited by the worker.
     with _identity(_context(**{AUTHENTICATED_CONTEXT_MARKER_KEY: False})):
         assert current_private_mcp_context() is None
@@ -340,3 +365,72 @@ async def test_worker_binds_through_assembly_and_graph_then_resets(origin):
         assert current_private_mcp_context() is None
     allowed = origin in {"private", "factory-error"}
     assert observed == [("assembly", allowed)] + ([] if origin == "factory-error" else [("graph", allowed)])
+
+
+def _service_context(auth_source):
+    """Exercise the real server stamp with replayed client authority fields."""
+    from app.gateway.services import inject_authenticated_user_context
+
+    user = SimpleNamespace(id="synthetic-internal" if auth_source == "internal" else ACTOR, system_role="internal" if auth_source == "internal" else "admin")
+    request = SimpleNamespace(state=SimpleNamespace(user=user, auth_source=auth_source, actor_user_id=ACTOR, organization_id=ORG, storage_user_id=ACTOR))
+    # A JSON flag, stale true value, or even an in-process replay is overwritten.
+    config = {"context": _context(), "configurable": {PRIVATE_MCP_SESSION_CONTEXT_KEY: PRIVATE_MCP_SESSION_MARKER, "is_internal": False}}
+    inject_authenticated_user_context(config, request, internal_owner_user=SimpleNamespace(id=ACTOR))
+    assert PRIVATE_MCP_SESSION_CONTEXT_KEY not in config["configurable"]
+    return config["context"]
+
+
+@pytest.mark.parametrize("source", ["session", "internal", "pat", "auth_disabled", None])
+def test_real_service_stamp_denies_delegated_owner_without_role_unless_session(source):
+    context = _service_context(source)
+    # This is the exact ambient owner object installed by services.start_run.
+    user_token = set_current_user(SimpleNamespace(id=ACTOR))
+    storage_token = set_storage_context(WorkspaceStorageContext(ACTOR, ORG, ACTOR))
+    binding = bind_private_mcp_context(context)
+    try:
+        assert private_mcp_allowed(_server()) is (source == "session")
+        if source != "session":
+            assert PRIVATE_MCP_SESSION_CONTEXT_KEY not in context
+    finally:
+        reset_private_mcp_context(binding)
+        reset_storage_context(storage_token)
+        reset_current_user(user_token)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("change", ["disabled", "actor", "organization", "removed-policy", "deleted", "transport", "url", "headers", "invalid-json", "missing-file"])
+async def test_guard_reloads_current_file_and_revokes_before_transport_entry(tmp_path, monkeypatch, change):
+    path = tmp_path / "extensions_config.json"
+    raw = {"mcpServers": {"private": _server().model_dump(mode="json")}}
+    path.write_text(json.dumps(raw), encoding="utf-8")
+    monkeypatch.setenv("DEER_FLOW_EXTENSIONS_CONFIG_PATH", str(path))
+    monkeypatch.setattr(ExtensionsConfig, "from_file", _REAL_EXTENSIONS_LOADER)
+    calls = []
+    with _identity():
+        discovered = ExtensionsConfig.from_file().mcp_servers["private"]
+        guarded = guard_private_mcp_tool(_tool(calls=calls), discovered, server_name="private")
+        assert await guarded.coroutine() == "synthetic-result"
+        current = raw["mcpServers"]["private"]
+        if change == "disabled":
+            current["enabled"] = False
+        elif change == "actor":
+            current["private_scope"]["actor_user_id"] = "synthetic-other"
+        elif change == "organization":
+            current["private_scope"]["organization_id"] = "synthetic-other-org"
+        elif change == "removed-policy":
+            current["private_scope"] = None
+        elif change == "deleted":
+            del raw["mcpServers"]["private"]
+        elif change == "transport":
+            current["type"] = "sse"
+        elif change == "url":
+            current["url"] = "https://other.synthetic.invalid/mcp"
+        elif change == "headers":
+            current["headers"] = {"X-Synthetic": "changed"}
+        if change == "missing-file":
+            path.unlink()
+        else:
+            path.write_text("{" if change == "invalid-json" else json.dumps(raw), encoding="utf-8")
+        with pytest.raises(ToolException, match="configuration (changed|is unavailable)"):
+            await guarded.coroutine()
+    assert calls == [{}]

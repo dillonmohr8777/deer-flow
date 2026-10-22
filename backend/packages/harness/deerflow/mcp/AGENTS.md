@@ -56,7 +56,9 @@
 
 **Private server policy**: `private_scope` binds one exact actor and organization
 to that actor's private web storage. The worker binds and resets its immutable MCP
-ContextVar from the Gateway authentication capability; never authorize from
+ContextVar from the Gateway authentication and session-only capabilities plus
+explicit noninternal origin; never authorize from
 ordinary runtime context. Keep restricted discovery out of the global cache,
-reauthorize before adapter/pool use, and deny channel/background/unknown origins.
+reauthorize against freshly loaded enabled policy/connection configuration before
+adapter/pool use, and deny channel/background/PAT/auth-disabled/unknown origins.
 See [private MCP scope](README.md) and `tests/test_mcp_private_scope.py`.

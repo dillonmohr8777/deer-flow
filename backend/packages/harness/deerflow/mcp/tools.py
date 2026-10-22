@@ -960,7 +960,7 @@ async def get_mcp_tools(*, private_only: bool = False) -> list[BaseTool]:
                     server_config=server_cfg,
                     tool_name_prefix=tool_name_prefix,
                 )
-            wrapped_tools.extend(guard_private_mcp_tool(tool, server_cfg) if private_only and server_cfg is not None else tool for tool in current_server_tools)
+            wrapped_tools.extend(guard_private_mcp_tool(tool, server_cfg, server_name=source_name) if private_only and server_cfg is not None else tool for tool in current_server_tools)
 
         # Patch tools to support sync invocation, as deerflow client streams synchronously
         for tool in wrapped_tools:

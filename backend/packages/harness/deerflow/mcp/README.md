@@ -23,17 +23,25 @@ Synthetic example only:
 ```
 
 The Gateway run worker binds an immutable task-local scope only when its
-in-process authenticated-context marker proves the actor and workspace. The
+in-process authenticated-context marker proves the actor and workspace, a
+separate Gateway-issued capability proves session authentication, and the
+server-stamped `is_internal` is explicitly false. The
 current authenticated user must match the actor and the storage bucket must
 equal that actor. The configured actor and organization must both match.
-Channel runs, internal callers, non-interactive runs, missing identity, and
+Channel runs, internal callers (including delegated owners without role
+attributes), PATs, auth-disabled callers, non-interactive runs, missing identity, and
 unknown origins are denied. A shared workspace's separate storage principal
 cannot satisfy this policy. Changing a model-visible role never grants access.
 
 The process-wide MCP cache contains only unrestricted servers. Restricted
 servers are discovered fresh during an authorized run, before OAuth acquisition,
 client construction, or connection. Their tools recheck the captured scope
-before invoking either the HTTP/SSE adapter or the pooled stdio wrapper. Reusing
+before invoking either the HTTP/SSE adapter or the pooled stdio wrapper. Each
+call reloads the current configuration off-loop and requires the server to
+remain enabled with the same private policy and complete configuration as at
+discovery. Disabling, rebinding, removing, or changing its connection denies
+stale tools; an unreadable configuration also denies. Rediscover after a change.
+Reusing
 a graph or tool under another actor/workspace cannot reuse that access. Private
 discovery preserves task context when the synchronous cache entry point must
 cross a worker thread. Ordinary public-server caching and session pooling keep
@@ -42,7 +50,9 @@ their existing behavior.
 Restricted servers cannot declare `task_toolsets`; raw durable-task calls also
 deny them before connection. Background notifications, scheduled retrieval,
 IM/DM retrieval, and cross-tenant retrieval need a separate reviewed trust path.
-No request-controlled private/public flag exists.
+No request-controlled private/public flag exists. The Gateway clears the
+session capability from both client config feeds before stamping it. The worker
+consumes it for task-local admission and excludes it from graph/runtime context.
 
 This source change does not register a server, mount private data, change an
 agent's tool permissions, or activate retrieval. The built-in `momobot-max`
