@@ -10,6 +10,13 @@ The upstream DeerFlow history stays in [CHANGELOG.md](../CHANGELOG.md).
 
 ## [Unreleased]
 
+## [momobot-prod-20261022-e40c76fd] - 2026-10-22
+
+### Changed
+
+- MomoBot onboarding: connect your tools on first login, Oct 22 (#245)
+- MomoBot changelog momobot-prod-20261022-68a630c6, Oct 22 (#247)
+
 ## [momobot-prod-20261022-68a630c6] - 2026-10-22
 
 ### Changed
