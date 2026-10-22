@@ -121,7 +121,7 @@
         {
           "heading": "FAQPage",
           "paragraphs": [
-            "FAQPage markup labels question and answer pairs. Google limited FAQ rich results to well-known government and health sites in 2023, and its [FAQPage documentation](https://developers.google.com/search/docs/appearance/structured-data/faqpage) notes that Google deprecated FAQ rich results in May 2026 and no longer shows them in Google Search. You can keep accurate FAQ markup, but do not expect a visual feature from it."
+            "FAQPage markup labels question and answer pairs. Google limited FAQ rich results to well-known government and health sites in 2023, and its [documentation updates log](https://developers.google.com/search/updates) records that Google deprecated FAQ rich results in May 2026 and no longer shows them in Google Search. You can keep accurate FAQ markup, but do not expect a visual feature from it."
           ]
         }
       ]
