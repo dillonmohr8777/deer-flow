@@ -201,7 +201,9 @@ async def test_double_approve_race_executes_once(org_world_pooled, slack):  # no
     async with _http(_app(org_world_pooled)) as client:
         h = auth_headers(USER_A)
         codes = sorted(r.status_code for r in await asyncio.gather(*[client.post(f"/api/approvals/{row['id']}/approve", headers=h) for _ in range(4)]))
-    assert codes.count(200) == 1 and len(slack.sent) == 1
+    assert codes == [200, 409, 409, 409] and len(slack.sent) == 1
+    with acting_as(USER_A):
+        assert (await PendingActionRepository(org_world_pooled).get(row["id"]))["status"] == "executed"
 
 
 @pytest.mark.asyncio

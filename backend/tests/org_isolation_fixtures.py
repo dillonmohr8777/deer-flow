@@ -4,6 +4,8 @@ Lane 0 owns this module; lanes A-F import it instead of seeding their own orgs:
 
     from org_isolation_fixtures import ORG_A, ORG_S, USER_A, acting_as, auth_headers, org_world  # noqa: F401
 
+Concurrent-writer tests use ``org_world_pooled`` instead (see its docstring).
+
 The layout copies the production creation paths, so every organization id is
 ``private_organization_id(storage principal)`` just as in live data:
 
@@ -27,6 +29,7 @@ from datetime import UTC, datetime
 from types import SimpleNamespace
 
 import pytest_asyncio
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
@@ -139,19 +142,32 @@ async def _seed_org_world(monkeypatch, engine):
 
 @pytest_asyncio.fixture()
 async def org_world(monkeypatch):
+    """Fast in-memory world. Not for concurrent writers: use ``org_world_pooled`` for those."""
     engine = create_async_engine("sqlite+aiosqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
-    yield await _seed_org_world(monkeypatch, engine)
-    await engine.dispose()
+    try:
+        yield await _seed_org_world(monkeypatch, engine)
+    finally:
+        await engine.dispose()
 
 
 @pytest_asyncio.fixture()
 async def org_world_pooled(monkeypatch, tmp_path_factory):
-    """``org_world`` on a file DB with one connection per session, as in production.
+    """``org_world`` on a file DB with one connection per session and the production PRAGMAs.
 
     Use it for concurrency tests. ``StaticPool`` shares one DBAPI connection, so one
     session's close() rolls back another session's uncommitted UPDATE and a
     compare-and-set can report several winners that a real pool never would.
     """
     engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path_factory.mktemp('org_world') / 'org.db'}")
-    yield await _seed_org_world(monkeypatch, engine)
-    await engine.dispose()
+
+    @event.listens_for(engine.sync_engine, "connect")
+    def _production_pragmas(dbapi_conn, _record):  # mirrors deerflow.persistence.engine
+        cursor = dbapi_conn.cursor()
+        for pragma in ("journal_mode=WAL", "synchronous=NORMAL", "foreign_keys=ON", "busy_timeout=30000"):
+            cursor.execute(f"PRAGMA {pragma};")
+        cursor.close()
+
+    try:
+        yield await _seed_org_world(monkeypatch, engine)
+    finally:
+        await engine.dispose()
