@@ -731,8 +731,8 @@
  */
 .paperHero .paperMomos {
   width: min(100%, 15rem);
-  /* The 3D bounce lifts the photo about 3rem above its box; this keeps the
-     "still invite only" scrap above it clear (the 72rem rule resets it). */
+  /* The bounce lifts the photo ~28px above its box and the scrap above it
+     is tilted; this keeps "still invite only" clear (72rem resets it). */
   margin: 2.75rem auto clamp(0.5rem, 3vw, 1.5rem);
 }
 
@@ -874,9 +874,12 @@
   min-height: 2.75rem;
   color: var(--paper-ink-muted);
   text-decoration: none;
-  border-bottom: 1px solid transparent;
+  text-underline-offset: 0.25em;
 }
 
+/* An underline, not a border: the 44px box would drop a border-bottom
+   well below the text. */
 .paperFooterLink:hover {
-  border-bottom-color: var(--paper-royal);
+  text-decoration: underline;
+  text-decoration-color: var(--paper-royal);
 }
