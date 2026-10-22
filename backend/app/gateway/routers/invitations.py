@@ -255,6 +255,8 @@ async def _join_workspace(session, invitation: InvitationRow, user_id: str, now:
         if other_customer is not None:
             raise HTTPException(409, "Client account already belongs to a dedicated customer workspace")
     organization = await session.get(OrganizationRow, invitation.organization_id)
+    if organization is not None and organization.customer_client_id is not None and invitation.role != "client":
+        raise _forbidden()  # a dedicated customer workspace takes client members only
     if invitation.role == "client" and organization is not None and organization.customer_client_id is not None:
         await validate_customer_workspace(session, organization=organization, actor_id=invitation.created_by)
         await _customer_contact(session, organization, user, now)
@@ -305,9 +307,15 @@ async def join_invited_workspaces(request: Request, *, user_id: str, email: str)
                 if _as_utc(invitation.expires_at) <= now or (invitation.role == "client" and not role_has_policy("client")):
                     continue
                 organization = await session.get(OrganizationRow, invitation.organization_id)
-                if invitation.role == "client" and organization is not None and organization.customer_client_id is not None:
-                    await validate_customer_workspace(session, organization=organization, actor_id=invitation.created_by)
-                    await fresh_customer_assignments(session, user, target_id=organization.id, client_id=organization.customer_client_id)
+                bound = organization is not None and organization.customer_client_id is not None
+                if bound and invitation.role != "client":
+                    continue  # a dedicated customer workspace takes client members only
+                if invitation.role == "client" and bound:
+                    try:
+                        await validate_customer_workspace(session, organization=organization, actor_id=invitation.created_by)
+                        await fresh_customer_assignments(session, user, target_id=organization.id, client_id=organization.customer_client_id)
+                    except HTTPException:
+                        continue  # stale or invalid: skip it, like any other dead invitation; the other joins proceed
                     dedicated.add(organization.id)
                 elif not await invitation_issuer_is_active(session, invitation):
                     continue
@@ -376,6 +384,8 @@ async def create_invitation(body: CreateInvitationRequest, request: Request, res
         organization, member = await active_shared_workspace_member(session, body.organization_id, actor_id)
         if organization is None or member is None:
             raise HTTPException(status_code=403, detail="Only an active workspace owner or admin can invite members")
+        if organization.customer_client_id is not None and body.role != "client":
+            raise HTTPException(409, "A dedicated customer workspace takes client invitations only")
         if body.role == "client" and organization.customer_client_id is not None:
             await validate_customer_workspace(session, organization=organization, actor_id=actor_id)
             customer = await _find_user_by_email(session, str(body.email))
@@ -483,8 +493,15 @@ async def accept_invitation(body: AcceptInvitationRequest, request: Request, res
                     existing = await _locked_invitation_user(session, existing.id)
 
                 organization = await session.get(OrganizationRow, invitation.organization_id)
+                if organization is not None and organization.customer_client_id is not None and invitation.role != "client":
+                    raise _forbidden()
                 if invitation.role == "client" and organization is not None and organization.customer_client_id is not None:
-                    await validate_customer_workspace(session, organization=organization, actor_id=invitation.created_by)
+                    try:
+                        await validate_customer_workspace(session, organization=organization, actor_id=invitation.created_by)
+                    except HTTPException:
+                        if existing is None:
+                            raise _forbidden() from None  # unauthenticated holder: same 403 as /inspect, no binding state
+                        raise
                     if existing is not None:
                         await fresh_customer_assignments(session, existing, target_id=organization.id, client_id=organization.customer_client_id)
 

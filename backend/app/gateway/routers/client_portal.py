@@ -216,6 +216,7 @@ async def provision_customer_workspace(body: CustomerWorkspace, request: Request
             raise HTTPException(409, "Client already has a customer workspace; invite its contact there")
         target = await _create_workspace_rows(session, actor_id=actor, name=body.name, now=now)
         target.customer_client_id = body.client_id
+        await validate_customer_workspace(session, organization=target, actor_id=actor, canonical=canonical)
         session.add(OrganizationMemberRow(organization_id=target.id, user_id=body.user_id, role="client", status="active", created_at=now, updated_at=now))
         session.add(ClientAssignmentRow(client_id=body.client_id, user_id=body.user_id, organization_id=target.id, role="client_contact", created_at=now, updated_at=now))
     return {"workspace_id": target.id, "client_id": body.client_id, "user_id": body.user_id, "delivery": "portal"}

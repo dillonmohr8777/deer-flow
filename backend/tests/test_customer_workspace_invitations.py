@@ -1,6 +1,7 @@
 """Synthetic invite-first onboarding through real SQL and workspace authorization."""
 
 import asyncio
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 import httpx
@@ -190,12 +191,12 @@ async def test_binding_or_account_changed_after_invite_rolls_back_acceptance(org
         created = (await _invite(client, {**PAYLOAD, "email": "user-b@example.com"})).json()
     async with org_world() as session, session.begin():
         session.add(ClientAssignmentRow(client_id="different-client", user_id=USER_B, organization_id=ORG_S, role="client_contact"))
-    with pytest.raises(HTTPException) as blocked:
-        if via == "local":
+    if via == "local":
+        with pytest.raises(HTTPException) as blocked:
             await invitations.accept_invitation(invitations.AcceptInvitationRequest(token=created["token"]), _signed_in(USER_B), Response())
-        else:
-            await invitations.join_invited_workspaces(_request(), user_id=USER_B, email="user-b@example.com")
-    assert blocked.value.status_code == 409
+        assert blocked.value.status_code == 409
+    else:  # SSO skips a stale dedicated invitation instead of failing every other join
+        assert await invitations.join_invited_workspaces(_request(), user_id=USER_B, email="user-b@example.com") is None
     async with org_world() as session:
         assert (await session.get(InvitationRow, created["id"])).consumed_at is None
         assert await session.get(OrganizationMemberRow, {"organization_id": created["workspace_id"], "user_id": USER_B}) is None
@@ -380,12 +381,12 @@ async def test_late_binding_change_rejects_without_consuming_or_joining(org_worl
     async with _http(app) as client:
         data = (await _invite(client, {**PAYLOAD, "email": "user-b@example.com"})).json()
     await _change_customer_binding(org_world, data["workspace_id"], change)
-    with pytest.raises(HTTPException) as blocked:
-        if via == "local":
+    if via == "local":
+        with pytest.raises(HTTPException) as blocked:
             await invitations.accept_invitation(invitations.AcceptInvitationRequest(token=data["token"]), _signed_in(USER_B), Response())
-        else:
-            await invitations.join_invited_workspaces(_request(), user_id=USER_B, email="user-b@example.com")
-    assert blocked.value.status_code == 409
+        assert blocked.value.status_code == 409
+    else:  # SSO skips a stale dedicated invitation instead of failing every other join
+        assert await invitations.join_invited_workspaces(_request(), user_id=USER_B, email="user-b@example.com") is None
     async with org_world() as session:
         assert (await session.get(InvitationRow, data["id"])).consumed_at is None
         assert (await session.get(UserRow, USER_B)).system_role == "user"
@@ -402,7 +403,7 @@ async def test_late_binding_change_cannot_create_password_customer(org_world, mo
     await _change_customer_binding(org_world, data["workspace_id"], change)
     with pytest.raises(HTTPException) as blocked:
         await invitations.accept_invitation(invitations.AcceptInvitationRequest(token=data["token"], password="Synthetic-customer-password!"), _request(), Response())
-    assert blocked.value.status_code == 409
+    assert blocked.value.status_code == 403  # unauthenticated: the uniform invalid-invitation answer, no binding state
     async with org_world() as session:
         assert await session.scalar(select(UserRow.id).where(UserRow.email == PAYLOAD["email"])) is None
         assert (await session.get(InvitationRow, data["id"])).consumed_at is None
@@ -433,12 +434,12 @@ async def test_dedicated_acceptance_rejects_recipient_promoted_after_issue(org_w
         data = (await _invite(client, {**PAYLOAD, "email": "user-b@example.com"})).json()
     async with org_world() as session, session.begin():
         await session.execute(update(UserRow).where(UserRow.id == USER_B).values(system_role=system_role))
-    with pytest.raises(HTTPException) as blocked:
-        if via == "local":
+    if via == "local":
+        with pytest.raises(HTTPException) as blocked:
             await invitations.accept_invitation(invitations.AcceptInvitationRequest(token=data["token"]), _signed_in(USER_B), Response())
-        else:
-            await invitations.join_invited_workspaces(_request(), user_id=USER_B, email="user-b@example.com")
-    assert blocked.value.status_code == 409
+        assert blocked.value.status_code == 409
+    else:  # SSO skips a stale dedicated invitation instead of failing every other join
+        assert await invitations.join_invited_workspaces(_request(), user_id=USER_B, email="user-b@example.com") is None
     async with org_world() as session:
         assert (await session.get(InvitationRow, data["id"])).consumed_at is None
         assert (await session.get(UserRow, USER_B)).system_role == system_role
@@ -500,3 +501,29 @@ async def test_generic_issue_cannot_bypass_dedicated_recipient_policy(org_world,
     async with org_world() as session:
         assert (await session.get(UserRow, USER_B)).system_role == system_role
         assert await session.scalar(select(func.count()).select_from(InvitationRow)) == (1 if system_role == "admin" or system_role == "exec" else 2)
+
+
+async def test_sso_stale_dedicated_invite_does_not_block_a_valid_staff_join(org_world, monkeypatch):  # noqa: F811
+    app = await _setup(org_world, monkeypatch)
+    async with _http(app) as client:
+        data = (await _invite(client, {**PAYLOAD, "email": "user-b@example.com"})).json()
+    await _change_customer_binding(org_world, data["workspace_id"], "local_roster")
+    now = datetime.now(UTC)
+    async with org_world() as session, session.begin():
+        session.add(InvitationRow(id="staff-link", token_hash="staff-link-hash", organization_id=ORG_S, email="user-b@example.com", role="member", created_by=USER_A, expires_at=now + timedelta(days=1), created_at=now, updated_at=now))
+    assert await invitations.join_invited_workspaces(_request(), user_id=USER_B, email="user-b@example.com") == ORG_S
+    async with org_world() as session:
+        assert (await session.get(InvitationRow, data["id"])).consumed_at is None
+        assert await session.get(OrganizationMemberRow, {"organization_id": data["workspace_id"], "user_id": USER_B}) is None
+
+
+@pytest.mark.parametrize("role", ["member", "admin"])
+async def test_customer_workspace_takes_client_invitations_only(org_world, monkeypatch, role):  # noqa: F811
+    app = await _setup(org_world, monkeypatch)
+    async with _http(app) as client:
+        data = (await _invite(client)).json()
+    monkeypatch.setattr(invitations, "get_current_user_from_request", client_portal.get_current_user_from_request)
+    body = invitations.CreateInvitationRequest(organization_id=data["workspace_id"], email="staff@example.com", role=role)
+    with pytest.raises(HTTPException) as blocked:
+        await invitations.create_invitation(body, _request(cookies={"access_token": USER_A}), Response())
+    assert blocked.value.status_code == 409

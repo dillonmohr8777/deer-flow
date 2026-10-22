@@ -68,8 +68,10 @@ existing system roles. The OAuth callback then applies eligible pending invitati
 audited with `via: sso`) and opens the newest joined workspace. An eligible
 dedicated customer `client` invitation takes precedence over all other links:
 only that dedicated workspace is joined; unrelated and conflicting-role links
-stay pending. Multiple dedicated customer workspaces fail closed. Generic staff
-invitations retain multi-workspace joining. Existing accounts still accept
+stay pending. Multiple dedicated customer workspaces fail closed. A dedicated
+invitation that no longer passes the binding or recipient checks is skipped
+(left pending), never fatal to the other joins. Generic staff invitations
+retain multi-workspace joining. Existing accounts still accept
 through the invitation link.
 
 Accepting any invitation seeds the `experience_mode: easy` preference (the
@@ -103,8 +105,10 @@ staff invitations retain their existing role rules. Shared customer binding
 and fresh-contact checks live in `app.gateway.invitation_policy`: canonical
 active agency client, one active dedicated workspace, distinct agency storage,
 no local roster, and an issuer still an active global admin and owner/admin of
-both workspaces. Acceptance rechecks this before reserving the token and rolls
-back all changes on conflict.
+both workspaces. Both provisioners run it on the new workspace. A dedicated
+customer workspace takes `client` invitations only (issue 409, accept 403).
+Acceptance rechecks this before reserving the token and rolls back all changes
+on conflict; an unauthenticated holder gets the uniform 403, never binding state.
 `client_boundary.py` is the default-deny route table `AuthMiddleware` applies to
 a client whatever `authorization.*` says, in the shape of the PAT policy above;
 `tests/test_client_route_boundary.py` pins every registered route it admits, so
