@@ -35,12 +35,12 @@
     },
     {
       "title": "Preview render",
-      "narration": "The engine renders a 960 by 540 preview in about a minute. We watch it once at phone size with the sound on, then once with the sound off. Anything that reads wrong gets its row number noted. Three or four preview rounds is normal. Each round changes rows, never files, so the inventory and plan stay true. Watching at phone size catches text that is too small long before the master exists.",
+      "narration": "The engine renders a small preview in about a minute. We watch it once at phone size with the sound on, then once with the sound off. Anything that reads wrong gets its row number noted. Three or four preview rounds is normal. Each round changes rows, never files, so the inventory and plan stay true. Watching at phone size catches text that is too small long before the master exists.",
       "visual": "Phone sized preview player with a notepad of row numbers beside it and a counter at round 3 of 4."
     },
     {
       "title": "Master render and the automatic checks",
-      "narration": "The master renders at 1920 by 1080, H.264 with AAC audio. Then the checks run: duration equals the track to the frame, the whole file decodes clean, the black frame detector finds nothing, loudness is in range and the poster frame is exported. Every output is hashed into a receipt next to the plan hash. A failed check names the row.",
+      "narration": "The master renders in full HD. Then the checks run: duration equals the track to the frame, the whole file decodes clean, the black frame detector finds nothing, loudness is in range and the poster frame is exported. Every output is hashed into a receipt next to the plan hash. A failed check names the row.",
       "visual": "Master render card with the five checks passing and a receipt listing output hashes beside the plan hash."
     },
     {
