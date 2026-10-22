@@ -163,6 +163,13 @@ describe("content/momo-daily", () => {
     }
   });
 
+  it("defaults takeaways and subsections to empty and caps takeaways at five", () => {
+    const parsed = article();
+    expect(parsed.takeaways).toEqual([]);
+    expect(parsed.body[0]?.subsections).toEqual([]);
+    expect(() => article({ takeaways: ["a", "b", "c", "d", "e", "f"] })).toThrow();
+  });
+
   it("rejects an unknown status", () => {
     expect(() => article({ status: "live" as never })).toThrow();
   });
@@ -179,7 +186,11 @@ describe("content/momo-daily", () => {
       expect(parsed.sources.length, name).toBeLessThanOrEqual(5);
       const text = [
         parsed.summary,
-        ...parsed.body.flatMap((b) => b.paragraphs),
+        ...parsed.takeaways,
+        ...parsed.body.flatMap((b) => [
+          ...b.paragraphs,
+          ...b.subsections.flatMap((sub) => sub.paragraphs),
+        ]),
         ...parsed.faq.map((f) => f.answer),
       ];
       for (const part of text.flatMap(textParts)) {

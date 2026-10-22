@@ -41,6 +41,8 @@ export const articleSchema = z.object({
   keywords: z.array(z.string().min(1)).default([]),
   /** Answer-first summary shown in the box at the top of the article. */
   summary: z.string().min(1),
+  /** Key takeaways listed under the short answer. */
+  takeaways: z.array(z.string().min(1)).max(5).default([]),
   section: z.string().min(1),
   hero: z.object({ src: z.string().startsWith("/"), alt: z.string().min(1) }),
   status: z.enum(["draft", "published"]),
@@ -50,6 +52,15 @@ export const articleSchema = z.object({
       z.object({
         heading: z.string().min(1),
         paragraphs: z.array(z.string().min(1)).min(1),
+        /** Optional H3 breakdown under this heading. */
+        subsections: z
+          .array(
+            z.object({
+              heading: z.string().min(1),
+              paragraphs: z.array(z.string().min(1)).min(1),
+            }),
+          )
+          .default([]),
       }),
     )
     .min(1),

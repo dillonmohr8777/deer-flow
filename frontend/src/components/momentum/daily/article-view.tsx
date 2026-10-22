@@ -107,6 +107,18 @@ export function DailyArticleView({
           <p>
             <RichText text={article.summary} />
           </p>
+          {article.takeaways.length > 0 ? (
+            <>
+              <h3>Key takeaways</h3>
+              <ul>
+                {article.takeaways.map((item) => (
+                  <li key={item}>
+                    <RichText text={item} />
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : null}
         </aside>
 
         <figure className={styles.hero}>
@@ -126,6 +138,16 @@ export function DailyArticleView({
                 <p key={paragraph}>
                   <RichText text={paragraph} />
                 </p>
+              ))}
+              {block.subsections.map((sub) => (
+                <div key={sub.heading}>
+                  <h3>{sub.heading}</h3>
+                  {sub.paragraphs.map((paragraph) => (
+                    <p key={paragraph}>
+                      <RichText text={paragraph} />
+                    </p>
+                  ))}
+                </div>
               ))}
             </section>
           ))}
