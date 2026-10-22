@@ -1,7 +1,7 @@
 # EC2 layer on top of the Lightsail kit's layers (lightsail/up.sh adds it via MOMOBOT_EXTRA_COMPOSE).
 # Gives the gateway the same extra mounts the Mac stack had from ops/compose.admission-20261005.yaml,
-# with the Mac paths replaced by /opt/momobot. Brain and client_browser MCP stay off in the cloud
-# extensions_config: both call services that only run on the Mac.
+# with the Mac paths replaced by /opt/momobot. client_browser MCP stays off in the cloud (Mac-only
+# service). Brain runs only as the private_scope-guarded read-only snapshot adapter (README).
 services:
   frontend:
     volumes:
@@ -24,14 +24,25 @@ services:
       - /opt/momobot/data/evals:/app/backend/.deer-flow/agency-evals:ro
       - /opt/momobot/code/momo_guard.py:/app/backend/packages/harness/deerflow/community/browser_automation/momo_guard.py:ro
       - /opt/momobot/code/momo_protocol.py:/app/backend/packages/harness/deerflow/community/browser_automation/momo_protocol.py:ro
-      # Private Brain snapshot for Dillon's private Max only (gateway-only, read-only; never an AIO sandbox mount).
-      - /opt/momobot/brain-snapshot:/opt/momobot/brain-snapshot:ro
-      - /opt/momobot/code/brain_readonly_adapter.py:/run/momo-security/brain_readonly_adapter.py:ro
       # Placement extension from a pinned git worktree (README "Operator extensions"). Inert until a
       # plugins: entry in /opt/momobot/config.yaml names it. A missing source fails the start.
       - type: bind
         source: /opt/momobot/extensions/placement/examples/vhin-placement/vhin_placement
         target: /app/backend/vhin_placement
+        read_only: true
+        bind:
+          create_host_path: false
+      # Private Brain snapshot for Dillon's private Max only: gateway-only and read-only,
+      # never an AIO sandbox mount. Fail fast if the owner has not staged the host paths.
+      - type: bind
+        source: /opt/momobot/brain-snapshot
+        target: /opt/momobot/brain-snapshot
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /opt/momobot/code/brain_readonly_adapter.py
+        target: /run/momo-security/brain_readonly_adapter.py
         read_only: true
         bind:
           create_host_path: false

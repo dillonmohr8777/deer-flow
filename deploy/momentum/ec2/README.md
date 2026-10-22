@@ -262,11 +262,11 @@ python -m pytest tests/test_org_isolation_g_memory.py -q
 Do not trigger a Claude extraction probe during the 01:30–08:30 ET quiet window. A config
 readback proves profile selection, not a completed provider extraction.
 
-## Optional read-only Brain snapshot (prepared, not enabled)
+## Private read-only Brain snapshot
 
 `brain_readonly_adapter.py` preserves the existing fixed-destination HTTP adapter and adds
-an offline mode selected by `BRAIN_SNAPSHOT_DIR`. It does not enable an MCP server or alter
-production configuration. The existing collector remains the only Brain writer.
+an offline mode selected by `BRAIN_SNAPSHOT_DIR`. The existing collector remains the only
+Brain writer.
 
 For snapshot mode, the deployment owner installs one coherent private directory containing
 `brain.json`, `NOW.md`, and the unchanged trusted `brain.py` renderer. Mount it read-only on
@@ -283,20 +283,28 @@ search, or HTTP service in snapshot mode. No bearer token or new network endpoin
 Every result includes the saved `generated_at` as `sourceObservedAt`, even if the files are
 old. These are saved observations, not live health or a fresh communication sweep.
 
-The deployment owner must independently review the change, stage the private renderer/cache
-and adapter, add a read-only mount, replace the missing `/run/momo-security` adapter path in
-the existing disabled MCP entry, then verify useful MCP output before enabling it. Do not
+The deployment owner stages the private renderer/cache and the adapter, keeps the `brain`
+MCP entry pointed at `/run/momo-security/brain_readonly_adapter.py`, and verifies useful MCP
+output and the denials before enabling it. Do not
 add a collector, timer, Mac bridge or competing writer. Cache transfer, authentication,
 production integration and client-scoped access remain unverified by the offline test.
 
-`compose.ec2.yaml` mounts both read-only into the gateway container only:
-`/opt/momobot/brain-snapshot` (0700, root) and the adapter at
+`compose.ec2.yaml` mounts both read-only into the gateway container only, with
+`create_host_path: false` so a release fails instead of creating empty paths:
+`/opt/momobot/brain-snapshot` (0700, root, files 0600) and the adapter at
 `/run/momo-security/brain_readonly_adapter.py` (staged from this directory to
-`/opt/momobot/code/`). Stage both host paths before a release that carries the
-mount, because a missing bind source would be created as an empty directory. The
-`brain` MCP entry stays scoped with `private_scope` (Dillon's actor plus exact
-private organization) and `BRAIN_SNAPSHOT_DIR=/opt/momobot/brain-snapshot`.
-Rollback: set `enabled: false` on that entry; the mount alone grants no tool.
+`/opt/momobot/code/`, covered by `backup_extra.py`). The snapshot is not backed up; it is
+regenerated from the Mac Brain. The `brain` MCP entry carries `private_scope` (Dillon's actor
+plus exact private organization) and `BRAIN_SNAPSHOT_DIR=/opt/momobot/brain-snapshot`.
+
+Refresh in place (`rsync` into the same directory, then `chmod 600`); a directory bind pins the
+inode, so swapping in a new directory with `mv` is invisible until the gateway is recreated.
+`brain.py` sits in the root-only snapshot directory, so only someone who is already root on
+the host can change the renderer.
+
+Rollback: set `enabled: false` on the `brain` entry (no tool is offered). To withdraw the data
+as well, empty `/opt/momobot/brain-snapshot`; the gateway is root, so a mounted file is
+readable by any gateway process.
 
 Offline contract check (synthetic fixture only):
 

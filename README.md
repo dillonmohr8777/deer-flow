@@ -2581,6 +2581,6 @@ historical. See the exact invocation in [private setup](docs/MOMOBOT_APP_RELEASE
 
 Optional Momentum integration: [synthetic offline SDK review worker](examples/momentum-sdk-review/README.md). Disabled by default; does not perform live client work or inference.
 
-For EC2 operators, an optional [read-only Brain snapshot adapter](deploy/momentum/ec2/README.md#optional-read-only-brain-snapshot-prepared-not-enabled)
+For EC2 operators, an optional [read-only Brain snapshot adapter](deploy/momentum/ec2/README.md#private-read-only-brain-snapshot)
 can expose saved context without a Mac service or new collector. It is prepared only;
 production registration and private snapshot installation are separate release steps.
