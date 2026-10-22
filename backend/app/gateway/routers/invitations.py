@@ -248,13 +248,21 @@ async def _customer_contact(session, organization: OrganizationRow, user: UserRo
         user.system_role = "client"
 
 
+async def _locked_invitation_user(session, user_id: str) -> UserRow | None:
+    # A common write lock fences different invitation rows on PostgreSQL and SQLite.
+    await session.execute(update(UserRow).execution_options(synchronize_session=False).where(UserRow.id == user_id).values(token_version=UserRow.token_version))
+    return await session.get(UserRow, user_id, populate_existing=True)
+
+
 async def _join_workspace(session, invitation: InvitationRow, user_id: str, now: datetime) -> str:
     """Make *user_id* an active member of the invitation's workspace; return the role it holds there.
 
     An owner stays owner. Invitees start on the simple experience (plain answers,
     guided starters) and can switch in Settings; a saved choice always wins.
     """
-    user = await session.get(UserRow, user_id)
+    user = await _locked_invitation_user(session, user_id)
+    if user is None or user.disabled_at is not None:
+        raise _forbidden()
     if user.system_role == "client":
         other_customer = await session.scalar(
             select(OrganizationRow.id)
@@ -266,9 +274,6 @@ async def _join_workspace(session, invitation: InvitationRow, user_id: str, now:
             raise HTTPException(409, "Client account already belongs to a dedicated customer workspace")
     organization = await session.get(OrganizationRow, invitation.organization_id)
     if invitation.role == "client" and organization is not None and organization.customer_client_id is not None:
-        # A real UPDATE serializes account binding on SQLite as well as PostgreSQL.
-        await session.execute(update(UserRow).where(UserRow.id == user_id).values(token_version=UserRow.token_version))
-        user = await session.get(UserRow, user_id)
         await _customer_contact(session, organization, user, now)
     workspace_member = await session.get(OrganizationMemberRow, {"organization_id": invitation.organization_id, "user_id": user_id})
     if workspace_member is None:
@@ -306,7 +311,7 @@ async def join_invited_workspaces(request: Request, *, user_id: str, email: str)
     joined: list[tuple[str, str, str, bool]] = []
     async with _session_factory()() as session:
         async with session.begin():
-            user = await session.get(UserRow, user_id)
+            user = await _locked_invitation_user(session, user_id)
             if user is None:
                 return None
             candidates = (await session.scalars(select(InvitationRow).where(func.lower(InvitationRow.email) == email.strip().lower(), InvitationRow.consumed_at.is_(None)).order_by(InvitationRow.created_at.desc()))).all()
@@ -323,7 +328,7 @@ async def join_invited_workspaces(request: Request, *, user_id: str, email: str)
             joined_workspaces: set[str] = set()
             for invitation in candidates:
                 # A customer accepts only its dedicated workspace, never an older agency link.
-                if dedicated and invitation.organization_id not in dedicated:
+                if dedicated and (invitation.organization_id not in dedicated or invitation.role != "client"):
                     continue
                 if _as_utc(invitation.expires_at) <= now or not await invitation_issuer_is_active(session, invitation):
                     continue
@@ -463,6 +468,29 @@ async def accept_invitation(body: AcceptInvitationRequest, request: Request, res
                     # no block for, so the invitee would be locked out. Nothing is consumed.
                     raise HTTPException(status_code=409, detail="Role 'client' is not defined under authorization.provider.config.roles; add it before inviting clients")
 
+                existing = await _find_user_by_email(session, invitation.email)
+                if existing is not None:
+                    # Sign in, then accept. An existing account (password or
+                    # SSO) never accepts with a credential in this body: a
+                    # password here would be a login that hands out a session
+                    # cookie without the account's MFA step. Its own verified
+                    # browser session already went through password + MFA or
+                    # SSO, so that is the only proof taken. Authenticate and
+                    # lock this user before reserving the token, like SSO.
+                    if session_user_id != existing.id:
+                        raise HTTPException(
+                            status_code=403,
+                            detail="Sign in with the invited email's existing account before accepting this invitation",
+                        )
+                    if not _csrf_double_submit_matches(request):
+                        raise HTTPException(
+                            status_code=403,
+                            # Reopening the link re-runs /inspect, whose
+                            # response issues a fresh csrf_token cookie.
+                            detail="Security check failed (CSRF). Reopen the invite link and try again.",
+                        )
+                    existing = await _locked_invitation_user(session, existing.id)
+
                 # Reserve the single-use token before password work.  The
                 # conditional update is the cross-worker fence; a concurrent
                 # accept sees rowcount=0 and cannot create a second member.
@@ -494,29 +522,9 @@ async def accept_invitation(body: AcceptInvitationRequest, request: Request, res
                 organization_id = organization.id
                 invitation_id = invitation.id
 
-                existing = await _find_user_by_email(session, invitation.email)
                 # Only an admin-issued invitation carries exec, and never without an RBAC exec block (_joins_as_exec).
                 joins_as_exec = await _joins_as_exec(session, invitation)
                 if existing is not None:
-                    # Sign in, then accept. An existing account (password or
-                    # SSO) never accepts with a credential in this body: a
-                    # password here would be a login that hands out a session
-                    # cookie without the account's MFA step. Its own verified
-                    # browser session already went through password + MFA or
-                    # SSO, so that is the only proof taken. Raising here rolls
-                    # back the reservation above, so the token stays usable.
-                    if session_user_id != existing.id:
-                        raise HTTPException(
-                            status_code=403,
-                            detail="Sign in with the invited email's existing account before accepting this invitation",
-                        )
-                    if not _csrf_double_submit_matches(request):
-                        raise HTTPException(
-                            status_code=403,
-                            # Reopening the link re-runs /inspect, whose
-                            # response issues a fresh csrf_token cookie.
-                            detail="Security check failed (CSRF). Reopen the invite link and try again.",
-                        )
                     user_id = existing.id
                     token_version = existing.token_version
                     if joins_as_exec and existing.system_role == _PLAIN_USER_ROLE:

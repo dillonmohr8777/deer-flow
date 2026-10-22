@@ -7,7 +7,7 @@ import httpx
 import pytest
 from fastapi import FastAPI, HTTPException
 from org_isolation_fixtures import ORG_A, ORG_S, USER_A, USER_B, USER_C, auth_headers, org_world, org_world_pooled  # noqa: F401
-from sqlalchemy import func, select, update
+from sqlalchemy import event, func, select, update
 from starlette.responses import Response
 from test_workspace_invitations import _request, _signed_in
 
@@ -286,3 +286,75 @@ async def test_rotation_does_not_touch_consumed_or_other_role_links(org_world, m
     async with org_world() as session:
         assert invitations._as_utc((await session.get(InvitationRow, first["id"])).consumed_at) == consumed
         assert (await session.get(InvitationRow, other_role.id)).consumed_at is None
+
+
+@pytest.mark.parametrize("newer_role", ["member", "admin"])
+@pytest.mark.parametrize("provision_new", [False, True])
+async def test_sso_dedicated_client_link_wins_over_newer_same_workspace_role(org_world, monkeypatch, newer_role, provision_new):  # noqa: F811
+    from app.gateway.auth import user_provisioning
+    from app.gateway.auth.local_provider import LocalAuthProvider
+    from app.gateway.auth.oidc import OIDCIdentity
+    from app.gateway.auth.repositories.sqlite import SQLiteUserRepository
+    from deerflow.config.auth_config import OIDCProviderConfig
+
+    app = await _setup(org_world, monkeypatch)
+    email = PAYLOAD["email"] if provision_new else "user-b@example.com"
+    async with _http(app) as client:
+        dedicated = (await _invite(client, {**PAYLOAD, "email": email})).json()
+    async with org_world() as session, session.begin():
+        workspace = await session.get(OrganizationRow, dedicated["workspace_id"])
+        newer = invitations._create_invitation_row(session, organization=workspace, email=email, role=newer_role, actor_id=USER_A, now=invitations._now())
+    user_id = USER_B
+    if provision_new:
+        monkeypatch.setattr(user_provisioning, "get_session_factory", lambda: org_world)
+        monkeypatch.setattr(user_provisioning, "role_has_policy", lambda role: True)
+        config = OIDCProviderConfig(display_name="Synthetic SSO", issuer="https://sso.example.com", client_id="synthetic", auto_create_requires_invitation=True)
+        identity = OIDCIdentity(provider="synthetic-sso", subject="synthetic-customer", email=email, email_verified=True, name=None, claims={})
+        provisioned = await user_provisioning.get_or_provision_oidc_user("synthetic-sso", config, identity, LocalAuthProvider(SQLiteUserRepository(org_world)))
+        # The real provisioning seam sees the newest membership role; joining must still apply the client binding.
+        assert provisioned["created"] and provisioned["user"].system_role == "user"
+        user_id = str(provisioned["user"].id)
+    assert await invitations.join_invited_workspaces(_request(), user_id=user_id, email=email) == dedicated["workspace_id"]
+    async with org_world() as session:
+        assert (await session.get(UserRow, user_id)).system_role == "client"
+        membership = await session.get(OrganizationMemberRow, {"organization_id": dedicated["workspace_id"], "user_id": user_id})
+        assert membership.role == "client"
+        assignment = await session.get(ClientAssignmentRow, {"client_id": PAYLOAD["client_id"], "user_id": user_id})
+        assert assignment.organization_id == dedicated["workspace_id"] and assignment.role == "client_contact"
+        assert (await session.get(InvitationRow, dedicated["id"])).consumed_at is not None
+        assert (await session.get(InvitationRow, newer.id)).consumed_at is None
+
+
+async def test_generic_join_locks_and_refreshes_stale_user_before_role_decision(org_world_pooled, monkeypatch):  # noqa: F811
+    sf = org_world_pooled
+    app = await _setup(sf, monkeypatch)
+    async with _http(app) as client:
+        dedicated = (await _invite(client, {**PAYLOAD, "email": "user-b@example.com"})).json()
+    async with sf() as session, session.begin():
+        agency = await session.get(OrganizationRow, ORG_S)
+        generic = invitations._create_invitation_row(session, organization=agency, email="user-b@example.com", role="member", actor_id=USER_A, now=invitations._now())
+    async with sf() as stale:
+        cached = await stale.get(UserRow, USER_B)
+        invitation = await stale.get(InvitationRow, generic.id)
+        assert cached.system_role == "user"
+        await invitations.accept_invitation(invitations.AcceptInvitationRequest(token=dedicated["token"]), _signed_in(USER_B), Response())
+        assert cached.system_role == "user"  # another transaction committed the dedicated role and membership
+        statements = []
+        engine = sf.kw["bind"].sync_engine
+
+        def record(_connection, _cursor, statement, _parameters, _context, _executemany):
+            statements.append(statement)
+
+        event.listen(engine, "before_cursor_execute", record)
+        try:
+            with pytest.raises(HTTPException) as blocked:
+                await invitations._join_workspace(stale, invitation, USER_B, invitations._now())
+            assert blocked.value.status_code == 409
+        finally:
+            event.remove(engine, "before_cursor_execute", record)
+        assert statements[0].lstrip().startswith("UPDATE users ")
+        assert statements[1].lstrip().startswith("SELECT users.")
+        assert cached.system_role == "client"
+    async with sf() as session:
+        assert await session.get(OrganizationMemberRow, {"organization_id": ORG_S, "user_id": USER_B}) is None
+        assert (await session.get(InvitationRow, generic.id)).consumed_at is None
