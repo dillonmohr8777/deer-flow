@@ -28,8 +28,8 @@ def _request() -> Request:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(("created", "verified", "joins"), [(True, True, True), (False, True, False), (True, False, False)])
-async def test_the_callback_opens_the_invited_workspace_only_for_a_new_verified_account(monkeypatch, created, verified, joins):
+@pytest.mark.parametrize(("created", "verified", "joins", "join_fails"), [(True, True, True, False), (False, True, False, False), (True, False, False, False), (True, True, False, True)])
+async def test_the_callback_opens_the_invited_workspace_only_for_a_new_verified_account(monkeypatch, created, verified, joins, join_fails):
     endpoints = dict(authorization_endpoint=None, token_endpoint=None, userinfo_endpoint=None, jwks_uri=None)
     provider = SimpleNamespace(issuer="https://accounts.google.com", client_id="momobot", client_secret="unused", token_endpoint_auth_method="client_secret_post", **endpoints)
     app_config = SimpleNamespace(auth=SimpleNamespace(oidc=SimpleNamespace(enabled=True, frontend_base_url="https://momobot.example", providers={"google": provider})))
@@ -42,7 +42,7 @@ async def test_the_callback_opens_the_invited_workspace_only_for_a_new_verified_
     user = SimpleNamespace(id="u-new", email="partner@example.com", token_version=0)
     monkeypatch.setattr(auth_router, "get_or_provision_oidc_user", AsyncMock(return_value={"user": user, "created": created}))
     monkeypatch.setattr(auth_router, "get_local_provider", lambda: object())
-    join = AsyncMock(return_value="workspace-1")
+    join = AsyncMock(side_effect=RuntimeError("database hiccup") if join_fails else None, return_value="workspace-1")
     monkeypatch.setattr("app.gateway.routers.invitations.join_invited_workspaces", join)
 
     response = await auth_router.oauth_callback(_request(), "google", code="c", state="s")
@@ -50,4 +50,4 @@ async def test_the_callback_opens_the_invited_workspace_only_for_a_new_verified_
     cookies = [value.decode() for key, value in response.raw_headers if key == b"set-cookie"]
     assert any(cookie.startswith("access_token=") for cookie in cookies)
     assert any(cookie.startswith("deerflow_workspace=workspace-1") for cookie in cookies) is joins
-    assert join.await_count == (1 if joins else 0)
+    assert join.await_count == (1 if created and verified else 0)  # a failed join still signs the person in

@@ -1499,7 +1499,10 @@ async def oauth_callback(
     if result.get("created") and identity.email_verified:
         from app.gateway.routers.invitations import join_invited_workspaces
 
-        joined_workspace = await join_invited_workspaces(request, user_id=str(user.id), email=user.email)
+        try:
+            joined_workspace = await join_invited_workspaces(request, user_id=str(user.id), email=user.email)
+        except Exception:  # a failed join must not fail the sign-in; the invitation link still works
+            logger.exception("Joining invited workspaces failed for new SSO account %s", user.id)
 
     # ── Issue DeerFlow session ───────────────────────────────────────
     token = create_access_token(str(user.id), token_version=user.token_version)
