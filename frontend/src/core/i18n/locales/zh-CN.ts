@@ -145,7 +145,7 @@ export const zhCN: Translations = {
     notAvailableInDemoMode: "在演示模式下不可用",
     pageNotAvailableTitle: "此页面不可用",
     pageNotAvailableDescription:
-      "该页面不属于你的账户。你可以随时回到与 MomoBot Max 的对话。",
+      "该页面不属于你的账户。你可以随时回到与 MomoBot 的对话。",
     backToChat: "返回对话",
     loading: "加载中...",
     error: "错误：",

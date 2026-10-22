@@ -30,7 +30,7 @@ from deerflow.config.authorization_config import AuthorizationConfig
 from deerflow.persistence.base import Base
 from deerflow.persistence.organizations.invitation import InvitationRow
 from deerflow.persistence.organizations.model import OrganizationMemberRow, OrganizationRow
-from deerflow.persistence.user.model import UserRow
+from deerflow.persistence.user.model import UserPreferenceRow, UserRow
 
 
 def _request(*, user=None, source=None, cookies: dict[str, str] | None = None, headers: dict[str, str] | None = None) -> Request:
@@ -86,6 +86,7 @@ async def invitation_db(monkeypatch):
                     OrganizationRow.__table__,
                     OrganizationMemberRow.__table__,
                     InvitationRow.__table__,
+                    UserPreferenceRow.__table__,
                 ],
             )
         )
@@ -652,3 +653,160 @@ async def test_a_client_invitation_is_refused_with_409_while_rbac_has_no_client_
         _request(),
         Response(),
     )
+
+
+@pytest.mark.asyncio
+async def test_invitees_start_on_easy_and_a_saved_choice_wins(invitation_db, monkeypatch):
+    organization_id = await _seed_workspace(invitation_db)
+    created = await _create(monkeypatch, invitation_db, organization_id)
+    await invitations.accept_invitation(invitations.AcceptInvitationRequest(token=created.token, password="A-longer-new-password!"), _request(), Response())
+
+    await _add_user(invitation_db, "sso-user", "sso@example.com", oauth_provider="google")
+    async with invitation_db() as session:
+        session.add(UserPreferenceRow(user_id="sso-user", key="experience_mode", value="hard"))
+        await session.commit()
+    sso = await _create(monkeypatch, invitation_db, organization_id, email="sso@example.com")
+    await invitations.accept_invitation(invitations.AcceptInvitationRequest(token=sso.token), _signed_in("sso-user"), Response())
+
+    async with invitation_db() as session:
+        new_user = await session.scalar(select(UserRow).where(UserRow.email == "jesse@example.com"))
+        assert new_user is not None
+        seeded = await session.get(UserPreferenceRow, {"user_id": new_user.id, "key": "experience_mode"})
+        kept = await session.get(UserPreferenceRow, {"user_id": "sso-user", "key": "experience_mode"})
+        assert seeded is not None and seeded.value == "easy"
+        assert kept is not None and kept.value == "hard"
+
+
+@pytest.mark.asyncio
+async def test_exec_emails_join_as_exec_and_never_touch_admin_or_client(invitation_db, monkeypatch):
+    organization_id = await _seed_workspace(invitation_db)
+    await _add_user(invitation_db, "sso-boss", "boss@example.com", oauth_provider="google")
+    await _add_user(invitation_db, "admin-user", "admin@example.com", oauth_provider="google")
+    await _add_user(invitation_db, "owner-1", "owner@example.com")
+    async with invitation_db() as session:
+        await session.execute(update(UserRow).where(UserRow.id.in_(["admin-user", "owner-1"])).values(system_role="admin"))
+        await session.commit()
+    exec_config = AuthorizationConfig(invitations_frozen=False, exec_emails=["Partner@Example.com", "boss@example.com", "admin@example.com", "client@example.com"])
+    monkeypatch.setattr("app.gateway.authz._get_route_authorization_config", lambda: exec_config)
+
+    new = await _create(monkeypatch, invitation_db, organization_id, email="partner@example.com", role="admin")
+    await invitations.accept_invitation(invitations.AcceptInvitationRequest(token=new.token, password="A-longer-new-password!"), _request(), Response())
+    for user_id, email in (("sso-boss", "boss@example.com"), ("admin-user", "admin@example.com")):
+        created = await _create(monkeypatch, invitation_db, organization_id, email=email)
+        await invitations.accept_invitation(invitations.AcceptInvitationRequest(token=created.token), _signed_in(user_id), Response())
+    client = await _create(monkeypatch, invitation_db, organization_id, email="client@example.com", role="client")
+    await invitations.accept_invitation(invitations.AcceptInvitationRequest(token=client.token, password="A-longer-new-password!"), _request(), Response())
+
+    async with invitation_db() as session:
+        roles = dict((await session.execute(select(UserRow.email, UserRow.system_role))).all())
+    assert roles["partner@example.com"] == "exec"
+    assert roles["boss@example.com"] == "exec"
+    assert roles["admin@example.com"] == "admin"
+    assert roles["client@example.com"] == "client"
+
+
+@pytest.mark.asyncio
+async def test_an_exec_email_stays_a_user_while_rbac_has_no_exec_block(invitation_db, monkeypatch):
+    organization_id = await _seed_workspace(invitation_db)
+    exec_config = AuthorizationConfig(invitations_frozen=False, exec_emails=["partner@example.com"])
+    monkeypatch.setattr("app.gateway.authz._get_route_authorization_config", lambda: exec_config)
+    monkeypatch.setattr(invitations, "role_has_policy", lambda role: role != "exec")
+    created = await _create(monkeypatch, invitation_db, organization_id, email="partner@example.com")
+    await invitations.accept_invitation(invitations.AcceptInvitationRequest(token=created.token, password="A-longer-new-password!"), _request(), Response())
+    async with invitation_db() as session:
+        user = await session.scalar(select(UserRow).where(UserRow.email == "partner@example.com"))
+    assert user is not None and user.system_role == "user"  # locked out of nothing: exec is withheld, not half-granted
+
+
+@pytest.mark.asyncio
+async def test_a_new_sso_account_joins_its_invited_workspace_without_a_token(invitation_db, monkeypatch):
+    organization_id = await _seed_workspace(invitation_db)
+    await _add_user(invitation_db, "sso-new", "partner@example.com", oauth_provider="google")
+    await _add_user(invitation_db, "owner-1", "owner@example.com")
+    async with invitation_db() as session:
+        await session.execute(update(UserRow).where(UserRow.id == "owner-1").values(system_role="admin"))
+        await session.commit()
+    monkeypatch.setattr("app.gateway.authz._get_route_authorization_config", lambda: AuthorizationConfig(invitations_frozen=False, exec_emails=["partner@example.com"]))
+    expired = await _create(monkeypatch, invitation_db, organization_id, email="partner@example.com", role="member")
+    async with invitation_db() as session:
+        await session.execute(update(InvitationRow).where(InvitationRow.id == expired.id).values(expires_at=datetime.now(UTC) - timedelta(minutes=1)))
+        await session.commit()
+    live = await _create(monkeypatch, invitation_db, organization_id, email="partner@example.com", role="admin")
+
+    assert await invitations.join_invited_workspaces(_request(), user_id="sso-new", email="Partner@Example.com") == organization_id
+
+    async with invitation_db() as session:
+        membership = await session.get(OrganizationMemberRow, {"organization_id": organization_id, "user_id": "sso-new"})
+        assert membership is not None and (membership.role, membership.status) == ("admin", "active")
+        assert (await session.get(InvitationRow, live.id)).consumed_at is not None
+        assert (await session.get(InvitationRow, expired.id)).consumed_at is None  # an expired invitation is never used
+        assert (await session.get(UserRow, "sso-new")).system_role == "exec"
+        assert (await session.get(UserPreferenceRow, {"user_id": "sso-new", "key": "experience_mode"})).value == "easy"
+    # Consumed: a second sign-in joins nothing more.
+    assert await invitations.join_invited_workspaces(_request(), user_id="sso-new", email="partner@example.com") is None
+
+
+@pytest.mark.asyncio
+async def test_sso_auto_join_respects_the_freeze_and_a_removed_issuer(invitation_db, monkeypatch):
+    organization_id = await _seed_workspace(invitation_db)
+    await _add_user(invitation_db, "sso-new", "jesse@example.com", oauth_provider="google")
+    created = await _create(monkeypatch, invitation_db, organization_id)
+    monkeypatch.setattr("app.gateway.authz._get_route_authorization_config", lambda: AuthorizationConfig(invitations_frozen=True))
+    assert await invitations.join_invited_workspaces(_request(), user_id="sso-new", email="jesse@example.com") is None
+    monkeypatch.setattr("app.gateway.authz._get_route_authorization_config", lambda: AuthorizationConfig(invitations_frozen=False))
+    async with invitation_db() as session:
+        await session.execute(update(OrganizationMemberRow).where(OrganizationMemberRow.user_id == "owner-1").values(status="removed"))
+        await session.commit()
+    assert await invitations.join_invited_workspaces(_request(), user_id="sso-new", email="jesse@example.com") is None
+    async with invitation_db() as session:
+        assert (await session.get(InvitationRow, created.id)).consumed_at is None
+        assert await session.get(OrganizationMemberRow, {"organization_id": organization_id, "user_id": "sso-new"}) is None
+
+
+class _AuditRecorder:
+    def __init__(self) -> None:
+        self.rows: list[dict] = []
+
+    async def record(self, **row) -> None:
+        self.rows.append(row)
+
+
+@pytest.mark.asyncio
+async def test_sso_auto_join_applies_the_newest_invitation_per_workspace_and_audits_it(invitation_db, monkeypatch):
+    organization_id = await _seed_workspace(invitation_db)
+    await _add_user(invitation_db, "sso-new", "jesse@example.com", oauth_provider="google")
+    older = await _create(monkeypatch, invitation_db, organization_id, role="admin")
+    newer = await _create(monkeypatch, invitation_db, organization_id, role="member")  # the correction wins
+    audit = _AuditRecorder()
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(audit_repo=audit)))
+
+    assert await invitations.join_invited_workspaces(request, user_id="sso-new", email="jesse@example.com") == organization_id
+
+    async with invitation_db() as session:
+        membership = await session.get(OrganizationMemberRow, {"organization_id": organization_id, "user_id": "sso-new"})
+        assert membership is not None and membership.role == "member"
+        for created in (older, newer):  # the superseded one is used up too, so it cannot be redeemed later
+            assert (await session.get(InvitationRow, created.id)).consumed_at is not None
+    assert [(row["action"], row["target_id"], row["details"]) for row in audit.rows] == [("invitation.accepted", newer.id, {"role": "member", "via": "sso"})]
+
+
+@pytest.mark.asyncio
+async def test_a_workspace_owner_who_is_not_a_global_admin_cannot_mint_exec(invitation_db, monkeypatch):
+    # The token goes to its issuer, who could set a new account's password or
+    # accept into an account they control: neither may come out exec.
+    organization_id = await _seed_workspace(invitation_db)
+    await _add_user(invitation_db, "owner-1", "owner@example.com")  # system_role "user"
+    await _add_user(invitation_db, "held", "held@example.com", oauth_provider="google")
+    monkeypatch.setattr("app.gateway.authz._get_route_authorization_config", lambda: AuthorizationConfig(invitations_frozen=False, exec_emails=["partner@example.com", "held@example.com", "sso@example.com"]))
+
+    new = await _create(monkeypatch, invitation_db, organization_id, email="partner@example.com")
+    await invitations.accept_invitation(invitations.AcceptInvitationRequest(token=new.token, password="A-longer-new-password!"), _request(), Response())
+    existing = await _create(monkeypatch, invitation_db, organization_id, email="held@example.com")
+    await invitations.accept_invitation(invitations.AcceptInvitationRequest(token=existing.token), _signed_in("held"), Response())
+    await _add_user(invitation_db, "sso-new", "sso@example.com", oauth_provider="google")
+    await _create(monkeypatch, invitation_db, organization_id, email="sso@example.com")
+    assert await invitations.join_invited_workspaces(_request(), user_id="sso-new", email="sso@example.com") == organization_id
+
+    async with invitation_db() as session:
+        roles = dict((await session.execute(select(UserRow.email, UserRow.system_role))).all())
+    assert (roles["partner@example.com"], roles["held@example.com"], roles["sso@example.com"]) == ("user", "user", "user")

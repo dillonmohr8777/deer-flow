@@ -128,6 +128,7 @@ export function WorkspaceNavChatList() {
   const { data: brandKit } = useBrandKit();
   const { user } = useAuth();
   const isAdmin = user?.system_role === "admin";
+  const canPickAgents = isAdmin || user?.system_role === "exec";
   // Threads with a Momo draft waiting on the owner; same query Desk's
   // Approvals panel runs, so React Query shares one cache entry.
   const waitingApproval = useBoardThreads({
@@ -243,8 +244,8 @@ export function WorkspaceNavChatList() {
             </Link>
           </SidebarMenuButton>
         </SidebarMenuItem>
-        {/* Admins only, keeps the team sidebar short. */}
-        {isAdmin && (
+        {/* Admins and execs (partners) only, keeps the team sidebar short. */}
+        {canPickAgents && (
           <SidebarMenuItem>
             {agentsEnabled ? (
               <SidebarMenuButton
