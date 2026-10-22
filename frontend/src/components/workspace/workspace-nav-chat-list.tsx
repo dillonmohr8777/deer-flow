@@ -73,7 +73,10 @@ function ClientNavList({ showBrandKit }: { showBrandKit: boolean }) {
           </SidebarMenuButton>
         </SidebarMenuItem>
         <SidebarMenuItem>
-          <SidebarMenuButton isActive={pathname.startsWith(MOMO_DAILY_PATH)} asChild>
+          <SidebarMenuButton
+            isActive={pathname.startsWith(MOMO_DAILY_PATH)}
+            asChild
+          >
             <Link className="text-muted-foreground" href={MOMO_DAILY_PATH}>
               <Newspaper />
               <span>{MOMO_DAILY_NAME}</span>
