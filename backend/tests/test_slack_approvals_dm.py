@@ -20,7 +20,7 @@ def _row(**kw):
         "action_type": "email",
         "title": "Weekly update",
         "target": "client@example.com",
-        "payload": {"subject": "Hi", "body": "x" * 900, "loop": {"client": "Omega Landscape"}},
+        "payload": {"subject": "Hi", "body": "x" * 900, "loop": {"client": "Maple Ridge Landscaping"}},
         "status": "pending",
         "agent_name": None,
         "user_id": "owner",
@@ -47,7 +47,7 @@ def _action(verb, user="U1"):
 
 def test_build_message_truncates_links_and_has_three_buttons():
     text, blocks = sa.build_message(_row(), CFG)
-    assert "Omega Landscape" in text and "email" in text
+    assert "Maple Ridge Landscaping" in text and "email" in text
     body = blocks[1]["text"]["text"]
     assert body.endswith("...") and len(body) < sa.SUMMARY_CHARS + 120
     assert "https://momo.example/workspace/approvals?id=abc123" in blocks[2]["elements"][0]["text"]

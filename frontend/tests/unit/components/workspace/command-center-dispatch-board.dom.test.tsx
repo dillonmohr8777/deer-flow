@@ -34,7 +34,7 @@ function run(overrides: Partial<ConsoleRunItem>): ConsoleRunItem {
   return {
     run_id: "run-1",
     thread_id: "thread-1",
-    thread_title: "Omega lead review",
+    thread_title: "Maple Ridge lead review",
     assistant_id: "dillon-brain",
     status: "running",
     model_name: "claude-sonnet",
