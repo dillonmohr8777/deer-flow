@@ -24,9 +24,10 @@ STUBS = {
     "systemctl": 'echo "$*" >> "$STUB_LOG"',
     "flock": "exit 0",
     "df": "printf 'Filesystem 1024-blocks Used Available Capacity Mounted\\nfake 1 1 99999999 1%% /\\n'",
-    # `docker image inspect` misses (forces a build); `docker inspect -f ... <name>` reports what settings.env holds.
+    # `docker image inspect` misses (forces a build); `docker inspect -f ... <name>` reports what settings.env holds
+    # for the containers prod really runs (compose.funnel.yaml names them momobot-prod-*), and no such container otherwise.
     "docker": """[[ "$1" == image ]] && exit 1
-key=MOMENTUM_GATEWAY_IMAGE; [[ "${!#}" == deer-flow-frontend ]] && key=MOMENTUM_FRONTEND_IMAGE
+case "${!#}" in momobot-prod-gateway) key=MOMENTUM_GATEWAY_IMAGE ;; momobot-prod-frontend) key=MOMENTUM_FRONTEND_IMAGE ;; *) exit 1 ;; esac
 sed -n "s/^$key=//p" "$MOMOBOT_DEPLOY_DIR/settings.env\"""",
     # Readiness always passes; the public smoke answers 502 while BAD_IMAGE is the configured gateway.
     "curl": """url="${!#}"

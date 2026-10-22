@@ -57,10 +57,12 @@ ready() {
 
 smoke() {  # <gateway image> <frontend image>
   local name want got domain url code
+  # up.sh's compose project names the containers (compose.funnel.yaml: <project>-gateway).
+  local project="${MOMOBOT_PROJECT:-momobot-prod}"
   for name in gateway frontend; do
     [[ "$name" == gateway ]] && want="$1" || want="$2"
-    got="$(docker inspect -f '{{.Config.Image}}' "deer-flow-$name" 2>/dev/null || true)"
-    [[ "$got" == "$want" ]] || { echo "release: deer-flow-$name runs '$got', expected $want" >&2; return 1; }
+    got="$(docker inspect -f '{{.Config.Image}}' "$project-$name" 2>/dev/null || true)"
+    [[ "$got" == "$want" ]] || { echo "release: $project-$name runs '$got', expected $want" >&2; return 1; }
   done
   domain="$("$SRC/deploy/momentum/vps/dotenv-get.sh" "$ENV_FILE" MOMOBOT_DOMAIN)"
   [[ -n "$domain" ]] || { echo "release: MOMOBOT_DOMAIN missing from $ENV_FILE" >&2; return 1; }
