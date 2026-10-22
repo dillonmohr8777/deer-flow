@@ -1,5 +1,8 @@
 # EC2 deployment
 
+Releases go through `release.sh` (lock, build, tag swap, restart, readiness, smoke, automatic rollback).
+Keep it bash 3.2 compatible (the operator half runs on macOS) and keep its offline test green.
+
 The existing health timer runs lightsail/health.sh. It must check the public UI
 as well as gateway readiness and fail on unknown disk space or less than 10 GiB
 available on the deployment filesystem. Reuse this timer; never add a second watcher.
