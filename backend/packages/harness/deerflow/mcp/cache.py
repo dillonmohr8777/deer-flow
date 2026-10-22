@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import threading
+from contextvars import copy_context
 from pathlib import Path
 
 from langchain_core.tools import BaseTool
@@ -194,6 +195,37 @@ async def initialize_mcp_tools() -> list[BaseTool]:
     return []
 
 
+def _with_private_tools(public_tools: list[BaseTool], *, extensions_config=None) -> list[BaseTool]:
+    """Discover private tools per authorized run, never in the global cache."""
+    from deerflow.mcp.private_scope import current_private_mcp_context
+    from deerflow.mcp.tools import get_mcp_tools
+
+    if current_private_mcp_context() is None:
+        return public_tools
+
+    def load() -> list[BaseTool]:
+        if extensions_config is None:
+            return asyncio.run(get_mcp_tools(private_only=True))
+        return asyncio.run(get_mcp_tools(private_only=True, extensions_config=extensions_config))
+
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        private_tools = load()
+    else:
+        import concurrent.futures
+
+        context = copy_context()
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            private_tools = executor.submit(context.run, load).result()
+    return [*public_tools, *private_tools]
+
+
+def get_private_mcp_tools(extensions_config) -> list[BaseTool]:
+    """Discover only the private servers in a selected config snapshot."""
+    return _with_private_tools([], extensions_config=extensions_config)
+
+
 def get_cached_mcp_tools() -> list[BaseTool]:
     """Get cached MCP tools with lazy initialization.
 
@@ -214,15 +246,16 @@ def get_cached_mcp_tools() -> list[BaseTool]:
                 logger.info("MCP cache is stale, resetting for re-initialization...")
                 retired_pool = _reset_mcp_tools_cache_state_and_retire_pool_locked()
 
-            if _cache_initialized:
-                return _mcp_tools_cache or []
+            public_tools = (_mcp_tools_cache or []) if _cache_initialized else None
 
-            if _initializing_generation is not None:
+            if public_tools is None and _initializing_generation is not None:
                 _init_condition.wait_for(lambda: _initializing_generation is None or _cache_initialized)
                 continue
 
         if retired_pool is not None:
             retired_pool.close_all_sync()
+        if public_tools is not None:
+            return _with_private_tools(public_tools)
 
         logger.info("MCP tools not initialized, performing lazy initialization...")
         try:
@@ -245,9 +278,7 @@ def get_cached_mcp_tools() -> list[BaseTool]:
             logger.exception("Failed to lazy-initialize MCP tools")
             return []
 
-        with _init_lock:
-            if _cache_initialized:
-                return _mcp_tools_cache or []
+        # Re-enter the loop to release the cache lock before private discovery.
 
 
 def _reset_mcp_tools_cache_state() -> None:

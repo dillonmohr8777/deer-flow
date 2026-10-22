@@ -22,6 +22,7 @@ from deerflow.mcp.client import build_servers_config
 from deerflow.mcp.headers import apply_header_overrides
 from deerflow.mcp.interceptors import build_mcp_tool_interceptors, compose_tool_interceptors
 from deerflow.mcp.oauth import build_oauth_tool_interceptor, get_initial_oauth_headers
+from deerflow.mcp.private_scope import guard_private_mcp_tool, private_mcp_allowed
 from deerflow.mcp.session_pool import call_pooled_session_tool, get_session_pool
 from deerflow.mcp.tasks import ORDINARY_MCP_TASK_DRIVER, TaskSubmitRequest
 from deerflow.mcp.tasks.runtime import (
@@ -772,8 +773,8 @@ def _configure_task_tools_for_server(
     return configured
 
 
-async def get_mcp_tools() -> list[BaseTool]:
-    """Get all tools from enabled MCP servers.
+async def get_mcp_tools(*, private_only: bool = False, extensions_config: ExtensionsConfig | None = None) -> list[BaseTool]:
+    """Get unrestricted tools, or authorized private tools for the current run.
 
     Tools using stdio transport are wrapped with persistent-session logic so
     consecutive calls within the same thread reuse the same MCP session.
@@ -790,12 +791,17 @@ async def get_mcp_tools() -> list[BaseTool]:
         logger.warning("langchain-mcp-adapters not installed. Install it to enable MCP tools: pip install langchain-mcp-adapters")
         return []
 
-    # NOTE: We use ExtensionsConfig.from_file() instead of get_extensions_config()
-    # to always read the latest configuration from disk. This ensures that changes
-    # made through the Gateway API (which runs in a separate process) are immediately
-    # reflected when initializing MCP tools.
-    extensions_config = ExtensionsConfig.from_file()
+    # Public discovery reads the latest file contents. The targeted private
+    # assembly path may pass its already selected snapshot so discovery and
+    # provenance use the same configuration without another synchronous read.
+    if extensions_config is None:
+        extensions_config = ExtensionsConfig.from_file()
     validate_mcp_task_config_snapshot(extensions_config)
+    # Public discovery is cacheable globally. Restricted discovery is fresh and
+    # authorized before OAuth, client construction, or any server connection.
+    enabled_servers = extensions_config.get_enabled_mcp_servers()
+    if private_only or any(server.private_scope is not None for server in enabled_servers.values()):
+        extensions_config = extensions_config.model_copy(update={"mcp_servers": {name: server for name, server in enabled_servers.items() if (server.private_scope is not None) == private_only and private_mcp_allowed(server)}})
     servers_config = build_servers_config(extensions_config)
 
     if not servers_config:
@@ -954,7 +960,7 @@ async def get_mcp_tools() -> list[BaseTool]:
                     server_config=server_cfg,
                     tool_name_prefix=tool_name_prefix,
                 )
-            wrapped_tools.extend(current_server_tools)
+            wrapped_tools.extend(guard_private_mcp_tool(tool, server_cfg, server_name=source_name) if private_only and server_cfg is not None else tool for tool in current_server_tools)
 
         # Patch tools to support sync invocation, as deerflow client streams synchronously
         for tool in wrapped_tools:

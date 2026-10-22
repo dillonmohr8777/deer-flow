@@ -8,6 +8,8 @@ from collections.abc import Mapping
 from datetime import timedelta
 from typing import Any
 
+from langchain_core.tools import ToolException
+
 from deerflow.config.extensions_config import ExtensionsConfig
 from deerflow.config.paths import get_paths
 from deerflow.constants import MCP_TMP_SUBDIR
@@ -105,6 +107,8 @@ class McpTaskToolCaller:
         server_config = self._extensions_config.get_enabled_mcp_servers().get(server_name)
         if server_config is None:
             raise LookupError(f"MCP task server {server_name!r} is missing or disabled in the startup configuration")
+        if server_config.private_scope is not None:
+            raise ToolException("Private MCP servers do not support background calls.")
         connection = build_server_params(server_name, server_config)
         transport = connection.get("transport", "stdio")
         scope_key = mcp_task_session_scope_key(user_id=user_id, thread_id=thread_id)
