@@ -10,6 +10,13 @@ The upstream DeerFlow history stays in [CHANGELOG.md](../CHANGELOG.md).
 
 ## [Unreleased]
 
+## [momobot-prod-20261022-99e617fd] - 2026-10-22
+
+### Changed
+
+- Add five Momo Max role-context bundles and synthetic acceptance contracts (#249)
+- MomoBot changelog momobot-prod-20261022-e40c76fd, Oct 22 (#248)
+
 ## [momobot-prod-20261022-e40c76fd] - 2026-10-22
 
 ### Changed
