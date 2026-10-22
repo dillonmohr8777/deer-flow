@@ -7,7 +7,10 @@ import {
   articleJsonLd,
   type DailyArticle,
   parseArticle,
+  plainText,
+  relatedArticles,
   serializeJsonLd,
+  textParts,
   visibleArticles,
 } from "@/core/momo-daily";
 
@@ -53,6 +56,41 @@ describe("visibleArticles", () => {
         (a) => a.slug,
       ),
     ).toEqual(["draft-one", "published-one"]);
+  });
+});
+
+describe("articleJsonLd citations", () => {
+  it("cites the sources and keeps link markup out of structured text", () => {
+    const graphs = articleJsonLd(
+      article({
+        summary: "Read [the guide](/daily/what-is-a-test) first.",
+        faq: [
+          {
+            question: "Why?",
+            answer: "See [Google](https://developers.google.com/search).",
+          },
+        ],
+        sources: [
+          {
+            title: "Google Search Central",
+            url: "https://developers.google.com/search",
+          },
+        ],
+      }),
+    );
+    const news = graphs.find((g) => g["@type"] === "NewsArticle")!;
+    expect(news.abstract).toBe("Read the guide first.");
+    expect(news.citation).toEqual([
+      {
+        "@type": "CreativeWork",
+        name: "Google Search Central",
+        url: "https://developers.google.com/search",
+      },
+    ]);
+    const faq = graphs.find((g) => g["@type"] === "FAQPage") as {
+      mainEntity: { acceptedAnswer: { text: string } }[];
+    };
+    expect(faq.mainEntity[0]!.acceptedAnswer.text).toBe("See Google.");
   });
 });
 
@@ -127,5 +165,91 @@ describe("content/momo-daily", () => {
 
   it("rejects an unknown status", () => {
     expect(() => article({ status: "live" as never })).toThrow();
+  });
+
+  it("every published article cites 2 to 5 sources and links only to real Daily articles", () => {
+    const slugs = new Set(files.map((name) => name.replace(/\.json$/, "")));
+    for (const name of files) {
+      const parsed = parseArticle(
+        JSON.parse(readFileSync(join(CONTENT_DIR, name), "utf8")),
+        name,
+      );
+      if (parsed.status !== "published") continue;
+      expect(parsed.sources.length, name).toBeGreaterThanOrEqual(2);
+      expect(parsed.sources.length, name).toBeLessThanOrEqual(5);
+      const text = [
+        parsed.summary,
+        ...parsed.body.flatMap((b) => b.paragraphs),
+        ...parsed.faq.map((f) => f.answer),
+      ];
+      for (const part of text.flatMap(textParts)) {
+        if (part.href?.startsWith("/daily/")) {
+          expect(
+            slugs.has(part.href.slice("/daily/".length)),
+            `${name} -> ${part.href}`,
+          ).toBe(true);
+        }
+      }
+    }
+  });
+});
+
+describe("inline links", () => {
+  it("turns Daily and https links into parts and leaves anything else as text", () => {
+    expect(
+      textParts(
+        "See [the guide](/daily/what-is-a-test) and [Google](https://developers.google.com/search) or [bad](javascript:alert(1)) [plain](http://x.test).",
+      ),
+    ).toEqual([
+      { text: "See " },
+      { text: "the guide", href: "/daily/what-is-a-test" },
+      { text: " and " },
+      { text: "Google", href: "https://developers.google.com/search" },
+      { text: " or [bad](javascript:alert(1)) [plain](http://x.test)." },
+    ]);
+    expect(plainText("Read [the guide](/daily/what-is-a-test).")).toBe(
+      "Read the guide.",
+    );
+  });
+
+  it("only accepts https sources", () => {
+    expect(() =>
+      article({ sources: [{ title: "Insecure", url: "http://example.com" }] }),
+    ).toThrow();
+  });
+});
+
+describe("relatedArticles", () => {
+  it("puts the same section first, skips the article itself and drafts, and stops at three", () => {
+    const self = article({ slug: "self", section: "Research" });
+    const pool = [
+      self,
+      article({
+        slug: "other-section-new",
+        section: "Tools",
+        date: "2026-09-30",
+      }),
+      article({
+        slug: "same-section-old",
+        section: "Research",
+        date: "2026-09-01",
+      }),
+      article({
+        slug: "same-section-new",
+        section: "Research",
+        date: "2026-09-25",
+      }),
+      article({ slug: "a-draft", section: "Research", status: "draft" }),
+      article({
+        slug: "other-section-old",
+        section: "Tools",
+        date: "2026-09-02",
+      }),
+    ];
+    expect(relatedArticles(self, pool).map((a) => a.slug)).toEqual([
+      "same-section-new",
+      "same-section-old",
+      "other-section-new",
+    ]);
   });
 });

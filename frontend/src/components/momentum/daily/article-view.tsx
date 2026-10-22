@@ -3,11 +3,13 @@
 import Link from "next/link";
 
 import {
+  articlePath,
   type DailyArticle,
   formatEditionDate,
   MOMO_DAILY_NAME,
   REPORTERS,
   reporterForSection,
+  textParts,
 } from "@/core/momo-daily";
 
 import { DraftStamp } from "./front-page";
@@ -18,7 +20,32 @@ import styles from "./daily.module.css";
 
 const FRONT_PAGE = "/daily?open=1";
 
-export function DailyArticleView({ article }: { article: DailyArticle }) {
+/** Article text with its [anchor](target) links: Daily links stay in the app, sources open in a new tab. */
+function RichText({ text }: { text: string }) {
+  return textParts(text).map((part, index) => {
+    if (!part.href) return part.text;
+    if (part.href.startsWith("/")) {
+      return (
+        <Link key={index} href={part.href}>
+          {part.text}
+        </Link>
+      );
+    }
+    return (
+      <a key={index} href={part.href} target="_blank" rel="noopener noreferrer">
+        {part.text}
+      </a>
+    );
+  });
+}
+
+export function DailyArticleView({
+  article,
+  related = [],
+}: {
+  article: DailyArticle;
+  related?: DailyArticle[];
+}) {
   const motion = useDailyMotion();
   const reporter = reporterForSection(article.section);
 
@@ -77,7 +104,9 @@ export function DailyArticleView({ article }: { article: DailyArticle }) {
           aria-labelledby="daily-answer-heading"
         >
           <h2 id="daily-answer-heading">The short answer</h2>
-          <p>{article.summary}</p>
+          <p>
+            <RichText text={article.summary} />
+          </p>
         </aside>
 
         <figure className={styles.hero}>
@@ -94,7 +123,9 @@ export function DailyArticleView({ article }: { article: DailyArticle }) {
             <section key={block.heading}>
               <h2>{block.heading}</h2>
               {block.paragraphs.map((paragraph) => (
-                <p key={paragraph}>{paragraph}</p>
+                <p key={paragraph}>
+                  <RichText text={paragraph} />
+                </p>
               ))}
             </section>
           ))}
@@ -106,12 +137,51 @@ export function DailyArticleView({ article }: { article: DailyArticle }) {
             {article.faq.map((item) => (
               <div key={item.question}>
                 <h3>{item.question}</h3>
-                <p>{item.answer}</p>
+                <p>
+                  <RichText text={item.answer} />
+                </p>
               </div>
             ))}
           </section>
         ) : null}
 
+        {article.sources.length > 0 ? (
+          <section
+            className={styles.faq}
+            aria-labelledby="daily-sources-heading"
+          >
+            <h2 id="daily-sources-heading">Sources</h2>
+            <ol>
+              {article.sources.map((source) => (
+                <li key={source.url}>
+                  <a
+                    href={source.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    {source.title}
+                  </a>
+                </li>
+              ))}
+            </ol>
+          </section>
+        ) : null}
+        {related.length > 0 ? (
+          <section
+            className={styles.faq}
+            aria-labelledby="daily-related-heading"
+          >
+            <h2 id="daily-related-heading">More from {MOMO_DAILY_NAME}</h2>
+            {related.map((other) => (
+              <div key={other.slug}>
+                <h3>
+                  <Link href={articlePath(other.slug)}>{other.title}</Link>
+                </h3>
+                <p>{other.dek}</p>
+              </div>
+            ))}
+          </section>
+        ) : null}
         <footer className={styles.articleFooter}>
           <p>
             Filed by the {REPORTERS[reporter]} desk of {MOMO_DAILY_NAME}.

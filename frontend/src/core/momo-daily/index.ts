@@ -15,11 +15,15 @@ export const MOMO_DAILY_NAME = "The Momo Daily";
 export const MOMO_DAILY_PATH = "/daily";
 
 /**
- * Absolute origin for canonical, OpenGraph and JSON-LD URLs. Set
- * NEXT_PUBLIC_SITE_URL in production; the fallback is the local nginx entry.
+ * Absolute origin for canonical, OpenGraph, sitemap and JSON-LD URLs.
+ * MOMOBOT_SITE_URL is read on the server at runtime, so one image serves any
+ * domain; NEXT_PUBLIC_SITE_URL (inlined at build) is the fallback, then the
+ * local nginx entry.
  */
 export const SITE_URL = (
-  process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:2026"
+  process.env.MOMOBOT_SITE_URL ??
+  process.env.NEXT_PUBLIC_SITE_URL ??
+  "http://localhost:2026"
 ).replace(/\/+$/, "");
 
 const isoDate = z
@@ -52,6 +56,15 @@ export const articleSchema = z.object({
   faq: z
     .array(z.object({ question: z.string().min(1), answer: z.string().min(1) }))
     .default([]),
+  /** Where the article's facts come from; listed under the article and cited in JSON-LD. */
+  sources: z
+    .array(
+      z.object({
+        title: z.string().min(1),
+        url: z.string().url().startsWith("https://"),
+      }),
+    )
+    .default([]),
 });
 
 export type DailyArticle = z.infer<typeof articleSchema>;
@@ -76,6 +89,54 @@ export function visibleArticles(
 
 export function articlePath(slug: string) {
   return `${MOMO_DAILY_PATH}/${slug}`;
+}
+
+/*
+ * Inline links in article text, written as [anchor](target). Only another
+ * Daily article (/daily/<slug>) or an https:// page counts; anything else
+ * stays plain text, so content can never inject a script or javascript: URL.
+ */
+const INLINE_LINK = /\[([^\]]+)\]\((\/daily\/[a-z0-9-]+|https:\/\/[^\s)]+)\)/g;
+
+export type TextPart = { text: string; href?: string };
+
+export function textParts(text: string): TextPart[] {
+  const parts: TextPart[] = [];
+  let last = 0;
+  for (const match of text.matchAll(INLINE_LINK)) {
+    const start = match.index ?? 0;
+    if (start > last) parts.push({ text: text.slice(last, start) });
+    parts.push({ text: match[1] ?? "", href: match[2] });
+    last = start + match[0].length;
+  }
+  if (last < text.length) parts.push({ text: text.slice(last) });
+  return parts;
+}
+
+/** The text with link markup removed, for meta tags and JSON-LD. */
+export function plainText(text: string) {
+  return text.replace(INLINE_LINK, "$1");
+}
+
+/** Up to *count* other published reads: same section first, then newest. */
+export function relatedArticles(
+  article: DailyArticle,
+  articles: readonly DailyArticle[],
+  count = 3,
+): DailyArticle[] {
+  const others = articles.filter(
+    (other) => other.slug !== article.slug && other.status === "published",
+  );
+  const sameSection = others.filter(
+    (other) => other.section === article.section,
+  );
+  const rest = others.filter((other) => other.section !== article.section);
+  const byNewest = (a: DailyArticle, b: DailyArticle) =>
+    b.date.localeCompare(a.date);
+  return [...sameSection.sort(byNewest), ...rest.sort(byNewest)].slice(
+    0,
+    count,
+  );
 }
 
 export function absoluteUrl(path: string) {
@@ -142,8 +203,8 @@ export function articleJsonLd(article: DailyArticle): JsonLd[] {
       "@context": "https://schema.org",
       "@type": "NewsArticle",
       headline: article.title,
-      description: article.dek,
-      abstract: article.summary,
+      description: plainText(article.dek),
+      abstract: plainText(article.summary),
       datePublished: article.date,
       dateModified: article.updated ?? article.date,
       articleSection: article.section,
@@ -163,6 +224,15 @@ export function articleJsonLd(article: DailyArticle): JsonLd[] {
         name: MOMO_DAILY_NAME,
         url: absoluteUrl(MOMO_DAILY_PATH),
       },
+      ...(article.sources.length > 0
+        ? {
+            citation: article.sources.map((source) => ({
+              "@type": "CreativeWork",
+              name: source.title,
+              url: source.url,
+            })),
+          }
+        : {}),
     },
     {
       "@context": "https://schema.org",
@@ -185,7 +255,7 @@ export function articleJsonLd(article: DailyArticle): JsonLd[] {
       mainEntity: article.faq.map((item) => ({
         "@type": "Question",
         name: item.question,
-        acceptedAnswer: { "@type": "Answer", text: item.answer },
+        acceptedAnswer: { "@type": "Answer", text: plainText(item.answer) },
       })),
     });
   }

@@ -36,3 +36,9 @@ export const loadAllArticles = cache(async (): Promise<DailyArticle[]> => {
 export const isSignedIn = cache(
   async () => (await getServerSideUser()).tag === "authenticated",
 );
+
+/** Drafts are for the team: a signed-in client account reads only published articles. */
+export const canSeeDrafts = cache(async () => {
+  const result = await getServerSideUser();
+  return result.tag === "authenticated" && result.user.system_role !== "client";
+});
