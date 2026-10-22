@@ -20,6 +20,8 @@ def normalize(text):
     for letters, command in [('p w d', 'pwd'), ('l s', 'ls'), ('c d', 'cd'), ('m k d i r', 'mkdir')]:
         text = re.sub(r'\b' + letters.replace(' ', r'\s*') + r'\b', command, text)
     text = text.replace('’', "'")
+    # ASR writes spoken dimensions ("960 by 540") as 960x540.
+    text = re.sub(r'(\d)\s*x\s*(\d)', r'\1 by \2', text)
     for contraction, expanded in {"let's": 'let us', "don't": 'do not', "can't": 'cannot', "isn't": 'is not', "doesn't": 'does not', "won't": 'will not', "shouldn't": 'should not', "aren't": 'are not', "wasn't": 'was not', "didn't": 'did not', "couldn't": 'could not', "wouldn't": 'would not', "hasn't": 'has not', "haven't": 'have not'}.items():
         text = text.replace(contraction, expanded)
     # Possessives and the narrator's name are spelled inconsistently by ASR, never by the voice.
