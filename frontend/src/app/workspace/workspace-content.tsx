@@ -6,9 +6,9 @@ import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { WorkspaceAppearanceProvider } from "@/components/workspace/command-center/appearance-provider";
 import { RetroResolve } from "@/components/workspace/command-center/retro-resolve";
 import { CommandPalette } from "@/components/workspace/command-palette";
-import { ExperienceModeChooser } from "@/components/workspace/experience-mode-chooser";
 import { GatewayOfflineBanner } from "@/components/workspace/gateway-offline-banner";
 import { ModelLoadErrorBanner } from "@/components/workspace/model-load-error-banner";
+import { FirstLoginGate } from "@/components/workspace/onboarding-flow";
 import { RoleRouteGuard } from "@/components/workspace/role-route-guard";
 import { SettingsDialogHost } from "@/components/workspace/settings";
 import {
@@ -81,7 +81,7 @@ export async function WorkspaceContent({
           <RetroResolve />
           <CommandPalette />
           <SettingsDialogHost />
-          <ExperienceModeChooser />
+          <FirstLoginGate />
           <WorkspaceSettingsDeepLink />
           <Toaster position="top-center" />
         </WorkspaceAppearanceProvider>

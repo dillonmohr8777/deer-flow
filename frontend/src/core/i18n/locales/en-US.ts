@@ -2101,4 +2101,33 @@ export const enUS: Translations = {
     failed:
       "The reviewed evidence could not be prepared. Recheck the workspace and current review.",
   },
+  onboarding: {
+    stepOf: "Step {step} of 3",
+    roleTitle: "Welcome to MomoBot. What do you do?",
+    prefilled:
+      "We filled this in from your team profile. Fix anything that's off.",
+    roleLabel: "Your role",
+    teamLabel: "Your team",
+    clients: "Clients you work on:",
+    continue: "Continue",
+    toolsTitle: "Which tools do you use every day?",
+    toolsHint:
+      "Pick everything you open on a normal day. MomoBot connects to these next.",
+    otherLabel: "Anything else? (optional)",
+    connectTitle: "Connect your tools",
+    connectHint:
+      "Each tool connects with your own account. Ones that aren't ready yet get requested for you.",
+    connected: "Connected",
+    comingSoon: "Coming soon",
+    linkSlack: "Link Slack DMs",
+    request: "Request access",
+    requested: "Requested",
+    skip: "Skip",
+    skipped: "Skipped",
+    finish: "Finish and start in Easy mode",
+    pinnedGroup: "Most used",
+    searchLabel: "Search plugins",
+    noMatch: 'No plugin matches. Add it under "Anything else".',
+    shared: "Ready for everyone",
+  },
 };
