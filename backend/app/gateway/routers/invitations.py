@@ -269,7 +269,7 @@ async def join_invited_workspaces(request: Request, *, user_id: str, email: str)
                     continue  # an older invitation to a workspace already joined: superseded, so used up but not applied
                 joined_workspaces.add(invitation.organization_id)
                 became_exec = False
-                if invitation.role != "client" and invitation.email in _exec_emails() and role_has_policy("exec") and user.system_role == _PLAIN_USER_ROLE:
+                if user.system_role == _PLAIN_USER_ROLE and await _joins_as_exec(session, invitation):
                     user.system_role = "exec"
                     became_exec = True
                 granted_role = await _join_workspace(session, invitation, user_id, now)
@@ -285,6 +285,20 @@ def _exec_emails() -> set[str]:
     from app.gateway.authz import _get_route_authorization_config
 
     return {email.strip().lower() for email in _get_route_authorization_config().exec_emails}
+
+
+async def _joins_as_exec(session, invitation: InvitationRow) -> bool:
+    """Whether accepting *invitation* grants exec: a non-client invitation to an
+    ``exec_emails`` address, an RBAC ``exec`` block (no lockout), and a global
+    admin as issuer. The issuer check is the fence: the token goes to whoever
+    created it, and a token for an email with no account lets its holder set
+    that account's password, so a workspace owner/admin who is not a global
+    admin must not be able to mint (or upgrade into) an exec account.
+    """
+    if invitation.role == "client" or invitation.email not in _exec_emails() or not role_has_policy("exec"):
+        return False
+    issuer = await session.get(UserRow, invitation.created_by)
+    return issuer is not None and issuer.system_role == "admin"
 
 
 def _no_store(response: Response) -> None:
@@ -428,8 +442,8 @@ async def accept_invitation(body: AcceptInvitationRequest, request: Request, res
                 invitation_id = invitation.id
 
                 existing = await _find_user_by_email(session, invitation.email)
-                # Same lockout guard as the admin role route: never hand out a role RBAC has no block for.
-                joins_as_exec = invitation.role != "client" and invitation.email in _exec_emails() and role_has_policy("exec")
+                # Only an admin-issued invitation carries exec, and never without an RBAC exec block (_joins_as_exec).
+                joins_as_exec = await _joins_as_exec(session, invitation)
                 if existing is not None:
                     # Sign in, then accept. An existing account (password or
                     # SSO) never accepts with a credential in this body: a
