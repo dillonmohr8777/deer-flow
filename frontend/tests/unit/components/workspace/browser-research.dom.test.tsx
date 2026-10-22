@@ -22,8 +22,8 @@ const mocks = rs.hoisted(() => ({
 rs.mock("@/core/auth/AuthProvider", () => ({
   useAuth: () => ({ user: mocks.user }),
 }));
-rs.mock("@/components/ui/sidebar", () => ({
-  SidebarTrigger: () => <button aria-label="Toggle sidebar" />,
+rs.mock("@/components/workspace/workspace-sidebar-trigger", () => ({
+  WorkspaceSidebarTrigger: () => <button aria-label="Toggle sidebar" />,
 }));
 rs.mock("@/core/browserbase/api", () => ({
   getBrowserbaseStatus: mocks.status,

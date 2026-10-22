@@ -7,6 +7,46 @@ import {
   isRunNotCancellableError,
   StreamReplayGapError,
 } from "@/core/api/api-client";
+import { setLoggingOut } from "@/core/api/fetcher";
+
+const TEST_ORIGIN = "http://localhost:2026";
+
+function requestPath(input: RequestInfo | URL): string {
+  const url = input instanceof Request ? input.url : input.toString();
+  return new URL(url, TEST_ORIGIN).pathname;
+}
+
+function stub401Location() {
+  const location = {
+    origin: TEST_ORIGIN,
+    pathname: "/workspace/chats/new",
+    search: "?settings=security",
+    href: `${TEST_ORIGIN}/workspace/chats/new?settings=security`,
+  };
+  rs.stubGlobal("window", { location, sessionStorage: makeSessionStorage() });
+  return location;
+}
+
+function stubLangGraph401(
+  probe: () => Promise<Response>,
+  onProbe?: () => void,
+) {
+  const requests: Array<{ input: RequestInfo | URL; init?: RequestInit }> = [];
+  const fetchFn = rs.fn(
+    async (input: RequestInfo | URL, init?: RequestInit) => {
+      requests.push({ input, init });
+      if (requestPath(input) === "/api/v1/auth/me") {
+        onProbe?.();
+        return probe();
+      }
+      return new Response(JSON.stringify({ detail: "unauthorized" }), {
+        status: 401,
+      });
+    },
+  );
+  rs.stubGlobal("fetch", fetchFn);
+  return { fetchFn, requests };
+}
 
 function makeSessionStorage() {
   const values = new Map<string, string>();
@@ -32,7 +72,74 @@ function makeSSEResponse(body: string, headers?: HeadersInit) {
 }
 
 afterEach(() => {
+  setLoggingOut(false);
   rs.unstubAllGlobals();
+});
+
+test("keeps a warm-up LangGraph 401 when /auth/me confirms a valid session", async () => {
+  const location = stub401Location();
+  const { requests } = stubLangGraph401(async () => new Response("{}"));
+
+  await expect(getAPIClient(true).threads.search({})).rejects.toThrow();
+
+  expect(location.href).toBe(
+    `${TEST_ORIGIN}/workspace/chats/new?settings=security`,
+  );
+  expect(requests).toHaveLength(2);
+  expect(requestPath(requests[1]!.input)).toBe("/api/v1/auth/me");
+  expect(requests[1]!.init).toMatchObject({
+    credentials: "include",
+    cache: "no-store",
+  });
+});
+
+test("keeps the SDK's 401 when the /auth/me probe fails", async () => {
+  const location = stub401Location();
+  const { requests } = stubLangGraph401(async () => {
+    throw new Error("session probe unavailable");
+  });
+
+  await expect(getAPIClient(true).threads.search({})).rejects.toThrow();
+
+  expect(requests).toHaveLength(2);
+  expect(location.href).toBe(
+    `${TEST_ORIGIN}/workspace/chats/new?settings=security`,
+  );
+});
+
+test("redirects after /auth/me confirms an unauthenticated session", async () => {
+  const location = stub401Location();
+  stubLangGraph401(async () => new Response("", { status: 401 }));
+
+  await expect(getAPIClient(true).threads.search({})).rejects.toThrow();
+
+  expect(location.href).toBe(
+    "/login?next=%2Fworkspace%2Fchats%2Fnew%3Fsettings%3Dsecurity",
+  );
+});
+
+test("does not redirect when logout starts while the /auth/me probe is pending", async () => {
+  const location = stub401Location();
+  let probeStarted!: () => void;
+  let resolveProbe!: (response: Response) => void;
+  const started = new Promise<void>((resolve) => {
+    probeStarted = resolve;
+  });
+  const probeResponse = new Promise<Response>((resolve) => {
+    resolveProbe = resolve;
+  });
+  stubLangGraph401(() => probeResponse, probeStarted);
+
+  const request = getAPIClient(true).threads.search({});
+  await started;
+  setLoggingOut(true);
+  resolveProbe(new Response("", { status: 401 }));
+
+  await expect(request).rejects.toThrow();
+
+  expect(location.href).toBe(
+    `${TEST_ORIGIN}/workspace/chats/new?settings=security`,
+  );
 });
 
 test("identifies inactive run stream errors", () => {

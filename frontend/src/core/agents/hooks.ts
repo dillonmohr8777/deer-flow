@@ -17,7 +17,7 @@ import {
 import type { CreateAgentRequest, UpdateAgentRequest } from "./types";
 
 export function useAgentsApiEnabled() {
-  const { data, isPending, isFetching } = useQuery({
+  const { data, isPending } = useQuery({
     queryKey: ["features", "agents_api"],
     queryFn: () => fetchAgentsApiEnabled(),
     // Re-check on every mount so flipping config.yaml + revisiting the
@@ -52,7 +52,6 @@ export function useAgentsApiEnabled() {
   return {
     enabled: resolveAgentsApiEnabled(data, cached),
     isLoading: isPending,
-    isFetching,
   };
 }
 

@@ -456,7 +456,19 @@ function createCompatibleClient(isMock?: boolean): LangGraphClient {
     callerOptions: {
       fetch: async (...args: Parameters<typeof globalThis.fetch>) => {
         const response = await globalThis.fetch(...args);
-        redirectOnUnauthorized(response);
+        if (response.status === 401) {
+          try {
+            const authResponse = await globalThis.fetch("/api/v1/auth/me", {
+              credentials: "include",
+              cache: "no-store",
+            });
+            if (authResponse.status === 401) {
+              redirectOnUnauthorized(authResponse);
+            }
+          } catch {
+            // Keep the SDK's original 401 when the session probe is unavailable.
+          }
+        }
         // Let the SDK keep its HTTP error and no-retry policy for 401s.
         return response;
       },

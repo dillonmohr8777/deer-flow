@@ -87,6 +87,8 @@ test.describe("Sidebar navigation", () => {
       .locator("[data-sidebar='trigger']:visible")
       .first();
     await expect(mobileSidebarTrigger).toBeVisible();
+    const triggerIcon = mobileSidebarTrigger.locator("svg");
+    await expect(triggerIcon).toHaveClass(/lucide-panel-left-open/);
     const triggerBox = await mobileSidebarTrigger.boundingBox();
     expect(triggerBox).not.toBeNull();
     const triggerReceivesPointerEvents = await page.evaluate(
@@ -104,6 +106,7 @@ test.describe("Sidebar navigation", () => {
       triggerBox!.x + triggerBox!.width / 2,
       triggerBox!.y + triggerBox!.height / 2,
     );
+    await expect(triggerIcon).toHaveClass(/lucide-panel-left-close/);
 
     const mobileSidebar = page.locator(
       "[data-mobile='true'][data-sidebar='sidebar']",

@@ -13,6 +13,7 @@ import React, {
 } from "react";
 
 import { queryClient } from "@/components/query-client-provider";
+import { redirectOnUnauthorized, setLoggingOut } from "@/core/api/fetcher";
 
 import { isStaticWebsiteOnly } from "../static-mode";
 
@@ -63,10 +64,13 @@ export function AuthProvider({ children, initialUser }: AuthProviderProps) {
   const authGenerationRef = useRef(0);
   const refreshRequestIdRef = useRef(0);
   const router = useRouter();
-  const pathname = usePathname();
   const staticMode = isStaticWebsiteOnly();
 
   const isAuthenticated = user !== null;
+
+  useIsomorphicLayoutEffect(() => {
+    setLoggingOut(false);
+  }, []);
 
   const invalidateAuthRequests = useCallback(() => {
     authGenerationRef.current += 1;
@@ -74,8 +78,8 @@ export function AuthProvider({ children, initialUser }: AuthProviderProps) {
   }, []);
 
   /**
-   * Apply a confirmed user, fencing older refreshes and clearing cached data
-   * on identity changes. Ignore recovery responses once logout has started.
+   * Apply a confirmed user, fencing older refreshes. A different signed-in
+   * account reloads the page to discard its observers and cached data together.
    */
   const applyUser = useCallback(
     (next: User | null) => {
@@ -83,10 +87,14 @@ export function AuthProvider({ children, initialUser }: AuthProviderProps) {
       // Callers such as the offline banner already hold an authoritative user
       // response. Fence any older /auth/me request before applying it.
       invalidateAuthRequests();
-      if (currentUserRef.current?.id !== next?.id) {
-        // Query keys are not uniformly account-scoped. Remove every prior
-        // identity's response before publishing a different user to consumers.
-        queryClient.clear();
+      if (
+        currentUserRef.current &&
+        next &&
+        currentUserRef.current.id !== next.id
+      ) {
+        setIsLoading(true);
+        window.location.reload();
+        return;
       }
       currentUserRef.current = next;
       setUser(next);
@@ -125,17 +133,18 @@ export function AuthProvider({ children, initialUser }: AuthProviderProps) {
 
       if (res.ok) {
         const parsed = userSchema.safeParse(await res.json());
-        if (parsed.success && isCurrentRequest()) {
-          applyUser(parsed.data);
+        if (isCurrentRequest()) {
+          if (parsed.success) {
+            applyUser(parsed.data);
+          } else {
+            console.warn("Failed to refresh user: invalid /auth/me response");
+          }
         }
       } else if (res.status === 401) {
         // Session expired or invalid
         if (isCurrentRequest()) {
           applyUser(null);
-          // Redirect to login if on a protected route
-          if (pathname?.startsWith("/workspace")) {
-            router.push(buildLoginUrl(`${pathname}${window.location.search}`));
-          }
+          redirectOnUnauthorized(res);
         }
       }
     } catch (err) {
@@ -149,7 +158,7 @@ export function AuthProvider({ children, initialUser }: AuthProviderProps) {
         setIsLoading(false);
       }
     }
-  }, [staticMode, pathname, router, applyUser]);
+  }, [staticMode, applyUser]);
 
   /**
    * Logout - call FastAPI logout endpoint and clear local state
@@ -166,6 +175,7 @@ export function AuthProvider({ children, initialUser }: AuthProviderProps) {
     // Fence recovery without rebuilding mounted queries under a live session.
     // The workspace/auth layout's provider unmounts on navigation to home.
     logoutStartedRef.current = true;
+    setLoggingOut(true);
     invalidateAuthRequests();
     currentUserRef.current = null;
     setUser(null);
@@ -278,18 +288,10 @@ export function useRequireAuth(): AuthContextType {
     if (isStaticWebsiteOnly()) return;
 
     // Only redirect if we're sure user is not authenticated (not just loading)
-    if (!auth.isLoading && !auth.isLoggingOut && !auth.isAuthenticated) {
-      router.push(
-        buildLoginUrl(`${pathname || "/workspace"}${window.location.search}`),
-      );
+    if (!auth.isLoading && !auth.isAuthenticated) {
+      router.push(buildLoginUrl(pathname || "/workspace"));
     }
-  }, [
-    auth.isAuthenticated,
-    auth.isLoading,
-    auth.isLoggingOut,
-    router,
-    pathname,
-  ]);
+  }, [auth.isAuthenticated, auth.isLoading, router, pathname]);
 
   return auth;
 }

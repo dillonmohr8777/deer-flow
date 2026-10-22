@@ -404,11 +404,16 @@ The sidebar's Easy / Medium / Hard entry opens the existing Experience settings 
 
 AuthProvider refreshes retain the confirmed user on transport/parse failures and
 clear it only after a confirmed 401 or explicit identity change. Fence responses
-by auth generation and request order; changing user IDs must clear the singleton
-query cache before showing the next user. REST and LangGraph SDK 401s share the
-query-preserving sign-in redirect; retain the SDK's HTTP 401 no-retry behavior.
-Validate refresh bodies with `userSchema`. Logout fences both refresh and banner
-recovery, suppresses the require-auth redirect, and clears queries after its POST.
+by auth generation and request order; switching between confirmed user IDs must
+reload the page so cached responses and mounted observers are discarded together.
+Same-user refreshes stay in place. REST and refreshUser 401s share the live-URL,
+query-preserving redirect. LangGraph 401s redirect only after a separate raw
+`/auth/me` request also confirms 401; retain the SDK's HTTP 401 no-retry behavior.
+Validate refresh bodies with `userSchema` and warn on invalid 200 responses.
+Logout fences refresh/banner recovery and the shared `redirectOnUnauthorized`
+helper used by REST and LangGraph, then clears queries after its POST. A fresh
+AuthProvider mount resets that shared logout guard; `useRequireAuth` has no
+production callers.
 Regression coverage is in `auth-logout-clears-cache.dom.test.tsx` and
 `core/api/fetcher.dom.test.ts`.
 
@@ -418,7 +423,8 @@ the drawer on pathname/query navigation, except a new chat assigning its thread
 URL; desktop breakpoint changes also close it. Keep these fixes in workspace components,
 with coverage in `ui-polish-mobile.spec.ts`, rather than generated UI primitives.
 Installation help stays hidden on authentication/invitation routes; Settings
-autofocus targets the resolved role-allowed section.
+autofocus targets the resolved role-allowed section. An unresolved role uses the
+client-safe section set, so an Invite deep link falls back to Appearance.
 The shared `useAgents` list query reports loading during initial feature discovery,
 then honors the resolved/sticky Agents flag without toggling the query during
 background revalidation. Disabled flags hide cached lists. Keep the unknown-feature outage

@@ -19,6 +19,7 @@ export function isStateChangingMethod(method: string): boolean {
 }
 
 const CSRF_COOKIE_PREFIX = "csrf_token=";
+let isLoggingOut = false;
 
 /**
  * Read the ``csrf_token`` cookie set by the gateway at login.
@@ -40,8 +41,13 @@ export function readCsrfCookie(): string | null {
   return null;
 }
 
+export function setLoggingOut(loggingOut: boolean): void {
+  isLoggingOut = loggingOut;
+}
+
 export function redirectOnUnauthorized(response: Response): void {
-  if (response.status !== 401 || typeof window === "undefined") return;
+  if (response.status !== 401 || isLoggingOut || typeof window === "undefined")
+    return;
   window.location.href = buildLoginUrl(
     `${window.location.pathname}${window.location.search}`,
   );

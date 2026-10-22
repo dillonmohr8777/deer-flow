@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, rs } from "@rstest/core";
+import { QueryObserver } from "@tanstack/react-query";
 import {
   act,
   cleanup,
@@ -9,11 +10,8 @@ import {
 } from "@testing-library/react";
 
 import { queryClient } from "@/components/query-client-provider";
-import {
-  AuthProvider,
-  useAuth,
-  useRequireAuth,
-} from "@/core/auth/AuthProvider";
+import { fetch as apiFetch } from "@/core/api/fetcher";
+import { AuthProvider, useAuth } from "@/core/auth/AuthProvider";
 import type { User } from "@/core/auth/types";
 
 const router = {
@@ -21,6 +19,7 @@ const router = {
   replace: rs.fn(),
   refresh: rs.fn(),
 };
+const reload = rs.fn<() => void>();
 
 // Same seams as gateway-offline-banner.dom.test.tsx: an inert router, and the
 // SPA branch of logout (the one that soft-navigates and keeps this tab's
@@ -41,6 +40,8 @@ afterEach(() => {
 
 beforeEach(() => {
   window.history.replaceState(null, "", "/workspace/team");
+  reload.mockReset();
+  rs.spyOn(window.location, "reload").mockImplementation(reload);
   router.push.mockClear();
   router.replace.mockClear();
   router.refresh.mockClear();
@@ -86,7 +87,6 @@ function LogoutButton() {
 
 function AuthControls() {
   const auth = useAuth();
-  useRequireAuth();
 
   return (
     <div>
@@ -137,6 +137,13 @@ describe("logout", () => {
     });
 
     expect(clear).toHaveBeenCalledTimes(1);
+    expect(router.push.mock.calls).toEqual([["/"]]);
+
+    rs.mocked(globalThis.fetch).mockResolvedValue(
+      new Response(null, { status: 401 }),
+    );
+    await expect(apiFetch("/api/threads")).rejects.toThrow();
+    expect(window.location.pathname).toBe("/workspace/team");
     expect(router.push.mock.calls).toEqual([["/"]]);
   });
 
@@ -230,6 +237,7 @@ describe("logout", () => {
 
 describe("refreshUser", () => {
   it("keeps the confirmed user and cache when /auth/me returns a malformed 200 body", async () => {
+    const warn = rs.spyOn(console, "warn").mockImplementation(() => undefined);
     rs.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(JSON.stringify({ detail: "gateway response" }), {
         status: 200,
@@ -247,25 +255,34 @@ describe("refreshUser", () => {
     expect(screen.getByTestId("auth-user").textContent).toBe(USER_A.id);
     expect(queryClient.getQueryData(["team", "channels"])).toBe(channels);
     expect(router.push).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledWith(
+      "Failed to refresh user: invalid /auth/me response",
+    );
   });
 
-  it("preserves the query string on every confirmed-401 sign-in redirect", async () => {
-    window.history.replaceState(null, "", "/workspace/team?settings=security");
-    rs.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(null, { status: 401 }),
-    );
+  it("uses the live pathname and query when a pending refresh confirms 401", async () => {
+    const pendingMe = deferred<Response>();
+    rs.spyOn(globalThis, "fetch").mockReturnValue(pendingMe.promise);
     renderAuth(USER_A);
     fireEvent.click(screen.getByRole("button", { name: "Refresh user" }));
+
+    window.history.replaceState(
+      null,
+      "",
+      "/workspace/chats/new?settings=security",
+    );
+    await act(async () => {
+      pendingMe.resolve(new Response(null, { status: 401 }));
+      await pendingMe.promise;
+    });
 
     await waitFor(() =>
       expect(screen.getByTestId("auth-user").textContent).toBe("signed-out"),
     );
-    expect(router.push).toHaveBeenCalled();
-    for (const [destination] of router.push.mock.calls) {
-      expect(destination).toBe(
-        "/login?next=%2Fworkspace%2Fteam%3Fsettings%3Dsecurity",
-      );
-    }
+    expect(new URL(window.location.href).searchParams.get("next")).toBe(
+      "/workspace/chats/new?settings=security",
+    );
+    expect(router.push).not.toHaveBeenCalled();
   });
 
   it("keeps the last confirmed user when /auth/me fails at the network layer", async () => {
@@ -295,9 +312,10 @@ describe("refreshUser", () => {
       expect(screen.getByTestId("auth-loading").textContent).toBe("idle"),
     );
     expect(queryClient.getQueryData(["team", "channels"])).toBe(channels);
+    expect(reload).not.toHaveBeenCalled();
   });
 
-  it("uses a replaced server user and ignores a refresh from the previous identity", async () => {
+  it("reloads for a changed server identity and fences the previous identity's refresh", async () => {
     const pendingMe = deferred<Response>();
     rs.spyOn(globalThis, "fetch").mockImplementation(() => pendingMe.promise);
 
@@ -315,20 +333,20 @@ describe("refreshUser", () => {
         <AuthControls />
       </AuthProvider>,
     );
-    await waitFor(() =>
-      expect(screen.getByTestId("auth-user").textContent).toBe(USER_B.id),
-    );
-    expect(queryClient.getQueryData(["team", "channels"])).toBeUndefined();
-    expect(queryClient.getQueryData(["academy", "courses"])).toBeUndefined();
-    expect(queryClient.getQueryData(["threads", "inbox"])).toBeUndefined();
+    expect(reload).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId("auth-user").textContent).toBe(USER_A.id);
+    expect(screen.getByTestId("auth-loading").textContent).toBe("loading");
+    expect(queryClient.getQueryData(["team", "channels"])).toEqual([
+      { id: "channel-a" },
+    ]);
 
     await act(async () => {
       pendingMe.resolve(responseFor(USER_A));
       await pendingMe.promise;
     });
 
-    expect(screen.getByTestId("auth-user").textContent).toBe(USER_B.id);
-    expect(screen.getByTestId("auth-loading").textContent).toBe("idle");
+    expect(reload).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId("auth-user").textContent).toBe(USER_A.id);
   });
 
   it("ignores older responses when refresh requests finish out of order", async () => {
@@ -351,18 +369,16 @@ describe("refreshUser", () => {
       second.resolve(responseFor(USER_B));
       await second.promise;
     });
-    await waitFor(() =>
-      expect(screen.getByTestId("auth-user").textContent).toBe(USER_B.id),
-    );
-    expect(queryClient.getQueryData(["team", "channels"])).toBeUndefined();
+    expect(reload).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId("auth-user").textContent).toBe(USER_A.id);
 
     await act(async () => {
       first.resolve(responseFor(USER_A));
       await first.promise;
     });
 
-    expect(screen.getByTestId("auth-user").textContent).toBe(USER_B.id);
-    expect(screen.getByTestId("auth-loading").textContent).toBe("idle");
+    expect(reload).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId("auth-user").textContent).toBe(USER_A.id);
   });
 
   it("fences a pending refresh when an authoritative user is applied", async () => {
@@ -377,13 +393,40 @@ describe("refreshUser", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Apply user B" }));
-    expect(queryClient.getQueryData(["team", "channels"])).toBeUndefined();
+    expect(reload).toHaveBeenCalledTimes(1);
     await act(async () => {
       pendingMe.resolve(responseFor(USER_A));
       await pendingMe.promise;
     });
 
-    expect(screen.getByTestId("auth-user").textContent).toBe(USER_B.id);
-    expect(screen.getByTestId("auth-loading").textContent).toBe("idle");
+    expect(screen.getByTestId("auth-user").textContent).toBe(USER_A.id);
+    expect(reload).toHaveBeenCalledTimes(1);
+  });
+
+  it("reloads without detaching a mounted query or publishing the next account", async () => {
+    const pending = deferred<string[]>();
+    queryClient.setQueryData(["account-screen"], ["account-a"]);
+    const observer = new QueryObserver(queryClient, {
+      queryKey: ["account-screen"],
+      queryFn: () => pending.promise,
+    });
+    const unsubscribe = observer.subscribe(() => undefined);
+    const query = queryClient
+      .getQueryCache()
+      .find({ queryKey: ["account-screen"] });
+    renderAuth(USER_A);
+
+    fireEvent.click(screen.getByRole("button", { name: "Apply user B" }));
+
+    expect(reload).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId("auth-user").textContent).toBe(USER_A.id);
+    expect(
+      queryClient.getQueryCache().find({ queryKey: ["account-screen"] }),
+    ).toBe(query);
+    pending.resolve(["settled-read"]);
+    await waitFor(() =>
+      expect(observer.getCurrentResult().data).toEqual(["settled-read"]),
+    );
+    unsubscribe();
   });
 });

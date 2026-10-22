@@ -26,11 +26,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import { SidebarTrigger } from "@/components/ui/sidebar";
 import { ArtifactsProvider } from "@/components/workspace/artifacts";
 import { MessageList } from "@/components/workspace/messages";
 import { ThreadContext } from "@/components/workspace/messages/context";
 import { pageStyles } from "@/components/workspace/page-body";
+import { WorkspaceSidebarTrigger } from "@/components/workspace/workspace-sidebar-trigger";
 import type { Agent } from "@/core/agents";
 import {
   AgentNameCheckError,
@@ -292,7 +292,7 @@ export default function NewAgentPage() {
   const header = (
     <header className="flex shrink-0 items-center justify-between gap-3 border-b px-4 py-3">
       <div className="flex items-center gap-3">
-        <SidebarTrigger className="md:hidden" />
+        <WorkspaceSidebarTrigger className="md:hidden" />
         <Button
           variant="ghost"
           size="icon-sm"
