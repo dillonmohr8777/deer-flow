@@ -1722,4 +1722,26 @@ export interface Translations {
     reviewExpired: string;
     failed: string;
   };
+  onboarding: {
+    stepOf: string;
+    roleTitle: string;
+    prefilled: string;
+    roleLabel: string;
+    teamLabel: string;
+    clients: string;
+    continue: string;
+    toolsTitle: string;
+    toolsHint: string;
+    otherLabel: string;
+    connectTitle: string;
+    connectHint: string;
+    connected: string;
+    comingSoon: string;
+    linkSlack: string;
+    request: string;
+    requested: string;
+    skip: string;
+    skipped: string;
+    finish: string;
+  };
 }
