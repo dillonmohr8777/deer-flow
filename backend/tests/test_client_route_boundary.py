@@ -104,6 +104,7 @@ INTERNAL_CALLS = [
     ("GET", "/api/board/threads"),
     ("POST", "/api/board/threads/x/approve"),
     ("POST", "/api/client-portal/customer-workspaces"),
+    ("POST", "/api/client-portal/customer-workspaces/invitations"),
     ("POST", "/api/client-portal/threads/x/draft"),
     ("POST", "/api/client-portal/threads/x/publish"),
     ("POST", "/api/client-portal/threads/x/work"),
