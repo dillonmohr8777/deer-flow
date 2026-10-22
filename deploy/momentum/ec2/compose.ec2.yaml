@@ -11,12 +11,15 @@ services:
     environment:
       - MOMO_ADMISSION_DIR=/var/momo-admission
       - MOMO_LOBBY_NOTES_DIR=/var/momo-lobby-notes
+      # Per-person onboarding profiles (<email>.md), built outside Git. Empty folder = no pre-fill.
+      - MOMO_PEOPLE_DIR=/var/momo-people
       # The base compose sets GITHUB_TOKEN from GITHUB_PERSONAL_ACCESS_TOKEN (unset here), which would blank it.
       - GITHUB_TOKEN=${GITHUB_TOKEN:-}
     volumes:
       - /opt/momobot/data/skills:/app/skills:ro
       - /opt/momobot/data/admission:/var/momo-admission
       - /opt/momobot/data/lobby-notes:/var/momo-lobby-notes:ro
+      - /opt/momobot/data/people:/var/momo-people:ro
       - /opt/momobot/data/brand:/var/momobot-brand:ro
       - /opt/momobot/data/evals:/app/backend/.deer-flow/agency-evals:ro
       - /opt/momobot/code/momo_guard.py:/app/backend/packages/harness/deerflow/community/browser_automation/momo_guard.py:ro

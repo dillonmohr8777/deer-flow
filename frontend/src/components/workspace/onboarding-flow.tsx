@@ -15,23 +15,17 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
 
 import { ExperienceModeChooser } from "./experience-mode-chooser";
 
-export const ONBOARDING_TOOLS = [
-  ["slack", "Slack"],
-  ["gmail", "Gmail"],
-  ["google_calendar", "Google Calendar"],
-  ["google_drive", "Google Drive"],
-  ["hubspot", "HubSpot"],
-  ["google_ads", "Google Ads"],
-  ["meta_ads", "Meta Ads"],
-  ["ga4", "GA4"],
-  ["search_console", "Search Console"],
-] as const;
-
 type ToolState = {
   id: string;
   label: string;
-  status: "connected" | "requested" | "skipped" | "pending";
+  status: "connected" | "shared" | "requested" | "skipped" | "pending";
   available: boolean;
+};
+type CatalogEntry = {
+  id: string;
+  label: string;
+  group: string;
+  pinned: boolean;
 };
 export type OnboardingState = {
   required: boolean;
@@ -41,6 +35,7 @@ export type OnboardingState = {
   clients: string[];
   tools: string[];
   other: string;
+  catalog: CatalogEntry[];
   connections: ToolState[];
 };
 
@@ -129,6 +124,15 @@ export function OnboardingFlow({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [slackCode, setSlackCode] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const needle = query.trim().toLowerCase();
+  // Pinned common tools stay first; the rest of the catalog is grouped.
+  const groups = new Map<string, CatalogEntry[]>();
+  for (const entry of initial.catalog) {
+    if (needle && !entry.label.toLowerCase().includes(needle)) continue;
+    const group = entry.pinned ? copy.pinnedGroup : entry.group;
+    groups.set(group, [...(groups.get(group) ?? []), entry]);
+  }
 
   const run = async (action: () => Promise<void>) => {
     setBusy(true);
@@ -271,23 +275,43 @@ export function OnboardingFlow({
             }}
           >
             <p className="text-muted-foreground text-sm">{copy.toolsHint}</p>
-            <div className="grid grid-cols-2 gap-2">
-              {ONBOARDING_TOOLS.map(([id, label]) => (
-                <label
-                  key={id}
-                  className={cn(
-                    "flex min-h-11 items-center gap-2 rounded-md border px-3 text-sm",
-                    tools.includes(id) && "border-primary",
-                  )}
-                >
-                  <input
-                    type="checkbox"
-                    checked={tools.includes(id)}
-                    onChange={() => toggle(id)}
-                  />
-                  {label}
-                </label>
+            <input
+              type="search"
+              aria-label={copy.searchLabel}
+              placeholder={copy.searchLabel}
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              className="min-h-11 rounded-md border px-3"
+            />
+            <div className="grid max-h-[45vh] gap-3 overflow-y-auto">
+              {[...groups].map(([group, entries]) => (
+                <fieldset key={group} className="grid gap-2">
+                  <legend className="text-muted-foreground mb-1 text-xs font-medium tracking-wide uppercase">
+                    {group}
+                  </legend>
+                  <div className="grid grid-cols-2 gap-2">
+                    {entries.map((entry) => (
+                      <label
+                        key={entry.id}
+                        className={cn(
+                          "flex min-h-11 items-center gap-2 rounded-md border px-3 text-sm",
+                          tools.includes(entry.id) && "border-primary",
+                        )}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={tools.includes(entry.id)}
+                          onChange={() => toggle(entry.id)}
+                        />
+                        {entry.label}
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
               ))}
+              {groups.size === 0 && (
+                <p className="text-muted-foreground text-sm">{copy.noMatch}</p>
+              )}
             </div>
             <label className="grid gap-1 text-sm">
               {copy.otherLabel}
@@ -319,8 +343,12 @@ export function OnboardingFlow({
                 >
                   <span className="font-medium">{tool.label}</span>
                   <span className="flex flex-wrap items-center gap-2">
-                    {tool.status === "connected" ? (
-                      <span>{copy.connected}</span>
+                    {tool.status === "connected" || tool.status === "shared" ? (
+                      <span>
+                        {tool.status === "connected"
+                          ? copy.connected
+                          : copy.shared}
+                      </span>
                     ) : (
                       <>
                         {!tool.available && (

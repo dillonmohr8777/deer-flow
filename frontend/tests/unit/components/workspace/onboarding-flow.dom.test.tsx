@@ -54,6 +54,12 @@ const BASE: OnboardingState = {
   clients: ["Example Co"],
   tools: ["slack"],
   other: "",
+  catalog: [
+    { id: "slack", label: "Slack", group: "Most used", pinned: true },
+    { id: "gmail", label: "Gmail", group: "Most used", pinned: true },
+    { id: "notion", label: "Notion", group: "Knowledge", pinned: false },
+    { id: "github", label: "GitHub", group: "Development", pinned: false },
+  ],
   connections: [],
 };
 
@@ -151,6 +157,17 @@ describe("first-login onboarding", () => {
     render(<Gate />);
     fireEvent.click(await screen.findByRole("button", { name: "Continue" }));
     fireEvent.click(await screen.findByLabelText("Gmail"));
+    // The whole plugin catalog is offered, grouped, pinned tools first, and searchable.
+    const legends = [...document.querySelectorAll("legend")].map(
+      (node) => node.textContent,
+    );
+    expect(legends).toEqual(["Most used", "Knowledge", "Development"]);
+    fireEvent.change(screen.getByRole("searchbox"), {
+      target: { value: "git" },
+    });
+    expect(screen.queryByLabelText("Notion")).toBeNull();
+    expect(screen.getByLabelText("GitHub")).toBeTruthy();
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "" } });
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
 
     expect(await screen.findByText("Coming soon")).toBeTruthy();

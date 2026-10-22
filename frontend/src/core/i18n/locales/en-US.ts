@@ -2125,5 +2125,9 @@ export const enUS: Translations = {
     skip: "Skip",
     skipped: "Skipped",
     finish: "Finish and start in Easy mode",
+    pinnedGroup: "Most used",
+    searchLabel: "Search plugins",
+    noMatch: 'No plugin matches. Add it under "Anything else".',
+    shared: "Ready for everyone",
   },
 };

@@ -1984,5 +1984,9 @@ export const zhCN: Translations = {
     skip: "跳过",
     skipped: "已跳过",
     finish: "完成并以简单模式开始",
+    pinnedGroup: "最常用",
+    searchLabel: "搜索插件",
+    noMatch: "没有匹配的插件，请在“还有其他吗”中填写。",
+    shared: "所有人可用",
   },
 };

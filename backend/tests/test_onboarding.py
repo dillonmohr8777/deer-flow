@@ -179,12 +179,42 @@ async def test_connected_only_with_the_users_own_mapped_credential(api, monkeypa
 async def test_admin_request_list_shows_requested_tools_only_to_admins(api):
     client, identity, _ = api
     await client.put(f"{PATH}/profile", json={"role": "AM", "team": "Paid"})
-    await client.put(f"{PATH}/tools", json={"tools": ["gmail", "hubspot"]})
+    await client.put(f"{PATH}/tools", json={"tools": ["gmail", "hubspot"], "other": "Canva"})
     await client.post(f"{PATH}/connections/gmail", json={"status": "requested"})
     await client.post(f"{PATH}/connections/hubspot", json={"status": "skipped"})
+    await client.post(f"{PATH}/complete")
     assert (await client.get(f"{PATH}/requests")).status_code == 403
     _as(client, identity, "admin")
-    assert (await client.get(f"{PATH}/requests")).json() == [{"email": "alice@example.com", "tools": {"gmail": "requested"}, "completed_at": None}]
+    [entry] = (await client.get(f"{PATH}/requests")).json()
+    assert (entry["email"], entry["tools"], entry["other"]) == ("alice@example.com", {"gmail": "requested", "other": "requested"}, "Canva")
+    assert entry["completed_at"]
+
+
+@pytest.mark.anyio
+async def test_step_two_offers_the_whole_plugin_catalog_with_common_tools_pinned(api, monkeypatch):
+    client, _, _ = api
+    servers = {
+        "github": McpServerConfig(enabled=True, type="http", url="https://gh.example.com/mcp"),
+        "notion-user": McpServerConfig(enabled=True, type="http", url="https://notion.example.com/mcp", user_auth=McpUserScopedAuthConfig(users={"alice": "Bearer own"})),
+        "house-crm": McpServerConfig(enabled=True, type="http", url="https://crm.example.com/mcp"),
+    }
+    monkeypatch.setattr("deerflow.config.extensions_config.get_extensions_config", lambda: ExtensionsConfig(mcp_servers=servers, skills={}))
+    catalog = (await client.get(PATH)).json()["catalog"]
+    ids = [entry["id"] for entry in catalog]
+    assert ids[:9] == ["slack", "gmail", "google_calendar", "google_drive", "hubspot", "google_ads", "meta_ads", "ga4", "search_console"]
+    assert all(entry["pinned"] for entry in catalog[:9]) and not any(entry["pinned"] for entry in catalog[9:])
+    # The plugin catalog and configured MCP servers are offered too; per-user servers fold into their tool.
+    assert {"notion", "github", "atlassian", "house-crm"} <= set(ids) and "notion-user" not in ids
+    assert ids.count("hubspot") == 1
+    await client.put(f"{PATH}/profile", json={"role": "AM", "team": "Paid"})
+    assert (await client.put(f"{PATH}/tools", json={"tools": ["not-a-plugin"]})).status_code == 422
+    state = (await client.put(f"{PATH}/tools", json={"tools": ["notion", "github", "house-crm", "atlassian"]})).json()
+    assert {c["id"]: (c["status"], c["available"]) for c in state["connections"]} == {
+        "notion": ("connected", True),
+        "github": ("shared", True),
+        "house-crm": ("shared", True),
+        "atlassian": ("pending", False),
+    }
 
 
 def test_profile_loader_rejects_unsafe_or_missing_keys(people_dir, monkeypatch):

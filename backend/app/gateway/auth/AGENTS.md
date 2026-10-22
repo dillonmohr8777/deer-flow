@@ -78,6 +78,13 @@ invitation (a token's holder can set a new account's password, so a workspace
 owner/admin must not mint exec): a new account is created as exec and a plain
 `user` is upgraded; `admin` and `client` accounts keep theirs.
 
+First login for staff (`user`/`exec`/`admin`) is the required onboarding in
+`routers/onboarding.py` (`/api/v1/auth/onboarding*`, session-only, clients
+denied): role/team, daily tools, per-tool connect state, then Easy mode and a
+one-time memory seed. Its state lives in `user_preferences` rows, a tool is
+"connected" only through a real per-user credential, and `MOMO_PEOPLE_DIR`
+profiles are keyed by the caller's own email. See `docs/MOMOBOT_ONBOARDING.md`.
+
 The PAT scope catalog includes Board, Team and Academy permissions. Scopes still intersect the owner's permissions; unlisted routes remain denied by `_PAT_ROUTE_RULES`, regardless of those scopes. Do not add route admission through a scope-catalog change.
 
 System roles: `admin`, `exec` (C-suite: premium models, never admin), `user`

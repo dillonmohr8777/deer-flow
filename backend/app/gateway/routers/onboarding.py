@@ -32,8 +32,8 @@ from deerflow.runtime.user_context import get_effective_user_id
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/auth/onboarding", tags=["auth"])
 
-ToolId = Literal["slack", "gmail", "google_calendar", "google_drive", "hubspot", "google_ads", "meta_ads", "ga4", "search_console"]
-TOOL_LABELS: dict[str, str] = {
+# The common daily tools, pinned at the top of the step-2 catalog.
+PINNED_TOOLS: dict[str, str] = {
     "slack": "Slack",
     "gmail": "Gmail",
     "google_calendar": "Google Calendar",
@@ -45,13 +45,10 @@ TOOL_LABELS: dict[str, str] = {
     "search_console": "Search Console",
 }
 # Operator-configured MCP servers with a user_auth block (see docs/MOMOBOT_ONBOARDING.md).
+# Any other id is looked up as "<id>-user", then "<id>".
 MCP_SERVER_FOR_TOOL: dict[str, str] = {
-    "slack": "slack-user",
-    "gmail": "gmail-user",
     "google_calendar": "google-calendar-user",
     "google_drive": "google-drive-user",
-    "hubspot": "hubspot-user",
-    "ga4": "ga4-user",
     "search_console": "search-console-user",
 }
 ADS_TOOLS = frozenset({"google_ads", "meta_ads"})
@@ -71,9 +68,12 @@ class ProfileStep(BaseModel):
     team: Text
 
 
+ToolId = Annotated[str, StringConstraints(pattern=r"^[a-z0-9][a-z0-9_.:-]{0,127}$")]
+
+
 class ToolsStep(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    tools: list[ToolId] = Field(max_length=len(TOOL_LABELS))
+    tools: list[ToolId] = Field(max_length=200)
     other: Annotated[str, StringConstraints(strip_whitespace=True, max_length=300)] = ""
 
 
@@ -82,10 +82,18 @@ class ConnectionStep(BaseModel):
     status: Literal["requested", "skipped"]
 
 
+class CatalogEntry(BaseModel):
+    id: str
+    label: str
+    group: str
+    pinned: bool = False
+
+
 class ToolState(BaseModel):
     id: str
     label: str
-    status: Literal["connected", "requested", "skipped", "pending"]
+    # "shared": an enabled MCP server with no per-user auth, already usable by everyone.
+    status: Literal["connected", "shared", "requested", "skipped", "pending"]
     available: bool
 
 
@@ -98,6 +106,7 @@ class OnboardingState(BaseModel):
     clients: list[str] = Field(default_factory=list)
     tools: list[str] = Field(default_factory=list)
     other: str = ""
+    catalog: list[CatalogEntry] = Field(default_factory=list)
     connections: list[ToolState] = Field(default_factory=list)
 
 
@@ -105,31 +114,60 @@ def _repository() -> UserPreferencesRepository:
     return user_preferences._repository()
 
 
-def _mcp_server(tool: str):
+def _catalog() -> dict[str, CatalogEntry]:
+    """Everything a person can say they use: pinned tools, the plugin catalog, configured MCP servers."""
+    from deerflow.capabilities.catalog import load_catalog
     from deerflow.config.extensions_config import get_extensions_config
 
-    name = MCP_SERVER_FOR_TOOL.get(tool)
-    server = get_extensions_config().get_enabled_mcp_servers().get(name) if name else None
-    return server if server is not None and server.user_auth is not None and server.user_auth.enabled else None
+    entries = {tool: CatalogEntry(id=tool, label=label, group="Most used", pinned=True) for tool, label in PINNED_TOOLS.items()}
+    try:
+        manifests = load_catalog()
+    except Exception:
+        logger.warning("Plugin catalog unavailable for onboarding", exc_info=True)
+        manifests = []
+    for manifest in manifests:
+        label = manifest.name.get("en-US") or manifest.name.get("en") or next(iter(manifest.name.values()), manifest.id)
+        entries.setdefault(manifest.id, CatalogEntry(id=manifest.id, label=label, group=manifest.category.capitalize()))
+    per_user = {_server_names(tool)[0] for tool in entries}
+    for name in get_extensions_config().get_enabled_mcp_servers():
+        if name not in per_user and name not in entries:
+            entries[name] = CatalogEntry(id=name, label=name.replace("-", " ").replace("_", " ").title(), group="Connected to MomoBot")
+    return entries
 
 
-def _tool_state(tool: str, recorded: str | None, user_ids: set[str]) -> ToolState:
-    connected = False
-    if tool in ADS_TOOLS:
+def _server_names(tool: str) -> tuple[str, str]:
+    return MCP_SERVER_FOR_TOOL.get(tool, f"{tool.replace('_', '-')}-user"), tool
+
+
+def _tool_state(entry: CatalogEntry, recorded: str | None, user_ids: set[str]) -> ToolState:
+    status = None
+    available = False
+    if entry.id in ADS_TOOLS:
         from deerflow.community.ads.common import AdsToolError, load_credentials
 
         available = True
         try:
-            load_credentials(tool)
-            connected = True
+            load_credentials(entry.id)
+            status = "connected"
         except AdsToolError:
             pass
     else:
-        server = _mcp_server(tool)
-        available = server is not None
-        connected = available and any(server.user_auth.users.get(uid) for uid in user_ids)
-    status = "connected" if connected else (recorded if recorded in {"requested", "skipped"} else "pending")
-    return ToolState(id=tool, label=TOOL_LABELS[tool], status=status, available=available)
+        from deerflow.config.extensions_config import get_extensions_config
+
+        servers = get_extensions_config().get_enabled_mcp_servers()
+        for name in _server_names(entry.id):
+            server = servers.get(name)
+            if server is None:
+                continue
+            available = True
+            if server.user_auth is not None and server.user_auth.enabled:
+                status = "connected" if any(server.user_auth.users.get(uid) for uid in user_ids) else None
+            else:
+                status = "shared"
+            break
+    if status is None:
+        status = recorded if recorded in {"requested", "skipped"} else "pending"
+    return ToolState(id=entry.id, label=entry.label, status=status, available=available)
 
 
 async def _context(request: Request, expected_user: str):
@@ -145,9 +183,10 @@ def _state(owner: str, user, stored: dict) -> OnboardingState:
     saved = stored.get(PROFILE_KEY) if isinstance(stored.get(PROFILE_KEY), dict) else {}
     tools_step = stored.get(TOOLS_KEY) if isinstance(stored.get(TOOLS_KEY), dict) else {}
     recorded = stored.get(CONNECTIONS_KEY) if isinstance(stored.get(CONNECTIONS_KEY), dict) else {}
-    chosen = [tool for tool in tools_step.get("tools", []) if tool in TOOL_LABELS]
+    catalog = _catalog()
+    chosen = [tool for tool in tools_step.get("tools", []) if tool in catalog]
     # Before step 2 the profile's tools pre-select the checklist.
-    preselect = chosen if tools_step else [tool for tool in profile.tools if tool in TOOL_LABELS]
+    preselect = chosen if tools_step else [tool for tool in profile.tools if tool in catalog]
     user_ids = {owner, get_effective_user_id()}
     return OnboardingState(
         required=not stored.get(COMPLETED_KEY),
@@ -158,15 +197,17 @@ def _state(owner: str, user, stored: dict) -> OnboardingState:
         clients=profile.clients,
         tools=preselect,
         other=tools_step.get("other", ""),
-        connections=[_tool_state(tool, recorded.get(tool), user_ids) for tool in chosen],
+        catalog=list(catalog.values()),
+        connections=[_tool_state(catalog[tool], recorded.get(tool), user_ids) for tool in chosen],
     )
 
 
 async def _seed_memory(profile: PersonProfile, role: str, team: str, tools: list[str], other: str) -> None:
+    catalog = _catalog()
     facts = [f"Role at Momentum: {role}. Team: {team}."]
     if profile.clients:
         facts.append(f"Clients this person works on: {', '.join(profile.clients)}.")
-    daily = [TOOL_LABELS[tool] for tool in tools] + ([other] if other else [])
+    daily = [catalog[tool].label if tool in catalog else tool for tool in tools] + ([other] if other else [])
     if daily:
         facts.append(f"Tools this person uses every day: {', '.join(daily)}.")
     if profile.notes:
@@ -203,6 +244,9 @@ async def put_tools(body: ToolsStep, request: Request, x_expected_user_id: str =
         raise HTTPException(409, "Confirm your role and team first")
     if not body.tools and not body.other:
         raise HTTPException(422, "Pick at least one tool you use every day")
+    unknown = sorted(set(body.tools) - set(_catalog()))
+    if unknown:
+        raise HTTPException(422, f"Unknown tools: {', '.join(unknown)}")
     values = {TOOLS_KEY: {"tools": list(dict.fromkeys(body.tools)), "other": body.other}}
     await _repository().patch(owner, values)
     return _state(owner, user, {**stored, **values})
@@ -229,6 +273,9 @@ async def complete_onboarding(request: Request, x_expected_user_id: str = Header
         raise HTTPException(409, "Finish your role and daily tools first")
     # Tools the person moved past without choosing are recorded as skipped.
     recorded = {tool: "skipped" for tool in tools_step.get("tools", [])} | (stored.get(CONNECTIONS_KEY) or {})
+    # Free-text tools are not in the catalog yet, so they are always a request.
+    if tools_step.get("other"):
+        recorded["other"] = "requested"
     # Easy mode on the fast chat mode (MODE_FOR_EXPERIENCE.easy in the frontend).
     values = {CONNECTIONS_KEY: recorded, COMPLETED_KEY: datetime.now(UTC).isoformat(timespec="seconds"), "experience_mode": "easy", "mode": "flash"}
     await _repository().patch(owner, values)
@@ -244,6 +291,7 @@ async def complete_onboarding(request: Request, x_expected_user_id: str = Header
 class ConnectionRequest(BaseModel):
     email: str
     tools: dict[str, str]
+    other: str = ""
     completed_at: str | None = None
 
 
@@ -254,7 +302,7 @@ async def list_connection_requests(request: Request) -> list[ConnectionRequest]:
     async with _repository().sessions() as session:
         rows = (
             await session.execute(
-                select(UserRow.id, UserRow.email, UserPreferenceRow.key, UserPreferenceRow.value).join(UserPreferenceRow, UserPreferenceRow.user_id == UserRow.id).where(UserPreferenceRow.key.in_([CONNECTIONS_KEY, COMPLETED_KEY]))
+                select(UserRow.id, UserRow.email, UserPreferenceRow.key, UserPreferenceRow.value).join(UserPreferenceRow, UserPreferenceRow.user_id == UserRow.id).where(UserPreferenceRow.key.in_([CONNECTIONS_KEY, COMPLETED_KEY, TOOLS_KEY]))
             )
         ).all()
     by_user: dict[str, ConnectionRequest] = {}
@@ -264,4 +312,6 @@ async def list_connection_requests(request: Request) -> list[ConnectionRequest]:
             entry.tools = {tool: status for tool, status in value.items() if status == "requested"}
         elif key == COMPLETED_KEY:
             entry.completed_at = value
+        elif key == TOOLS_KEY and isinstance(value, dict):
+            entry.other = value.get("other", "")
     return sorted((entry for entry in by_user.values() if entry.tools), key=lambda entry: entry.email)

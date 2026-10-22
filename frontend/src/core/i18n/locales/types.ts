@@ -1743,5 +1743,9 @@ export interface Translations {
     skip: string;
     skipped: string;
     finish: string;
+    pinnedGroup: string;
+    searchLabel: string;
+    noMatch: string;
+    shared: string;
   };
 }
