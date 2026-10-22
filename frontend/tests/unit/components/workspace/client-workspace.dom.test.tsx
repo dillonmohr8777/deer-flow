@@ -182,11 +182,13 @@ describe("the internal sidebar", () => {
       ]) {
         expect(links, href).toContain(href);
       }
-      // Command Center and Agents are admin-only.
-      for (const href of ["/workspace/command-center", "/workspace/agents"]) {
-        if (role === "admin") expect(links, href).toContain(href);
-        else expect(links, href).not.toContain(href);
-      }
+      // Command Center is admin-only; Agents is for admins and execs.
+      if (role === "admin")
+        expect(links).toContain("/workspace/command-center");
+      else expect(links).not.toContain("/workspace/command-center");
+      if (role === "admin" || role === "exec")
+        expect(links).toContain("/workspace/agents");
+      else expect(links).not.toContain("/workspace/agents");
     },
   );
 

@@ -30,7 +30,7 @@ from deerflow.config.authorization_config import AuthorizationConfig
 from deerflow.persistence.base import Base
 from deerflow.persistence.organizations.invitation import InvitationRow
 from deerflow.persistence.organizations.model import OrganizationMemberRow, OrganizationRow
-from deerflow.persistence.user.model import UserRow
+from deerflow.persistence.user.model import UserPreferenceRow, UserRow
 
 
 def _request(*, user=None, source=None, cookies: dict[str, str] | None = None, headers: dict[str, str] | None = None) -> Request:
@@ -86,6 +86,7 @@ async def invitation_db(monkeypatch):
                     OrganizationRow.__table__,
                     OrganizationMemberRow.__table__,
                     InvitationRow.__table__,
+                    UserPreferenceRow.__table__,
                 ],
             )
         )
@@ -652,3 +653,52 @@ async def test_a_client_invitation_is_refused_with_409_while_rbac_has_no_client_
         _request(),
         Response(),
     )
+
+
+@pytest.mark.asyncio
+async def test_invitees_start_on_easy_and_a_saved_choice_wins(invitation_db, monkeypatch):
+    organization_id = await _seed_workspace(invitation_db)
+    created = await _create(monkeypatch, invitation_db, organization_id)
+    await invitations.accept_invitation(invitations.AcceptInvitationRequest(token=created.token, password="A-longer-new-password!"), _request(), Response())
+
+    await _add_user(invitation_db, "sso-user", "sso@example.com", oauth_provider="google")
+    async with invitation_db() as session:
+        session.add(UserPreferenceRow(user_id="sso-user", key="experience_mode", value="hard"))
+        await session.commit()
+    sso = await _create(monkeypatch, invitation_db, organization_id, email="sso@example.com")
+    await invitations.accept_invitation(invitations.AcceptInvitationRequest(token=sso.token), _signed_in("sso-user"), Response())
+
+    async with invitation_db() as session:
+        new_user = await session.scalar(select(UserRow).where(UserRow.email == "jesse@example.com"))
+        assert new_user is not None
+        seeded = await session.get(UserPreferenceRow, {"user_id": new_user.id, "key": "experience_mode"})
+        kept = await session.get(UserPreferenceRow, {"user_id": "sso-user", "key": "experience_mode"})
+        assert seeded is not None and seeded.value == "easy"
+        assert kept is not None and kept.value == "hard"
+
+
+@pytest.mark.asyncio
+async def test_exec_emails_join_as_exec_and_never_touch_admin_or_client(invitation_db, monkeypatch):
+    organization_id = await _seed_workspace(invitation_db)
+    await _add_user(invitation_db, "sso-boss", "boss@example.com", oauth_provider="google")
+    await _add_user(invitation_db, "admin-user", "admin@example.com", oauth_provider="google")
+    async with invitation_db() as session:
+        await session.execute(update(UserRow).where(UserRow.id == "admin-user").values(system_role="admin"))
+        await session.commit()
+    exec_config = AuthorizationConfig(invitations_frozen=False, exec_emails=["Partner@Example.com", "boss@example.com", "admin@example.com", "client@example.com"])
+    monkeypatch.setattr("app.gateway.authz._get_route_authorization_config", lambda: exec_config)
+
+    new = await _create(monkeypatch, invitation_db, organization_id, email="partner@example.com", role="admin")
+    await invitations.accept_invitation(invitations.AcceptInvitationRequest(token=new.token, password="A-longer-new-password!"), _request(), Response())
+    for user_id, email in (("sso-boss", "boss@example.com"), ("admin-user", "admin@example.com")):
+        created = await _create(monkeypatch, invitation_db, organization_id, email=email)
+        await invitations.accept_invitation(invitations.AcceptInvitationRequest(token=created.token), _signed_in(user_id), Response())
+    client = await _create(monkeypatch, invitation_db, organization_id, email="client@example.com", role="client")
+    await invitations.accept_invitation(invitations.AcceptInvitationRequest(token=client.token, password="A-longer-new-password!"), _request(), Response())
+
+    async with invitation_db() as session:
+        roles = dict((await session.execute(select(UserRow.email, UserRow.system_role))).all())
+    assert roles["partner@example.com"] == "exec"
+    assert roles["boss@example.com"] == "exec"
+    assert roles["admin@example.com"] == "admin"
+    assert roles["client@example.com"] == "client"

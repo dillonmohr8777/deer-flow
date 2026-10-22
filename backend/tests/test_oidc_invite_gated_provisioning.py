@@ -61,7 +61,7 @@ async def db(monkeypatch):
     await engine.dispose()
 
 
-async def _invite(session_factory, email: str = _INVITED, *, invitation_id: str = "invite-1") -> None:
+async def _invite(session_factory, email: str = _INVITED, *, invitation_id: str = "invite-1", role: str = "member") -> None:
     now = datetime.now(UTC)
     async with session_factory() as session:
         async with session.begin():
@@ -71,7 +71,7 @@ async def _invite(session_factory, email: str = _INVITED, *, invitation_id: str 
                     token_hash=f"digest-{invitation_id}",
                     organization_id=_WORKSPACE,
                     email=email,
-                    role="member",
+                    role=role,
                     created_by=_ISSUER,
                     expires_at=now + timedelta(hours=48),
                     created_at=now,
@@ -226,3 +226,12 @@ async def test_an_account_it_created_keeps_signing_in_after_the_invitation_is_us
     again = await get_or_provision_oidc_user("google", config, _identity(), _provider(db))
     assert again["created"] is False
     assert str(again["user"].id) == str(first["user"].id)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("roles", "expected"), [(["client"], "client"), (["client", "member"], "user"), (["member"], "user")])
+async def test_an_email_invited_only_as_a_client_is_created_as_a_client(db, roles, expected):
+    for index, role in enumerate(roles):
+        await _invite(db, invitation_id=f"invite-{index}", role=role)
+    result = await get_or_provision_oidc_user("google", _config(auto_create_requires_invitation=True), _identity(), _provider(db))
+    assert result["created"] is True and result["user"].system_role == expected

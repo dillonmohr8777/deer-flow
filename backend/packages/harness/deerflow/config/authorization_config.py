@@ -34,6 +34,10 @@ class AuthorizationConfig(BaseModel):
         default=True,
         description="Refuse creating, inspecting and accepting shared-workspace invitations (M3 decision 1). Existing memberships are unaffected.",
     )
+    exec_emails: list[str] = Field(
+        default_factory=list,
+        description="Emails that get the exec (C-suite) system role when they accept a workspace invitation. Upgrades a plain user only; never touches admin or client.",
+    )
 
 
 _authorization_config: AuthorizationConfig | None = None

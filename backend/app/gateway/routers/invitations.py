@@ -31,13 +31,15 @@ from deerflow.persistence.organizations.identity import private_organization_id,
 from deerflow.persistence.organizations.invitation import InvitationRow
 from deerflow.persistence.organizations.invitation_policy import active_shared_workspace_member, invitation_issuer_is_active
 from deerflow.persistence.organizations.model import OrganizationMemberRow, OrganizationRow
-from deerflow.persistence.user.model import UserRow
+from deerflow.persistence.user.model import UserPreferenceRow, UserRow
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/auth/invitations", tags=["auth"])
 
 _INVITATION_TTL = timedelta(hours=48)
+# The only system role an exec email upgrades; admin and client accounts keep theirs.
+_PLAIN_USER_ROLE = "user"
 
 
 class CreateInvitationRequest(BaseModel):
@@ -203,6 +205,13 @@ def _refuse_if_frozen() -> None:
         raise HTTPException(status_code=403, detail=_INVITATIONS_FROZEN_DETAIL)
 
 
+def _exec_emails() -> set[str]:
+    """Lower-cased ``authorization.exec_emails``: who joins as exec (C-suite)."""
+    from app.gateway.authz import _get_route_authorization_config
+
+    return {email.strip().lower() for email in _get_route_authorization_config().exec_emails}
+
+
 def _no_store(response: Response) -> None:
     response.headers["Cache-Control"] = "no-store"
     response.headers["Pragma"] = "no-cache"
@@ -343,6 +352,7 @@ async def accept_invitation(body: AcceptInvitationRequest, request: Request, res
                 invitation_id = invitation.id
 
                 existing = await _find_user_by_email(session, invitation.email)
+                joins_as_exec = invitation.role != "client" and invitation.email in _exec_emails()
                 if existing is not None:
                     # Sign in, then accept. An existing account (password or
                     # SSO) never accepts with a credential in this body: a
@@ -365,6 +375,8 @@ async def accept_invitation(body: AcceptInvitationRequest, request: Request, res
                         )
                     user_id = existing.id
                     token_version = existing.token_version
+                    if joins_as_exec and existing.system_role == _PLAIN_USER_ROLE:
+                        existing.system_role = "exec"
                 else:
                     _validate_new_password(body.password)
                     user_id = str(uuid4())
@@ -378,7 +390,7 @@ async def accept_invitation(body: AcceptInvitationRequest, request: Request, res
                             password_hash=password_hash,
                             # A client's own people get the client tier from day one;
                             # an existing account keeps whatever role it has.
-                            system_role="client" if invitation.role == "client" else "user",
+                            system_role="client" if invitation.role == "client" else "exec" if joins_as_exec else "user",
                             needs_setup=False,
                             token_version=0,
                             created_at=now,
@@ -429,6 +441,11 @@ async def accept_invitation(body: AcceptInvitationRequest, request: Request, res
                     workspace_member.updated_at = now
                 else:
                     granted_role = "owner"
+
+                # Invitees start on the simple experience (plain answers, guided
+                # starters) and can switch in Settings; a saved choice always wins.
+                if await session.get(UserPreferenceRow, {"user_id": user_id, "key": "experience_mode"}) is None:
+                    session.add(UserPreferenceRow(user_id=user_id, key="experience_mode", value="easy"))
     except IntegrityError:
         logger.info("Workspace invitation acceptance conflicted with an existing account or membership")
         raise HTTPException(status_code=409, detail="This invitation could not be accepted; retry from the invitation page") from None
