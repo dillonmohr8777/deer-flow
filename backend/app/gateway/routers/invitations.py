@@ -308,6 +308,7 @@ async def accept_invitation(body: AcceptInvitationRequest, request: Request, res
     organization_id: str | None = None
     invitation_id: str | None = None
     granted_role: str | None = None
+    became_exec = False
 
     try:
         async with session_factory() as session:
@@ -352,7 +353,8 @@ async def accept_invitation(body: AcceptInvitationRequest, request: Request, res
                 invitation_id = invitation.id
 
                 existing = await _find_user_by_email(session, invitation.email)
-                joins_as_exec = invitation.role != "client" and invitation.email in _exec_emails()
+                # Same lockout guard as the admin role route: never hand out a role RBAC has no block for.
+                joins_as_exec = invitation.role != "client" and invitation.email in _exec_emails() and role_has_policy("exec")
                 if existing is not None:
                     # Sign in, then accept. An existing account (password or
                     # SSO) never accepts with a credential in this body: a
@@ -377,10 +379,12 @@ async def accept_invitation(body: AcceptInvitationRequest, request: Request, res
                     token_version = existing.token_version
                     if joins_as_exec and existing.system_role == _PLAIN_USER_ROLE:
                         existing.system_role = "exec"
+                        became_exec = True
                 else:
                     _validate_new_password(body.password)
                     user_id = str(uuid4())
                     token_version = 0
+                    became_exec = joins_as_exec
                     password_hash = await hash_password_async(body.password)
                     private_id = private_organization_id(user_id)
                     session.add(
@@ -388,8 +392,9 @@ async def accept_invitation(body: AcceptInvitationRequest, request: Request, res
                             id=user_id,
                             email=invitation.email,
                             password_hash=password_hash,
-                            # A client's own people get the client tier from day one;
-                            # an existing account keeps whatever role it has.
+                            # A client's own people get the client tier from day one and
+                            # exec_emails get exec; an existing account keeps its role,
+                            # except that a plain user on exec_emails becomes exec above.
                             system_role="client" if invitation.role == "client" else "exec" if joins_as_exec else "user",
                             needs_setup=False,
                             token_version=0,
@@ -453,7 +458,8 @@ async def accept_invitation(body: AcceptInvitationRequest, request: Request, res
     assert user_id is not None and organization_id is not None
     _record_login_success(client_ip)
     _set_workspace_session(response, request, user_id, token_version, organization_id)
-    await record_audit_event(request, action="invitation.accepted", outcome="success", actor_user_id=user_id, organization_id=organization_id, target_type="invitation", target_id=invitation_id, details={"role": granted_role})
+    details = {"role": granted_role, **({"system_role": "exec"} if became_exec else {})}
+    await record_audit_event(request, action="invitation.accepted", outcome="success", actor_user_id=user_id, organization_id=organization_id, target_type="invitation", target_id=invitation_id, details=details)
     return AcceptInvitationResponse(workspace_id=organization_id)
 
 

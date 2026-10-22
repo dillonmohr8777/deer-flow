@@ -702,3 +702,16 @@ async def test_exec_emails_join_as_exec_and_never_touch_admin_or_client(invitati
     assert roles["boss@example.com"] == "exec"
     assert roles["admin@example.com"] == "admin"
     assert roles["client@example.com"] == "client"
+
+
+@pytest.mark.asyncio
+async def test_an_exec_email_stays_a_user_while_rbac_has_no_exec_block(invitation_db, monkeypatch):
+    organization_id = await _seed_workspace(invitation_db)
+    exec_config = AuthorizationConfig(invitations_frozen=False, exec_emails=["partner@example.com"])
+    monkeypatch.setattr("app.gateway.authz._get_route_authorization_config", lambda: exec_config)
+    monkeypatch.setattr(invitations, "role_has_policy", lambda role: role != "exec")
+    created = await _create(monkeypatch, invitation_db, organization_id, email="partner@example.com")
+    await invitations.accept_invitation(invitations.AcceptInvitationRequest(token=created.token, password="A-longer-new-password!"), _request(), Response())
+    async with invitation_db() as session:
+        user = await session.scalar(select(UserRow).where(UserRow.email == "partner@example.com"))
+    assert user is not None and user.system_role == "user"  # locked out of nothing: exec is withheld, not half-granted
