@@ -66,5 +66,6 @@ enforces and preserves these owner controls; unreadable records fail closed.
 installation and its four read schemas only when `private_brain_for_max` proves
 the existing trusted private MCP context and enabled policy. Keep global Max
 config, delegated metadata, models and subagents unchanged. Preserve MCP source
-checks, the selection-snapshot guard, role authorization, and prefix handling.
+checks, matching immutable private-discovery provenance, role authorization,
+and prefix handling.
 Regression: `tests/test_momobot_private_brain.py`; no provider or real Brain data.

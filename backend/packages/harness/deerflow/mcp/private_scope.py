@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from collections.abc import Mapping
 from contextvars import ContextVar, Token
 from dataclasses import dataclass
@@ -88,6 +89,22 @@ def require_private_mcp_access(server: McpServerConfig, expected: PrivateMcpCont
         raise ToolException("This MCP server requires its operator-bound private web workspace.")
 
 
+@dataclass(frozen=True)
+class _PrivateMcpProvenance:
+    server_name: str
+    configuration: str
+
+
+def _configuration_identity(server: McpServerConfig) -> str:
+    return json.dumps(server.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
+
+
+def matches_private_mcp_discovery(tool: BaseTool, server: McpServerConfig, *, server_name: str) -> bool:
+    # A backend coroutine capability, never a provider-supplied metadata claim.
+    provenance = getattr(getattr(tool, "coroutine", None), "_deerflow_private_mcp_provenance", None)
+    return isinstance(provenance, _PrivateMcpProvenance) and provenance == _PrivateMcpProvenance(server_name, _configuration_identity(server))
+
+
 def guard_private_mcp_tool(tool: BaseTool, server: McpServerConfig, *, server_name: str) -> BaseTool:
     """Check again before any adapter/pool coroutine can open a connection."""
     if server.private_scope is None:
@@ -110,6 +127,7 @@ def guard_private_mcp_tool(tool: BaseTool, server: McpServerConfig, *, server_na
         require_private_mcp_access(current, expected)
         return await tool.coroutine(runtime=runtime, **arguments)
 
+    private_call._deerflow_private_mcp_provenance = _PrivateMcpProvenance(server_name, _configuration_identity(server))
     return StructuredTool(
         name=tool.name,
         description=tool.description,

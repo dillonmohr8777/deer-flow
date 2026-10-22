@@ -63,7 +63,12 @@ enabled, scope-authorized `brain` installation and locally adds four read names:
 `tool_name_prefix` (default final names are `brain_brain_now`,
 `brain_brain_client`, `brain_brain_open_items`, `brain_brain_systems`). It keeps
 normal capability selection, authorization, and execution-time scope/revocation
-guards. Search/capture/refresh and other MCP tools are excluded. The local
+guards. Added candidates must already carry private-discovery provenance from
+the backend guard coroutine, matching the selected server policy and connection.
+Ordinary metadata cannot claim that provenance, and raw/public tools are never
+promoted by wrapping them with a private policy, including when configuration
+changes A to public transport B and returns to A during assembly.
+Search/capture/refresh and other MCP tools are excluded. The local
 selection is not written to agent configuration or delegated subagent metadata.
 Deployment still requires separate review. Before any Brain
 registration, privately verify the authenticated actor, exact private

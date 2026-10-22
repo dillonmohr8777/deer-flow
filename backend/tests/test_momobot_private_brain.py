@@ -121,11 +121,13 @@ def harness(monkeypatch, tmp_path):
     monkeypatch.setattr(cache, "_is_cache_stale", lambda: False)
     discovered = []
     transport_calls = []
+    transport_entries = []
 
     @asynccontextmanager
-    async def session(*_a, **_kw):
+    async def session(connection, **_kw):
         async def call_tool(name, arguments, **kwargs):
             transport_calls.append(name)
+            transport_entries.append((connection["url"], name))
             return CallToolResult(content=[TextContent(type="text", text=json.dumps(SNAPSHOT[name]))])
 
         async def initialize():
@@ -137,7 +139,7 @@ def harness(monkeypatch, tmp_path):
 
     def server_tools(server_name, connection, prefix):
         discovered.append(server_name)
-        names = (*READS, "brain_search", "brain_capture", "brain_refresh") if server_name == "brain" else ("brain_now", "public_query")
+        names = (*READS, "brain_search", "brain_capture", "brain_refresh", "web_search") if server_name == "brain" else ("brain_now", "public_query")
         return [
             adapter.convert_mcp_tool_to_langchain_tool(None, Tool(name=name, description="Synthetic read", inputSchema={"type": "object", "properties": {}}), connection=connection, server_name=server_name, tool_name_prefix=prefix)
             for name in names
@@ -183,7 +185,7 @@ def harness(monkeypatch, tmp_path):
         return captures[str(get_current_user().id)], config
 
     try:
-        yield SimpleNamespace(app=app, path=path, raw=raw, save=save, assemble=assemble, selected=selected, discovered=discovered, transport_calls=transport_calls, barrier=barrier)
+        yield SimpleNamespace(app=app, path=path, raw=raw, save=save, assemble=assemble, selected=selected, discovered=discovered, transport_calls=transport_calls, transport_entries=transport_entries, barrier=barrier)
     finally:
         reset_app_config()
 
@@ -199,6 +201,9 @@ async def test_private_max_reaches_real_selection_authorization_and_four_adapter
         captured, config = harness.assemble()
         actual = {tool.name: tool for tool in captured["tools"]}
         assert names <= actual.keys()
+        from deerflow.tools.mcp_metadata import is_mcp_tool
+
+        assert {name for name, tool in actual.items() if is_mcp_tool(tool)} == names
         from deerflow.agents.middlewares.skill_tool_policy_middleware import SkillToolPolicyMiddleware
 
         policy = next(m for m in captured["middleware"] if isinstance(m, SkillToolPolicyMiddleware))
@@ -310,32 +315,42 @@ def test_public_mcp_catalog_cannot_join_private_max_selection(harness, monkeypat
 
 
 @pytest.mark.asyncio
-async def test_policy_change_during_discovery_cannot_bind_unguarded_cached_brain(harness, monkeypatch):
-    from langchain_mcp_adapters import tools as adapter
-
+async def test_cold_loader_public_transport_aba_cannot_enter_private_max(harness, monkeypatch):
     import deerflow.tools
     from deerflow.mcp import cache
-    from deerflow.tools.mcp_metadata import tag_mcp_tool
+    from deerflow.mcp.private_scope import matches_private_mcp_discovery
 
-    raw = adapter.convert_mcp_tool_to_langchain_tool(
-        None, Tool(name="brain_now", description="Synthetic", inputSchema={"type": "object", "properties": {}}), connection={"transport": "http", "url": "https://brain.synthetic.invalid/mcp"}, server_name="brain", tool_name_prefix=True
-    )
-    tag_mcp_tool(raw, server_name="brain", transport="http")
-    monkeypatch.setattr(cache, "_mcp_tools_cache", [raw])
+    original = json.loads(json.dumps(harness.raw))
+    selected_server = ExtensionsConfig.from_file().mcp_servers["brain"]
+    # No preseeded tools: the real cache must discover the temporary public B.
+    monkeypatch.setattr(cache, "_cache_initialized", False)
+    monkeypatch.setattr(cache, "_mcp_tools_cache", None)
     available = deerflow.tools.get_available_tools
 
-    def change_during_discovery(**kwargs):
-        harness.raw["mcpServers"]["brain"].pop("private_scope")
+    def public_transport_then_restore(**kwargs):
+        public = harness.raw["mcpServers"]["brain"]
+        public.pop("private_scope")
+        public["url"] = "https://old-public.synthetic.invalid/mcp"
         harness.save()
-        return available(**kwargs)
+        try:
+            return available(**kwargs)
+        finally:
+            harness.raw.clear()
+            harness.raw.update(original)
+            harness.save()
 
-    monkeypatch.setattr(deerflow.tools, "get_available_tools", change_during_discovery)
+    monkeypatch.setattr(deerflow.tools, "get_available_tools", public_transport_then_restore)
     with _scope():
         captured, _config = harness.assemble()
-        tool = next(tool for tool in captured["tools"] if tool.name == "brain_brain_now")
-        with pytest.raises(ToolException, match="configuration changed"):
-            await tool.coroutine()
-    assert harness.transport_calls == []
+        assert ExtensionsConfig.from_file().mcp_servers["brain"].model_dump() == selected_server.model_dump()
+        assert cache._mcp_tools_cache
+        assert {f"brain_{name}" for name in READS}.isdisjoint(tool.name for tool in captured["tools"])
+        for candidate in cache._mcp_tools_cache:
+            # A matching JSON metadata claim cannot manufacture provenance.
+            candidate.metadata = {**(candidate.metadata or {}), "_deerflow_private_mcp_provenance": {"server_name": "brain", "configuration": selected_server.model_dump(mode="json")}}
+            assert not matches_private_mcp_discovery(candidate, selected_server, server_name="brain")
+    assert harness.discovered == ["brain"]
+    assert harness.transport_entries == []
 
 
 def test_selection_requires_existing_max_name_and_readable_config(harness):
