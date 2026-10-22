@@ -10,8 +10,18 @@ The upstream DeerFlow history stays in [CHANGELOG.md](../CHANGELOG.md).
 
 ## [Unreleased]
 
+## [momobot-prod-20261022-76744ed9] - 2026-10-22
+
 ### Changed
 
+- Momo Daily published and built to rank, Oct 22 (#235)
+- Sean's MomoBot access: Easy, exec and Google auto-join on invite, Oct 22 (#231)
+- MomoBot base and MomoBot Max client tiers, Oct 22 (#233)
+- Release script: smoke the real container names, Oct 22 (#232)
+- One-command MomoBot prod release, Oct 21 (#228)
+- Bump katex from 0.16.28 to 0.18.2 in /frontend (#224)
+- Fictional client name in tests, Oct 21 (#229)
+- Placement extension mount on EC2, Oct 21 (#226)
 - MomoBot 1Password logins, Oct 21 (#223)
 - Bump aiohttp from 3.14.3 to 3.14.4 in /workers/browser-teams/python (#221)
 - Bump certifi from 2026.7.22 to 2026.10.19 in /workers/agno-team (#220)
@@ -30,6 +40,7 @@ The upstream DeerFlow history stays in [CHANGELOG.md](../CHANGELOG.md).
 
 ### Fixed
 
+- Approvals race test on a real pool, Oct 21 (#227)
 - Broker unit snap fix, Oct 21 (#225)
 - Fictional names in public test fixtures, Oct 21 (#219)
 
