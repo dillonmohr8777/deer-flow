@@ -31,6 +31,11 @@ class MomobotMaxConfig(BaseModel):
     )
     base_model: str = Field(default="claude-haiku-5-5", description="Name of the models: entry the base MomoBot chat runs on")
     base_effort: MomobotMaxEffort = Field(default="medium", description="Reasoning effort for the base MomoBot chat")
+    staff_model: str | None = Field(
+        default=None,
+        description="Model non-admin staff run MomoBot Max on (e.g. claude-haiku-5-5); unset means `model`. Admins always get `model`.",
+    )
+    staff_effort: MomobotMaxEffort = Field(default="high", description="Reasoning effort for staff runs on `staff_model`")
 
     def unlocked_for(self, client_keys: tuple[str, ...] = ()) -> bool:
         """Whether a caller assigned to *client_keys* has MomoBot Max (any one key unlocks it)."""

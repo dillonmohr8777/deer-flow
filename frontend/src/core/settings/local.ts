@@ -21,6 +21,13 @@ export const DEFAULT_LOCAL_SETTINGS: LocalSettings = {
 export const LOCAL_SETTINGS_KEY = "deerflow.local-settings";
 export const THREAD_MODEL_KEY_PREFIX = "deerflow.thread-model.";
 
+/** Each experience level picks its matching chat mode (Oct 22: chats were stuck on a saved Ultra). */
+export const MODE_FOR_EXPERIENCE = {
+  easy: "flash",
+  medium: "pro",
+  hard: "ultra",
+} as const;
+
 export function getResolvedMode(
   mode: LocalSettings["context"]["mode"],
   supportsThinking: boolean,
