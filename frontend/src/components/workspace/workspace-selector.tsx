@@ -23,7 +23,9 @@ export function WorkspaceSelector() {
           );
         }}
       >
-        <option value="">My private workspace</option>
+        <option value="">
+          {data?.private_workspace_name ?? "My private workspace"}
+        </option>
         {data?.workspaces.map((workspace) => (
           <option key={workspace.id} value={workspace.id}>
             {workspace.name}
