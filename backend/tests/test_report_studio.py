@@ -12,7 +12,7 @@ from types import SimpleNamespace
 import httpx
 import pytest
 from fastapi import FastAPI
-from org_isolation_fixtures import USER_A, acting_as, auth_headers, org_world  # noqa: F401
+from org_isolation_fixtures import USER_A, acting_as, auth_headers, org_world, org_world_pooled  # noqa: F401
 
 from app.gateway import approval_adapters
 from app.gateway.auth_middleware import AuthMiddleware
@@ -223,14 +223,14 @@ async def test_nothing_deploys_before_approval_and_reject_never_deploys(org_worl
 
 
 @pytest.mark.asyncio
-async def test_approve_deploys_once_even_when_approved_concurrently(org_world, settings, registered):  # noqa: F811
-    out = await _propose_deploy(org_world, settings)
-    async with _http(_app(org_world)) as client:
+async def test_approve_deploys_once_even_when_approved_concurrently(org_world_pooled, settings, registered):  # noqa: F811
+    out = await _propose_deploy(org_world_pooled, settings)
+    async with _http(_app(org_world_pooled)) as client:
         h = auth_headers(USER_A)
         codes = sorted(r.status_code for r in await asyncio.gather(*[client.post(f"/api/approvals/{out['id']}/approve", headers=h) for _ in range(4)]))
-    assert codes.count(200) == 1 and len(registered.deploys) == 1
+    assert codes == [200, 409, 409, 409] and len(registered.deploys) == 1
     with acting_as(USER_A):
-        row = await PendingActionRepository(org_world).get(out["id"])
+        row = await PendingActionRepository(org_world_pooled).get(out["id"])
     assert row["status"] == "executed" and row["execution_result"]["url"].endswith("/reports/client-a/")
     assert "test-token-not-real" not in json.dumps(row, default=str)
 

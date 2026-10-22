@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 
 TOKEN_KEY = "OP_SERVICE_ACCOUNT_TOKEN"
+HOST_ONLY = {TOKEN_KEY, "OP_CLIENTS_TOKEN"}  # read by host services only, never rendered into the app env
 BROWSERBASE_REFS = {
     "BROWSERBASE_API_KEY": "op://ezfukkmm4vt7wqw6vp7l7eli3m/bjil477nt5c433kto6ys3qejw4/credential",
     "BROWSERBASE_PROJECT_ID": "op://ezfukkmm4vt7wqw6vp7l7eli3m/bjil477nt5c433kto6ys3qejw4/project_id",
@@ -71,10 +72,10 @@ def render_env(parameters, settings, resolver=resolve_browserbase):
             validate_value(value, required=True)
     for line in settings.splitlines():
         match = re.match(r"\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=", line)
-        if match and (match[1] == TOKEN_KEY or match[1] in overrides):
+        if match and (match[1] in HOST_ONLY or match[1] in overrides):
             raise ValueError("protected setting override")
     pairs = [
-        (key, overrides.get(key, value)) for key, value in pairs if key != TOKEN_KEY
+        (key, overrides.get(key, value)) for key, value in pairs if key not in HOST_ONLY
     ]
     existing = {key for key, _ in pairs}
     pairs.extend(

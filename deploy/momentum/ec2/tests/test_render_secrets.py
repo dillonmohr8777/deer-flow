@@ -66,6 +66,17 @@ class RenderSecretsTests(unittest.TestCase):
         self.assertNotIn("synthetic-token", actual)
         self.assertNotIn("OP_SERVICE_ACCOUNT_TOKEN", actual)
 
+    def test_clients_token_is_host_only(self):
+        async def unused(*args):
+            self.fail("legacy path must not load SDK")
+
+        actual = loader.render_env(
+            [["/prod/KEY", "old"], ["/prod/OP_CLIENTS_TOKEN", "ops_synthetic"]], "", unused
+        )
+        self.assertEqual(actual, "KEY='old'\n")
+        with self.assertRaises(ValueError):
+            loader.render_env([["/prod/KEY", "old"]], "OP_CLIENTS_TOKEN=x\n", unused)
+
     def test_invalid_ssm_values_keys_and_shapes_rejected(self):
         for rows in (
             [],
