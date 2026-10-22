@@ -1,0 +1,93 @@
+{
+  "schema_version": 1,
+  "bundle_set": "momobot-max-five",
+  "status": "source_only",
+  "purpose": "Five reusable role-context profiles for the existing MomoBot Max surface, with synthetic offline acceptance contracts.",
+  "agent_reference": {
+    "name": "momobot-max",
+    "expected_builtin": true,
+    "verification_note": "This reference identifies the intended existing agent only; it is not a live inventory receipt. Verify the runtime identity before application."
+  },
+  "profile_surface": {
+    "get_path": "/api/user-profile",
+    "put_path": "/api/user-profile",
+    "request_model": "UserProfileUpdateRequest",
+    "response_model": "UserProfileResponse",
+    "body_field": "content",
+    "storage_binding": "effective authenticated storage principal",
+    "prompt_limit_bytes": 4096,
+    "legacy_read_fallback": true,
+    "readback_rule": "A GET response alone does not prove per-user or tenant storage provenance because the route can fall back to legacy shared USER.md. Verify identity, workspace, effective storage principal, source path, and destination readback before any owner-approved PUT.",
+    "application_rule": "Source artifacts only. Preserve and review existing user context; never overwrite a profile automatically."
+  },
+  "authority_boundary": {
+    "context_only": true,
+    "changes_permissions": false,
+    "changes_model_or_usage_entitlement": false,
+    "creates_schedule_or_sender": false,
+    "authorizes_self_granted_access": false,
+    "external_actions_require_existing_permissions_and_action_specific_approval": true,
+    "runtime_writes_or_deployment_performed": false
+  },
+  "acceptance_cases": {
+    "path": "acceptance-cases.v1.json",
+    "sha256": "f0de4a480ac2d872e47c571f4345b153990b60ed203202cb0f425260075df879",
+    "bytes": 20049,
+    "case_count": 21,
+    "synthetic_only": true,
+    "execution_status": "fixture_contracts_only_not_agent_runs"
+  },
+  "repository_sources": [
+    {"path": "backend/app/gateway/routers/agents.py", "symbols": ["AgentResponse", "UserProfileUpdateRequest", "UserProfileResponse", "get_user_profile", "update_user_profile"]},
+    {"path": "backend/packages/harness/deerflow/agents/lead_agent/prompt.py", "symbols": ["_USER_PROFILE_MAX_BYTES"]}
+  ],
+  "roles": [
+    {
+      "role_id": "dillon-mohr",
+      "identity": "Dillon Mohr",
+      "profile": {"path": "profiles/dillon-mohr.v1.md", "sha256": "5c7f377654fe98ec584f899d4935ed8481827917c52d0228250627120f12e955", "bytes": 1246},
+      "workspace_policy": {"kind": "verified_private_user", "required_authenticated_identity": "Dillon Mohr", "require_effective_private_storage_principal": true, "require_source_path_readback": true, "stop_if_legacy_shared_fallback_or_workspace_identity_is_uncertain": true},
+      "source_refs": [
+        {"path": "Momo Brain/People/Dillon Mohr.md", "line_start": 84, "line_end": 86, "purpose": "Identity and general role context only; no client facts copied."}
+      ]
+    },
+    {
+      "role_id": "mac-frederick",
+      "identity": "Mac Frederick",
+      "profile": {"path": "profiles/mac-frederick.v1.md", "sha256": "1bb43eb0ccd8e8c7f05915f2c86274b940f70a973d5376b148b73c2474796959", "bytes": 1228},
+      "workspace_policy": {"kind": "verified_private_user", "required_authenticated_identity": "Mac Frederick", "require_effective_private_storage_principal": true, "require_source_path_readback": true, "stop_if_legacy_shared_fallback_or_workspace_identity_is_uncertain": true},
+      "source_refs": [
+        {"path": "Momo Brain/People/Mac Frederick.md", "line_start": 55, "line_end": 58, "purpose": "Identity and general role context only; no client facts copied."}
+      ]
+    },
+    {
+      "role_id": "jason-fallon",
+      "identity": "Jason Fallon",
+      "profile": {"path": "profiles/jason-fallon.v1.md", "sha256": "6f46bbed34e13fa9b258d4795ebffea8c5eae0437dd8cdd658ce941b4f4a1fb0", "bytes": 1386},
+      "workspace_policy": {"kind": "verified_private_user", "required_authenticated_identity": "Jason Fallon", "require_effective_private_storage_principal": true, "require_source_path_readback": true, "stop_if_legacy_shared_fallback_or_workspace_identity_is_uncertain": true},
+      "private_binding_gate": "Resolve the expected CRM portal identity privately for this account and compare it to a fresh connector readback. Do not store account IDs or credentials in this public bundle.",
+      "source_refs": [
+        {"path": "Momo Brain/People/Jason Fallon.md", "line_start": 15, "line_end": 18, "purpose": "Identity and general role context only; no client facts copied."}
+      ]
+    },
+    {
+      "role_id": "melissa-silber",
+      "identity": "Melissa Silber",
+      "profile": {"path": "profiles/melissa-silber.v1.md", "sha256": "3ab25bfaf5c90068d77a92e35e1fe59f18aefc5f981c5a1c961c163a1e809c60", "bytes": 1277},
+      "workspace_policy": {"kind": "verified_private_user", "required_authenticated_identity": "Melissa Silber", "require_effective_private_storage_principal": true, "require_source_path_readback": true, "stop_if_legacy_shared_fallback_or_workspace_identity_is_uncertain": true},
+      "source_refs": [
+        {"path": "Momo Brain/People/Melissa Silber.md", "line_start": 31, "line_end": 34, "purpose": "Identity and general role context only; no client facts copied."}
+      ]
+    },
+    {
+      "role_id": "vhin-justin-grace",
+      "identity": "VHIN Cares workflow for Justin Micheau + Grace Slagle",
+      "profile": {"path": "profiles/vhin-justin-grace.v1.md", "sha256": "a21169510641691eae66ff051a066d34c4a77f2c7ad9d0d37f366a78faec0d1f", "bytes": 1652},
+      "workspace_policy": {"kind": "verified_authorized_tenant", "required_tenant": "VHIN Cares", "authorized_members": ["Justin Micheau", "Grace Slagle"], "require_tenant_membership_readback": true, "require_effective_tenant_only_storage_principal": true, "require_source_path_readback": true, "stop_if_legacy_shared_fallback_or_tenant_identity_is_uncertain": true, "never_use_global_user_profile_or_dillon_private_workspace": true},
+      "source_refs": [
+        {"path": "Momo Brain/People/Justin Micheau.md", "line_start": 13, "line_end": 16, "purpose": "Identity and role context only; no case facts copied."},
+        {"path": "12_Brain/05_Projects/MomoBot Cloud and VHIN Max Plus/PLAN.md", "line_start": 31, "line_end": 61, "purpose": "Workflow, tenant isolation, and human review gates; no fee or private case details copied."}
+      ]
+    }
+  ]
+}
