@@ -467,3 +467,20 @@
   [data-slot="tabs-trigger"]:not([data-state="active"]):hover {
   color: var(--foreground);
 }
+
+/* Same voices in dark (Oct 22): the font system does not change with the
+   theme, so body text stays Nunito Sans and dialog titles stay Fraunces. */
+:is(
+  :root.dark[data-treatment="paper"],
+  :root.dark [data-workspace-shell][data-treatment="paper"]
+) {
+  font-family: var(--m-font-text);
+}
+:is(
+    :root.dark[data-treatment="paper"],
+    :root.dark [data-workspace-shell][data-treatment="paper"]
+  )
+  [data-slot="dialog-title"] {
+  font-family: var(--m-font-serif);
+  font-weight: 700;
+}
