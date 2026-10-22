@@ -5,6 +5,7 @@ import { fetch } from "@/core/api/fetcher";
 type WorkspaceList = {
   workspaces: { id: string; name: string; role: string }[];
   active_workspace_id: string | null;
+  private_workspace_name?: string | null;
 };
 
 export function useWorkspaceSelection() {
