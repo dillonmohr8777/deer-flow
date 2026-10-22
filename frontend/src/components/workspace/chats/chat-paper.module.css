@@ -11,14 +11,11 @@
  * depends on utility class names.
  */
 
-/* Thread header: the canvas itself (cream and the shell's grain, whose tiles
-   line up because the header starts at the surface's corner) over one
-   hairline. Opaque, since the record scrolls under it. No blur, no shadow. */
+/* Thread header: the cream canvas itself over one hairline. Opaque, since the record scrolls under it. No blur, no shadow. */
 :global(:root:not(.dark) [data-treatment="paper"])
   .surface
   :global([data-chat-header]) {
   background-color: var(--paper-cream);
-  background-image: var(--paper-grain);
   box-shadow: none;
   backdrop-filter: none;
 }

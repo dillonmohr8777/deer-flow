@@ -1,12 +1,6 @@
 import type { Message } from "@langchain/langgraph-sdk";
 import { afterEach, beforeEach, describe, expect, it, rs } from "@rstest/core";
-import {
-  act,
-  cleanup,
-  render,
-  renderHook,
-  screen,
-} from "@testing-library/react";
+import { cleanup, render, renderHook, screen } from "@testing-library/react";
 import type { ReactElement } from "react";
 
 import { MessageGroup } from "@/components/workspace/messages/message-group";
@@ -221,7 +215,6 @@ describe("useDeepReasoningTracker", () => {
       deep: true,
     });
     expect(result.current.liveId).toBe("ai-2");
-    expect(result.current.joltId).toBe("ai-2");
     const live = result.current;
 
     // More reasoning streams in: the state object does not churn per chunk.
@@ -328,7 +321,7 @@ describe("useDeepReasoningTracker", () => {
     expect(result.current.liveId).toBe("ai-6");
   });
 
-  it("times the receipt from the live start and jolts once per run", () => {
+  it("times the receipt from the live start", () => {
     let state = initialDeepReasoningTracker([human], false, true);
     state = advanceDeepReasoningTracker(state, [human], true, true, () => 0);
     state = advanceDeepReasoningTracker(
@@ -352,7 +345,6 @@ describe("useDeepReasoningTracker", () => {
     );
     expect(state.receipts.get("ai-7")).toBe(7);
 
-    // A second reasoning phase in the same run gets no second jolt.
     state = advanceDeepReasoningTracker(
       state,
       [human, reasoningMessage("ai-8")],
@@ -361,17 +353,15 @@ describe("useDeepReasoningTracker", () => {
       () => 9_000,
     );
     expect(state.liveId).toBe("ai-8");
-    expect(state.joltId).toBe("ai-7");
   });
 
-  it("arriving mid-run is not a start: no jolt, and an unknown duration", () => {
+  it("arriving mid-run is not a start: an unknown duration", () => {
     let state = initialDeepReasoningTracker(
       [human, reasoningMessage("ai-9")],
       true,
       true,
     );
     expect(state.liveId).toBe("ai-9");
-    expect(state.joltId).toBeNull();
     state = advanceDeepReasoningTracker(
       state,
       [human, reasoningMessage("ai-9", { content: "Answer." })],
@@ -383,16 +373,9 @@ describe("useDeepReasoningTracker", () => {
 });
 
 describe("DeepReasoning", () => {
-  it("streams real text once in the accessibility tree; print layers are hidden duplicates", () => {
+  it("streams the real text once, with no duplicate glitch layers or view-wide shimmer", () => {
     const { container } = render(
-      withI18n(
-        <DeepReasoning
-          messageId="block-a11y"
-          reasoning={REASONING}
-          live
-          seconds={null}
-        />,
-      ),
+      withI18n(<DeepReasoning reasoning={REASONING} live seconds={null} />),
     );
     const block = container.querySelector("details")!;
     expect(block.open).toBe(true);
@@ -400,74 +383,36 @@ describe("DeepReasoning", () => {
     expect(block.dataset.motion).toBe("on");
     expect(accessibleText(block)).toContain("Thinking deeply");
     expect(occurrences(accessibleText(block), REASONING)).toBe(1);
-    // The cyan drum duplicates the text, but only as aria-hidden print.
-    expect(occurrences(block.textContent, REASONING)).toBe(2);
-    expect(
-      block.querySelector(`.${styles.ghost}`)?.getAttribute("aria-hidden"),
-    ).toBe("true");
-    // Labels across the view shimmer only while it streams.
-    expect(document.documentElement.classList.contains(styles.live!)).toBe(
-      true,
-    );
-    cleanup();
-    expect(document.documentElement.classList.contains(styles.live!)).toBe(
-      false,
-    );
+    // Oct 22: no misregistered ghost copy of the reasoning.
+    expect(occurrences(block.textContent, REASONING)).toBe(1);
   });
 
   for (const [name, setting] of [
     ["reduced motion", { reducedMotion: true }],
     ["the appearance motion switch off", { motion: false }],
   ] as const) {
-    it(`under ${name}: a static label, a plain block, no jolt`, () => {
+    it(`under ${name}: a static label and a plain block`, () => {
       motion(setting);
       const { container } = render(
-        withI18n(
-          <DeepReasoning
-            messageId={`block-static-${name}`}
-            reasoning={REASONING}
-            live
-            jolt
-            seconds={null}
-          />,
-        ),
+        withI18n(<DeepReasoning reasoning={REASONING} live seconds={null} />),
       );
       const block = container.querySelector("details")!;
       expect(block.dataset.motion).toBe("off");
       expect(screen.getByText("Thinking deeply")).toBeTruthy();
       expect(occurrences(block.textContent, REASONING)).toBe(1);
-      for (const layer of [
-        styles.ghost,
-        styles.titleGhost,
-        styles.hot,
-        styles.caret,
-      ]) {
+      for (const layer of [styles.hot, styles.caret]) {
         expect(block.querySelector(`.${layer}`)).toBeNull();
       }
-      expect(document.querySelector(`.${styles.overclock}`)).toBeNull();
-      expect(document.documentElement.classList.contains(styles.live!)).toBe(
-        false,
-      );
     });
   }
 
   it("keeps the acid on the glyphs only: no box-level sweep, rain, halftone or registration marks", () => {
     const { container } = render(
-      withI18n(
-        <DeepReasoning
-          messageId="block-glyph-only"
-          reasoning={REASONING}
-          live
-          seconds={null}
-        />,
-      ),
+      withI18n(<DeepReasoning reasoning={REASONING} live seconds={null} />),
     );
     const block = container.querySelector("details")!;
     expect(block.dataset.motion).toBe("on");
-    // Glyph-level misregistration and streaming stay: the cyan drum, the
-    // misregistered label duplicate, the hot printing word and its caret.
-    expect(block.querySelector(`.${styles.ghost}`)).not.toBeNull();
-    expect(block.querySelector(`.${styles.titleGhost}`)).not.toBeNull();
+    // Streaming stays calm: the hot printing word and its caret only.
     expect(block.querySelector(`.${styles.hot}`)).not.toBeNull();
     expect(block.querySelector(`.${styles.caret}`)).not.toBeNull();
     // Box-level print layers are gone from the module entirely, not merely
@@ -483,12 +428,7 @@ describe("DeepReasoning", () => {
   it("settles into a calm block with a Thought for receipt", () => {
     const { container, rerender } = render(
       withI18n(
-        <DeepReasoning
-          messageId="block-settled"
-          reasoning={REASONING}
-          live={false}
-          seconds={7}
-        />,
+        <DeepReasoning reasoning={REASONING} live={false} seconds={7} />,
       ),
     );
     const block = container.querySelector("details")!;
@@ -503,195 +443,10 @@ describe("DeepReasoning", () => {
     // An unknown duration is left out, never shown as 0.
     rerender(
       withI18n(
-        <DeepReasoning
-          messageId="block-settled"
-          reasoning={REASONING}
-          live={false}
-          seconds={null}
-        />,
+        <DeepReasoning reasoning={REASONING} live={false} seconds={null} />,
       ),
     );
     expect(block.textContent).not.toContain("Thought for");
-  });
-
-  describe("the overclock jolt", () => {
-    const rect = {
-      x: 20,
-      y: 40,
-      left: 20,
-      top: 40,
-      width: 90,
-      height: 18,
-      right: 110,
-      bottom: 58,
-      toJSON: () => ({}),
-    } as DOMRect;
-    let label: HTMLElement;
-    let restore: () => void;
-
-    beforeEach(() => {
-      label = document.createElement("h2");
-      label.textContent = "Kestrel September report";
-      document.body.append(label);
-      const rangeRect = Object.getOwnPropertyDescriptor(
-        Range.prototype,
-        "getBoundingClientRect",
-      );
-      const pointHit = Object.getOwnPropertyDescriptor(
-        document,
-        "elementFromPoint",
-      );
-      Object.defineProperty(Range.prototype, "getBoundingClientRect", {
-        configurable: true,
-        value: () => rect,
-      });
-      Object.defineProperty(document, "elementFromPoint", {
-        configurable: true,
-        value: () => label,
-      });
-      rs.spyOn(Element.prototype, "getBoundingClientRect").mockReturnValue(
-        rect,
-      );
-      restore = () => {
-        label.remove();
-        if (rangeRect) {
-          Object.defineProperty(
-            Range.prototype,
-            "getBoundingClientRect",
-            rangeRect,
-          );
-        }
-        if (pointHit) {
-          Object.defineProperty(document, "elementFromPoint", pointHit);
-        } else {
-          delete (document as { elementFromPoint?: unknown }).elementFromPoint;
-        }
-      };
-      rs.useFakeTimers();
-    });
-
-    afterEach(() => restore());
-
-    it("scrambles an aria-hidden overlay once, never the page's own text, and clears in 520ms", () => {
-      const view = render(
-        withI18n(
-          <DeepReasoning
-            messageId="block-jolt"
-            reasoning={REASONING}
-            live
-            jolt
-            seconds={null}
-          />,
-        ),
-      );
-      const overlay = document.querySelector<HTMLElement>(
-        `.${styles.overclock}`,
-      );
-      expect(overlay?.getAttribute("aria-hidden")).toBe("true");
-      expect(overlay?.children).toHaveLength(3);
-      // The last frame resolves to the real words.
-      expect(overlay?.lastElementChild?.textContent).toBe(
-        "KestrelSeptemberreport",
-      );
-      expect(document.documentElement.classList.contains(styles.jolting!)).toBe(
-        true,
-      );
-      // The page's text nodes, and the reasoning, are never rewritten.
-      expect(label.textContent).toBe("Kestrel September report");
-      expect(overlay?.textContent).not.toContain("Goal:");
-
-      act(() => {
-        rs.advanceTimersByTime(520);
-      });
-      expect(document.querySelector(`.${styles.overclock}`)).toBeNull();
-      expect(document.documentElement.classList.contains(styles.jolting!)).toBe(
-        false,
-      );
-
-      // Remounted while still live (scrolled away and back): no second jolt.
-      view.unmount();
-      render(
-        withI18n(
-          <DeepReasoning
-            messageId="block-jolt"
-            reasoning={REASONING}
-            live
-            jolt
-            seconds={null}
-          />,
-        ),
-      );
-      expect(document.querySelector(`.${styles.overclock}`)).toBeNull();
-    });
-
-    it("stops at once when the reasoning ends mid-jolt", () => {
-      const view = render(
-        withI18n(
-          <DeepReasoning
-            messageId="block-jolt-cut"
-            reasoning={REASONING}
-            live
-            jolt
-            seconds={null}
-          />,
-        ),
-      );
-      expect(document.querySelector(`.${styles.overclock}`)).not.toBeNull();
-      view.rerender(
-        withI18n(
-          <DeepReasoning
-            messageId="block-jolt-cut"
-            reasoning={REASONING}
-            live={false}
-            seconds={1}
-          />,
-        ),
-      );
-      expect(document.querySelector(`.${styles.overclock}`)).toBeNull();
-      expect(document.documentElement.classList.contains(styles.jolting!)).toBe(
-        false,
-      );
-    });
-
-    it("keeps the glyphs on their scroll container while the stream scrolls it", () => {
-      const scroller = document.createElement("div");
-      document.body.append(scroller);
-      scroller.append(label);
-      Object.defineProperty(scroller, "scrollHeight", { value: 2000 });
-      Object.defineProperty(scroller, "clientHeight", { value: 600 });
-      const computed = window.getComputedStyle.bind(window);
-      rs.spyOn(window, "getComputedStyle").mockImplementation(
-        (element, pseudo) =>
-          element === scroller
-            ? ({
-                overflowX: "visible",
-                overflowY: "auto",
-              } as CSSStyleDeclaration)
-            : computed(element, pseudo),
-      );
-      render(
-        withI18n(
-          <DeepReasoning
-            messageId="block-jolt-scroll"
-            reasoning={REASONING}
-            live
-            jolt
-            seconds={null}
-          />,
-        ),
-      );
-      // frame > clip (the scroller's box) > layer that follows its scroll
-      const layer = document.querySelector<HTMLElement>(
-        `.${styles.frameA} > div > div`,
-      );
-      expect(layer?.textContent).toHaveLength("KestrelSeptemberreport".length);
-      expect(layer?.parentElement?.style.clipPath).toContain("inset(");
-
-      scroller.scrollTop = 40;
-      scroller.dispatchEvent(new Event("scroll"));
-      expect(layer?.style.transform).toBe("translate(0px, -40px)");
-      scroller.remove();
-    });
   });
 });
 

@@ -2,7 +2,7 @@
 
 import type { Message } from "@langchain/langgraph-sdk";
 import { ChevronDownIcon } from "lucide-react";
-import { createContext, useEffect, useState } from "react";
+import { createContext, useState } from "react";
 
 import { brandMotionAllowed } from "@/components/workspace/command-center/appearance-preferences";
 import { useWorkspaceAppearance } from "@/components/workspace/command-center/appearance-provider";
@@ -23,11 +23,10 @@ import styles from "./ultra-thinking.module.css";
  * streams, then a calm settled block with a "Thought for Ns" receipt.
  * Approved prototype: block-shots/2026-09-22-design/acid (variants B and D).
  *
- * The acid lives in the glyphs only: the cyan drum (misregistered duplicate
- * text), the hot/caret print, and the one-time overclock jolt (scrambled
- * glyph overlay). 2026-09-23: the block-level print layers (scanline sweep,
- * token rain, background halftone/grain, animated registration marks) were
- * removed; nothing but text moves or misregisters now.
+ * 2026-10-22 (Dillon: "no weird static ... no choppiness"): the glitch
+ * motion is gone (the screen-wide overclock scramble, the label jitter and
+ * the misregistered ghost text). Only the reasoning text prints in, with a
+ * soft caret.
  */
 
 const DEEP_EFFORTS: ReadonlySet<string> = new Set(["high", "xhigh"]);
@@ -90,10 +89,6 @@ export type DeepReasoningTracker = {
   receipts: ReadonlyMap<string, number | null>;
   /** This run has streamed deep reasoning (drives the one announcement). */
   started: boolean;
-  /** The one live start per run that gets the overclock jolt. */
-  joltId: string | null;
-  /** No jolt chosen yet for a run that began while this list was mounted. */
-  joltArmed: boolean;
 };
 
 const NO_RECEIPTS: ReadonlyMap<string, number | null> = new Map();
@@ -111,9 +106,6 @@ export function initialDeepReasoningTracker(
     since: null,
     receipts: NO_RECEIPTS,
     started: liveId !== null,
-    // Arriving mid-run (a reload, a thread switch) is not a start: no jolt.
-    joltId: null,
-    joltArmed: !isLoading,
   };
 }
 
@@ -133,8 +125,6 @@ export function advanceDeepReasoningTracker(
           loading: true,
           deep,
           started: false,
-          joltId: null,
-          joltArmed: true,
         }
       : { ...next, loading: false };
   }
@@ -155,8 +145,6 @@ export function advanceDeepReasoningTracker(
       since: liveId === null ? null : time,
       receipts,
       started: next.started || liveId !== null,
-      joltId: liveId !== null && next.joltArmed ? liveId : next.joltId,
-      joltArmed: next.joltArmed && liveId === null,
     };
   }
   return next;
@@ -201,7 +189,6 @@ export function deepReasoningFor(
       messageId,
       live: true,
       seconds: null,
-      jolt: state.joltId === messageId,
     };
   }
   if (!state.receipts.has(messageId)) {
@@ -211,7 +198,6 @@ export function deepReasoningFor(
     messageId,
     live: false,
     seconds: state.receipts.get(messageId) ?? null,
-    jolt: false,
   };
 }
 
@@ -233,23 +219,15 @@ export function DeepReasoningStatus({
   );
 }
 
-// ponytail: per-tab memory of jolts already played, one id per deep run;
-// keeps a remounted live block (scrolled away and back) from jolting twice.
-const jolted = new Set<string>();
-
 export function DeepReasoning({
-  messageId,
   reasoning,
   live,
   seconds,
-  jolt = false,
   framed = true,
 }: {
-  messageId: string;
   reasoning: string;
   live: boolean;
   seconds: number | null;
-  jolt?: boolean;
   framed?: boolean;
 }) {
   const { t } = useI18n();
@@ -262,22 +240,6 @@ export function DeepReasoning({
       visible,
       inView: true,
     });
-
-  useEffect(() => {
-    if (!motion) {
-      return;
-    }
-    const root = document.documentElement;
-    root.classList.add(styles.live!);
-    return () => root.classList.remove(styles.live!);
-  }, [motion]);
-
-  useEffect(() => {
-    if (!motion || !jolt || jolted.has(messageId)) {
-      return;
-    }
-    return overclock(() => jolted.add(messageId));
-  }, [jolt, messageId, motion]);
 
   const duration =
     !live && seconds !== null
@@ -299,11 +261,6 @@ export function DeepReasoning({
           <span>
             {live ? t.runDuration.thinkingDeeply : t.runDuration.reasoning}
           </span>
-          {motion && (
-            <span className={styles.titleGhost} aria-hidden="true">
-              {t.runDuration.thinkingDeeply}
-            </span>
-          )}
         </span>
         {duration && (
           <span className={styles.receipt} data-receipt="">
@@ -318,11 +275,6 @@ export function DeepReasoning({
             <p className={styles.text}>
               <Ink text={reasoning} printing={motion} />
             </p>
-            {motion && (
-              <p className={styles.ghost} aria-hidden="true">
-                <Ink text={reasoning} printing />
-              </p>
-            )}
           </div>
         </div>
       </div>
@@ -330,7 +282,7 @@ export function DeepReasoning({
   );
 }
 
-/** The motion vocabulary's working state: three squares ticking in steps. */
+/** The motion vocabulary's working state: one dot gliding across three squares. */
 export function WorkingSquares() {
   return (
     <span className={styles.squares} aria-hidden="true">
@@ -357,259 +309,5 @@ function Ink({ text, printing }: { text: string; printing: boolean }) {
       <span className={styles.hot}>{text.slice(cut)}</span>
       <span className={styles.caret} aria-hidden="true" />
     </>
-  );
-}
-
-const JOLT_MS = 520;
-const MAX_WORDS = 600;
-const MAX_MEASURES = 4000;
-const GLYPHS =
-  "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz0123456789#%&*+=<>/[]{}";
-const UNTOUCHED =
-  "[data-ultra-block], input, textarea, select, [contenteditable]";
-
-type OverclockWord = {
-  text: string;
-  rect: DOMRect;
-  style: CSSStyleDeclaration;
-  /** Scroll containers around the word, innermost first. */
-  scrollers: readonly Element[];
-};
-
-type ScrollFollow = {
-  scroller: Element;
-  top: number;
-  left: number;
-  layer: HTMLElement;
-};
-
-/**
- * Variant D's one-shot overclock: every visible word scrambles, misregisters
- * and resolves to itself in 520ms. The page's own text nodes are never
- * rewritten: an aria-hidden overlay carries three frames of glyphs while CSS
- * hides the real glyphs by fill colour, so nothing reflows. Words are
- * measured once; CSS steps the frames on opacity and transform. Returns a
- * cancel that removes everything at once.
- */
-export function overclock(onFinish?: () => void): () => void {
-  const words = visibleWords();
-  const overlay = document.createElement("div");
-  overlay.className = styles.overclock!;
-  overlay.setAttribute("aria-hidden", "true");
-  // The conversation keeps scrolling to follow the stream during the jolt,
-  // so glyphs ride with their scroll containers: clipped to each one and
-  // shifted by however far it has scrolled since the words were measured.
-  const follows: ScrollFollow[] = [];
-  for (const [frameClass, scramble] of [
-    [styles.frameA, "all"],
-    [styles.frameB, "some"],
-    [styles.frameC, "none"],
-  ] as const) {
-    const frame = document.createElement("div");
-    frame.className = frameClass!;
-    const layers = new Map<Element, HTMLElement>();
-    for (const word of words) {
-      layerFor(frame, word.scrollers, layers, follows).append(
-        glyphSpan(word, scramble),
-      );
-    }
-    overlay.append(frame);
-  }
-  const follow = () => {
-    for (const { scroller, top, left, layer } of follows) {
-      layer.style.transform = `translate(${left - scroller.scrollLeft}px, ${top - scroller.scrollTop}px)`;
-    }
-  };
-  const root = document.documentElement;
-  document.body.append(overlay);
-  root.classList.add(styles.jolting!);
-  document.addEventListener("scroll", follow, { capture: true, passive: true });
-  let done = false;
-  const stop = () => {
-    if (done) {
-      return;
-    }
-    done = true;
-    window.clearTimeout(timer);
-    document.removeEventListener("scroll", follow, { capture: true });
-    overlay.remove();
-    root.classList.remove(styles.jolting!);
-  };
-  const timer = window.setTimeout(() => {
-    stop();
-    onFinish?.();
-  }, JOLT_MS);
-  return stop;
-}
-
-/** A clip and a moving layer per scroll container, outermost first. */
-function layerFor(
-  frame: HTMLElement,
-  scrollers: readonly Element[],
-  layers: Map<Element, HTMLElement>,
-  follows: ScrollFollow[],
-) {
-  let container = frame;
-  for (const scroller of [...scrollers].reverse()) {
-    let layer = layers.get(scroller);
-    if (!layer) {
-      const box = scroller.getBoundingClientRect();
-      const clip = document.createElement("div");
-      clip.style.clipPath = `inset(${box.top}px ${window.innerWidth - box.right}px ${window.innerHeight - box.bottom}px ${box.left}px)`;
-      layer = document.createElement("div");
-      clip.append(layer);
-      container.append(clip);
-      layers.set(scroller, layer);
-      follows.push({
-        scroller,
-        top: scroller.scrollTop,
-        left: scroller.scrollLeft,
-        layer,
-      });
-    }
-    container = layer;
-  }
-  return container;
-}
-
-function glyphSpan(
-  { text, rect, style }: OverclockWord,
-  scramble: "all" | "some" | "none",
-) {
-  const span = document.createElement("span");
-  const characters = [...text];
-  span.textContent =
-    scramble === "none"
-      ? text
-      : characters
-          .map((character, index) =>
-            /[\p{L}\p{N}]/u.test(character) &&
-            (scramble === "all" || Math.random() < index / characters.length)
-              ? GLYPHS[Math.floor(Math.random() * GLYPHS.length)]
-              : character,
-          )
-          .join("");
-  Object.assign(span.style, {
-    left: `${rect.left}px`,
-    top: `${rect.top}px`,
-    lineHeight: `${rect.height}px`,
-    fontFamily: style.fontFamily,
-    fontSize: style.fontSize,
-    fontStyle: style.fontStyle,
-    fontWeight: style.fontWeight,
-    letterSpacing: style.letterSpacing,
-    textTransform: style.textTransform,
-    ...(scramble === "none" ? {} : { color: style.color }),
-  });
-  return span;
-}
-
-/**
- * Words drawn on screen right now, topmost only, capped.
- * ponytail: measured once. Scrolling is followed, but text that reflows
- * during the 520ms (content below the live block as it grows, about a line
- * at real speed) keeps its measured spot; re-measure per frame if it shows.
- */
-function visibleWords(): OverclockWord[] {
-  const words: OverclockWord[] = [];
-  const range = document.createRange();
-  const computed = new Map<Element, CSSStyleDeclaration | null>();
-  const chains = new Map<Element, readonly Element[]>();
-  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
-  let measures = 0;
-  for (
-    let node = walker.nextNode();
-    node && words.length < MAX_WORDS && measures < MAX_MEASURES;
-    node = walker.nextNode()
-  ) {
-    const parent = node.parentElement;
-    const text = node.nodeValue ?? "";
-    if (!parent || !/\S/.test(text)) {
-      continue;
-    }
-    let style = computed.get(parent);
-    if (style === undefined) {
-      style = onScreen(parent) ? getComputedStyle(parent) : null;
-      computed.set(parent, style);
-    }
-    if (!style) {
-      continue;
-    }
-    for (const match of text.matchAll(/\S+/g)) {
-      range.setStart(node, match.index);
-      range.setEnd(node, match.index + match[0].length);
-      const rect = range.getBoundingClientRect();
-      measures++;
-      if (rect.top > window.innerHeight || words.length >= MAX_WORDS) {
-        break; // the rest of this node is below the fold
-      }
-      if (rect.width > 0 && drawnOnTop(parent, rect)) {
-        words.push({
-          text: match[0],
-          rect,
-          style,
-          scrollers: scrollChain(parent, chains),
-        });
-      }
-    }
-  }
-  return words;
-}
-
-/** Scroll containers at or above an element, innermost first (cached). */
-function scrollChain(
-  element: Element,
-  chains: Map<Element, readonly Element[]>,
-): readonly Element[] {
-  const cached = chains.get(element);
-  if (cached) {
-    return cached;
-  }
-  const outer = element.parentElement
-    ? scrollChain(element.parentElement, chains)
-    : [];
-  const { overflowX, overflowY } = getComputedStyle(element);
-  const scrolls =
-    (/auto|scroll|overlay/.test(overflowY) &&
-      element.scrollHeight > element.clientHeight) ||
-    (/auto|scroll|overlay/.test(overflowX) &&
-      element.scrollWidth > element.clientWidth);
-  const chain = scrolls ? [element, ...outer] : outer;
-  chains.set(element, chain);
-  return chain;
-}
-
-function onScreen(element: Element) {
-  if (
-    element.closest(UNTOUCHED) ||
-    // An opacity-0 or hidden ancestor still hit-tests, so ask directly.
-    element.checkVisibility?.({
-      opacityProperty: true,
-      visibilityProperty: true,
-    }) === false
-  ) {
-    return false;
-  }
-  const box = element.getBoundingClientRect();
-  return (
-    // A 1px box is a visually hidden label (sr-only): its text is not drawn.
-    box.width > 1 &&
-    box.height > 1 &&
-    box.bottom > 0 &&
-    box.right > 0 &&
-    box.top < window.innerHeight &&
-    box.left < window.innerWidth
-  );
-}
-
-/** A word under a header or a sheet is not visible, so it does not jolt. */
-function drawnOnTop(parent: Element, rect: DOMRect) {
-  const hit = document.elementFromPoint(
-    rect.left + rect.width / 2,
-    rect.top + rect.height / 2,
-  );
-  return (
-    hit !== null &&
-    (hit === parent || parent.contains(hit) || hit.contains(parent))
   );
 }

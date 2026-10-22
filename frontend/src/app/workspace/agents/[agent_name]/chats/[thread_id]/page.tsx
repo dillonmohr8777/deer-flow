@@ -353,8 +353,8 @@ export default function AgentChatPage() {
               className={cn(
                 "absolute top-0 right-0 left-0 flex h-12 shrink-0 items-center gap-2 px-2 sm:px-4",
                 isWelcomeMode
-                  ? "bg-background/0 z-40 backdrop-blur-none"
-                  : "bg-background/80 z-30 shadow-xs backdrop-blur",
+                  ? "bg-background/0 z-40"
+                  : "bg-background z-30 shadow-xs",
               )}
             >
               <SidebarTrigger className="md:hidden" />
@@ -511,7 +511,6 @@ export default function AgentChatPage() {
                         {activeGoal && <GoalStatus goal={activeGoal} />}
                         {hasTodos && (
                           <TodoList
-                            className="bg-background/5"
                             todos={thread.values.todos ?? []}
                             hidden={false}
                           />
@@ -522,7 +521,7 @@ export default function AgentChatPage() {
 
                   <InputBox
                     className={cn(
-                      "bg-background/5 w-full",
+                      "w-full",
                       isWelcomeMode && "-translate-y-2 sm:-translate-y-4",
                     )}
                     isWelcomeMode={isWelcomeMode}
