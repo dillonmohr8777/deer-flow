@@ -81,3 +81,25 @@ describe("workspace text follows the theme", () => {
     expect(sheet).toContain("--muted-foreground: var(--paper-ink-muted)");
   });
 });
+
+describe("paper fonts follow no theme", () => {
+  // Oct 22: dark paper fell back to the system face while light used Nunito.
+  it("sets the body and dialog-title fonts outside any light-only scope", () => {
+    const paper = read("styles", "paper.css");
+    const rules = [...paper.matchAll(/([^{}]+)\{([^{}]*)\}/g)];
+    const owns = (decl: RegExp) =>
+      rules.filter(
+        ([, sel, body]) => decl.test(body!) && sel!.includes("paper"),
+      );
+    for (const decl of [
+      /font-family:\s*var\(--m-font-text\)/,
+      /font-family:\s*var\(--m-font-serif\)/,
+    ]) {
+      const found = owns(decl);
+      expect(found.length).toBeGreaterThan(0);
+      for (const [, sel] of found) {
+        expect(sel).not.toMatch(/not\(\.dark\)/);
+      }
+    }
+  });
+});
