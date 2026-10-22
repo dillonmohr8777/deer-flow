@@ -20,7 +20,7 @@
     },
     {
       "title": "Listen back with a machine, then a person",
-      "narration": "After synthesis, speech recognition transcribes every clip and compares it word by word against the script. Missing numbers, negations and instruction words are protected: a dropped not or a wrong digit fails the clip, no matter how small the difference looks. Harmless differences need a person who actually listened to sign off. Recognition proves the words, not the speaker. The comparison protects numbers, negations and instruction words first, because those are the words that change meaning.",
+      "narration": "After synthesis, speech recognition transcribes every clip and compares it word by word against the script. Missing numbers, negations and instruction words are protected: a dropped negation or a wrong digit fails the clip, no matter how small the difference looks. Harmless differences need a person who actually listened to sign off. Recognition proves the words, not the speaker. The comparison protects numbers, negations and instruction words first, because those are the words that change meaning.",
       "visual": "Side by side script and transcript with a dropped not highlighted as a hard fail and a reviewer's signed judgment card."
     },
     {

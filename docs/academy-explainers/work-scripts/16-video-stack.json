@@ -30,7 +30,7 @@
     },
     {
       "title": "Render from the engine",
-      "narration": "The engine turns the cut plan into the video. It reads the plan, pulls the exact clips by hash, applies the color grade and the type, lays the track and writes a master. A preview at 960 by 540 renders first so a bad row costs seconds, not minutes. The full master is 1920 by 1080, H.264 with AAC audio. Renders are versioned, so v2 never overwrites v1.",
+      "narration": "The engine turns the cut plan into the video. It reads the plan, pulls the exact clips by hash, applies the color grade and the type, lays the track and writes a master. A small preview renders first so a bad row costs seconds, not minutes. The full master renders in full HD. Renders are versioned, so v2 never overwrites v1.",
       "visual": "Render panel showing the preview at 960 by 540, then the master at 1920 by 1080, with v1 and v2 side by side."
     },
     {
