@@ -20,20 +20,20 @@
     ],
     [
       "Files: what goes in and what comes out",
-      "INPUT \u2192 OUTPUT",
-      "weekly.csv \u2192 source figures\nnotes.txt \u2192 context\nreport-draft.txt \u2192 deliverable\ncheck.txt \u2192 comparison",
+      "INPUT → OUTPUT",
+      "weekly.csv → source figures\nnotes.txt → context\nreport-draft.txt → deliverable\ncheck.txt → comparison",
       "Open the source beside the saved draft."
     ],
     [
       "Agents: the specialists doing the parts",
       "ASSIGN THE PARTS",
-      "Extract: sheet \u2192 figures\nCheck: figures \u2192 flags\nWrite: checked figures \u2192 summary",
+      "Extract: sheet → figures\nCheck: figures → flags\nWrite: checked figures → summary",
       "Each part has a source and an output."
     ],
     [
       "Run history: what actually happened",
       "INSPECT THE RECORD",
-      "Brief \u2192 saved chat\nSource \u2192 attached file\nRun \u2192 status and artifacts\nCheck \u2192 finished or failed",
+      "Brief → saved chat\nSource → attached file\nRun → status and artifacts\nCheck → finished or failed",
       "A status is useful when you inspect its evidence."
     ],
     [
@@ -51,19 +51,19 @@
     [
       "Momo Daily and Academy",
       "STAFF LEARNING",
-      "Momo Daily \u2192 daily staff view\nAcademy \u2192 work lessons\nPractice \u2192 checked exercise\nLive work \u2192 normal review",
+      "Momo Daily → daily staff view\nAcademy → work lessons\nPractice → checked exercise\nLive work → normal review",
       "Use lessons to build a repeatable work habit."
     ],
     [
       "Desktop and mobile",
       "SAME SAVED WORK",
-      "Desktop \u2192 prepare the brief\nSaved chat \u2192 one record\nPhone \u2192 read status and draft\nNext action \u2192 same owner",
+      "Desktop → prepare the brief\nSaved chat → one record\nPhone → read status and draft\nNext action → same owner",
       "Reopen the record instead of copying the task."
     ],
     [
       "Proposed inbox: not built yet",
       "INBOX STATUS",
-      "Current \u2192 run history\nCurrent \u2192 approval controls\nProposed \u2192 gathered exceptions\nVerify \u2192 your actual account",
+      "Current → run history\nCurrent → approval controls\nProposed → gathered exceptions\nVerify → your actual account",
       "Use only the features that are available today."
     ],
     [
@@ -77,7 +77,7 @@
     [
       "From request to checked work",
       "WORK PATH",
-      "Request \u2192 model\nContext \u2192 tools\nSaved work \u2192 review\nIndependent check \u2192 accept",
+      "Request → model\nContext → tools\nSaved work → review\nIndependent check → accept",
       "Every stage changes what you can trust."
     ],
     [
@@ -101,37 +101,37 @@
     [
       "Memory: what's saved",
       "SAVED RECORDS",
-      "Chat \u2192 brief and follow-up\nFile \u2192 supplied evidence\nRun \u2192 status and outputs\nReopen \u2192 inspect the same record",
+      "Chat → brief and follow-up\nFile → supplied evidence\nRun → status and outputs\nReopen → inspect the same record",
       "Know what is saved and where it lives."
     ],
     [
       "Step one: the sheet",
       "SOURCE ROWS",
-      "Category \u2192 source row\nFigure \u2192 exact cell\nWindow \u2192 export dates\nBlank \u2192 keep missing",
+      "Category → source row\nFigure → exact cell\nWindow → export dates\nBlank → keep missing",
       "Missing is different from zero."
     ],
     [
       "Step two: the draft",
       "DRAFT WITH REFERENCES",
-      "Weekly figure \u2192 row reference\nSummary \u2192 checked source\nComparison \u2192 matching window\nUnsupported claim \u2192 remove",
+      "Weekly figure → row reference\nSummary → checked source\nComparison → matching window\nUnsupported claim → remove",
       "Write the conclusion the evidence supports."
     ],
     [
       "Step three: the independent check",
       "OUTSIDE CHECK",
-      "Draft figure \u2192 source figure\nMatch \u2192 keep\nDifference \u2192 investigate\nResolution \u2192 record reason",
+      "Draft figure → source figure\nMatch → keep\nDifference → investigate\nResolution → record reason",
       "Compare the actual output to the source."
     ],
     [
       "Approvals come last",
       "REVIEW DECISION",
-      "Draft version \u2192 exact file\nReviewer \u2192 named person\nDecision \u2192 accept or return\nRelease \u2192 separate authorized action",
+      "Draft version → exact file\nReviewer → named person\nDecision → accept or return\nRelease → separate authorized action",
       "The model does not sign off on its own work."
     ],
     [
       "Roles: who does what",
       "TEAM RESPONSIBILITY",
-      "Owner \u2192 defines done\nSpecialist \u2192 checks substance\nReviewer \u2192 accepts output\nConnection owner \u2192 scope",
+      "Owner → defines done\nSpecialist → checks substance\nReviewer → accepts output\nConnection owner → scope",
       "A handoff needs an accountable person."
     ],
     [
@@ -169,13 +169,13 @@
     [
       "Inspect run status and artifacts",
       "RUN AND ARTIFACTS",
-      "Extract \u2192 finished\nDraft \u2192 saved output\nCheck \u2192 unfinished\nSend \u2192 separate decision",
+      "Extract → finished\nDraft → saved output\nCheck → unfinished\nSend → separate decision",
       "Inspect the step status and the file."
     ],
     [
       "Resume only what failed",
       "RESUME THE FAILED PART",
-      "Succeeded extraction \u2192 keep\nFailed check \u2192 inspect\nRerun check \u2192 verify\nExternal action \u2192 reconcile first",
+      "Succeeded extraction → keep\nFailed check → inspect\nRerun check → verify\nExternal action → reconcile first",
       "A retry must not duplicate a real side effect."
     ],
     [
@@ -187,13 +187,13 @@
     [
       "What a clean handoff looks like",
       "CLEAN HANDOFF",
-      "Input sheet \u2192 linked\nDraft file \u2192 linked\nFailed check \u2192 named\nNext owner \u2192 assigned",
+      "Input sheet → linked\nDraft file → linked\nFailed check → named\nNext owner → assigned",
       "Let the receiver identify the next step."
     ],
     [
       "Roles that pick up the work",
       "ROLE PICKUP",
-      "Manager \u2192 dates and promises\nSpecialist \u2192 source and scope\nDeveloper \u2192 failed step\nReviewer \u2192 final output",
+      "Manager → dates and promises\nSpecialist → source and scope\nDeveloper → failed step\nReviewer → final output",
       "Different roles need the same clear record."
     ],
     [
@@ -219,7 +219,7 @@
     [
       "Where you are: cwd and paths",
       "WHERE AM I?",
-      "pwd\n./notes.txt\nAbsolute path \u2192 full location\nRelative path \u2192 current folder",
+      "pwd\n./notes.txt\nAbsolute path → full location\nRelative path → current folder",
       "Read the location before the command."
     ],
     [
@@ -231,13 +231,13 @@
     [
       "Output and exit status",
       "EXIT STATUS",
-      "python3 check.py\nRows: 3\nHeader present: yes\necho $? \u2192 0",
+      "python3 check.py\nRows: 3\nHeader present: yes\necho $? → 0",
       "Output explains what the exit code reports."
     ],
     [
       "Run the small check",
       "SMALL CHECK",
-      "Required header: campaign\nRows read: 3\nMissing header \u2192 nonzero exit\nFix the input, then rerun",
+      "Required header: campaign\nRows read: 3\nMissing header → nonzero exit\nFix the input, then rerun",
       "A failed check is a useful result."
     ],
     [
@@ -255,7 +255,7 @@
     [
       "How this fits your work stack",
       "WORK STACK",
-      "Source file \u2192 terminal check\nTerminal result \u2192 run note\nRun note \u2192 Momo draft\nReviewer \u2192 compare to source",
+      "Source file → terminal check\nTerminal result → run note\nRun note → Momo draft\nReviewer → compare to source",
       "The terminal supplies evidence for the work."
     ],
     [
@@ -287,7 +287,7 @@
     [
       "What MomoBot already holds",
       "WORKSPACE CONTEXT",
-      "Saved chat \u2192 client brief\nRun \u2192 status and outputs\nFiles \u2192 current sources\nMode \u2192 response style",
+      "Saved chat → client brief\nRun → status and outputs\nFiles → current sources\nMode → response style",
       "Response style does not grant account access."
     ],
     [
@@ -299,25 +299,25 @@
     [
       "Reconcile the KPIs",
       "RECONCILE FIGURES",
-      "Report figure \u2192 export figure\nExport date \u2192 report window\nDifference \u2192 reason\nMissing value \u2192 missing",
+      "Report figure → export figure\nExport date → report window\nDifference → reason\nMissing value → missing",
       "Keep the explanation beside the mismatch."
     ],
     [
       "Promises and dates",
       "PROMISE REGISTER",
-      "Promise \u2192 source document\nOwner \u2192 accountable role\nDue date \u2192 confirmed date\nChange \u2192 dated record",
+      "Promise → source document\nOwner → accountable role\nDue date → confirmed date\nChange → dated record",
       "Do not invent or silently move a commitment."
     ],
     [
       "Owners and risk",
       "RISK REGISTER",
-      "Risk \u2192 specific issue\nOwner \u2192 one person\nNext check \u2192 date\nEvidence \u2192 linked source",
+      "Risk → specific issue\nOwner → one person\nNext check → date\nEvidence → linked source",
       "A risk with no owner stays open."
     ],
     [
       "Next action and handoff",
       "HANDOFF RECORD",
-      "Next action \u2192 exact task\nOwner \u2192 named role\nDate \u2192 confirmed deadline\nOpen items \u2192 source links",
+      "Next action → exact task\nOwner → named role\nDate → confirmed deadline\nOpen items → source links",
       "Make the next step easy to pick up."
     ],
     [
@@ -335,7 +335,7 @@
     [
       "Approval, not sending",
       "REVIEW STATUS",
-      "Draft file \u2192 exact version\nApprover \u2192 named owner\nDecision \u2192 pending\nSend \u2192 no action yet",
+      "Draft file → exact version\nApprover → named owner\nDecision → pending\nSend → no action yet",
       "An approval request is different from a sent reply."
     ],
     [
@@ -355,31 +355,31 @@
     [
       "Who owns each step",
       "SALES OWNERS",
-      "Director \u2192 direction\nManager \u2192 quality\nRepresentative \u2192 next action\nOutbound \u2192 contact log",
+      "Director → direction\nManager → quality\nRepresentative → next action\nOutbound → contact log",
       "Name who owns each step."
     ],
     [
       "Ownership and ledger first",
       "OWNERSHIP AND DEDUPE",
-      "Owning representative\nSender ledger one\nSender ledger two\nConflict \u2192 hold contact",
+      "Owning representative\nSender ledger one\nSender ledger two\nConflict → hold contact",
       "Check all sender records before outreach."
     ],
     [
       "Source-backed audit",
       "AUDIT EVIDENCE",
-      "Finding \u2192 exact source line\nSource \u2192 captured page\nDate \u2192 capture date\nInference \u2192 label separately",
+      "Finding → exact source line\nSource → captured page\nDate → capture date\nInference → label separately",
       "A pitch starts with a defensible observation."
     ],
     [
       "The verified brief",
       "PROSPECT BRIEF",
-      "Confirmed \u2192 source-backed\nInferred \u2192 clearly marked\nUnknown \u2192 question\nDate \u2192 evidence age",
+      "Confirmed → source-backed\nInferred → clearly marked\nUnknown → question\nDate → evidence age",
       "Separate what you know from what you think."
     ],
     [
       "Discovery questions",
       "DISCOVERY QUESTIONS",
-      "Question \u2192 linked finding\nPurpose \u2192 clarify the gap\nAnswer \u2192 prospect's words\nUnknown \u2192 keep open",
+      "Question → linked finding\nPurpose → clarify the gap\nAnswer → prospect's words\nUnknown → keep open",
       "Use questions to test the brief."
     ],
     [
@@ -397,13 +397,13 @@
     [
       "One CRM next action",
       "CRM NEXT ACTION",
-      "Owner \u2192 representative\nDue date \u2192 confirmed\nChannel \u2192 exact destination\nNote \u2192 one next step",
+      "Owner → representative\nDue date → confirmed\nChannel → exact destination\nNote → one next step",
       "Verify the CRM connection before claiming a write."
     ],
     [
       "Approval before contact",
       "CONTACT DECISION",
-      "Outreach draft \u2192 review\nRecipient \u2192 verified\nDuplicate check \u2192 current\nSpend \u2192 separate decision",
+      "Outreach draft → review\nRecipient → verified\nDuplicate check → current\nSpend → separate decision",
       "Contact only through the authorized action."
     ],
     [
@@ -429,7 +429,7 @@
     [
       "Check the access contact",
       "ACCESS READBACK",
-      "Contact \u2192 supplied number\nBackup \u2192 supplied contact\nWindow \u2192 written reply\nConfirmation date \u2192 source",
+      "Contact → supplied number\nBackup → supplied contact\nWindow → written reply\nConfirmation date → source",
       "Verify someone can open the location."
     ],
     [
@@ -441,19 +441,19 @@
     [
       "Set the time zone",
       "TIMEZONE CHECK",
-      "Client: 09:00\u201311:00 Eastern\nPhotographer: 08:00\u201310:00 Central\nSame two-hour window\nConfirm the date and location",
+      "Client: 09:00–11:00 Eastern\nPhotographer: 08:00–10:00 Central\nSame two-hour window\nConfirm the date and location",
       "Match the actual timezone on the shoot date."
     ],
     [
       "Scope the deliverables",
       "DELIVERABLE SCOPE",
-      "Item \u2192 agreed deliverable\nCount \u2192 source packet\nFormat \u2192 requested file\nFloor plan \u2192 confirmation pending",
+      "Item → agreed deliverable\nCount → source packet\nFormat → requested file\nFloor plan → confirmation pending",
       "Keep scope separate from assumptions."
     ],
     [
       "Build the editing handoff",
       "EDITING HANDOFF",
-      "Room order \u2192 capture list\nFilename \u2192 source asset\nRights \u2192 owned or licensed\nGap \u2192 missing record",
+      "Room order → capture list\nFilename → source asset\nRights → owned or licensed\nGap → missing record",
       "The editor needs usable files and context."
     ],
     [
@@ -465,7 +465,7 @@
     [
       "Acceptance and readback",
       "PACKET CHECK",
-      "Intake \u2192 packet line\nMatch \u2192 keep\nMismatch \u2192 resolve\nConfirmation \u2192 read back",
+      "Intake → packet line\nMatch → keep\nMismatch → resolve\nConfirmation → read back",
       "Compare each detail before the shoot."
     ],
     [
@@ -485,31 +485,31 @@
     [
       "Build the asset manifest",
       "ASSET MANIFEST",
-      "Filename \u2192 asset identity\nDuration \u2192 actual media\nRights \u2192 owned/licensed/missing\nScene \u2192 intended use",
+      "Filename → asset identity\nDuration → actual media\nRights → owned/licensed/missing\nScene → intended use",
       "Flag duplicates and missing rights."
     ],
     [
       "Write the cut plan",
       "45-SECOND CUT PLAN",
-      "00:00\u201300:05 \u2192 opening\n00:05\u201300:20 \u2192 spaces\n00:20\u201300:38 \u2192 key details\n00:38\u201300:45 \u2192 close",
+      "00:00–00:05 → opening\n00:05–00:20 → spaces\n00:20–00:38 → key details\n00:38–00:45 → close",
       "Check the beat lengths against the brief."
     ],
     [
       "Judge the picture and color",
       "PICTURE REVIEW",
-      "00:12 \u2192 reception exposure\nChair color \u2192 source reference\nCrop \u2192 intended format\nNote \u2192 exact timecode",
+      "00:12 → reception exposure\nChair color → source reference\nCrop → intended format\nNote → exact timecode",
       "A specialist judges the actual picture."
     ],
     [
       "Judge the audio",
       "AUDIO REVIEW",
-      "Voice \u2192 clear\nMusic \u2192 below voice\nPeaks \u2192 checked\nLicense \u2192 linked file",
+      "Voice → clear\nMusic → below voice\nPeaks → checked\nLicense → linked file",
       "Listen to the export, not only the timeline."
     ],
     [
       "Set up the review versions",
       "VERSION LOG",
-      "v01 \u2192 first review\nv02 \u2192 addressed notes\nRequest \u2192 named reviewer\nOpen/closed \u2192 each note",
+      "v01 → first review\nv02 → addressed notes\nRequest → named reviewer\nOpen/closed → each note",
       "Keep the original and a clear change record."
     ],
     [
@@ -547,7 +547,7 @@
     [
       "Scope the branch",
       "SCOPED BRANCH",
-      "Repository \u2192 verified connection\nBranch \u2192 short-lived fix\nScope \u2192 one issue\nDone \u2192 reproducible check",
+      "Repository → verified connection\nBranch → short-lived fix\nScope → one issue\nDone → reproducible check",
       "Name the repository and the boundary."
     ],
     [
@@ -559,37 +559,37 @@
     [
       "Make the small fix",
       "SMALL DIFF",
-      "Requested behavior \u2192 fix\nTouched lines \u2192 explain\nUnrelated code \u2192 preserve\nCheck \u2192 reproduce again",
+      "Requested behavior → fix\nTouched lines → explain\nUnrelated code → preserve\nCheck → reproduce again",
       "Make the smallest change that solves the issue."
     ],
     [
       "Check assets and logo",
       "ASSET RECORD",
-      "Logo \u2192 transparent original\nPhoto \u2192 licensed source\nRights \u2192 linked record\nMissing asset \u2192 name the gap",
+      "Logo → transparent original\nPhoto → licensed source\nRights → linked record\nMissing asset → name the gap",
       "Check real assets before release."
     ],
     [
       "QA at three widths",
       "THREE WIDTHS",
-      "390 \u2192 phone\n768 \u2192 tablet\n1440 \u2192 desktop\nOverflow + form + hero \u2192 inspect",
+      "390 → phone\n768 → tablet\n1440 → desktop\nOverflow + form + hero → inspect",
       "Judge phone behavior first."
     ],
     [
       "Check the form destination",
       "FORM READBACK",
-      "Synthetic test entry\nMapped fields \u2192 expected values\nConfirmation \u2192 exact message\nDestination \u2192 actual received row",
+      "Synthetic test entry\nMapped fields → expected values\nConfirmation → exact message\nDestination → actual received row",
       "A success screen alone does not prove delivery."
     ],
     [
       "Review",
       "INDEPENDENT REVIEW",
-      "Diff \u2192 reviewer\nFinding \u2192 reproduce\nFix \u2192 rerun check\nHistory \u2192 preserve earlier attempt",
+      "Diff → reviewer\nFinding → reproduce\nFix → rerun check\nHistory → preserve earlier attempt",
       "The author does not approve the same change."
     ],
     [
       "Approved release",
       "RELEASE REQUEST",
-      "Exact reviewed diff\nThree viewport screenshots\nDestination test result\nApprover \u2192 pending",
+      "Exact reviewed diff\nThree viewport screenshots\nDestination test result\nApprover → pending",
       "Attach concrete evidence to the release decision."
     ],
     [
@@ -615,37 +615,37 @@
     [
       "Source inventory",
       "SOURCE INVENTORY",
-      "Search Console \u2192 verify scope\nCrawl \u2192 dated export\nGBP \u2192 verified profile\nMissing source \u2192 missing",
+      "Search Console → verify scope\nCrawl → dated export\nGBP → verified profile\nMissing source → missing",
       "Missing is different from no traffic."
     ],
     [
       "Search Console dates",
       "COMPARABLE WINDOWS",
-      "Current window \u2192 exact dates\nComparison \u2192 matching length\nTimezone \u2192 export setting\nSource \u2192 Search Console",
+      "Current window → exact dates\nComparison → matching length\nTimezone → export setting\nSource → Search Console",
       "Dates are part of the evidence."
     ],
     [
       "Crawl evidence",
       "CRAWL FINDINGS",
-      "Status code \u2192 source URL\nNoindex \u2192 exact page\nCount \u2192 filtered export\nExample \u2192 linked row",
+      "Status code → source URL\nNoindex → exact page\nCount → filtered export\nExample → linked row",
       "Make the issue reproducible."
     ],
     [
       "GBP consistency",
       "LOCAL CONSISTENCY",
-      "Name + address\nPhone + hours\nCategory \u2192 profile\nSite footer \u2192 compare",
+      "Name + address\nPhone + hours\nCategory → profile\nSite footer → compare",
       "Check the same business across sources."
     ],
     [
       "Measured AI answers",
       "AI ANSWER LOG",
-      "Question \u2192 exact wording\nDate + location setting\nAnswer \u2192 saved text\nPractice named \u2192 yes/no",
+      "Question → exact wording\nDate + location setting\nAnswer → saved text\nPractice named → yes/no",
       "Record repeat observations separately."
     ],
     [
       "Evidence rows",
       "EVIDENCE ROW",
-      "Finding \u2192 exact source\nSource row \u2192 link\nSupport \u2192 observed detail\nUnsupported \u2192 open question",
+      "Finding → exact source\nSource row → link\nSupport → observed detail\nUnsupported → open question",
       "Every recommendation needs evidence."
     ],
     [
@@ -657,13 +657,13 @@
     [
       "Judge acceptance",
       "AUDIT REVIEW",
-      "Same dates and scope\nFinding matches source\nNo missing-as-zero claim\nReturned row \u2192 correction",
+      "Same dates and scope\nFinding matches source\nNo missing-as-zero claim\nReturned row → correction",
       "An outside check tests the actual audit."
     ],
     [
       "Client summary and approval",
       "CLIENT SUMMARY DRAFT",
-      "Supported findings\nPrioritized next work\nExact report link\nApproval \u2192 pending",
+      "Supported findings\nPrioritized next work\nExact report link\nApproval → pending",
       "Promise work, not rankings or placement."
     ],
     [
@@ -677,7 +677,7 @@
     [
       "Who this is for",
       "READ-ONLY ANALYSIS",
-      "Synthetic campaign export\nSynthetic CRM export\nNo live account changes\nProposal \u2192 review",
+      "Synthetic campaign export\nSynthetic CRM export\nNo live account changes\nProposal → review",
       "Start with evidence before a budget decision."
     ],
     [
@@ -689,7 +689,7 @@
     [
       "CRM lead export",
       "CRM EXPORT",
-      "Created date\nSource field\nLead status\nBlank source \u2192 separate",
+      "Created date\nSource field\nLead status\nBlank source → separate",
       "Keep contact details out of the practice table."
     ],
     [
@@ -701,13 +701,13 @@
     [
       "Attribution",
       "ATTRIBUTION",
-      "Platform \u2192 its model\nCRM \u2192 its source rule\nDifferent counts \u2192 expected gap\nReason \u2192 investigate",
+      "Platform → its model\nCRM → its source rule\nDifferent counts → expected gap\nReason → investigate",
       "A platform conversion is not automatically a qualified lead."
     ],
     [
       "Reconcile the funnel",
       "FUNNEL RECONCILIATION",
-      "Clicks \u2192 platform conversions\nLeads \u2192 qualified leads\nCampaign \u2192 source join\nGap \u2192 reason code",
+      "Clicks → platform conversions\nLeads → qualified leads\nCampaign → source join\nGap → reason code",
       "Keep each funnel stage distinct."
     ],
     [
@@ -731,13 +731,13 @@
     [
       "Approval, no live change",
       "APPROVAL RECORD",
-      "Proposal \u2192 exact version\nCap \u2192 stated amount\nApprover \u2192 named person\nAccount change \u2192 none",
+      "Proposal → exact version\nCap → stated amount\nApprover → named person\nAccount change → none",
       "A proposal does not authorize live spend."
     ],
     [
       "Try this in Momo",
       "TRY THE COMPARISON",
-      "Same-window platform export\nSame-window CRM export\nQualified count \u2192 compare\nReviewer \u2192 actual source",
+      "Same-window platform export\nSame-window CRM export\nQualified count → compare\nReviewer → actual source",
       "Use Momo to explain a checked funnel."
     ]
   ],
@@ -751,49 +751,49 @@
     [
       "Write for each channel",
       "CHANNEL VERSIONS",
-      "Social \u2192 short post\nWeb \u2192 supporting article\nEmail \u2192 direct invitation\nEach \u2192 own length and purpose",
+      "Social → short post\nWeb → supporting article\nEmail → direct invitation\nEach → own length and purpose",
       "Adapt the writing without changing the facts."
     ],
     [
       "Run the factual check",
       "FACT CHECK",
-      "Sentence \u2192 brief line\nDate \u2192 confirmed source\nClaim \u2192 approved wording\nUnmatched \u2192 return",
+      "Sentence → brief line\nDate → confirmed source\nClaim → approved wording\nUnmatched → return",
       "Every factual sentence needs support."
     ],
     [
       "Check rights on every image",
       "IMAGE RIGHTS",
-      "Asset \u2192 exact filename\nStatus \u2192 owned/licensed\nRecord \u2192 file link\nMissing \u2192 replace before release",
+      "Asset → exact filename\nStatus → owned/licensed\nRecord → file link\nMissing → replace before release",
       "Check every image in the post."
     ],
     [
       "Alt text and captions",
       "ACCESSIBLE CONTENT",
-      "Alt text \u2192 visible details\nCaption file \u2192 spoken words\nSync \u2192 actual playback\nImage \u2192 appropriate crop",
+      "Alt text → visible details\nCaption file → spoken words\nSync → actual playback\nImage → appropriate crop",
       "Make the content usable in its channel."
     ],
     [
       "Email and Slack drafts",
       "MESSAGE DRAFTS",
-      "Email \u2192 verified recipient\nSlack \u2192 exact channel\nMentions \u2192 verified people\nFooter \u2192 none",
+      "Email → verified recipient\nSlack → exact channel\nMentions → verified people\nFooter → none",
       "Review the real destination before sending."
     ],
     [
       "Review and the publishing request",
       "PUBLISHING REQUEST",
-      "Channel + selected version\nOptional scheduled slot\nRights status\nApprover \u2192 pending",
+      "Channel + selected version\nOptional scheduled slot\nRights status\nApprover → pending",
       "A prepared post is different from a published post."
     ],
     [
       "Outreach with a contact log",
       "CONTACT LOG",
-      "Handle \u2192 verified identity\nDraft date \u2192 recorded\nStatus \u2192 draft\nDuplicate contact \u2192 check",
+      "Handle → verified identity\nDraft date → recorded\nStatus → draft\nDuplicate contact → check",
       "Keep outreach bounded and deduplicated."
     ],
     [
       "Acceptance check for content",
       "CONTENT REVIEW",
-      "Facts match brief\nRights are complete\nCaptions and alt text checked\nFailed line \u2192 return",
+      "Facts match brief\nRights are complete\nCaptions and alt text checked\nFailed line → return",
       "Judge the exact version for the channel."
     ],
     [
@@ -813,43 +813,43 @@
     [
       "Who owns what",
       "DECISION OWNERS",
-      "Leadership \u2192 priorities\nOperations \u2192 handoffs\nSales \u2192 next revenue action\nSpecialists \u2192 accepted work",
+      "Leadership → priorities\nOperations → handoffs\nSales → next revenue action\nSpecialists → accepted work",
       "Assign a decision to the right person."
     ],
     [
       "Accepted work",
       "ACCEPTED WORK",
-      "Item \u2192 actual deliverable\nAccount \u2192 correct scope\nAcceptor \u2192 outside owner\nDate \u2192 acceptance record",
+      "Item → actual deliverable\nAccount → correct scope\nAcceptor → outside owner\nDate → acceptance record",
       "Pending is different from accepted."
     ],
     [
       "Aging promises",
       "AGING PROMISES",
-      "Promise \u2192 original source\nAge \u2192 measured days\nOwner \u2192 accountable person\nUnowned \u2192 flag first",
+      "Promise → original source\nAge → measured days\nOwner → accountable person\nUnowned → flag first",
       "Find the promise that needs a decision."
     ],
     [
       "Blockers and approvals",
       "BLOCKERS AND APPROVALS",
-      "Blocker \u2192 clearing action\nAction \u2192 owner\nApproval \u2192 decision owner\nWaiting time \u2192 measured",
+      "Blocker → clearing action\nAction → owner\nApproval → decision owner\nWaiting time → measured",
       "Name what changes the state."
     ],
     [
       "Revenue and retainer truth",
       "BILLING TRUTH",
-      "Revenue \u2192 billing export\nRetainer \u2192 current agreement\nSource date \u2192 recorded\nAbsent figure \u2192 missing",
+      "Revenue → billing export\nRetainer → current agreement\nSource date → recorded\nAbsent figure → missing",
       "Verify revenue through the billing record."
     ],
     [
       "Ad spend and measured cost",
       "COST TRUTH",
-      "Ad spend \u2192 platform export\nRevenue \u2192 separate block\nModel cost \u2192 measured receipt\nUnmeasured \u2192 say unmeasured",
+      "Ad spend → platform export\nRevenue → separate block\nModel cost → measured receipt\nUnmeasured → say unmeasured",
       "Do not substitute spend for revenue."
     ],
     [
       "Delegate one bounded outcome",
       "BOUNDED DELEGATION",
-      "Outcome \u2192 one deliverable\nOwner + due date\nAcceptance rule \u2192 runnable\nAcceptor \u2192 another person",
+      "Outcome → one deliverable\nOwner + due date\nAcceptance rule → runnable\nAcceptor → another person",
       "Delegate a result someone else can check."
     ],
     [
@@ -875,43 +875,43 @@
     [
       "Why lead intake breaks",
       "LEAD PATH",
-      "Intake \u2192 dedupe\nOwner \u2192 paused automation\nTest event \u2192 readback\nHandoff \u2192 named owner",
+      "Intake → dedupe\nOwner → paused automation\nTest event → readback\nHandoff → named owner",
       "Keep one clean record through the workflow."
     ],
     [
       "Intake to one clean record",
       "CLEAN INTAKE",
-      "Name + email + phone\nSource + consent flag\nRequired field \u2192 check\nDuplicate key \u2192 search",
+      "Name + email + phone\nSource + consent flag\nRequired field → check\nDuplicate key → search",
       "Missing required data stays visible."
     ],
     [
       "Assign the owner",
       "OWNER RULE",
-      "Roster \u2192 source rule\nOwner field \u2192 read back\nMissing rule \u2192 wait\nAssignment \u2192 recorded",
+      "Roster → source rule\nOwner field → read back\nMissing rule → wait\nAssignment → recorded",
       "Do not guess who owns the lead."
     ],
     [
       "Confirm the automation is paused",
       "PAUSED WORKFLOW",
-      "Status \u2192 paused\nFirst message \u2192 inspect\nAudience \u2192 test contact\nLive action \u2192 separate decision",
+      "Status → paused\nFirst message → inspect\nAudience → test contact\nLive action → separate decision",
       "Verify the state in the actual CRM."
     ],
     [
       "Run a test event, not a live message",
       "TEST EVENT",
-      "Practice contact only\nExpected tag\nExpected owner and source\nEvent log \u2192 inspect",
+      "Practice contact only\nExpected tag\nExpected owner and source\nEvent log → inspect",
       "Test the mapping without messaging a real lead."
     ],
     [
       "Readback and compare",
       "READBACK TABLE",
-      "Intake value \u2192 record value\nConsent \u2192 preserved\nOwner and tag \u2192 expected\nMismatch \u2192 flag",
+      "Intake value → record value\nConsent → preserved\nOwner and tag → expected\nMismatch → flag",
       "Read the destination after the write."
     ],
     [
       "Retries without double sends",
       "RETRY BEHAVIOR",
-      "Same lead key\nRepeated request\nExpected \u2192 one record\nProvider support \u2192 verify",
+      "Same lead key\nRepeated request\nExpected → one record\nProvider support → verify",
       "Never assume duplicate protection exists."
     ],
     [
@@ -923,7 +923,7 @@
     [
       "The virtual assistant pass",
       "ASSISTANT CHECKLIST",
-      "Known source \u2192 proceed\nMissing field \u2192 record\nNew scope \u2192 stop\nNew login \u2192 authorized route",
+      "Known source → proceed\nMissing field → record\nNew scope → stop\nNew login → authorized route",
       "Keep the task inside the agreed access."
     ],
     [
@@ -937,7 +937,7 @@
     [
       "Improvement in small weeks",
       "FOUR-WEEK PATH",
-      "Week 1 \u2192 baseline\nWeek 2 \u2192 reusable brief\nWeek 3 \u2192 read-only source\nWeek 4 \u2192 paused workflow",
+      "Week 1 → baseline\nWeek 2 → reusable brief\nWeek 3 → read-only source\nWeek 4 → paused workflow",
       "Add one checked habit at a time."
     ],
     [
@@ -955,31 +955,31 @@
     [
       "Week two: reusable brief and working context",
       "WEEK 2 BRIEF",
-      "Owner + sources\nTime range + files\nApproval + next action\nStanding context \u2192 scoped",
+      "Owner + sources\nTime range + files\nApproval + next action\nStanding context → scoped",
       "Reuse a complete brief, not a vague prompt."
     ],
     [
       "Week two exercise and proof",
       "WEEK 2 COMPARISON",
-      "Run one \u2192 correction list\nRun two \u2192 correction list\nSame job and sources\nCount actual fixes",
+      "Run one → correction list\nRun two → correction list\nSame job and sources\nCount actual fixes",
       "Improvement means less correction on comparable work."
     ],
     [
       "Week three: one read-only source",
       "WEEK 3 CONNECTION",
-      "One read-only source\nConnection \u2192 verified\nClient scope \u2192 matched\nAccess gap \u2192 recorded",
+      "One read-only source\nConnection → verified\nClient scope → matched\nAccess gap → recorded",
       "Add a connection only after the workflow is clear."
     ],
     [
       "Week three exercise and proof",
       "WEEK 3 PROOF",
-      "Week 2 draft\nWeek 3 draft\nChanged figures \u2192 source rows\nReviewer \u2192 compare",
+      "Week 2 draft\nWeek 3 draft\nChanged figures → source rows\nReviewer → compare",
       "Verify what the new source actually changed."
     ],
     [
       "Week four: the paused workflow",
       "WEEK 4 WORKFLOW",
-      "Repeatable draft job\nStatus \u2192 paused\nOutputs \u2192 run record\nApprover \u2192 named owner",
+      "Repeatable draft job\nStatus → paused\nOutputs → run record\nApprover → named owner",
       "Prepare the workflow before allowing it to run."
     ],
     [
@@ -991,13 +991,13 @@
     [
       "Each role's part",
       "TEAM RESPONSIBILITIES",
-      "Owner \u2192 brief\nSpecialist \u2192 source check\nManager \u2192 handoff\nApprover \u2192 final decision",
+      "Owner → brief\nSpecialist → source check\nManager → handoff\nApprover → final decision",
       "Each week ends with an accountable review."
     ],
     [
       "Try this in Momo",
       "TRY YOUR FOUR WEEKS",
-      "Source list\nBaseline minutes\nWeekly proof bundle\nSummary \u2192 claims checked",
+      "Source list\nBaseline minutes\nWeekly proof bundle\nSummary → claims checked",
       "Use real measured work to choose the next habit."
     ]
   ],
@@ -1005,7 +1005,7 @@
     [
       "AI as your operating driver",
       "MONTHLY LOOP",
-      "Measure \u2192 compare\nKeep \u2192 improve\nRetire \u2192 failed work\nHuman \u2192 decision",
+      "Measure → compare\nKeep → improve\nRetire → failed work\nHuman → decision",
       "AI improves work through measured repetition."
     ],
     [
@@ -1017,13 +1017,13 @@
     [
       "Month one exercise and acceptance",
       "MONTH 1 ACCEPTANCE",
-      "Draft \u2192 accepted/returned\nReviewer \u2192 outside owner\nSource comparison \u2192 saved\nLog \u2192 actual outcome",
+      "Draft → accepted/returned\nReviewer → outside owner\nSource comparison → saved\nLog → actual outcome",
       "A fast rejected draft is still rejected."
     ],
     [
       "Month two: context and handoffs",
       "MONTH 2 HANDOFF",
-      "Shared brief\nRole-specific source access\nReceiver \u2192 confirm context\nMissing access \u2192 stop",
+      "Shared brief\nRole-specific source access\nReceiver → confirm context\nMissing access → stop",
       "Make team pickup reliable before scaling."
     ],
     [
@@ -1035,7 +1035,7 @@
     [
       "Month three: a measured queue",
       "MONTH 3 QUEUE",
-      "Reviewed workflow rows\nManual exceptions\nCurrent run records\nProposed inbox \u2192 future",
+      "Reviewed workflow rows\nManual exceptions\nCurrent run records\nProposed inbox → future",
       "Use only the controls that actually exist."
     ],
     [
@@ -1047,19 +1047,19 @@
     [
       "The monthly review",
       "MONTHLY REVIEW",
-      "This month \u2192 same job\nLast month \u2192 comparable source\nChange \u2192 measured result\nDecision \u2192 one per workflow",
+      "This month → same job\nLast month → comparable source\nChange → measured result\nDecision → one per workflow",
       "Do not turn anecdotes into a trend."
     ],
     [
       "Each role's part in the plan",
       "ROLE RESPONSIBILITY",
-      "Owner \u2192 context\nManager \u2192 handoff\nSpecialist \u2192 quality\nDeveloper \u2192 bounded implementation",
+      "Owner → context\nManager → handoff\nSpecialist → quality\nDeveloper → bounded implementation",
       "Consequential decisions keep an accountable person."
     ],
     [
       "The proof you keep",
       "PROOF SHEET",
-      "Source date\nAccepted output\nTime + measured cost\nUnavailable figure \u2192 missing",
+      "Source date\nAccepted output\nTime + measured cost\nUnavailable figure → missing",
       "Keep enough evidence to test the claim."
     ],
     [
@@ -1067,6 +1067,316 @@
       "TRY THE MONTHLY ROW",
       "Baseline minutes\nAccepted practice draft\nSource list\nReviewer sign-off",
       "Make the next improvement from the actual result."
+    ]
+  ],
+  "16-video-stack": [
+    [
+      "One stack, every video",
+      "THE STACK",
+      "brief\ninputs\nsource plan\ncut plan\nrender\nQA\nrelease",
+      "Same seven steps for ads, lessons and films."
+    ],
+    [
+      "Start with the brief",
+      "THE BRIEF",
+      "audience\nplacement\nlength\none message\ncall to action\ndeadline",
+      "Six lines, or the job does not start."
+    ],
+    [
+      "Inventory the inputs with hashes",
+      "INVENTORY",
+      "17 clips\n1 logo, transparent PNG\n2 fonts\n1 track, licensed\nsha256 per file",
+      "A changed hash marks every dependent plan stale."
+    ],
+    [
+      "Write the source plan",
+      "SOURCE PLAN",
+      "11 usable, 6 rejected\nreasons: near black, ceiling, shake\nplan hash pinned to inventory",
+      "Reviewed by a person, pinned to the bytes."
+    ],
+    [
+      "The cut plan is a table",
+      "CUT PLAN",
+      "14 rows\nstart, length, clip, in point\ntext on screen, beat",
+      "Edit the table, then re-render."
+    ],
+    [
+      "Render from the engine",
+      "RENDER",
+      "preview 960 x 540\nmaster 1920 x 1080\nH.264 + AAC\nv1, v2, v3 all kept",
+      "Preview cheap, master once, never overwrite."
+    ],
+    [
+      "Automatic checks before anyone watches",
+      "AUTO CHECKS",
+      "duration equals track\nfull decode clean\nblack frames 0\nloudness and silence\nhashes to receipt",
+      "Fail here, fix one row, render again."
+    ],
+    [
+      "Then the human review",
+      "HUMAN REVIEW",
+      "contact sheet, 1 frame a second\nhook in 2 seconds?\nevery shot earns it?\nstops a thumb?",
+      "Checks catch broken. People catch boring."
+    ],
+    [
+      "Deliver with the receipt",
+      "DELIVERY",
+      "master.mp4\nposter.jpg\ncaptions.vtt\nreceipt.json with hashes and checks",
+      "A person sends it. The receipt proves it."
+    ],
+    [
+      "Where this lesson came from",
+      "NEXT",
+      "17 Momo ads\n18 footage to cut\n19 lessons in my voice\n20 QA and release",
+      "Same stack, one layer deeper each time."
+    ]
+  ],
+  "17-momo-ads": [
+    [
+      "An ad is not a demo",
+      "AD, NOT DEMO",
+      "one problem\none character in motion\none line\none action",
+      "Stop a thumb, earn one action."
+    ],
+    [
+      "The first 2 seconds",
+      "HOOK IN 2 SECONDS",
+      "one image\none line\nno logo, no intro, no fade\ntest it alone",
+      "If it needs the brand to make sense, it is not a hook."
+    ],
+    [
+      "One problem, said once",
+      "ONE PROBLEM",
+      "6 benefits in the plan\n1 in the ad\nthe rest wait for the page",
+      "Say it once, show it plainly."
+    ],
+    [
+      "Full-body Momo solves it",
+      "FULL-BODY MOMO",
+      "walks in, reaches, reacts, fixes\n6 to 8 seconds\nreuse the walking rig",
+      "Never a head in a ring. Never a card stack."
+    ],
+    [
+      "The scrapbook world",
+      "SCRAPBOOK WORLD",
+      "warm cream and tan grounds\nkraft edges, paper shadows\nnavy ink, gold accent\nno void, no glow, no orbs",
+      "One world for ads and films."
+    ],
+    [
+      "Type that reads like a poster",
+      "POSTER TYPE",
+      "display face, 2 lines max\nhigh contrast on paper\ndigits for prices\nchecked at phone size",
+      "Interface fonts read like a settings screen."
+    ],
+    [
+      "Voice and music",
+      "VOICE AND MUSIC",
+      "about 40 spoken words\nmusic under the voice\ncuts on the beat\nloudness normalized",
+      "Energy from the track, meaning from the voice."
+    ],
+    [
+      "The ask",
+      "THE ASK",
+      "last 3 seconds\none verb, one place\nlogo transparent on paper\nno second offer",
+      "If they have to choose, they choose nothing."
+    ],
+    [
+      "Variants",
+      "VARIANTS",
+      "9 x 16 Reels\n1 x 1 feed\n6 second bumper\npixel art cut",
+      "One plan, every size."
+    ],
+    [
+      "Would this stop a thumb",
+      "THUMB STOP REVIEW",
+      "frames 1 and 2 stop me?\nproblem clear, sound off?\nMomo moves, not a sticker?\nline readable on a phone?",
+      "Finished is not the bar. Stopping a thumb is."
+    ]
+  ],
+  "18-footage-to-cut": [
+    [
+      "Start from the actual footage",
+      "THE FOOTAGE",
+      "17 clips, one evening\nonly this shoot\nnothing borrowed",
+      "Cut what was shot, not what you wish was shot."
+    ],
+    [
+      "Inventory and hash every clip",
+      "INVENTORY",
+      "name, duration, resolution\nframe rate, audio channels\nsha256 of the bytes\n2 vertical, 1 silent, noted",
+      "The table remembers so nobody has to."
+    ],
+    [
+      "Match clips to the track",
+      "THE TRACK",
+      "45.0 seconds, measured\nbeat grid first\nabout 14 shots\nend where the track ends",
+      "The track sets the clock."
+    ],
+    [
+      "Score, then review the scores",
+      "SCORES",
+      "exposure, blur, faces\nstability, sound\n3 dark, 2 ceiling, 1 pocket\n11 make the plan",
+      "Scores shortlist. People decide."
+    ],
+    [
+      "The source plan is signed",
+      "SIGNED PLAN",
+      "who reviewed, when\npinned to inventory hashes\nnew files ignored\nchanges carry a note",
+      "The engine only sees the plan."
+    ],
+    [
+      "Build the cutlist by beat",
+      "CUTLIST",
+      "beat, clip, in point\nwide on downbeats\ndetail on fills\ntext lands on beats too",
+      "Edit rows, not the timeline."
+    ],
+    [
+      "Preview render",
+      "PREVIEW",
+      "960 x 540, about a minute\nsound on, then sound off\nnote the row, not the feeling\n3 or 4 rounds is normal",
+      "Rounds change rows, never files."
+    ],
+    [
+      "Master render and the automatic checks",
+      "MASTER AND CHECKS",
+      "1920 x 1080, H.264 + AAC\nduration to the frame\ndecode clean, black frames 0\nloudness in range, poster out",
+      "A failed check names the row."
+    ],
+    [
+      "Versions, never overwrites",
+      "VERSIONS",
+      "v1 stays when v2 renders\nreceipt carries the plan hash\nanswer with a row diff\narchive, never delete",
+      "What changed is a diff, not a memory."
+    ],
+    [
+      "What the engine never does",
+      "NEVER",
+      "invents footage\npulls outside the plan\nships without a receipt\nsends anything",
+      "The engine makes the craft repeatable."
+    ]
+  ],
+  "19-lessons-in-my-voice": [
+    [
+      "A lesson is a file first",
+      "THE SCRIPT FILE",
+      "title, description\n10 or 11 chapters\n740 to 765 words\nreviewed as text first",
+      "Text is cheap to fix. Audio is not."
+    ],
+    [
+      "Acceptance before generation",
+      "ACCEPTANCE",
+      "lesson name + script hash\nchanged script, new acceptance\nhold file stops everything",
+      "A draft never becomes my voice by accident."
+    ],
+    [
+      "My voice, from a protected reference",
+      "THE REFERENCE",
+      "my voice, short recording\nnever in Git, never leaves\nhash checked before use\none model process",
+      "Each sentence is its own clip."
+    ],
+    [
+      "Listen back with a machine, then a person",
+      "LISTEN BACK",
+      "transcribe every clip\nword by word against the script\nnumbers and negations protected\na person signs the rest",
+      "Recognition proves the words, not the speaker."
+    ],
+    [
+      "Repairs are new versions",
+      "REPAIRS",
+      "at most 2 passes\nnew versions, nothing overwritten\nseed and sampler recorded\nincomplete marker blocks promotion",
+      "Repair by adding, never by replacing."
+    ],
+    [
+      "Captions come from the script",
+      "CAPTIONS",
+      "text from the script\ntiming from recognition\nsidecar by default\nchecked word by word",
+      "Names and numbers are always right."
+    ],
+    [
+      "Build the boards",
+      "THE BOARDS",
+      "heading, lines, caption\nPaper palette, bouncing mark\nFraunces and Nunito Sans\nchapter count from acceptance",
+      "One board per chapter, under my words."
+    ],
+    [
+      "Render on the queue",
+      "RENDER QUEUE",
+      "one queue, one lock\nhash check before anything moves\n4 workers at 15 fps\nmaster, poster, captions, transcript",
+      "Mismatched files never reach the renderer."
+    ],
+    [
+      "Verify before anyone watches",
+      "VERIFY",
+      "duration and streams\naudio levels and silence\ncaptions, chapter samples\nhashes, then a person listens",
+      "Both agree, or it is not done."
+    ],
+    [
+      "What never leaves the machine",
+      "NEVER LEAVES",
+      "voice reference\nnarration audio\nclient data\nmodel weights",
+      "My voice, only on words I approved."
+    ]
+  ],
+  "20-video-qa-release": [
+    [
+      "Finished is not released",
+      "FINISHED IS NOT RELEASED",
+      "render done is step 1\nseven gates\na person makes the call",
+      "Every gate here is the memory of a miss."
+    ],
+    [
+      "Phone first",
+      "PHONE FIRST",
+      "390 pixels wide\nsound off, then on\nunreadable line fails\ndesktop is secondary",
+      "See what the audience sees."
+    ],
+    [
+      "The contact sheet",
+      "CONTACT SHEET",
+      "1 frame a second\n30 seconds, 30 frames\nmarks map to rows\nnever from memory",
+      "Review from the sheet, not the feeling."
+    ],
+    [
+      "Audio gates",
+      "AUDIO GATES",
+      "loudness normalized\nsilence over 1 second flagged\nvoice above music\nlicense in the inventory",
+      "Audio is a gate, not a note."
+    ],
+    [
+      "Captions and text",
+      "CAPTIONS AND TEXT",
+      "word for word against the script\nbanned characters and words\ndigits for numbers\nunsourced number removed",
+      "Verified facts or nothing."
+    ],
+    [
+      "Rights and provenance",
+      "RIGHTS",
+      "owned, licensed or missing\nmissing blocks release\ngenerated images: props only\nevery input hashed",
+      "Provenance you can prove later."
+    ],
+    [
+      "The blockers list",
+      "BLOCKERS",
+      "AI footer or credit\nclient name in a public repo\nunconfirmed price or date\nlogo on a white box\ninterface type in an ad",
+      "Momo scans the mechanical ones. People catch the rest."
+    ],
+    [
+      "Hashes and the receipt",
+      "THE RECEIPT",
+      "master, poster, captions, transcript\nplan hash\nevery check result\ntravels with the file",
+      "Compare hashes, know in seconds."
+    ],
+    [
+      "Release is the owner's word",
+      "RELEASE",
+      "ready is not released\nowner decides, right channel\nreceipt attached\nagents stage and wait",
+      "Merge is not deploy. Ready is not released."
+    ],
+    [
+      "Make the gate, not the fix",
+      "MAKE THE GATE",
+      "a repeat miss becomes a check\nblack frames from one dark shot\nfooter scan from one slip\nthe gates are the memory",
+      "Add the gate. The stack gets safer every week."
     ]
   ]
 }

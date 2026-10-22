@@ -1,0 +1,57 @@
+{
+  "title": "From raw footage to a finished cut",
+  "slug": "work-18-footage-to-cut",
+  "description": "Synthetic 45 second brand film cut from 17 phone clips: hashed inventory, reviewed source plan, beat-matched cutlist, versioned engine renders and the checks that catch bad shots before a person does.",
+  "chapters": [
+    {
+      "title": "Start from the actual footage",
+      "narration": "A good cut starts with what was shot, not with what we wish was shot. This lesson follows a synthetic 45 second brand film for Sample Landscaping LLC built from 17 phone clips from one evening. Nothing here is a real client. Momo inventories, scores and drafts; I pick the shots and the editor judges the cut. The rule for this job is simple: only clips from that shoot, nothing borrowed. Borrowed footage breaks the promise that this film shows this business.",
+      "visual": "Folder of 17 phone clips from one evening, each thumbnail timestamped, with a card that says this shoot only."
+    },
+    {
+      "title": "Inventory and hash every clip",
+      "narration": "Momo reads each file: name, duration, resolution, frame rate, audio channels and a hash of the bytes. The inventory is saved before anything else happens. Two clips were shot vertical and 1 has no audio; that goes in the table, not in someone's memory. The hashes let every later step prove it used these exact files and not a re-export. Momo also notes which clips share a scene, so the cut does not jump between two takes of the same moment.",
+      "visual": "Inventory table with duration, resolution, frame rate, audio and sha256; two vertical clips and one silent clip flagged."
+    },
+    {
+      "title": "Match clips to the track",
+      "narration": "The film is cut to a track, so the track comes first. Momo measures the track length to the millisecond and builds a beat grid. The cut has to end exactly where the track ends. For the example, the track is 45.0 seconds, which gives roughly 14 shots at about 3 seconds each, with a few held longer on the slow bars. Changing the track later means redoing the grid, so the track is locked before any row is written.",
+      "visual": "Beat grid over a 45.0 second track with 14 shot slots marked, two slots stretched over the slow bars."
+    },
+    {
+      "title": "Score, then review the scores",
+      "narration": "Momo scores each clip for exposure, motion blur, faces, stability and sound. Scores are a shortlist, not a decision. I look at the actual frames for every clip the scores reject, because a dark shot can be the best shot. For the example, 3 clips are too dark, 2 point at the ceiling and 1 is 2 seconds of pocket. 11 clips make the reviewed source plan. The scores save time on the obvious rejects; the judgment stays with the person.",
+      "visual": "Score sheet with five columns per clip and a person's checkmarks overriding two machine rejections."
+    },
+    {
+      "title": "The source plan is signed",
+      "narration": "The reviewed source plan is saved with the inventory hashes and a note of who reviewed it and when. From here the engine only accepts clips in the plan. If someone drops a new clip in the folder, the plan does not pick it up by accident. That is how v2 of this film dropped the near black shot at 18 seconds and the ceiling shot at 36: the plan changed, on purpose, with a note.",
+      "visual": "Signed source plan card with reviewer, date and hash, and a stray new clip in the folder shown ignored."
+    },
+    {
+      "title": "Build the cutlist by beat",
+      "narration": "The cutlist maps every beat to a clip and an in point. Momo drafts it from the plan: wide shots on the downbeats, detail shots on the fills, the best face on the lift before the chorus. Each row carries a reason. I edit rows, not the timeline. Text on screen goes in the same table so the words land on beats too. A row's reason is one short phrase, like wide establishing or best smile.",
+      "visual": "Cutlist table with beat, clip, in point, reason and text columns; wide shots marked on downbeats."
+    },
+    {
+      "title": "Preview render",
+      "narration": "The engine renders a 960 by 540 preview in about a minute. We watch it once at phone size with the sound on, then once with the sound off. Anything that reads wrong gets its row number noted. Three or four preview rounds is normal. Each round changes rows, never files, so the inventory and plan stay true. Watching at phone size catches text that is too small long before the master exists.",
+      "visual": "Phone sized preview player with a notepad of row numbers beside it and a counter at round 3 of 4."
+    },
+    {
+      "title": "Master render and the automatic checks",
+      "narration": "The master renders at 1920 by 1080, H.264 with AAC audio. Then the checks run: duration equals the track to the frame, the whole file decodes clean, the black frame detector finds nothing, loudness is in range and the poster frame is exported. Every output is hashed into a receipt next to the plan hash. A failed check names the row.",
+      "visual": "Master render card with the five checks passing and a receipt listing output hashes beside the plan hash."
+    },
+    {
+      "title": "Versions, never overwrites",
+      "narration": "v1 stays on disk when v2 renders. The receipt for each version lists the plan hash it came from, so a reviewer can say exactly what changed between them. When a teammate asks why a shot moved, the answer is a row diff, not a memory. Old versions are archived, not deleted, until the owner says otherwise. A version is never renamed, so the receipt always points at a real file.",
+      "visual": "Two receipts side by side, v1 and v2, with the differing rows highlighted between them."
+    },
+    {
+      "title": "What the engine never does",
+      "narration": "The engine never invents footage, never pulls a clip outside the signed plan, never ships without a passing receipt and never sends anything anywhere. Generated images are for props and boards, not for pretending a shot exists. Delivery goes through a person in the right channel. The craft is still the editor's. The engine makes the craft repeatable. When something cannot be done with the footage we have, the answer is a reshoot, not a fake.",
+      "visual": "Board of four never statements on paper cards with a small Momo holding a clapperboard."
+    }
+  ]
+}
