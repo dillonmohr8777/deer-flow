@@ -10,6 +10,13 @@ The upstream DeerFlow history stays in [CHANGELOG.md](../CHANGELOG.md).
 
 ## [Unreleased]
 
+## [momobot-prod-20261022-d2fd3334] - 2026-10-22
+
+### Changed
+
+- Private workspace shows its own name, Oct 22 (#241)
+- Paper fonts in dark mode, Oct 22 (#242)
+
 ## [momobot-prod-20261022-cfb3fba0] - 2026-10-22
 
 ### Changed
