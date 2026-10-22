@@ -24,8 +24,10 @@ from app.gateway.auth.password import hash_password_async
 from app.gateway.auth.session_cookie import ACCESS_TOKEN_COOKIE_NAME, set_session_cookie
 from app.gateway.auth_disabled import AUTH_SOURCE_AUTH_DISABLED, AUTH_SOURCE_INTERNAL, AUTH_SOURCE_PAT, AUTH_SOURCE_SESSION
 from app.gateway.authz import role_has_policy
+from app.gateway.client_boundary import CLIENT_ROLE
 from app.gateway.csrf_middleware import CSRF_COOKIE_NAME, CSRF_HEADER_NAME, is_secure_request
 from app.gateway.deps import get_current_user_from_request, record_audit_event
+from deerflow.persistence.clients.model import ClientAssignmentRow, ClientRow
 from deerflow.persistence.engine import get_session_factory
 from deerflow.persistence.organizations.identity import private_organization_id, private_organization_slug
 from deerflow.persistence.organizations.invitation import InvitationRow
@@ -210,12 +212,70 @@ def _refuse_if_frozen() -> None:
         raise HTTPException(status_code=403, detail=_INVITATIONS_FROZEN_DETAIL)
 
 
+async def _customer_contact(session, organization: OrganizationRow, user: UserRow, now: datetime) -> None:
+    """Bind only a fresh contact (or its exact retry) to the canonical customer."""
+    client_id = organization.customer_client_id
+    canonical = await session.get(ClientRow, client_id)
+    agency = await session.get(OrganizationRow, canonical.organization_id) if canonical is not None else None
+    bindings = (await session.scalars(select(OrganizationRow.id).where(OrganizationRow.customer_client_id == client_id))).all()
+    if (
+        canonical is None
+        or canonical.status != "active"
+        or agency is None
+        or agency.id == organization.id
+        or agency.status != "active"
+        or agency.storage_user_id is None
+        or agency.customer_client_id is not None
+        or bindings != [organization.id]
+    ):
+        raise HTTPException(409, "Customer workspace binding is unavailable")
+    assignments = (await session.scalars(select(ClientAssignmentRow).where(ClientAssignmentRow.user_id == user.id))).all()
+    shared = (
+        await session.scalars(
+            select(OrganizationMemberRow.organization_id)
+            .join(OrganizationRow, OrganizationRow.id == OrganizationMemberRow.organization_id)
+            .where(OrganizationMemberRow.user_id == user.id, OrganizationMemberRow.status == "active", OrganizationRow.storage_user_id.is_not(None))
+        )
+    ).all()
+    if user.disabled_at is not None or any(a.client_id != client_id or a.organization_id != organization.id for a in assignments) or any(workspace != organization.id for workspace in shared):
+        raise HTTPException(409, "Client account is already assigned; review its existing workspace")
+    assignment = next(iter(assignments), None)
+    if assignment is None:
+        session.add(ClientAssignmentRow(client_id=client_id, user_id=user.id, organization_id=organization.id, role="client_contact", created_at=now, updated_at=now))
+    else:
+        assignment.role = "client_contact"
+        assignment.updated_at = now
+    if user.system_role == _PLAIN_USER_ROLE:
+        user.system_role = "client"
+
+
+async def _locked_invitation_user(session, user_id: str) -> UserRow | None:
+    # A common write lock fences different invitation rows on PostgreSQL and SQLite.
+    await session.execute(update(UserRow).execution_options(synchronize_session=False).where(UserRow.id == user_id).values(token_version=UserRow.token_version))
+    return await session.get(UserRow, user_id, populate_existing=True)
+
+
 async def _join_workspace(session, invitation: InvitationRow, user_id: str, now: datetime) -> str:
     """Make *user_id* an active member of the invitation's workspace; return the role it holds there.
 
     An owner stays owner. Invitees start on the simple experience (plain answers,
     guided starters) and can switch in Settings; a saved choice always wins.
     """
+    user = await _locked_invitation_user(session, user_id)
+    if user is None or user.disabled_at is not None:
+        raise _forbidden()
+    if user.system_role == CLIENT_ROLE:
+        other_customer = await session.scalar(
+            select(OrganizationRow.id)
+            .join(OrganizationMemberRow, OrganizationMemberRow.organization_id == OrganizationRow.id)
+            .where(OrganizationMemberRow.user_id == user_id, OrganizationMemberRow.status == "active", OrganizationRow.customer_client_id.is_not(None), OrganizationRow.id != invitation.organization_id)
+            .limit(1)
+        )
+        if other_customer is not None:
+            raise HTTPException(409, "Client account already belongs to a dedicated customer workspace")
+    organization = await session.get(OrganizationRow, invitation.organization_id)
+    if invitation.role == "client" and organization is not None and organization.customer_client_id is not None:
+        await _customer_contact(session, organization, user, now)
     workspace_member = await session.get(OrganizationMemberRow, {"organization_id": invitation.organization_id, "user_id": user_id})
     if workspace_member is None:
         granted_role = invitation.role or "member"
@@ -240,7 +300,9 @@ async def join_invited_workspaces(request: Request, *, user_id: str, email: str)
     proves on the password path, so no token changes hands. Each invitation
     must pass the same bar as ``/accept`` (unconsumed, unexpired, an active
     shared workspace, an issuer still owner or admin) and is consumed here.
-    Returns the workspace to open first (the newest invitation's), or None.
+    A dedicated customer invitation excludes other workspaces for a plain/client
+    account; ambiguous customer invitations fail closed. Staff roles keep the
+    existing multi-workspace behavior. Returns the first workspace, or None.
     """
     from app.gateway.authz import _get_route_authorization_config
 
@@ -250,12 +312,25 @@ async def join_invited_workspaces(request: Request, *, user_id: str, email: str)
     joined: list[tuple[str, str, str, bool]] = []
     async with _session_factory()() as session:
         async with session.begin():
-            user = await session.get(UserRow, user_id)
+            user = await _locked_invitation_user(session, user_id)
             if user is None:
                 return None
             candidates = (await session.scalars(select(InvitationRow).where(func.lower(InvitationRow.email) == email.strip().lower(), InvitationRow.consumed_at.is_(None)).order_by(InvitationRow.created_at.desc()))).all()
+            dedicated: set[str] = set()
+            if (user.system_role == _PLAIN_USER_ROLE or user.system_role == CLIENT_ROLE) and role_has_policy("client"):
+                for invitation in candidates:
+                    if invitation.role != "client" or _as_utc(invitation.expires_at) <= now or not await invitation_issuer_is_active(session, invitation):
+                        continue
+                    organization = await session.get(OrganizationRow, invitation.organization_id)
+                    if organization.customer_client_id is not None:
+                        dedicated.add(organization.id)
+                if len(dedicated) > 1:
+                    raise HTTPException(409, "Conflicting customer invitations; ask your team to review the workspace binding")
             joined_workspaces: set[str] = set()
             for invitation in candidates:
+                # A customer accepts only its dedicated workspace, never an older agency link.
+                if dedicated and (invitation.organization_id not in dedicated or invitation.role != "client"):
+                    continue
                 if _as_utc(invitation.expires_at) <= now or not await invitation_issuer_is_active(session, invitation):
                     continue
                 if invitation.role == "client" and not role_has_policy("client"):
@@ -312,40 +387,24 @@ async def create_invitation(body: CreateInvitationRequest, request: Request, res
     _refuse_if_frozen()
     actor = await get_current_user_from_request(request)
     actor_id = str(actor.id)
-    token = secrets.token_urlsafe(32)
     now = _now()
-    expires_at = now + _INVITATION_TTL
-    invitation_id = str(uuid4())
-
-    async with _session_factory()() as session:
-        async with session.begin():
-            organization, member = await active_shared_workspace_member(session, body.organization_id, actor_id)
-            if organization is None or member is None:
-                raise HTTPException(status_code=403, detail="Only an active workspace owner or admin can invite members")
-            session.add(
-                InvitationRow(
-                    id=invitation_id,
-                    token_hash=_token_hash(token),
-                    organization_id=organization.id,
-                    email=str(body.email).lower(),
-                    role=body.role,
-                    created_by=actor_id,
-                    expires_at=expires_at,
-                    created_at=now,
-                    updated_at=now,
-                )
-            )
-
+    async with _session_factory()() as session, session.begin():
+        organization, member = await active_shared_workspace_member(session, body.organization_id, actor_id)
+        if organization is None or member is None:
+            raise HTTPException(status_code=403, detail="Only an active workspace owner or admin can invite members")
+        created = _create_invitation_row(session, organization=organization, email=str(body.email), role=body.role, actor_id=actor_id, now=now)
     await record_audit_event(
-        request, action="invitation.created", outcome="success", actor_user_id=actor_id, organization_id=organization.id, target_type="invitation", target_id=invitation_id, details={"email": str(body.email).lower(), "role": body.role}
+        request, action="invitation.created", outcome="success", actor_user_id=actor_id, organization_id=organization.id, target_type="invitation", target_id=created.id, details={"email": created.email, "role": body.role}
     )
-    return CreateInvitationResponse(
-        id=invitation_id,
-        token=token,
-        expires_at=expires_at,
-        email=str(body.email).lower(),
-        workspace_name=organization.name,
-    )
+    return created
+
+
+def _create_invitation_row(session, *, organization: OrganizationRow, email: str, role: str, actor_id: str, now: datetime) -> CreateInvitationResponse:
+    token = secrets.token_urlsafe(32)
+    invitation_id = str(uuid4())
+    expires_at = now + _INVITATION_TTL
+    session.add(InvitationRow(id=invitation_id, token_hash=_token_hash(token), organization_id=organization.id, email=email.lower(), role=role, created_by=actor_id, expires_at=expires_at, created_at=now, updated_at=now))
+    return CreateInvitationResponse(id=invitation_id, token=token, expires_at=expires_at, email=email.lower(), workspace_name=organization.name)
 
 
 @router.post("/inspect", response_model=InspectInvitationResponse)
@@ -410,6 +469,29 @@ async def accept_invitation(body: AcceptInvitationRequest, request: Request, res
                     # no block for, so the invitee would be locked out. Nothing is consumed.
                     raise HTTPException(status_code=409, detail="Role 'client' is not defined under authorization.provider.config.roles; add it before inviting clients")
 
+                existing = await _find_user_by_email(session, invitation.email)
+                if existing is not None:
+                    # Sign in, then accept. An existing account (password or
+                    # SSO) never accepts with a credential in this body: a
+                    # password here would be a login that hands out a session
+                    # cookie without the account's MFA step. Its own verified
+                    # browser session already went through password + MFA or
+                    # SSO, so that is the only proof taken. Authenticate and
+                    # lock this user before reserving the token, like SSO.
+                    if session_user_id != existing.id:
+                        raise HTTPException(
+                            status_code=403,
+                            detail="Sign in with the invited email's existing account before accepting this invitation",
+                        )
+                    if not _csrf_double_submit_matches(request):
+                        raise HTTPException(
+                            status_code=403,
+                            # Reopening the link re-runs /inspect, whose
+                            # response issues a fresh csrf_token cookie.
+                            detail="Security check failed (CSRF). Reopen the invite link and try again.",
+                        )
+                    existing = await _locked_invitation_user(session, existing.id)
+
                 # Reserve the single-use token before password work.  The
                 # conditional update is the cross-worker fence; a concurrent
                 # accept sees rowcount=0 and cannot create a second member.
@@ -441,29 +523,9 @@ async def accept_invitation(body: AcceptInvitationRequest, request: Request, res
                 organization_id = organization.id
                 invitation_id = invitation.id
 
-                existing = await _find_user_by_email(session, invitation.email)
                 # Only an admin-issued invitation carries exec, and never without an RBAC exec block (_joins_as_exec).
                 joins_as_exec = await _joins_as_exec(session, invitation)
                 if existing is not None:
-                    # Sign in, then accept. An existing account (password or
-                    # SSO) never accepts with a credential in this body: a
-                    # password here would be a login that hands out a session
-                    # cookie without the account's MFA step. Its own verified
-                    # browser session already went through password + MFA or
-                    # SSO, so that is the only proof taken. Raising here rolls
-                    # back the reservation above, so the token stays usable.
-                    if session_user_id != existing.id:
-                        raise HTTPException(
-                            status_code=403,
-                            detail="Sign in with the invited email's existing account before accepting this invitation",
-                        )
-                    if not _csrf_double_submit_matches(request):
-                        raise HTTPException(
-                            status_code=403,
-                            # Reopening the link re-runs /inspect, whose
-                            # response issues a fresh csrf_token cookie.
-                            detail="Security check failed (CSRF). Reopen the invite link and try again.",
-                        )
                     user_id = existing.id
                     token_version = existing.token_version
                     if joins_as_exec and existing.system_role == _PLAIN_USER_ROLE:

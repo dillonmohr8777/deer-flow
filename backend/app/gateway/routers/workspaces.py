@@ -141,57 +141,46 @@ async def create_workspace(body: WorkspaceCreateRequest, request: Request) -> Wo
     if getattr(actor, "system_role", None) != "admin":
         raise HTTPException(status_code=403, detail="Global administrator permission required")
 
-    actor_id = str(actor.id)
+    async with _session_factory()() as session, session.begin():
+        organization = await _create_workspace_rows(session, actor_id=str(actor.id), name=body.name, now=datetime.now(UTC))
+    return WorkspaceCreateResponse(id=organization.id, name=organization.name, role="owner")
+
+
+async def _create_workspace_rows(session, *, actor_id: str, name: str, now: datetime) -> OrganizationRow:
+    """Allocate fresh storage in the caller's transaction; never bind an existing bucket."""
     storage_user_id = str(uuid4())
     organization_id = private_organization_id(storage_user_id)
-    now = datetime.now(UTC)
-    workspace_name = body.name.strip()
+    workspace_name = name.strip()
     if not workspace_name:
         raise HTTPException(status_code=422, detail="Workspace name must contain a non-whitespace character")
-
-    async with _session_factory()() as session:
-        async with session.begin():
-            if await session.get(OrganizationRow, organization_id) is not None:
-                raise HTTPException(status_code=409, detail="Workspace already exists")
-            # The storage principal has no password or OAuth identity and is
-            # never issued a session. It exists only so existing owner-scoped
-            # persistence and filesystem helpers can share one safe bucket.
-            session.add(
-                UserRow(
-                    id=storage_user_id,
-                    email=f"workspace-{storage_user_id}@deerflow.invalid",
-                    password_hash=None,
-                    system_role="user",
-                    created_at=now,
-                    oauth_provider=None,
-                    oauth_id=None,
-                    needs_setup=False,
-                    token_version=0,
-                )
-            )
-            session.add(
-                OrganizationRow(
-                    id=organization_id,
-                    slug=private_organization_slug(storage_user_id),
-                    name=workspace_name,
-                    status="active",
-                    storage_user_id=storage_user_id,
-                    created_at=now,
-                    updated_at=now,
-                )
-            )
-            session.add(
-                OrganizationMemberRow(
-                    organization_id=organization_id,
-                    user_id=actor_id,
-                    role="owner",
-                    status="active",
-                    created_at=now,
-                    updated_at=now,
-                )
-            )
-
-    return WorkspaceCreateResponse(id=organization_id, name=workspace_name, role="owner")
+    if await session.get(OrganizationRow, organization_id) is not None:
+        raise HTTPException(status_code=409, detail="Workspace already exists")
+    # The storage principal has no password or OAuth identity and is never issued a session.
+    session.add(
+        UserRow(
+            id=storage_user_id,
+            email=f"workspace-{storage_user_id}@deerflow.invalid",
+            password_hash=None,
+            system_role="user",
+            created_at=now,
+            oauth_provider=None,
+            oauth_id=None,
+            needs_setup=False,
+            token_version=0,
+        )
+    )
+    organization = OrganizationRow(
+        id=organization_id,
+        slug=private_organization_slug(storage_user_id),
+        name=workspace_name,
+        status="active",
+        storage_user_id=storage_user_id,
+        created_at=now,
+        updated_at=now,
+    )
+    session.add(organization)
+    session.add(OrganizationMemberRow(organization_id=organization_id, user_id=actor_id, role="owner", status="active", created_at=now, updated_at=now))
+    return organization
 
 
 @router.post("/select", response_model=WorkspaceSelectResponse)
