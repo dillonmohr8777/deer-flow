@@ -18,8 +18,8 @@ rs.mock("next/dynamic", () => ({
     },
 }));
 
-rs.mock("@/components/ui/sidebar", () => ({
-  SidebarTrigger: () => null,
+rs.mock("@/components/workspace/workspace-sidebar-trigger", () => ({
+  WorkspaceSidebarTrigger: () => null,
 }));
 
 import { CapabilityCenter } from "@/components/workspace/capabilities/capability-center";

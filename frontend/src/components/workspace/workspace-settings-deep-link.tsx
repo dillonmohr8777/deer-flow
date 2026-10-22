@@ -20,6 +20,7 @@ const SETTINGS_SECTIONS = new Set<SettingsSection>([
   "notification",
   "experience",
   "audit",
+  "invite",
   "about",
 ]);
 

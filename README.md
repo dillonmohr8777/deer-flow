@@ -50,6 +50,25 @@ This first workflow has local failure and restart tests. Live Slack delivery, un
 Learn more and see **real demos** on our [**official website**](https://deerflow.tech).
 The landing-page case studies open as allowlisted, read-only showcases without requiring a sign-in.
 
+### MomoBot workspace recovery and mobile navigation
+
+Temporary connection failures keep the last confirmed sign-in visible. An expired
+session returns both REST and chat requests to sign-in with the current page and
+query preserved. Logout and identity changes discard stale refresh responses;
+logout clears cached responses after its request completes and suppresses late
+sign-in redirects. Switching between confirmed accounts reloads the page to
+discard the previous account's queries and observers. A chat request's 401 only
+redirects after a separate session check also confirms the session has expired.
+
+Phone navigation remains expanded even when the desktop sidebar was collapsed.
+The drawer closes after page or query navigation and when moving to a desktop
+layout, while a starting chat assigning its thread URL keeps the drawer open.
+Installation prompts stay off sign-in, setup and invitation pages.
+Settings deep links include `?settings=invite`; links to sections unavailable to
+the current role, including an unresolved role, focus the allowed Appearance fallback.
+Agent lists show loading during initial feature discovery and hide cached agents
+when the Agents API is disabled.
+
 ## Sister Projects
 
 <img width="446" height="280" alt="image" align="middle" src="https://github.com/user-attachments/assets/077edef4-d560-41af-bb0d-d0a5f14fcc20" />

@@ -49,6 +49,7 @@ function createAuthState(user: User | null): ReturnType<typeof useAuth> {
     user,
     isAuthenticated: user !== null,
     isLoading: false,
+    isLoggingOut: false,
     logout: rs.fn(),
     refreshUser: rs.fn(),
     applyUser: rs.fn(),

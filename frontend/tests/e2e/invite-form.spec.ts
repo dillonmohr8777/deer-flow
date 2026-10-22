@@ -54,6 +54,16 @@ async function mockInviteAPI(page: Page) {
   });
 }
 
+test("invite settings can be opened from a deep link", async ({ page }) => {
+  await mockInviteAPI(page);
+  await page.goto("/workspace/chats/new?settings=invite");
+  const dialog = page.getByRole("dialog", { name: "Settings", exact: true });
+  await expect(
+    dialog.getByRole("button", { name: "Invite teammate", exact: true }),
+  ).toHaveAttribute("aria-current", "page");
+  await expect(dialog.getByLabel("Email")).toBeVisible();
+});
+
 for (const width of [390, 768, 1440]) {
   test(`invite form mints a one-time link without overflow at ${width}px`, async ({
     page,

@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 
 import { MomoFilm } from "@/components/momentum/momo-film";
 import { Button } from "@/components/ui/button";
-import { SidebarTrigger } from "@/components/ui/sidebar";
 import { useWorkspaceAppearance } from "@/components/workspace/command-center/appearance-provider";
 import {
   EmptyState,
@@ -13,6 +12,7 @@ import {
   pageStyles,
   WorkingState,
 } from "@/components/workspace/page-body";
+import { WorkspaceSidebarTrigger } from "@/components/workspace/workspace-sidebar-trigger";
 import { useAgents } from "@/core/agents";
 import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
@@ -41,7 +41,7 @@ export function AgentGallery() {
         <div className="mx-auto flex w-full max-w-5xl flex-wrap items-end justify-between gap-x-6 gap-y-3">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <SidebarTrigger className="-ml-2 md:hidden" />
+              <WorkspaceSidebarTrigger className="-ml-2 md:hidden" />
               <h1 className="text-2xl">{t.agents.title}</h1>
             </div>
             <p className={cn(pageStyles.lede, "mt-1")}>

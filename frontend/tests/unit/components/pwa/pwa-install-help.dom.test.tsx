@@ -11,7 +11,10 @@ import { InstallHelp } from "@/components/pwa/install-help";
 import { InstallHelpDialog } from "@/components/pwa/install-help-dialog";
 import { INSTALL_HELP_DISMISSED_KEY } from "@/core/pwa/install";
 
-rs.mock("next/navigation", () => ({ usePathname: () => "/workspace/openai" }));
+const { route } = rs.hoisted(() => ({
+  route: { pathname: "/workspace/openai" },
+}));
+rs.mock("next/navigation", () => ({ usePathname: () => route.pathname }));
 // The browser suite exercises the real lazy dialog boundary. These tests own
 // eligibility, persistence, event subscriptions and the dialog's actual content.
 rs.mock("next/dynamic", () => ({ default: () => () => null }));
@@ -27,12 +30,36 @@ function iphone(standalone = false) {
 
 afterEach(() => {
   cleanup();
+  route.pathname = "/workspace/openai";
   localStorage.clear();
   rs.unstubAllGlobals();
   rs.restoreAllMocks();
 });
 
 describe("MomoBot installation help", () => {
+  it.each(["/login", "/setup", "/invite", "/auth/callback"])(
+    "keeps installation controls off the %s authentication page",
+    (pathname) => {
+      iphone();
+      route.pathname = pathname;
+      render(<InstallHelp />);
+      expect(
+        screen.queryByRole("button", { name: "Install MomoBot" }),
+      ).toBeNull();
+    },
+  );
+
+  it("offers installation again after navigating out of sign-in", () => {
+    iphone();
+    route.pathname = "/login";
+    const { rerender } = render(<InstallHelp />);
+    route.pathname = "/workspace/openai";
+    rerender(<InstallHelp />);
+    expect(
+      screen.getByRole("button", { name: "Install MomoBot" }),
+    ).toBeDefined();
+  });
+
   it("shows guidance in an iPhone browser and suppresses it in an installed app", () => {
     iphone();
     const { unmount } = render(<InstallHelp />);
