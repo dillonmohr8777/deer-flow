@@ -1,84 +1,255 @@
 {
-  "title": "What is generative engine optimization, and does my business need it?",
-  "dek": "Generative engine optimization means writing your pages so AI tools like ChatGPT and Google AI Overviews can find, trust and repeat what you say.",
+  "title": "What Is Generative Engine Optimization (GEO)? Do You Need It?",
+  "dek": "Generative engine optimization (GEO) helps ChatGPT, Perplexity and Google AI Overviews cite your pages. What it is, what works, and who needs it.",
   "slug": "what-is-generative-engine-optimization",
   "date": "2026-09-23",
-  "author": { "name": "Dillon Mohr", "title": "AI Marketing Director" },
+  "author": {
+    "name": "Dillon Mohr",
+    "title": "AI Marketing Director"
+  },
   "keywords": [
     "generative engine optimization",
     "GEO",
-    "AI search",
-    "AI Overviews",
-    "answer engine optimization"
+    "what is GEO",
+    "GEO vs SEO",
+    "GEO for small business",
+    "how to get cited in AI answers",
+    "generative engine optimization strategies"
   ],
-  "summary": "Generative engine optimization, or GEO, is the practice of structuring your website so AI assistants can read it, trust it, and quote it in a generated answer. Most small and mid size businesses already do the groundwork through good SEO. GEO adds a sharper focus on clear answers, real authorship, and verifiable facts.",
+  "summary": "Generative engine optimization (GEO) is the practice of shaping web pages so AI tools that write answers, like ChatGPT, Perplexity and Google AI Overviews, cite them as sources. It builds on SEO. The extra focus is clear answers, named sources, real statistics and quotes, and facts a reader can check.",
   "section": "Search and Growth",
   "hero": {
     "src": "/momentum/daily/art/what-is-generative-engine-optimization.webp",
     "alt": "Momo the blue robot mascot as a 1930s pulp noir detective, magnifying glass raised to a glowing question mark clue, rendered in dramatic ink and halftone on cream newsprint"
   },
-  "status": "draft",
+  "status": "published",
   "body": [
     {
-      "heading": "What does generative engine optimization actually mean?",
+      "heading": "What is generative engine optimization?",
       "paragraphs": [
-        "Generative engine optimization, or GEO, is the work of shaping a website so that an AI system, not just a search engine, can read it, understand what it says, and safely repeat it. When someone asks ChatGPT, Perplexity, or Google AI Overviews a question, the system does not invent an answer from nothing. It searches, reads a handful of pages, and stitches together a response, often naming or linking the sources it leaned on. GEO is the practice of trying to be one of those sources.",
-        "The name is new. The underlying goal is not. Businesses have always wanted to be the answer a customer finds first. What changed is the format of that first answer, from a list of blue links to a short paragraph the AI wrote itself."
+        "Generative engine optimization, or GEO, is the work of making your pages easy for AI systems to read, trust and cite when they write an answer. A generative engine is a tool like ChatGPT search, Perplexity, Google AI Overviews, Google AI Mode, Gemini or Microsoft Copilot that searches the web and then writes a reply.",
+        "These tools do not invent answers from nothing. They read a handful of pages, combine what they find, and often link the sources they used. GEO is the effort to be one of those sources.",
+        "This guide is for owners and marketers at small and mid size businesses who want to know whether GEO is worth their time and where to begin."
+      ],
+      "subsections": [
+        {
+          "heading": "How engines pick sources",
+          "paragraphs": [
+            "Google says AI Overviews and AI Mode may use a query fan-out technique, running several related searches across subtopics before writing a response. One customer question can pull in pages about cost, timing and materials all at once.",
+            "ChatGPT search finds pages through OpenAI's OAI-SearchBot crawler. Perplexity and Microsoft Copilot run their own retrieval, and Copilot draws on Bing. In every case, a page has to be reachable and clear before it can be cited."
+          ]
+        },
+        {
+          "heading": "Why being cited matters",
+          "paragraphs": [
+            "When an AI answer names three sources, those three get the attention the rest of the web used to share. A cited page also borrows some trust from the answer itself, so the person who clicks arrives already warmed up."
+          ]
+        }
       ]
     },
     {
-      "heading": "How is GEO different from regular SEO?",
+      "heading": "Where did the term GEO come from?",
       "paragraphs": [
-        "GEO builds on search engine optimization rather than replacing it. The two disciplines want the same things: a fast site, clear writing, accurate information, and pages that answer a real question. If your SEO is solid, you already have most of what GEO needs.",
-        "The difference is emphasis. SEO optimizes for a ranking position on a results page a person will scan. GEO optimizes for being extracted, meaning a sentence or two of your page gets lifted out and placed inside someone else's generated answer. That means a direct, quotable answer near the top of the page matters more than it used to, and a wall of marketing language before the substance matters less."
+        "The term comes from a research paper titled [GEO: Generative Engine Optimization](https://arxiv.org/abs/2311.09735), by researchers from Princeton University, IIT Delhi and others, published at the KDD 2024 conference. The authors built a benchmark of 10,000 queries to test how changes to a page affect whether AI engines use it.",
+        "Their headline finding was that some page changes boosted a source's visibility in generative engine responses by up to 40 percent. They also tested on Perplexity, a live answer engine, and saw improvements of up to 37 percent.",
+        "Treat those numbers as research results under test conditions, not a promise for any one website. Results varied by topic, which the authors called out directly.",
+        "One finding is good news for small businesses. The paper reports that GEO methods helped lower ranked sources the most, which means a smaller site with clear, well sourced pages has a real chance against bigger names."
       ]
     },
     {
-      "heading": "Where do AI answers actually get their facts?",
+      "heading": "How is GEO different from SEO?",
       "paragraphs": [
-        "Answer engines pull from an index of crawled pages, similar to a search engine's index, and increasingly favor pages that make their claims easy to verify: a clear author, a clear publisher, a date, and language that states things plainly instead of hedging behind adjectives. Structured data, the machine readable markup behind a page, helps an AI system confirm who wrote something and when, rather than guessing.",
-        "This is also why accuracy carries more weight than usual. An AI system that gets burned by quoting something false is less likely to draw from that source again. A page with clean facts, dated updates, and a named author with a real title reads as more trustworthy to both a person and a machine."
+        "GEO builds on SEO instead of replacing it. Google says its generative AI features in Search are rooted in its core ranking and quality systems, in its [guide to optimizing for generative AI features](https://developers.google.com/search/docs/fundamentals/ai-optimization-guide)."
+      ],
+      "subsections": [
+        {
+          "heading": "Same foundation",
+          "paragraphs": [
+            "A page still needs to be crawlable, indexed and genuinely helpful. Google's page on [AI features and your website](https://developers.google.com/search/docs/appearance/ai-features) says a page must be indexed and eligible to show with a snippet to appear as a supporting link in AI Overviews or AI Mode."
+          ]
+        },
+        {
+          "heading": "Different goal",
+          "paragraphs": [
+            "SEO aims for a position on a results page a person scans. GEO aims for a sentence or fact from your page to land inside someone else's written answer, ideally with a link back."
+          ]
+        },
+        {
+          "heading": "Different tactics that matter",
+          "paragraphs": [
+            "The GEO paper found that keyword stuffing, a classic old SEO trick, had little to no benefit in generative engine responses. Clear presentation and credible evidence did much better."
+          ]
+        }
       ]
     },
     {
-      "heading": "Does a small or mid size business really need this?",
+      "heading": "Which GEO tactics actually work?",
       "paragraphs": [
-        "If your customers research before they buy, and most do, some of that research is starting inside an AI chat window instead of a search box. A contractor comparing insurance options, a homeowner comparing local landscapers, or an office manager comparing payroll software may now get a short AI generated summary before they ever see a full page of results. If your business is not part of that summary, a competitor's might be.",
-        "That does not mean every business needs a GEO strategy on day one. A business with almost no organic web presence has bigger priorities first. But for a business that already publishes useful content, whether that is service pages, guides, or an FAQ, a light GEO pass on existing pages is a small, worthwhile project.",
-        "It is also worth saying plainly what GEO is not. It is not a technical trick, a plugin, or a paid placement. Nobody can guarantee an AI system will name your business, and anyone who promises that is overselling. What a business can control is whether its pages are clear, accurate, and easy to verify, which is the same standard a careful human reader applies."
+        "The strongest tactics in the GEO study were adding credible evidence to the page. These line up with what makes a page useful to a person, too."
+      ],
+      "subsections": [
+        {
+          "heading": "Cite your sources",
+          "paragraphs": [
+            "Linking the source behind a claim was one of the top performing methods in the study. It also lets a reader check your work, which is good practice anyway."
+          ]
+        },
+        {
+          "heading": "Add real statistics",
+          "paragraphs": [
+            "Adding relevant statistics was another top method. The key word is real: every number should come from a source you can name, or from your own records."
+          ]
+        },
+        {
+          "heading": "Quote credible people",
+          "paragraphs": [
+            "Adding quotations from relevant, credible sources also lifted visibility. A quote from your licensed technician or a named industry body counts, a vague claim does not."
+          ]
+        },
+        {
+          "heading": "Write clearly",
+          "paragraphs": [
+            "Methods that made text more fluent and easier to understand also helped in the study. Short sentences and a direct answer near the top serve both readers and machines. Our guide on [writing pages answer engines quote](/daily/write-pages-answer-engines-quote) goes deeper."
+          ]
+        }
       ]
     },
     {
-      "heading": "What should an account manager tell a client this month?",
+      "heading": "Does a small business need GEO?",
       "paragraphs": [
-        "Start with the questions your best customers actually ask before they call. Answer each one in two or three plain sentences near the top of the relevant page. Make sure the page names who wrote it and when it was last checked. That is most of the work.",
-        "Then be patient. Citations in AI answers are not something you buy or force. They are something you earn by being the clearest, most verifiable source on a specific question, the same way a good answer earns a follow up question in conversation."
+        "If your customers research before they buy, some of that research now happens inside an AI chat. A homeowner comparing landscapers or an office manager comparing payroll tools may read an AI summary before visiting any site."
+      ],
+      "subsections": [
+        {
+          "heading": "GEO makes sense if",
+          "paragraphs": [
+            "Your site is already indexed, you publish service pages, guides or FAQs, and customers ask you the same questions again and again. A light GEO pass on those pages is a small, sensible project."
+          ]
+        },
+        {
+          "heading": "Skip it for now if",
+          "paragraphs": [
+            "Your site has almost no content, is not indexed, or has basic technical problems. Fix the foundation first, because no AI engine can cite a page it cannot find."
+          ]
+        },
+        {
+          "heading": "Do not expect guarantees",
+          "paragraphs": [
+            "No one can promise that an AI tool will name your business. What you control is whether your pages are clear, accurate and easy to verify."
+          ]
+        },
+        {
+          "heading": "Who benefits most",
+          "paragraphs": [
+            "Businesses that sell a considered purchase gain the most, because their buyers ask a lot of questions first. Think contractors, clinics, law firms, software vendors and anyone selling a service over a few hundred dollars.",
+            "A business that sells mostly on impulse, or mostly through walk-in traffic, will see less from GEO. Its time is usually better spent on its Google Business Profile and reviews."
+          ]
+        }
       ]
     },
     {
-      "heading": "What is the risk of waiting?",
+      "heading": "What are common GEO mistakes?",
       "paragraphs": [
-        "Waiting is not free, but it is not an emergency either. AI answer engines are still evolving fast, and today's best practice may shift within a year. The safer move is treating GEO as an ongoing habit, a few updated pages each quarter, rather than a one time overhaul. Businesses that build that habit now will have a head start once AI generated answers become as ordinary as a search results page is today. We track that shift over on The Momo Daily as it happens.",
-        "The businesses most exposed are the ones that treat their website as a brochure they finished writing once and never touched again. A page written five years ago, with no author, no date, and language built for a search engine that no longer exists on its own, is the page most likely to be skipped by an AI system reaching for a clean, current answer."
+        "The biggest mistake is chasing tricks instead of evidence. Google lists several things you can skip for its AI features, including llms.txt files, chunking content into tiny pieces, and rewriting content just for AI.",
+        "The second mistake is making up numbers to look authoritative. A statistic with no source can hurt trust with people and machines, so cite it or cut it.",
+        "The third is blocking crawlers by accident. OpenAI's [publisher FAQ](https://help.openai.com/en/articles/12627856-publishers-and-developers-faq) says sites that want to appear in ChatGPT search summaries should make sure they are not blocking OAI-SearchBot."
+      ],
+      "subsections": [
+        {
+          "heading": "Treating GEO as a separate project",
+          "paragraphs": [
+            "Some teams start a GEO project that runs apart from their SEO and content work. That doubles the effort, because the same pages, facts and writing habits serve both.",
+            "Fold GEO into the content work you already do. Every time a page is updated for search, add a direct answer, a source for each number and an author."
+          ]
+        },
+        {
+          "heading": "Ignoring the pages customers actually read",
+          "paragraphs": [
+            "Blog posts get attention, but service pages, pricing pages and FAQs are what customers check before they call. Those pages are often the thinnest on a small business site.",
+            "Start your GEO work there. A clear, sourced answer on a service page helps a buyer far more than another general blog post."
+          ]
+        }
+      ]
+    },
+    {
+      "heading": "A simple worked example",
+      "paragraphs": [
+        "This is an example with made up numbers to show how to plan the work, not a measured result. Say a landscaping company has a 900 word page on patio installation with no sources, no author and the answer in paragraph four.",
+        "Step 1: Move a two sentence answer to the top. Step 2: Add the author's name and role, plus an updated date.",
+        "Step 3: Add 3 facts with sources, such as the material spec from the manufacturer and the permit rule from the town's website. Step 4: Add 1 quote from the crew lead about how long a typical job takes, based on the company's own job records.",
+        "That is about 2 hours of work per page. At 5 pages a month, the company would update its 10 most important pages in 2 months, then check citations in ChatGPT search, Perplexity and Google AI Overviews. Our guide to [measuring AI search visibility](/daily/measure-ai-search-visibility) shows a simple way to track that."
+      ]
+    },
+    {
+      "heading": "How do I start GEO this month?",
+      "paragraphs": [
+        "Start with the questions your best customers ask before they call. Answer each one in two or three plain sentences near the top of the right page.",
+        "Then add sources for every number, a named author and a date. If you want the closely related basics, read [what answer engine optimization is](/daily/what-is-answer-engine-optimization) and our guide on [getting cited by AI answer engines](/daily/get-cited-by-ai-answer-engines).",
+        "Treat GEO as a habit, a few pages each month, not a one time overhaul. AI search tools keep changing, and accurate, current pages are the safest bet through those changes."
+      ],
+      "subsections": [
+        {
+          "heading": "Measure what changes",
+          "paragraphs": [
+            "OpenAI's [publisher FAQ](https://help.openai.com/en/articles/12627856-publishers-and-developers-faq) says ChatGPT adds utm_source=chatgpt.com to referral links, so that traffic can show up in Google Analytics. [Search Engine Land reported](https://searchengineland.com/chatgpt-appears-to-drop-utm-tracking-making-ai-referral-traffic-harder-to-measure-496552) in October 2026 that some ChatGPT links now arrive without that tag, so part of that traffic can show up as direct. Google Search Console counts clicks and impressions from AI features inside its regular Performance reports.",
+            "Also run a short manual check each month. Ask your top ten customer questions in ChatGPT search, Perplexity and Google, and write down which sources each one cites."
+          ]
+        },
+        {
+          "heading": "Keep local details current",
+          "paragraphs": [
+            "For local businesses, keep your Google Business Profile hours, services and photos up to date. Google lists current Business Profile information among the basics that still apply to its AI features. Our guide to [local SEO and AI Overviews](/daily/local-seo-ai-overviews) covers the local side in more detail."
+          ]
+        }
       ]
     }
   ],
   "faq": [
     {
       "question": "Is GEO a replacement for SEO?",
-      "answer": "No. GEO adds to SEO rather than replacing it. A site with strong technical SEO and clear content already has the foundation GEO needs."
+      "answer": "No. GEO adds to SEO, and Google says its AI features rely on its core ranking systems, so strong SEO stays the foundation."
     },
     {
-      "question": "Which AI tools does GEO actually cover?",
-      "answer": "The main ones today are ChatGPT, Perplexity, Google AI Overviews, and Microsoft Copilot. Each reads the web slightly differently, but all of them reward the same things: clarity, accuracy, and easy attribution."
+      "question": "Which AI tools does GEO cover?",
+      "answer": "The main ones are ChatGPT search, Perplexity, Google AI Overviews, Google AI Mode, Gemini and Microsoft Copilot. Each works a little differently, but all of them read and cite web pages."
     },
     {
-      "question": "How long does it take to see a citation?",
-      "answer": "There is no fixed timeline, and no service can guarantee one. Treat it like earning a reputation, steady and cumulative rather than immediate."
+      "question": "Is the 40 percent GEO number reliable for my site?",
+      "answer": "It is a research result from a benchmark of 10,000 test queries, not a forecast for any one site. The authors found results varied by topic."
     },
     {
-      "question": "Do I need new content, or can I update what I have?",
-      "answer": "Most businesses can start by updating existing pages rather than writing new ones. Add a direct answer near the top, check the facts, and name an author."
+      "question": "Can I track traffic that comes from ChatGPT?",
+      "answer": "Partly. OpenAI says ChatGPT adds utm_source=chatgpt.com to referral links, but some ChatGPT visits now arrive untagged and look like direct traffic, so treat the tagged count as a floor."
+    },
+    {
+      "question": "Do I need to write new content for GEO?",
+      "answer": "Usually not at first. Updating your most important existing pages with a direct answer, sources and an author is the fastest place to start."
+    }
+  ],
+  "updated": "2026-10-22",
+  "takeaways": [
+    "GEO is about being cited inside an AI written answer, not just ranking in a list of links.",
+    "The 2024 GEO research paper found that adding citations, quotations and statistics raised a source's visibility in AI answers by up to about 40 percent in its tests.",
+    "Google says its AI features rest on its core ranking systems, so strong SEO is still the foundation for GEO.",
+    "Keyword stuffing showed little to no benefit in the GEO study, so clarity beats repetition.",
+    "A small business can start GEO by updating existing pages instead of writing new ones."
+  ],
+  "sources": [
+    {
+      "title": "GEO: Generative Engine Optimization (Aggarwal et al., KDD 2024)",
+      "url": "https://arxiv.org/abs/2311.09735"
+    },
+    {
+      "title": "Google's guide to optimizing for generative AI features on Google Search",
+      "url": "https://developers.google.com/search/docs/fundamentals/ai-optimization-guide"
+    },
+    {
+      "title": "AI features and your website, Google Search Central",
+      "url": "https://developers.google.com/search/docs/appearance/ai-features"
+    },
+    {
+      "title": "Publishers and Developers FAQ, OpenAI Help Center",
+      "url": "https://help.openai.com/en/articles/12627856-publishers-and-developers-faq"
     }
   ]
 }

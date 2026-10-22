@@ -1,84 +1,279 @@
 {
-  "title": "AI agents versus chatbots: what actually changes for a small business",
-  "dek": "Chatbots answer questions. AI agents can complete a task on their own. Here is what that means for a small business.",
+  "title": "AI Agents vs Chatbots: What Changes for a Small Business",
+  "dek": "AI agents vs chatbots for small business: what each one does, when an agent is worth it, the real risks, and a safe way to start this month.",
   "slug": "ai-agents-vs-chatbots",
   "date": "2026-09-21",
-  "author": { "name": "Dillon Mohr", "title": "AI Marketing Director" },
+  "author": {
+    "name": "Dillon Mohr",
+    "title": "AI Marketing Director"
+  },
   "keywords": [
     "AI agents vs chatbots",
     "AI agents for small business",
-    "business automation",
-    "AI agent workflow",
-    "chatbot vs agent"
+    "difference between AI agent and chatbot",
+    "chatbot vs AI agent",
+    "when to use an AI agent",
+    "small business automation",
+    "AI agent risks"
   ],
-  "summary": "A chatbot answers a question inside a conversation. An AI agent can also take the next step: booking the appointment, updating the record, drafting the email, without a person doing each click. For a small business, the real change is not smarter answers. It is fewer manual handoffs between asking and getting something done.",
+  "summary": "A chatbot answers questions inside a conversation. An AI agent uses tools to finish a task, like booking an appointment or updating a customer record. For a small business, the real change is fewer manual handoffs between a question and a finished job. Agents fit repetitive, rule-based work, as long as a person approves anything risky or hard to undo.",
   "section": "Business",
   "hero": {
     "src": "/momentum/daily/art/ai-agents-vs-chatbots.webp",
     "alt": "Momo the blue robot mascot as a noir office clerk at a busy switchboard desk, pulling levers and stamping documents at once, in dramatic ink and halftone on cream newsprint"
   },
-  "status": "draft",
+  "status": "published",
   "body": [
     {
-      "heading": "What is the actual difference between a chatbot and an agent?",
+      "heading": "What is the difference between an AI agent and a chatbot?",
       "paragraphs": [
-        "A chatbot has a conversation. Someone types a question, it answers from a script or a knowledge base, and the exchange ends there. Even a good one, powered by a large language model, is still fundamentally reactive: it responds to what it is asked and stops.",
-        "An AI agent goes further. It can look at a goal, break it into steps, use tools such as a calendar, a database, or an email account, and carry the task through to completion, checking its own work along the way. The chatbot describes what you could do. The agent can do it."
+        "A chatbot answers; an AI agent acts. A chatbot replies to a question and stops, while an agent can take a goal, plan the steps and use tools to get the job done.",
+        "This page is for owners and managers of small businesses who already have a website chat widget or a help bot and want to know whether an agent is worth the extra setup."
+      ],
+      "subsections": [
+        {
+          "heading": "What a chatbot does",
+          "paragraphs": [
+            "A chatbot holds a conversation and answers from a script, a help center or a language model. Even a very good one is reactive: it responds to what it is asked and leaves the next step to a person."
+          ]
+        },
+        {
+          "heading": "What an AI agent does",
+          "paragraphs": [
+            "An AI agent uses tools in a loop until a task is finished. Anthropic now describes agents simply as language models autonomously using tools in a loop, in [its post on context engineering](https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents).",
+            "The tools are ordinary business systems: a calendar, a CRM, an inbox or a spreadsheet. The agent checks the result of each step before it takes the next one."
+          ]
+        },
+        {
+          "heading": "Why the line is blurring",
+          "paragraphs": [
+            "Many products now sold as chatbots can call a tool or two, such as a booking link or an order lookup. The useful question is not what a vendor calls it, but how much the tool is allowed to do without a person clicking a button."
+          ]
+        }
       ]
     },
     {
-      "heading": "Where does a small business already use a chatbot?",
+      "heading": "Where does a chatbot still make sense?",
       "paragraphs": [
-        "Most small businesses already have some version of a chatbot: a website widget that answers hours and pricing questions, a support bot that pulls answers from a help center, or a simple appointment scheduler with fixed options. These tools are useful and low risk, because a person still has to act on whatever the chatbot tells them.",
-        "That low risk is also the limit. A chatbot that hands a customer a scheduling link still leaves the actual scheduling, and every follow up step after it, to a person on both ends of the conversation. The convenience stops exactly where the real work begins."
+        "A chatbot is still the right tool when the job is answering, not doing. Hours, directions, return policies and simple pricing questions are good examples.",
+        "Chatbots are low risk because a person still acts on whatever they say. If a bot gives a slightly wrong answer about parking, the cost is small and easy to fix.",
+        "That low risk is also the limit. A bot that sends a customer a booking link still leaves the actual booking, the confirmation and the reminder to people on both ends."
       ]
     },
     {
-      "heading": "What can an agent do that a chatbot cannot?",
+      "heading": "What can an AI agent do that a chatbot cannot?",
       "paragraphs": [
-        "An agent can take that same customer question and act on it. Instead of telling a customer where to find the booking page, it can check real availability and put the appointment on the calendar. Instead of telling an employee what a policy says, it can pull the exact record, draft the update, and queue it for approval. The output is not information, it is a finished or near finished task.",
-        "This matters most in the places where a business currently pays a person to do repetitive coordination work: scheduling, data entry, first draft replies, and status updates between systems that do not talk to each other.",
-        "None of that coordination work is glamorous, which is exactly why it is a good fit. It follows clear rules most of the time, it happens often enough to be worth automating, and the cost of a small mistake is usually a quick correction rather than a serious problem."
+        "An agent can finish the task instead of describing it. The output is a booked slot, an updated record or a ready-to-send draft, not a set of instructions.",
+        "OpenAI's guide lists the kinds of actions agents take, such as sending emails, updating a CRM record or handing a support ticket to a person. See [OpenAI's practical guide to building agents](https://cdn.openai.com/business-guides-and-resources/a-practical-guide-to-building-agents.pdf) for the full breakdown."
+      ],
+      "subsections": [
+        {
+          "heading": "Scheduling",
+          "paragraphs": [
+            "An agent can check real availability, hold a slot and send the confirmation. A chatbot can only point the customer to the booking page."
+          ]
+        },
+        {
+          "heading": "Records and data entry",
+          "paragraphs": [
+            "An agent can copy details from a form into the right fields of your CRM or spreadsheet. That removes one of the most common sources of typos in a small office."
+          ]
+        },
+        {
+          "heading": "First draft replies",
+          "paragraphs": [
+            "An agent can read an incoming email, pull the matching order or account, and draft a reply for a person to approve. The person edits a finished draft instead of starting from a blank screen."
+          ]
+        },
+        {
+          "heading": "Status updates between systems",
+          "paragraphs": [
+            "An agent can move information between tools that do not talk to each other. For example, it can note in the CRM that an invoice was paid once the payment shows up."
+          ]
+        }
       ]
     },
     {
-      "heading": "What is the catch?",
+      "heading": "When does an AI agent make sense for a small business?",
       "paragraphs": [
-        "The catch is exactly the source of the benefit: an agent that can act can also act on a mistake. A chatbot that gives a wrong answer causes a person to make a wrong decision. An agent that takes a wrong action can send the wrong email, book the wrong slot, or touch a customer record incorrectly, faster than a person would notice. That speed is what makes the guardrails matter, not optional polish added later.",
-        "That risk is manageable, but it has to be designed for on purpose. Every credible agent setup keeps a clear line between actions that are safe to automate fully and actions, such as anything involving money, a public message, or an irreversible change, that still need a person to approve before they go out."
+        "An agent makes sense when a task is frequent, follows clear rules and is cheap to correct. If any of those three is missing, a chatbot or a simple automation is usually the better buy."
+      ],
+      "subsections": [
+        {
+          "heading": "An agent is probably the right call if",
+          "paragraphs": [
+            "The same task happens many times a week, a person currently copies information between two systems to do it, and a mistake can be caught and fixed in minutes. Booking, intake forms and routine replies usually pass all three tests."
+          ]
+        },
+        {
+          "heading": "Stick with a chatbot or a simple automation if",
+          "paragraphs": [
+            "The task happens a few times a month, the steps never change, or a mistake would be expensive. [Anthropic's guide to building effective agents](https://www.anthropic.com/engineering/building-effective-agents) makes the same point: start with the simplest solution and add agentic systems only when simpler options fall short."
+          ]
+        },
+        {
+          "heading": "Signs you have outgrown a chatbot",
+          "paragraphs": [
+            "Your team spends more time acting on chatbot conversations than the bot saves. Customers hit the end of the chat and still have to call or email to get anything done."
+          ]
+        }
       ]
     },
     {
-      "heading": "Where should a small business start?",
+      "heading": "What does an AI agent save? A simple worked example",
       "paragraphs": [
-        "Start with one workflow that already has a chatbot or a manual process attached to it, and that is low risk if something goes slightly wrong. Internal scheduling is a common first choice. Let the agent draft the action and get final sign off from a person for the first few weeks, then loosen that gate only once the pattern proves itself.",
-        "Measure the same things you would measure for a new employee doing that task: how often the work was done correctly without a correction, and how much time it freed up. Those two numbers make the case for expanding an agent's scope far better than any general claim about the technology."
+        "Here is an example with made-up but realistic numbers, not a study. Picture a two-chair dental office that gets 40 appointment requests a week by phone, email and web form.",
+        "If each request takes about 6 minutes of back and forth, that is 240 minutes, or 4 hours of staff time a week. If an agent drafts and books each one and a person spends 1 minute approving it, the weekly total drops to 40 minutes.",
+        "That is 200 minutes saved each week, which works out to about 173 hours over a 52 week year. Run the same math with your own request count and minutes per request before you buy anything."
       ]
     },
     {
-      "heading": "Who should stay in the loop?",
+      "heading": "What are the risks of giving an AI agent access to your tools?",
       "paragraphs": [
-        "Anything that reaches a customer directly, spends money, or cannot be undone should keep a person in the loop, at least for now. That is not a limitation of the technology so much as good judgment: the value of an agent is speed and consistency on the routine work, which frees a person's attention for the decisions that actually need it.",
-        "This division of labor is not permanent. As a specific workflow proves itself over weeks or months, the gate can move further out, and the person's role shifts from approving every action to spot checking a sample of them. The pace of that shift should be set by evidence, not by how impressive the technology seems on day one."
+        "The main risk is that an agent that can act can also act on a mistake. A wrong chatbot answer leads a person to a wrong decision, but a wrong agent action can send the wrong email or book the wrong slot before anyone notices.",
+        "Security groups have a name for this. [OWASP's entry on excessive agency](https://genai.owasp.org/llmrisk/llm062025-excessive-agency/) says the root causes are usually too much functionality, too many permissions or too much autonomy."
+      ],
+      "subsections": [
+        {
+          "heading": "Too many tools",
+          "paragraphs": [
+            "An agent that only needs to read a calendar should not also be able to delete contacts. Give it the smallest set of tools the job requires."
+          ]
+        },
+        {
+          "heading": "Too much access",
+          "paragraphs": [
+            "Connect the agent with an account that can only touch the data it needs. A booking agent rarely needs access to payroll or billing."
+          ]
+        },
+        {
+          "heading": "Too much freedom",
+          "paragraphs": [
+            "Decide in advance which actions run on their own and which wait for a person. Our guide to [human approval for AI agents](/daily/human-approval-ai-agents) walks through how to draw that line."
+          ]
+        },
+        {
+          "heading": "Who should stay in the loop",
+          "paragraphs": [
+            "A person should approve anything that reaches a customer directly, spends money or cannot be undone. OpenAI's guide names high-risk actions, like canceling orders, issuing large refunds or making payments, as the moments that should trigger human oversight until you trust the agent.",
+            "That split is not permanent. As a workflow proves itself, the person moves from approving every action to spot checking a sample, and the pace should be set by your numbers, not by how impressive the demo looked.",
+            "The details of a good handoff matter a lot, and we cover them in [how AI agents hand work to people](/daily/how-ai-agents-hand-work-to-people)."
+          ]
+        }
+      ]
+    },
+    {
+      "heading": "What are common mistakes when moving from a chatbot to an agent?",
+      "paragraphs": [
+        "The most common mistake is giving an agent too much too soon. The others usually come from skipping measurement or skipping review."
+      ],
+      "subsections": [
+        {
+          "heading": "Automating a messy process",
+          "paragraphs": [
+            "If your team cannot write down the steps of a task, an agent will not follow them reliably either. Clean up the process first, then automate it."
+          ]
+        },
+        {
+          "heading": "Starting with something customer-facing",
+          "paragraphs": [
+            "A first project that sends messages to customers on its own leaves no room to learn. Start with internal work, or with drafts that a person approves."
+          ]
+        },
+        {
+          "heading": "Not measuring anything",
+          "paragraphs": [
+            "Without numbers, you cannot tell whether the agent is helping. Track how often its work needed a correction and how much time it saved."
+          ]
+        },
+        {
+          "heading": "Feeding it private data carelessly",
+          "paragraphs": [
+            "Check where customer data goes before you connect a tool. Our piece on [keeping client data safe in AI tools](/daily/client-data-safe-ai-tools) covers the questions to ask a vendor."
+          ]
+        }
+      ]
+    },
+    {
+      "heading": "How should a small business start with AI agents?",
+      "paragraphs": [
+        "Start with one low-risk workflow you already do by hand every week. Then follow four steps.",
+        "Step 1: Pick a task that is frequent, rule-based and cheap to correct, such as internal scheduling or first draft replies to routine questions.",
+        "Step 2: Write down the steps and the rules, including which actions need a person's sign off.",
+        "Step 3: Run the agent in draft mode for a few weeks, with a person approving every action, and log each correction.",
+        "Step 4: Loosen the approval step only for the actions that were right nearly every time. If you want to see what a full team of agents looks like in practice, read [a day in the life of AI marketing agents](/daily/ai-marketing-agents-day-in-the-life)."
+      ],
+      "subsections": [
+        {
+          "heading": "What to measure in the first month",
+          "paragraphs": [
+            "Measure the agent the way you would measure a new hire on the same task. Two numbers matter most: how often its work was right without a correction, and how many minutes it saved.",
+            "Log every correction with a short note on what went wrong. After a few weeks, the log shows which actions are ready to run on their own and which still need a person."
+          ]
+        },
+        {
+          "heading": "What to ask a vendor before you sign",
+          "paragraphs": [
+            "Ask which tools the agent connects to, what access each connection needs, and whether you can require approval for specific actions. Also ask where your customer data is stored and whether it is used to train models.",
+            "If a vendor cannot show you how to turn off an action or review a log of what the agent did, keep looking. You want the ability to see and stop every action the agent takes."
+          ]
+        },
+        {
+          "heading": "When to widen the agent's job",
+          "paragraphs": [
+            "Widen it only when the numbers support it. A reasonable rule is to let an action run on its own once it has gone several weeks with almost no corrections, and to keep spot checking a sample after that.",
+            "Add one new task at a time. If you change three things at once and accuracy drops, you will not know which change caused it."
+          ]
+        }
       ]
     }
   ],
   "faq": [
     {
       "question": "Is an AI agent just a smarter chatbot?",
-      "answer": "Not quite. The difference is not intelligence, it is authority to act. An agent can carry out a task using real tools; a chatbot can only describe what to do."
+      "answer": "No. The difference is permission to act, not intelligence: an agent uses real tools to finish a task, while a chatbot can only describe what to do."
     },
     {
-      "question": "Do agents replace customer service staff?",
-      "answer": "Usually not entirely. Agents tend to absorb the repetitive parts of a role, coordination and data entry, which leaves staff more time for judgment calls and relationship work."
+      "question": "Will an AI agent replace my front desk or support staff?",
+      "answer": "Usually not. Agents tend to take over the repetitive parts of a role, like data entry and scheduling, which leaves staff more time for judgment calls and customer relationships."
     },
     {
-      "question": "Is this safe for a small business to try?",
-      "answer": "Yes, if it starts with a low risk workflow and keeps a person approving anything that touches money, a public message, or an irreversible change."
+      "question": "Is it safe for a small business to try an AI agent?",
+      "answer": "Yes, if you start with a low-risk task and keep a person approving anything that spends money, sends a public message or cannot be undone. Give the agent only the tools and access the task needs."
     },
     {
-      "question": "What is a good first agent project?",
-      "answer": "Internal scheduling or first draft replies to routine inquiries. Both are common, low risk, and easy to measure."
+      "question": "What is a good first AI agent project?",
+      "answer": "Internal scheduling or first draft replies to routine questions. Both happen often, follow clear rules and are easy to measure."
+    },
+    {
+      "question": "Do I need an AI agent if my chatbot works fine?",
+      "answer": "Not necessarily. If customers get what they need from the chat and your team is not spending hours acting on it, a chatbot may be all you need."
+    }
+  ],
+  "updated": "2026-10-22",
+  "takeaways": [
+    "A chatbot tells a customer what to do next, while an AI agent can do the next step itself using tools like a calendar, CRM or inbox.",
+    "The value of an agent for a small business is fewer manual handoffs, not smarter answers.",
+    "Agents fit work that is frequent, rule-based and cheap to correct, such as scheduling, data entry and first draft replies.",
+    "Anything that spends money, reaches a customer publicly or cannot be undone should still wait for a person to approve it.",
+    "Start with one low-risk workflow, measure accuracy and time saved, and widen the agent's access only when the numbers hold up."
+  ],
+  "sources": [
+    {
+      "title": "Building effective agents (Anthropic)",
+      "url": "https://www.anthropic.com/engineering/building-effective-agents"
+    },
+    {
+      "title": "Effective context engineering for AI agents (Anthropic)",
+      "url": "https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents"
+    },
+    {
+      "title": "A practical guide to building agents (OpenAI)",
+      "url": "https://cdn.openai.com/business-guides-and-resources/a-practical-guide-to-building-agents.pdf"
+    },
+    {
+      "title": "LLM06:2025 Excessive Agency (OWASP Gen AI Security Project)",
+      "url": "https://genai.owasp.org/llmrisk/llm062025-excessive-agency/"
     }
   ]
 }

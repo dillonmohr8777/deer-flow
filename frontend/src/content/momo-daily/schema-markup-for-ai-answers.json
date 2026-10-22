@@ -1,69 +1,280 @@
 {
-  "title": "What is schema markup, and how does it help AI give better answers?",
-  "dek": "Schema markup is a label on your page that tells a machine exactly what it is looking at, in plain terms.",
+  "title": "What Is Schema Markup? How It Helps AI Search and Answers",
+  "dek": "What schema markup is, which types a small business needs, and what it does and does not do for Google AI Overviews, ChatGPT search and Perplexity.",
   "slug": "schema-markup-for-ai-answers",
   "date": "2026-09-26",
-  "author": { "name": "Dillon Mohr", "title": "AI Marketing Director" },
-  "keywords": ["schema markup", "structured data", "JSON-LD", "AI answers"],
-  "summary": "Schema markup is hidden code on a web page that labels its content in a format machines can read directly, such as marking a paragraph as an FAQ answer or a name as the author. It helps AI tools and search engines describe and cite your page correctly instead of guessing.",
+  "updated": "2026-10-22",
+  "author": {
+    "name": "Dillon Mohr",
+    "title": "AI Marketing Director"
+  },
+  "keywords": [
+    "schema markup",
+    "what is schema markup",
+    "structured data",
+    "JSON-LD",
+    "schema markup for AI search",
+    "LocalBusiness schema",
+    "does schema markup help AI Overviews"
+  ],
+  "summary": "Schema markup is code, usually written in JSON-LD, that labels what a page contains, such as its author, business address or opening hours. It helps search engines read a page without guessing. Google says no special schema is needed for AI Overviews or AI Mode, so treat it as an accuracy layer, not a ranking trick.",
   "section": "Tools",
   "hero": {
     "src": "/momentum/daily/art/schema-markup-for-ai-answers.webp",
     "alt": "A 1930s pulp noir illustration of Momo the robot mascot as an archivist filing a blank index card into a card catalog drawer, with tall cabinets and a magnifying glass nearby"
   },
-  "status": "draft",
+  "status": "published",
+  "takeaways": [
+    "Schema markup is a machine-readable label for page content, built on the shared schema.org vocabulary.",
+    "Google recommends JSON-LD as the format for structured data.",
+    "Google says structured data is not required for its AI features and that there is no special schema.org markup to add for them.",
+    "Structured data must match what visitors can see on the page, or it can lose eligibility for rich results.",
+    "For most small businesses, Organization, LocalBusiness and Article markup cover the essentials."
+  ],
   "body": [
     {
       "heading": "What is schema markup in plain English?",
       "paragraphs": [
-        "A web page is written for people. It has headings, paragraphs and photos that a person reads and understands from context. A machine does not have that context. It can read the words, but it has to guess which part is the headline, which part is a price, and which part is a question and answer.",
-        "Schema markup removes the guessing. It is a small block of code added to a page that says, in a format a machine reads directly, exactly what each piece of content is: this is the article's author, this is the date it was published, this is a question and this is its answer. Nothing about the page's design changes. It is a label, not a layout."
+        "Schema markup is a small block of code on a web page that tells machines exactly what the content is. It says this is the business name, this is the address, this is the author and this is the date published. Visitors never see it, and the page design does not change.",
+        "Without markup, a machine reads the words and has to infer which line is a price, which is a date and which is a name. With markup, those facts are stated outright, so there is less room for a wrong guess.",
+        "The labels come from [schema.org](https://schema.org/LocalBusiness), a shared vocabulary that Google, Microsoft and other search providers support. Google accepts three formats and calls JSON-LD the recommended one, in its [general structured data guidelines](https://developers.google.com/search/docs/appearance/structured-data/sd-policies).",
+        "Think of it as a label on a box, not the contents. A clear label helps a machine sort and describe the box correctly. It cannot make a weak page good.",
+        "A JSON-LD block is a short list of labeled facts that sits in the page code, usually in the head section. Each fact pairs a property name with a value, like name with your business name or telephone with your phone number."
+      ],
+      "subsections": [
+        {
+          "heading": "The type",
+          "paragraphs": [
+            "Every block starts by naming what it describes, such as LocalBusiness, Article or Organization. Google advises using the most specific type that fits, so a plumbing company would use Plumber rather than the general LocalBusiness."
+          ]
+        },
+        {
+          "heading": "The properties",
+          "paragraphs": [
+            "Properties are the individual facts: name, address, telephone, opening hours, author, date published. Schema.org lists which properties each type can use, and Google lists which ones it requires for each rich result."
+          ]
+        },
+        {
+          "heading": "Links between things",
+          "paragraphs": [
+            "Markup can connect facts, such as an article whose author is a person who works for your organization. Those connections help a machine see that the post, the author and the business all belong together."
+          ]
+        }
       ]
     },
     {
-      "heading": "Why does this matter for AI answers?",
+      "heading": "Does schema markup help with AI answers?",
       "paragraphs": [
-        "When an AI assistant is deciding whether to quote a page, it is weighing whether the page is trustworthy and whether it can confirm the facts on it. A page with clear structured data, a named author, a named publisher, a clear publish date, gives the assistant something firm to point to.",
-        "Without that markup, the assistant has to infer those facts from the surrounding text, which is slower and less reliable. Two pages can say the same true thing, and the one with clear structured data is the easier one for a machine to trust and cite."
+        "It helps machines understand your page correctly, but it does not earn citations on its own. Google is direct about this, so it is worth reading what it says before spending time on markup."
+      ],
+      "subsections": [
+        {
+          "heading": "What Google says",
+          "paragraphs": [
+            "Google's guide to [optimizing for generative AI features](https://developers.google.com/search/docs/fundamentals/ai-optimization-guide) says structured data is not required for generative AI search and that there is no special schema.org markup to add. Its [AI features page](https://developers.google.com/search/docs/appearance/ai-features) does list one related best practice: make sure your structured data matches the visible text on the page."
+          ]
+        },
+        {
+          "heading": "Why it still helps",
+          "paragraphs": [
+            "Markup removes guesswork about the facts a system needs to describe you: who you are, where you are, when a page was written and who wrote it. It also keeps those facts consistent across your site, which supports the trust signals covered in [how to get cited by AI answer engines](/daily/get-cited-by-ai-answer-engines)."
+          ]
+        },
+        {
+          "heading": "What it cannot do",
+          "paragraphs": [
+            "It cannot rescue a page that is vague, outdated or wrong. Google also notes that correct markup does not guarantee any rich result will appear."
+          ]
+        }
       ]
     },
     {
-      "heading": "What kinds of markup matter most for a small business?",
+      "heading": "Which schema types matter most for a small business?",
       "paragraphs": [
-        "A few types cover most of what a small or mid size business needs. Organization markup identifies your business name, logo and contact details. Article or NewsArticle markup labels a blog post with its author, publisher and dates. FAQPage markup labels a set of questions and answers exactly as that, a Q and A. LocalBusiness markup, for a business with a physical location, labels your address, hours and service area.",
-        "You do not need every type of schema that exists. You need the handful that accurately describe what is actually on your page, applied correctly, rather than a long list applied loosely.",
-        "Product markup matters for any business that sells something directly online, since it labels price, availability and reviews in a format a shopping engine or AI assistant can read without visiting the checkout page itself. A service business without products can safely skip it."
+        "Most small businesses need only a few types, applied accurately. Pick the ones that describe what is really on each page."
+      ],
+      "subsections": [
+        {
+          "heading": "Organization",
+          "paragraphs": [
+            "Organization markup identifies your business name, logo, website and contact details. It usually lives on the homepage or about page."
+          ]
+        },
+        {
+          "heading": "LocalBusiness",
+          "paragraphs": [
+            "LocalBusiness markup, or a more specific type like Plumber or Dentist, labels your address, phone number, hours and service area. It matters most for businesses that serve customers in person, which is why it pairs well with [local SEO for AI Overviews](/daily/local-seo-ai-overviews)."
+          ]
+        },
+        {
+          "heading": "Article or BlogPosting",
+          "paragraphs": [
+            "Article and BlogPosting markup label a post's headline, author, publisher and dates. Use it on blog posts and guides you want described accurately."
+          ]
+        },
+        {
+          "heading": "Product",
+          "paragraphs": [
+            "Product markup labels price, availability and reviews for things you sell online. A service business with no online store can skip it."
+          ]
+        },
+        {
+          "heading": "FAQPage",
+          "paragraphs": [
+            "FAQPage markup labels question and answer pairs. Google limited FAQ rich results to well-known government and health sites in 2023, and its [FAQPage documentation](https://developers.google.com/search/docs/appearance/structured-data/faqpage) notes that Google deprecated FAQ rich results in May 2026 and no longer shows them in Google Search. You can keep accurate FAQ markup, but do not expect a visual feature from it."
+          ]
+        }
       ]
     },
     {
-      "heading": "Do you have to write this code by hand?",
+      "heading": "Should your business add schema markup?",
       "paragraphs": [
-        "Not usually. Most modern websites and content management systems can generate this markup automatically once the underlying page has the right information filled in, like an author field or an FAQ block. The work is often more about organizing your content clearly than about writing code.",
-        "If your site is built by hand or on an older platform, a developer can add the markup directly, following the format Google and other search providers publish and update. It is worth having someone check the result with a validator afterward, since a small mistake in the code can make the markup invisible to machines even though the page looks fine to a visitor.",
-        "Common mistakes are worth watching for even after the markup is live: a date field that never updates when a page is edited, an author name that does not match the real byline, or a price that was correct at launch and quietly went stale. None of these break the page for a human visitor, which is exactly why they can sit unnoticed for months."
+        "For most businesses with a website they control, yes, because the basic types are quick to add and low risk. The question is how much effort to put in and when."
+      ],
+      "subsections": [
+        {
+          "heading": "It makes sense if",
+          "paragraphs": [
+            "It makes sense if you have a physical location or service area, publish articles under a named author, or sell products online. It also makes sense if your platform can generate markup from fields you already fill in."
+          ]
+        },
+        {
+          "heading": "Hold off if",
+          "paragraphs": [
+            "Hold off on anything beyond the basics if your pages are thin, outdated or not indexed. Fixing the content and the crawl problems will do more, and markup can follow."
+          ]
+        },
+        {
+          "heading": "A quick way to decide",
+          "paragraphs": [
+            "Ask one question for each page: is there a clear fact here that a machine could get wrong, such as an address, hours, an author or a date? If yes, mark it up. If the page is mostly opinion or storytelling, basic Article markup is usually all it needs."
+          ]
+        }
       ]
     },
     {
-      "heading": "Where should a business start?",
+      "heading": "How do you add schema markup to a website?",
       "paragraphs": [
-        "Start with your most important pages: your homepage, your main service pages, and any blog posts you want AI tools to be able to cite. Make sure each one clearly states who wrote it, who publishes it, and when it was last updated, then add the matching markup.",
-        "This is not a one time task. Every time you publish something new, the markup should go with it. Over time, that consistency is what makes an AI assistant, and a search engine, treat your site as a source it can rely on. More plain explanations like this one live at The Momo Daily.",
-        "A useful habit is adding markup to a page's publishing checklist, right next to the spell check and the final read through, instead of treating it as a separate technical project. Once it is a normal step, it stops being extra work and just becomes part of how the page ships."
+        "Most sites can add markup without writing code by hand. Follow these steps for each page type.",
+        "Step 1: Check what your platform already does. Many website builders and SEO plugins add Organization and Article markup automatically from fields like author and publish date.",
+        "Step 2: Fill in the visible information first. The business address, hours or author name must appear on the page, because Google's guidelines say not to mark up content readers cannot see.",
+        "Step 3: Add or generate the JSON-LD for the matching type, using the most specific type that fits, such as Bakery instead of LocalBusiness.",
+        "Step 4: Test the page with Google's [Rich Results Test and the Schema Markup Validator](https://developers.google.com/search/docs/appearance/structured-data). The first checks Google features, and the second checks any schema.org markup.",
+        "Step 5: Use the URL Inspection tool in Google Search Console to confirm Google can see the live page, then add markup to your publishing checklist so new pages ship with it."
+      ]
+    },
+    {
+      "heading": "What does schema markup look like for a real business?",
+      "paragraphs": [
+        "Here is a worked example, not a statistic. A neighborhood bakery has 12 pages that matter: a homepage, an about page, 1 location page, 3 menu pages and 6 blog posts.",
+        "The homepage gets Organization markup, the location page gets Bakery markup with address, phone and hours, and the 6 blog posts get BlogPosting markup with the owner as author. That is 8 pages marked up, and at about 15 minutes each, about 2 hours of work.",
+        "The menu pages get none, because the bakery does not sell online and Product markup would not match anything a visitor can buy there. When holiday hours change, the owner updates the visible hours and the markup together, which takes about 5 minutes.",
+        "Six months later, the bakery adds online ordering for cakes. Only then does Product markup make sense, because there is now a real product with a price and availability that a visitor can see and buy."
+      ]
+    },
+    {
+      "heading": "What are the most common schema markup mistakes?",
+      "paragraphs": [
+        "Most schema problems are invisible to visitors, which is why they can sit unnoticed for months."
+      ],
+      "subsections": [
+        {
+          "heading": "Marking up content nobody can see",
+          "paragraphs": [
+            "Google's guidelines say not to mark up content that is not visible on the page. If the markup lists hours, the page should show the same hours."
+          ]
+        },
+        {
+          "heading": "Letting facts go stale",
+          "paragraphs": [
+            "A date that never updates, an old phone number or a past price in the markup tells machines something false. Update markup whenever you update the page."
+          ]
+        },
+        {
+          "heading": "Fake or misleading reviews",
+          "paragraphs": [
+            "Google lists fake reviews as an example of misleading markup. Violations can lead to a manual action that removes rich result eligibility."
+          ]
+        },
+        {
+          "heading": "Adding every type you can find",
+          "paragraphs": [
+            "More markup is not better markup. Use the few types that describe the page accurately rather than a long list applied loosely."
+          ]
+        }
+      ]
+    },
+    {
+      "heading": "How do you know your schema markup is working?",
+      "paragraphs": [
+        "Start by confirming it is valid, then confirm Google can read it, then watch whether your pages are described accurately. Run the Rich Results Test or Schema Markup Validator after any change, and check the enhancement reports and Manual Actions report in Google Search Console.",
+        "If a page has markup but Google describes it wrongly, compare the markup with the visible text first. A mismatch between the two is the most common cause, and fixing it usually takes minutes.",
+        "For AI visibility specifically, markup is one input among many. Track citations and AI impressions with the methods in [how to measure AI search visibility](/daily/measure-ai-search-visibility), and pair markup with clear writing from [how to write pages answer engines quote](/daily/write-pages-answer-engines-quote)."
+      ],
+      "subsections": [
+        {
+          "heading": "Check validity after every change",
+          "paragraphs": [
+            "A missing comma or bracket can make a whole JSON-LD block unreadable while the page looks fine. Testing after each edit catches this in seconds."
+          ]
+        },
+        {
+          "heading": "Check the reports monthly",
+          "paragraphs": [
+            "Google Search Console shows structured data issues in its enhancement reports when your markup qualifies for a supported feature. A monthly look is enough for most small sites."
+          ]
+        },
+        {
+          "heading": "Check how you are described",
+          "paragraphs": [
+            "Ask Google AI Mode, ChatGPT search and Perplexity for your business hours or address. If the answer is wrong, compare your markup, your page and your Google Business Profile, and fix whichever one disagrees."
+          ]
+        }
       ]
     }
   ],
   "faq": [
     {
-      "question": "Does schema markup change how my page looks to visitors?",
-      "answer": "No. It is hidden code read by machines, not people. Your page's design and layout stay exactly the same."
+      "question": "Does schema markup change how my page looks?",
+      "answer": "No. Schema markup is hidden code read by machines. Your design and layout stay the same for visitors."
     },
     {
-      "question": "Is schema markup the same thing as SEO?",
-      "answer": "It is part of a wider SEO and AI visibility effort, not the whole thing. It helps machines understand a page correctly, but it does not replace good content or clear writing."
+      "question": "Is JSON-LD the same thing as schema markup?",
+      "answer": "JSON-LD is a format for writing schema markup. Schema.org is the vocabulary of labels, and JSON-LD is the way Google recommends adding them to a page."
     },
     {
-      "question": "How do I know if my schema markup is working?",
-      "answer": "Free validator tools can check whether your markup is correctly formatted and readable, which is a good first check before assuming it is helping."
+      "question": "Do I need schema markup to appear in Google AI Overviews?",
+      "answer": "No. Google says there is no special schema.org markup required for AI Overviews or AI Mode. A page needs to be indexed and eligible to show with a snippet."
+    },
+    {
+      "question": "Should I remove FAQ schema now that FAQ rich results are gone?",
+      "answer": "You do not have to. Google has said unused structured data does not cause problems for Search, so accurate FAQ markup can stay."
+    },
+    {
+      "question": "Can wrong schema markup hurt my site?",
+      "answer": "Misleading markup can lead to a manual action that removes rich result eligibility. Google says this does not affect how the page ranks in web search."
+    }
+  ],
+  "sources": [
+    {
+      "title": "General structured data guidelines",
+      "url": "https://developers.google.com/search/docs/appearance/structured-data/sd-policies"
+    },
+    {
+      "title": "Optimizing your website for generative AI features on Google Search",
+      "url": "https://developers.google.com/search/docs/fundamentals/ai-optimization-guide"
+    },
+    {
+      "title": "FAQ (FAQPage, Question, Answer) structured data",
+      "url": "https://developers.google.com/search/docs/appearance/structured-data/faqpage"
+    },
+    {
+      "title": "Changes to HowTo and FAQ rich results",
+      "url": "https://developers.google.com/search/blog/2023/08/howto-faq-changes"
+    },
+    {
+      "title": "LocalBusiness",
+      "url": "https://schema.org/LocalBusiness"
     }
   ]
 }

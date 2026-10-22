@@ -1,75 +1,251 @@
 {
-  "title": "How do you measure your visibility in AI search?",
-  "dek": "Rankings still matter, but the new question is whether an AI assistant names your business at all.",
+  "title": "How to Measure AI Search Visibility: A Monthly Check",
+  "dek": "How to measure AI search visibility with free Google and Bing reports, a monthly prompt log for ChatGPT and Perplexity, and the five numbers to track.",
   "slug": "measure-ai-search-visibility",
   "date": "2026-09-24",
-  "author": { "name": "Dillon Mohr", "title": "AI Marketing Director" },
+  "updated": "2026-10-22",
+  "author": {
+    "name": "Dillon Mohr",
+    "title": "AI Marketing Director"
+  },
   "keywords": [
+    "measure AI search visibility",
     "AI search visibility",
-    "answer engine optimization",
-    "generative engine optimization",
-    "brand mentions"
+    "Search Console generative AI performance report",
+    "Bing AI Performance report",
+    "ChatGPT referral traffic",
+    "track brand mentions in AI answers",
+    "answer engine optimization metrics"
   ],
-  "summary": "You measure AI search visibility by asking the questions your customers ask, in tools like ChatGPT, Gemini and Google's AI Overviews, and tracking whether your business is named, how it is described, and which competitors show up instead. A monthly log of those checks shows whether your work is moving the needle.",
+  "summary": "You measure AI search visibility by pairing free platform reports with a monthly log of real customer questions. Search Console shows impressions from Google AI Overviews and AI Mode, and Bing Webmaster Tools shows Copilot citations. For ChatGPT, Perplexity and Gemini, ask the same questions each month and record whether you are named.",
   "section": "Search and Growth",
   "hero": {
     "src": "/momentum/daily/art/measure-ai-search-visibility.webp",
     "alt": "A 1930s pulp noir illustration of Momo the robot mascot standing on a rooftop at night, looking through a brass spyglass at a glowing city skyline"
   },
-  "status": "draft",
+  "status": "published",
+  "takeaways": [
+    "AI search visibility is whether an AI answer names or cites your business when a customer asks a question you can answer.",
+    "Google Search Console's generative AI performance report shows impressions from AI Overviews and AI Mode.",
+    "Bing Webmaster Tools' AI Performance report shows when Microsoft Copilot and Bing AI answers cite your pages.",
+    "For AI tools that do not report to site owners, a fixed list of customer questions checked monthly is the most honest measure.",
+    "Judge the trend over several months, because AI answers can change from one day to the next."
+  ],
   "body": [
     {
       "heading": "What is AI search visibility?",
       "paragraphs": [
-        "It is whether an AI assistant mentions your business when someone asks it a question your business could answer. A search engine shows you a page of links and lets you pick. An AI assistant reads several sources and writes one answer. If your business is not part of what it reads, it does not exist in that answer.",
-        "This is a different kind of visibility than a search ranking. A page can rank on the first page of Google and still never get quoted by an AI assistant, because the assistant is looking for a clear, direct, attributable answer, not just a relevant page."
+        "AI search visibility is whether an AI answer names, describes or links to your business when someone asks a question you could answer. A results page lets people pick from a list, while an AI answer picks for them.",
+        "That makes it a different measure from rankings. A page can rank well and still be left out of the written answer, and a business can be named in an answer without anyone clicking through.",
+        "The tools that matter most for a small business are Google AI Overviews and Google AI Mode, Microsoft Copilot and Bing, ChatGPT search, Perplexity and Gemini. Our explainer on [answer engine optimization](/daily/what-is-answer-engine-optimization) covers how these answers get written.",
+        "In practice, visibility has three parts: being named, being described correctly and being linked as a source. A useful measure covers all three."
       ]
     },
     {
-      "heading": "How do you actually check it?",
+      "heading": "Why don't rankings and traffic tell the whole story anymore?",
       "paragraphs": [
-        "Start with the questions your customers ask before they buy: what a service costs, who is best for a given job, what the difference is between two options, whether a business serves their area. Type those questions into the AI tools people actually use, plainly, the way a customer would.",
-        "Read what comes back. Note whether your business is named, how accurately it is described, and which competitors get mentioned instead. Do this across a handful of tools, since each one draws on different sources and can give different answers to the same question.",
-        "Keep a simple log: the question, the date, which tool, what it said. A single check tells you where you stand today. A log kept over weeks tells you whether the work you are doing is changing anything.",
-        "It helps to assign a small set of people, or an agent, to run the same set of questions on a fixed schedule rather than checking whenever it comes to mind. Consistency in when you check matters almost as much as what you ask, since AI tools change their answers over time and a scattered check makes that drift hard to see."
+        "Rankings and traffic only count the people who scrolled and clicked. When an AI answer settles the question on the results page, your business can influence the decision without showing up as a visit.",
+        "That does not make rankings useless. Most customers still visit a website before they buy, so rankings, clicks and leads stay in the report, and AI visibility becomes one more line next to them.",
+        "Think of three layers in one monthly review: are we ranking, are we getting clicks and leads, and are AI answers naming us correctly. Each layer catches problems the others miss.",
+        "AI visibility also tends to move slower than rankings. Expect a few months of steady work on clear pages and consistent facts before the trend shows up."
       ]
     },
     {
-      "heading": "What makes a business more likely to get cited?",
+      "heading": "Which free tools show AI search data?",
       "paragraphs": [
-        "Clear, direct answers on your own site help most. A page that states a fact plainly near the top, in plain language, is easier for an assistant to lift and quote than a page that buries the answer under three paragraphs of introduction.",
-        "Being named consistently across the web also matters. If your business name, location and services are described the same way on your site, your listings and other pages that mention you, an assistant has an easier time confirming who you are and what you do.",
-        "Structured data helps too. Marking up your pages so a machine can confirm the author, the publisher and the facts on the page gives an assistant a more confident basis for citing you instead of a vaguer competitor.",
-        "Reviews and third party mentions carry weight as well. An assistant weighing whether to trust your description of your own business often checks whether other sources, directories, review sites, local press, describe you the same way. Consistency across those sources builds the same kind of trust a person would extend after hearing your name from more than one place."
+        "Two search engines now report AI data to site owners for free, and one AI assistant tags its traffic. Start with these before paying for anything."
+      ],
+      "subsections": [
+        {
+          "heading": "Google Search Console",
+          "paragraphs": [
+            "Search Console's [generative AI performance report](https://support.google.com/webmasters/answer/16984139) shows how often your pages appear in AI Overviews and AI Mode. You can group the data by page, country and device and watch impressions change over time.",
+            "Google says the report rolled out to all websites worldwide as of August 31, 2026. If you do not see it, your site may not have enough impressions in those features yet.",
+            "Compare its page list with your regular performance report. Pages that rank well but rarely appear in AI features are your first candidates for clearer answers."
+          ]
+        },
+        {
+          "heading": "Bing Webmaster Tools",
+          "paragraphs": [
+            "Bing's [AI Performance report](https://blogs.bing.com/webmaster/February-2026/Introducing-AI-Performance-in-Bing-Webmaster-Tools-Public-Preview) shows when your content is cited in AI answers across Microsoft Copilot, Bing and select partner experiences. It lists which URLs were cited and how citation activity changes over time.",
+            "Bing has kept adding to the report since its public preview in February 2026, so check it monthly for new views."
+          ]
+        },
+        {
+          "heading": "ChatGPT referral traffic",
+          "paragraphs": [
+            "OpenAI's [publisher FAQ](https://help.openai.com/en/articles/12627856-publishers-and-developers-faq) says ChatGPT adds utm_source=chatgpt.com to referral links, as long as your site does not block its OAI-SearchBot crawler. Filter your analytics for that source to count those visits. [Search Engine Land reported](https://searchengineland.com/chatgpt-appears-to-drop-utm-tracking-making-ai-referral-traffic-harder-to-measure-496552) in October 2026 that some ChatGPT links now arrive without that tag, so part of that traffic can show up as direct.",
+            "Some AI visits still arrive with no source tag and get counted as direct traffic. Treat the tagged number as a floor, not the full total."
+          ]
+        }
       ]
     },
     {
-      "heading": "Does this replace tracking rankings and traffic?",
+      "heading": "How do you check AI tools that do not report to you?",
       "paragraphs": [
-        "No. Search rankings, click through rates and site traffic are still real signals, and most customers still click through to a website before they buy. AI search visibility sits alongside those numbers as an added layer, not a replacement for them.",
-        "Think of it as one more question in a weekly or monthly review: are we ranking, are we getting clicks, and now, are we the business an AI assistant actually names. Treating all three together gives a fuller picture than any one of them alone.",
-        "It is also fair to expect this to move slowly at first. Traditional search rankings can shift within weeks of a change. AI assistants draw on a mix of sources that update on their own schedule, so a business often has to keep at the fundamentals, clear answers, consistent naming, structured data, for a few months before the citations start showing up."
+        "You check them by hand with a fixed list of questions, run on a fixed schedule, logged the same way every time. Consistency is what turns a few screenshots into a real measure.",
+        "Step 1: Write down 10 to 20 questions customers ask before they buy. Mix cost questions, comparison questions, best option near me questions and questions about your exact service.",
+        "Step 2: Pick the tools your customers use, usually ChatGPT, Perplexity, Gemini and Google AI Mode. Use a logged-out or fresh session where you can, so past chats do not shape the answer.",
+        "Step 3: Ask each question word for word, the way a customer would type it. Do not add your business name unless the question is about your business.",
+        "Step 4: Log five things for each answer: the date, the tool, whether you were named, whether the description was accurate and which competitors were named instead.",
+        "Step 5: Repeat the same list once a month. This is a good job to hand to an assistant or an agent, as long as a person reads the results, like the routine in our [day in the life of an AI marketing agent](/daily/ai-marketing-agents-day-in-the-life).",
+        "Keep the log where the whole team can see it, like a shared sheet with one tab per month. The goal is a record you can compare, not a folder of screenshots."
       ]
     },
     {
-      "heading": "Where should a small business start this week?",
+      "heading": "What should you track each month?",
       "paragraphs": [
-        "Pick the five questions your customers ask most often. Run them through two or three AI tools. Write down what comes back. That single afternoon of checking will tell you more about your AI search visibility than any tool that promises to score it automatically. You can find more plain answers like this one at The Momo Daily."
+        "Track five numbers that together show whether you are visible, accurate and gaining ground. Keep them in one sheet next to your normal SEO numbers."
+      ],
+      "subsections": [
+        {
+          "heading": "Mention rate",
+          "paragraphs": [
+            "Mention rate is the share of your checks where an AI answer names your business. It is the closest thing to a single visibility score you can build yourself.",
+            "Divide the checks where you were named by the total number of checks. Named in 10 of 40 checks is a 25 percent mention rate."
+          ]
+        },
+        {
+          "heading": "Accuracy",
+          "paragraphs": [
+            "Accuracy is whether the answer gets your services, area and hours right. A wrong description can cost more than no mention at all.",
+            "When an answer gets a detail wrong, find where that detail lives online, usually an old listing or an outdated page, and fix it at the source. Then check the same question again next month."
+          ]
+        },
+        {
+          "heading": "Cited pages",
+          "paragraphs": [
+            "Cited pages are the URLs AI answers link to. Google and Bing reports show these directly, and they tell you which pages are doing the work.",
+            "If the cited page is an old blog post instead of your service page, the service page probably needs a clearer answer near the top."
+          ]
+        },
+        {
+          "heading": "Competitors named",
+          "paragraphs": [
+            "Competitors named shows who wins the answers you miss. Read their cited pages to see what they explain that you do not.",
+            "Often the gap is simple, like a competitor page that states its service area and turnaround time in the first two sentences."
+          ]
+        },
+        {
+          "heading": "AI referral visits",
+          "paragraphs": [
+            "AI referral visits are the tagged sessions from tools like ChatGPT in your analytics. Watch the trend, not the exact count.",
+            "If your forms or call tracking record the source, add the leads from those visits too. A handful of AI referrals that turn into booked jobs matters more than a big visit count."
+          ]
+        }
+      ]
+    },
+    {
+      "heading": "A simple worked example: reading your first three months",
+      "paragraphs": [
+        "Here is an example with made-up numbers, not a statistic. A home cleaning company picks 10 questions and checks them in 3 tools, which is 30 checks a month.",
+        "In month one, it is named in 6 of 30 checks, a 20 percent mention rate, and 2 of those 6 descriptions get the service area wrong. The company fixes its Google Business Profile, rewrites its service pages so the answer sits in the first sentence and adds a page answering its most common pricing question without listing prices.",
+        "In month three, it is named in 9 of 30 checks, a 30 percent mention rate, and all 9 descriptions are accurate. Search Console also shows the new service page picking up AI Overview impressions, which confirms the hand count is pointing the same way.",
+        "The method is the point: same questions, same tools, same log, then compare. Two months can be noise, so give it at least three before deciding what works."
+      ]
+    },
+    {
+      "heading": "What are the common mistakes when measuring AI visibility?",
+      "paragraphs": [
+        "The biggest mistake is reading one check as the truth. AI answers are generated fresh each time, so a single result can be noise. Look for patterns across months instead."
+      ],
+      "subsections": [
+        {
+          "heading": "Changing the questions every month",
+          "paragraphs": [
+            "If the list changes, the numbers cannot be compared. Keep the core list fixed and add new questions in a separate section."
+          ]
+        },
+        {
+          "heading": "Asking leading questions",
+          "paragraphs": [
+            "A question that already includes your business name will usually return your business. Ask the way a customer who has never heard of you would ask."
+          ]
+        },
+        {
+          "heading": "Counting mentions but not accuracy",
+          "paragraphs": [
+            "Being named with the wrong hours or services is a problem, not a win. Log accuracy every time."
+          ]
+        },
+        {
+          "heading": "Checking only one tool",
+          "paragraphs": [
+            "Each AI tool draws on different sources and can answer the same question differently. A business named in Perplexity may be missing from ChatGPT, so check at least three tools."
+          ]
+        },
+        {
+          "heading": "Ignoring the free reports",
+          "paragraphs": [
+            "Search Console and Bing Webmaster Tools already show real AI data from Google and Microsoft. Skipping them means guessing at numbers you could simply read."
+          ]
+        }
+      ]
+    },
+    {
+      "heading": "Is a paid AI visibility tracker worth it?",
+      "paragraphs": [
+        "For most small businesses, not at first. The free reports plus a monthly prompt log answer the main question, which is whether you are being named and described correctly."
+      ],
+      "subsections": [
+        {
+          "heading": "A paid tracker makes sense if",
+          "paragraphs": [
+            "You need to track hundreds of questions, several locations or several brands, or you report AI visibility to a board or client every month. At that scale, hand checks take too long to stay consistent.",
+            "It can also help when you want alerts the moment an AI description of your business changes. That is hard to catch with a monthly hand check."
+          ]
+        },
+        {
+          "heading": "Skip it for now if",
+          "paragraphs": [
+            "You have fewer than about 20 questions that really matter and one location. Spend that time improving the pages that get cited, using guides like [how to get cited by AI answer engines](/daily/get-cited-by-ai-answer-engines) and [local SEO for AI Overviews](/daily/local-seo-ai-overviews)."
+          ]
+        }
       ]
     }
   ],
   "faq": [
     {
-      "question": "What is the difference between SEO and AI search visibility?",
-      "answer": "SEO earns a place in a list of links a person scans and clicks. AI search visibility earns a mention inside the one composed answer an assistant writes, which is a higher bar for clarity and trust."
+      "question": "Is there one score for AI search visibility?",
+      "answer": "No. Each platform reports differently and some do not report at all, so a mix of the free Google and Bing reports and a monthly prompt log is the honest approach."
     },
     {
-      "question": "How often should I check my AI search visibility?",
-      "answer": "Monthly is enough for most small businesses. AI tools update how they answer over time, so a single check goes stale, but a monthly log shows real trends."
+      "question": "How do I see ChatGPT traffic in Google Analytics?",
+      "answer": "Filter for sessions with the source chatgpt.com. OpenAI says ChatGPT adds utm_source=chatgpt.com to referral links when your site allows OAI-SearchBot, but some visits still arrive untagged."
     },
     {
-      "question": "Can a small local business actually show up in AI answers?",
-      "answer": "Yes. Being named consistently, answering common questions plainly on your own site, and using structured data all help, regardless of business size."
+      "question": "Why does my business appear in an AI answer one day and not the next?",
+      "answer": "AI answers are generated fresh for each question and can draw on different sources. That is why a monthly log over several months tells you more than any single check."
+    },
+    {
+      "question": "How many questions should be on my prompt list?",
+      "answer": "Ten to twenty is enough for most small businesses. Use the questions real customers ask and keep the core list the same each month."
+    },
+    {
+      "question": "Does AI search visibility replace normal SEO reporting?",
+      "answer": "No. Rankings, clicks and leads still matter, and AI visibility sits next to them in the same monthly review."
+    }
+  ],
+  "sources": [
+    {
+      "title": "Generative AI performance report (Search) (Search Console Help)",
+      "url": "https://support.google.com/webmasters/answer/16984139"
+    },
+    {
+      "title": "Introducing AI Performance in Bing Webmaster Tools Public Preview (Bing Webmaster Blog)",
+      "url": "https://blogs.bing.com/webmaster/February-2026/Introducing-AI-Performance-in-Bing-Webmaster-Tools-Public-Preview"
+    },
+    {
+      "title": "Publishers and Developers FAQ (OpenAI Help Center)",
+      "url": "https://help.openai.com/en/articles/12627856-publishers-and-developers-faq"
+    },
+    {
+      "title": "AI Features and Your Website (Google Search Central)",
+      "url": "https://developers.google.com/search/docs/appearance/ai-features"
+    },
+    {
+      "title": "ChatGPT appears to drop UTM tracking, making AI referral traffic harder to measure",
+      "url": "https://searchengineland.com/chatgpt-appears-to-drop-utm-tracking-making-ai-referral-traffic-harder-to-measure-496552"
     }
   ]
 }

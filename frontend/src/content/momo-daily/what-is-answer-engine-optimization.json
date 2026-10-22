@@ -1,53 +1,250 @@
 {
-  "title": "What's answer engine optimization, and why does it matter now?",
-  "dek": "Search is turning into conversation. Being the source an AI assistant quotes is the new first page.",
+  "title": "What Is Answer Engine Optimization (AEO)? A Plain Guide",
+  "dek": "Answer engine optimization (AEO) helps AI tools like Google AI Overviews and ChatGPT search find, trust and quote your page. Here is how it works.",
   "slug": "what-is-answer-engine-optimization",
   "date": "2026-09-23",
-  "author": { "name": "Dillon Mohr", "title": "AI Marketing Director" },
+  "author": {
+    "name": "Dillon Mohr",
+    "title": "AI Marketing Director"
+  },
   "keywords": [
     "answer engine optimization",
     "AEO",
-    "AI search",
-    "structured data",
-    "generative engine optimization"
+    "what is AEO",
+    "AEO vs SEO",
+    "AI Overviews optimization",
+    "how to get cited by ChatGPT search",
+    "answer engine optimization for small business"
   ],
-  "summary": "Answer engine optimization (AEO) is the practice of writing and marking up pages so AI assistants can find, trust and quote them. It rewards a direct answer near the top, clear question headings, and structured data that names the author and publisher.",
+  "summary": "Answer engine optimization (AEO) is the work of making a web page easy for AI answer tools to find, understand and quote. It rests on normal SEO: a crawlable, indexed page. Then it adds a direct answer near the top, headings that match real questions, and facts a reader can check.",
   "section": "Search and Growth",
   "hero": {
     "src": "/momentum/momos-living/growth/flat.webp",
     "alt": "The Growth Momo, cut from blue and kraft paper, tending a seedling"
   },
-  "status": "draft",
+  "status": "published",
   "body": [
     {
-      "heading": "What changed about search?",
+      "heading": "What is answer engine optimization?",
       "paragraphs": [
-        "People increasingly ask a question and read one composed answer instead of scanning ten links. The assistant still reads the web; it simply chooses a handful of sources to lean on.",
-        "That makes the job less about ranking for a phrase and more about being the clearest, most attributable answer to a question."
+        "Answer engine optimization, or AEO, is the practice of writing and structuring pages so AI answer tools can pick them as a source. An answer engine is any tool that replies with a written answer instead of a list of links, such as Google AI Overviews, Google AI Mode, ChatGPT search, Perplexity, Gemini or Microsoft Copilot.",
+        "These tools still read the web. They pull a handful of pages, write a short answer, and usually link the pages they relied on. AEO is the work of becoming one of those linked pages.",
+        "This guide is for small business owners and marketers who already have a website and want it to show up in AI answers, not just in the blue links."
+      ],
+      "subsections": [
+        {
+          "heading": "Which answer engines matter most",
+          "paragraphs": [
+            "For most small businesses, Google AI Overviews and Google AI Mode matter most because they sit inside the search engine customers already use. ChatGPT search, Perplexity, Gemini and Microsoft Copilot come next, and each one reads and links web pages in its own way.",
+            "Microsoft Copilot draws on Bing, so a site that is healthy in Bing Webmaster Tools is in better shape there. ChatGPT search relies on OpenAI's own crawler, which is why robots.txt settings matter."
+          ]
+        },
+        {
+          "heading": "Why it matters now",
+          "paragraphs": [
+            "More people ask a full question and read one written reply instead of scanning ten links. When the reply names three sources, being one of those three is the new version of ranking on page one.",
+            "A customer who reads your answer inside an AI reply and then clicks through already trusts you a little. That makes the visit more likely to turn into a call."
+          ]
+        }
       ]
     },
     {
-      "heading": "What does an answer engine look for?",
+      "heading": "How is AEO different from SEO?",
       "paragraphs": [
-        "A short, plain answer early on the page. Headings phrased the way people ask. Named authors with a real role, a named publisher, and dates that say how fresh the answer is.",
-        "Structured data (JSON-LD) turns those facts into something a machine can verify rather than guess."
+        "AEO is not a replacement for SEO. It sits on top of it, and most of the work is the same."
+      ],
+      "subsections": [
+        {
+          "heading": "What stays the same",
+          "paragraphs": [
+            "The page still has to be crawlable, indexed and useful. Google says plainly in its guide to [AI features and your website](https://developers.google.com/search/docs/appearance/ai-features) that the best practices for SEO remain relevant and that there are no extra technical requirements to appear in AI Overviews or AI Mode.",
+            "A page has to be indexed and eligible to show with a snippet. That is the same bar as regular search."
+          ]
+        },
+        {
+          "heading": "What changes",
+          "paragraphs": [
+            "The emphasis shifts from ranking a page to being quoted from it. A tool that writes a two sentence answer needs two clear sentences to lean on. A page that buries its answer under a long intro gives it nothing clean to lift."
+          ]
+        },
+        {
+          "heading": "What you can ignore",
+          "paragraphs": [
+            "Google's [guide to generative AI features in Search](https://developers.google.com/search/docs/fundamentals/ai-optimization-guide) lists things you do not need for Google, including llms.txt files, special markup, chopping content into tiny chunks, or rewriting pages just for AI. It also says structured data is not required and there is no special schema.org markup for AI features. That saves a lot of wasted effort."
+          ]
+        }
       ]
     },
     {
-      "heading": "Where should a team start?",
+      "heading": "How do answer engines choose which pages to quote?",
       "paragraphs": [
-        "Pick the ten questions your clients ask most. Answer each in two sentences at the top of a page, then go deeper below. Mark it up, and measure which answers get cited."
+        "They start with pages they can reach and have indexed, then favor the ones that answer the question clearly. Google describes a query fan-out technique, where AI Overviews and AI Mode run several related searches across subtopics before writing a response.",
+        "That fan-out matters for small businesses. A homeowner who asks about patio pavers versus poured concrete may trigger searches on cost, durability and upkeep. A page that answers each of those cleanly has more chances to be pulled in."
+      ],
+      "subsections": [
+        {
+          "heading": "Access",
+          "paragraphs": [
+            "If a crawler cannot reach the page, nothing else matters. OpenAI's [crawler documentation](https://developers.openai.com/api/docs/bots) says sites that opt out of OAI-SearchBot will not be shown in ChatGPT search answers, though they can still appear as navigational links."
+          ]
+        },
+        {
+          "heading": "Clarity",
+          "paragraphs": [
+            "A direct answer near the top is easy to extract. Headings phrased as the questions people actually ask tell the tool exactly which part of the page answers what. See our guide on [how to write pages answer engines quote](/daily/write-pages-answer-engines-quote) for the sentence level detail."
+          ]
+        },
+        {
+          "heading": "Trust",
+          "paragraphs": [
+            "A named author with a real role, a clear publisher and a visible date all help a reader, human or machine, judge the page. Facts that can be checked against a source carry more weight than vague claims."
+          ]
+        }
+      ]
+    },
+    {
+      "heading": "What does an AEO-ready page look like?",
+      "paragraphs": [
+        "It answers first, then explains. The first sentence under the title should answer the question on its own, as if it were the only sentence anyone read.",
+        "Below that, each section heading is a real question, and the first sentence under each heading answers it. Supporting detail, examples and caveats come after.",
+        "The page also carries the basics that build trust: an author byline, a published or updated date, and links to the sources behind any numbers. If you use structured data, Google says it must match the visible text on the page. Our [schema markup guide](/daily/schema-markup-for-ai-answers) covers which types are worth adding."
+      ],
+      "subsections": [
+        {
+          "heading": "The opening",
+          "paragraphs": [
+            "Open with a one or two sentence answer that names the subject. For a plumber, that might read: a water heater replacement usually takes one day, and most homes are back to hot water by evening."
+          ]
+        },
+        {
+          "heading": "The headings",
+          "paragraphs": [
+            "Write headings as questions people type or say out loud. How long does a water heater last is better than Our Water Heater Philosophy."
+          ]
+        },
+        {
+          "heading": "The proof",
+          "paragraphs": [
+            "Back up claims with something a reader can check, such as a manufacturer spec, a code requirement or your own job records. Then link it or name it, so the claim is not just your word."
+          ]
+        }
+      ]
+    },
+    {
+      "heading": "AEO makes sense if, and when to skip it for now",
+      "paragraphs": [
+        "AEO is worth the effort if your customers research before they buy and your site already has pages that answer their questions. Service businesses, clinics, contractors and local shops with real FAQ traffic fit this well.",
+        "It makes sense to hold off if your site is not indexed, loads slowly or has almost no content yet. Fix those basics first, because an answer engine cannot quote a page it cannot find.",
+        "It also is not a fit if you expect a guaranteed placement. No one controls which sources an AI tool picks on a given day, and anyone who promises otherwise is overselling."
+      ]
+    },
+    {
+      "heading": "What are the most common AEO mistakes?",
+      "paragraphs": [
+        "Most mistakes come from treating AEO as a trick instead of as clear writing."
+      ],
+      "subsections": [
+        {
+          "heading": "Blocking the crawlers",
+          "paragraphs": [
+            "Some sites block every AI bot in robots.txt or behind a firewall rule and then wonder why they never appear. Check that Googlebot and OAI-SearchBot can reach your public pages."
+          ]
+        },
+        {
+          "heading": "Burying the answer",
+          "paragraphs": [
+            "A 300 word intro before the answer makes extraction harder for tools and readers alike. Put the answer in the first two sentences."
+          ]
+        },
+        {
+          "heading": "Chasing special files",
+          "paragraphs": [
+            "Spending a week on an llms.txt file while the service pages say nothing useful is effort in the wrong place. Google says it ignores those files for Search."
+          ]
+        },
+        {
+          "heading": "Unsourced numbers",
+          "paragraphs": [
+            "A statistic with no source looks the same as a made up one. Link the source or cut the number."
+          ]
+        },
+        {
+          "heading": "Writing for robots instead of people",
+          "paragraphs": [
+            "Stuffing a page with every phrasing of a question makes it harder to read and does not help. Google says AI systems understand synonyms and general meaning, so one clear answer in natural language beats ten awkward variations.",
+            "Write the way your best employee would explain it to a customer on the phone. That version is usually the most quotable one too."
+          ]
+        },
+        {
+          "heading": "Letting pages go stale",
+          "paragraphs": [
+            "A page with last year's prices, old hours or a discontinued service gives answer engines a reason to pick someone else. Put a review date on your key pages and check them at least twice a year.",
+            "When something changes, update the page and its updated date together. A current date only helps when the content behind it is current too."
+          ]
+        }
+      ]
+    },
+    {
+      "heading": "A simple worked example",
+      "paragraphs": [
+        "Here is an example with made up numbers to show how to plan the work, not a measured result. Say a roofing company has 40 pages and its team can rewrite 5 pages a week.",
+        "Step 1: List the 10 questions customers ask most on calls, such as how long a roof replacement takes. Step 2: Match each question to the page that should answer it, which covers 10 of the 40 pages. Step 3: Rewrite those 10 pages so each opens with a two sentence answer, which takes 2 weeks at 5 pages a week.",
+        "Step 4: Check that each page is indexed in Google Search Console and that robots.txt allows OAI-SearchBot. Step 5: After a month, search each question in Google, ChatGPT search and Perplexity and note which pages get cited. Our guide on [measuring AI search visibility](/daily/measure-ai-search-visibility) shows how to track that over time."
+      ]
+    },
+    {
+      "heading": "Where should a small business start with AEO?",
+      "paragraphs": [
+        "Start with the questions you already hear. The front desk, the sales inbox and Google Business Profile reviews are full of them.",
+        "Pick the ten most common, give each one a clear answer on the right page, and add an author and a date. Then read our explainer on [generative engine optimization](/daily/what-is-generative-engine-optimization), the closely related idea of being quoted inside AI written answers.",
+        "Keep the habit going a few pages at a time. AEO rewards steady, accurate updates more than a one time overhaul.",
+        "Measure as you go. Google Search Console includes clicks and impressions from AI features inside its regular Performance reports, and OpenAI's [publisher FAQ](https://help.openai.com/en/articles/12627856-publishers-and-developers-faq) says ChatGPT adds utm_source=chatgpt.com to its referral links, so you can see much of that traffic in Google Analytics. [Search Engine Land reported](https://searchengineland.com/chatgpt-appears-to-drop-utm-tracking-making-ai-referral-traffic-harder-to-measure-496552) in October 2026 that some ChatGPT links now arrive without that tag, so part of that traffic can show up as direct.",
+        "Keep your Google Business Profile current too. Google lists up to date Business Profile information among the SEO basics that still apply to AI features, and local answers often draw on it."
       ]
     }
   ],
   "faq": [
     {
-      "question": "Is AEO different from SEO?",
-      "answer": "It builds on SEO. The foundations are the same; AEO adds a stronger emphasis on direct answers, question headings and machine readable attribution."
+      "question": "Is AEO the same thing as GEO?",
+      "answer": "They overlap heavily. AEO usually describes being picked as the answer to a question, while GEO describes being cited inside an AI written response, and both rely on the same clear, verifiable pages."
     },
     {
-      "question": "What's GEO?",
-      "answer": "Generative engine optimization: the same idea applied to AI systems that write answers, with extra weight on being quotable and clearly sourced."
+      "question": "Do I need an llms.txt file for AEO?",
+      "answer": "Not for Google. Google's own guidance says Search does not use llms.txt files, so it neither helps nor hurts there."
+    },
+    {
+      "question": "Does structured data help pages appear in AI answers?",
+      "answer": "It can help machines read facts like the author and date, but Google says no special schema is required for AI features. If you add it, it must match what the page visibly says."
+    },
+    {
+      "question": "How do I get my site into ChatGPT search results?",
+      "answer": "Make sure your robots.txt and firewall allow OpenAI's OAI-SearchBot. Then write pages that answer questions clearly, since no setting guarantees a citation."
+    },
+    {
+      "question": "How long does AEO take to work?",
+      "answer": "There is no fixed timeline. Pages must be crawled and indexed first, and citations build gradually as tools find your answers useful."
+    }
+  ],
+  "updated": "2026-10-22",
+  "takeaways": [
+    "AEO is SEO plus one extra habit: answer the question plainly in the first two sentences of the page.",
+    "Google says there are no special requirements to appear in AI Overviews or AI Mode beyond being indexed and eligible for a snippet.",
+    "To show up in ChatGPT search answers, your site must not block OpenAI's OAI-SearchBot crawler in robots.txt.",
+    "Answer engines reward pages that name an author, show a date and state facts a reader can verify.",
+    "Start with the ten questions customers ask before they call, and give each one a clear, short answer on the right page."
+  ],
+  "sources": [
+    {
+      "title": "AI features and your website, Google Search Central",
+      "url": "https://developers.google.com/search/docs/appearance/ai-features"
+    },
+    {
+      "title": "Google's guide to optimizing for generative AI features on Google Search",
+      "url": "https://developers.google.com/search/docs/fundamentals/ai-optimization-guide"
+    },
+    {
+      "title": "Overview of OpenAI Crawlers",
+      "url": "https://developers.openai.com/api/docs/bots"
     }
   ]
 }

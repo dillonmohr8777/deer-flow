@@ -1,85 +1,277 @@
 {
-  "title": "How to get your business cited by ChatGPT, Perplexity and Google AI Overviews",
-  "dek": "A practical checklist for getting your business quoted in AI generated answers, not just ranked in traditional search results.",
+  "title": "How to Get Cited by ChatGPT, Perplexity and Google AI Overviews",
+  "dek": "How to get cited by AI answer engines like ChatGPT search, Perplexity and Google AI Overviews: open crawler access, answer-first pages and trust signals.",
   "slug": "get-cited-by-ai-answer-engines",
   "date": "2026-09-22",
-  "author": { "name": "Dillon Mohr", "title": "AI Marketing Director" },
+  "updated": "2026-10-22",
+  "author": {
+    "name": "Dillon Mohr",
+    "title": "AI Marketing Director"
+  },
   "keywords": [
-    "get cited by AI",
-    "ChatGPT citations",
+    "get cited by AI answer engines",
+    "how to get cited by ChatGPT",
     "Perplexity citations",
-    "Google AI Overviews",
-    "AI answer engines"
+    "Google AI Overviews citations",
+    "AI search visibility",
+    "OAI-SearchBot robots.txt",
+    "how to show up in AI answers small business"
   ],
-  "summary": "Getting cited by an AI answer engine means writing pages that are easy to lift and trust: a short direct answer up top, clear headings shaped like real questions, named authorship, and accurate facts kept current. There is no submission form. Citations come from being the clearest, most verifiable source on a specific question.",
+  "summary": "To get cited by AI answer engines, let their search crawlers reach your site, put a plain answer at the top of each important page, and back it with a named author and current facts. Google AI Overviews, ChatGPT search and Perplexity all pick sources from pages they can crawl and trust. There is no form to submit.",
   "section": "Search and Growth",
   "hero": {
     "src": "/momentum/daily/art/get-cited-by-ai-answer-engines.webp",
     "alt": "Momo the blue robot mascot as a noir newspaper reporter hunched over a typewriter under a desk lamp, papers scattered about, in dramatic ink and halftone on cream newsprint"
   },
-  "status": "draft",
+  "status": "published",
+  "takeaways": [
+    "AI answer engines cite pages they can crawl, index and trust, and none of them offer a submission form.",
+    "Blocking OAI-SearchBot or PerplexityBot in robots.txt keeps your pages out of ChatGPT search answers and Perplexity results.",
+    "Google says a page needs to be indexed and eligible for a snippet to appear in AI Overviews or AI Mode, with no extra technical requirements.",
+    "The pages that get cited put a direct answer in the first two sentences and back it with specific, checkable facts.",
+    "Google Search Console and Bing Webmaster Tools now both report on AI search visibility, so you can measure progress instead of guessing."
+  ],
   "body": [
     {
-      "heading": "What does it mean to be cited by an AI answer engine?",
+      "heading": "What does it mean to get cited by an AI answer engine?",
       "paragraphs": [
-        "Being cited means an AI assistant reads your page, decides it answers the question well, and either names your business directly or links to your page inside its generated response. It is the AI era version of being the first organic result, except the person asking may never click through. Your name and your answer arrive together.",
-        "This is different from an ad or a directory listing. There is no bidding, no submission form, and no guaranteed placement. The system chooses sources the same way a careful researcher would, by judging which pages answer the question clearly and which ones it can trust.",
-        "It also is not one single moment. A business can be cited for one question and skipped for the next, even on the same page, depending on how the AI system parsed the answer that day. Think of it less as a badge you earn once and more as a habit of showing up, question after question, because the underlying page keeps doing its job."
+        "Getting cited means an AI tool reads your page, uses it to build an answer, and shows your business as a source with a link. It is the AI version of ranking on page one. The person asking may never click, but your name and your answer reach them together.",
+        "A citation is not an ad and it is not a directory listing. You cannot bid on it or buy it. The system picks sources the way a careful researcher would, by judging which pages answer the question clearly and which ones it can trust.",
+        "Citations also send a different kind of visitor. Someone who clicks through from an AI answer has usually read a summary already, so they arrive further along in their decision and with a narrower question.",
+        "It is also not a one time win. You can be cited for one question and skipped for the next, even from the same page. If you want the bigger picture first, start with [what answer engine optimization is](/daily/what-is-answer-engine-optimization)."
       ]
     },
     {
-      "heading": "What structure makes a page easy to quote?",
+      "heading": "How do Google AI Overviews, ChatGPT search and Perplexity choose sources?",
       "paragraphs": [
-        "The pages that get lifted most often share a shape. A short, direct answer sits within the first few sentences, before any backstory or company history. Headings are phrased the way a person would actually ask the question, not as clever marketing phrases. Below that direct answer, the page goes deeper: specifics, caveats, and examples that show real expertise.",
-        "Long is not the enemy here. A thorough page is fine, even good, as long as the short answer comes first. What hurts is burying the answer under three paragraphs of introduction before getting to the point."
+        "Each tool searches the web, picks a handful of pages that answer the question, and summarizes them with links. The details differ by tool, but all three depend on being able to reach and read your page first."
+      ],
+      "subsections": [
+        {
+          "heading": "Google AI Overviews and AI Mode",
+          "paragraphs": [
+            "Google AI Overviews and Google AI Mode pull from the same index as regular Google Search. [Google Search Central](https://developers.google.com/search/docs/appearance/ai-features) says a page must be indexed and eligible to show with a snippet, and that there are no additional technical requirements. Both features may run several related searches behind the scenes, which Google calls query fan-out, before writing a response."
+          ]
+        },
+        {
+          "heading": "ChatGPT search",
+          "paragraphs": [
+            "ChatGPT search uses a crawler called OAI-SearchBot. [OpenAI's crawler documentation](https://developers.openai.com/api/docs/bots) says sites that opt out of OAI-SearchBot will not be shown in ChatGPT search answers. OpenAI recommends allowing it in robots.txt if you want to appear."
+          ]
+        },
+        {
+          "heading": "Perplexity",
+          "paragraphs": [
+            "Perplexity uses PerplexityBot to surface and link websites in its results. [Perplexity's crawler page](https://docs.perplexity.ai/docs/resources/perplexity-crawlers) recommends allowing it in robots.txt and says changes can take up to 24 hours to take effect."
+          ]
+        }
       ]
     },
     {
-      "heading": "Does structured data actually help?",
+      "heading": "What has to be true before any AI tool can cite you?",
       "paragraphs": [
-        "Structured data, specifically JSON-LD schema markup, will not force an AI system to cite you, but it removes guesswork. Marking up an article with its author, publish date, and organization tells the system exactly who is speaking, rather than leaving it to infer that from surrounding text. FAQ markup does something similar for question and answer pairs, making each one easy to pull out on its own.",
-        "Think of structured data as a clean label on a product, not the product itself. It helps a system trust and use what is already good content. It cannot rescue a page that is vague or wrong."
+        "Your page has to be reachable, indexed and readable as text before content quality matters at all. Work through these in order, because each one can quietly block everything after it.",
+        "Step 1: Open your robots.txt file and confirm you are not blocking Googlebot, Bingbot, OAI-SearchBot or PerplexityBot. Check your hosting or security plugin too, since some block bots without telling you.",
+        "Step 2: Confirm your key pages are indexed using the URL Inspection tool in Google Search Console. A page Google has not indexed cannot appear in AI Overviews.",
+        "Step 3: Make sure no page you care about uses noindex or nosnippet by accident. Those controls also limit what Google can show in its AI features.",
+        "Step 4: Put the important answers in real text on the page. A price list trapped in an image or a PDF is much harder for any system to quote."
       ]
     },
     {
-      "heading": "What role does authorship and trust play?",
+      "heading": "What makes a page worth citing?",
       "paragraphs": [
-        "AI systems weigh trust the same way people do: a named author with a real title, a page that states when it was last checked, and facts that hold up when checked elsewhere. A page signed by nobody, dated nowhere, competes at a real disadvantage against one that shows its work.",
-        "Consistency matters too. If your business name, address, and key facts about your services differ from page to page or across the web, that inconsistency reads as a small trust problem, whether the reader is a person or a machine.",
-        "This is one more reason the small, unglamorous parts of a website, a correct about page, a real staff bio, a footer that matches the header, carry more weight in an AI first world than they used to. They are the details a system checks when it is deciding whether to trust the rest of the page."
+        "A page earns citations when it answers one question clearly and gives the system reasons to trust it. Four habits do most of the work."
+      ],
+      "subsections": [
+        {
+          "heading": "A direct answer up top",
+          "paragraphs": [
+            "Put a two or three sentence answer right under the heading, before any backstory. A thorough page is fine as long as the short answer comes first. Our guide on [how to write pages answer engines quote](/daily/write-pages-answer-engines-quote) covers this in detail."
+          ]
+        },
+        {
+          "heading": "Specific, checkable facts",
+          "paragraphs": [
+            "Specific facts beat general claims. We serve the whole county tells a system very little, while a list of the towns you serve gives it something it can repeat with confidence."
+          ]
+        },
+        {
+          "heading": "A named author and honest dates",
+          "paragraphs": [
+            "A real person with a real title, plus a published and updated date, helps readers and machines judge whether to trust the page. Undated, unsigned pages compete at a disadvantage."
+          ]
+        },
+        {
+          "heading": "The same business facts everywhere",
+          "paragraphs": [
+            "Your name, address, phone number and hours should match across your site and your Google Business Profile. Google's own guidance tells site owners to keep Business Profile information up to date, and it matters even more for [local searches that trigger AI Overviews](/daily/local-seo-ai-overviews)."
+          ]
+        }
+      ]
+    },
+    {
+      "heading": "Is chasing AI citations worth it for your business?",
+      "paragraphs": [
+        "For most service businesses, yes, because the work that earns citations is the same work that improves regular search results. Whether it deserves time this month depends on where you are starting."
+      ],
+      "subsections": [
+        {
+          "heading": "It makes sense if",
+          "paragraphs": [
+            "It makes sense if customers research before they call, if they ask the same questions over and over, or if competitors already show up when you test AI tools. It also makes sense if your site is already indexed and you just need clearer pages.",
+            "A business whose customers compare several options before choosing, such as a contractor, a clinic or a law office, usually gains the most, because those buyers ask long, specific questions that AI tools are built to answer."
+          ]
+        },
+        {
+          "heading": "Skip it for now if",
+          "paragraphs": [
+            "Skip it for now if your site is not indexed, loads slowly, or still has an outdated phone number on it. Fix those basics first, since no AI tool will cite a page it cannot reach or trust.",
+            "The same goes for a site that has no pages answering real customer questions yet. Build a few strong service pages first, then come back to citations once there is something worth citing."
+          ]
+        },
+        {
+          "heading": "A worked example: a roofing company",
+          "paragraphs": [
+            "Here is a worked example with simple numbers, not a statistic. Picture a roofing company that lists the 20 questions customers ask most before booking, then groups them onto 5 pages: repair, replacement, storm damage, insurance claims and service area.",
+            "Rewriting each page with an answer-first opening, question headings and a named author takes about 30 minutes, so 5 pages take about 2.5 hours. Each month, the owner asks 5 of those questions in Google AI Mode, ChatGPT search and Perplexity, which is 15 checks and about 20 minutes of work.",
+            "If the company is cited in 3 of 15 checks in month one and 6 of 15 in month three, citation rate moved from 20 percent to 40 percent. That simple tally tells the owner which pages are working and which need another pass."
+          ]
+        }
+      ]
+    },
+    {
+      "heading": "Which questions should you try to get cited for?",
+      "paragraphs": [
+        "Aim for the questions customers ask right before they decide to buy, not broad topics where national publishers already dominate. A local electrician is unlikely to be cited for what is electricity, but has a real shot at how much does it cost to add an outlet in a finished basement."
+      ],
+      "subsections": [
+        {
+          "heading": "Questions from your own inbox",
+          "paragraphs": [
+            "The best list comes from emails, call notes and chat logs. If three customers asked it this month, other people are asking an AI tool the same thing."
+          ]
+        },
+        {
+          "heading": "Comparison and decision questions",
+          "paragraphs": [
+            "Google says AI Mode is especially helpful for questions that need comparison and reasoning. Pages that compare options honestly, like repair versus replacement, fit that kind of question well."
+          ]
+        },
+        {
+          "heading": "Local and specific questions",
+          "paragraphs": [
+            "Questions that include a town, a product model or a specific situation have fewer strong answers competing for them. That gives a small business with real local knowledge a better chance of being the clearest source."
+          ]
+        },
+        {
+          "heading": "Questions you can answer better than anyone",
+          "paragraphs": [
+            "Look for topics where you have firsthand experience, such as what an inspection actually checks or how long a job really takes in your area. Specific experience is hard for a generic page to copy, and it gives an AI system a reason to choose you."
+          ]
+        }
+      ]
+    },
+    {
+      "heading": "What are the most common mistakes?",
+      "paragraphs": [
+        "Most missed citations come from a handful of fixable errors, not from a lack of content."
+      ],
+      "subsections": [
+        {
+          "heading": "Blocking the search crawlers",
+          "paragraphs": [
+            "Some sites block every AI bot to keep content out of model training, then wonder why they never appear in AI answers. OpenAI lists OAI-SearchBot and GPTBot as separate settings, so you can allow search while still opting out of training."
+          ]
+        },
+        {
+          "heading": "Burying the answer",
+          "paragraphs": [
+            "Three paragraphs of company history before the answer is the most common page problem we see. Move the answer up and keep the history below it."
+          ]
+        },
+        {
+          "heading": "Chasing shortcuts",
+          "paragraphs": [
+            "Google's guide to [optimizing for generative AI features](https://developers.google.com/search/docs/fundamentals/ai-optimization-guide) says Google Search ignores llms.txt files and that seeking inauthentic mentions is not as helpful as it seems. Time spent on tricks is time not spent on better pages."
+          ]
+        },
+        {
+          "heading": "Fixing every page at once",
+          "paragraphs": [
+            "A rushed pass across 60 pages teaches you less than getting 5 revenue pages exactly right. Start small, measure, then expand."
+          ]
+        }
       ]
     },
     {
       "heading": "How do you know if it is working?",
       "paragraphs": [
-        "There is no perfect dashboard for AI citations yet, but there are signals. Ask ChatGPT or Perplexity the exact questions your best pages answer and read what comes back. If your business shows up, note it. If a competitor shows up instead, look at what their page does that yours does not, usually a clearer direct answer or a more specific fact.",
-        "Search Console and analytics still matter too. A page that starts getting referral traffic from AI tools, or that holds its ranking for question style searches, is doing something right."
-      ]
-    },
-    {
-      "heading": "What is a simple first project?",
-      "paragraphs": [
-        "Pick five questions your customers ask most, before they ever call or fill out a form. Write a two or three sentence direct answer for each, place it at the top of the relevant page, and add basic authorship information: a real name, a real title, a date. That single project, done well, moves more of the needle than a long list of small tweaks. It is the same discipline behind every article on The Momo Daily.",
-        "Do not try to fix every page at once. Ranking the five or ten pages that matter most to revenue, usually a handful of service pages and the FAQ, and getting those exactly right will teach you more about what works than a rushed pass across the entire site."
+        "You can now measure AI visibility with free first-party tools, plus a few simple manual checks. Use them together, since no single report covers every AI tool."
+      ],
+      "subsections": [
+        {
+          "heading": "Google Search Console",
+          "paragraphs": [
+            "Google Search Console has a [generative AI performance report](https://support.google.com/webmasters/answer/16984139?hl=en) that shows impressions from AI Overviews and AI Mode. Google says it rolled out to all websites on August 31, 2026."
+          ]
+        },
+        {
+          "heading": "Bing Webmaster Tools",
+          "paragraphs": [
+            "Bing Webmaster Tools has an AI Performance report that shows how often Microsoft Copilot and Bing's AI answers cite your pages. It also lists grounding queries, the phrases the AI used to find your content."
+          ]
+        },
+        {
+          "heading": "Analytics and spot checks",
+          "paragraphs": [
+            "OpenAI says ChatGPT adds utm_source=chatgpt.com to referral links, so ChatGPT search visits can show up in Google Analytics. [Search Engine Land reported](https://searchengineland.com/chatgpt-appears-to-drop-utm-tracking-making-ai-referral-traffic-harder-to-measure-496552) in October 2026 that some ChatGPT links now arrive without that tag, so part of that traffic can show up as direct. Pair that with monthly spot checks in Perplexity and ChatGPT. Our guide to [measuring AI search visibility](/daily/measure-ai-search-visibility) walks through the full setup."
+          ]
+        }
       ]
     }
   ],
   "faq": [
     {
-      "question": "Do I need to submit my site to ChatGPT or Perplexity?",
-      "answer": "No. There is no submission process. These tools read the public web the way a search engine does, so being crawlable and clear is what matters."
+      "question": "Do I need to submit my website to ChatGPT or Perplexity?",
+      "answer": "No. Neither offers a submission form. They find pages through their own crawlers, OAI-SearchBot and PerplexityBot, so allowing those in robots.txt is what matters."
     },
     {
-      "question": "Does paying for search ads help me get cited?",
-      "answer": "No. AI generated answers are separate from paid search results, and citation cannot be purchased directly."
+      "question": "Can I pay to be cited in AI answers?",
+      "answer": "No. Citations in AI Overviews, ChatGPT search and Perplexity cannot be bought. Ads, where they exist, are labeled separately from the cited sources."
     },
     {
-      "question": "How often should I update a page once it is optimized?",
-      "answer": "Whenever a fact changes, and at minimum a light check every few months. A visible last updated date supports trust even between changes."
+      "question": "Do I need an llms.txt file to show up in Google AI Overviews?",
+      "answer": "No. Google says Google Search ignores llms.txt and that no special files or markup are needed for its AI features. It does not hurt to keep one for other tools."
     },
     {
-      "question": "What is the single highest impact change I can make?",
-      "answer": "Move your direct answer to the top of the page and phrase your headings as the actual questions customers ask."
+      "question": "How long does it take to start getting cited?",
+      "answer": "It varies by page and question. Crawler changes in robots.txt can take about 24 hours to register with OpenAI and Perplexity, but earning citations depends on how well your page answers the question compared with others."
+    },
+    {
+      "question": "Does schema markup make AI tools cite me?",
+      "answer": "Not on its own. Google says no special schema is required for AI Overviews or AI Mode, but accurate structured data helps systems read your page correctly. See our [schema markup guide](/daily/schema-markup-for-ai-answers)."
+    }
+  ],
+  "sources": [
+    {
+      "title": "AI features and your website",
+      "url": "https://developers.google.com/search/docs/appearance/ai-features"
+    },
+    {
+      "title": "Overview of OpenAI Crawlers",
+      "url": "https://developers.openai.com/api/docs/bots"
+    },
+    {
+      "title": "Perplexity Crawlers",
+      "url": "https://docs.perplexity.ai/docs/resources/perplexity-crawlers"
+    },
+    {
+      "title": "Generative AI performance report (Search)",
+      "url": "https://support.google.com/webmasters/answer/16984139?hl=en"
+    },
+    {
+      "title": "See how you're showing up in AI search",
+      "url": "https://about.ads.microsoft.com/en/blog/post/march-2026/the-ai-performance-dashboard-your-view-into-where-your-brand-appears-across-the-ai-web"
     }
   ]
 }

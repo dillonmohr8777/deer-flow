@@ -1,42 +1,306 @@
 {
-  "title": "How should AI agents hand work back to people?",
-  "dek": "The best agent teams aren't the ones that do everything. They're the ones that know exactly when to stop and ask.",
+  "title": "How AI Agents Hand Work to People: A Handoff Checklist",
+  "dek": "How AI agents should hand work to people: when to stop and ask, what a good handoff includes, and a step by step checklist for human in the loop.",
   "slug": "how-ai-agents-hand-work-to-people",
   "date": "2026-09-22",
-  "author": { "name": "Dillon Mohr", "title": "AI Marketing Director" },
+  "author": {
+    "name": "Dillon Mohr",
+    "title": "AI Marketing Director"
+  },
   "keywords": [
-    "AI agents",
-    "human in the loop",
-    "approval gates",
-    "agent safety"
+    "AI agent handoff",
+    "human in the loop AI agents",
+    "AI agent approval",
+    "when should an AI agent ask a human",
+    "AI agent escalation",
+    "human oversight for AI agents"
   ],
-  "summary": "AI agents should hand work back at the moment an action becomes hard to undo: a send, a deploy, a payment. A good handoff arrives as a finished draft with its evidence attached, so a person can approve it in one read.",
+  "summary": "An AI agent should hand work to a person when the next step is risky, sensitive or hard to undo, such as a send, a payment or a public post, and when it keeps failing at a task. A good handoff arrives as a finished draft with its evidence and a note on what happens if the person says yes.",
   "section": "Safety",
   "hero": {
     "src": "/momentum/momos-living/verifier/flat.webp",
     "alt": "The Verifier Momo, cut from blue and kraft paper, studying a tag through a magnifying glass"
   },
-  "status": "draft",
+  "status": "published",
   "body": [
     {
-      "heading": "When should an agent stop and ask?",
+      "heading": "When should an AI agent stop and hand work to a person?",
       "paragraphs": [
-        "Whenever the next step leaves the building. Research, drafting and checking are cheap to redo; an email sent or a budget spent isn't.",
-        "Drawing that line once, in writing, saves a hundred judgment calls later."
+        "An agent should stop when the next step leaves the building or cannot be undone. Research, drafting and checking are cheap to redo, but a sent email, a payment or a published post is not.",
+        "This page is for business owners and teams setting up AI agents who want a clear rule for when the agent asks and when it acts on its own.",
+        "[OpenAI's practical guide to building agents](https://cdn.openai.com/business-guides-and-resources/a-practical-guide-to-building-agents.pdf) names two triggers that usually call for a person. The first is exceeding failure thresholds, such as an agent that still cannot understand a customer after several tries; the second is high-risk actions, like canceling orders, authorizing large refunds or making payments."
+      ],
+      "subsections": [
+        {
+          "heading": "Signs the agent is stuck",
+          "paragraphs": [
+            "It has tried the same step several times, it keeps asking the customer the same question, or its confidence in the answer is low. In each case, a person can usually solve in a minute what the agent would keep retrying."
+          ]
+        },
+        {
+          "heading": "Signs the action is risky",
+          "paragraphs": [
+            "The action moves money, speaks for the business in public, changes a live campaign or deletes something. Any one of these is enough to require a yes from a person."
+          ]
+        },
+        {
+          "heading": "Signs the situation is unusual",
+          "paragraphs": [
+            "The request does not match any rule the agent was given, or the customer is upset, confused or mentions a complaint. Unusual cases are where people add the most value."
+          ]
+        }
       ]
     },
     {
-      "heading": "What makes a good handoff?",
+      "heading": "What should a good handoff include?",
       "paragraphs": [
-        "A finished draft, not a question. The evidence it relied on, linked. A one line statement of what happens if the person says yes."
+        "A good handoff includes four things: the finished draft, the evidence behind it, what happens on yes, and how to undo it. With all four, a person can decide in one read."
+      ],
+      "subsections": [
+        {
+          "heading": "The finished draft",
+          "paragraphs": [
+            "Hand over the email, the post or the record change exactly as it would go out. A question like \"what should I say?\" pushes the work back onto the person."
+          ]
+        },
+        {
+          "heading": "The evidence",
+          "paragraphs": [
+            "Link the sources the draft relied on: the customer's message, the order record, the brief. The reviewer should be able to check a claim in seconds, not reopen the whole task."
+          ]
+        },
+        {
+          "heading": "What happens on yes",
+          "paragraphs": [
+            "Write one line that states the action, for example \"Sends this reply to the customer and marks the ticket solved.\" No reviewer should have to guess the consequence of a click."
+          ]
+        },
+        {
+          "heading": "The undo path",
+          "paragraphs": [
+            "Say whether the action can be reversed and how. If it cannot, the handoff should say so plainly, so the reviewer slows down for that one."
+          ]
+        }
       ]
     },
     {
-      "heading": "Does this slow the work down?",
+      "heading": "What are the main types of AI agent handoff?",
       "paragraphs": [
-        "Less than it seems. The agent does the long part; the person spends a minute on the part that carries the risk. That's the trade clients are paying for."
+        "Most handoffs fall into three types: approvals, escalations and exceptions. Naming them helps you decide who gets each one and how fast they need to answer."
+      ],
+      "subsections": [
+        {
+          "heading": "Approval",
+          "paragraphs": [
+            "The agent finished the work and needs a yes before it acts. A reply to a customer review is a typical example."
+          ]
+        },
+        {
+          "heading": "Escalation",
+          "paragraphs": [
+            "The agent could not finish and passes control to a person. In customer service that means a human agent takes over the conversation, as OpenAI's guide describes."
+          ]
+        },
+        {
+          "heading": "Exception",
+          "paragraphs": [
+            "The agent found something outside its rules, like a refund request above its limit or an angry message that mentions a lawyer. It stops, flags it and leaves the decision to a person."
+          ]
+        },
+        {
+          "heading": "Who gets which type",
+          "paragraphs": [
+            "Approvals go to the person who owns the account or the channel. Escalations and exceptions go to whoever can make a decision quickly, which is often the owner or a manager."
+          ]
+        }
+      ]
+    },
+    {
+      "heading": "How do you decide which actions need human approval?",
+      "paragraphs": [
+        "Sort every action the agent can take by two questions: can it be undone, and who will see it. Anything public, costly or permanent goes to a person by default."
+      ],
+      "subsections": [
+        {
+          "heading": "Usually safe to automate",
+          "paragraphs": [
+            "Reading data, summarizing, drafting, tagging and internal notes. If one of these is wrong, a person fixes it in a minute and no customer is affected."
+          ]
+        },
+        {
+          "heading": "Approve first",
+          "paragraphs": [
+            "Customer messages, public posts, changes to a live ad campaign, and edits to customer records. These are visible or hard to quietly fix."
+          ]
+        },
+        {
+          "heading": "Always a person",
+          "paragraphs": [
+            "Payments, refunds, contract terms, deleting data and granting access. These carry real money or real risk, so they stay with a person."
+          ]
+        },
+        {
+          "heading": "Limit what the agent can touch",
+          "paragraphs": [
+            "Approval rules work best alongside tight permissions. [OWASP's guidance on excessive agency](https://genai.owasp.org/llmrisk/llm062025-excessive-agency/) recommends giving agents only the tools and access they truly need, and our piece on [client data and AI tools](/daily/client-data-safe-ai-tools) covers the data side."
+          ]
+        }
+      ]
+    },
+    {
+      "heading": "What does a handoff cost in time? A simple worked example",
+      "paragraphs": [
+        "Here is an example with simple, made-up numbers, not a study. Say a local landscaping company answers 30 online reviews a month.",
+        "Writing each reply from scratch takes about 8 minutes, or 240 minutes a month. If an agent drafts each reply with the review and the job record attached, and the owner spends about 90 seconds approving or editing each one, the total is 45 minutes.",
+        "That saves about 3 hours and 15 minutes a month, and the owner still reads every public reply before it posts. Try the same math with your own volume before deciding which tasks to hand over."
+      ],
+      "subsections": [
+        {
+          "heading": "Where the time goes",
+          "paragraphs": [
+            "Most of the 90 seconds is reading the review and the draft side by side. The evidence attached to the handoff, like the job date and the crew notes, is what keeps that read short."
+          ]
+        }
+      ]
+    },
+    {
+      "heading": "What are common mistakes in AI agent handoffs?",
+      "paragraphs": [
+        "The most common mistakes make handoffs either too frequent or too thin. Both lead to people approving things without really reading them."
+      ],
+      "subsections": [
+        {
+          "heading": "Asking about everything",
+          "paragraphs": [
+            "If the agent asks for approval on every small step, people start clicking yes without looking. Save approvals for the actions that carry real risk."
+          ]
+        },
+        {
+          "heading": "Handing over questions instead of drafts",
+          "paragraphs": [
+            "An agent that asks \"how should I respond?\" has not done its job. It should propose an answer and let the person change it."
+          ]
+        },
+        {
+          "heading": "Hiding the evidence",
+          "paragraphs": [
+            "A draft with no sources forces the reviewer to redo the research or trust it blindly. Attach the links every time."
+          ]
+        },
+        {
+          "heading": "No owner for the queue",
+          "paragraphs": [
+            "Handoffs that nobody is assigned to sit for days. Name one person who reviews the queue and a backup for when they are out."
+          ]
+        },
+        {
+          "heading": "Never revisiting the rules",
+          "paragraphs": [
+            "If an action has been approved without edits for weeks, it may be ready to run on its own with spot checks. Review the rules on a schedule instead of leaving them frozen."
+          ]
+        },
+        {
+          "heading": "Treating approval as a rubber stamp",
+          "paragraphs": [
+            "A reviewer who approves fifty items in five minutes is not reviewing. If the queue is too long to read properly, cut the number of approval rules or add a second reviewer.",
+            "Spot check the approved items once a week. If problems slipped through, tighten the template or the rules, not just the reviewer."
+          ]
+        }
+      ]
+    },
+    {
+      "heading": "Does human approval slow the work down?",
+      "paragraphs": [
+        "Less than most people expect. The agent does the long part of the job, and the person spends a minute or two on the part that carries the risk.",
+        "Anthropic makes a similar point in [Anthropic's guide to building effective agents](https://www.anthropic.com/engineering/building-effective-agents): agents add the most value on tasks with clear success criteria, feedback loops and meaningful human oversight. Oversight is part of the design, not a tax on it.",
+        "For a full picture of where review sits in a working day, see [a day in the life of AI marketing agents](/daily/ai-marketing-agents-day-in-the-life)."
+      ],
+      "subsections": [
+        {
+          "heading": "Batch the reviews",
+          "paragraphs": [
+            "Reviewing handoffs two or three times a day is faster than reacting to each one as it arrives. Set the times so customers still get answers within your normal response window."
+          ]
+        },
+        {
+          "heading": "Make approving one click",
+          "paragraphs": [
+            "The reviewer should be able to approve, edit or reject from the same screen as the draft. Every extra login or copy and paste step adds friction that leads to rushed approvals."
+          ]
+        },
+        {
+          "heading": "Measure the queue",
+          "paragraphs": [
+            "Track how long items wait and how many get edited. A long wait means you need another reviewer or fewer approval rules; a high edit rate means the agent needs better instructions."
+          ]
+        }
+      ]
+    },
+    {
+      "heading": "How do you set up AI agent handoffs step by step?",
+      "paragraphs": [
+        "You can set up a working handoff system in an afternoon with five steps. Write it down once and it saves a hundred judgment calls later.",
+        "Step 1: List every action the agent can take, from reading an inbox to sending a message.",
+        "Step 2: Mark each action as automate, approve first or always a person, using the undo and visibility questions above.",
+        "Step 3: Set a failure limit, such as three failed attempts, after which the agent escalates to a person instead of retrying.",
+        "Step 4: Build the handoff template with the draft, the evidence, the one-line consequence and the undo note, and name the reviewer.",
+        "Step 5: Review the log every month and move actions between categories based on how often they needed edits. For more on the approval side, read [human approval for AI agents](/daily/human-approval-ai-agents), and if you are still deciding whether you need an agent at all, start with [AI agents vs chatbots](/daily/ai-agents-vs-chatbots)."
+      ],
+      "subsections": [
+        {
+          "heading": "What the handoff template looks like",
+          "paragraphs": [
+            "Keep it to four short parts in the same order every time: the draft, the sources, the one-line consequence and the undo note. A familiar layout lets the reviewer scan it in seconds and spot anything missing.",
+            "For example, a refund handoff might read: draft reply to the customer, link to the order and the photo they sent, \"Issues a refund to the card on file and emails the customer,\" and \"Cannot be reversed once processed.\""
+          ]
+        },
+        {
+          "heading": "How to roll it out",
+          "paragraphs": [
+            "Start with one workflow and one reviewer for a few weeks. Once the team trusts the template, reuse it for the next workflow instead of designing a new one each time."
+          ]
+        }
       ]
     }
   ],
-  "faq": []
+  "faq": [
+    {
+      "question": "What does human in the loop mean for AI agents?",
+      "answer": "It means a person reviews or approves certain agent actions before they happen. Most teams keep a person in the loop for anything public, costly or permanent."
+    },
+    {
+      "question": "How many times should an agent retry before asking for help?",
+      "answer": "Set a fixed limit, such as two or three attempts, then escalate. OpenAI's guide recommends limits on retries or actions so an agent hands off instead of looping."
+    },
+    {
+      "question": "Can an agent ever stop asking for approval?",
+      "answer": "Yes, for specific actions that have proven reliable over time. Move them to automatic with regular spot checks, and keep money, deletions and access changes with a person."
+    },
+    {
+      "question": "Who should review an agent's handoffs?",
+      "answer": "One named person who knows the customer or the account, with a backup. A queue with no owner turns into a backlog."
+    }
+  ],
+  "updated": "2026-10-22",
+  "takeaways": [
+    "An AI agent should stop and ask a person before any action that is sensitive, costly or hard to undo.",
+    "An agent should also hand work back when it keeps failing, instead of retrying forever.",
+    "A good handoff is a finished draft with its evidence attached, not an open question.",
+    "Every handoff should say what happens if the person says yes and how to undo it.",
+    "Human approval costs minutes; the agent still does the long part of the work."
+  ],
+  "sources": [
+    {
+      "title": "A practical guide to building agents (OpenAI)",
+      "url": "https://cdn.openai.com/business-guides-and-resources/a-practical-guide-to-building-agents.pdf"
+    },
+    {
+      "title": "Building effective agents (Anthropic)",
+      "url": "https://www.anthropic.com/engineering/building-effective-agents"
+    },
+    {
+      "title": "LLM06:2025 Excessive Agency (OWASP Gen AI Security Project)",
+      "url": "https://genai.owasp.org/llmrisk/llm062025-excessive-agency/"
+    }
+  ]
 }

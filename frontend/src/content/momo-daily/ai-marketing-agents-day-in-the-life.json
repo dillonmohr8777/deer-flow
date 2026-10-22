@@ -1,74 +1,308 @@
 {
-  "title": "What does an AI marketing team of agents actually do in a day?",
-  "dek": "A look inside a real daily run: research, drafts, checks and one human sign off before anything goes out.",
+  "title": "What Do AI Marketing Agents Do All Day? A Real Workflow",
+  "dek": "What AI marketing agents do all day: the research, drafting and checking each agent handles, and where a person signs off before anything ships.",
   "slug": "ai-marketing-agents-day-in-the-life",
   "date": "2026-09-23",
-  "author": { "name": "Dillon Mohr", "title": "AI Marketing Director" },
+  "author": {
+    "name": "Dillon Mohr",
+    "title": "AI Marketing Director"
+  },
   "keywords": [
     "AI marketing agents",
     "AI marketing team",
-    "marketing automation",
-    "agent workflow"
+    "AI agents for marketing",
+    "AI marketing workflow",
+    "what do AI marketing agents do",
+    "marketing automation with AI agents",
+    "human review of AI marketing"
   ],
-  "summary": "An AI marketing team of agents spends most of a day on research, drafting and checking, the same work a human team does, just faster. Each agent has one job. Nothing that costs money or reaches a client goes out until a person reviews it.",
+  "summary": "AI marketing agents spend most of the day on research, drafting and checking, the same work a human team does, only faster. Each agent has one narrow job, a short daily plan sets what they work on, and a person reviews everything that spends money, changes a live campaign or goes out under a client's name.",
   "section": "Front Page",
   "hero": {
     "src": "/momentum/daily/art/ai-marketing-agents-day-in-the-life.webp",
     "alt": "A 1930s pulp noir illustration of Momo the robot mascot as a night city desk editor, on the phone at a cluttered desk under a lamp with newspapers flying past and a wall clock overhead"
   },
-  "status": "draft",
+  "status": "published",
   "body": [
     {
-      "heading": "What does a day actually look like?",
+      "heading": "What do AI marketing agents actually do?",
       "paragraphs": [
-        "A small or mid size business does not need a marketing department the size of a newsroom to get newsroom level output. It needs a handful of agents, each with a narrow job, working through a queue every day and handing finished drafts to a person who decides what ships.",
-        "A typical day starts with research. One agent checks what changed since yesterday: a competitor's new offer, a shift in search rankings, a client's calendar event, a question that came up on social media. It does not write anything yet. It reads, summarizes and flags what matters.",
-        "From there the work splits into lanes. A content agent turns approved topics into drafts: blog posts, social captions, email copy. A design agent builds the visuals that go with them. An analytics agent checks last week's numbers and notes what is working and what is not. A client success agent watches for anything that looks like a risk, a missed reply, a slipping metric, before it becomes a real problem."
+        "AI marketing agents do the production work of marketing: research, first drafts, resizing, reporting and checks. They hand finished drafts to a person, who decides what goes out.",
+        "This page is for small business owners and marketing leads who want to see a real daily run before they hire for it, build it or buy it. It describes the shape of the work, not a product pitch.",
+        "An agent here means a language model that uses tools, like a search tool, an analytics export or a document editor, to complete a task. If that term is new, start with [AI agents vs chatbots](/daily/ai-agents-vs-chatbots)."
+      ],
+      "subsections": [
+        {
+          "heading": "What they do not do",
+          "paragraphs": [
+            "They do not set strategy, choose budgets or decide what the brand stands for. Those calls stay with people, because they depend on context no tool can see, like a client's mood on a call or a change in the owner's plans."
+          ]
+        },
+        {
+          "heading": "Why agents instead of one big assistant",
+          "paragraphs": [
+            "One general assistant asked to do everything tends to lose focus on long tasks. Several small agents, each with a short job and a clear handoff, are easier to check and easier to fix when one of them gets something wrong."
+          ]
+        }
       ]
     },
     {
-      "heading": "Who decides what is worth doing?",
+      "heading": "What does a typical day look like for an AI marketing team?",
       "paragraphs": [
-        "The agents do not decide their own priorities from nothing. A short list of goals sets the direction each day: which clients need attention, which campaigns are live, what deadlines are close. Agents work from that list, not from whatever seems interesting.",
-        "This matters because agents are good at producing volume. Left alone, a content agent could write dozens of posts nobody asked for. The discipline is in scoping the work tightly: this client, this campaign, this week's plan, and stopping there.",
-        "A morning stand up, even a short automated one, sets that scope before the agents start. It lists what is due, what changed overnight, and what to skip. Without that step, agents default to doing everything they are capable of, which is rarely the same thing as doing what actually needs to happen today."
+        "A typical day runs in four blocks: research in the morning, drafting at midday, checks in the afternoon and a human review at the end. The blocks matter more than the clock times."
+      ],
+      "subsections": [
+        {
+          "heading": "Morning: research",
+          "paragraphs": [
+            "A research agent checks what changed since yesterday. That can be a competitor's new offer, a shift in search rankings, a question customers keep asking, or a holiday that affects a campaign.",
+            "It does not write anything yet. It reads, summarizes and flags the few items that matter today."
+          ]
+        },
+        {
+          "heading": "Midday: drafting",
+          "paragraphs": [
+            "A content agent turns approved topics into drafts: blog posts, social captions and email copy. A design agent builds the matching visuals in the sizes each platform needs."
+          ]
+        },
+        {
+          "heading": "Afternoon: checks",
+          "paragraphs": [
+            "An analytics agent pulls last week's numbers and notes what moved. A checking agent compares each draft against the brief and the sources it used, and flags anything it cannot back up."
+          ]
+        },
+        {
+          "heading": "End of day: human review",
+          "paragraphs": [
+            "A person reviews the queue of finished drafts. Each item arrives with the reason it exists and the facts it relied on, so approving one takes a minute or two."
+          ]
+        },
+        {
+          "heading": "What changes on a busy day",
+          "paragraphs": [
+            "On a launch day or during a holiday promotion, the plan narrows to one campaign and the review happens twice instead of once. The agents do less, but what they do is checked sooner."
+          ]
+        }
       ]
     },
     {
-      "heading": "Where does a person come in?",
+      "heading": "How should the work be split between agents?",
       "paragraphs": [
-        "At the end, not the start. By the time a draft reaches a person, the research is done, the copy is written, the image is built, and the agent has already checked its own work against the brief. What is left is a judgment call: does this sound right, does it fit the client, is the offer accurate, should this go out today or wait.",
-        "That review is not a formality. Anything that spends money, changes a live campaign, or goes out under a client's name waits for a person to say yes. Drafts pile up in a queue with the reasoning behind them attached, so approving one takes a minute, not an investigation.",
-        "A good approval queue shows the finished draft next to the reason it exists: which client, which goal, which facts it relied on. An account manager scanning that queue at the end of the day can approve, edit or reject each item without reopening the whole research trail behind it."
+        "Give each agent one job. Narrow jobs are easier to check, easier to fix and less likely to wander off topic, which matches the advice in [Anthropic's guide to building effective agents](https://www.anthropic.com/engineering/building-effective-agents) to build from simple, composable patterns."
+      ],
+      "subsections": [
+        {
+          "heading": "Research agent",
+          "paragraphs": [
+            "Reads sources and summarizes what changed. It never publishes anything."
+          ]
+        },
+        {
+          "heading": "Content agent",
+          "paragraphs": [
+            "Writes drafts from an approved brief and a list of facts. Its drafts are never final until a person says so."
+          ]
+        },
+        {
+          "heading": "Analytics agent",
+          "paragraphs": [
+            "Pulls numbers from the tools you already use, such as Google Search Console and your ad accounts, and writes a short readout. It reports what changed and leaves the decisions to people."
+          ]
+        },
+        {
+          "heading": "Account watch agent",
+          "paragraphs": [
+            "Looks for early warning signs, like a slipping metric or a customer question that has gone unanswered for two days. It raises a flag rather than trying to fix the problem itself."
+          ]
+        },
+        {
+          "heading": "How the agents pass work along",
+          "paragraphs": [
+            "Each agent writes its output to a shared queue with a short note on what it did and what it used. The next agent starts from that note instead of redoing the research, and the reviewer can trace any draft back to where it began.",
+            "When an agent cannot finish, it says so in the queue rather than guessing. A clear \"could not confirm this number\" saves far more time than a confident wrong one."
+          ]
+        }
       ]
     },
     {
-      "heading": "Why does this beat a bigger team?",
+      "heading": "Who decides what the agents work on?",
       "paragraphs": [
-        "Not because the agents are smarter than a person. They are not. They are faster at the parts of marketing that are mostly repetition: pulling data, drafting a first version, checking a fact, resizing an image for five platforms. A small business gets that speed without hiring five specialists, and an account manager gets to spend their day on strategy and client relationships instead of production.",
-        "The honest version of this story is not that agents replace judgment. It is that they clear away the work that sits in front of judgment, so the person making the final call gets to it faster and with better material in hand."
+        "People decide; agents follow a short written plan. Each day starts with a list of goals: which campaigns are live, which deadlines are close and what to skip.",
+        "This matters because agents are very good at producing volume. Left alone, a content agent could write dozens of posts nobody asked for, so the discipline is in scoping the work tightly.",
+        "A short morning stand up, even an automated one, sets that scope. Without it, agents default to doing everything they can, which is rarely what needs doing today."
+      ],
+      "subsections": [
+        {
+          "heading": "What goes in the daily plan",
+          "paragraphs": [
+            "The plan lists live campaigns, due dates, open questions from customers and anything that changed overnight. It also lists what not to do today, which is often the most useful line."
+          ]
+        },
+        {
+          "heading": "Who writes the plan",
+          "paragraphs": [
+            "A person owns the plan, even if an agent drafts it. The owner adjusts it in a few minutes each morning and the agents work only from the approved version."
+          ]
+        },
+        {
+          "heading": "How the plan changes during the week",
+          "paragraphs": [
+            "Early in the week the plan leans toward research and drafting. Later in the week it shifts toward reporting and cleanup, so nothing half finished carries into the weekend."
+          ]
+        }
       ]
     },
     {
-      "heading": "What can go wrong with this setup?",
+      "heading": "Where does a person approve the work?",
       "paragraphs": [
-        "Agents can be confidently wrong, especially about facts they were not given directly. That is why every claim in a draft should trace back to a real source: a client's own numbers, a public fact, or a note from the account manager, never a guess dressed up as a statistic.",
-        "The fix is not to slow everything down. It is to put the review where it belongs: light checking on routine drafts, careful review on anything client facing, and a hard stop before spend or a public send. Read more daily notes like this one at The Momo Daily, where Momentum publishes what its own agent team learns."
+        "A person approves at the end, right before anything leaves the building. By then the research, the draft and the visuals are done, and what is left is a judgment call.",
+        "Anything that spends money, changes a live campaign or goes out under a client's name waits for a yes. [OpenAI's practical guide to building agents](https://cdn.openai.com/business-guides-and-resources/a-practical-guide-to-building-agents.pdf) recommends the same thing: send high-risk, sensitive or irreversible actions to a person until you trust the agent.",
+        "A good approval queue shows the draft next to its reason and its sources. We go deeper on that in [how AI agents hand work to people](/daily/how-ai-agents-hand-work-to-people)."
+      ],
+      "subsections": [
+        {
+          "heading": "Is it accurate?",
+          "paragraphs": [
+            "The reviewer checks every number and claim against the source the agent attached. If a claim has no source, it comes out of the draft."
+          ]
+        },
+        {
+          "heading": "Does it sound like the brand?",
+          "paragraphs": [
+            "Agents drift toward generic, polished language. The reviewer cuts anything that sounds like it could have been written for any business."
+          ]
+        },
+        {
+          "heading": "Is the timing right?",
+          "paragraphs": [
+            "A post that is fine on Tuesday can be wrong on Wednesday if the news changed. The reviewer decides whether it goes out today, waits or gets dropped."
+          ]
+        },
+        {
+          "heading": "Does it promise anything?",
+          "paragraphs": [
+            "Prices, dates and guarantees need extra care. If a draft promises something the business has not confirmed, it goes back for a rewrite."
+          ]
+        }
+      ]
+    },
+    {
+      "heading": "How much time does it save? A simple worked example",
+      "paragraphs": [
+        "Here is an example with simple, made-up numbers, not a study. Say a local bakery posts 5 times a week on 3 platforms, which is 15 captions and image sizes a week.",
+        "If a person writes and resizes each one from scratch in about 20 minutes, that is 300 minutes, or 5 hours a week. If agents prepare the drafts and the person spends about 3 minutes reviewing each, the total is 45 minutes.",
+        "That frees about 4 hours and 15 minutes a week for the owner or marketer. Swap in your own post count and minutes to see whether the setup is worth it for you."
+      ],
+      "subsections": [
+        {
+          "heading": "What the example leaves out",
+          "paragraphs": [
+            "The math above skips setup time, the first few weeks of heavier editing and the time spent writing the brand voice down. Expect the savings to start small and grow as the agents learn your rules and the review gets faster."
+          ]
+        }
+      ]
+    },
+    {
+      "heading": "What are the common mistakes with AI marketing agents?",
+      "paragraphs": [
+        "Most problems come from loose scope, missing sources or skipped review. All three are fixable with process, not a better model."
+      ],
+      "subsections": [
+        {
+          "heading": "Letting agents invent facts",
+          "paragraphs": [
+            "Agents can be confidently wrong, especially about statistics they were not given. Require every number in a draft to trace back to a client's own data, a named public source or a note from a person."
+          ]
+        },
+        {
+          "heading": "Publishing volume for its own sake",
+          "paragraphs": [
+            "More content is not the goal. [Google Search Central](https://developers.google.com/search/blog/2023/02/google-search-and-ai-content) says it rewards helpful, high-quality content however it is made, and that using automation mainly to manipulate rankings breaks its spam policies."
+          ]
+        },
+        {
+          "heading": "Reviewing everything the same way",
+          "paragraphs": [
+            "Light checks on routine internal drafts and careful review on anything public keep the queue moving. A hard stop belongs before any spend or public send."
+          ]
+        },
+        {
+          "heading": "Writing for search engines only",
+          "paragraphs": [
+            "Pages written to be quoted clearly tend to work for people and for AI answer engines alike. Our guide on [writing pages answer engines quote](/daily/write-pages-answer-engines-quote) shows the pattern."
+          ]
+        }
+      ]
+    },
+    {
+      "heading": "Is an AI marketing agent team right for your business?",
+      "paragraphs": [
+        "It is a good fit when you have steady, repeatable marketing work and someone with the judgment to review it. It is a poor fit when nobody has time to review, or when the work changes completely every week."
+      ],
+      "subsections": [
+        {
+          "heading": "It probably makes sense if",
+          "paragraphs": [
+            "You publish on a regular schedule, you report on the same numbers every week, and one person can spend 30 to 60 minutes a day reviewing drafts."
+          ]
+        },
+        {
+          "heading": "Skip it for now if",
+          "paragraphs": [
+            "You post a few times a month, you have no clear brand voice written down, or nobody owns the final yes. Fix those first and the agents will have something to follow."
+          ]
+        },
+        {
+          "heading": "How to know it is working",
+          "paragraphs": [
+            "Track how many drafts are approved without edits and how many hours the team gets back. To see whether the extra content shows up in AI answers, read [how to measure AI search visibility](/daily/measure-ai-search-visibility). This is the same daily rhythm we run at Momentum, and The Momo Daily is where we write up what we learn."
+          ]
+        }
       ]
     }
   ],
   "faq": [
     {
-      "question": "Do AI marketing agents work without any human oversight?",
-      "answer": "No. Agents handle research, drafting and checking. A person still approves anything that spends money, changes a live campaign, or is sent under a client's name."
+      "question": "Can AI marketing agents run without any human oversight?",
+      "answer": "They should not. Agents handle research, drafting and checking, but a person should approve anything that spends money, changes a live campaign or is sent under a client's name."
     },
     {
-      "question": "How many agents does a small business actually need?",
-      "answer": "Usually a handful, each with one job: research, content, design, analytics and client success. More agents does not mean more value if the work is not scoped tightly."
+      "question": "How many AI marketing agents does a small business need?",
+      "answer": "Usually a handful, each with one job, such as research, content, analytics and account watch. Adding more agents does not add value if the work is not tightly scoped."
     },
     {
-      "question": "What is the biggest risk of using AI marketing agents?",
-      "answer": "Confident mistakes, usually a made up statistic or a misread brief. The safeguard is requiring every claim to trace back to a real source and keeping human review on anything client facing."
+      "question": "Does Google penalize content written with help from AI?",
+      "answer": "Google says it rewards helpful, high-quality content however it is produced. Using automation mainly to manipulate search rankings is against its spam policies."
+    },
+    {
+      "question": "What is the biggest risk with AI marketing agents?",
+      "answer": "Confident mistakes, such as a made-up statistic or a misread brief. Requiring a real source for every claim and keeping human review on public work are the main safeguards."
+    },
+    {
+      "question": "How long does a daily review take?",
+      "answer": "With drafts that arrive alongside their reasons and sources, most items take a minute or two to approve, edit or reject."
+    }
+  ],
+  "updated": "2026-10-22",
+  "takeaways": [
+    "AI marketing agents do research, first drafts and fact checks; people make the final calls on what ships.",
+    "Each agent works best with one narrow job, such as research, content, analytics or account watch.",
+    "A short daily plan keeps agents on the work that matters instead of producing volume nobody asked for.",
+    "Anything that spends money, changes a live campaign or goes out under a client's name waits for a person's approval.",
+    "Every claim in an agent's draft should trace back to a real source, because agents can be confidently wrong."
+  ],
+  "sources": [
+    {
+      "title": "Building effective agents (Anthropic)",
+      "url": "https://www.anthropic.com/engineering/building-effective-agents"
+    },
+    {
+      "title": "A practical guide to building agents (OpenAI)",
+      "url": "https://cdn.openai.com/business-guides-and-resources/a-practical-guide-to-building-agents.pdf"
+    },
+    {
+      "title": "Google Search's guidance about AI-generated content (Google Search Central)",
+      "url": "https://developers.google.com/search/blog/2023/02/google-search-and-ai-content"
     }
   ]
 }
