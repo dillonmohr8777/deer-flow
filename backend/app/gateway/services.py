@@ -25,7 +25,7 @@ from langchain_core.messages import BaseMessage, ChatMessage, HumanMessage, Syst
 from langchain_core.messages.utils import convert_to_messages
 from langgraph.types import Command
 
-from app.gateway.auth_disabled import AUTH_SOURCE_INTERNAL
+from app.gateway.auth_disabled import AUTH_SOURCE_INTERNAL, AUTH_SOURCE_SESSION
 from app.gateway.authz import require_cancel_permission_if
 from app.gateway.client_boundary import CLIENT_ROLE
 from app.gateway.deps import get_checkpointer, get_local_provider, get_run_context, get_run_manager, get_stream_bridge, get_thread_store
@@ -95,6 +95,8 @@ from deerflow.runtime.stream_modes import normalize_stream_modes
 from deerflow.runtime.user_context import (
     AUTHENTICATED_CONTEXT_MARKER,
     AUTHENTICATED_CONTEXT_MARKER_KEY,
+    PRIVATE_MCP_SESSION_CONTEXT_KEY,
+    PRIVATE_MCP_SESSION_MARKER,
     WORKSPACE_IDENTITY_CONTEXT_KEYS,
     WorkspaceStorageContext,
     reset_current_user,
@@ -618,6 +620,7 @@ _SERVER_OWNED_RUNTIME_CONTEXT_KEYS: frozenset[str] = (
             KNOWLEDGE_SCOPE_KEY,
             KNOWLEDGE_SCOPE_RUNTIME_KEY,
             AUTHENTICATED_CONTEXT_MARKER_KEY,
+            PRIVATE_MCP_SESSION_CONTEXT_KEY,
         }
     )
     | WORKSPACE_IDENTITY_CONTEXT_KEYS
@@ -793,6 +796,9 @@ def inject_authenticated_user_context(
         if isinstance(configurable, dict):
             configurable.pop("user_id", None)
     runtime_context["is_internal"] = auth_source == AUTH_SOURCE_INTERNAL
+    # Delegated owners may have no role attribute; MCP admission needs origin proof.
+    if auth_source == AUTH_SOURCE_SESSION:
+        runtime_context[PRIVATE_MCP_SESSION_CONTEXT_KEY] = PRIVATE_MCP_SESSION_MARKER
     runtime_context["momentum_staff"] = bool(momentum_staff)
     if auth_source == AUTH_SOURCE_INTERNAL and request_context is not None:
         channel_user_id = request_context.get("channel_user_id")

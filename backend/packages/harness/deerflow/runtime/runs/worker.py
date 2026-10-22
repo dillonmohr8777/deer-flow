@@ -88,6 +88,7 @@ from deerflow.runtime.stream_modes import normalize_stream_modes, to_langgraph_s
 from deerflow.runtime.user_context import (
     AUTHENTICATED_CONTEXT_MARKER,
     AUTHENTICATED_CONTEXT_MARKER_KEY,
+    PRIVATE_MCP_SESSION_CONTEXT_KEY,
     WORKSPACE_IDENTITY_CONTEXT_KEYS,
     get_current_user,
     get_effective_user_id,
@@ -535,6 +536,7 @@ _SERVER_OWNED_RUNTIME_CONTEXT_KEYS: Final[frozenset[str]] = (
             PROJECT_CONTEXT_KEY,
             KNOWLEDGE_SCOPE_RUNTIME_KEY,
             AUTHENTICATED_CONTEXT_MARKER_KEY,
+            PRIVATE_MCP_SESSION_CONTEXT_KEY,
         }
     )
     | WORKSPACE_IDENTITY_CONTEXT_KEYS
@@ -971,6 +973,10 @@ async def run_agent(
             )
             logger.info("Run %s was cancelled", run_id)
 
+    # MCP assembly depends on repositories; load it after cold bootstrap.
+    from deerflow.mcp.private_scope import bind_private_mcp_context, reset_private_mcp_context
+
+    private_mcp_token = bind_private_mcp_context(config.get("context"))
     try:
         normalized_stream_modes = normalize_stream_modes(stream_modes)
         requested_modes: set[str] = set(normalized_stream_modes)
@@ -1513,6 +1519,7 @@ async def run_agent(
             )
 
     finally:
+        reset_private_mcp_context(private_mcp_token)
         try:
             if record.ownership_lost:
                 logger.warning(
