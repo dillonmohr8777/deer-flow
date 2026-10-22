@@ -15,7 +15,7 @@ from alembic import command
 from alembic.script import ScriptDirectory
 from fastapi import FastAPI
 from langchain_core.messages import ToolMessage
-from org_isolation_fixtures import ORG_S, USER_A, USER_B, USER_C, acting_as, auth_headers, org_world  # noqa: F401
+from org_isolation_fixtures import ORG_S, USER_A, USER_B, USER_C, acting_as, auth_headers, org_world, org_world_pooled  # noqa: F401
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from app.gateway import approval_adapters
@@ -194,11 +194,11 @@ async def test_decisions_are_audited(org_world, slack):  # noqa: F811
 
 
 @pytest.mark.asyncio
-async def test_double_approve_race_executes_once(org_world, slack):  # noqa: F811
+async def test_double_approve_race_executes_once(org_world_pooled, slack):  # noqa: F811
     import asyncio
 
-    row = await _propose(org_world)
-    async with _http(_app(org_world)) as client:
+    row = await _propose(org_world_pooled)
+    async with _http(_app(org_world_pooled)) as client:
         h = auth_headers(USER_A)
         codes = sorted(r.status_code for r in await asyncio.gather(*[client.post(f"/api/approvals/{row['id']}/approve", headers=h) for _ in range(4)]))
     assert codes.count(200) == 1 and len(slack.sent) == 1

@@ -115,9 +115,7 @@ async def _user_from_access_token(request):
     return SimpleNamespace(id=request.cookies["access_token"], system_role="user", email="org-world@example.com")
 
 
-@pytest_asyncio.fixture()
-async def org_world(monkeypatch):
-    engine = create_async_engine("sqlite+aiosqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+async def _seed_org_world(monkeypatch, engine):
     async with engine.begin() as connection:
         await connection.run_sync(Base.metadata.create_all)
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
@@ -136,5 +134,24 @@ async def org_world(monkeypatch):
     monkeypatch.setattr("deerflow.persistence.engine.get_session_factory", lambda: session_factory)
     monkeypatch.setattr("app.gateway.deps.get_current_user_from_request", _user_from_access_token)
     monkeypatch.setattr("app.gateway.authz._get_route_authorization_config", lambda: AuthorizationConfig())
-    yield session_factory
+    return session_factory
+
+
+@pytest_asyncio.fixture()
+async def org_world(monkeypatch):
+    engine = create_async_engine("sqlite+aiosqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    yield await _seed_org_world(monkeypatch, engine)
+    await engine.dispose()
+
+
+@pytest_asyncio.fixture()
+async def org_world_pooled(monkeypatch, tmp_path_factory):
+    """``org_world`` on a file DB with one connection per session, as in production.
+
+    Use it for concurrency tests. ``StaticPool`` shares one DBAPI connection, so one
+    session's close() rolls back another session's uncommitted UPDATE and a
+    compare-and-set can report several winners that a real pool never would.
+    """
+    engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path_factory.mktemp('org_world') / 'org.db'}")
+    yield await _seed_org_world(monkeypatch, engine)
     await engine.dispose()
