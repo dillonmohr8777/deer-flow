@@ -36,7 +36,7 @@ class AuthorizationConfig(BaseModel):
     )
     exec_emails: list[str] = Field(
         default_factory=list,
-        description="Emails that get the exec (C-suite) system role when they accept a workspace invitation. Upgrades a plain user only; never touches admin or client.",
+        description="Emails that get the exec (C-suite) system role when they accept a workspace invitation a global admin issued. Upgrades a plain user only; never touches admin or client.",
     )
 
 

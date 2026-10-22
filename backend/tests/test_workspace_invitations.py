@@ -682,8 +682,9 @@ async def test_exec_emails_join_as_exec_and_never_touch_admin_or_client(invitati
     organization_id = await _seed_workspace(invitation_db)
     await _add_user(invitation_db, "sso-boss", "boss@example.com", oauth_provider="google")
     await _add_user(invitation_db, "admin-user", "admin@example.com", oauth_provider="google")
+    await _add_user(invitation_db, "owner-1", "owner@example.com")
     async with invitation_db() as session:
-        await session.execute(update(UserRow).where(UserRow.id == "admin-user").values(system_role="admin"))
+        await session.execute(update(UserRow).where(UserRow.id.in_(["admin-user", "owner-1"])).values(system_role="admin"))
         await session.commit()
     exec_config = AuthorizationConfig(invitations_frozen=False, exec_emails=["Partner@Example.com", "boss@example.com", "admin@example.com", "client@example.com"])
     monkeypatch.setattr("app.gateway.authz._get_route_authorization_config", lambda: exec_config)
@@ -721,6 +722,10 @@ async def test_an_exec_email_stays_a_user_while_rbac_has_no_exec_block(invitatio
 async def test_a_new_sso_account_joins_its_invited_workspace_without_a_token(invitation_db, monkeypatch):
     organization_id = await _seed_workspace(invitation_db)
     await _add_user(invitation_db, "sso-new", "partner@example.com", oauth_provider="google")
+    await _add_user(invitation_db, "owner-1", "owner@example.com")
+    async with invitation_db() as session:
+        await session.execute(update(UserRow).where(UserRow.id == "owner-1").values(system_role="admin"))
+        await session.commit()
     monkeypatch.setattr("app.gateway.authz._get_route_authorization_config", lambda: AuthorizationConfig(invitations_frozen=False, exec_emails=["partner@example.com"]))
     expired = await _create(monkeypatch, invitation_db, organization_id, email="partner@example.com", role="member")
     async with invitation_db() as session:
@@ -756,3 +761,25 @@ async def test_sso_auto_join_respects_the_freeze_and_a_removed_issuer(invitation
     async with invitation_db() as session:
         assert (await session.get(InvitationRow, created.id)).consumed_at is None
         assert await session.get(OrganizationMemberRow, {"organization_id": organization_id, "user_id": "sso-new"}) is None
+
+
+@pytest.mark.asyncio
+async def test_a_workspace_owner_who_is_not_a_global_admin_cannot_mint_exec(invitation_db, monkeypatch):
+    # The token goes to its issuer, who could set a new account's password or
+    # accept into an account they control: neither may come out exec.
+    organization_id = await _seed_workspace(invitation_db)
+    await _add_user(invitation_db, "owner-1", "owner@example.com")  # system_role "user"
+    await _add_user(invitation_db, "held", "held@example.com", oauth_provider="google")
+    monkeypatch.setattr("app.gateway.authz._get_route_authorization_config", lambda: AuthorizationConfig(invitations_frozen=False, exec_emails=["partner@example.com", "held@example.com", "sso@example.com"]))
+
+    new = await _create(monkeypatch, invitation_db, organization_id, email="partner@example.com")
+    await invitations.accept_invitation(invitations.AcceptInvitationRequest(token=new.token, password="A-longer-new-password!"), _request(), Response())
+    existing = await _create(monkeypatch, invitation_db, organization_id, email="held@example.com")
+    await invitations.accept_invitation(invitations.AcceptInvitationRequest(token=existing.token), _signed_in("held"), Response())
+    await _add_user(invitation_db, "sso-new", "sso@example.com", oauth_provider="google")
+    await _create(monkeypatch, invitation_db, organization_id, email="sso@example.com")
+    assert await invitations.join_invited_workspaces(_request(), user_id="sso-new", email="sso@example.com") == organization_id
+
+    async with invitation_db() as session:
+        roles = dict((await session.execute(select(UserRow.email, UserRow.system_role))).all())
+    assert (roles["partner@example.com"], roles["held@example.com"], roles["sso@example.com"]) == ("user", "user", "user")

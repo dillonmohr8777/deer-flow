@@ -73,8 +73,10 @@ through the invitation link.
 
 Accepting any invitation seeds the `experience_mode: easy` preference (the
 simple version) unless the account already saved a choice, and an email listed
-in `authorization.exec_emails` joins as `exec`: a new account is created as
-exec and a plain `user` is upgraded; `admin` and `client` accounts keep theirs.
+in `authorization.exec_emails` joins as `exec` when a global admin issued the
+invitation (a token's holder can set a new account's password, so a workspace
+owner/admin must not mint exec): a new account is created as exec and a plain
+`user` is upgraded; `admin` and `client` accounts keep theirs.
 
 The PAT scope catalog includes Board, Team and Academy permissions. Scopes still intersect the owner's permissions; unlisted routes remain denied by `_PAT_ROUTE_RULES`, regardless of those scopes. Do not add route admission through a scope-catalog change.
 
