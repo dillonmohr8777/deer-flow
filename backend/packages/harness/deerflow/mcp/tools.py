@@ -773,7 +773,7 @@ def _configure_task_tools_for_server(
     return configured
 
 
-async def get_mcp_tools(*, private_only: bool = False) -> list[BaseTool]:
+async def get_mcp_tools(*, private_only: bool = False, extensions_config: ExtensionsConfig | None = None) -> list[BaseTool]:
     """Get unrestricted tools, or authorized private tools for the current run.
 
     Tools using stdio transport are wrapped with persistent-session logic so
@@ -791,11 +791,11 @@ async def get_mcp_tools(*, private_only: bool = False) -> list[BaseTool]:
         logger.warning("langchain-mcp-adapters not installed. Install it to enable MCP tools: pip install langchain-mcp-adapters")
         return []
 
-    # NOTE: We use ExtensionsConfig.from_file() instead of get_extensions_config()
-    # to always read the latest configuration from disk. This ensures that changes
-    # made through the Gateway API (which runs in a separate process) are immediately
-    # reflected when initializing MCP tools.
-    extensions_config = ExtensionsConfig.from_file()
+    # Public discovery reads the latest file contents. The targeted private
+    # assembly path may pass its already selected snapshot so discovery and
+    # provenance use the same configuration without another synchronous read.
+    if extensions_config is None:
+        extensions_config = ExtensionsConfig.from_file()
     validate_mcp_task_config_snapshot(extensions_config)
     # Public discovery is cacheable globally. Restricted discovery is fresh and
     # authorized before OAuth, client construction, or any server connection.

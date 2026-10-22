@@ -65,9 +65,12 @@ enabled, scope-authorized `brain` installation and locally adds four read names:
 normal capability selection, authorization, and execution-time scope/revocation
 guards. Added candidates must already carry private-discovery provenance from
 the backend guard coroutine, matching the selected server policy and connection.
-Ordinary metadata cannot claim that provenance, and raw/public tools are never
-promoted by wrapping them with a private policy, including when configuration
-changes A to public transport B and returns to A during assembly.
+Lead assembly passes the same loaded config snapshot to private-only discovery,
+narrowed to the selected installation, so this Max case does not initialize the
+public cache or start unrelated private servers. Ordinary metadata cannot claim
+that provenance, and raw/public tools are never promoted by wrapping them with a
+private policy, including when configuration changes A to public transport B and
+returns to A during assembly.
 Search/capture/refresh and other MCP tools are excluded. The local
 selection is not written to agent configuration or delegated subagent metadata.
 Deployment still requires separate review. Before any Brain

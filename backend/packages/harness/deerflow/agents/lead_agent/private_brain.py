@@ -8,7 +8,7 @@ from deerflow.mcp.private_scope import current_private_mcp_context, private_mcp_
 _BRAIN_READ_TOOLS = ("brain_now", "brain_client", "brain_open_items", "brain_systems")
 
 
-def private_brain_for_max(agent_name: str | None) -> tuple[McpServerConfig, str, list[str]] | None:
+def private_brain_for_max(agent_name: str | None) -> tuple[ExtensionsConfig, McpServerConfig, str, list[str]] | None:
     """Select only an enabled, explicitly private, scope-authorized Brain server."""
     if agent_name != MOMOBOT_MAX_NAME or current_private_mcp_context() is None:
         return None
@@ -21,7 +21,7 @@ def private_brain_for_max(agent_name: str | None) -> tuple[McpServerConfig, str,
         if identity in ambiguous_installation_ids({name: entry.model_dump() for name, entry in config.mcp_servers.items()}):
             return None
         names = [f"brain_{name}" if server.tool_name_prefix else name for name in _BRAIN_READ_TOOLS]
-        return server, identity, names
+        return config, server, identity, names
     except Exception:
         # Unavailable configuration cannot add private access to the base agent.
         return None

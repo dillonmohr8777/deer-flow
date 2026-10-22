@@ -195,7 +195,7 @@ async def initialize_mcp_tools() -> list[BaseTool]:
     return []
 
 
-def _with_private_tools(public_tools: list[BaseTool]) -> list[BaseTool]:
+def _with_private_tools(public_tools: list[BaseTool], *, extensions_config=None) -> list[BaseTool]:
     """Discover private tools per authorized run, never in the global cache."""
     from deerflow.mcp.private_scope import current_private_mcp_context
     from deerflow.mcp.tools import get_mcp_tools
@@ -204,7 +204,9 @@ def _with_private_tools(public_tools: list[BaseTool]) -> list[BaseTool]:
         return public_tools
 
     def load() -> list[BaseTool]:
-        return asyncio.run(get_mcp_tools(private_only=True))
+        if extensions_config is None:
+            return asyncio.run(get_mcp_tools(private_only=True))
+        return asyncio.run(get_mcp_tools(private_only=True, extensions_config=extensions_config))
 
     try:
         asyncio.get_running_loop()
@@ -217,6 +219,11 @@ def _with_private_tools(public_tools: list[BaseTool]) -> list[BaseTool]:
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
             private_tools = executor.submit(context.run, load).result()
     return [*public_tools, *private_tools]
+
+
+def get_private_mcp_tools(extensions_config) -> list[BaseTool]:
+    """Discover only the private servers in a selected config snapshot."""
+    return _with_private_tools([], extensions_config=extensions_config)
 
 
 def get_cached_mcp_tools() -> list[BaseTool]:

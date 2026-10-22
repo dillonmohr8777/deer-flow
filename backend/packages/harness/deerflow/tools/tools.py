@@ -1,6 +1,7 @@
 import copy
 import logging
 import threading
+from typing import Any
 
 from langchain.tools import BaseTool
 from langchain_core.language_models import BaseChatModel
@@ -114,6 +115,7 @@ def get_available_tools(
     subagent_enabled: bool = False,
     *,
     mcp_plugins: list[str] | None = None,
+    private_mcp_config: Any | None = None,
     include_upload_tool: bool = True,
     include_conversation_reader: bool = False,
     include_momentum_sdk: bool = False,
@@ -141,6 +143,8 @@ def get_available_tools(
         include_conversation_reader: Allow the configured conversation reader
             only when the host provides its authorized runtime capability.
             Defaults to false for embedded callers and subagents.
+        private_mcp_config: Optional preloaded MCP snapshot for a targeted
+            private selection. It bypasses global public-cache discovery.
 
     Returns:
         List of available tools.
@@ -249,32 +253,45 @@ def get_available_tools(
             for tool in loaded_tools
         ]
 
-    # Get cached MCP tools if enabled
-    # NOTE: We use ExtensionsConfig.from_file() instead of config.extensions
-    # to always read the latest configuration from disk. This ensures that changes
-    # made through the Gateway API (which runs in a separate process) are immediately
-    # reflected when loading MCP tools.
+    # Get MCP tools if enabled. An explicit empty selection must prevent
+    # discovery, not merely filter its results: lazy discovery can start
+    # globally enabled HTTP/stdio servers.
     mcp_tools = []
-    # An explicit empty selection must prevent discovery, not merely filter its
-    # results: lazy discovery can start globally enabled HTTP/stdio servers.
     if include_mcp and mcp_plugins != []:
         try:
-            from deerflow.config.extensions_config import ExtensionsConfig
-            from deerflow.mcp.cache import get_cached_mcp_tools
+            if private_mcp_config is not None:
+                # The selected private snapshot bypasses both the public cache
+                # and unrelated private servers.
+                if mcp_plugins:
+                    from deerflow.capabilities.runtime import ambiguous_installation_ids, installation_id
+                    from deerflow.mcp.cache import get_private_mcp_tools
 
-            extensions_config = ExtensionsConfig.from_file()
-            if extensions_config.get_enabled_mcp_servers():
-                mcp_tools = get_cached_mcp_tools()
-                if mcp_tools:
-                    logger.info(f"Using {len(mcp_tools)} cached MCP tool(s)")
+                    configured_servers = {name: server.model_dump() for name, server in private_mcp_config.mcp_servers.items()}
+                    selected_ids = set(mcp_plugins) - ambiguous_installation_ids(configured_servers)
+                    selected_servers = {name: server for name, server in private_mcp_config.get_enabled_mcp_servers().items() if server.private_scope is not None and installation_id(name, server.model_dump()) in selected_ids}
+                    if selected_servers:
+                        selected_config = private_mcp_config.model_copy(update={"mcp_servers": selected_servers})
+                        mcp_tools = get_private_mcp_tools(selected_config)
+                extensions_config = private_mcp_config
+            else:
+                # Standard agent discovery retains the global public cache and
+                # its existing per-run private-tool behavior.
+                from deerflow.config.extensions_config import ExtensionsConfig
+                from deerflow.mcp.cache import get_cached_mcp_tools
 
-                    # Tag MCP-sourced tools so deferred-tool assembly at each
-                    # agent construction site can identify them. Lead agents
-                    # assemble their full configured MCP catalog and apply active
-                    # skill policy at runtime; subagents may pass an already
-                    # policy-filtered list because their skills load at startup.
-                    for t in mcp_tools:
-                        tag_mcp_tool(t)
+                extensions_config = ExtensionsConfig.from_file()
+                if extensions_config.get_enabled_mcp_servers():
+                    mcp_tools = get_cached_mcp_tools()
+                    if mcp_tools:
+                        logger.info(f"Using {len(mcp_tools)} cached MCP tool(s)")
+
+                        # Tag MCP-sourced tools so deferred-tool assembly at each
+                        # agent construction site can identify them. Lead agents
+                        # assemble their full configured MCP catalog and apply active
+                        # skill policy at runtime; subagents may pass an already
+                        # policy-filtered list because their skills load at startup.
+                        for t in mcp_tools:
+                            tag_mcp_tool(t)
             if mcp_plugins is not None:
                 from deerflow.capabilities.runtime import filter_mcp_plugins
 
@@ -282,7 +299,7 @@ def get_available_tools(
         except ImportError:
             logger.warning("MCP module not available. Install 'langchain-mcp-adapters' package to enable MCP tools.")
         except Exception as e:
-            logger.error(f"Failed to get cached MCP tools: {e}")
+            logger.error(f"Failed to get MCP tools: {e}")
 
     # Add invoke_acp_agent tool if any ACP agents are configured
     acp_tools: list[BaseTool] = []

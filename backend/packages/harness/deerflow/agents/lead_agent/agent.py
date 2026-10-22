@@ -1262,14 +1262,16 @@ def _assemble_lead_agent(config: RunnableConfig, *, app_config: AppConfig) -> Le
 
     mcp_plugins = getattr(agent_config, "mcp_plugins", None)
     private_brain = private_brain_for_max(agent_name) if tool_names is not None else None
+    private_mcp_config = None
     if private_brain is not None:
-        brain_server, brain_installation, brain_names = private_brain
+        private_mcp_config, brain_server, brain_installation, brain_names = private_brain
         mcp_plugins = [brain_installation]
         tool_names = [*tool_names, *brain_names]
     raw_tools = get_available_tools(
         model_name=model_name,
         groups=agent_config.tool_groups if agent_config else None,
         mcp_plugins=mcp_plugins,
+        private_mcp_config=private_mcp_config,
         subagent_enabled=subagent_enabled,
         include_conversation_reader=callable(cfg.get(CONVERSATION_READER_CONTEXT_KEY)) and not bool(cfg.get("is_subagent")),
         include_momentum_sdk=callable(cfg.get(MOMENTUM_SDK_CONTEXT_KEY)) and not bool(cfg.get("is_subagent")),
