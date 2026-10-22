@@ -35,6 +35,7 @@ from app.gateway.checkpoint_lineage import (
 )
 from app.gateway.deps import get_checkpointer, get_run_event_store, get_run_manager, get_run_store
 from app.gateway.internal_auth import get_trusted_internal_owner_user_id
+from app.gateway.momobot_max import client_side_model
 from app.gateway.services import (
     abuild_checkpoint_state_accessor,
     build_checkpoint_state_mutation_accessor,
@@ -71,7 +72,7 @@ from deerflow.runtime.journal import build_branch_history_seed_events
 from deerflow.runtime.runs.manager import ConflictError
 from deerflow.runtime.runs.worker import RUN_MESSAGE_IDS_METADATA_KEY, valid_duration_entry, valid_run_message_id_entry
 from deerflow.runtime.secret_context import redact_metadata_secrets
-from deerflow.runtime.user_context import get_effective_user_id
+from deerflow.runtime.user_context import get_current_user, get_effective_user_id
 from deerflow.utils.file_io import run_file_io
 from deerflow.utils.thread_id import ThreadId, resolve_thread_id, validate_thread_id
 from deerflow.utils.time import coerce_iso, now_iso
@@ -1412,7 +1413,7 @@ async def compact_thread(thread_id: ThreadId, body: ThreadCompactRequest, reques
                 force=body.force,
                 user_id=get_effective_user_id(),
                 agent_name=body.agent_name,
-                model_name=body.model_name,
+                model_name=client_side_model(get_current_user(), body.model_name),
             )
     except ConflictError:
         raise HTTPException(status_code=409, detail="Thread has a run in flight. Compact after the run finishes.") from None

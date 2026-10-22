@@ -68,7 +68,7 @@ async def _assemble(monkeypatch, tmp_path, *, role: str, app: AppConfig, keys=()
     monkeypatch.setattr("deerflow.config.paths._paths", None)
     set_app_config(app)  # the built-in agent reads the process-wide config, like production
 
-    async def client_keys(_user_id):
+    async def client_keys(_user_id, _organization_id=None):
         return keys
 
     monkeypatch.setattr("app.gateway.momobot_max.client_keys_for_user", client_keys)

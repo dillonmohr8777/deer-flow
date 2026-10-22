@@ -280,3 +280,22 @@ def test_get_suggestions_config():
     result_false = asyncio.run(suggestions.get_suggestions_config(config=mock_config_false))
     assert result_false.enabled is False
     assert result_false.max_suggestions == 4
+
+
+def test_a_client_never_picks_the_suggestions_model(monkeypatch):
+    """Follow-up suggestions for a client always run on the base model, whatever the request names."""
+    req = suggestions.SuggestionsRequest(messages=[suggestions.SuggestionMessage(role="user", content="Hi")], n=1, model_name="claude-opus-5-5")
+    fake_model = MagicMock()
+    fake_model.ainvoke = AsyncMock(return_value=MagicMock(content='["Q1"]'))
+    seen = {}
+
+    def create_chat_model(**kwargs):
+        seen["name"] = kwargs.get("name")
+        return fake_model
+
+    monkeypatch.setattr(oneshot_llm, "create_chat_model", create_chat_model)
+    monkeypatch.setattr(suggestions, "get_current_user", lambda: SimpleNamespace(id="c-user", system_role="client"))
+    monkeypatch.setattr("deerflow.config.app_config.get_app_config", lambda: SimpleNamespace(momobot_max=SimpleNamespace(base_model="claude-haiku-5-5")))
+    config = SimpleNamespace(suggestions=SimpleNamespace(enabled=True))
+    asyncio.run(suggestions.generate_suggestions.__wrapped__("t1", req, request=None, config=config))
+    assert seen["name"] == "claude-haiku-5-5"

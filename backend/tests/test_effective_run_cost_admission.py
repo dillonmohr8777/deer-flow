@@ -30,15 +30,17 @@ def isolated_config(tmp_path, monkeypatch):
     reset_app_config()
 
 
-def harness(monkeypatch, *, role="client", refusal=None, router_enabled=True, authorization=None):
+def harness(monkeypatch, *, role="client", refusal=None, router_enabled=True, authorization=None, tier="max"):
     prices = {CHEAP: {"input_per_mtok": 1, "output_per_mtok": 1}, EXPENSIVE: {"input_per_mtok": 10, "output_per_mtok": 10}}
     if refusal == "unpriced":
         prices.pop(EXPENSIVE)
+    if refusal == "unpriced-base":
+        prices.pop(CHEAP)
     config = AppConfig.model_validate(
         {
             "sandbox": {"use": "deerflow.sandbox.local:LocalSandboxProvider"},
             "models": [{"name": name, "model": name, "use": "langchain_openai:ChatOpenAI"} for name in (EXPENSIVE, CHEAP)],
-            "momobot_max": {"enabled": True, "model": EXPENSIVE, "clients": ["cost-client"]},
+            "momobot_max": {"enabled": True, "model": EXPENSIVE, "clients": ["cost-client"], "base_model": CHEAP},
             **({"authorization": authorization} if authorization is not None else {}),
             "cost_router": {
                 "enabled": router_enabled,
@@ -74,7 +76,7 @@ def harness(monkeypatch, *, role="client", refusal=None, router_enabled=True, au
     # Dedicated workspace authorization has its own SQL/AuthMiddleware suite.
     # This fixture starts after that gate, solely to exercise cost admission.
     monkeypatch.setattr("app.gateway.client_workspace.require_client_workspace", AsyncMock())
-    monkeypatch.setattr("app.gateway.momobot_max.client_keys_for_user", AsyncMock(return_value=("cost-client",)))  # a Max client
+    monkeypatch.setattr("app.gateway.momobot_max.client_keys_for_user", AsyncMock(return_value=("cost-client",) if tier == "max" else ()))
     return SimpleNamespace(config=config, store=store, manager=manager, threads=threads, request=request, user=user, worker=worker, seed=seed)
 
 
@@ -158,3 +160,21 @@ async def test_existing_authorized_model_fallback_is_admitted_and_pinned(monkeyp
     assert actual["context"]["user_role"] == "user"
     assert actual["context"]["model_name"] == CHEAP
     assert (await h.store.get(record.run_id))["model_name"] == CHEAP
+
+
+async def test_a_base_client_is_admitted_and_billed_on_the_base_model(monkeypatch):
+    h = harness(monkeypatch, tier="base")
+    record = await launch(h, {"agent_name": "finance-bot", "model_name": EXPENSIVE}, config={"configurable": {"model_name": EXPENSIVE}})
+    actual = h.worker.await_args.kwargs["config"]
+    for section in ("configurable", "context"):
+        assert actual[section]["agent_name"] == "momobot-max" and actual[section]["model_name"] == CHEAP
+    assert (await h.store.get(record.run_id))["model_name"] == CHEAP
+
+
+async def test_a_base_client_with_an_unpriced_base_model_is_refused_before_any_run(monkeypatch):
+    h = harness(monkeypatch, tier="base", refusal="unpriced-base")
+    with pytest.raises(HTTPException) as error:
+        await launch(h, {})
+    assert error.value.status_code == 402
+    h.manager.create_or_reject.assert_not_awaited()
+    h.worker.assert_not_awaited()

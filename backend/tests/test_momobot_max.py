@@ -34,6 +34,7 @@ from deerflow.config.builtin_agents import MOMOBOT_MAX_NAME, MOMOBOT_MAX_TOOL_NA
 from deerflow.config.momobot_max_config import MomobotMaxConfig
 from deerflow.persistence.base import Base
 from deerflow.persistence.clients.model import ClientAssignmentRow, ClientRow
+from deerflow.persistence.organizations.model import OrganizationRow
 from deerflow.runtime.user_context import set_current_user
 
 MODELS = [{"name": name, "use": "langchain_openai:ChatOpenAI", "model": name} for name in ("claude-opus-5-5", "claude-haiku-5-5", "cheap-model")]
@@ -253,7 +254,7 @@ def _run_config(**sections) -> dict:
 
 
 async def _policy(config: dict, user, *, keys=(), app_config=None, internal=False, actor="u-1"):
-    async def fake_keys(_user_id):
+    async def fake_keys(_user_id, _organization_id=None):
         return keys
 
     # This helper exercises model/effort pinning in isolation. Real workspace
@@ -346,19 +347,19 @@ async def test_a_trusted_internal_caller_skips_the_visibility_check_but_gets_the
 async def clients_db(monkeypatch):
     engine = create_async_engine("sqlite+aiosqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
     async with engine.begin() as connection:
-        await connection.run_sync(lambda sync: Base.metadata.create_all(sync, tables=[ClientRow.__table__, ClientAssignmentRow.__table__]))
+        await connection.run_sync(lambda sync: Base.metadata.create_all(sync, tables=[ClientRow.__table__, ClientAssignmentRow.__table__, OrganizationRow.__table__]))
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
     monkeypatch.setattr("deerflow.persistence.engine.get_session_factory", lambda: session_factory)
     async with session_factory() as session:
         async with session.begin():
             session.add_all(
                 [
-                    ClientRow(id="c-1", display_name="Vhin Cares", registry_id="acme-dental"),
+                    ClientRow(id="c-1", display_name="Acme Dental", registry_id="acme-dental"),
                     ClientRow(id="c-2", display_name="Acme", registry_id=None),
                     ClientRow(id="c-3", display_name="Other", registry_id="other"),
-                    ClientAssignmentRow(client_id="c-1", user_id="justin", role="client_contact"),
-                    ClientAssignmentRow(client_id="c-2", user_id="justin", role="client_contact"),
-                    ClientAssignmentRow(client_id="c-3", user_id="justin", role="account_manager"),
+                    ClientAssignmentRow(client_id="c-1", user_id="jordan", role="client_contact"),
+                    ClientAssignmentRow(client_id="c-2", user_id="jordan", role="client_contact"),
+                    ClientAssignmentRow(client_id="c-3", user_id="jordan", role="account_manager"),
                     ClientAssignmentRow(client_id="c-3", user_id="someone", role="client_contact"),
                 ]
             )
@@ -368,7 +369,7 @@ async def clients_db(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_a_client_contact_resolves_to_their_clients_registry_id_and_id(clients_db):
-    assert await client_keys_for_user("justin") == ("acme-dental", "c-1", "c-2")
+    assert await client_keys_for_user("jordan") == ("acme-dental", "c-1", "c-2")
     assert await client_keys_for_user("someone") == ("other", "c-3")  # only client_contact counts for justin, not account_manager
     assert await client_keys_for_user("nobody") == ()
 
@@ -376,7 +377,7 @@ async def test_a_client_contact_resolves_to_their_clients_registry_id_and_id(cli
 @pytest.mark.asyncio
 async def test_with_no_database_there_is_no_client_and_the_default_applies(monkeypatch):
     monkeypatch.setattr("deerflow.persistence.engine.get_session_factory", lambda: None)
-    assert await client_keys_for_user("justin") == ()
+    assert await client_keys_for_user("jordan") == ()
 
 
 # -- start_run applies the policy -----------------------------------------------
@@ -535,3 +536,32 @@ async def test_a_client_sees_momobot_on_base_and_momobot_max_once_unlocked(agent
             fetched = await get_agent("momobot-max")
         assert [a.name for a in listed] == ["momobot-max"] and listed[0].display_name == fetched.display_name == name, keys
         assert fetched.model is None and fetched.soul is None
+
+
+@pytest.mark.asyncio
+async def test_a_client_gets_the_tier_of_the_workspace_it_chats_in_and_archived_clients_never_count(clients_db):
+    from datetime import UTC, datetime
+
+    now = datetime.now(UTC)
+    async with clients_db() as session:
+        async with session.begin():
+            session.add(OrganizationRow(id="org-c2", slug="acme", name="Acme", status="active", storage_user_id="s", customer_client_id="c-2", created_at=now, updated_at=now))
+            session.add(OrganizationRow(id="org-staff", slug="agency", name="Agency", status="active", storage_user_id="s2", created_at=now, updated_at=now))
+    assert await client_keys_for_user("jordan", "org-c2") == ("c-2",)  # not the unlocked c-1 they also contact for
+    assert await client_keys_for_user("jordan", "org-staff") == ()  # a workspace bound to no client
+    async with clients_db() as session:
+        async with session.begin():
+            row = await session.get(ClientRow, "c-1")
+            row.status = "archived"
+    assert await client_keys_for_user("jordan") == ("c-2",)
+
+
+def test_a_client_side_job_always_runs_on_the_base_model():
+    set_app_config(_config(momobot_max={"enabled": True, "base_model": "claude-haiku-5-5"}))
+    try:
+        assert momobot_max.client_side_model(_user("client"), "claude-opus-5-5") == "claude-haiku-5-5"
+        assert momobot_max.client_side_model(_user("client"), None) == "claude-haiku-5-5"
+        for role in ("admin", "exec", "user"):
+            assert momobot_max.client_side_model(_user(role), "claude-opus-5-5") == "claude-opus-5-5"
+    finally:
+        reset_app_config()
