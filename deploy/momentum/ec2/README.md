@@ -55,8 +55,13 @@ sudo MOMOBOT_ENV_FILE=/run/momobot/.env MOMOBOT_EXTRA_COMPOSE=/opt/momobot/src/d
   /opt/momobot/src/deploy/momentum/lightsail/up.sh compose logs -f gateway
 ```
 
-Release: build `deer-flow-{gateway,frontend}:main-<sha8>` on the box from the merged commit, set both tags in
-`settings.env`, then `systemctl restart momobot`. Rollback: put the previous tags back and restart.
+Release, from an operator checkout: `MOMOBOT_SSH=<user@host> MOMOBOT_SSH_KEY=<key> deploy/momentum/ec2/release.sh <sha>`.
+Under `/run/momobot-release.lock` it checks out the merged commit, builds `deer-flow-{gateway,frontend}:main-<sha8>`
+unless the box has them, swaps both tags in `settings.env`, runs `systemctl restart momobot`, waits for
+`/health/ready` and smoke-checks the running images plus the public API and UI. A failure after the swap
+restores the previous source and tags by itself. On success it tags `momobot-prod-YYYYMMDD-<sha8>` and opens a
+PR adding the release to `docs/MOMOBOT_CHANGELOG.md`. `release.sh rollback` restores the previous release.
+Every attempt is a line in `/var/log/momobot/releases.jsonl`. Offline check: `backend/tests/test_ec2_release_script.py`.
 
 The existing `momobot-health.timer` checks gateway readiness, public API and UI,
 backup freshness, and at least 10 GiB free on the deployment filesystem. Its JSON
