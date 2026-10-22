@@ -289,6 +289,15 @@ the existing disabled MCP entry, then verify useful MCP output before enabling i
 add a collector, timer, Mac bridge or competing writer. Cache transfer, authentication,
 production integration and client-scoped access remain unverified by the offline test.
 
+`compose.ec2.yaml` mounts both read-only into the gateway container only:
+`/opt/momobot/brain-snapshot` (0700, root) and the adapter at
+`/run/momo-security/brain_readonly_adapter.py` (staged from this directory to
+`/opt/momobot/code/`). Stage both host paths before a release that carries the
+mount, because a missing bind source would be created as an empty directory. The
+`brain` MCP entry stays scoped with `private_scope` (Dillon's actor plus exact
+private organization) and `BRAIN_SNAPSHOT_DIR=/opt/momobot/brain-snapshot`.
+Rollback: set `enabled: false` on that entry; the mount alone grants no tool.
+
 Offline contract check (synthetic fixture only):
 
 ```sh

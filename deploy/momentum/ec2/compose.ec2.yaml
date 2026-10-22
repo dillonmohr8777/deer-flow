@@ -24,6 +24,9 @@ services:
       - /opt/momobot/data/evals:/app/backend/.deer-flow/agency-evals:ro
       - /opt/momobot/code/momo_guard.py:/app/backend/packages/harness/deerflow/community/browser_automation/momo_guard.py:ro
       - /opt/momobot/code/momo_protocol.py:/app/backend/packages/harness/deerflow/community/browser_automation/momo_protocol.py:ro
+      # Private Brain snapshot for Dillon's private Max only (gateway-only, read-only; never an AIO sandbox mount).
+      - /opt/momobot/brain-snapshot:/opt/momobot/brain-snapshot:ro
+      - /opt/momobot/code/brain_readonly_adapter.py:/run/momo-security/brain_readonly_adapter.py:ro
       # Placement extension from a pinned git worktree (README "Operator extensions"). Inert until a
       # plugins: entry in /opt/momobot/config.yaml names it. A missing source fails the start.
       - type: bind
