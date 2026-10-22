@@ -407,16 +407,20 @@ clear it only after a confirmed 401 or explicit identity change. Fence responses
 by auth generation and request order; changing user IDs must clear the singleton
 query cache before showing the next user. REST and LangGraph SDK 401s share the
 query-preserving sign-in redirect; retain the SDK's HTTP 401 no-retry behavior.
+Validate refresh bodies with `userSchema`. Logout fences both refresh and banner
+recovery, suppresses the require-auth redirect, and clears queries after its POST.
 Regression coverage is in `auth-logout-clears-cache.dom.test.tsx` and
 `core/api/fetcher.dom.test.ts`.
 
-Mobile sidebar presentation uses `isMobile || open`, while the desktop collapse
-preference remains independent. WorkspaceSidebar closes the drawer on pathname,
-query and desktop breakpoint changes. Keep these fixes in workspace components,
+Mobile sidebar presentation shares `useSidebarExpanded`, while the desktop
+collapse preference remains independent. The workspace location watcher closes
+the drawer on pathname/query navigation, except a new chat assigning its thread
+URL; desktop breakpoint changes also close it. Keep these fixes in workspace components,
 with coverage in `ui-polish-mobile.spec.ts`, rather than generated UI primitives.
 Installation help stays hidden on authentication/invitation routes; Settings
 autofocus targets the resolved role-allowed section.
-The shared `useAgents` list query waits for feature discovery and revalidation,
-then honors the resolved/sticky Agents flag. Keep the unknown-feature outage
+The shared `useAgents` list query reports loading during initial feature discovery,
+then honors the resolved/sticky Agents flag without toggling the query during
+background revalidation. Disabled flags hide cached lists. Keep the unknown-feature outage
 fallback; `core/agents/hooks.dom.test.tsx` and `agents-feature-disabled.spec.ts`
 cover discovery, disabled results and recovery.

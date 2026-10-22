@@ -77,6 +77,37 @@ test.describe("UI polish mobile regressions", () => {
     await expect(mobileSidebar).toBeHidden();
   });
 
+  test("mobile sidebar closes on browser back without a sidebar click", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    mockLangGraphAPI(page);
+
+    await page.goto("/workspace/chats/new?source=mobile");
+    const mobileSidebar = page.locator(
+      "[data-mobile='true'][data-sidebar='sidebar']",
+    );
+    await expect(async () => {
+      await page.locator("[data-sidebar='trigger']:visible").first().click();
+      await expect(mobileSidebar).toBeVisible({ timeout: 1_000 });
+    }).toPass();
+    await mobileSidebar
+      .getByRole("link", { name: "Chats", exact: true })
+      .click();
+    await expect(page).toHaveURL(/\/workspace\/chats$/);
+    await expect(mobileSidebar).toBeHidden();
+
+    await expect(async () => {
+      await page.locator("[data-sidebar='trigger']:visible").first().click();
+      await expect(mobileSidebar).toBeVisible({ timeout: 1_000 });
+    }).toPass();
+
+    // Only browser Back triggers closing after the drawer has been reopened.
+    await page.goBack();
+    await expect(page).toHaveURL(/\/workspace\/chats\/new\?source=mobile$/);
+    await expect(mobileSidebar).toBeHidden();
+  });
+
   test("mobile sidebar closes after activating the current workspace link", async ({
     page,
   }) => {
@@ -158,6 +189,11 @@ test.describe("UI polish mobile regressions", () => {
       "[data-mobile='true'][data-sidebar='sidebar']",
     );
     await expect(
+      mobileSidebar.locator(
+        "[data-sidebar='trigger'] .lucide-panel-left-close",
+      ),
+    ).toBeVisible();
+    await expect(
       mobileSidebar.locator(`a[href='/workspace/chats/${MOCK_THREAD_ID}']`),
     ).toBeVisible();
     await expect(
@@ -173,6 +209,33 @@ test.describe("UI polish mobile regressions", () => {
       .click();
     await expect(page).toHaveURL(`/workspace/chats/${MOCK_THREAD_ID}`);
     await expect(mobileSidebar).toBeHidden();
+  });
+
+  test("mobile sidebar stays open during new-chat thread ID assignment", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    mockLangGraphAPI(page);
+
+    await page.goto("/workspace/chats/new");
+    const mobileSidebar = page.locator(
+      "[data-mobile='true'][data-sidebar='sidebar']",
+    );
+    await expect(async () => {
+      await page.locator("[data-sidebar='trigger']:visible").first().click();
+      await expect(mobileSidebar).toBeVisible({ timeout: 1_000 });
+    }).toPass();
+
+    // Match chat-page's onStart without making this sidebar test depend on SSE.
+    await page.evaluate((threadId) => {
+      history.replaceState(null, "", `/workspace/chats/${threadId}`);
+    }, MOCK_THREAD_ID);
+
+    await expect(page).toHaveURL(`/workspace/chats/${MOCK_THREAD_ID}`);
+    await expect(
+      mobileSidebar.getByRole("link", { name: "New chat", exact: true }),
+    ).toHaveAttribute("data-active", "false");
+    await expect(mobileSidebar).toBeVisible();
   });
 
   test("mobile artifacts open in a drawer without horizontal overflow", async ({

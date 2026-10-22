@@ -57,17 +57,19 @@ export function useAgentsApiEnabled() {
 }
 
 export function useAgents() {
-  const {
-    enabled: agentsApiEnabled,
-    isLoading: agentsApiLoading,
-    isFetching: agentsApiFetching,
-  } = useAgentsApiEnabled();
+  const { enabled: agentsApiEnabled, isLoading: agentsApiLoading } =
+    useAgentsApiEnabled();
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["agents"],
     queryFn: () => listAgents(),
-    enabled: !agentsApiLoading && !agentsApiFetching && agentsApiEnabled,
+    enabled: !agentsApiLoading && agentsApiEnabled,
   });
-  return { agents: data ?? [], isLoading, error, refetch };
+  return {
+    agents: agentsApiEnabled ? (data ?? []) : [],
+    isLoading: isLoading || agentsApiLoading,
+    error,
+    refetch,
+  };
 }
 
 export function useAgent(name: string | null | undefined) {

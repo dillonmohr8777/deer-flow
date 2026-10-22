@@ -1,8 +1,5 @@
 "use client";
 
-import { usePathname, useSearchParams } from "next/navigation";
-import { useEffect, useRef } from "react";
-
 import { Scraps } from "@/components/momentum/scraps";
 import {
   Sidebar,
@@ -23,22 +20,20 @@ import { PluginNavigation } from "./plugin-navigation";
 import { ProjectsSection } from "./projects-section";
 import { RecentChatList } from "./recent-chat-list";
 import { ThreadDeleteDialogProvider } from "./thread-delete-dialog";
+import { useSidebarExpanded } from "./use-sidebar-expanded";
 import { WorkspaceHeader } from "./workspace-header";
 import { WorkspaceNavChatList } from "./workspace-nav-chat-list";
 import { WorkspaceNavMenu } from "./workspace-nav-menu";
 import { WorkspaceSelector } from "./workspace-selector";
+import { WorkspaceSidebarNavigation } from "./workspace-sidebar-navigation";
 
 import styles from "./workspace-sidebar.module.css";
 
 export function WorkspaceSidebar({
   ...props
 }: React.ComponentProps<typeof Sidebar>) {
-  const { open, isMobile, setOpenMobile } = useSidebar();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const locationKey = `${pathname}?${searchParams.toString()}`;
-  const previousLocationKey = useRef(locationKey);
-  const isSidebarOpen = isMobile || open;
+  const { setOpenMobile } = useSidebar();
+  const isSidebarOpen = useSidebarExpanded();
   const { motionOn } = useWorkspaceAppearance();
   // A client sees chats and nothing internal: no workspace switcher, plugin
   // pages, channels, projects or background work.
@@ -47,17 +42,10 @@ export function WorkspaceSidebar({
   const unresolved = useIsRoleUnresolved();
   const showInternal = !isClient && !unresolved;
 
-  useEffect(() => {
-    const locationChanged = previousLocationKey.current !== locationKey;
-    if (locationChanged) previousLocationKey.current = locationKey;
-    if (!isMobile || locationChanged) setOpenMobile(false);
-  }, [isMobile, locationKey, setOpenMobile]);
-
   const closeMobileSidebarForWorkspaceLink: React.MouseEventHandler<
     HTMLDivElement
   > = (event) => {
     if (
-      event.defaultPrevented ||
       event.button !== 0 ||
       event.metaKey ||
       event.ctrlKey ||
@@ -88,6 +76,7 @@ export function WorkspaceSidebar({
 
   return (
     <ThreadDeleteDialogProvider>
+      <WorkspaceSidebarNavigation />
       <Sidebar variant="sidebar" collapsible="icon" {...props}>
         <SidebarHeader
           className={cn("py-0", styles.phoneTargets)}

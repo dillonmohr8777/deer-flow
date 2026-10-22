@@ -40,6 +40,7 @@ afterEach(() => {
 });
 
 beforeEach(() => {
+  window.history.replaceState(null, "", "/workspace/team");
   router.push.mockClear();
   router.replace.mockClear();
   router.refresh.mockClear();
@@ -115,6 +116,54 @@ function renderAuth(initialUser: User | null) {
 }
 
 describe("logout", () => {
+  it("keeps mounted query caches until the logout POST completes and skips the login redirect", async () => {
+    const pendingLogout = deferred<Response>();
+    rs.spyOn(globalThis, "fetch").mockReturnValue(pendingLogout.promise);
+    const clear = rs.spyOn(queryClient, "clear");
+    const channels = [{ id: "channel-a" }];
+    queryClient.setQueryData(["team", "channels"], channels);
+
+    renderAuth(USER_A);
+    fireEvent.click(screen.getByRole("button", { name: "Log out" }));
+
+    expect(screen.getByTestId("auth-user").textContent).toBe("signed-out");
+    expect(clear).not.toHaveBeenCalled();
+    expect(queryClient.getQueryData(["team", "channels"])).toBe(channels);
+    expect(router.push).not.toHaveBeenCalled();
+
+    await act(async () => {
+      pendingLogout.resolve(new Response(null, { status: 200 }));
+      await pendingLogout.promise;
+    });
+
+    expect(clear).toHaveBeenCalledTimes(1);
+    expect(router.push.mock.calls).toEqual([["/"]]);
+  });
+
+  it("ignores recovery attempts after logout starts", async () => {
+    const pendingLogout = deferred<Response>();
+    const fetchMock = rs
+      .spyOn(globalThis, "fetch")
+      .mockReturnValue(pendingLogout.promise);
+    renderAuth(USER_A);
+
+    fireEvent.click(screen.getByRole("button", { name: "Log out" }));
+    fireEvent.click(screen.getByRole("button", { name: "Apply user B" }));
+    fireEvent.click(screen.getByRole("button", { name: "Refresh user" }));
+
+    expect(screen.getByTestId("auth-user").textContent).toBe("signed-out");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith("/api/v1/auth/logout", {
+      method: "POST",
+      credentials: "include",
+    });
+
+    await act(async () => {
+      pendingLogout.resolve(new Response(null, { status: 200 }));
+      await pendingLogout.promise;
+    });
+  });
+
   it("drops cached responses so the next person on this tab can't see them", async () => {
     rs.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(JSON.stringify({ message: "Successfully logged out" }), {
@@ -180,6 +229,45 @@ describe("logout", () => {
 });
 
 describe("refreshUser", () => {
+  it("keeps the confirmed user and cache when /auth/me returns a malformed 200 body", async () => {
+    rs.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ detail: "gateway response" }), {
+        status: 200,
+      }),
+    );
+    renderAuth(USER_A);
+    const channels = [{ id: "channel-a" }];
+    queryClient.setQueryData(["team", "channels"], channels);
+
+    fireEvent.click(screen.getByRole("button", { name: "Refresh user" }));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("auth-loading").textContent).toBe("idle"),
+    );
+    expect(screen.getByTestId("auth-user").textContent).toBe(USER_A.id);
+    expect(queryClient.getQueryData(["team", "channels"])).toBe(channels);
+    expect(router.push).not.toHaveBeenCalled();
+  });
+
+  it("preserves the query string on every confirmed-401 sign-in redirect", async () => {
+    window.history.replaceState(null, "", "/workspace/team?settings=security");
+    rs.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(null, { status: 401 }),
+    );
+    renderAuth(USER_A);
+    fireEvent.click(screen.getByRole("button", { name: "Refresh user" }));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("auth-user").textContent).toBe("signed-out"),
+    );
+    expect(router.push).toHaveBeenCalled();
+    for (const [destination] of router.push.mock.calls) {
+      expect(destination).toBe(
+        "/login?next=%2Fworkspace%2Fteam%3Fsettings%3Dsecurity",
+      );
+    }
+  });
+
   it("keeps the last confirmed user when /auth/me fails at the network layer", async () => {
     rs.spyOn(globalThis, "fetch").mockRejectedValue(new TypeError("offline"));
     rs.spyOn(console, "error").mockImplementation(() => undefined);

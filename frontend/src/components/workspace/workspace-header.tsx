@@ -8,8 +8,6 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarTrigger,
-  useSidebar,
 } from "@/components/ui/sidebar";
 import { BrandMotionToggle } from "@/components/workspace/command-center/workspace-appearance";
 import { useIsClient } from "@/core/auth/AuthProvider";
@@ -18,9 +16,12 @@ import { useI18n } from "@/core/i18n/hooks";
 import { env } from "@/env";
 import { cn } from "@/lib/utils";
 
+import { useSidebarExpanded } from "./use-sidebar-expanded";
+import { WorkspaceSidebarTrigger } from "./workspace-sidebar-trigger";
+
 export function WorkspaceHeader({ className }: { className?: string }) {
   const { t } = useI18n();
-  const { state, isMobile } = useSidebar();
+  const isSidebarExpanded = useSidebarExpanded();
   const pathname = usePathname();
   // A client has no Command Center, and every new chat is with MomoBot Max.
   const isClient = useIsClient();
@@ -28,7 +29,7 @@ export function WorkspaceHeader({ className }: { className?: string }) {
     ? CLIENT_NEW_CHAT_PATH
     : "/workspace/command-center";
   const newChatPath = isClient ? CLIENT_NEW_CHAT_PATH : "/workspace/chats/new";
-  const sidebarIsCollapsed = state === "collapsed" && !isMobile;
+  const sidebarIsCollapsed = !isSidebarExpanded;
   return (
     <>
       <div
@@ -44,7 +45,7 @@ export function WorkspaceHeader({ className }: { className?: string }) {
             <div className="text-primary block pt-1 font-serif group-hover/workspace-header:hidden">
               M
             </div>
-            <SidebarTrigger className="hidden pl-2 group-hover/workspace-header:block" />
+            <WorkspaceSidebarTrigger className="hidden pl-2 group-hover/workspace-header:block" />
           </div>
         ) : (
           <div className="flex items-center justify-between gap-2">
@@ -69,7 +70,7 @@ export function WorkspaceHeader({ className }: { className?: string }) {
             {env.NEXT_PUBLIC_STATIC_WEBSITE_ONLY !== "true" && (
               <BrandMotionToggle compact />
             )}
-            <SidebarTrigger />
+            <WorkspaceSidebarTrigger />
           </div>
         )}
       </div>

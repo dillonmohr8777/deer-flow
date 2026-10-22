@@ -17,7 +17,7 @@ import { queryClient } from "@/components/query-client-provider";
 import { isStaticWebsiteOnly } from "../static-mode";
 
 import { isClientUser, isRoleUnresolved } from "./roles";
-import { type User, buildLoginUrl } from "./types";
+import { type User, buildLoginUrl, userSchema } from "./types";
 
 // Re-export for consumers
 export type { User };
@@ -29,6 +29,7 @@ interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  isLoggingOut: boolean;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
   applyUser: (user: User | null) => void;
@@ -55,6 +56,8 @@ interface AuthProviderProps {
 export function AuthProvider({ children, initialUser }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(initialUser);
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const logoutStartedRef = useRef(false);
   const currentUserRef = useRef(initialUser);
   const initialUserRef = useRef(initialUser);
   const authGenerationRef = useRef(0);
@@ -65,18 +68,18 @@ export function AuthProvider({ children, initialUser }: AuthProviderProps) {
 
   const isAuthenticated = user !== null;
 
-  /**
-   * Apply a user value supplied by a caller (e.g. banner probe) that has
-   * already fetched it. Equivalent to setUser, exposed with a stable name
-   * so consumers don't reach into React internals.
-   */
   const invalidateAuthRequests = useCallback(() => {
     authGenerationRef.current += 1;
     refreshRequestIdRef.current += 1;
   }, []);
 
+  /**
+   * Apply a confirmed user, fencing older refreshes and clearing cached data
+   * on identity changes. Ignore recovery responses once logout has started.
+   */
   const applyUser = useCallback(
     (next: User | null) => {
+      if (logoutStartedRef.current) return;
       // Callers such as the offline banner already hold an authoritative user
       // response. Fence any older /auth/me request before applying it.
       invalidateAuthRequests();
@@ -106,7 +109,7 @@ export function AuthProvider({ children, initialUser }: AuthProviderProps) {
    * Used when initialUser might be stale (e.g., after tab was inactive)
    */
   const refreshUser = useCallback(async () => {
-    if (staticMode) return;
+    if (staticMode || logoutStartedRef.current) return;
 
     const requestId = ++refreshRequestIdRef.current;
     const authGeneration = authGenerationRef.current;
@@ -121,9 +124,9 @@ export function AuthProvider({ children, initialUser }: AuthProviderProps) {
       });
 
       if (res.ok) {
-        const data = await res.json();
-        if (isCurrentRequest()) {
-          applyUser(data);
+        const parsed = userSchema.safeParse(await res.json());
+        if (parsed.success && isCurrentRequest()) {
+          applyUser(parsed.data);
         }
       } else if (res.status === 401) {
         // Session expired or invalid
@@ -131,7 +134,7 @@ export function AuthProvider({ children, initialUser }: AuthProviderProps) {
           applyUser(null);
           // Redirect to login if on a protected route
           if (pathname?.startsWith("/workspace")) {
-            router.push(buildLoginUrl(pathname));
+            router.push(buildLoginUrl(`${pathname}${window.location.search}`));
           }
         }
       }
@@ -160,10 +163,17 @@ export function AuthProvider({ children, initialUser }: AuthProviderProps) {
    * logout used to.
    */
   const logout = useCallback(async () => {
-    // Immediately clear local state to prevent UI flicker
-    applyUser(null);
+    // Fence recovery without rebuilding mounted queries under a live session.
+    // The workspace/auth layout's provider unmounts on navigation to home.
+    logoutStartedRef.current = true;
+    invalidateAuthRequests();
+    currentUserRef.current = null;
+    setUser(null);
+    setIsLoading(false);
+    setIsLoggingOut(true);
 
     if (staticMode) {
+      queryClient.clear();
       router.push("/");
       return;
     }
@@ -192,7 +202,7 @@ export function AuthProvider({ children, initialUser }: AuthProviderProps) {
     queryClient.clear();
     // Redirect to home page
     router.push("/");
-  }, [staticMode, router, applyUser]);
+  }, [staticMode, router, invalidateAuthRequests]);
 
   /**
    * Handle visibility change - refresh user when tab becomes visible again.
@@ -221,6 +231,7 @@ export function AuthProvider({ children, initialUser }: AuthProviderProps) {
     user,
     isAuthenticated,
     isLoading,
+    isLoggingOut,
     logout,
     refreshUser,
     applyUser,
@@ -267,10 +278,18 @@ export function useRequireAuth(): AuthContextType {
     if (isStaticWebsiteOnly()) return;
 
     // Only redirect if we're sure user is not authenticated (not just loading)
-    if (!auth.isLoading && !auth.isAuthenticated) {
-      router.push(buildLoginUrl(pathname || "/workspace"));
+    if (!auth.isLoading && !auth.isLoggingOut && !auth.isAuthenticated) {
+      router.push(
+        buildLoginUrl(`${pathname || "/workspace"}${window.location.search}`),
+      );
     }
-  }, [auth.isAuthenticated, auth.isLoading, router, pathname]);
+  }, [
+    auth.isAuthenticated,
+    auth.isLoading,
+    auth.isLoggingOut,
+    router,
+    pathname,
+  ]);
 
   return auth;
 }

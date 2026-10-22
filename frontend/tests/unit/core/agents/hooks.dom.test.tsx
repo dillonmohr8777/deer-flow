@@ -55,8 +55,9 @@ describe("useAgents feature gating", () => {
     mockedListAgents.mockResolvedValue([]);
     const { queryClient, wrapper } = createHarness();
 
-    renderHook(() => useAgents(), { wrapper });
+    const { result } = renderHook(() => useAgents(), { wrapper });
 
+    expect(result.current.isLoading).toBe(true);
     expect(mockedListAgents).not.toHaveBeenCalled();
     await act(async () => {
       feature.resolve(false);
@@ -69,26 +70,36 @@ describe("useAgents feature gating", () => {
     expect(mockedListAgents).not.toHaveBeenCalled();
   });
 
-  it("waits for a stale enabled flag to be rechecked before fetching agents", async () => {
+  it("does not refetch agents when a background feature recheck confirms enabled", async () => {
     const feature = deferred<boolean>();
-    mockedFetchAgentsApiEnabled.mockReturnValue(feature.promise);
+    mockedFetchAgentsApiEnabled
+      .mockResolvedValueOnce(true)
+      .mockReturnValueOnce(feature.promise);
     mockedListAgents.mockResolvedValue([]);
     const { queryClient, wrapper } = createHarness();
-    queryClient.setQueryData(["features", "agents_api"], true);
 
     renderHook(() => useAgents(), { wrapper });
 
-    expect(mockedFetchAgentsApiEnabled).toHaveBeenCalledTimes(1);
-    expect(mockedListAgents).not.toHaveBeenCalled();
+    await waitFor(() => expect(mockedListAgents).toHaveBeenCalledTimes(1));
+    act(() => {
+      void queryClient.invalidateQueries({
+        queryKey: ["features", "agents_api"],
+      });
+    });
+    await waitFor(() =>
+      expect(mockedFetchAgentsApiEnabled).toHaveBeenCalledTimes(2),
+    );
+    expect(mockedListAgents).toHaveBeenCalledTimes(1);
+
     await act(async () => {
-      feature.resolve(false);
+      feature.resolve(true);
       await feature.promise;
     });
     await waitFor(() =>
-      expect(queryClient.getQueryData(["features", "agents_api"])).toBe(false),
+      expect(queryClient.getQueryData(["features", "agents_api"])).toBe(true),
     );
 
-    expect(mockedListAgents).not.toHaveBeenCalled();
+    expect(mockedListAgents).toHaveBeenCalledTimes(1);
   });
 
   it("starts the list request after feature discovery enables the API", async () => {
@@ -120,6 +131,35 @@ describe("useAgents feature gating", () => {
         queryClient.getQueryState(["features", "agents_api"])?.status,
       ).toBe("error"),
     );
+    expect(mockedListAgents).not.toHaveBeenCalled();
+  });
+
+  it("returns no cached agents after the feature is confirmed disabled", async () => {
+    const feature = deferred<boolean>();
+    const cachedAgents = [
+      {
+        name: "cached-agent",
+        description: "Cached agent",
+        model: null,
+        tool_groups: null,
+        skills: null,
+      },
+    ];
+    mockedFetchAgentsApiEnabled.mockReturnValue(feature.promise);
+    const { queryClient, wrapper } = createHarness();
+    queryClient.setQueryData(["agents"], cachedAgents);
+
+    const { result } = renderHook(() => useAgents(), { wrapper });
+    await act(async () => {
+      feature.resolve(false);
+      await feature.promise;
+    });
+
+    await waitFor(() =>
+      expect(queryClient.getQueryData(["features", "agents_api"])).toBe(false),
+    );
+    expect(queryClient.getQueryData(["agents"])).toEqual(cachedAgents);
+    expect(result.current.agents).toEqual([]);
     expect(mockedListAgents).not.toHaveBeenCalled();
   });
 

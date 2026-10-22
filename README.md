@@ -55,14 +55,17 @@ The landing-page case studies open as allowlisted, read-only showcases without r
 Temporary connection failures keep the last confirmed sign-in visible. An expired
 session returns both REST and chat requests to sign-in with the current page and
 query preserved. Logout and identity changes discard stale refresh responses;
-switching accounts also discards the previous account's query cache.
+logout clears cached responses after its request completes, and switching accounts
+discards the previous account's query cache before showing the new account.
 
 Phone navigation remains expanded even when the desktop sidebar was collapsed.
 The drawer closes after page or query navigation and when moving to a desktop
-layout. Installation prompts stay off sign-in, setup and invitation pages.
+layout, while a starting chat assigning its thread URL keeps the drawer open.
+Installation prompts stay off sign-in, setup and invitation pages.
 Settings deep links include `?settings=invite`; links to sections unavailable to
 the current role focus the allowed Appearance fallback.
-Agent lists wait for feature discovery and do not request a disabled Agents API.
+Agent lists show loading during initial feature discovery and hide cached agents
+when the Agents API is disabled.
 
 ## Sister Projects
 
