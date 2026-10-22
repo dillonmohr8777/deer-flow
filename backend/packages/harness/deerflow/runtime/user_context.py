@@ -62,6 +62,11 @@ _current_user: Final[ContextVar[CurrentUser | None]] = ContextVar("deerflow_curr
 AUTHENTICATED_CONTEXT_MARKER_KEY: Final[str] = "__deerflow_authenticated_context"
 AUTHENTICATED_CONTEXT_MARKER: Final[object] = object()
 
+# Keep the private-session capability in this dependency-light auth context.
+# Run bootstrap must not import MCP/tool assembly while repositories initialize.
+PRIVATE_MCP_SESSION_CONTEXT_KEY: Final[str] = "__deerflow_private_mcp_session"
+PRIVATE_MCP_SESSION_MARKER: Final[object] = object()
+
 WORKSPACE_IDENTITY_CONTEXT_KEYS: Final[frozenset[str]] = frozenset(
     {
         "actor_user_id",

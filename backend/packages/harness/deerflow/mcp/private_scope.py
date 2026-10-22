@@ -14,13 +14,12 @@ from deerflow.config.extensions_config import ExtensionsConfig, McpServerConfig
 from deerflow.runtime.user_context import (
     AUTHENTICATED_CONTEXT_MARKER,
     AUTHENTICATED_CONTEXT_MARKER_KEY,
+    PRIVATE_MCP_SESSION_CONTEXT_KEY,
+    PRIVATE_MCP_SESSION_MARKER,
     get_current_user,
     get_storage_context,
 )
 from deerflow.tools.types import Runtime
-
-PRIVATE_MCP_SESSION_CONTEXT_KEY = "__deerflow_private_mcp_session"
-PRIVATE_MCP_SESSION_MARKER = object()
 
 
 @dataclass(frozen=True)

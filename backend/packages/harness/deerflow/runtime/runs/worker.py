@@ -42,7 +42,6 @@ from deerflow.config.app_config import AppConfig
 from deerflow.config.database_config import CheckpointChannelMode
 from deerflow.constants import CONVERSATION_READER_CONTEXT_KEY, MOMENTUM_SDK_CONTEXT_KEY, TOOL_RESULTS_DIRNAME
 from deerflow.knowledge_scope import KNOWLEDGE_SCOPE_RUNTIME_KEY, execution_scope
-from deerflow.mcp.private_scope import PRIVATE_MCP_SESSION_CONTEXT_KEY, bind_private_mcp_context, reset_private_mcp_context
 from deerflow.runtime.checkpoint_mode import (
     aensure_checkpoint_mode_compatible,
     inject_checkpoint_mode,
@@ -89,6 +88,7 @@ from deerflow.runtime.stream_modes import normalize_stream_modes, to_langgraph_s
 from deerflow.runtime.user_context import (
     AUTHENTICATED_CONTEXT_MARKER,
     AUTHENTICATED_CONTEXT_MARKER_KEY,
+    PRIVATE_MCP_SESSION_CONTEXT_KEY,
     WORKSPACE_IDENTITY_CONTEXT_KEYS,
     get_current_user,
     get_effective_user_id,
@@ -972,6 +972,9 @@ async def run_agent(
                 **terminal_status_kwargs,
             )
             logger.info("Run %s was cancelled", run_id)
+
+    # MCP assembly depends on repositories; load it after cold bootstrap.
+    from deerflow.mcp.private_scope import bind_private_mcp_context, reset_private_mcp_context
 
     private_mcp_token = bind_private_mcp_context(config.get("context"))
     try:
