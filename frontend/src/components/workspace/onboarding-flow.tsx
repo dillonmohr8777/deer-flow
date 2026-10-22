@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 
 import { fetch as apiFetch } from "@/core/api/fetcher";
 import { useAuth } from "@/core/auth/AuthProvider";
+import { isClientUser } from "@/core/auth/roles";
 import { connectChannelProvider } from "@/core/channels/api";
 import { getBackendBaseURL } from "@/core/config";
 import { useI18n } from "@/core/i18n/hooks";
@@ -29,6 +30,8 @@ type CatalogEntry = {
 };
 export type OnboardingState = {
   required: boolean;
+  profile_saved: boolean;
+  tools_saved: boolean;
   role: string;
   team: string;
   profile_found: boolean;
@@ -38,8 +41,6 @@ export type OnboardingState = {
   catalog: CatalogEntry[];
   connections: ToolState[];
 };
-
-const STAFF_ROLES = new Set(["user", "exec", "admin"]);
 
 /*
  * First sign-in for Momentum staff: confirm role and team, pick the tools used
@@ -53,7 +54,7 @@ export function FirstLoginGate() {
   const [checked, setChecked] = useState(false);
   const userId =
     !isStaticWebsiteOnly() && user?.id !== "default" ? user?.id : undefined;
-  const staff = !!user && STAFF_ROLES.has(user.system_role);
+  const staff = !!user && !isClientUser(user);
 
   useEffect(() => {
     if (!userId || !staff) return;
@@ -115,7 +116,10 @@ export function OnboardingFlow({
   const copy = t.onboarding;
   const [, setSettings] = useLocalSettings();
   const [open, setOpen] = useState(true);
-  const [step, setStep] = useState<1 | 2 | 3>(1);
+  // Resume where the server says this person left off.
+  const [step, setStep] = useState<1 | 2 | 3>(
+    initial.tools_saved ? 3 : initial.profile_saved ? 2 : 1,
+  );
   const [state, setState] = useState(initial);
   const [role, setRole] = useState(initial.role);
   const [team, setTeam] = useState(initial.team);

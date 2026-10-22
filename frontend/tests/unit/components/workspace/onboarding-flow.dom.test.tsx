@@ -48,6 +48,8 @@ rs.mock("@/components/workspace/experience-mode-chooser", () => ({
 
 const BASE: OnboardingState = {
   required: true,
+  profile_saved: false,
+  tools_saved: false,
   role: "Account manager",
   team: "Paid media",
   profile_found: true,
@@ -204,6 +206,20 @@ describe("first-login onboarding", () => {
     expect(sent[1]!.body).toEqual({ tools: ["slack", "gmail"], other: "" });
     expect(sent[2]!.body).toEqual({ status: "requested" });
     await waitFor(() => expect(screen.queryByText("Gmail")).toBeNull());
+  });
+
+  it("resumes at the connect step after a reload", async () => {
+    serve({
+      ...BASE,
+      profile_saved: true,
+      tools_saved: true,
+      connections: [
+        { id: "github", label: "GitHub", status: "shared", available: true },
+      ],
+    });
+    render(<Gate />);
+    expect(await screen.findByText("Connect your tools")).toBeTruthy();
+    expect(screen.getByText("Ready for everyone")).toBeTruthy();
   });
 
   it("keeps the old chooser for clients and finished accounts", async () => {

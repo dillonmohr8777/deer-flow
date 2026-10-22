@@ -120,12 +120,14 @@ async def test_steps_are_ordered_and_completion_needs_steps_one_and_two(api):
     assert (await client.post(f"{PATH}/connections/gmail", json={"status": "requested"})).status_code == 409
     state = (await client.put(f"{PATH}/tools", json={"tools": ["slack", "gmail", "google_ads"], "other": "Canva"})).json()
     assert [(c["id"], c["status"], c["available"]) for c in state["connections"]] == [("slack", "pending", False), ("gmail", "pending", False), ("google_ads", "pending", True)]
+    assert (await client.post(f"{PATH}/connections/slack", json={"status": "skipped"})).status_code == 200
     state = (await client.post(f"{PATH}/connections/gmail", json={"status": "requested"})).json()
+    assert state["profile_saved"] and state["tools_saved"]
     assert {c["id"]: c["status"] for c in state["connections"]}["gmail"] == "requested"
     assert facts == []
     done = (await client.post(f"{PATH}/complete")).json()
     assert done["required"] is False and done["completed_at"]
-    assert {c["id"]: c["status"] for c in done["connections"]} == {"slack": "skipped", "gmail": "requested", "google_ads": "skipped"}
+    assert {c["id"]: c["status"] for c in done["connections"]} == {"slack": "skipped", "gmail": "requested", "google_ads": "requested"}
     assert [user for user, _ in facts] == ["alice"] * 4
     assert any("Example Co" in fact for _, fact in facts) and any("Canva" in fact for _, fact in facts)
     # Completing again is a no-op: memory is seeded once.
@@ -230,3 +232,36 @@ def test_profile_loader_rejects_unsafe_or_missing_keys(people_dir, monkeypatch):
 def test_parse_profile_without_front_matter_keeps_notes_only():
     profile = parse_profile("Just notes here.")
     assert (profile.role, profile.notes) == ("", "Just notes here.")
+
+
+@pytest.mark.anyio
+async def test_deselected_answers_are_dropped_and_concurrent_finish_seeds_once(api, repo):
+    import asyncio
+
+    client, _, facts = api
+    await client.put(f"{PATH}/profile", json={"role": "AM", "team": "Paid"})
+    await client.put(f"{PATH}/tools", json={"tools": ["gmail", "hubspot"]})
+    await client.post(f"{PATH}/connections/gmail", json={"status": "requested"})
+    await client.put(f"{PATH}/tools", json={"tools": ["hubspot"]})
+    assert "gmail" not in (await repo.get("alice")).get("onboarding_connections", {})
+    results = await asyncio.gather(client.post(f"{PATH}/complete"), client.post(f"{PATH}/complete"))
+    assert all(r.status_code == 200 for r in results)
+    assert len(facts) == 4  # one seed: role, clients, tools, working style
+    assert (await repo.get("alice"))["onboarding_connections"] == {"hubspot": "requested"}
+
+
+@pytest.mark.anyio
+async def test_shared_workspace_principal_gets_no_personal_memory_or_borrowed_connection(api, monkeypatch):
+    from app.gateway.routers import onboarding
+
+    client, _, facts = api
+    slack = McpServerConfig(enabled=True, type="http", url="https://slack-mcp.example.com/mcp", user_auth=McpUserScopedAuthConfig(users={"team-principal": "Bearer shared"}))
+    bad = McpServerConfig(enabled=True, type="http", url="https://x.example.com/mcp")
+    monkeypatch.setattr("deerflow.config.extensions_config.get_extensions_config", lambda: ExtensionsConfig(mcp_servers={"slack-user": slack, "My Server": bad}, skills={}))
+    monkeypatch.setattr(onboarding, "get_effective_user_id", lambda: "team-principal")
+    assert "My Server" not in [entry["id"] for entry in (await client.get(PATH)).json()["catalog"]]
+    await client.put(f"{PATH}/profile", json={"role": "AM", "team": "Paid"})
+    state = (await client.put(f"{PATH}/tools", json={"tools": ["slack"]})).json()
+    assert state["connections"][0]["status"] == "pending"
+    await client.post(f"{PATH}/complete")
+    assert facts == []

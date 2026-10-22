@@ -16,11 +16,15 @@ Easy/Medium/Hard chooser behaviour.
 3. **Connect.** Per tool: connected (a real per-user credential exists),
    "Request access" (recorded as `requested`), or "Skip" (recorded as `skipped`).
    Slack also offers "Link Slack DMs", the existing binding-code flow from
-   `POST /api/channels/slack/connect`. Tools left untouched are recorded as
-   skipped at completion.
+   `POST /api/channels/slack/connect`. A picked tool left unanswered that is not
+   already working is recorded as requested at completion; only an explicit Skip
+   is skipped. Answers for tools later unpicked are dropped. The flow resumes at
+   the saved step after a reload.
 4. **Finish.** Stores `onboarding_completed_at`, sets `experience_mode: easy` and
    `mode: flash`, and seeds the person's own memory once (role, team, clients,
-   daily tools, working style).
+   daily tools, working style). Completion is claimed with an insert-if-absent
+   row, so two tabs cannot seed twice. In a shared workspace, where memory belongs
+   to the whole team, nothing personal is seeded.
 
 State is stored in the owner-scoped `user_preferences` rows (`onboarding_profile`,
 `daily_tools`, `onboarding_connections`, `onboarding_completed_at`).
