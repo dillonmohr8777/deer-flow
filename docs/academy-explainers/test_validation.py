@@ -20,6 +20,13 @@ class ValidationTest(unittest.TestCase):
     def test_caption_complete_valid(self):
         self.assertFalse(timing_errors({'segments': [{'text': 'hello world', 'words': [{'start': 1, 'end': 2, 'word': 'hello'}, {'start': 2, 'end': 3, 'word': 'world'}]}]}, 320))
 
+    def test_captions_use_script_text_on_asr_times(self):
+        from build import captions
+        heard = [dict(word=w, start=i, end=i + .5) for i, w in enumerate(['Hi', "I'm", 'Dylan', 'next', 'to', 'the', 'promise', 'list'])]
+        cues = captions({'segments': [{'words': heard}]}, {'chapters': [{'narration': "Hi, I'm Dillon. Next, the promises."}]})
+        self.assertEqual(' '.join(c['text'] for c in cues), "Hi, I'm Dillon. Next, the promises.")
+        self.assertEqual((cues[0]['start'], cues[-1]['end']), (0, 7.5))
+
     def test_missing_caption_words_fail(self):
         asr = {'segments': [{'text': 'hello world', 'words': [{'start': 1, 'end': 2, 'word': 'hello'}]}]}
         self.assertIn('Timed words do not cover accepted segment text', timing_errors(asr, 320))
@@ -103,6 +110,7 @@ class ValidationTest(unittest.TestCase):
             self.assertTrue(critical_differences([{'expected': token, 'heard': ''}]))
         self.assertFalse(critical_differences([{'expected': 'balanced', 'heard': 'balance'}]))
         self.assertEqual(normalize("Don't send five"), normalize('Do not send 5'))
+        self.assertEqual(normalize("Hi, I'm Dillon. The customer's list"), normalize("Hi, I'm Dylan. The customers list"))
 
     def test_variable_duration_and_chunks(self):
         for duration, expected in [(479, False), (480, True), (599.9, True), (600, False)]:
@@ -110,6 +118,9 @@ class ValidationTest(unittest.TestCase):
         self.assertFalse(duration_ok({'course_stem': '01-ai-at-work', 'duration': 480}))
         self.assertEqual(chunks('First sentence. Second sentence.'), ['First sentence.', 'Second sentence.'])
         self.assertTrue(all(len(part.split()) <= 30 for part in chunks('word ' * 75)))
+        long = ' '.join(['word'] * 20) + ', ' + ' '.join(['more'] * 10) + ' off.'
+        self.assertEqual([len(part.split()) for part in chunks(long)], [20, 11])
+        self.assertTrue(all(len(part.split()) >= 6 for part in chunks('word ' * 31)))
 
 class BuildContractTest(unittest.TestCase):
     def test_work_build_variable_chapters_and_default_caption_track(self):
@@ -134,7 +145,7 @@ class BuildContractTest(unittest.TestCase):
             (directory / 'narration.wav').write_bytes(b'fixture audio bytes - not real media')
             atomic_json(directory / 'voice-check.json', {'pass': True, 'sha256': fingerprints(directory)})
             assets = root / 'assets'; assets.mkdir()
-            for name in ['momo-mark.svg', 'archivo-black.ttf', 'nunito-sans.ttf', 'gsap.min.js', 'experience.png']:
+            for name in ['momo-mark.svg', 'archivo-black.ttf', 'nunito-sans.ttf', 'nunito-sans-bold.ttf', 'fraunces-bold.woff2', 'gsap.min.js', 'experience.png']:
                 (assets / name).write_bytes(b'fixture')
             build(directory / 'lesson.json', root / 'projects', assets)
             project = root / 'projects/00-platform-tour'

@@ -1,9 +1,11 @@
 """Build self-contained HyperFrames teaching projects from completed narration."""
 import argparse
+import difflib
 import html
 import json
 import shutil
 import os
+import re
 import time
 from pathlib import Path
 from validation import require_approved
@@ -12,25 +14,27 @@ from contract import duration_ok, require_course
 HERE = Path(__file__).parent
 STYLE = """
 @font-face{font-family:Nunito;src:url('assets/nunito-sans.ttf')}
+@font-face{font-family:Nunito;font-weight:700 900;src:url('assets/nunito-sans-bold.ttf')}
 @font-face{font-family:Archivo;src:url('assets/archivo-black.ttf')}
+@font-face{font-family:Fraunces;font-weight:700;src:url('assets/fraunces-bold.woff2')}
 *{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden}
-body{background:#0E1417;color:#F4F1EC;font-family:Nunito,sans-serif}
+body{background:#F2EDE3;color:#101E3F;font-family:Nunito,sans-serif}
 #root{position:relative;width:100%;height:100%;overflow:hidden}
 .scene{position:absolute;inset:0;padding:180px 100px 160px}
-.header{position:absolute;left:90px;right:90px;top:45px;height:80px;display:flex;align-items:center;gap:26px;border-bottom:2px solid #687175;padding-bottom:20px}
-.logo{width:72px;height:72px}.brand{font-weight:800;font-size:30px}.lesson-no{margin-left:auto;color:#F4F1EC;font-size:26px}
-.chapter-no{color:#F6A765;font-size:28px;font-weight:800;letter-spacing:3px;margin:0 0 25px}
-.title{font-family:Archivo,sans-serif;font-size:72px;line-height:1.13;max-width:700px;margin:0}
+.header{position:absolute;left:90px;right:90px;top:45px;height:80px;display:flex;align-items:center;gap:26px;border-bottom:3px solid #D8C3A0;padding-bottom:20px}
+.logo{width:72px;height:72px}.brand{font-family:Fraunces,serif;font-weight:700;font-size:34px;color:#1B4B9E;letter-spacing:-.015em}.lesson-no{margin-left:auto;color:#3A4A6B;font-size:26px;font-weight:700}
+.chapter-no{color:#1B4B9E;font-family:Archivo,sans-serif;font-size:26px;letter-spacing:3px;margin:0 0 25px}
+.title{font-family:Fraunces,serif;font-weight:700;font-size:76px;line-height:1.08;max-width:700px;margin:0;color:#101E3F;letter-spacing:-.015em}
 .layout{display:grid;grid-template-columns:720px 1fr;gap:70px;height:650px;align-items:center}
-.principle{font-size:38px;line-height:1.3;max-width:670px;margin-top:42px;color:#F6A765}
-.board{border:2px solid #687175;border-radius:20px;background:#172226;padding:46px;min-height:490px;display:flex;flex-direction:column;justify-content:center;position:relative}
-.board-label{font-size:28px;color:#F6A765;font-weight:900;letter-spacing:2px;margin-bottom:25px}
-.row{font-size:37px;line-height:1.3;margin:10px 0;padding:9px 14px;white-space:pre-wrap;border-radius:8px;position:relative}
-.row.command{font-family:monospace;font-size:32px}.row.current{background:#28373B}
-.bar{position:absolute;height:7px;background:#E27113;bottom:0;left:0;width:100%;transform-origin:left}
-.footer{position:absolute;left:100px;right:100px;bottom:30px;font-size:23px;color:#B7C0C3;display:flex;justify-content:space-between}
-.caption{position:absolute;left:125px;right:125px;bottom:85px;min-height:60px;text-align:center;font-size:36px;line-height:1.25;font-weight:800;padding:10px 24px;background:#0E1417;color:#F4F1EC}
-.clip{position:absolute}.shot{max-height:640px;max-width:100%;object-fit:contain;border-radius:18px;border:2px solid #687175}
+.principle{font-size:36px;line-height:1.3;max-width:670px;margin-top:42px;color:#101E3F;font-weight:700;border-left:8px solid #1B4B9E;padding-left:26px}
+.board{border:2px solid #D8C3A0;border-radius:20px;background:#FBF8F1;padding:46px;min-height:490px;display:flex;flex-direction:column;justify-content:center;position:relative;box-shadow:0 1px 2px rgb(16 30 63/.16),0 24px 44px -18px rgb(16 30 63/.5),14px 16px 0 rgb(27 75 158/.18)}
+.board-label{font-family:Archivo,sans-serif;font-size:26px;color:#1B4B9E;letter-spacing:2px;margin-bottom:25px}
+.row{font-size:37px;line-height:1.3;margin:10px 0;padding:9px 14px;white-space:pre-wrap;border-radius:8px;position:relative;color:#101E3F}
+.row.command{font-family:monospace;font-size:32px}
+.bar{position:absolute;height:8px;background:#1B4B9E;bottom:0;left:0;width:100%;transform-origin:left;border-radius:0 0 18px 18px}
+.footer{position:absolute;left:100px;right:100px;bottom:30px;font-size:23px;color:#3A4A6B;font-weight:700;display:flex;justify-content:space-between}
+.caption{position:absolute;left:125px;right:125px;bottom:85px;min-height:60px;text-align:center;font-size:36px;line-height:1.25;font-weight:800;padding:12px 28px;background:#101E3F;color:#FBF8F1;border-radius:14px}
+.clip{position:absolute}.shot{max-height:640px;max-width:100%;object-fit:contain;border-radius:18px;border:2px solid #D8C3A0}
 .mode-example{display:flex;align-items:center;gap:20px}.mode-example .shot{width:255px;height:590px}.mode-example .row{font-size:30px}
 """
 
@@ -47,19 +51,37 @@ def timestamp(value, separator='.'):
     return f'{hours:02}:{minutes:02}:{seconds:02}{separator}{ms:03}'
 
 
+def script_timing(expected, heard):
+    """Caption text is the reviewed script; each word takes the time of the ASR word aligned to it."""
+    from transcribe import normalize
+    key = lambda text: ''.join(normalize(text))
+    timed = []
+    for tag, i1, i2, j1, j2 in difflib.SequenceMatcher(None, [key(t) for t in expected], [key(w['word']) for w in heard], autojunk=False).get_opcodes():
+        if tag == 'insert':
+            continue
+        if i2 - i1 == j2 - j1:
+            timed += [dict(start=heard[j]['start'], end=heard[j]['end'], word=expected[i]) for i, j in zip(range(i1, i2), range(j1, j2))]
+            continue
+        # Uneven replace spreads over the heard span; a missed word sits in the gap between its neighbours.
+        start = heard[j1]['start'] if j2 > j1 else (heard[j1 - 1]['end'] if j1 else 0.0)
+        end = heard[j2 - 1]['end'] if j2 > j1 else (heard[j1]['start'] if j1 < len(heard) else start)
+        step = (end - start) / (i2 - i1)
+        timed += [dict(start=start + k * step, end=start + (k + 1) * step, word=expected[i1 + k]) for k in range(i2 - i1)]
+    return timed
+
+
 def captions(asr, lesson=None):
     words = [w for segment in asr['segments'] for w in segment.get('words', [])]
     assert words, 'Word timestamps are required; do not invent caption timing.'
-    # Caption text follows the reviewed script while timing comes from ASR. Only
-    # use a one-to-one raw-word mapping; contractions can legitimately change it.
     if lesson is not None:
-        import re
-        expected = re.findall(r'\S+', ' '.join(c['narration'] for c in lesson['chapters']))
-        if len(expected) == len(words):
-            words = [dict(word, word=text) for word, text in zip(words, expected)]
-    return [dict(start=batch[0]['start'], end=batch[-1]['end'],
-                 text=' '.join(w['word'].strip() for w in batch))
-            for offset in range(0, len(words), 7) if (batch := words[offset:offset + 7])]
+        words = script_timing(re.findall(r'\S+', ' '.join(c['narration'] for c in lesson['chapters'])), words)
+    cues, batch = [], []
+    for word in words:
+        batch.append(word)
+        if len(batch) == 7 or (len(batch) >= 4 and word['word'].endswith(('.', '?', '!'))) or word is words[-1]:
+            cues.append(dict(start=batch[0]['start'], end=batch[-1]['end'], text=' '.join(w['word'].strip() for w in batch)))
+            batch = []
+    return cues
 
 
 def build(source, output, assets, burn_captions=False):
@@ -72,7 +94,7 @@ def build(source, output, assets, burn_captions=False):
     project.mkdir(parents=True, exist_ok=True)
     (project / 'compositions').mkdir(exist_ok=True)
     (project / 'assets').mkdir(exist_ok=True)
-    for name in ['momo-mark.svg', 'archivo-black.ttf', 'nunito-sans.ttf', 'gsap.min.js']:
+    for name in ['momo-mark.svg', 'archivo-black.ttf', 'nunito-sans.ttf', 'nunito-sans-bold.ttf', 'fraunces-bold.woff2', 'gsap.min.js']:
         shutil.copy2(assets / name, project / 'assets' / name)
     if (assets / 'experience.png').exists():
         shutil.copy2(assets / 'experience.png', project / 'assets/experience.png')
@@ -101,7 +123,7 @@ def build(source, output, assets, burn_captions=False):
         animation += [f'tl.fromTo("#{cid}-row-{j}",{{opacity:0,y:30}},{{opacity:1,y:0,duration:.35,ease:"power4.out"}},{j*.12+.1});' for j in range(len(rows))]
         for j in range(len(rows)):
             start = max(.6, j * duration / len(rows))
-            animation.append(f'tl.to("#{cid}-row-{j}",{{backgroundColor:"#35484D",duration:.25,ease:"none"}},{start:.3f});')
+            animation.append(f'tl.to("#{cid}-row-{j}",{{backgroundColor:"#E9DECC",duration:.25,ease:"none"}},{start:.3f});')
         animation.append(f'tl.fromTo("#{cid}-bar",{{scaleX:0}},{{scaleX:1,duration:{duration},ease:"none"}},0);')
         animation.append(f'window.__timelines["{cid}"]=tl;')
         frame = f'''<!doctype html><html><body><template>
@@ -127,7 +149,7 @@ def build(source, output, assets, burn_captions=False):
 {''.join(hosts)}{''.join(cap_html) if burn_captions else ''}
 <audio id="narration" class="clip" src="assets/narration.wav" data-start="0" data-duration="{duration}" data-track-index="1"></audio>
 <footer class="footer"><span>{escape(title)}</span><span>Dillon Mohr</span></footer></div>
-<script>const tl=gsap.timeline({{paused:true}});window.__timelines["main"]=tl;</script></body></html>'''
+<script>const tl=gsap.timeline({{paused:true}});tl.to(".logo",{{y:-12,rotation:-4,duration:1.3,ease:"sine.inOut",yoyo:true,repeat:{max(1, int(duration / 1.3) - 1)}}},0);window.__timelines["main"]=tl;</script></body></html>'''
     (project / 'index.html').write_text(document)
     (project / 'hyperframes.json').write_text(json.dumps({'authoringSkill': 'general-video', 'media': {'autoProxy': False}}, indent=2))
     (project / 'STORYBOARD.md').write_text('\n'.join(boards))
@@ -136,7 +158,7 @@ def build(source, output, assets, burn_captions=False):
     (project / 'lesson.json').write_text(json.dumps(lesson, indent=2))
     shutil.copy2(source.parent / 'generation.json', project / 'generation.json')
     (project / 'BRIEF.md').write_text('---\nworkflow: general-video\nflow: automation\nstoryboard: no\n---\nFive to six minutes of useful instruction in Dillon\'s own voice; no music bed so the lesson stays easy to hear. Existing Momo brand assets, work examples, variable practical chapters, sidecar word-timed captions default off. Parent owns final integration.\n')
-    (project / 'design.md').write_text('Existing Momentum tokens: deep #0E1417, onDeep #F4F1EC, signal #E27113. Lighter #F6A765 for readable accent text. Exact transparent Momo mark, existing Archivo headline and Nunito body files. Focal element: concrete teaching example; left edge: chapter/title; bottom: word-timed captions. Stepped highlight follows teaching beats. No decorative movement competing with commands.\n')
+    (project / 'design.md').write_text('MomoBot Paper tokens: cream #F2EDE3, cream-hi #FBF8F1, kraft #D8C3A0, ink #101E3F, ink-muted #3A4A6B, royal #1B4B9E for state and objects. Fraunces 700 headings, Archivo Black labels, Nunito Sans text. Exact transparent Momo mark bouncing in the header. Focal element: concrete teaching example; left edge: chapter/title; bottom: word-timed captions. Stepped highlight follows teaching beats. No decorative movement competing with commands.\n')
     print(project, round(duration, 3), 'seconds', len(word_caps), 'captions')
 
 

@@ -22,6 +22,8 @@ def normalize(text):
     text = text.replace('’', "'")
     for contraction, expanded in {"let's": 'let us', "don't": 'do not', "can't": 'cannot', "isn't": 'is not', "doesn't": 'does not', "won't": 'will not', "shouldn't": 'should not', "aren't": 'are not', "wasn't": 'was not', "didn't": 'did not', "couldn't": 'could not', "wouldn't": 'would not', "hasn't": 'has not', "haven't": 'have not'}.items():
         text = text.replace(contraction, expanded)
+    # Possessives and the narrator's name are spelled inconsistently by ASR, never by the voice.
+    text = re.sub(r'\bdylan', 'dillon', text.replace("'", ''))
     for name, value in TENS.items():
         for unit, number in list(NUMBERS.items())[1:10]:
             text = re.sub(rf'\b{name}[ -]{unit}\b', str(value + int(number)), text)

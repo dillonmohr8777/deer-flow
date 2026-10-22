@@ -12,7 +12,14 @@ def chunks(text, maximum=30):
     result = []
     for sentence in re.split(r'(?<=[.!?])\s+', text.strip()):
         words = sentence.split()
-        result.extend(' '.join(words[start:start + maximum]) for start in range(0, len(words), maximum))
+        while len(words) > maximum:
+            # Balanced breaks at the comma nearest the middle: no one-word tails, natural pauses.
+            target = -(-len(words) // -(-len(words) // maximum))
+            commas = [i for i in range(8, maximum + 1) if words[i - 1].endswith((',', ';', ':')) and len(words) - i >= 6]
+            cut = min(commas, key=lambda i: abs(i - target)) if commas else target
+            result.append(' '.join(words[:cut]))
+            words = words[cut:]
+        result.append(' '.join(words))
     assert result and all(len(item.split()) <= maximum for item in result)
     return result
 
