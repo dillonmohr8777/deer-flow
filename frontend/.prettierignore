@@ -3,3 +3,6 @@ pnpm-lock.yaml
 src/content/**/*.mdx
 playwright-report/
 test-results/
+
+# Search engine verification files must stay byte-exact
+public/google*.html
