@@ -112,7 +112,8 @@
  * <html>, which the provider mirrors the treatment onto so portalled dialogs,
  * menus and the mobile sidebar sheet get it too. Landing, login and invite set
  * data-treatment on their own roots and keep their own components: nothing
- * here reaches them. Light theme only; a dark-theme choice is respected.
+ * here reaches them. Colours are light theme only (a dark-theme choice is
+ * respected); the fonts at the end of this file apply in both themes.
  *
  * Cream canvas, cream-hi sheets, hairline --paper-line borders, cream-lo for
  * hover and quiet fills. Colour carries state: royal marks the selected thing.
@@ -145,7 +146,6 @@
   --sidebar-accent-foreground: var(--paper-ink);
   --sidebar-border: var(--paper-line);
   --sidebar-ring: var(--paper-focus);
-  font-family: var(--m-font-text);
 }
 
 /*
@@ -220,14 +220,6 @@
   [data-slot="dialog-content"] {
   background-color: var(--paper-cream-hi);
   box-shadow: 8px 10px 0 var(--paper-kraft);
-}
-:is(
-    :root:not(.dark)[data-treatment="paper"],
-    :root:not(.dark) [data-workspace-shell][data-treatment="paper"]
-  )
-  [data-slot="dialog-title"] {
-  font-family: var(--m-font-serif);
-  font-weight: 700;
 }
 /* Upstream centres dialog headers below 640px while every field below them
    stays left-aligned; a sheet reads from its top-left corner at every width. */
@@ -468,17 +460,17 @@
   color: var(--foreground);
 }
 
-/* Same voices in dark (Oct 22): the font system does not change with the
-   theme, so body text stays Nunito Sans and dialog titles stay Fraunces. */
+/* Fonts, both themes (Oct 22): the paper voices do not change with the theme,
+   so body text is Nunito Sans and dialog titles Fraunces in light and dark. */
 :is(
-  :root.dark[data-treatment="paper"],
-  :root.dark [data-workspace-shell][data-treatment="paper"]
+  :root[data-treatment="paper"],
+  [data-workspace-shell][data-treatment="paper"]
 ) {
   font-family: var(--m-font-text);
 }
 :is(
-    :root.dark[data-treatment="paper"],
-    :root.dark [data-workspace-shell][data-treatment="paper"]
+    :root[data-treatment="paper"],
+    [data-workspace-shell][data-treatment="paper"]
   )
   [data-slot="dialog-title"] {
   font-family: var(--m-font-serif);
