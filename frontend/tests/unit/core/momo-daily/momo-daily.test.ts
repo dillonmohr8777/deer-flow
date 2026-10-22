@@ -167,7 +167,9 @@ describe("content/momo-daily", () => {
     const parsed = article();
     expect(parsed.takeaways).toEqual([]);
     expect(parsed.body[0]?.subsections).toEqual([]);
-    expect(() => article({ takeaways: ["a", "b", "c", "d", "e", "f"] })).toThrow();
+    expect(() =>
+      article({ takeaways: ["a", "b", "c", "d", "e", "f"] }),
+    ).toThrow();
   });
 
   it("rejects an unknown status", () => {
