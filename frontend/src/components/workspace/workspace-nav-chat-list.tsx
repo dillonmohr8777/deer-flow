@@ -26,7 +26,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import { useAgentsApiEnabled } from "@/core/agents";
+import { useAgents, useAgentsApiEnabled } from "@/core/agents";
 import {
   useAuth,
   useIsClient,
@@ -121,6 +121,10 @@ export function WorkspaceNavChatList() {
   const isClient = useIsClient();
   const unresolved = useIsRoleUnresolved();
   const { enabled: agentsEnabled } = useAgentsApiEnabled();
+  const { agents } = useAgents();
+  // The backend lists momobot-max only when it is on and this role may run it.
+  const maxAvailable =
+    agentsEnabled && agents.some((agent) => agent.name === "momobot-max");
   const { enabled: deskEnabled } = useDeskEnabled();
   const { enabled: internalEnabled } = useMomentumInternalEnabled();
   const { data: brandKit } = useBrandKit();
@@ -141,20 +145,22 @@ export function WorkspaceNavChatList() {
     <>
       <SidebarGroup className="pt-1">
         <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              isActive={pathname.startsWith("/workspace/agents/momobot-max")}
-              asChild
-            >
-              <Link
-                className="text-muted-foreground"
-                href="/workspace/agents/momobot-max/chats/new"
+          {maxAvailable && (
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                isActive={pathname.startsWith("/workspace/agents/momobot-max")}
+                asChild
               >
-                <Sparkles />
-                <span>MomoBot Max</span>
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
+                <Link
+                  className="text-muted-foreground"
+                  href="/workspace/agents/momobot-max/chats/new"
+                >
+                  <Sparkles />
+                  <span>MomoBot Max</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          )}
           <SidebarMenuItem>
             <SidebarMenuButton
               isActive={pathname === "/workspace/chats"}

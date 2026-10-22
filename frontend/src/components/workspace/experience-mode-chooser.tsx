@@ -38,10 +38,7 @@ function saveExperienceMode(userId: string, mode: ExperienceMode) {
  */
 export function ExperienceModeSwitch() {
   const { t } = useI18n();
-  const { user } = useAuth();
   const [settings, setSettings] = useLocalSettings();
-  const userId =
-    !isStaticWebsiteOnly() && user?.id !== "default" ? user?.id : undefined;
   const current = settings.context.experience_mode ?? "medium";
   const labels: Record<ExperienceMode, string> = {
     easy: t.settings.experience.easyLabel,
@@ -62,10 +59,9 @@ export function ExperienceModeSwitch() {
           aria-checked={current === mode}
           onClick={() => {
             setSettings("context", {
-        experience_mode: mode,
-        mode: MODE_FOR_EXPERIENCE[mode],
-      });
-            if (userId) void saveExperienceMode(userId, mode);
+              experience_mode: mode,
+              mode: MODE_FOR_EXPERIENCE[mode],
+            });
           }}
           className={cn(
             "min-h-9 rounded-md text-xs font-semibold transition-colors",

@@ -50,6 +50,7 @@ rs.mock("@/core/features", () => ({
 }));
 rs.mock("@/core/agents", () => ({
   useAgentsApiEnabled: () => ({ enabled: mocks.agents, isLoading: false }),
+  useAgents: () => ({ agents: [{ name: "momobot-max" }], isLoading: false }),
 }));
 rs.mock("@/core/board", () => ({ useBoardThreads: () => ({ data: [] }) }));
 rs.mock("@/components/workspace/workspace-selector", () => ({

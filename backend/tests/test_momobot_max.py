@@ -597,3 +597,21 @@ def test_staff_whose_role_may_use_the_staff_model_can_open_max():
         assert momobot_max_available_to(_user("user"), _config(momobot_max={"enabled": True}, authorization=example_authorization())) is False
     finally:
         reset_app_config()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("role", ["internal", None, "mystery"])
+async def test_internal_channel_runs_and_unknown_roles_keep_the_max_model(role):
+    config = _run_config(context={"agent_name": "momobot-max"})
+    await _policy(config, _user(role) if role else SimpleNamespace(id="u-1"), app_config=_config(momobot_max=_STAFF_CHEAP, authorization=example_authorization()), internal=True)
+    assert config["context"].get("model_name") != "claude-haiku-5-5"
+
+
+def test_staff_who_may_not_use_the_staff_model_fall_back_to_the_max_model():
+    settings = _config(momobot_max={**_STAFF_CHEAP, "staff_model": "not-in-any-role"}, authorization=example_authorization())
+    set_app_config(settings)
+    try:
+        assert momobot_max.staff_runs_cheap(_user("exec"), settings.momobot_max) is False
+        assert momobot_max_available_to(_user("exec"), settings) is True
+    finally:
+        reset_app_config()
