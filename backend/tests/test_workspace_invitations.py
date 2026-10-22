@@ -715,3 +715,44 @@ async def test_an_exec_email_stays_a_user_while_rbac_has_no_exec_block(invitatio
     async with invitation_db() as session:
         user = await session.scalar(select(UserRow).where(UserRow.email == "partner@example.com"))
     assert user is not None and user.system_role == "user"  # locked out of nothing: exec is withheld, not half-granted
+
+
+@pytest.mark.asyncio
+async def test_a_new_sso_account_joins_its_invited_workspace_without_a_token(invitation_db, monkeypatch):
+    organization_id = await _seed_workspace(invitation_db)
+    await _add_user(invitation_db, "sso-new", "partner@example.com", oauth_provider="google")
+    monkeypatch.setattr("app.gateway.authz._get_route_authorization_config", lambda: AuthorizationConfig(invitations_frozen=False, exec_emails=["partner@example.com"]))
+    expired = await _create(monkeypatch, invitation_db, organization_id, email="partner@example.com", role="member")
+    async with invitation_db() as session:
+        await session.execute(update(InvitationRow).where(InvitationRow.id == expired.id).values(expires_at=datetime.now(UTC) - timedelta(minutes=1)))
+        await session.commit()
+    live = await _create(monkeypatch, invitation_db, organization_id, email="partner@example.com", role="admin")
+
+    assert await invitations.join_invited_workspaces(_request(), user_id="sso-new", email="Partner@Example.com") == organization_id
+
+    async with invitation_db() as session:
+        membership = await session.get(OrganizationMemberRow, {"organization_id": organization_id, "user_id": "sso-new"})
+        assert membership is not None and (membership.role, membership.status) == ("admin", "active")
+        assert (await session.get(InvitationRow, live.id)).consumed_at is not None
+        assert (await session.get(InvitationRow, expired.id)).consumed_at is None  # an expired invitation is never used
+        assert (await session.get(UserRow, "sso-new")).system_role == "exec"
+        assert (await session.get(UserPreferenceRow, {"user_id": "sso-new", "key": "experience_mode"})).value == "easy"
+    # Consumed: a second sign-in joins nothing more.
+    assert await invitations.join_invited_workspaces(_request(), user_id="sso-new", email="partner@example.com") is None
+
+
+@pytest.mark.asyncio
+async def test_sso_auto_join_respects_the_freeze_and_a_removed_issuer(invitation_db, monkeypatch):
+    organization_id = await _seed_workspace(invitation_db)
+    await _add_user(invitation_db, "sso-new", "jesse@example.com", oauth_provider="google")
+    created = await _create(monkeypatch, invitation_db, organization_id)
+    monkeypatch.setattr("app.gateway.authz._get_route_authorization_config", lambda: AuthorizationConfig(invitations_frozen=True))
+    assert await invitations.join_invited_workspaces(_request(), user_id="sso-new", email="jesse@example.com") is None
+    monkeypatch.setattr("app.gateway.authz._get_route_authorization_config", lambda: AuthorizationConfig(invitations_frozen=False))
+    async with invitation_db() as session:
+        await session.execute(update(OrganizationMemberRow).where(OrganizationMemberRow.user_id == "owner-1").values(status="removed"))
+        await session.commit()
+    assert await invitations.join_invited_workspaces(_request(), user_id="sso-new", email="jesse@example.com") is None
+    async with invitation_db() as session:
+        assert (await session.get(InvitationRow, created.id)).consumed_at is None
+        assert await session.get(OrganizationMemberRow, {"organization_id": organization_id, "user_id": "sso-new"}) is None

@@ -173,9 +173,9 @@ class MessageResponse(BaseModel):
 # ── Helpers ───────────────────────────────────────────────────────────────
 
 
-def _set_session_cookie(response: Response, token: str, request: Request, *, remember_me: bool | None = None) -> None:
-    """Set the access_token HttpOnly cookie on the response."""
-    set_session_cookie(response, request, token, remember_me=remember_me)
+def _set_session_cookie(response: Response, token: str, request: Request, *, remember_me: bool | None = None):
+    """Set the access_token HttpOnly cookie on the response; return its cookie policy."""
+    return set_session_cookie(response, request, token, remember_me=remember_me)
 
 
 # ── Rate Limiting ────────────────────────────────────────────────────────
@@ -1491,6 +1491,16 @@ async def oauth_callback(
 
     user = result["user"]
 
+    # ── Join invited workspaces ──────────────────────────────────────
+    # An account created just now for a pending invitation joins that
+    # workspace: the provider verified the email, which is what the
+    # invitation token proves on the password path.
+    joined_workspace = None
+    if result.get("created") and identity.email_verified:
+        from app.gateway.routers.invitations import join_invited_workspaces
+
+        joined_workspace = await join_invited_workspaces(request, user_id=str(user.id), email=user.email)
+
     # ── Issue DeerFlow session ───────────────────────────────────────
     token = create_access_token(str(user.id), token_version=user.token_version)
 
@@ -1502,7 +1512,11 @@ async def oauth_callback(
     redirect_response = RedirectResponse(url=callback_redirect, status_code=status.HTTP_302_FOUND)
 
     # Set session cookie (reuse existing helper)
-    _set_session_cookie(redirect_response, token, request, remember_me=state_payload.remember_me)
+    policy = _set_session_cookie(redirect_response, token, request, remember_me=state_payload.remember_me)
+    if joined_workspace is not None:
+        from app.gateway.routers.invitations import set_workspace_cookie
+
+        set_workspace_cookie(redirect_response, request, joined_workspace, policy)
 
     # Set CSRF cookie (callback is a GET, so CSRF middleware won't set it)
     _set_csrf_cookie(redirect_response, request)

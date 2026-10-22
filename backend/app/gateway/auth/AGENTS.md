@@ -64,7 +64,12 @@ created keep signing in after their invitation is used, because the gate only
 applies to creating a user. When every pending invitation for the email is a
 `client` invitation, the account is created with the `client` system role (the
 same as a password sign-up through it), because accepting later keeps an
-existing account's role.
+existing account's role. The OAuth callback then joins that new account to
+every workspace its verified email holds a pending invitation to
+(`invitations.join_invited_workspaces`: same bar as `/accept`, each invitation
+consumed, audited with `via: sso`) and opens the newest one, so an invitee who
+signs in with the provider needs no token. Existing accounts still accept
+through the invitation link.
 
 Accepting any invitation seeds the `experience_mode: easy` preference (the
 simple version) unless the account already saved a choice, and an email listed

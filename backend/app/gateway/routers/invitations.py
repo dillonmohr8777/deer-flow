@@ -184,6 +184,11 @@ async def _find_user_by_email(session, email: str) -> UserRow | None:
 def _set_workspace_session(response: Response, request: Request, user_id: str, token_version: int, organization_id: str) -> None:
     token = create_access_token(user_id, token_version=token_version)
     policy = set_session_cookie(response, request, token)
+    set_workspace_cookie(response, request, organization_id, policy)
+
+
+def set_workspace_cookie(response: Response, request: Request, organization_id: str, policy) -> None:
+    """Open *organization_id* as the active workspace, for as long as the session cookie *policy* lasts."""
     response.set_cookie(
         key="deerflow_workspace",
         value=organization_id,
@@ -203,6 +208,72 @@ def _refuse_if_frozen() -> None:
 
     if _get_route_authorization_config().invitations_frozen:
         raise HTTPException(status_code=403, detail=_INVITATIONS_FROZEN_DETAIL)
+
+
+async def _join_workspace(session, invitation: InvitationRow, user_id: str, now: datetime) -> str:
+    """Make *user_id* an active member of the invitation's workspace; return the role it holds there.
+
+    An owner stays owner. Invitees start on the simple experience (plain answers,
+    guided starters) and can switch in Settings; a saved choice always wins.
+    """
+    workspace_member = await session.get(OrganizationMemberRow, {"organization_id": invitation.organization_id, "user_id": user_id})
+    if workspace_member is None:
+        granted_role = invitation.role or "member"
+        session.add(OrganizationMemberRow(organization_id=invitation.organization_id, user_id=user_id, role=granted_role, status="active", created_at=now, updated_at=now))
+    elif workspace_member.role != "owner":
+        granted_role = invitation.role or "member"
+        workspace_member.role = granted_role
+        workspace_member.status = "active"
+        workspace_member.updated_at = now
+    else:
+        granted_role = "owner"
+    if await session.get(UserPreferenceRow, {"user_id": user_id, "key": "experience_mode"}) is None:
+        session.add(UserPreferenceRow(user_id=user_id, key="experience_mode", value="easy"))
+    return granted_role
+
+
+async def join_invited_workspaces(request: Request, *, user_id: str, email: str) -> str | None:
+    """A brand-new SSO account joins every workspace its email holds a pending invitation to.
+
+    Only the OAuth callback calls this, for an account it just created from a
+    provider-verified email. That verification is what the invitation token
+    proves on the password path, so no token changes hands. Each invitation
+    must pass the same bar as ``/accept`` (unconsumed, unexpired, an active
+    shared workspace, an issuer still owner or admin) and is consumed here.
+    Returns the workspace to open first (the newest invitation's), or None.
+    """
+    from app.gateway.authz import _get_route_authorization_config
+
+    if _get_route_authorization_config().invitations_frozen:
+        return None
+    now = _now()
+    joined: list[tuple[str, str, str, bool]] = []
+    async with _session_factory()() as session:
+        async with session.begin():
+            user = await session.get(UserRow, user_id)
+            if user is None:
+                return None
+            candidates = (await session.scalars(select(InvitationRow).where(func.lower(InvitationRow.email) == email.strip().lower(), InvitationRow.consumed_at.is_(None)).order_by(InvitationRow.created_at.desc()))).all()
+            for invitation in candidates:
+                if _as_utc(invitation.expires_at) <= now or not await invitation_issuer_is_active(session, invitation):
+                    continue
+                if invitation.role == "client" and not role_has_policy("client"):
+                    continue
+                reserved = await session.execute(
+                    update(InvitationRow).execution_options(synchronize_session=False).where(InvitationRow.id == invitation.id, InvitationRow.consumed_at.is_(None), InvitationRow.expires_at > now).values(consumed_at=now, updated_at=now)
+                )
+                if reserved.rowcount != 1:
+                    continue
+                became_exec = False
+                if invitation.role != "client" and invitation.email in _exec_emails() and role_has_policy("exec") and user.system_role == _PLAIN_USER_ROLE:
+                    user.system_role = "exec"
+                    became_exec = True
+                granted_role = await _join_workspace(session, invitation, user_id, now)
+                joined.append((invitation.organization_id, invitation.id, granted_role, became_exec))
+    for organization_id, invitation_id, granted_role, became_exec in joined:
+        details = {"role": granted_role, "via": "sso", **({"system_role": "exec"} if became_exec else {})}
+        await record_audit_event(request, action="invitation.accepted", outcome="success", actor_user_id=user_id, organization_id=organization_id, target_type="invitation", target_id=invitation_id, details=details)
+    return joined[0][0] if joined else None
 
 
 def _exec_emails() -> set[str]:
@@ -423,34 +494,7 @@ async def accept_invitation(body: AcceptInvitationRequest, request: Request, res
                         )
                     )
 
-                workspace_member = await session.get(
-                    OrganizationMemberRow,
-                    {"organization_id": organization_id, "user_id": user_id},
-                )
-                if workspace_member is None:
-                    granted_role = invitation.role or "member"
-                    session.add(
-                        OrganizationMemberRow(
-                            organization_id=organization_id,
-                            user_id=user_id,
-                            role=granted_role,
-                            status="active",
-                            created_at=now,
-                            updated_at=now,
-                        )
-                    )
-                elif workspace_member.role != "owner":
-                    granted_role = invitation.role or "member"
-                    workspace_member.role = granted_role
-                    workspace_member.status = "active"
-                    workspace_member.updated_at = now
-                else:
-                    granted_role = "owner"
-
-                # Invitees start on the simple experience (plain answers, guided
-                # starters) and can switch in Settings; a saved choice always wins.
-                if await session.get(UserPreferenceRow, {"user_id": user_id, "key": "experience_mode"}) is None:
-                    session.add(UserPreferenceRow(user_id=user_id, key="experience_mode", value="easy"))
+                granted_role = await _join_workspace(session, invitation, user_id, now)
     except IntegrityError:
         logger.info("Workspace invitation acceptance conflicted with an existing account or membership")
         raise HTTPException(status_code=409, detail="This invitation could not be accepted; retry from the invitation page") from None
