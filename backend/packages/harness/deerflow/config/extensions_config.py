@@ -203,10 +203,19 @@ class McpOAuthConfig(BaseModel):
     model_config = ConfigDict(extra="allow")
 
 
+class McpPrivateScopeConfig(BaseModel):
+    """Operator binding for one actor in their private workspace; no role grants."""
+
+    actor_user_id: str = Field(min_length=1)
+    organization_id: str = Field(min_length=1)
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+
 class McpServerConfig(BaseModel):
     """Configuration for a single MCP server."""
 
     enabled: bool = Field(default=True, description="Whether this MCP server is enabled")
+    private_scope: McpPrivateScopeConfig | None = Field(default=None, description="Restrict discovery and calls to one authenticated actor in an exact private web workspace")
     type: str = Field(default="stdio", description="Transport type: 'stdio', 'sse', or 'http'")
     command: str | None = Field(default=None, description="Command to execute to start the MCP server (for stdio type)")
     args: list[str] = Field(default_factory=list, description="Arguments to pass to the command (for stdio type)")
@@ -282,6 +291,8 @@ class McpServerConfig(BaseModel):
 
     @model_validator(mode="after")
     def _validate_task_tool_bindings(self) -> "McpServerConfig":
+        if self.private_scope is not None and self.task_toolsets:
+            raise ValueError("private_scope MCP servers do not support background task_toolsets")
         claimed: dict[str, str] = {}
         for toolset in self.task_toolsets:
             for role in ("submit_tool", "status_tool", "cancel_tool"):
