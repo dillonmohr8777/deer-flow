@@ -51,6 +51,8 @@ def staff_runs_cheap(user: Any, settings: Any, *, fail_closed: bool = True) -> b
 def momobot_max_available_to(user: Any, config: AppConfig, *, is_internal: bool = False, tier: str = "max") -> bool:
     """Whether *user* may chat with the agent at *tier*: it is enabled and their role may use that tier's model."""
     settings = config.momobot_max
+    if not settings.enabled:
+        return False
     if tier != "max":
         model = settings.base_model
     elif staff_runs_cheap(user, settings, fail_closed=config.authorization.fail_closed):
