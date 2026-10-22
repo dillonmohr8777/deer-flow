@@ -62,8 +62,8 @@ async def invitation_issuer_is_active(session: AsyncSession, invitation: Invitat
     return member is not None
 
 
-async def has_pending_invitation(session: AsyncSession, email: str, *, now: datetime) -> bool:
-    """Whether any invitation for ``email`` (case-insensitive) is still pending.
+async def pending_invitation_roles(session: AsyncSession, email: str, *, now: datetime) -> set[str]:
+    """The roles ``email`` (case-insensitive) is invited with: the newest pending invitation's role per workspace.
 
     Pending means: not consumed (accepted or revoked), not expired, for an
     active shared workspace whose issuer is still an active owner or admin
@@ -72,23 +72,26 @@ async def has_pending_invitation(session: AsyncSession, email: str, *, now: date
     """
     candidates = (
         await session.scalars(
-            select(InvitationRow).where(
+            select(InvitationRow)
+            .where(
                 func.lower(InvitationRow.email) == email.strip().lower(),
                 InvitationRow.consumed_at.is_(None),
             )
+            .order_by(InvitationRow.created_at.desc())
         )
     ).all()
+    newest: dict[str, str] = {}
     for invitation in candidates:
-        if _as_utc(invitation.expires_at) <= now:
+        if invitation.organization_id in newest or _as_utc(invitation.expires_at) <= now:
             continue
         if await invitation_issuer_is_active(session, invitation):
-            return True
-    return False
+            newest[invitation.organization_id] = invitation.role or "member"
+    return set(newest.values())
 
 
 __all__ = [
     "SHARED_WORKSPACE_ADMIN_ROLES",
     "active_shared_workspace_member",
-    "has_pending_invitation",
     "invitation_issuer_is_active",
+    "pending_invitation_roles",
 ]

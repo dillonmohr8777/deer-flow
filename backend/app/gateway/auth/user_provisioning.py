@@ -15,28 +15,29 @@ from fastapi import HTTPException, status
 
 from app.gateway.auth.local_provider import LocalAuthProvider
 from app.gateway.auth.oidc import OIDCIdentity
+from app.gateway.authz import role_has_policy
 from deerflow.config.auth_config import OIDCProviderConfig
 from deerflow.persistence.engine import get_session_factory
-from deerflow.persistence.organizations.invitation_policy import has_pending_invitation
+from deerflow.persistence.organizations.invitation_policy import pending_invitation_roles
 
 logger = logging.getLogger(__name__)
 
 _AUTO_CREATE_DISABLED_DETAIL = "Automatic account creation is disabled. Contact your administrator."
 
 
-async def _identity_has_pending_invitation(identity: OIDCIdentity, email: str) -> bool:
-    """Whether the identity's provider-verified email holds a pending invitation.
+async def _identity_pending_invitation_roles(identity: OIDCIdentity, email: str) -> set[str]:
+    """Roles of the pending invitations the identity's provider-verified email holds.
 
-    Fails closed: an unverified email, or no database to check, never counts.
+    Fails closed: an unverified email, or no database to check, holds none.
     """
     if not identity.email_verified:
-        return False
+        return set()
     session_factory = get_session_factory()
     if session_factory is None:
-        logger.warning("SSO auto-create requires an invitation but no database is configured; refusing")
-        return False
+        logger.warning("SSO auto-create cannot check pending invitations: no database is configured")
+        return set()
     async with session_factory() as session:
-        return await has_pending_invitation(session, email, now=datetime.now(UTC))
+        return await pending_invitation_roles(session, email, now=datetime.now(UTC))
 
 
 async def get_or_provision_oidc_user(
@@ -103,11 +104,20 @@ async def get_or_provision_oidc_user(
     # Invite-gated deployments create accounts only for people someone asked
     # in. The refusal is the same 403 as auto-create being off, so a login
     # attempt cannot probe which emails hold an invitation.
-    if provider_config.auto_create_requires_invitation and not await _identity_has_pending_invitation(identity, email):
+    pending_roles = await _identity_pending_invitation_roles(identity, email)
+    if "client" in pending_roles and not role_has_policy("client"):
+        # /accept refuses a client invitation while RBAC has no client block; so does sign-up.
+        pending_roles = pending_roles - {"client"}
+    if provider_config.auto_create_requires_invitation and not pending_roles:
         logger.info("Refused SSO auto-create for %s (provider=%s): no pending workspace invitation", email, provider_id)
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=_AUTO_CREATE_DISABLED_DETAIL)
 
     role = _resolve_role(email, provider_config.admin_emails)
+    # Someone invited only as a client gets the client tier from day one, the
+    # same as a password sign-up through that invitation; accepting it later
+    # keeps an existing account's role, so this is the only point to set it.
+    if role == "user" and pending_roles == {"client"}:
+        role = "client"
     try:
         user = await local_provider.create_oauth_user(
             email=email,

@@ -3136,6 +3136,7 @@ authorization:
   # Shared-workspace invitations (create, inspect, accept) answer 403 while
   # true; existing memberships are unaffected. Default: true.
   # invitations_frozen: true
+  # exec_emails: []   # people who join as exec (C-suite) when they accept an invite; upgrades a plain user only
 
 # ============================================================================
 # M4 Entitlement Gate (docs/momo-week/m4-entitlement.md)
