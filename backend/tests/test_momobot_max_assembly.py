@@ -53,7 +53,9 @@ class OfflineModel(BaseChatModel):
 def _app_config(**extra) -> AppConfig:
     example = AppConfig.model_validate(yaml.safe_load((Path(__file__).parents[2] / "config.example.yaml").read_text()))
     model = {"name": "claude-opus-5-5", "use": "langchain_openai:ChatOpenAI", "model": "claude-opus-5-5", "supports_thinking": True, "supports_reasoning_effort": True}
-    app = AppConfig.model_validate({**example.model_dump(), "models": [model], "momobot_max": {"enabled": True, "default_effort": "high", "client_effort": {"vhin-cares": "medium"}}, **extra})
+    base = {"name": "claude-haiku-5-5", "use": "langchain_openai:ChatOpenAI", "model": "claude-haiku-5-5", "supports_thinking": True, "supports_reasoning_effort": True}
+    max_settings = {"enabled": True, "default_effort": "high", "client_effort": {"acme-dental": "medium"}, "clients": ["acme-dental", "c-max"]}
+    app = AppConfig.model_validate({**example.model_dump(), "models": [model, base], "momobot_max": max_settings, **extra})
     app.summarization.enabled = False
     return app
 
@@ -114,17 +116,18 @@ async def _assemble(monkeypatch, tmp_path, *, role: str, app: AppConfig, keys=()
 @pytest.mark.asyncio
 @pytest.mark.parametrize("role", ["client", "exec", "admin"])
 async def test_a_momobot_max_run_has_the_models_effort_delegation_and_soul(monkeypatch, tmp_path, role):
-    created, captured = await _assemble(monkeypatch, tmp_path, role=role, app=_app_config(authorization=example_authorization()))
+    created, captured = await _assemble(monkeypatch, tmp_path, role=role, app=_app_config(authorization=example_authorization()), keys=("c-max",))
 
     assert (created["name"], created["thinking_enabled"], created["reasoning_effort"]) == ("claude-opus-5-5", True, "high")
+    assert "<momobot_tier" not in captured["system_prompt"]
     assert "You are MomoBot Max" in captured["system_prompt"]
-    assert "<subagent_system>" in captured["system_prompt"]  # it can delegate
+    assert "<subagent_system>\n" in captured["system_prompt"]  # it can delegate (the block itself, not its mention in the preamble)
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("role", ["client", "exec", "admin"])
 async def test_the_tool_ceiling_holds_for_every_role_that_runs_it(monkeypatch, tmp_path, role):
-    _, captured = await _assemble(monkeypatch, tmp_path, role=role, app=_app_config(authorization=example_authorization()))
+    _, captured = await _assemble(monkeypatch, tmp_path, role=role, app=_app_config(authorization=example_authorization()), keys=("c-max",))
 
     assert {t.name for t in captured["tools"]} <= set(MOMOBOT_MAX_TOOL_NAMES)
     assert {"bash", "update_agent", "propose_action", "memory_search", "client_mcp_tool", "list_uploaded_files"}.isdisjoint(t.name for t in captured["tools"])
@@ -133,13 +136,24 @@ async def test_the_tool_ceiling_holds_for_every_role_that_runs_it(monkeypatch, t
 
 @pytest.mark.asyncio
 async def test_the_ceiling_holds_even_with_authorization_off(monkeypatch, tmp_path):
-    _, captured = await _assemble(monkeypatch, tmp_path, role="client", app=_app_config())
+    _, captured = await _assemble(monkeypatch, tmp_path, role="client", app=_app_config(), keys=("c-max",))
 
     assert {t.name for t in captured["tools"]} == set(MOMOBOT_MAX_TOOL_NAMES) - {"tool_search"}  # tool_search is added later by deferred-tool assembly
 
 
 @pytest.mark.asyncio
 async def test_a_clients_assignment_picks_the_effort(monkeypatch, tmp_path):
-    created, _ = await _assemble(monkeypatch, tmp_path, role="client", app=_app_config(authorization=example_authorization()), keys=("vhin-cares", "c-1"))
+    created, _ = await _assemble(monkeypatch, tmp_path, role="client", app=_app_config(authorization=example_authorization()), keys=("acme-dental", "c-1"))
 
     assert created["reasoning_effort"] == "medium"
+
+
+@pytest.mark.asyncio
+async def test_a_base_client_run_is_the_light_momobot_chat(monkeypatch, tmp_path):
+    created, captured = await _assemble(monkeypatch, tmp_path, role="client", app=_app_config(authorization=example_authorization()), keys=("not-unlocked",))
+
+    assert (created["name"], created["thinking_enabled"], created["reasoning_effort"]) == ("claude-haiku-5-5", False, "medium")
+    assert '<momobot_tier tier="base">' in captured["system_prompt"] and "Introduce yourself as MomoBot, not MomoBot Max" in captured["system_prompt"]
+    assert "<subagent_system>\n" not in captured["system_prompt"]  # no subagent team on the base subscription
+    # (The harness offers every tool, so the task tool's absence is the policy's subagent_enabled=False, tested there.)
+    assert {t.name for t in captured["tools"]} <= set(MOMOBOT_MAX_TOOL_NAMES)

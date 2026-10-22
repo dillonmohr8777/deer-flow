@@ -2418,19 +2418,26 @@ momentum_internal:
   enabled: false
   organization_slugs: []
 
-# MomoBot Max: the built-in all-in-one agent client accounts chat with. Global
-# (not per user), read-only, and absent until enabled. A caller sees it only if
-# their role may use `model` (authorization.provider.config.roles.<role>.models),
-# so teammates whose model list excludes it never get it. Every run of it uses
-# the effort resolved here, whatever the request asks for. A client user is
-# pinned to it and resolves their client from their client_contact assignment
-# (key = the client's registry id, else its id).
+# The client chat. MomoBot Max is the base subscription plus the all-in-one
+# agent: every client account chats with this one built-in agent (one memory),
+# a client listed in `clients` gets it as MomoBot Max (`model`, effort, subagent
+# team) and every other client gets the base MomoBot chat (`base_model`,
+# `base_effort`, no subagents). Global (not per user), read-only, and absent
+# until enabled. A caller sees it only if their role may use their tier's model
+# (authorization.provider.config.roles.<role>.models), so teammates whose model
+# list excludes it never get it. Every run of it uses the settings resolved
+# here, whatever the request asks for. A client user is pinned to it and
+# resolves their client from their client_contact assignment (key = the
+# client's registry id, else its id). Staff always get Max.
 # momobot_max:
 #   enabled: true
 #   model: claude-opus-5-5          # name of a models: entry
 #   default_effort: high            # low | medium | high
-#   client_effort:                  # per-client override
-#     vhin-cares: high
+#   client_effort:                  # per-client override (Max only)
+#     acme-dental: high
+#   clients: []                     # clients unlocked for MomoBot Max (registry id or id)
+#   base_model: claude-haiku-5-5    # every other client: the base MomoBot chat on this model
+#   base_effort: medium             # ...at this effort, with no subagent team
 
 # ============================================================================
 # Skill Self-Evolution Configuration
@@ -3111,7 +3118,7 @@ run_ownership:
 #               - "clients:read"
 #               - "clients:write"
 #               - "clients:delete"
-#           models: {allow: ["claude-opus-5-5"]}   # must equal momobot_max.model
+#           models: {allow: ["claude-opus-5-5", "claude-haiku-5-5"]}   # momobot_max.model (Max) and base_model (base)
 #           sandbox: {allow: "*"}
 #           skills: {allow: []}
 #         guest:

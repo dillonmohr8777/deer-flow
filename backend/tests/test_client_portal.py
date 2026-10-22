@@ -201,7 +201,7 @@ async def test_own_client_chat_in_dedicated_workspace_is_durable(org_world, monk
         from app.gateway.momobot_max import apply_run_policy
 
         run_config = {"configurable": {"agent_name": "other", "model_name": "cheap-model"}, "context": {"reasoning_effort": "low", "max_total_subagents": 50}}
-        config = _config(momobot_max={"enabled": True})
+        config = _config(momobot_max={"enabled": True, "clients": ["dedicated-client"]})  # unlocked through the real assignment lookup
         await apply_run_policy(run_config, user=SimpleNamespace(id=USER_B, system_role="client"), actor_user_id=USER_B, app_config=config)
         for section in run_config.values():
             assert section["agent_name"] == "momobot-max" and "model_name" not in section

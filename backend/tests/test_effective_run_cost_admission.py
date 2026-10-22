@@ -38,7 +38,7 @@ def harness(monkeypatch, *, role="client", refusal=None, router_enabled=True, au
         {
             "sandbox": {"use": "deerflow.sandbox.local:LocalSandboxProvider"},
             "models": [{"name": name, "model": name, "use": "langchain_openai:ChatOpenAI"} for name in (EXPENSIVE, CHEAP)],
-            "momobot_max": {"enabled": True, "model": EXPENSIVE},
+            "momobot_max": {"enabled": True, "model": EXPENSIVE, "clients": ["cost-client"]},
             **({"authorization": authorization} if authorization is not None else {}),
             "cost_router": {
                 "enabled": router_enabled,
@@ -74,7 +74,7 @@ def harness(monkeypatch, *, role="client", refusal=None, router_enabled=True, au
     # Dedicated workspace authorization has its own SQL/AuthMiddleware suite.
     # This fixture starts after that gate, solely to exercise cost admission.
     monkeypatch.setattr("app.gateway.client_workspace.require_client_workspace", AsyncMock())
-    monkeypatch.setattr("app.gateway.momobot_max.client_keys_for_user", AsyncMock(return_value=()))
+    monkeypatch.setattr("app.gateway.momobot_max.client_keys_for_user", AsyncMock(return_value=("cost-client",)))  # a Max client
     return SimpleNamespace(config=config, store=store, manager=manager, threads=threads, request=request, user=user, worker=worker, seed=seed)
 
 

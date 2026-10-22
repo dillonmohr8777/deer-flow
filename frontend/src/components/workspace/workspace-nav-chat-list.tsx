@@ -12,6 +12,7 @@ import {
   LampDesk,
   Network,
   ShieldCheck,
+  Newspaper,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -37,13 +38,15 @@ import {
 import { useBoardThreads } from "@/core/board";
 import { useDeskEnabled, useMomentumInternalEnabled } from "@/core/features";
 import { useI18n } from "@/core/i18n/hooks";
+import { MOMO_DAILY_NAME, MOMO_DAILY_PATH } from "@/core/momo-daily";
 import { useBrandKit } from "@/core/momobot-brand";
 
 import { WorkspaceSelector } from "./workspace-selector";
 
 /**
- * The client version of MomoBot: chats, the MomoBot lineup and About, nothing
- * internal. (New chat lives in the sidebar header.)
+ * The client version of MomoBot: chats, The Momo Daily (part of the base
+ * subscription), the MomoBot lineup and About, nothing internal. (New chat
+ * lives in the sidebar header.)
  */
 function ClientNavList({ showBrandKit }: { showBrandKit: boolean }) {
   const { t } = useI18n();
@@ -66,6 +69,14 @@ function ClientNavList({ showBrandKit }: { showBrandKit: boolean }) {
             <Link className="text-muted-foreground" href="/workspace/chats">
               <MessagesSquare />
               <span>{t.sidebar.chats}</span>
+            </Link>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+        <SidebarMenuItem>
+          <SidebarMenuButton isActive={pathname === MOMO_DAILY_PATH} asChild>
+            <Link className="text-muted-foreground" href={MOMO_DAILY_PATH}>
+              <Newspaper />
+              <span>{MOMO_DAILY_NAME}</span>
             </Link>
           </SidebarMenuButton>
         </SidebarMenuItem>

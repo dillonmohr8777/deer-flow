@@ -86,8 +86,8 @@ def test_it_is_off_by_default_on_opus_at_high_effort():
 
 
 def test_the_clients_override_wins_then_the_default():
-    settings = MomobotMaxConfig(default_effort="medium", client_effort={"vhin-cares": "high", "acme": "low"})
-    assert settings.effort_for(("vhin-cares",)) == "high"
+    settings = MomobotMaxConfig(default_effort="medium", client_effort={"acme-dental": "high", "acme": "low"})
+    assert settings.effort_for(("acme-dental",)) == "high"
     assert settings.effort_for(("c-123", "acme")) == "low"  # the first key with an override
     assert settings.effort_for(("someone-else",)) == "medium"
     assert settings.effort_for() == "medium"
@@ -98,12 +98,12 @@ def test_an_effort_outside_low_medium_high_is_rejected(bad):
     with pytest.raises(ValidationError):
         MomobotMaxConfig(default_effort=bad)
     with pytest.raises(ValidationError):
-        MomobotMaxConfig(client_effort={"vhin-cares": bad})
+        MomobotMaxConfig(client_effort={"acme-dental": bad})
 
 
 def test_the_example_block_validates():
-    config = _config(momobot_max={"enabled": True, "model": "claude-opus-5-5", "default_effort": "high", "client_effort": {"vhin-cares": "high"}})
-    assert config.momobot_max.effort_for(("vhin-cares",)) == "high"
+    config = _config(momobot_max={"enabled": True, "model": "claude-opus-5-5", "default_effort": "high", "client_effort": {"acme-dental": "high"}})
+    assert config.momobot_max.effort_for(("acme-dental",)) == "high"
 
 
 # -- the agent -----------------------------------------------------------------
@@ -223,7 +223,7 @@ async def test_a_client_reads_it_without_the_management_api_but_staff_still_need
     load_agents_api_config_from_dict({"enabled": False})
     as_role("client")
     assert [a.name for a in (await list_agents()).agents] == ["momobot-max"]
-    assert (await get_agent("momobot-max")).display_name == "MomoBot Max"
+    assert (await get_agent("momobot-max")).display_name == "MomoBot"  # no client unlocked: the base subscription
     as_role("admin")
     with pytest.raises(HTTPException) as disabled:
         await list_agents()
@@ -259,7 +259,9 @@ async def _policy(config: dict, user, *, keys=(), app_config=None, internal=Fals
     # This helper exercises model/effort pinning in isolation. Real workspace
     # admission is covered with SQL memberships/binding in test_client_portal.
     with patch.object(momobot_max, "client_keys_for_user", fake_keys), patch("app.gateway.client_workspace.require_client_workspace", new=AsyncMock()):
-        await apply_run_policy(config, user=user, actor_user_id=actor, app_config=app_config or _config(momobot_max={"enabled": True, "client_effort": {"vhin-cares": "medium"}}), internal=internal)
+        await apply_run_policy(
+            config, user=user, actor_user_id=actor, app_config=app_config or _config(momobot_max={"enabled": True, "client_effort": {"acme-dental": "medium"}, "clients": ["acme-dental", "someone-else"]}), internal=internal
+        )
 
 
 @pytest.mark.asyncio
@@ -268,11 +270,11 @@ async def test_a_client_run_is_pinned_to_the_agent_whatever_the_request_names():
         configurable={"agent_name": "finance-bot", "model_name": "cheap-model", "is_bootstrap": True},
         context={"agent_name": "lead_agent", "model_name": "claude-haiku-5-5", "model": "x", "reasoning_effort": "low", "thinking_enabled": False, "subagent_enabled": False},
     )
-    await _policy(config, _user("client"))
+    await _policy(config, _user("client"), keys=("someone-else",))  # a client unlocked for Max
     for section in (config["configurable"], config["context"]):
         assert section["agent_name"] == "momobot-max"
         assert not {"model_name", "model", "is_bootstrap"} & set(section)
-        assert (section["reasoning_effort"], section["thinking_enabled"], section["subagent_enabled"]) == ("high", True, True)
+        assert (section["reasoning_effort"], section["thinking_enabled"], section["subagent_enabled"], section["momobot_tier"]) == ("high", True, True, "max")
 
 
 @pytest.mark.asyncio
@@ -284,7 +286,7 @@ async def test_a_client_run_with_no_context_section_still_gets_pinned():
 
 @pytest.mark.asyncio
 async def test_effort_comes_from_the_clients_assignment_then_the_default():
-    for keys, expected in ((("vhin-cares", "c-1"), "medium"), (("someone-else",), "high"), ((), "high")):
+    for keys, expected in ((("acme-dental", "c-1"), "medium"), (("someone-else",), "high")):
         config = _run_config()
         await _policy(config, _user("client"), keys=keys)
         assert config["context"]["reasoning_effort"] == expected, keys
@@ -351,7 +353,7 @@ async def clients_db(monkeypatch):
         async with session.begin():
             session.add_all(
                 [
-                    ClientRow(id="c-1", display_name="Vhin Cares", registry_id="vhin-cares"),
+                    ClientRow(id="c-1", display_name="Vhin Cares", registry_id="acme-dental"),
                     ClientRow(id="c-2", display_name="Acme", registry_id=None),
                     ClientRow(id="c-3", display_name="Other", registry_id="other"),
                     ClientAssignmentRow(client_id="c-1", user_id="justin", role="client_contact"),
@@ -366,7 +368,7 @@ async def clients_db(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_a_client_contact_resolves_to_their_clients_registry_id_and_id(clients_db):
-    assert await client_keys_for_user("justin") == ("vhin-cares", "c-1", "c-2")
+    assert await client_keys_for_user("justin") == ("acme-dental", "c-1", "c-2")
     assert await client_keys_for_user("someone") == ("other", "c-3")  # only client_contact counts for justin, not account_manager
     assert await client_keys_for_user("nobody") == ()
 
@@ -424,14 +426,14 @@ async def _start_run_as(role: str, context: dict, *, app_config: AppConfig):
 
 @pytest.mark.asyncio
 async def test_start_run_pins_a_client_to_the_agent_before_anything_reads_the_agent_name():
-    app_config = _config(momobot_max={"enabled": True, "default_effort": "medium"})
-    config = await _start_run_as("client", {"agent_name": "finance-bot", "model_name": "cheap-model", "reasoning_effort": "low", "subagent_enabled": False}, app_config=app_config)
+    app_config = _config(momobot_max={"enabled": True, "base_effort": "low"})
+    config = await _start_run_as("client", {"agent_name": "finance-bot", "model_name": "cheap-model", "reasoning_effort": "high", "subagent_enabled": True}, app_config=app_config)
 
     for section in (config["configurable"], config["context"]):
         assert section["agent_name"] == "momobot-max"
-        # The client's own model is scrubbed; start_run pins the model it admitted and meters.
-        assert section["model_name"] != "cheap-model"
-        assert (section["reasoning_effort"], section["subagent_enabled"], section["thinking_enabled"]) == ("medium", True, True)
+        # The client's own model is scrubbed; a client with no Max gets the base model, which start_run admits and meters.
+        assert section["model_name"] == "claude-haiku-5-5"
+        assert (section["reasoning_effort"], section["subagent_enabled"], section["thinking_enabled"], section["momobot_tier"]) == ("low", False, False, "base")
     assert config["context"]["user_role"] == "client"
 
 
@@ -447,12 +449,13 @@ async def test_start_run_leaves_a_teammates_ordinary_run_alone():
 async def test_the_total_subagent_cap_is_config_owned_not_request_owned():
     app_config = _config(momobot_max={"enabled": True})
     cap = app_config.subagents.max_total_per_run
+    app_config = _config(momobot_max={"enabled": True, "clients": ["acme-dental"]})
     for user in (_user("client"), _user("exec")):
         config = _run_config(
             configurable={"max_total_subagents": 50},
             context={"agent_name": "momobot-max", "max_total_subagents": 50},
         )
-        await _policy(config, user, app_config=app_config)
+        await _policy(config, user, app_config=app_config, keys=("acme-dental",))
         assert config["context"]["max_total_subagents"] == cap
         assert config["configurable"]["max_total_subagents"] == cap
 
@@ -470,3 +473,65 @@ async def test_a_stored_row_with_the_reserved_name_is_not_listed_beside_the_buil
     # Off, the stored row is an ordinary agent again and is listed.
     set_app_config(_config())
     assert sorted(a.name for a in (await list_agents()).agents) == ["momobot-max", "writer"]
+
+
+# -- the tier: MomoBot Max is the base subscription plus the all-in-one agent --
+
+
+def test_a_client_has_max_only_when_one_of_its_keys_is_unlocked():
+    settings = MomobotMaxConfig(clients=["acme-dental"])
+    assert settings.unlocked_for(("c-9", "acme-dental")) is True
+    assert settings.unlocked_for(("someone-else",)) is False
+    assert settings.unlocked_for(()) is False
+    assert MomobotMaxConfig().clients == [] and (MomobotMaxConfig().base_model, MomobotMaxConfig().base_effort) == ("claude-haiku-5-5", "medium")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("keys", [("not-unlocked",), ()])
+async def test_a_client_without_max_gets_the_base_chat_on_the_same_agent(keys):
+    config = _run_config(context={"agent_name": "momobot-max", "model_name": "claude-opus-5-5", "reasoning_effort": "high", "thinking_enabled": True, "subagent_enabled": True})
+    await _policy(config, _user("client"), keys=keys)
+    for section in (config["configurable"], config["context"]):
+        assert section["agent_name"] == "momobot-max"  # one agent, one memory, whatever the tier
+        assert (section["model_name"], section["reasoning_effort"], section["thinking_enabled"], section["subagent_enabled"], section["momobot_tier"]) == ("claude-haiku-5-5", "medium", False, False, "base")
+        assert "max_total_subagents" not in section
+
+
+@pytest.mark.asyncio
+async def test_the_tier_is_set_by_the_server_never_by_the_request():
+    base = _run_config(context={"momobot_tier": "max"}, configurable={"momobot_tier": "max"})
+    await _policy(base, _user("client"))
+    assert base["context"]["momobot_tier"] == base["configurable"]["momobot_tier"] == "base"
+    staff = _run_config(context={"agent_name": "finance-bot", "momobot_tier": "base"})
+    await _policy(staff, _user("admin"))
+    assert "momobot_tier" not in staff["context"]
+    exec_run = _run_config(context={"agent_name": "momobot-max", "momobot_tier": "base"})
+    await _policy(exec_run, _user("exec"))
+    assert exec_run["context"]["momobot_tier"] == "max"  # staff always get Max
+
+
+@pytest.mark.asyncio
+async def test_a_base_client_whose_role_may_not_use_the_base_model_is_refused():
+    authorization = example_authorization()
+    authorization["provider"]["config"]["roles"]["client"]["models"] = {"allow": ["claude-opus-5-5"]}
+    app_config = _config(momobot_max={"enabled": True, "clients": ["acme-dental"]}, authorization=authorization)
+    set_app_config(app_config)
+    try:
+        with pytest.raises(HTTPException) as refused:
+            await _policy(_run_config(), _user("client"), app_config=app_config)
+        assert refused.value.status_code == 422
+        await _policy(_run_config(), _user("client"), app_config=app_config, keys=("acme-dental",))  # Max uses the allowed model
+    finally:
+        reset_app_config()
+
+
+@pytest.mark.asyncio
+async def test_a_client_sees_momobot_on_base_and_momobot_max_once_unlocked(agent_env, as_role):
+    set_app_config(_config(momobot_max={"enabled": True, "clients": ["acme-dental"]}))
+    as_role("client")
+    for keys, name in (((), "MomoBot"), (("acme-dental",), "MomoBot Max")):
+        with patch.object(momobot_max, "client_keys_for_user", AsyncMock(return_value=keys)):
+            listed = (await list_agents()).agents
+            fetched = await get_agent("momobot-max")
+        assert [a.name for a in listed] == ["momobot-max"] and listed[0].display_name == fetched.display_name == name, keys
+        assert fetched.model is None and fetched.soul is None

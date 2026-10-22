@@ -10,6 +10,12 @@ This module owns the parts that need a caller:
   the request names is dropped), and every run of the agent gets the
   config-owned reasoning effort, thinking and delegation settings (including the total subagent cap), whatever
   the request says.
+
+The tier: MomoBot Max is the base subscription plus the all-in-one agent. A
+client whose client is listed in ``momobot_max.clients`` gets MomoBot Max (the
+all-in-one model, effort and subagent team); every other client gets the base
+MomoBot chat on the same agent and memory (``base_model``, ``base_effort``, no
+subagents). Staff always get Max.
 """
 
 from __future__ import annotations
@@ -29,9 +35,17 @@ from deerflow.persistence.clients.model import ClientAssignmentRow, ClientRow
 _UNRESOLVED_AGENT_DETAIL = "knowledge_scope assistant configuration could not be resolved"
 
 
-def momobot_max_available_to(user: Any, config: AppConfig, *, is_internal: bool = False) -> bool:
+def momobot_max_available_to(user: Any, config: AppConfig, *, is_internal: bool = False, tier: str = "max") -> bool:
+    """Whether *user* may chat with the agent at *tier*: it is enabled and their role may use that tier's model."""
     settings = config.momobot_max
-    return settings.enabled and model_use_allowed(user, settings.model, is_internal=is_internal, fail_closed=config.authorization.fail_closed)
+    model = settings.model if tier == "max" else settings.base_model
+    return settings.enabled and model_use_allowed(user, model, is_internal=is_internal, fail_closed=config.authorization.fail_closed)
+
+
+async def client_tier(actor_user_id: str | None, config: AppConfig) -> str:
+    """``max`` when the caller's client is unlocked for MomoBot Max, else ``base`` (no client counts as base)."""
+    keys = await client_keys_for_user(actor_user_id) if actor_user_id else ()
+    return "max" if config.momobot_max.unlocked_for(keys) else "base"
 
 
 async def client_keys_for_user(user_id: str) -> tuple[str, ...]:
@@ -65,14 +79,23 @@ async def apply_run_policy(config: dict[str, Any], *, user: Any, actor_user_id: 
             for key in ("model_name", "model", "is_bootstrap"):
                 section.pop(key, None)
     sections = _sections(config)
+    for section in sections:  # the tier is server-owned: set below for this agent only, never taken from a request
+        section.pop("momobot_tier", None)
     agent_name = next((section["agent_name"] for section in sections if isinstance(section.get("agent_name"), str)), "")
     if agent_name.strip().lower().replace("_", "-") != MOMOBOT_MAX_NAME:
         return
-    if not internal and (user is None or not momobot_max_available_to(user, app_config)):
+    settings = app_config.momobot_max
+    client_keys = await client_keys_for_user(actor_user_id) if actor_user_id else ()
+    tier = "base" if getattr(user, "system_role", None) == CLIENT_ROLE and not settings.unlocked_for(client_keys) else "max"
+    if not internal and (user is None or not momobot_max_available_to(user, app_config, tier=tier)):
         raise HTTPException(status_code=422, detail=_UNRESOLVED_AGENT_DETAIL)
-    effort = app_config.momobot_max.effort_for(await client_keys_for_user(actor_user_id) if actor_user_id else ())
+    if tier == "base":
+        for section in sections:
+            section.update(model_name=settings.base_model, reasoning_effort=settings.base_effort, thinking_enabled=False, subagent_enabled=False, momobot_tier="base")
+        return
+    effort = settings.effort_for(client_keys)
     for section in sections:
-        section.update(reasoning_effort=effort, thinking_enabled=True, subagent_enabled=True, max_total_subagents=app_config.subagents.max_total_per_run)
+        section.update(reasoning_effort=effort, thinking_enabled=True, subagent_enabled=True, max_total_subagents=app_config.subagents.max_total_per_run, momobot_tier="max")
 
 
 def _sections(config: dict[str, Any]) -> list[dict[str, Any]]:
