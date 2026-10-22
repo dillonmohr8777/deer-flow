@@ -64,8 +64,13 @@ swift test --package-path MomoMobileCore \
 1. Join the Apple Developer Program, register `com.dillonmohr.momobot`, and set
    the signing team in the private build environment. Certificates and profiles
    never belong in this repository.
-2. Create the matching App Store Connect record, archive a Release build for a
-   generic iOS device, and upload the signed archive.
+2. Create the matching App Store Connect record (the API cannot create it), then
+   run the manual `MomoBot iOS TestFlight` workflow
+   (`.github/workflows/momobot-ios-testflight.yml`). It archives with Xcode 26,
+   signs at export with cloud-managed automatic signing, and uploads. It needs the
+   repository secrets `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_PRIVATE_KEY` (the `.p8`
+   text) and `APPLE_TEAM_ID`, from an App Store Connect Team API key with the
+   Admin role. Without them it only checks that the unsigned archive builds.
 3. Complete export-compliance, app-privacy, beta-description, feedback-email,
    and test-instructions fields. Privacy answers must include data handled by
    the hosted workspace, not only the native shell.
@@ -94,5 +99,6 @@ All TestFlight gates still apply, plus:
    navigation, loading, and failure handling reduce the web-wrapper risk but do
    not guarantee approval under App Review Guideline 4.2.
 
-No archive upload, TestFlight release, signing change, or App Store submission is
-performed by this project setup.
+Uploads happen only when someone runs the TestFlight workflow by hand. The
+workflow only uploads: it adds no testers, starts no Beta App Review, and submits
+nothing to the App Store.

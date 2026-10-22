@@ -1,0 +1,128 @@
+name: MomoBot iOS TestFlight
+
+# Manual only. Archives MomoBot with the newest installed Xcode 26 (App Store
+# Connect has required the iOS 26 SDK since April 28, 2026), then, when the
+# four Apple secrets exist, signs it with cloud-managed automatic signing and
+# uploads it to TestFlight. Without the secrets it stops after the unsigned
+# archive with a plain message, so a dispatch still proves the release build
+# compiles.
+#
+# Secrets (Settings > Secrets and variables > Actions):
+#   ASC_KEY_ID       App Store Connect Team API key ID (Admin role; cloud
+#                    signing refuses App Manager and Individual keys)
+#   ASC_ISSUER_ID    Issuer ID shown above the Team keys list
+#   ASC_PRIVATE_KEY  full text of the AuthKey_<id>.p8 file
+#   APPLE_TEAM_ID    10-character Apple Developer team ID
+# The App Store Connect app record for com.dillonmohr.momobot must exist
+# before the first upload; the API cannot create it.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: momobot-ios-testflight
+  cancel-in-progress: false
+
+jobs:
+  testflight:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - name: Checkout reviewed source
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Check Apple secrets
+        id: gate
+        env:
+          HAS_ASC_KEY_ID: ${{ secrets.ASC_KEY_ID != '' }}
+          HAS_ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID != '' }}
+          HAS_ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY != '' }}
+          HAS_APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID != '' }}
+        run: |
+          missing=""
+          for name in ASC_KEY_ID ASC_ISSUER_ID ASC_PRIVATE_KEY APPLE_TEAM_ID; do
+            flag="HAS_$name"
+            [ "${!flag}" = "true" ] || missing="$missing $name"
+          done
+          if [ -n "$missing" ]; then
+            echo "upload=false" >> "$GITHUB_OUTPUT"
+            message="TestFlight upload skipped: missing repository secrets:$missing. This run only checks that the unsigned release archive builds."
+            echo "::notice title=No Apple credentials::$message"
+            echo "$message" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "upload=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Select Xcode 26
+        run: |
+          xcode_app=""
+          for app in /Applications/Xcode_26*.app; do
+            # Glob order is lexical; keep the newest non-beta (betas cannot upload).
+            case "$app" in *[Bb]eta*) ;; *) if [ -d "$app" ]; then xcode_app="$app"; fi ;; esac
+          done
+          if [ -z "$xcode_app" ]; then
+            echo "::error::No Xcode 26 on this runner; App Store Connect rejects builds made without the iOS 26 SDK."
+            exit 1
+          fi
+          sudo xcode-select -s "$xcode_app/Contents/Developer"
+          xcodebuild -version
+
+      - name: Generate Xcode project
+        run: |
+          brew install xcodegen
+          xcodegen generate --spec mobile/ios/project.yml
+          # Every upload needs a new, higher build number; reruns bump the attempt.
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}" mobile/ios/App/Info.plist
+
+      # Unsigned on purpose: an automatically signed archive needs a development
+      # profile, which Apple cannot create for a team with no registered devices.
+      # Distribution signing happens at export below.
+      - name: Archive release build
+        run: >-
+          xcodebuild archive
+          -project mobile/ios/MomoBot.xcodeproj
+          -scheme MomoBot
+          -configuration Release
+          -destination 'generic/platform=iOS'
+          -archivePath "$RUNNER_TEMP/MomoBot.xcarchive"
+          CODE_SIGNING_ALLOWED=NO
+
+      - name: Sign and upload to TestFlight
+        if: steps.gate.outputs.upload == 'true'
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          # RUNNER_TEMP is emptied at the end of the job.
+          umask 077
+          key_path="$RUNNER_TEMP/AuthKey_${ASC_KEY_ID}.p8"
+          printf '%s\n' "$ASC_PRIVATE_KEY" > "$key_path"
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>upload</string>
+            <key>signingStyle</key><string>automatic</string>
+            <key>teamID</key><string>${APPLE_TEAM_ID}</string>
+            <key>manageAppVersionAndBuildNumber</key><false/>
+          </dict>
+          </plist>
+          EOF
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/MomoBot.xcarchive" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+            -exportPath "$RUNNER_TEMP/export" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$key_path" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID"
+          echo "Uploaded MomoBot build ${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}. TestFlight shows it after Apple finishes processing." >> "$GITHUB_STEP_SUMMARY"
