@@ -129,3 +129,10 @@ def test_refuses_commit_not_on_main(box):
     result = run("box-release", "0" * 40)
     assert result.returncode != 0
     assert state()["stub"] == "" and state()["gateway"] == "gw:old"
+
+
+def test_refuses_process_substitution_instead_of_tagging_a_no_op(box):
+    # Regression (Oct 22): `bash <(...)` piped an empty script to the box, exited 0 and tagged a release that never deployed.
+    result = subprocess.run(["bash", "-c", 'bash <(cat "$0") rollback', str(SCRIPT)], capture_output=True, text=True, timeout=60)
+    assert result.returncode == 1
+    assert "run release.sh from a file" in result.stderr
