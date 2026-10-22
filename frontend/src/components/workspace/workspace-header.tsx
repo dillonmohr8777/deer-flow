@@ -20,7 +20,7 @@ import { cn } from "@/lib/utils";
 
 export function WorkspaceHeader({ className }: { className?: string }) {
   const { t } = useI18n();
-  const { state } = useSidebar();
+  const { state, isMobile } = useSidebar();
   const pathname = usePathname();
   // A client has no Command Center, and every new chat is with MomoBot Max.
   const isClient = useIsClient();
@@ -28,6 +28,7 @@ export function WorkspaceHeader({ className }: { className?: string }) {
     ? CLIENT_NEW_CHAT_PATH
     : "/workspace/command-center";
   const newChatPath = isClient ? CLIENT_NEW_CHAT_PATH : "/workspace/chats/new";
+  const sidebarIsCollapsed = state === "collapsed" && !isMobile;
   return (
     <>
       <div
@@ -38,7 +39,7 @@ export function WorkspaceHeader({ className }: { className?: string }) {
           className,
         )}
       >
-        {state === "collapsed" ? (
+        {sidebarIsCollapsed ? (
           <div className="group-has-data-[collapsible=icon]/sidebar-wrapper:-translate-y flex w-full cursor-pointer items-center justify-center">
             <div className="text-primary block pt-1 font-serif group-hover/workspace-header:hidden">
               M

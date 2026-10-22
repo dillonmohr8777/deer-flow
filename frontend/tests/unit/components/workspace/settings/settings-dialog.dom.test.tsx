@@ -81,6 +81,7 @@ describe("settings sections by role", () => {
       name: enUS.settings.sections.appearance,
     });
     expect(current()).toEqual([appearance]);
+    expect(document.activeElement).toBe(appearance);
   });
 
   it.each(["admin", "exec", "user"] as const)(

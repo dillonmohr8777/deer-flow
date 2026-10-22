@@ -11,7 +11,11 @@ import {
 } from "../threads/static-demo";
 import type { AgentThreadState } from "../threads/types";
 
-import { isStateChangingMethod, readCsrfCookie } from "./fetcher";
+import {
+  isStateChangingMethod,
+  readCsrfCookie,
+  redirectOnUnauthorized,
+} from "./fetcher";
 import { forceChatRunStreamOptions } from "./stream-mode";
 
 /**
@@ -449,6 +453,14 @@ function createCompatibleClient(isMock?: boolean): LangGraphClient {
   const client = new LangGraphClient({
     apiUrl,
     onRequest: injectCsrfHeader,
+    callerOptions: {
+      fetch: async (...args: Parameters<typeof globalThis.fetch>) => {
+        const response = await globalThis.fetch(...args);
+        redirectOnUnauthorized(response);
+        // Let the SDK keep its HTTP error and no-retry policy for 401s.
+        return response;
+      },
+    },
   });
 
   const originalRunStream = client.runs.stream.bind(client.runs);

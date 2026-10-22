@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, rs } from "@rstest/core";
 
+import { getAPIClient } from "@/core/api/api-client";
 import { fetch as apiFetch } from "@/core/api/fetcher";
 
 describe("api fetcher unauthorized redirect", () => {
@@ -36,6 +37,22 @@ describe("api fetcher unauthorized redirect", () => {
     ).searchParams.get("next");
     expect(next).toBe(
       "/artifacts/view?path=%2Fmnt%2Fuser-data%2Foutputs%2Freport.md&thread_id=t-1",
+    );
+  });
+
+  it("returns SDK requests to sign-in without retrying an expired session", async () => {
+    window.history.replaceState(
+      {},
+      "",
+      "/workspace/chats/new?settings=security",
+    );
+
+    await expect(getAPIClient(true).threads.search({})).rejects.toThrow();
+
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    expect(window.location.pathname).toBe("/login");
+    expect(new URL(window.location.href).searchParams.get("next")).toBe(
+      "/workspace/chats/new?settings=security",
     );
   });
 });

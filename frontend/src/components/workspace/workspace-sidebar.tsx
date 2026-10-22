@@ -1,5 +1,8 @@
 "use client";
 
+import { usePathname, useSearchParams } from "next/navigation";
+import { useEffect, useRef } from "react";
+
 import { Scraps } from "@/components/momentum/scraps";
 import {
   Sidebar,
@@ -30,7 +33,12 @@ import styles from "./workspace-sidebar.module.css";
 export function WorkspaceSidebar({
   ...props
 }: React.ComponentProps<typeof Sidebar>) {
-  const { open: isSidebarOpen } = useSidebar();
+  const { open, isMobile, setOpenMobile } = useSidebar();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const locationKey = `${pathname}?${searchParams.toString()}`;
+  const previousLocationKey = useRef(locationKey);
+  const isSidebarOpen = isMobile || open;
   const { motionOn } = useWorkspaceAppearance();
   // A client sees chats and nothing internal: no workspace switcher, plugin
   // pages, channels, projects or background work.
@@ -38,14 +46,60 @@ export function WorkspaceSidebar({
   // Until the role resolves the user may be a client: show no internal UI.
   const unresolved = useIsRoleUnresolved();
   const showInternal = !isClient && !unresolved;
+
+  useEffect(() => {
+    const locationChanged = previousLocationKey.current !== locationKey;
+    if (locationChanged) previousLocationKey.current = locationKey;
+    if (!isMobile || locationChanged) setOpenMobile(false);
+  }, [isMobile, locationKey, setOpenMobile]);
+
+  const closeMobileSidebarForWorkspaceLink: React.MouseEventHandler<
+    HTMLDivElement
+  > = (event) => {
+    if (
+      event.defaultPrevented ||
+      event.button !== 0 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey
+    ) {
+      return;
+    }
+
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+
+    const link = target.closest<HTMLAnchorElement>("a[href]");
+    if (!link || link.hasAttribute("download")) return;
+    if (link.target && link.target !== "_self") return;
+
+    const url = new URL(link.href, window.location.href);
+    if (url.origin !== window.location.origin) return;
+    if (
+      url.pathname !== "/workspace" &&
+      !url.pathname.startsWith("/workspace/")
+    ) {
+      return;
+    }
+
+    setOpenMobile(false);
+  };
+
   return (
     <ThreadDeleteDialogProvider>
       <Sidebar variant="sidebar" collapsible="icon" {...props}>
-        <SidebarHeader className={cn("py-0", styles.phoneTargets)}>
+        <SidebarHeader
+          className={cn("py-0", styles.phoneTargets)}
+          onClickCapture={closeMobileSidebarForWorkspaceLink}
+        >
           <WorkspaceHeader />
           {isSidebarOpen && showInternal && <WorkspaceSelector />}
         </SidebarHeader>
-        <SidebarContent className={styles.phoneTargets}>
+        <SidebarContent
+          className={styles.phoneTargets}
+          onClickCapture={closeMobileSidebarForWorkspaceLink}
+        >
           <WorkspaceNavChatList />
           {showInternal && <PluginNavigation />}
           {showInternal && <WorkspaceChannelsList />}
@@ -56,7 +110,10 @@ export function WorkspaceSidebar({
             </>
           )}
         </SidebarContent>
-        <SidebarFooter className={styles.phoneTargets}>
+        <SidebarFooter
+          className={styles.phoneTargets}
+          onClickCapture={closeMobileSidebarForWorkspaceLink}
+        >
           {/* Docked, not floating: it used to cover the composer and lists. */}
           {isSidebarOpen && (
             <Scraps

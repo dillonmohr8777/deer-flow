@@ -53,7 +53,8 @@ function getProviderUnavailableReason(
 }
 
 export function WorkspaceChannelsList() {
-  const { open: isSidebarOpen } = useSidebar();
+  const { open, isMobile } = useSidebar();
+  const isSidebarOpen = isMobile || open;
   const { t } = useI18n();
   const workspace = useWorkspaceSelection();
   const sharedWorkspace = Boolean(workspace.data?.active_workspace_id);

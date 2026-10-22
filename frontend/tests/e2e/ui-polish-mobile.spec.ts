@@ -25,6 +25,156 @@ test.describe("UI polish mobile regressions", () => {
       .toBeLessThanOrEqual(375);
   });
 
+  test("mobile sidebar closes after following a navigation link", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    mockLangGraphAPI(page);
+
+    await page.goto("/workspace/chats/new");
+
+    await expect(async () => {
+      await page.locator("[data-sidebar='trigger']:visible").first().click();
+      await expect(
+        page.locator("[data-mobile='true'][data-sidebar='sidebar']"),
+      ).toBeVisible({ timeout: 1_000 });
+    }).toPass();
+
+    const mobileSidebar = page.locator(
+      "[data-mobile='true'][data-sidebar='sidebar']",
+    );
+    await mobileSidebar
+      .getByRole("link", { name: "Chats", exact: true })
+      .click();
+
+    await expect(page).toHaveURL(/\/workspace\/chats$/);
+    await expect(mobileSidebar).toBeHidden();
+  });
+
+  test("mobile sidebar closes after query-only navigation", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    mockLangGraphAPI(page);
+
+    await page.goto("/workspace/chats/new?source=mobile");
+
+    await expect(async () => {
+      await page.locator("[data-sidebar='trigger']:visible").first().click();
+      await expect(
+        page.locator("[data-mobile='true'][data-sidebar='sidebar']"),
+      ).toBeVisible({ timeout: 1_000 });
+    }).toPass();
+
+    const mobileSidebar = page.locator(
+      "[data-mobile='true'][data-sidebar='sidebar']",
+    );
+    await mobileSidebar
+      .getByRole("link", { name: "New chat", exact: true })
+      .click();
+
+    await expect(page).toHaveURL(/\/workspace\/chats\/new$/);
+    await expect(mobileSidebar).toBeHidden();
+  });
+
+  test("mobile sidebar closes after activating the current workspace link", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    mockLangGraphAPI(page);
+
+    await page.goto("/workspace/chats/new");
+
+    await expect(async () => {
+      await page.locator("[data-sidebar='trigger']:visible").first().click();
+      await expect(
+        page.locator("[data-mobile='true'][data-sidebar='sidebar']"),
+      ).toBeVisible({ timeout: 1_000 });
+    }).toPass();
+
+    const mobileSidebar = page.locator(
+      "[data-mobile='true'][data-sidebar='sidebar']",
+    );
+    await mobileSidebar
+      .getByRole("link", { name: "New chat", exact: true })
+      .click();
+
+    await expect(page).toHaveURL(/\/workspace\/chats\/new$/);
+    await expect(mobileSidebar).toBeHidden();
+  });
+
+  test("mobile sidebar stays closed after crossing the desktop breakpoint", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    mockLangGraphAPI(page);
+
+    await page.goto("/workspace/chats/new");
+
+    await expect(async () => {
+      await page.locator("[data-sidebar='trigger']:visible").first().click();
+      await expect(
+        page.locator("[data-mobile='true'][data-sidebar='sidebar']"),
+      ).toBeVisible({ timeout: 1_000 });
+    }).toPass();
+
+    const mobileSidebar = page.locator(
+      "[data-mobile='true'][data-sidebar='sidebar']",
+    );
+    await page.setViewportSize({ width: 820, height: 844 });
+    await expect(mobileSidebar).toBeHidden();
+    await page.setViewportSize({ width: 390, height: 844 });
+
+    await expect(mobileSidebar).toBeHidden();
+  });
+
+  test("mobile sidebar keeps recent chats visible when desktop sidebar is collapsed", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    mockLangGraphAPI(page, {
+      threads: [
+        {
+          thread_id: MOCK_THREAD_ID,
+          title: "Recent phone chat",
+        },
+      ],
+    });
+
+    await page.goto("/workspace/chats/new");
+    await page.evaluate(() => {
+      document.cookie = "sidebar_state=false; path=/; max-age=604800";
+    });
+    await page.reload();
+
+    await expect(async () => {
+      await page.locator("[data-sidebar='trigger']:visible").first().click();
+      await expect(
+        page.locator("[data-mobile='true'][data-sidebar='sidebar']"),
+      ).toBeVisible({ timeout: 1_000 });
+    }).toPass();
+
+    const mobileSidebar = page.locator(
+      "[data-mobile='true'][data-sidebar='sidebar']",
+    );
+    await expect(
+      mobileSidebar.locator(`a[href='/workspace/chats/${MOCK_THREAD_ID}']`),
+    ).toBeVisible();
+    await expect(
+      mobileSidebar.getByRole("button", { name: /settings and more/i }),
+    ).toBeVisible();
+    await page.screenshot({
+      path: test.info().outputPath("mobile-sidebar.png"),
+      animations: "disabled",
+    });
+
+    await mobileSidebar
+      .locator(`a[href='/workspace/chats/${MOCK_THREAD_ID}']`)
+      .click();
+    await expect(page).toHaveURL(`/workspace/chats/${MOCK_THREAD_ID}`);
+    await expect(mobileSidebar).toBeHidden();
+  });
+
   test("mobile artifacts open in a drawer without horizontal overflow", async ({
     page,
   }) => {

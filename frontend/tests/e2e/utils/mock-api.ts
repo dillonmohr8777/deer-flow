@@ -306,6 +306,12 @@ function runStreamThreadId(route: Route) {
  */
 export function mockLangGraphAPI(page: Page, options?: MockAPIOptions) {
   void page.route("**/api/plugins", (route) => route.fulfill({ json: [] }));
+  void page.route("**/api/workspaces", (route) => {
+    if (route.request().method() !== "GET") return route.fallback();
+    return route.fulfill({
+      json: { workspaces: [], active_workspace_id: null },
+    });
+  });
   let threads = [...(options?.threads ?? [])];
   const projectsList = (options?.projects ?? []).map((project) => ({
     instructions: "",

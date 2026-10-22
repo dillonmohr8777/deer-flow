@@ -7,6 +7,8 @@ import React, {
   useState,
   useCallback,
   useEffect,
+  useLayoutEffect,
+  useRef,
   type ReactNode,
 } from "react";
 
@@ -34,6 +36,9 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+const useIsomorphicLayoutEffect =
+  typeof window === "undefined" ? useEffect : useLayoutEffect;
+
 interface AuthProviderProps {
   children: ReactNode;
   initialUser: User | null;
@@ -50,6 +55,10 @@ interface AuthProviderProps {
 export function AuthProvider({ children, initialUser }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(initialUser);
   const [isLoading, setIsLoading] = useState(false);
+  const currentUserRef = useRef(initialUser);
+  const initialUserRef = useRef(initialUser);
+  const authGenerationRef = useRef(0);
+  const refreshRequestIdRef = useRef(0);
   const router = useRouter();
   const pathname = usePathname();
   const staticMode = isStaticWebsiteOnly();
@@ -61,9 +70,36 @@ export function AuthProvider({ children, initialUser }: AuthProviderProps) {
    * already fetched it. Equivalent to setUser, exposed with a stable name
    * so consumers don't reach into React internals.
    */
-  const applyUser = useCallback((next: User | null) => {
-    setUser(next);
+  const invalidateAuthRequests = useCallback(() => {
+    authGenerationRef.current += 1;
+    refreshRequestIdRef.current += 1;
   }, []);
+
+  const applyUser = useCallback(
+    (next: User | null) => {
+      // Callers such as the offline banner already hold an authoritative user
+      // response. Fence any older /auth/me request before applying it.
+      invalidateAuthRequests();
+      if (currentUserRef.current?.id !== next?.id) {
+        // Query keys are not uniformly account-scoped. Remove every prior
+        // identity's response before publishing a different user to consumers.
+        queryClient.clear();
+      }
+      currentUserRef.current = next;
+      setUser(next);
+      setIsLoading(false);
+    },
+    [invalidateAuthRequests],
+  );
+
+  // Layout sync keeps a newly server-confirmed identity from being hidden by
+  // the provider's initial useState value during client-side route updates.
+  // It also fences a refresh started under the previous server identity.
+  useIsomorphicLayoutEffect(() => {
+    if (initialUserRef.current === initialUser) return;
+    initialUserRef.current = initialUser;
+    applyUser(initialUser);
+  }, [initialUser, applyUser]);
 
   /**
    * Fetch current user from FastAPI
@@ -71,6 +107,12 @@ export function AuthProvider({ children, initialUser }: AuthProviderProps) {
    */
   const refreshUser = useCallback(async () => {
     if (staticMode) return;
+
+    const requestId = ++refreshRequestIdRef.current;
+    const authGeneration = authGenerationRef.current;
+    const isCurrentRequest = () =>
+      refreshRequestIdRef.current === requestId &&
+      authGenerationRef.current === authGeneration;
 
     try {
       setIsLoading(true);
@@ -80,22 +122,31 @@ export function AuthProvider({ children, initialUser }: AuthProviderProps) {
 
       if (res.ok) {
         const data = await res.json();
-        setUser(data);
+        if (isCurrentRequest()) {
+          applyUser(data);
+        }
       } else if (res.status === 401) {
         // Session expired or invalid
-        setUser(null);
-        // Redirect to login if on a protected route
-        if (pathname?.startsWith("/workspace")) {
-          router.push(buildLoginUrl(pathname));
+        if (isCurrentRequest()) {
+          applyUser(null);
+          // Redirect to login if on a protected route
+          if (pathname?.startsWith("/workspace")) {
+            router.push(buildLoginUrl(pathname));
+          }
         }
       }
     } catch (err) {
-      console.error("Failed to refresh user:", err);
-      setUser(null);
+      // A transport or parse failure does not establish that the session is
+      // invalid. Keep the last confirmed user; only a 401 clears it.
+      if (isCurrentRequest()) {
+        console.error("Failed to refresh user:", err);
+      }
     } finally {
-      setIsLoading(false);
+      if (isCurrentRequest()) {
+        setIsLoading(false);
+      }
     }
-  }, [staticMode, pathname, router]);
+  }, [staticMode, pathname, router, applyUser]);
 
   /**
    * Logout - call FastAPI logout endpoint and clear local state
@@ -110,7 +161,7 @@ export function AuthProvider({ children, initialUser }: AuthProviderProps) {
    */
   const logout = useCallback(async () => {
     // Immediately clear local state to prevent UI flicker
-    setUser(null);
+    applyUser(null);
 
     if (staticMode) {
       router.push("/");
@@ -141,7 +192,7 @@ export function AuthProvider({ children, initialUser }: AuthProviderProps) {
     queryClient.clear();
     // Redirect to home page
     router.push("/");
-  }, [staticMode, router]);
+  }, [staticMode, router, applyUser]);
 
   /**
    * Handle visibility change - refresh user when tab becomes visible again.

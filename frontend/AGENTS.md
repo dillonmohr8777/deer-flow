@@ -401,3 +401,22 @@ List/detail page over `GET/PATCH/POST /api/approvals` (`src/core/approvals/`, `s
 Channel connection setup belongs to the caller's private workspace. Use `core/workspaces/hooks.ts` for the sidebar setup handoff and workspace selector; never submit channel setup against a shared workspace. A successful switch hard-navigates to discard old workspace caches.
 
 The sidebar's Easy / Medium / Hard entry opens the existing Experience settings for staff, including account managers. Keep it hidden for client or unresolved roles, matching the Settings dialog's section policy.
+
+AuthProvider refreshes retain the confirmed user on transport/parse failures and
+clear it only after a confirmed 401 or explicit identity change. Fence responses
+by auth generation and request order; changing user IDs must clear the singleton
+query cache before showing the next user. REST and LangGraph SDK 401s share the
+query-preserving sign-in redirect; retain the SDK's HTTP 401 no-retry behavior.
+Regression coverage is in `auth-logout-clears-cache.dom.test.tsx` and
+`core/api/fetcher.dom.test.ts`.
+
+Mobile sidebar presentation uses `isMobile || open`, while the desktop collapse
+preference remains independent. WorkspaceSidebar closes the drawer on pathname,
+query and desktop breakpoint changes. Keep these fixes in workspace components,
+with coverage in `ui-polish-mobile.spec.ts`, rather than generated UI primitives.
+Installation help stays hidden on authentication/invitation routes; Settings
+autofocus targets the resolved role-allowed section.
+The shared `useAgents` list query waits for feature discovery and revalidation,
+then honors the resolved/sticky Agents flag. Keep the unknown-feature outage
+fallback; `core/agents/hooks.dom.test.tsx` and `agents-feature-disabled.spec.ts`
+cover discovery, disabled results and recovery.

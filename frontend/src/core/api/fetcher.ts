@@ -40,6 +40,13 @@ export function readCsrfCookie(): string | null {
   return null;
 }
 
+export function redirectOnUnauthorized(response: Response): void {
+  if (response.status !== 401 || typeof window === "undefined") return;
+  window.location.href = buildLoginUrl(
+    `${window.location.pathname}${window.location.search}`,
+  );
+}
+
 /**
  * Fetch with credentials and automatic CSRF protection.
  *
@@ -99,9 +106,7 @@ export async function fetch(
     // Include the search string: routes that carry their target in the query
     // (e.g. the standalone artifact viewer) are otherwise unrecoverable after
     // login, which lands on the default workspace instead.
-    window.location.href = buildLoginUrl(
-      `${window.location.pathname}${window.location.search}`,
-    );
+    redirectOnUnauthorized(res);
     throw new UnauthorizedError();
   }
 

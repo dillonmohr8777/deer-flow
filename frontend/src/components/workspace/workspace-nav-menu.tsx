@@ -50,7 +50,8 @@ function NavMenuButtonContent({
 export function WorkspaceNavMenu() {
   const { openSettings } = useSettingsDialog();
   const [mounted, setMounted] = useState(false);
-  const { open: isSidebarOpen } = useSidebar();
+  const { open, isMobile } = useSidebar();
+  const isSidebarOpen = isMobile || open;
   const { t } = useI18n();
   const isClient = useIsClient();
   const unresolved = useIsRoleUnresolved();

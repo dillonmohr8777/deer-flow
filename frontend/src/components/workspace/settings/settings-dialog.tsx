@@ -267,7 +267,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
           // is selected: two highlights at once. Focus the selected one.
           event.preventDefault();
           navRef.current
-            ?.querySelector<HTMLElement>(`[data-section="${defaultSection}"]`)
+            ?.querySelector<HTMLElement>(`[data-section="${activeSection}"]`)
             ?.focus();
         }}
       >
