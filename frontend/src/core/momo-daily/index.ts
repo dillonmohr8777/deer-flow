@@ -184,6 +184,7 @@ export function reporterLayers(slug: ReporterSlug) {
 
 const ORGANIZATION = {
   "@type": "Organization",
+  "@id": `${SITE_URL}/#organization`,
   name: "Momentum",
   url: SITE_URL,
   logo: { "@type": "ImageObject", url: absoluteUrl("/momentum/wordmark.png") },
@@ -214,6 +215,7 @@ export function articleJsonLd(article: DailyArticle): JsonLd[] {
       url,
       author: {
         "@type": "Person",
+        "@id": `${SITE_URL}/#${article.author.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
         name: article.author.name,
         ...(article.author.title ? { jobTitle: article.author.title } : {}),
         worksFor: ORGANIZATION,
