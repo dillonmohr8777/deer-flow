@@ -8,7 +8,7 @@ from langchain_core.messages import ToolMessage
 from deerflow.factcheck import Evidence, verify_draft
 from deerflow.tools.builtins.verify_claims_tool import verify_claims_tool
 
-GOOGLE_TERMS = Evidence("google_ads_search_terms", '{"account": "Omega Landscape", "channel": "Google Ads", "queries": 537, "clicks": 214, "impressions": 6100, "ctr": 3.5}')
+GOOGLE_TERMS = Evidence("google_ads_search_terms", '{"account": "Maple Ridge Landscaping", "channel": "Google Ads", "queries": 537, "clicks": 214, "impressions": 6100, "ctr": 3.5}')
 SPEND = Evidence("google_ads_report", "Google Ads, Sep 1 - Sep 30: spend $1,240.50, conversions 18, CPA $68.92.")
 ROAS = Evidence("meta_ads_report", "Meta Ads\nAug: purchases 80, spend 1000\nSep: purchases 100, spend 1000\nconversions: unavailable")
 
