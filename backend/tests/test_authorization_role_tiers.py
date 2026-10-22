@@ -38,7 +38,7 @@ def test_models_climb_the_tiers(rbac):
     assert _visible(rbac, "admin", "model", MODELS) == MODELS
     assert _visible(rbac, "exec", "model", MODELS) == ["claude-opus-5-5", "claude-haiku-5-5", "claude-sonnet-4"]
     assert _visible(rbac, "user", "model", MODELS) == ["claude-haiku-5-5"]
-    assert _visible(rbac, "client", "model", MODELS) == ["claude-opus-5-5"]
+    assert _visible(rbac, "client", "model", MODELS) == ["claude-opus-5-5", "claude-haiku-5-5"]  # MomoBot Max and the base MomoBot chat
 
 
 def test_a_client_gets_only_the_minimal_tool_list(rbac):

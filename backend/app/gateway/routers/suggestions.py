@@ -7,8 +7,10 @@ from pydantic import BaseModel, Field
 import deerflow.utils.llm_text as llm_text
 from app.gateway.authz import require_permission
 from app.gateway.deps import get_config
+from app.gateway.momobot_max import client_side_model
 from deerflow.config.app_config import AppConfig
 from deerflow.config.suggestions_config import DEFAULT_MAX_SUGGESTIONS, MAX_SUGGESTIONS_LIMIT
+from deerflow.runtime.user_context import get_current_user
 from deerflow.utils.oneshot_llm import run_oneshot_llm
 from deerflow.utils.thread_id import ThreadId
 
@@ -136,7 +138,7 @@ async def generate_suggestions(
             user_content=user_content,
             run_name="suggest_agent",
             app_config=config,
-            model_name=body.model_name,
+            model_name=client_side_model(get_current_user(), body.model_name),
             thread_id=thread_id,
         )
         suggestions = _parse_json_string_list(raw) or []

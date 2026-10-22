@@ -1015,6 +1015,18 @@ Memory is running in tool mode. When present, the injected <memory> block contai
 _EASY_MODE_ASK_LINE = "- Before starting any non-trivial task, ask up to 3 short clarifying questions with `ask_clarification` so you learn about the person, their business, and their preferences.\n"
 
 
+def _build_momobot_tier_section(momobot_tier: str | None) -> str:
+    """The client's subscription when it is the base one. Empty for MomoBot Max (its SOUL already says so) and for every other run."""
+    if momobot_tier != "base":
+        return ""
+    return """<momobot_tier tier="base">
+This client has the MomoBot base subscription. Introduce yourself as MomoBot, not MomoBot Max.
+You chat, explain, plan and draft on your own, without a research team behind you, so keep each job focused.
+When the client wants bigger multi-part work (a full campaign build, an audit across every channel), do the useful first part now
+and tell them their Momentum account manager can turn on MomoBot Max, the all-in-one agent, for that kind of work. Never quote a price.
+</momobot_tier>"""
+
+
 def _build_experience_mode_section(experience_mode: str | None, interaction_policy: RunInteractionPolicy) -> str:
     """Per-user reading-level/depth guidance. Empty for medium (current behaviour) or unknown values."""
     if experience_mode == "easy":
@@ -1090,6 +1102,7 @@ def apply_prompt_template(
     interaction_policy: RunInteractionPolicy | None = None,
     experience_mode: str | None = None,
     public_channel: bool = False,
+    momobot_tier: str | None = None,
 ) -> str:
     interaction_policy = interaction_policy or RunInteractionPolicy.interactive()
     # Include subagent section only if enabled (from runtime parameter)
@@ -1183,7 +1196,7 @@ def apply_prompt_template(
         interaction_thinking_guidance=interaction_policy.thinking_guidance,
         clarification_system=interaction_policy.clarification_system,
         clarification_reminder=interaction_policy.clarification_reminder,
-        experience_mode_section=_build_experience_mode_section(experience_mode, interaction_policy),
+        experience_mode_section=_build_experience_mode_section(experience_mode, interaction_policy) + _build_momobot_tier_section(momobot_tier),
         user_profile_section="" if public_channel else _build_user_profile_section(user_id),
         agent_name=agent_name or "DeerFlow 2.0",
         soul=get_agent_soul(agent_name, user_id=user_id),

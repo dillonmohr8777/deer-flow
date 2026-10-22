@@ -1184,6 +1184,7 @@ def _assemble_lead_agent(config: RunnableConfig, *, app_config: AppConfig) -> Le
             interaction_policy=interaction_policy,
             memory_enabled=memory_enabled,
             experience_mode=cfg.get("experience_mode"),
+            momobot_tier=cfg.get("momobot_tier"),
         )
         graph = create_agent(
             model=chat_model,
@@ -1336,6 +1337,7 @@ def _assemble_lead_agent(config: RunnableConfig, *, app_config: AppConfig) -> Le
         interaction_policy=interaction_policy,
         memory_enabled=memory_enabled,
         experience_mode=cfg.get("experience_mode"),
+        momobot_tier=cfg.get("momobot_tier"),
     )
     from deerflow.extensions import get_agent_build_extensions
     from deerflow.sandbox.native_startup import configure_native_lazy_startup

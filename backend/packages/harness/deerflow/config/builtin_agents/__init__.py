@@ -31,6 +31,10 @@ MOMOBOT_MAX_TOOL_NAMES = [
 
 _SOUL_PATH = Path(__file__).with_name("momobot_max.md")
 
+# What a client on the base subscription sees of the same agent (MomoBot Max is base plus the all-in-one agent).
+MOMOBOT_BASE_DISPLAY_NAME = "MomoBot"
+MOMOBOT_BASE_DESCRIPTION = "Your marketing teammate: ask about your business, your results and what to do next."
+
 
 def _momobot_max_model() -> str | None:
     """The configured model name, or ``None`` while the agent is off (or no config exists)."""
