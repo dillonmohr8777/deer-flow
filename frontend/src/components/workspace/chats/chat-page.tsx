@@ -465,7 +465,7 @@ export default function ChatPage() {
             <header
               data-chat-header=""
               className={cn(
-                "border-border bg-card/80 absolute top-0 right-0 left-0 flex h-12 shrink-0 items-center gap-2 border-b px-2 shadow-xs backdrop-blur sm:px-4",
+                "border-border bg-card absolute top-0 right-0 left-0 flex h-12 shrink-0 items-center gap-2 border-b px-2 shadow-xs sm:px-4",
                 isWelcomeMode ? "z-40" : "z-30",
               )}
             >
@@ -628,7 +628,6 @@ export default function ChatPage() {
                         {activeGoal && <GoalStatus goal={activeGoal} />}
                         {hasTodos && (
                           <TodoList
-                            className="bg-background/5"
                             todos={thread.values.todos ?? []}
                             hidden={false}
                           />
@@ -639,7 +638,7 @@ export default function ChatPage() {
                   {mountedRef.current ? (
                     <InputBox
                       className={cn(
-                        "bg-background/5 w-full",
+                        "w-full",
                         isWelcomeMode && "-translate-y-2 sm:-translate-y-4",
                       )}
                       isWelcomeMode={isWelcomeMode}

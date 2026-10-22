@@ -14,7 +14,6 @@
 .canvas {
   min-height: 100vh;
   background-color: var(--paper-cream);
-  background-image: var(--paper-grain);
   color: var(--paper-ink);
   font-family: var(--m-font-text);
   font-size: 16px;
@@ -57,7 +56,6 @@
 .sheet {
   position: relative;
   background-color: var(--paper-cream-hi);
-  background-image: var(--paper-grain);
   border: 1px solid color-mix(in srgb, var(--paper-line) 45%, transparent);
   box-shadow:
     0 1px 0 rgba(16, 30, 63, 0.05),

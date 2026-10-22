@@ -2309,7 +2309,7 @@ export function InputBox({
         <div className="flex items-center justify-center pb-1">
           <div className="flex items-center gap-2">
             {followupsLoading ? (
-              <div className="text-muted-foreground bg-background/80 rounded-full border px-4 py-1.5 text-xs backdrop-blur-sm">
+              <div className="text-muted-foreground bg-background rounded-full border px-4 py-1.5 text-xs">
                 {t.inputBox.followupLoading}
               </div>
             ) : (
@@ -2341,7 +2341,7 @@ export function InputBox({
         <div className="absolute right-0 bottom-full left-0 z-40 mb-2 px-1">
           <div
             aria-label="Skill suggestions"
-            className="bg-popover/95 text-popover-foreground border-border max-h-72 overflow-y-auto rounded-xl border p-1 shadow-lg backdrop-blur-sm"
+            className="bg-popover text-popover-foreground border-border max-h-72 overflow-y-auto rounded-xl border p-1 shadow-lg"
             role="listbox"
           >
             {skillSuggestions.map((suggestion, index) => {
@@ -2385,7 +2385,7 @@ export function InputBox({
       )}
       <PromptInput
         className={cn(
-          "bg-background/85 relative z-10 rounded-2xl backdrop-blur-sm transition-all duration-300 ease-out *:data-[slot='input-group']:rounded-2xl",
+          "bg-background relative z-10 rounded-2xl transition-[transform,box-shadow,border-color] duration-300 ease-out *:data-[slot='input-group']:rounded-2xl",
           polishingInput &&
             "shadow-primary/10 ring-primary/25 shadow-lg ring-1",
           className,
