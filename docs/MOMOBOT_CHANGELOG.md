@@ -10,6 +10,12 @@ The upstream DeerFlow history stays in [CHANGELOG.md](../CHANGELOG.md).
 
 ## [Unreleased]
 
+## [momobot-prod-20261022-68a630c6] - 2026-10-22
+
+### Changed
+
+- MomoBot Max for the team, short sidebar, Easy/Medium/Hard switch, Oct 22 (#243)
+
 ## [momobot-prod-20261022-cfb3fba0] - 2026-10-22
 
 ### Changed
