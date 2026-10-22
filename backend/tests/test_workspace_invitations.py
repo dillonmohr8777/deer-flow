@@ -756,3 +756,30 @@ async def test_sso_auto_join_respects_the_freeze_and_a_removed_issuer(invitation
     async with invitation_db() as session:
         assert (await session.get(InvitationRow, created.id)).consumed_at is None
         assert await session.get(OrganizationMemberRow, {"organization_id": organization_id, "user_id": "sso-new"}) is None
+
+
+class _AuditRecorder:
+    def __init__(self) -> None:
+        self.rows: list[dict] = []
+
+    async def record(self, **row) -> None:
+        self.rows.append(row)
+
+
+@pytest.mark.asyncio
+async def test_sso_auto_join_applies_the_newest_invitation_per_workspace_and_audits_it(invitation_db, monkeypatch):
+    organization_id = await _seed_workspace(invitation_db)
+    await _add_user(invitation_db, "sso-new", "jesse@example.com", oauth_provider="google")
+    older = await _create(monkeypatch, invitation_db, organization_id, role="admin")
+    newer = await _create(monkeypatch, invitation_db, organization_id, role="member")  # the correction wins
+    audit = _AuditRecorder()
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(audit_repo=audit)))
+
+    assert await invitations.join_invited_workspaces(request, user_id="sso-new", email="jesse@example.com") == organization_id
+
+    async with invitation_db() as session:
+        membership = await session.get(OrganizationMemberRow, {"organization_id": organization_id, "user_id": "sso-new"})
+        assert membership is not None and membership.role == "member"
+        for created in (older, newer):  # the superseded one is used up too, so it cannot be redeemed later
+            assert (await session.get(InvitationRow, created.id)).consumed_at is not None
+    assert [(row["action"], row["target_id"], row["details"]) for row in audit.rows] == [("invitation.accepted", newer.id, {"role": "member", "via": "sso"})]

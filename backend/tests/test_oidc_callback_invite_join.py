@@ -28,14 +28,18 @@ def _request() -> Request:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(("created", "verified", "joins", "join_fails"), [(True, True, True, False), (False, True, False, False), (True, False, False, False), (True, True, False, True)])
-async def test_the_callback_opens_the_invited_workspace_only_for_a_new_verified_account(monkeypatch, created, verified, joins, join_fails):
+@pytest.mark.parametrize(
+    ("created", "verified", "gated", "joins", "join_fails"),
+    [(True, True, True, True, False), (False, True, True, False, False), (True, False, True, False, False), (True, True, False, False, False), (True, True, True, False, True)],
+)
+async def test_the_callback_opens_the_invited_workspace_only_for_a_new_verified_invited_account(monkeypatch, created, verified, gated, joins, join_fails):
     endpoints = dict(authorization_endpoint=None, token_endpoint=None, userinfo_endpoint=None, jwks_uri=None)
-    provider = SimpleNamespace(issuer="https://accounts.google.com", client_id="momobot", client_secret="unused", token_endpoint_auth_method="client_secret_post", **endpoints)
+    provider = SimpleNamespace(issuer="https://accounts.google.com", client_id="momobot", client_secret="unused", token_endpoint_auth_method="client_secret_post", auto_create_requires_invitation=gated, **endpoints)
     app_config = SimpleNamespace(auth=SimpleNamespace(oidc=SimpleNamespace(enabled=True, frontend_base_url="https://momobot.example", providers={"google": provider})))
     monkeypatch.setattr("deerflow.config.app_config.get_app_config", lambda: app_config)
     monkeypatch.setattr("app.gateway.auth.config._auth_config", AuthConfig(jwt_secret="oidc-callback-invite-join-test-secret"))
-    monkeypatch.setattr(auth_router, "get_state_cookie", lambda request, provider_id: SimpleNamespace(state="s", code_verifier="v", nonce="n", next_path=None, remember_me=False))
+    # The invite page sends people to Google with next=/invite; once joined they go to the workspace instead.
+    monkeypatch.setattr(auth_router, "get_state_cookie", lambda request, provider_id: SimpleNamespace(state="s", code_verifier="v", nonce="n", next_path="/invite", remember_me=False))
     monkeypatch.setattr(auth_router, "_resolve_oidc_redirect_uri", lambda *args: "https://momobot.example/api/v1/auth/callback/google")
     identity = SimpleNamespace(email="partner@example.com", email_verified=verified)
     monkeypatch.setattr(auth_router, "_get_oidc_service", lambda: SimpleNamespace(discover=AsyncMock(return_value={}), authenticate_callback=AsyncMock(return_value=identity)))
@@ -50,4 +54,5 @@ async def test_the_callback_opens_the_invited_workspace_only_for_a_new_verified_
     cookies = [value.decode() for key, value in response.raw_headers if key == b"set-cookie"]
     assert any(cookie.startswith("access_token=") for cookie in cookies)
     assert any(cookie.startswith("deerflow_workspace=workspace-1") for cookie in cookies) is joins
-    assert join.await_count == (1 if created and verified else 0)  # a failed join still signs the person in
+    assert join.await_count == (1 if created and verified and gated else 0)  # a failed join still signs the person in
+    assert ("next=/workspace" if joins else "next=/invite") in response.headers["location"]

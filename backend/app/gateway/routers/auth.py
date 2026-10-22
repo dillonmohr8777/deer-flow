@@ -1496,7 +1496,7 @@ async def oauth_callback(
     # workspace: the provider verified the email, which is what the
     # invitation token proves on the password path.
     joined_workspace = None
-    if result.get("created") and identity.email_verified:
+    if result.get("created") and identity.email_verified and provider_config.auto_create_requires_invitation:
         from app.gateway.routers.invitations import join_invited_workspaces
 
         try:
@@ -1509,6 +1509,8 @@ async def oauth_callback(
 
     # Revalidate as defense-in-depth if future state writers populate this target.
     redirect_target = validate_next_param(state_payload.next_path) or "/workspace"
+    if joined_workspace is not None and redirect_target.startswith("/invite"):
+        redirect_target = "/workspace"  # the invitation is already accepted; the invite page would call it used up
     frontend_base = oidc_config.frontend_base_url or ""
     callback_redirect = f"{frontend_base}/auth/callback?next={urllib.parse.quote(redirect_target)}"
 

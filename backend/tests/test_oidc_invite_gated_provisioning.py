@@ -229,9 +229,18 @@ async def test_an_account_it_created_keeps_signing_in_after_the_invitation_is_us
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(("roles", "expected"), [(["client"], "client"), (["client", "member"], "user"), (["member"], "user")])
+@pytest.mark.parametrize(("roles", "expected"), [(["client"], "client"), (["client", "member"], "user"), (["member", "client"], "client"), (["member"], "user")])
 async def test_an_email_invited_only_as_a_client_is_created_as_a_client(db, roles, expected):
     for index, role in enumerate(roles):
         await _invite(db, invitation_id=f"invite-{index}", role=role)
     result = await get_or_provision_oidc_user("google", _config(auto_create_requires_invitation=True), _identity(), _provider(db))
     assert result["created"] is True and result["user"].system_role == expected
+
+
+@pytest.mark.asyncio
+async def test_a_client_only_invitation_creates_nothing_while_rbac_has_no_client_block(db, monkeypatch):
+    await _invite(db, role="client")
+    monkeypatch.setattr(user_provisioning, "role_has_policy", lambda role: role != "client")
+    with pytest.raises(HTTPException) as refused:
+        await get_or_provision_oidc_user("google", _config(auto_create_requires_invitation=True), _identity(), _provider(db))
+    assert refused.value.status_code == 403 and await _user_count(db) == 0

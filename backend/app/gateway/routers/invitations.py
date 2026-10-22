@@ -254,6 +254,7 @@ async def join_invited_workspaces(request: Request, *, user_id: str, email: str)
             if user is None:
                 return None
             candidates = (await session.scalars(select(InvitationRow).where(func.lower(InvitationRow.email) == email.strip().lower(), InvitationRow.consumed_at.is_(None)).order_by(InvitationRow.created_at.desc()))).all()
+            joined_workspaces: set[str] = set()
             for invitation in candidates:
                 if _as_utc(invitation.expires_at) <= now or not await invitation_issuer_is_active(session, invitation):
                     continue
@@ -264,6 +265,9 @@ async def join_invited_workspaces(request: Request, *, user_id: str, email: str)
                 )
                 if reserved.rowcount != 1:
                     continue
+                if invitation.organization_id in joined_workspaces:
+                    continue  # an older invitation to a workspace already joined: superseded, so used up but not applied
+                joined_workspaces.add(invitation.organization_id)
                 became_exec = False
                 if invitation.role != "client" and invitation.email in _exec_emails() and role_has_policy("exec") and user.system_role == _PLAIN_USER_ROLE:
                     user.system_role = "exec"

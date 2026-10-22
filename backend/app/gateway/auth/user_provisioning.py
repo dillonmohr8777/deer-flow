@@ -15,6 +15,7 @@ from fastapi import HTTPException, status
 
 from app.gateway.auth.local_provider import LocalAuthProvider
 from app.gateway.auth.oidc import OIDCIdentity
+from app.gateway.authz import role_has_policy
 from deerflow.config.auth_config import OIDCProviderConfig
 from deerflow.persistence.engine import get_session_factory
 from deerflow.persistence.organizations.invitation_policy import pending_invitation_roles
@@ -104,6 +105,9 @@ async def get_or_provision_oidc_user(
     # in. The refusal is the same 403 as auto-create being off, so a login
     # attempt cannot probe which emails hold an invitation.
     pending_roles = await _identity_pending_invitation_roles(identity, email)
+    if "client" in pending_roles and not role_has_policy("client"):
+        # /accept refuses a client invitation while RBAC has no client block; so does sign-up.
+        pending_roles = pending_roles - {"client"}
     if provider_config.auto_create_requires_invitation and not pending_roles:
         logger.info("Refused SSO auto-create for %s (provider=%s): no pending workspace invitation", email, provider_id)
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=_AUTO_CREATE_DISABLED_DETAIL)
