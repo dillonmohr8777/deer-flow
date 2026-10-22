@@ -24,6 +24,7 @@ from app.gateway.auth.password import hash_password_async
 from app.gateway.auth.session_cookie import ACCESS_TOKEN_COOKIE_NAME, set_session_cookie
 from app.gateway.auth_disabled import AUTH_SOURCE_AUTH_DISABLED, AUTH_SOURCE_INTERNAL, AUTH_SOURCE_PAT, AUTH_SOURCE_SESSION
 from app.gateway.authz import role_has_policy
+from app.gateway.client_boundary import CLIENT_ROLE
 from app.gateway.csrf_middleware import CSRF_COOKIE_NAME, CSRF_HEADER_NAME, is_secure_request
 from app.gateway.deps import get_current_user_from_request, record_audit_event
 from deerflow.persistence.clients.model import ClientAssignmentRow, ClientRow
@@ -263,7 +264,7 @@ async def _join_workspace(session, invitation: InvitationRow, user_id: str, now:
     user = await _locked_invitation_user(session, user_id)
     if user is None or user.disabled_at is not None:
         raise _forbidden()
-    if user.system_role == "client":
+    if user.system_role == CLIENT_ROLE:
         other_customer = await session.scalar(
             select(OrganizationRow.id)
             .join(OrganizationMemberRow, OrganizationMemberRow.organization_id == OrganizationRow.id)
@@ -316,7 +317,7 @@ async def join_invited_workspaces(request: Request, *, user_id: str, email: str)
                 return None
             candidates = (await session.scalars(select(InvitationRow).where(func.lower(InvitationRow.email) == email.strip().lower(), InvitationRow.consumed_at.is_(None)).order_by(InvitationRow.created_at.desc()))).all()
             dedicated: set[str] = set()
-            if user.system_role in {"user", "client"} and role_has_policy("client"):
+            if (user.system_role == _PLAIN_USER_ROLE or user.system_role == CLIENT_ROLE) and role_has_policy("client"):
                 for invitation in candidates:
                     if invitation.role != "client" or _as_utc(invitation.expires_at) <= now or not await invitation_issuer_is_active(session, invitation):
                         continue
