@@ -11,6 +11,7 @@ MOUNTS = [
 ] + [
     "code/momo_guard.py",
     "code/momo_protocol.py",
+    "code/brain_readonly_adapter.py",
 ]
 SETTINGS = {
     "settings.env": (
