@@ -58,5 +58,10 @@ async def test_two_members_share_content_identity_but_revocation_and_foreign_coo
         # The revoked cookie cannot trap the user: selection/discovery remains accessible.
         listing = await read("actor-b", "/api/workspaces")
         assert listing.status_code == 200 and listing.json()["workspaces"] == []
+        # A private workspace with its own name shows it; the default name keeps the client's label.
+        assert listing.json()["private_workspace_name"] == "Private"
+        async with invitation_db() as session, session.begin():
+            (await session.get(OrganizationRow, private_organization_id("actor-b"))).name = "Private organization"
+        assert (await read("actor-b", "/api/workspaces")).json()["private_workspace_name"] is None
         result = await client.post("/api/workspaces/select", headers={"Cookie": "access_token=actor-b"}, json={"workspace_id": shared_id})
         assert result.status_code == 404

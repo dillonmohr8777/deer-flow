@@ -30,6 +30,8 @@ class WorkspaceSummary(BaseModel):
 class WorkspaceListResponse(BaseModel):
     workspaces: list[WorkspaceSummary]
     active_workspace_id: str | None = None
+    # The private workspace's own name once an operator has given it one; None keeps the default label.
+    private_workspace_name: str | None = None
 
 
 class WorkspaceCreateRequest(BaseModel):
@@ -125,7 +127,12 @@ async def list_workspaces(request: Request) -> WorkspaceListResponse:
     selected_id = selected_id.strip() if selected_id and selected_id.strip() else None
     shared_ids = {item.id for item in workspaces}
     active_workspace_id = selected_id if selected_id in shared_ids else None
-    return WorkspaceListResponse(workspaces=workspaces, active_workspace_id=active_workspace_id)
+    private_name = next(organization.name for organization, _role in memberships if organization.id == private_id)
+    return WorkspaceListResponse(
+        workspaces=workspaces,
+        active_workspace_id=active_workspace_id,
+        private_workspace_name=None if private_name == "Private organization" else private_name,
+    )
 
 
 @router.post("", response_model=WorkspaceCreateResponse, status_code=status.HTTP_201_CREATED)
