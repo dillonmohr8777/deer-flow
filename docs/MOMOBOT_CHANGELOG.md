@@ -10,6 +10,14 @@ The upstream DeerFlow history stays in [CHANGELOG.md](../CHANGELOG.md).
 
 ## [Unreleased]
 
+## [momobot-prod-20261022-331f7395] - 2026-10-22
+
+### Changed
+
+- Gateway-only Brain snapshot mount, Oct 22 (#258)
+- MomoBot mobile nav and session recovery, Oct 22 (#256)
+- MomoBot changelog momobot-prod-20261022-526b957d, Oct 22 (#257)
+
 ## [momobot-prod-20261022-526b957d] - 2026-10-22
 
 ### Changed
