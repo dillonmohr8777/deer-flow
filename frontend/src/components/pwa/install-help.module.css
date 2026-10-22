@@ -102,9 +102,21 @@
   outline-offset: 3px;
 }
 
+/* Public pages keep their fixed Pause motion control at the bottom right
+   (momobot.module.css .motionToggle); stack the hint above it, never on it. */
+.hint:not([data-workspace="true"]) {
+  bottom: calc(4.5rem + env(safe-area-inset-bottom));
+}
+
 @media (max-width: 767px) {
   .hint[data-workspace="true"] {
     bottom: calc(88px + env(safe-area-inset-bottom));
+  }
+
+  /* On a phone the sign-in form fills the screen and the hint sat on its
+     Sign in button; it comes back in the workspace after sign-in. */
+  .hint[data-signin="true"] {
+    display: none;
   }
 }
 

@@ -114,6 +114,7 @@ export function InstallHelp() {
       aria-label="MomoBot installation"
       className={styles.hint}
       data-workspace={pathname?.startsWith("/workspace") || undefined}
+      data-signin={pathname === "/login" || undefined}
     >
       <button
         ref={triggerRef}
