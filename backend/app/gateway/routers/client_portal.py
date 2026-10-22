@@ -14,7 +14,7 @@ from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import Response
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 
@@ -83,6 +83,12 @@ class Draft(Closed):
 class Publish(Closed):
     approval_id: str = Field(min_length=1, max_length=64)
     expected_revision: int = Field(ge=1)
+
+
+class CustomerWorkspaceInvitation(Closed):
+    client_id: str = Field(min_length=1, max_length=64)
+    email: EmailStr
+    name: str = Field(min_length=1, max_length=256)
 
 
 class CustomerWorkspace(Closed):
@@ -156,45 +162,119 @@ async def _load(request, thread_id):
     return row[0], row[1], admin, external
 
 
-@router.post("/customer-workspaces", status_code=201)
-async def provision_customer_workspace(body: CustomerWorkspace, request: Request):
-    """Fresh storage only. Reuse workspace creation and the canonical client row."""
-    from app.gateway.routers.workspaces import WorkspaceCreateRequest, create_workspace
-    from deerflow.persistence.user.model import UserRow
+async def _customer_admin(request):
+    from app.gateway.routers.workspaces import _session_actor
 
     actor, org, admin, external = await _identity(request)
-    user = await get_current_user_from_request(request)
+    user = _session_actor(request)
     if not admin or getattr(user, "system_role", None) != "admin":
         raise HTTPException(403, "Global administrator and agency owner/admin required")
-    async with _sf()() as session:
-        canonical = await session.get(ClientRow, body.client_id)
-        customer = await session.get(UserRow, body.user_id)
-        if canonical is None or canonical.organization_id != org or canonical.status != "active":
-            raise _missing()
-        if customer is None or customer.system_role != CLIENT_ROLE or customer.disabled_at is not None:
-            raise HTTPException(422, "Choose an existing active client account")
-        existing = await session.scalar(select(ClientAssignmentRow.client_id).where(ClientAssignmentRow.user_id == body.user_id).limit(1))
-        shared = await session.scalar(
+    return actor, org
+
+
+async def _customer_client(session, *, client_id, org, actor):
+    from deerflow.persistence.organizations.invitation_policy import active_shared_workspace_member
+
+    # The first statement is a write: FOR UPDATE alone is ignored on SQLite.
+    # Every supported provisioner takes this canonical row lock before looking for a binding.
+    locked = await session.execute(update(ClientRow).where(ClientRow.id == client_id, ClientRow.organization_id == org, ClientRow.status == "active").values(updated_at=ClientRow.updated_at))
+    if locked.rowcount != 1:
+        raise _missing()
+    agency, member = await active_shared_workspace_member(session, org, actor)
+    if agency is None or member is None or agency.customer_client_id is not None:
+        raise HTTPException(403, "Active agency owner/admin required")
+    return await session.get(ClientRow, client_id)
+
+
+async def _bound_customer_workspace(session, *, canonical, actor):
+    from deerflow.persistence.organizations.invitation_policy import active_shared_workspace_member
+
+    targets = (await session.scalars(select(OrganizationRow).where(OrganizationRow.customer_client_id == canonical.id))).all()
+    if not targets:
+        return None
+    if len(targets) != 1:
+        raise HTTPException(409, "Client already has conflicting customer workspaces; review its binding")
+    target = targets[0]
+    organization, member = await active_shared_workspace_member(session, target.id, actor)
+    own_roster = await session.scalar(select(ClientRow.id).where(ClientRow.organization_id == target.id).limit(1))
+    agency = await session.get(OrganizationRow, canonical.organization_id)
+    if organization is None or member is None or own_roster or target.id == canonical.organization_id or target.storage_user_id == agency.storage_user_id:
+        raise HTTPException(409, "Customer workspace binding is unavailable")
+    return target
+
+
+async def _fresh_customer_account(session, user_id, *, target_id=None, client_id=None):
+    assignments = (await session.scalars(select(ClientAssignmentRow).where(ClientAssignmentRow.user_id == user_id))).all()
+    shared = (
+        await session.scalars(
             select(OrganizationMemberRow.organization_id)
             .join(OrganizationRow, OrganizationRow.id == OrganizationMemberRow.organization_id)
-            .where(OrganizationMemberRow.user_id == body.user_id, OrganizationMemberRow.status == "active", OrganizationRow.storage_user_id.is_not(None))
-            .limit(1)
+            .where(OrganizationMemberRow.user_id == user_id, OrganizationMemberRow.status == "active", OrganizationRow.storage_user_id.is_not(None))
         )
-        if existing or shared:
-            raise HTTPException(409, "Client account is already assigned; review its existing workspace")
-    # Existing service allocates a new random storage principal and organization.
-    # No caller can bind an old agency bucket. If binding fails, this empty
-    # admin-only workspace remains inaccessible to the customer.
-    created = await create_workspace(WorkspaceCreateRequest(name=body.name), request)
+    ).all()
+    if any(a.client_id != client_id or a.organization_id != target_id for a in assignments) or any(org != target_id for org in shared):
+        raise HTTPException(409, "Client account is already assigned; review its existing workspace")
+
+
+@router.post("/customer-workspaces", status_code=201)
+async def provision_customer_workspace(body: CustomerWorkspace, request: Request):
+    """Fresh existing accounts keep the no-shared-membership migration guard."""
+    from app.gateway.routers.workspaces import _create_workspace_rows
+    from deerflow.persistence.user.model import UserRow
+
+    actor, org = await _customer_admin(request)
     now = datetime.now(UTC)
     async with _sf()() as session, session.begin():
-        target = await session.get(OrganizationRow, created.id)
-        if target is None or target.customer_client_id is not None or target.storage_user_id is None:
-            raise HTTPException(409, "Fresh workspace validation failed")
+        canonical = await _customer_client(session, client_id=body.client_id, org=org, actor=actor)
+        await session.execute(update(UserRow).where(UserRow.id == body.user_id).values(token_version=UserRow.token_version))
+        customer = await session.get(UserRow, body.user_id)
+        if customer is None or customer.system_role != CLIENT_ROLE or customer.disabled_at is not None:
+            raise HTTPException(422, "Choose an existing active client account")
+        await _fresh_customer_account(session, body.user_id)
+        if await _bound_customer_workspace(session, canonical=canonical, actor=actor) is not None:
+            raise HTTPException(409, "Client already has a customer workspace; invite its contact there")
+        target = await _create_workspace_rows(session, actor_id=actor, name=body.name, now=now)
         target.customer_client_id = body.client_id
-        session.add(OrganizationMemberRow(organization_id=created.id, user_id=body.user_id, role="member", status="active", created_at=now, updated_at=now))
-        session.add(ClientAssignmentRow(client_id=body.client_id, user_id=body.user_id, organization_id=created.id, role="client_contact", created_at=now, updated_at=now))
-    return {"workspace_id": created.id, "client_id": body.client_id, "user_id": body.user_id, "delivery": "portal"}
+        session.add(OrganizationMemberRow(organization_id=target.id, user_id=body.user_id, role="member", status="active", created_at=now, updated_at=now))
+        session.add(ClientAssignmentRow(client_id=body.client_id, user_id=body.user_id, organization_id=target.id, role="client_contact", created_at=now, updated_at=now))
+    return {"workspace_id": target.id, "client_id": body.client_id, "user_id": body.user_id, "delivery": "portal"}
+
+
+@router.post("/customer-workspaces/invitations", status_code=201)
+async def invite_customer_workspace(body: CustomerWorkspaceInvitation, request: Request, response: Response):
+    """Create/bind first, then issue the existing private single-use invitation."""
+    from app.gateway.routers import invitations
+    from app.gateway.routers.workspaces import _create_workspace_rows
+
+    invitations._no_store(response)
+    invitations._refuse_if_frozen()
+    if not invitations.role_has_policy("client"):
+        raise HTTPException(409, "Role 'client' is not defined under authorization.provider.config.roles; add it before inviting clients")
+    actor, org = await _customer_admin(request)
+    now = datetime.now(UTC)
+    email = str(body.email).lower()
+    async with _sf()() as session, session.begin():
+        canonical = await _customer_client(session, client_id=body.client_id, org=org, actor=actor)
+        target = await _bound_customer_workspace(session, canonical=canonical, actor=actor)
+        customer = await invitations._find_user_by_email(session, email)
+        if customer is not None:
+            if customer.disabled_at is not None:
+                raise HTTPException(422, "Choose an active customer account")
+            await _fresh_customer_account(session, customer.id, target_id=target.id if target else None, client_id=body.client_id)
+        if target is None:
+            target = await _create_workspace_rows(session, actor_id=actor, name=body.name, now=now)
+            target.customer_client_id = body.client_id
+        # Only pending client links for this workspace/email are rotated. A retry returns a fresh token.
+        await session.execute(
+            update(invitations.InvitationRow)
+            .where(invitations.InvitationRow.organization_id == target.id, invitations.InvitationRow.email == email, invitations.InvitationRow.role == "client", invitations.InvitationRow.consumed_at.is_(None))
+            .values(consumed_at=now, updated_at=now)
+        )
+        created = invitations._create_invitation_row(session, organization=target, email=email, role="client", actor_id=actor, now=now)
+    await invitations.record_audit_event(
+        request, action="invitation.created", outcome="success", actor_user_id=actor, organization_id=target.id, target_type="invitation", target_id=created.id, details={"email": email, "role": "client", "client_id": body.client_id}
+    )
+    return {"workspace_id": target.id, "client_id": body.client_id, **created.model_dump()}
 
 
 def _message(message):
