@@ -25,7 +25,7 @@
     },
     {
       "title": "The source plan is signed",
-      "narration": "The reviewed source plan is saved with the inventory hashes and a note of who reviewed it and when. From here the engine only accepts clips in the plan. If someone drops a new clip in the folder, the plan does not pick it up by accident. That is how v2 of this film dropped the near black shot at 18 seconds and the ceiling shot at 36: the plan changed, on purpose, with a note.",
+      "narration": "The reviewed source plan is saved with the inventory hashes and a note of who reviewed it and when. From here the engine only accepts clips in the plan. If someone drops a new clip in the folder, the plan does not pick it up by accident. That is how v2 of this film dropped the near black shot at 18 seconds and the ceiling shot at 36. The plan changed, on purpose, with a note.",
       "visual": "Signed source plan card with reviewer, date and hash, and a stray new clip in the folder shown ignored."
     },
     {

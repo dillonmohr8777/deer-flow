@@ -50,7 +50,7 @@
     },
     {
       "title": "What never leaves the machine",
-      "narration": "The voice reference, the narration audio, client data and model weights never enter Git. Public release, hosting and messages are separate decisions made by the owner, not by the pipeline. This is a lot of gates for a 5 minute video. That is the point. My voice goes out only on words I approved, from files I can prove. That is also why a lesson takes a day to produce and not an hour.",
+      "narration": "The voice reference, the narration audio, client data and model weights never enter Git. Public release, hosting and messaging are decisions the owner makes, not the pipeline. This is a lot of gates for a 5 minute video. That is the point. My voice goes out only on words I approved, from files I can prove. That is also why a lesson takes a day to produce and not an hour.",
       "visual": "Four locked cards: voice reference, narration audio, client data, model weights, with an owner key beside a release switch."
     }
   ]
