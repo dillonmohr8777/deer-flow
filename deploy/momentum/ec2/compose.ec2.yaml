@@ -21,6 +21,11 @@ services:
       - /opt/momobot/data/evals:/app/backend/.deer-flow/agency-evals:ro
       - /opt/momobot/code/momo_guard.py:/app/backend/packages/harness/deerflow/community/browser_automation/momo_guard.py:ro
       - /opt/momobot/code/momo_protocol.py:/app/backend/packages/harness/deerflow/community/browser_automation/momo_protocol.py:ro
-      # Operator extension from the release checkout (same SHA as the image). Off until a plugins:
-      # entry in /opt/momobot/config.yaml names it; its data_dir lives in gateway-data.
-      - /opt/momobot/src/examples/vhin-placement/vhin_placement:/app/backend/vhin_placement:ro
+      # Placement extension from a pinned git worktree (README "Operator extensions"). Inert until a
+      # plugins: entry in /opt/momobot/config.yaml names it. A missing source fails the start.
+      - type: bind
+        source: /opt/momobot/extensions/placement/examples/vhin-placement/vhin_placement
+        target: /app/backend/vhin_placement
+        read_only: true
+        bind:
+          create_host_path: false

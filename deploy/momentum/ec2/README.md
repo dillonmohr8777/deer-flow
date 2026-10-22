@@ -9,7 +9,8 @@ EC2 adds three things:
   (tmpfs, root 600). These environment credentials stay out of git and backups;
   the private gateway backup still contains its JWT signing secret and user data.
 - **The gateway's extra mounts** (`compose.ec2.yaml`): skills, admission, lobby notes, brand kit, evals and the
-  two browser guard modules, from `/opt/momobot/data` and `/opt/momobot/code`.
+  two browser guard modules, from `/opt/momobot/data` and `/opt/momobot/code`, plus the pinned placement
+  extension (see Operator extensions).
 - **systemd drop-ins** (`systemd/`) that point the kit's units at the tmpfs env file and the EC2 layer.
 
 ## Layout on the box
@@ -22,13 +23,28 @@ EC2 adds three things:
 /opt/momobot/settings.env     non-secret: MOMOBOT_DOMAIN, MOMOBOT_ACME_EMAIL, image tags, GATEWAY_ENABLE_DOCS
 /opt/momobot/data/{skills,admission,lobby-notes,brand,evals}
 /opt/momobot/code/{momo_guard.py,momo_protocol.py}
+/opt/momobot/extensions/placement   pinned git worktree for the placement extension (runtime code, not backed up)
 ```
 
-Operator extensions: compose mounts `examples/vhin-placement/vhin_placement` from `/opt/momobot/src`
-read-only, so it moves with each release. It stays off until `/opt/momobot/config.yaml` has a
-`plugins:` entry for it (`use: vhin_placement:install`, `required: false`, no `package:`). Point its
-`data_dir` inside the gateway volume (`/app/backend/.deer-flow/extensions/<name>`), so the nightly
-SQLite-safe gateway snapshot already backs it up and restores it with `gateway-data.tgz`.
+### Operator extensions
+
+The placement extension (`examples/vhin-placement`) is not in the image yet, so compose bind-mounts it
+read-only from a detached worktree pinned to the image's SHA. Pinning keeps image rollback and
+extension code independent of the `/opt/momobot/src` checkout. Update it on purpose, under
+`/run/momobot-release.lock`:
+
+```sh
+sudo git -C /opt/momobot/src worktree add --detach /opt/momobot/extensions/placement <image-sha>
+# later: sudo git -C /opt/momobot/extensions/placement checkout --detach <new-sha>
+```
+
+It stays inert until `/opt/momobot/config.yaml` has a `plugins:` entry with `use: vhin_placement:install`,
+`required: false`, no `package:`, and every config key in that example's README. Put `data_dir` inside the
+gateway volume (`/app/backend/.deer-flow/extensions/<name>`) so the nightly gateway snapshot backs it up
+and `gateway-data.tgz` restores it. Readback after a restart: `docker logs momobot-prod-gateway | grep
+extension`, then an authenticated `GET /api/vhin/state`. Its SQLite file uses rollback-journal mode: if a
+gateway crash leaves a hot journal, the nightly backup fails on that file (health.sh flags the stale
+stamp). One authenticated desk request rolls the journal back; then rerun the backup.
 
 ## Operate
 
@@ -161,13 +177,15 @@ unchanged.
 ## Nightly recovery contents
 
 The existing backup timer includes the consistent gateway SQLite snapshot, config and MCP settings,
-a Redis-native RDB snapshot verified by `redis-check-rdb`, and the seven EC2 bind mounts listed above.
+a Redis-native RDB snapshot verified by `redis-check-rdb`, and the seven EC2 data and guard bind mounts
+listed above (the extension worktree is code from git and is recreated, not backed up).
 `ec2-recovery.json` carries only the known non-secret image/domain/frontend-owner settings needed to
 recreate `settings.env` and `frontend.env`. Environment files remain excluded; reload credentials
 from SSM. The gateway snapshot contains private user data and its JWT signing secret, so keep the
 S3 bucket private and encrypted.
 
-For a replacement host, install the merged source and EC2 kit, verify every `MANIFEST.sha256` entry,
+For a replacement host, install the merged source and EC2 kit, recreate the pinned extension worktree
+(compose refuses to start without it), verify every `MANIFEST.sha256` entry,
 restore `gateway-data.tgz` into an empty gateway volume, and restore `ec2-mounts.tgz` under
 `/opt/momobot`. Recreate the two non-secret env files from `ec2-recovery.json`. With Redis stopped
 and an empty Redis volume, install `redis.rdb` as `dump.rdb` with the image's Redis ownership;
