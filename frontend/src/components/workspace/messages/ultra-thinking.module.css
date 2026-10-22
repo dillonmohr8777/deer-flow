@@ -28,7 +28,6 @@
   --ur-key-deep: var(--card-foreground);
   --ur-muted: var(--muted-foreground);
   --ur-line: var(--border);
-  --ur-cyan: color-mix(in srgb, var(--muted-foreground) 55%, transparent);
   --ur-brass: var(--border);
 
   position: relative;
@@ -47,7 +46,6 @@
   --ur-key: var(--paper-royal);
   --ur-key-deep: var(--paper-royal-deep);
   --ur-muted: var(--paper-ink-muted);
-  --ur-cyan: var(--paper-cyan);
   --ur-brass: var(--paper-brass);
 }
 
@@ -188,7 +186,6 @@
   background: currentcolor;
 }
 
-/* Second drum: cyan, halftoned, overprinted a few pixels off. Never read. */
 /* ---------- Working squares: one dot gliding across three, 1.2s each way ---------- */
 
 .squares {
@@ -230,7 +227,7 @@
 
 @keyframes ur-tick {
   to {
-    transform: translateX(24px);
+    transform: translateX(16px);
   }
 }
 

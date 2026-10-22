@@ -83,7 +83,7 @@
 
 /* --surface/--line are already remapped per treatment above, so this one
    rule (not a hardcoded near-white) is enough to theme every treatment;
-   paper alone keeps a bespoke grain background below. */
+   paper alone keeps a bespoke cream background below. */
 .topbar {
   position: relative;
   z-index: 2;
@@ -266,13 +266,13 @@
   --green: var(--paper-ok);
   --danger: var(--paper-danger);
   --focus: var(--paper-focus);
-  /* The shell's own paper canvas: cream with its 5% grain, so the page and
+  /* The shell's own paper canvas: flat cream, so the page and
      the sidebar read as one sheet. */
-  background: var(--paper-cream) var(--paper-grain);
+  background: var(--paper-cream);
 }
 .root[data-treatment="paper"] .topbar {
   border-bottom-color: var(--line);
-  background: var(--paper-cream) var(--paper-grain);
+  background: var(--paper-cream);
 }
 
 /* Space, Future and Retro: reskin the hero surface's local palette so it

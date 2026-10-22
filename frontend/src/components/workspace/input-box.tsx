@@ -2385,7 +2385,7 @@ export function InputBox({
       )}
       <PromptInput
         className={cn(
-          "bg-background relative z-10 rounded-2xl transition-[box-shadow,border-color] duration-300 ease-out *:data-[slot='input-group']:rounded-2xl",
+          "bg-background relative z-10 rounded-2xl transition-[transform,box-shadow,border-color] duration-300 ease-out *:data-[slot='input-group']:rounded-2xl",
           polishingInput &&
             "shadow-primary/10 ring-primary/25 shadow-lg ring-1",
           className,

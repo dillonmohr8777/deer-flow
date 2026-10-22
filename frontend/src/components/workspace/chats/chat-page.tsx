@@ -628,7 +628,6 @@ export default function ChatPage() {
                         {activeGoal && <GoalStatus goal={activeGoal} />}
                         {hasTodos && (
                           <TodoList
-                            className="bg-background/5"
                             todos={thread.values.todos ?? []}
                             hidden={false}
                           />
@@ -639,7 +638,7 @@ export default function ChatPage() {
                   {mountedRef.current ? (
                     <InputBox
                       className={cn(
-                        "bg-background/5 w-full",
+                        "w-full",
                         isWelcomeMode && "-translate-y-2 sm:-translate-y-4",
                       )}
                       isWelcomeMode={isWelcomeMode}

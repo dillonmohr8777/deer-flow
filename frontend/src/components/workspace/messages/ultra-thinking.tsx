@@ -220,13 +220,11 @@ export function DeepReasoningStatus({
 }
 
 export function DeepReasoning({
-  messageId: _messageId,
   reasoning,
   live,
   seconds,
   framed = true,
 }: {
-  messageId: string;
   reasoning: string;
   live: boolean;
   seconds: number | null;
@@ -284,7 +282,7 @@ export function DeepReasoning({
   );
 }
 
-/** The motion vocabulary's working state: three squares ticking in steps. */
+/** The motion vocabulary's working state: one dot gliding across three squares. */
 export function WorkingSquares() {
   return (
     <span className={styles.squares} aria-hidden="true">

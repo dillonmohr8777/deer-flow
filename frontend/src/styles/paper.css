@@ -41,7 +41,6 @@
   --paper-kraft: #d8c3a0;
 
   /* The landing's 5% grain as a background tile, so it sits under content. */
-  --paper-grain: none; /* Oct 22: the 5% feTurbulence grain read as static on phones and cost scroll paint; flat cream instead. */
 
   /* Ink */
   --paper-ink: #101e3f;
@@ -155,7 +154,7 @@
  * dialogs and the mobile sidebar sheet.
  */
 
-/* Flat cream canvas with grain. Replaces the blue and violet washes. */
+/* Flat cream canvas. Replaces the blue and violet washes. */
 :is(
     :root:not(.dark)[data-treatment="paper"],
     :root:not(.dark) [data-workspace-shell][data-treatment="paper"]
@@ -167,7 +166,6 @@
     .momentum-conversation-surface
   ) {
   background-color: var(--paper-cream);
-  background-image: var(--paper-grain);
   color: var(--paper-ink);
 }
 
