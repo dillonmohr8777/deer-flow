@@ -27,7 +27,8 @@ from app.gateway.authz import role_has_policy
 from app.gateway.client_boundary import CLIENT_ROLE
 from app.gateway.csrf_middleware import CSRF_COOKIE_NAME, CSRF_HEADER_NAME, is_secure_request
 from app.gateway.deps import get_current_user_from_request, record_audit_event
-from deerflow.persistence.clients.model import ClientAssignmentRow, ClientRow
+from app.gateway.invitation_policy import PLAIN_USER_ROLE, fresh_customer_assignments, validate_customer_workspace
+from deerflow.persistence.clients.model import ClientAssignmentRow
 from deerflow.persistence.engine import get_session_factory
 from deerflow.persistence.organizations.identity import private_organization_id, private_organization_slug
 from deerflow.persistence.organizations.invitation import InvitationRow
@@ -41,7 +42,7 @@ router = APIRouter(prefix="/api/v1/auth/invitations", tags=["auth"])
 
 _INVITATION_TTL = timedelta(hours=48)
 # The only system role an exec email upgrades; admin and client accounts keep theirs.
-_PLAIN_USER_ROLE = "user"
+_PLAIN_USER_ROLE = PLAIN_USER_ROLE
 
 
 class CreateInvitationRequest(BaseModel):
@@ -54,7 +55,9 @@ class CreateInvitationRequest(BaseModel):
     is never staff, so Momentum-internal surfaces (Team, AI Academy) stay
     hidden from them even before they are given a client assignment. An account
     this creates for a "client" invitation also gets the `client` system role
-    (chat with MomoBot Max only); an existing account keeps its role.
+    (chat with MomoBot Max only). A dedicated customer workspace also upgrades
+    an eligible plain account to client and rejects privileged staff; generic
+    invitations keep their existing system-role rules.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -215,30 +218,7 @@ def _refuse_if_frozen() -> None:
 async def _customer_contact(session, organization: OrganizationRow, user: UserRow, now: datetime) -> None:
     """Bind only a fresh contact (or its exact retry) to the canonical customer."""
     client_id = organization.customer_client_id
-    canonical = await session.get(ClientRow, client_id)
-    agency = await session.get(OrganizationRow, canonical.organization_id) if canonical is not None else None
-    bindings = (await session.scalars(select(OrganizationRow.id).where(OrganizationRow.customer_client_id == client_id))).all()
-    if (
-        canonical is None
-        or canonical.status != "active"
-        or agency is None
-        or agency.id == organization.id
-        or agency.status != "active"
-        or agency.storage_user_id is None
-        or agency.customer_client_id is not None
-        or bindings != [organization.id]
-    ):
-        raise HTTPException(409, "Customer workspace binding is unavailable")
-    assignments = (await session.scalars(select(ClientAssignmentRow).where(ClientAssignmentRow.user_id == user.id))).all()
-    shared = (
-        await session.scalars(
-            select(OrganizationMemberRow.organization_id)
-            .join(OrganizationRow, OrganizationRow.id == OrganizationMemberRow.organization_id)
-            .where(OrganizationMemberRow.user_id == user.id, OrganizationMemberRow.status == "active", OrganizationRow.storage_user_id.is_not(None))
-        )
-    ).all()
-    if user.disabled_at is not None or any(a.client_id != client_id or a.organization_id != organization.id for a in assignments) or any(workspace != organization.id for workspace in shared):
-        raise HTTPException(409, "Client account is already assigned; review its existing workspace")
+    assignments = await fresh_customer_assignments(session, user, target_id=organization.id, client_id=client_id)
     assignment = next(iter(assignments), None)
     if assignment is None:
         session.add(ClientAssignmentRow(client_id=client_id, user_id=user.id, organization_id=organization.id, role="client_contact", created_at=now, updated_at=now))
@@ -246,7 +226,7 @@ async def _customer_contact(session, organization: OrganizationRow, user: UserRo
         assignment.role = "client_contact"
         assignment.updated_at = now
     if user.system_role == _PLAIN_USER_ROLE:
-        user.system_role = "client"
+        user.system_role = CLIENT_ROLE
 
 
 async def _locked_invitation_user(session, user_id: str) -> UserRow | None:
@@ -255,13 +235,14 @@ async def _locked_invitation_user(session, user_id: str) -> UserRow | None:
     return await session.get(UserRow, user_id, populate_existing=True)
 
 
-async def _join_workspace(session, invitation: InvitationRow, user_id: str, now: datetime) -> str:
+async def _join_workspace(session, invitation: InvitationRow, user_id: str, now: datetime, *, user: UserRow | None = None) -> str:
     """Make *user_id* an active member of the invitation's workspace; return the role it holds there.
 
     An owner stays owner. Invitees start on the simple experience (plain answers,
     guided starters) and can switch in Settings; a saved choice always wins.
     """
-    user = await _locked_invitation_user(session, user_id)
+    if user is None:
+        user = await _locked_invitation_user(session, user_id)
     if user is None or user.disabled_at is not None:
         raise _forbidden()
     if user.system_role == CLIENT_ROLE:
@@ -275,6 +256,7 @@ async def _join_workspace(session, invitation: InvitationRow, user_id: str, now:
             raise HTTPException(409, "Client account already belongs to a dedicated customer workspace")
     organization = await session.get(OrganizationRow, invitation.organization_id)
     if invitation.role == "client" and organization is not None and organization.customer_client_id is not None:
+        await validate_customer_workspace(session, organization=organization, actor_id=invitation.created_by)
         await _customer_contact(session, organization, user, now)
     workspace_member = await session.get(OrganizationMemberRow, {"organization_id": invitation.organization_id, "user_id": user_id})
     if workspace_member is None:
@@ -301,8 +283,9 @@ async def join_invited_workspaces(request: Request, *, user_id: str, email: str)
     must pass the same bar as ``/accept`` (unconsumed, unexpired, an active
     shared workspace, an issuer still owner or admin) and is consumed here.
     A dedicated customer invitation excludes other workspaces for a plain/client
-    account; ambiguous customer invitations fail closed. Staff roles keep the
-    existing multi-workspace behavior. Returns the first workspace, or None.
+    account; ambiguous customer invitations and staff recipients fail closed.
+    Generic staff invitations keep the existing multi-workspace behavior.
+    Returns the first workspace, or None.
     """
     from app.gateway.authz import _get_route_authorization_config
 
@@ -316,24 +299,25 @@ async def join_invited_workspaces(request: Request, *, user_id: str, email: str)
             if user is None:
                 return None
             candidates = (await session.scalars(select(InvitationRow).where(func.lower(InvitationRow.email) == email.strip().lower(), InvitationRow.consumed_at.is_(None)).order_by(InvitationRow.created_at.desc()))).all()
+            eligible = []
             dedicated: set[str] = set()
-            if (user.system_role == _PLAIN_USER_ROLE or user.system_role == CLIENT_ROLE) and role_has_policy("client"):
-                for invitation in candidates:
-                    if invitation.role != "client" or _as_utc(invitation.expires_at) <= now or not await invitation_issuer_is_active(session, invitation):
-                        continue
-                    organization = await session.get(OrganizationRow, invitation.organization_id)
-                    if organization.customer_client_id is not None:
-                        dedicated.add(organization.id)
-                if len(dedicated) > 1:
-                    raise HTTPException(409, "Conflicting customer invitations; ask your team to review the workspace binding")
-            joined_workspaces: set[str] = set()
             for invitation in candidates:
+                if _as_utc(invitation.expires_at) <= now or (invitation.role == "client" and not role_has_policy("client")):
+                    continue
+                organization = await session.get(OrganizationRow, invitation.organization_id)
+                if invitation.role == "client" and organization is not None and organization.customer_client_id is not None:
+                    await validate_customer_workspace(session, organization=organization, actor_id=invitation.created_by)
+                    await fresh_customer_assignments(session, user, target_id=organization.id, client_id=organization.customer_client_id)
+                    dedicated.add(organization.id)
+                elif not await invitation_issuer_is_active(session, invitation):
+                    continue
+                eligible.append(invitation)
+            if len(dedicated) > 1:
+                raise HTTPException(409, "Conflicting customer invitations; ask your team to review the workspace binding")
+            joined_workspaces: set[str] = set()
+            for invitation in eligible:
                 # A customer accepts only its dedicated workspace, never an older agency link.
                 if dedicated and (invitation.organization_id not in dedicated or invitation.role != "client"):
-                    continue
-                if _as_utc(invitation.expires_at) <= now or not await invitation_issuer_is_active(session, invitation):
-                    continue
-                if invitation.role == "client" and not role_has_policy("client"):
                     continue
                 reserved = await session.execute(
                     update(InvitationRow).execution_options(synchronize_session=False).where(InvitationRow.id == invitation.id, InvitationRow.consumed_at.is_(None), InvitationRow.expires_at > now).values(consumed_at=now, updated_at=now)
@@ -347,7 +331,7 @@ async def join_invited_workspaces(request: Request, *, user_id: str, email: str)
                 if user.system_role == _PLAIN_USER_ROLE and await _joins_as_exec(session, invitation):
                     user.system_role = "exec"
                     became_exec = True
-                granted_role = await _join_workspace(session, invitation, user_id, now)
+                granted_role = await _join_workspace(session, invitation, user_id, now, user=user)
                 joined.append((invitation.organization_id, invitation.id, granted_role, became_exec))
     for organization_id, invitation_id, granted_role, became_exec in joined:
         details = {"role": granted_role, "via": "sso", **({"system_role": "exec"} if became_exec else {})}
@@ -392,6 +376,12 @@ async def create_invitation(body: CreateInvitationRequest, request: Request, res
         organization, member = await active_shared_workspace_member(session, body.organization_id, actor_id)
         if organization is None or member is None:
             raise HTTPException(status_code=403, detail="Only an active workspace owner or admin can invite members")
+        if body.role == "client" and organization.customer_client_id is not None:
+            await validate_customer_workspace(session, organization=organization, actor_id=actor_id)
+            customer = await _find_user_by_email(session, str(body.email))
+            if customer is not None:
+                customer = await _locked_invitation_user(session, customer.id)
+                await fresh_customer_assignments(session, customer, target_id=organization.id, client_id=organization.customer_client_id)
         created = _create_invitation_row(session, organization=organization, email=str(body.email), role=body.role, actor_id=actor_id, now=now)
     await record_audit_event(
         request, action="invitation.created", outcome="success", actor_user_id=actor_id, organization_id=organization.id, target_type="invitation", target_id=created.id, details={"email": created.email, "role": body.role}
@@ -492,6 +482,12 @@ async def accept_invitation(body: AcceptInvitationRequest, request: Request, res
                         )
                     existing = await _locked_invitation_user(session, existing.id)
 
+                organization = await session.get(OrganizationRow, invitation.organization_id)
+                if invitation.role == "client" and organization is not None and organization.customer_client_id is not None:
+                    await validate_customer_workspace(session, organization=organization, actor_id=invitation.created_by)
+                    if existing is not None:
+                        await fresh_customer_assignments(session, existing, target_id=organization.id, client_id=organization.customer_client_id)
+
                 # Reserve the single-use token before password work.  The
                 # conditional update is the cross-worker fence; a concurrent
                 # accept sees rowcount=0 and cannot create a second member.
@@ -526,6 +522,7 @@ async def accept_invitation(body: AcceptInvitationRequest, request: Request, res
                 # Only an admin-issued invitation carries exec, and never without an RBAC exec block (_joins_as_exec).
                 joins_as_exec = await _joins_as_exec(session, invitation)
                 if existing is not None:
+                    user = existing
                     user_id = existing.id
                     token_version = existing.token_version
                     if joins_as_exec and existing.system_role == _PLAIN_USER_ROLE:
@@ -538,20 +535,18 @@ async def accept_invitation(body: AcceptInvitationRequest, request: Request, res
                     became_exec = joins_as_exec
                     password_hash = await hash_password_async(body.password)
                     private_id = private_organization_id(user_id)
-                    session.add(
-                        UserRow(
-                            id=user_id,
-                            email=invitation.email,
-                            password_hash=password_hash,
-                            # A client's own people get the client tier from day one and
-                            # exec_emails get exec; an existing account keeps its role,
-                            # except that a plain user on exec_emails becomes exec above.
-                            system_role="client" if invitation.role == "client" else "exec" if joins_as_exec else "user",
-                            needs_setup=False,
-                            token_version=0,
-                            created_at=now,
-                        )
+                    user = UserRow(
+                        id=user_id,
+                        email=invitation.email,
+                        password_hash=password_hash,
+                        # Dedicated plain users become clients in _customer_contact;
+                        # generic staff invitations retain their existing role rules.
+                        system_role="client" if invitation.role == "client" else "exec" if joins_as_exec else "user",
+                        needs_setup=False,
+                        token_version=0,
+                        created_at=now,
                     )
+                    session.add(user)
                     session.add(
                         OrganizationRow(
                             id=private_id,
@@ -574,7 +569,7 @@ async def accept_invitation(body: AcceptInvitationRequest, request: Request, res
                         )
                     )
 
-                granted_role = await _join_workspace(session, invitation, user_id, now)
+                granted_role = await _join_workspace(session, invitation, user_id, now, user=user)
     except IntegrityError:
         logger.info("Workspace invitation acceptance conflicted with an existing account or membership")
         raise HTTPException(status_code=409, detail="This invitation could not be accepted; retry from the invitation page") from None

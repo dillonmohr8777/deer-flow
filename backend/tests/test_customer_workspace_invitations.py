@@ -18,7 +18,7 @@ from deerflow.config.authorization_config import AuthorizationConfig
 from deerflow.persistence.clients.model import ClientAssignmentRow, ClientRow
 from deerflow.persistence.organizations.invitation import InvitationRow
 from deerflow.persistence.organizations.model import OrganizationMemberRow, OrganizationRow
-from deerflow.persistence.user.model import UserRow
+from deerflow.persistence.user.model import UserPreferenceRow, UserRow
 
 pytestmark = pytest.mark.asyncio
 PATH = "/api/client-portal/customer-workspaces/invitations"
@@ -164,7 +164,7 @@ async def test_freeze_missing_policy_and_shared_membership_fail_without_orphans(
 
 
 @pytest.mark.parametrize("via", ["local", "sso"])
-@pytest.mark.parametrize("system_role,expected", [("user", "client"), ("client", "client"), ("admin", "admin"), ("exec", "exec")])
+@pytest.mark.parametrize("system_role,expected", [("user", "client"), ("client", "client")])
 async def test_existing_account_and_sso_contact_roles(org_world, monkeypatch, via, system_role, expected):  # noqa: F811
     app = await _setup(org_world, monkeypatch)
     async with org_world() as session, session.begin():
@@ -358,3 +358,145 @@ async def test_generic_join_locks_and_refreshes_stale_user_before_role_decision(
     async with sf() as session:
         assert await session.get(OrganizationMemberRow, {"organization_id": ORG_S, "user_id": USER_B}) is None
         assert (await session.get(InvitationRow, generic.id)).consumed_at is None
+
+
+async def _change_customer_binding(sf, workspace_id, change):
+    async with sf() as session, session.begin():
+        if change == "local_roster":
+            session.add(ClientRow(id="synthetic-local-roster", organization_id=workspace_id, display_name="Unexpected roster"))
+        elif change == "agency_storage":
+            agency = await session.get(OrganizationRow, ORG_S)
+            await session.execute(update(OrganizationRow).where(OrganizationRow.id == workspace_id).values(storage_user_id=agency.storage_user_id))
+        elif change == "agency_issuer":
+            await session.execute(update(OrganizationMemberRow).where(OrganizationMemberRow.organization_id == ORG_S, OrganizationMemberRow.user_id == USER_A).values(role="member"))
+        else:
+            await session.execute(update(UserRow).where(UserRow.id == USER_A).values(system_role="user"))
+
+
+@pytest.mark.parametrize("via", ["local", "sso"])
+@pytest.mark.parametrize("change", ["local_roster", "agency_storage", "agency_issuer", "global_issuer"])
+async def test_late_binding_change_rejects_without_consuming_or_joining(org_world, monkeypatch, via, change):  # noqa: F811
+    app = await _setup(org_world, monkeypatch)
+    async with _http(app) as client:
+        data = (await _invite(client, {**PAYLOAD, "email": "user-b@example.com"})).json()
+    await _change_customer_binding(org_world, data["workspace_id"], change)
+    with pytest.raises(HTTPException) as blocked:
+        if via == "local":
+            await invitations.accept_invitation(invitations.AcceptInvitationRequest(token=data["token"]), _signed_in(USER_B), Response())
+        else:
+            await invitations.join_invited_workspaces(_request(), user_id=USER_B, email="user-b@example.com")
+    assert blocked.value.status_code == 409
+    async with org_world() as session:
+        assert (await session.get(InvitationRow, data["id"])).consumed_at is None
+        assert (await session.get(UserRow, USER_B)).system_role == "user"
+        assert await session.get(OrganizationMemberRow, {"organization_id": data["workspace_id"], "user_id": USER_B}) is None
+        assert await session.get(ClientAssignmentRow, {"client_id": PAYLOAD["client_id"], "user_id": USER_B}) is None
+        assert await session.get(UserPreferenceRow, {"user_id": USER_B, "key": "experience_mode"}) is None
+
+
+@pytest.mark.parametrize("change", ["local_roster", "agency_storage", "agency_issuer"])
+async def test_late_binding_change_cannot_create_password_customer(org_world, monkeypatch, change):  # noqa: F811
+    app = await _setup(org_world, monkeypatch)
+    async with _http(app) as client:
+        data = (await _invite(client)).json()
+    await _change_customer_binding(org_world, data["workspace_id"], change)
+    with pytest.raises(HTTPException) as blocked:
+        await invitations.accept_invitation(invitations.AcceptInvitationRequest(token=data["token"], password="Synthetic-customer-password!"), _request(), Response())
+    assert blocked.value.status_code == 409
+    async with org_world() as session:
+        assert await session.scalar(select(UserRow.id).where(UserRow.email == PAYLOAD["email"])) is None
+        assert (await session.get(InvitationRow, data["id"])).consumed_at is None
+        assert await session.scalar(select(func.count()).select_from(ClientAssignmentRow)) == 0
+        assert await session.scalar(select(func.count()).select_from(OrganizationMemberRow).where(OrganizationMemberRow.organization_id == data["workspace_id"], OrganizationMemberRow.user_id != USER_A)) == 0
+
+
+@pytest.mark.parametrize("system_role", ["admin", "exec"])
+async def test_dedicated_invitation_rejects_existing_staff_before_creating_workspace(org_world, monkeypatch, system_role):  # noqa: F811
+    app = await _setup(org_world, monkeypatch)
+    async with org_world() as session, session.begin():
+        await session.execute(update(UserRow).where(UserRow.id == USER_B).values(system_role=system_role))
+    async with _http(app) as client:
+        result = await _invite(client, {**PAYLOAD, "email": "user-b@example.com"})
+    assert result.status_code == 409, result.text
+    async with org_world() as session:
+        assert (await session.get(UserRow, USER_B)).system_role == system_role
+        assert await session.scalar(select(func.count()).select_from(InvitationRow)) == 0
+        assert await session.scalar(select(func.count()).select_from(OrganizationRow).where(OrganizationRow.customer_client_id.is_not(None))) == 0
+        assert await session.scalar(select(func.count()).select_from(UserRow).where(UserRow.email.like("workspace-%@deerflow.invalid"))) == 0
+
+
+@pytest.mark.parametrize("via", ["local", "sso"])
+@pytest.mark.parametrize("system_role", ["admin", "exec"])
+async def test_dedicated_acceptance_rejects_recipient_promoted_after_issue(org_world, monkeypatch, via, system_role):  # noqa: F811
+    app = await _setup(org_world, monkeypatch)
+    async with _http(app) as client:
+        data = (await _invite(client, {**PAYLOAD, "email": "user-b@example.com"})).json()
+    async with org_world() as session, session.begin():
+        await session.execute(update(UserRow).where(UserRow.id == USER_B).values(system_role=system_role))
+    with pytest.raises(HTTPException) as blocked:
+        if via == "local":
+            await invitations.accept_invitation(invitations.AcceptInvitationRequest(token=data["token"]), _signed_in(USER_B), Response())
+        else:
+            await invitations.join_invited_workspaces(_request(), user_id=USER_B, email="user-b@example.com")
+    assert blocked.value.status_code == 409
+    async with org_world() as session:
+        assert (await session.get(InvitationRow, data["id"])).consumed_at is None
+        assert (await session.get(UserRow, USER_B)).system_role == system_role
+        assert await session.get(OrganizationMemberRow, {"organization_id": data["workspace_id"], "user_id": USER_B}) is None
+        assert await session.get(ClientAssignmentRow, {"client_id": PAYLOAD["client_id"], "user_id": USER_B}) is None
+
+
+@pytest.mark.parametrize("provisioner", ["existing", "invitation"])
+async def test_both_provisioners_grant_client_membership(org_world, monkeypatch, provisioner):  # noqa: F811
+    app = await _setup(org_world, monkeypatch)
+    async with org_world() as session, session.begin():
+        await session.execute(update(UserRow).where(UserRow.id == USER_B).values(system_role="client"))
+    async with _http(app) as client:
+        if provisioner == "existing":
+            result = await client.post("/api/client-portal/customer-workspaces", headers=auth_headers(USER_A, ORG_S), json={"client_id": PAYLOAD["client_id"], "user_id": USER_B, "name": PAYLOAD["name"]})
+            assert result.status_code == 201, result.text
+            workspace_id = result.json()["workspace_id"]
+        else:
+            data = (await _invite(client, {**PAYLOAD, "email": "user-b@example.com"})).json()
+            accepted = await invitations.accept_invitation(invitations.AcceptInvitationRequest(token=data["token"]), _signed_in(USER_B), Response())
+            workspace_id = accepted.workspace_id
+    async with org_world() as session:
+        assert (await session.get(UserRow, USER_B)).system_role == "client"
+        member = await session.get(OrganizationMemberRow, {"organization_id": workspace_id, "user_id": USER_B})
+        assert member.role == "client"
+        contact = await session.get(ClientAssignmentRow, {"client_id": PAYLOAD["client_id"], "user_id": USER_B})
+        assert (contact.organization_id, contact.role) == (workspace_id, "client_contact")
+
+
+@pytest.mark.parametrize("change", ["local_roster", "agency_storage", "agency_issuer"])
+async def test_issue_and_accept_share_customer_binding_checks(org_world, monkeypatch, change):  # noqa: F811
+    app = await _setup(org_world, monkeypatch)
+    async with _http(app) as client:
+        data = (await _invite(client)).json()
+        await _change_customer_binding(org_world, data["workspace_id"], change)
+        result = await _invite(client)
+        assert result.status_code == (403 if change == "agency_issuer" else 409), result.text
+    async with org_world() as session:
+        assert (await session.get(InvitationRow, data["id"])).consumed_at is None
+        assert await session.scalar(select(func.count()).select_from(InvitationRow)) == 1
+
+
+@pytest.mark.parametrize("system_role", ["user", "client", "admin", "exec"])
+async def test_generic_issue_cannot_bypass_dedicated_recipient_policy(org_world, monkeypatch, system_role):  # noqa: F811
+    app = await _setup(org_world, monkeypatch)
+    async with _http(app) as client:
+        data = (await _invite(client)).json()
+    async with org_world() as session, session.begin():
+        await session.execute(update(UserRow).where(UserRow.id == USER_B).values(system_role=system_role))
+    monkeypatch.setattr(invitations, "get_current_user_from_request", client_portal.get_current_user_from_request)
+    body = invitations.CreateInvitationRequest(organization_id=data["workspace_id"], email="user-b@example.com", role="client")
+    if system_role == "admin" or system_role == "exec":
+        with pytest.raises(HTTPException) as blocked:
+            await invitations.create_invitation(body, _request(cookies={"access_token": USER_A}), Response())
+        assert blocked.value.status_code == 409
+    else:
+        issued = await invitations.create_invitation(body, _request(cookies={"access_token": USER_A}), Response())
+        assert issued.email == "user-b@example.com"
+    async with org_world() as session:
+        assert (await session.get(UserRow, USER_B)).system_role == system_role
+        assert await session.scalar(select(func.count()).select_from(InvitationRow)) == (1 if system_role == "admin" or system_role == "exec" else 2)
