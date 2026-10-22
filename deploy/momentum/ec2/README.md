@@ -24,6 +24,12 @@ EC2 adds three things:
 /opt/momobot/code/{momo_guard.py,momo_protocol.py}
 ```
 
+Operator extensions: compose mounts `examples/vhin-placement/vhin_placement` from `/opt/momobot/src`
+read-only, so it moves with each release. It stays off until `/opt/momobot/config.yaml` has a
+`plugins:` entry for it (`use: vhin_placement:install`, `required: false`, no `package:`). Point its
+`data_dir` inside the gateway volume (`/app/backend/.deer-flow/extensions/<name>`), so the nightly
+SQLite-safe gateway snapshot already backs it up and restores it with `gateway-data.tgz`.
+
 ## Operate
 
 ```bash
