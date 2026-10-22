@@ -10,28 +10,11 @@ The upstream DeerFlow history stays in [CHANGELOG.md](../CHANGELOG.md).
 
 ## [Unreleased]
 
+## [momobot-prod-20261022-cfb3fba0] - 2026-10-22
+
 ### Changed
 
-- MomoBot 1Password logins, Oct 21 (#223)
-- Bump aiohttp from 3.14.3 to 3.14.4 in /workers/browser-teams/python (#221)
-- Bump certifi from 2026.7.22 to 2026.10.19 in /workers/agno-team (#220)
-- Run cost admission on the effective model, Oct 21 (#217)
-- Patch Node runtimes, Oct 21 (#222)
-- Sandbox works on OrbStack, Oct 19 (#174)
-- Bump pillow from 12.3.0 to 13.0.0 in /workers/browser-teams/python (#182)
-- Bump mcp from 1.28.1 to 1.30.0 in /backend (#180)
-- Bump @modelcontextprotocol/sdk from 1.31.0 to 1.32.1 in /workers/inngest-team (#181)
-- Keep channel guide under the size check, Oct 21 (#218)
-- Employee Academy and private inbox acceptance, Oct 21 (#214)
-- Slack posts never double-send, Oct 21 (#216)
-- AWS headroom, Oct 21 (#215)
-- Keep shared chat events visible, Oct 21 (#213)
-- Host-only Browserbase vault access, Oct 21 (#211)
-
-### Fixed
-
-- Broker unit snap fix, Oct 21 (#225)
-- Fictional names in public test fixtures, Oct 21 (#219)
+- Calm, smooth MomoBot: no static or glitch motion, Oct 22 (#239)
 
 ## [momobot-prod-20261021-43f1453f] - 2026-10-21
 
