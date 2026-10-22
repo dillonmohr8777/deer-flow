@@ -51,7 +51,6 @@ from deerflow.config.agents_config import load_agent_config
 from deerflow.config.app_config import get_app_config
 from deerflow.config.database_config import resolve_checkpoint_graph_cache_max
 from deerflow.knowledge_scope import KNOWLEDGE_SCOPE_KEY, KNOWLEDGE_SCOPE_RUNTIME_KEY
-from deerflow.mcp.private_scope import PRIVATE_MCP_SESSION_CONTEXT_KEY, PRIVATE_MCP_SESSION_MARKER
 from deerflow.persistence.organizations.delegation import ActiveDelegation, OrganizationDelegationRepository
 from deerflow.persistence.organizations.resolution import storage_user_id_for_organization
 from deerflow.projects.context import PROJECT_CONTEXT_MESSAGE_MARKER, resolve_project_context
@@ -96,6 +95,8 @@ from deerflow.runtime.stream_modes import normalize_stream_modes
 from deerflow.runtime.user_context import (
     AUTHENTICATED_CONTEXT_MARKER,
     AUTHENTICATED_CONTEXT_MARKER_KEY,
+    PRIVATE_MCP_SESSION_CONTEXT_KEY,
+    PRIVATE_MCP_SESSION_MARKER,
     WORKSPACE_IDENTITY_CONTEXT_KEYS,
     WorkspaceStorageContext,
     reset_current_user,
