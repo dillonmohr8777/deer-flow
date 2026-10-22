@@ -1,6 +1,6 @@
 # Momentum Academy work course
 
-The corrected course covers sixteen initial lessons: four foundations, ten work-role families and two growth lessons. A seventeenth client-communication module follows verified working portal UI. The platform tour is480–<600seconds; all other lessons are300–360seconds. These are work lessons with concrete synthetic records and exercises. The original seven generic lessons and their media remain held and preserved as engine evidence, never promoted as this course.
+The corrected course covers sixteen initial lessons: four foundations, ten work-role families and two growth lessons. A seventeenth client-communication module follows verified working portal UI. The platform tour is480–<600seconds; all other lessons are300–360seconds. These are work lessons with concrete synthetic records and exercises. The original seven generic lessons and their media remain held and preserved as engine evidence, never promoted as this course. Lessons 16 to 20 are the video family, written Oct 22 in Dillon's voice about how his own videos get made: the stack end to end, Momo ads that stop a thumb, raw footage to a finished cut, lessons in his voice, and video QA and release gates. They follow the same synthetic-only rule and need the same acceptance file before any audio is generated.
 
 `work-visuals.json` holds173 concrete teaching boards. The parent owns factual script acceptance, Academy UI/progress compatibility, private media hosting and production release. This branch owns only `docs/academy-explainers/`.
 
