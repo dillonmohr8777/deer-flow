@@ -9,7 +9,8 @@ import re
 import time
 from pathlib import Path
 from validation import require_approved
-from contract import COURSE_MAX, duration_ok, require_course
+from contract import COURSE_MAX, duration_ok, require_course, sha
+from master import master
 
 HERE = Path(__file__).parent
 STYLE = """
@@ -29,11 +30,12 @@ body{background:#F2EDE3;color:#101E3F;font-family:Nunito,sans-serif}
 .principle{font-size:36px;line-height:1.3;max-width:670px;margin-top:42px;color:#101E3F;font-weight:700;border-left:8px solid #1B4B9E;padding-left:26px}
 .board{border:2px solid #D8C3A0;border-radius:20px;background:#FBF8F1;padding:46px;min-height:490px;display:flex;flex-direction:column;justify-content:center;position:relative;box-shadow:0 1px 2px rgb(16 30 63/.16),0 24px 44px -18px rgb(16 30 63/.5),14px 16px 0 rgb(27 75 158/.18)}
 .board-label{font-family:Archivo,sans-serif;font-size:26px;color:#1B4B9E;letter-spacing:2px;margin-bottom:25px}
-.row{font-size:37px;line-height:1.3;margin:10px 0;padding:9px 14px;white-space:pre-wrap;border-radius:8px;position:relative;color:#101E3F}
+.row{font-size:37px;line-height:1.3;margin:10px 0;padding:9px 14px;white-space:pre-wrap;border-radius:8px;position:relative;color:#101E3F;border-left:6px solid rgba(27,75,158,0)}
 .row.command{font-family:monospace;font-size:32px}
 .bar{position:absolute;height:8px;background:#1B4B9E;bottom:0;left:0;width:100%;transform-origin:left;border-radius:0 0 18px 18px}
 .footer{position:absolute;left:100px;right:100px;bottom:30px;font-size:23px;color:#3A4A6B;font-weight:700;display:flex;justify-content:space-between}
-.caption{position:absolute;left:125px;right:125px;bottom:85px;min-height:60px;text-align:center;font-size:36px;line-height:1.25;font-weight:800;padding:12px 28px;background:#101E3F;color:#FBF8F1;border-radius:14px}
+.caption{position:absolute;left:125px;right:125px;bottom:85px;text-align:center}
+.caption span{display:inline-block;max-width:100%;font-size:38px;line-height:1.25;font-weight:800;padding:12px 32px;background:#101E3F;color:#FBF8F1;border-radius:14px;box-shadow:0 12px 26px -14px rgb(16 30 63/.6)}
 .clip{position:absolute}.shot{max-height:640px;max-width:100%;object-fit:contain;border-radius:18px;border:2px solid #D8C3A0}
 .mode-example{display:flex;align-items:center;gap:20px}.mode-example .shot{width:255px;height:590px}.mode-example .row{font-size:30px}
 """
@@ -78,7 +80,9 @@ def captions(asr, lesson=None):
     cues, batch = [], []
     for word in words:
         batch.append(word)
-        if len(batch) == 7 or (len(batch) >= 4 and word['word'].endswith(('.', '?', '!'))) or word is words[-1]:
+        # Cues end with the sentence or at a comma once long enough, so a cue never starts the next sentence.
+        text = word['word']
+        if len(batch) == 8 or (len(batch) >= 3 and text.endswith(('.', '?', '!'))) or (len(batch) >= 5 and text.endswith((',', ';', ':'))) or word is words[-1]:
             cues.append(dict(start=batch[0]['start'], end=batch[-1]['end'], text=' '.join(w['word'].strip() for w in batch)))
             batch = []
     return cues
@@ -98,9 +102,12 @@ def build(source, output, assets, burn_captions=False):
         shutil.copy2(assets / name, project / 'assets' / name)
     if (assets / 'experience.png').exists():
         shutil.copy2(assets / 'experience.png', project / 'assets/experience.png')
-    audio_link = project / 'assets' / ('narration-' + str(time.time_ns()) + '.wav')
-    os.link(source.parent / 'narration.wav', audio_link)
-    audio_link.replace(project / 'assets/narration.wav')
+    # The video carries a delivery master (edge fades, -16 LUFS, true-peak ceiling); the accepted narration stays as is.
+    pending = project / 'assets' / ('narration-' + str(time.time_ns()) + '.wav')
+    mastering = master(source.parent / 'narration.wav', source.parent / 'timing.json', pending)
+    pending.replace(project / 'assets/narration.wav')
+    mastering.update(source_sha256=sha(source.parent / 'narration.wav'), output_sha256=sha(project / 'assets/narration.wav'))
+    (project / 'mastering.json').write_text(json.dumps(mastering, indent=2))
     key = stem[:2]
     visuals = json.loads((HERE / 'work-visuals.json').read_text())[stem]
     assert len(visuals) == len(lesson['chapters']), 'Chapter/visual mismatch'
@@ -119,11 +126,20 @@ def build(source, output, assets, burn_captions=False):
             assert (assets / 'experience.png').is_file(), 'Inspected Experience screenshot required'
             row_html = f'<div class="mode-example"><img class="shot" src="assets/experience.png" alt="Actual Easy, Medium and Hard experience settings"><div>{row_html}</div></div>'
         duration = chapter['duration']
-        animation = [f'const tl=gsap.timeline({{paused:true}});']
-        animation += [f'tl.fromTo("#{cid}-row-{j}",{{opacity:0,y:30}},{{opacity:1,y:0,duration:.35,ease:"power4.out"}},{j*.12+.1});' for j in range(len(rows))]
+        # Enter: label, title, principle and board settle in; rows follow the board. Leave: a short lift and fade.
+        animation = [f'const tl=gsap.timeline({{paused:true}});',
+                     f'tl.fromTo("#{cid} .chapter-no",{{opacity:0,x:-28}},{{opacity:1,x:0,duration:.5,ease:"power3.out"}},.05);',
+                     f'tl.fromTo("#{cid} .title",{{opacity:0,y:40}},{{opacity:1,y:0,duration:.7,ease:"power3.out"}},.12);',
+                     f'tl.fromTo("#{cid} .principle",{{opacity:0,x:-22}},{{opacity:1,x:0,duration:.6,ease:"power3.out"}},.4);',
+                     f'tl.fromTo("#{cid} .board",{{opacity:0,y:46,scale:.97}},{{opacity:1,y:0,scale:1,duration:.7,ease:"power3.out"}},.18);',
+                     f'tl.to("#{cid} .scene",{{opacity:0,y:-14,duration:.35,ease:"power2.in"}},{max(1.5, duration - .4):.3f});']
+        animation += [f'tl.fromTo("#{cid}-row-{j}",{{opacity:0,y:26}},{{opacity:1,y:0,duration:.45,ease:"power3.out"}},{j*.1+.5:.2f});' for j in range(len(rows))]
+        # One active row at a time (royal edge, warm fill); rows already covered keep a light fill.
         for j in range(len(rows)):
-            start = max(.6, j * duration / len(rows))
-            animation.append(f'tl.to("#{cid}-row-{j}",{{backgroundColor:"#E9DECC",duration:.25,ease:"none"}},{start:.3f});')
+            start = max(.9, j * duration / len(rows))
+            animation.append(f'tl.to("#{cid}-row-{j}",{{backgroundColor:"#E6D7BE",borderLeftColor:"rgba(27,75,158,1)",duration:.3,ease:"power1.out"}},{start:.3f});')
+            if j:
+                animation.append(f'tl.to("#{cid}-row-{j-1}",{{backgroundColor:"#EFE7DA",borderLeftColor:"rgba(27,75,158,0)",duration:.3,ease:"power1.out"}},{start:.3f});')
         animation.append(f'tl.fromTo("#{cid}-bar",{{scaleX:0}},{{scaleX:1,duration:{duration},ease:"none"}},0);')
         animation.append(f'window.__timelines["{cid}"]=tl;')
         frame = f'''<!doctype html><html><body><template>
@@ -138,7 +154,7 @@ def build(source, output, assets, burn_captions=False):
     cap_html = []
     for index, cap in enumerate(word_caps):
         duration = max(.01, cap['end'] - cap['start'])
-        cap_html.append(f'<div id="caption-{index}" class="clip caption" data-start="{cap["start"]}" data-duration="{duration}" data-track-index="2">{escape(cap["text"])}</div>')
+        cap_html.append(f'<div id="caption-{index}" class="clip caption" data-start="{cap["start"]}" data-duration="{duration}" data-track-index="2"><span>{escape(cap["text"])}</span></div>')
         vtt += [f'{timestamp(cap["start"])} --> {timestamp(cap["end"])}', cap['text'], '']
     duration = lesson['duration']
     title = lesson['title'].split(':')[0]

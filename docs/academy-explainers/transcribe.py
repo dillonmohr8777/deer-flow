@@ -12,6 +12,10 @@ NUMBERS = dict(zip(
     'zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen'.split(),
     map(str, range(20))))
 TENS = dict(zip('twenty thirty forty fifty sixty seventy eighty ninety'.split(), range(20, 100, 10)))
+# Oct 22: words that sound identical, so ASR spelling is a guess, not evidence (lessons 17, 19, 20), plus the
+# Fraunces typeface name, which ASR spells by sound. Plural or article slips (rights/right, an/and) stay
+# differences for the outside listener.
+HOMOPHONES = {'tale': 'tail', 'site': 'sight', 'band': 'banned', 'craft': 'kraft', 'fronces': 'fraunces'}
 
 
 def normalize(text):
@@ -32,7 +36,7 @@ def normalize(text):
         text = re.sub(rf'\b{name}\b', str(value), text)
     for name, value in NUMBERS.items():
         text = re.sub(rf'\b{name}\b', value, text)
-    return re.findall(r'[a-z0-9]+', text)
+    return [HOMOPHONES.get(token, token) for token in re.findall(r'[a-z0-9]+', text)]
 
 
 def critical_differences(differences):

@@ -28,7 +28,7 @@ if (Test-Path (Join-Path $TaskRoot 'HOLD.json')) { throw 'Production is held' }
 $output = Join-Path $TaskRoot ($Name + '.mp4')
 if (Test-Path $output) { throw 'Preserve existing export; reconcile its receipt before another render' }
 $renderLog = Join-Path $TaskRoot ($Name + '-render.log')
-& cmd.exe /d /c "npx.cmd --yes hyperframes@0.8.61 render --workers 4 --fps 15 --quality looks --no-best-effort --frames-cache-dir off --output `"$output`" > `"$renderLog`" 2>&1"
+& cmd.exe /d /c "npx.cmd --yes hyperframes@0.8.61 render --workers 4 --fps 30 --quality looks --no-best-effort --frames-cache-dir off --output `"$output`" > `"$renderLog`" 2>&1"
 if ($LASTEXITCODE -ne 0) { throw 'HyperFrames render failed' }
 $probeRaw = & ffprobe -v error -show_format -show_streams -of json $output
 if ($LASTEXITCODE -ne 0) { throw 'Export probe failed' }

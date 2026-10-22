@@ -1,5 +1,6 @@
 """Probe finished exports and inspect every chapter center without re-rendering."""
 import argparse
+from fractions import Fraction
 import hashlib
 import json
 from pathlib import Path
@@ -48,6 +49,14 @@ def main():
     peak = float(re.search(r'max_volume: ([\d.-]+) dB', decode.stderr)[1])
     mean = float(re.search(r'mean_volume: ([\d.-]+) dB', decode.stderr)[1])
     assert -35 < mean < -5 and peak < 0, (mean, peak)
+    # Oct 22: delivered loudness and a constant frame cadence (no dropped or doubled frames).
+    from master import loudness
+    level = loudness(video)
+    assert -17 <= level['integrated_lufs'] <= -15 and level['true_peak_dbtp'] <= -1.5, level
+    fps = float(Fraction(visual['r_frame_rate']))
+    times = sorted(float(t) for t in subprocess.check_output(['ffprobe', '-v', 'error', '-select_streams', 'v:0', '-show_entries', 'packet=pts_time', '-of', 'csv=p=0', str(video)], text=True).split())
+    uneven = sum(abs(b - a - 1 / fps) > .002 for a, b in zip(times, times[1:]))
+    assert fps >= 30 and not uneven and abs(len(times) - duration * fps) <= 2, (fps, uneven, len(times))
     frames = []
     for index, chapter in enumerate(lesson['chapters']):
         at = chapter['start'] + chapter['duration']/2
@@ -62,7 +71,7 @@ def main():
     exported = [video, video.with_suffix('.jpg'), video.with_suffix('.vtt'), video.with_suffix('.txt')]
     manifest = dict(stem=name, duration=duration, files=[dict(name=item.name, bytes=item.stat().st_size, sha256=sha(item)) for item in exported])
     (video.parent / (name + '-manifest.json')).write_text(json.dumps(manifest, indent=2))
-    report = dict(video=str(video), duration=duration, width=visual['width'], height=visual['height'], fps=visual['r_frame_rate'], audio_codec=audio['codec_name'], mean_dbfs=mean, peak_dbfs=peak, captions=len(cues), chapters=frames, sha256=hashlib.sha256(video.read_bytes()).hexdigest(), voice_check=json.loads((voice/'voice-check.json').read_text()), passed=True)
+    report = dict(video=str(video), duration=duration, width=visual['width'], height=visual['height'], fps=visual['r_frame_rate'], audio_codec=audio['codec_name'], mean_dbfs=mean, peak_dbfs=peak, **level, frames=len(times), captions=len(cues), chapters=frames, sha256=hashlib.sha256(video.read_bytes()).hexdigest(), voice_check=json.loads((voice/'voice-check.json').read_text()), passed=True)
     (qa / 'verification.json').write_text(json.dumps(report, indent=2))
     print(json.dumps({k: v for k, v in report.items() if k not in ('chapters', 'voice_check')}), flush=True)
 

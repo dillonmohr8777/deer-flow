@@ -111,6 +111,9 @@ class ValidationTest(unittest.TestCase):
         self.assertFalse(critical_differences([{'expected': 'balanced', 'heard': 'balance'}]))
         self.assertEqual(normalize("Don't send five"), normalize('Do not send 5'))
         self.assertEqual(normalize("Hi, I'm Dillon. The customer's list"), normalize("Hi, I'm Dylan. The customers list"))
+        self.assertEqual(normalize('fail on sight, the banned words, a long tail, Fraunces'), normalize('fail on site, the band words, a long tale, fronces'))
+        self.assertNotEqual(normalize('rights'), normalize('right'))
+        self.assertNotEqual(normalize('an agent'), normalize('and agent'))
 
     def test_variable_duration_and_chunks(self):
         for duration, expected in [(479, False), (480, True), (599.9, True), (600, False)]:
@@ -121,6 +124,39 @@ class ValidationTest(unittest.TestCase):
         long = ' '.join(['word'] * 20) + ', ' + ' '.join(['more'] * 10) + ' off.'
         self.assertEqual([len(part.split()) for part in chunks(long)], [20, 11])
         self.assertTrue(all(len(part.split()) >= 6 for part in chunks('word ' * 31)))
+
+def write_tone_narration(path, rate=24000):
+    """Two hard-edged tone 'sentences' with a pause, like synthesize.py concatenates them."""
+    import numpy as np, soundfile as sf
+    t = np.arange(int(1.5 * rate)) / rate
+    sentence = .9 * np.sin(2 * np.pi * 220 * t + .7) + .2 * np.sin(2 * np.pi * 1700 * t)  # starts and stops off zero
+    pause = np.zeros(int(.35 * rate))
+    sf.write(path, np.concatenate([sentence, pause, sentence, pause]), rate)
+    return [dict(start=0.0, duration=1.5), dict(start=1.85, duration=1.5)]
+
+
+class MasterTest(unittest.TestCase):
+    def test_master_is_latency_free_faded_and_on_target(self):
+        import numpy as np, soundfile as sf
+        from master import master, TARGET_LUFS, CEILING_DBTP
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            rows = write_tone_narration(root / 'in.wav')
+            atomic_json(root / 'timing.json', rows)
+            report = master(root / 'in.wav', root / 'timing.json', root / 'out.wav')
+            out, rate = sf.read(root / 'out.wav')
+            self.assertEqual((rate, out.shape[1]), (48000, 2))
+            self.assertTrue(np.array_equal(out[:, 0], out[:, 1]))
+            self.assertAlmostEqual(len(out) / rate, 3.7, places=2)
+            self.assertGreater(report['before']['edge_sample_abs_max'], .5)
+            self.assertLess(report['after']['edge_sample_abs_max'], .002)
+            self.assertLessEqual(abs(report['after']['integrated_lufs'] - TARGET_LUFS), .5)
+            self.assertLessEqual(report['after']['true_peak_dbtp'], CEILING_DBTP + .3)
+            # Zero latency: the second sentence still starts at 1.85 s (silence before, sound after).
+            onset = int(1.85 * rate)
+            self.assertLess(np.abs(out[onset - 480:onset - 5]).max(), 1e-3)
+            self.assertGreater(np.abs(out[onset + 960:onset + 1440]).max(), .1)
+
 
 class BuildContractTest(unittest.TestCase):
     def test_work_build_variable_chapters_and_default_caption_track(self):
@@ -141,8 +177,8 @@ class BuildContractTest(unittest.TestCase):
             lesson = json.loads(source.read_text()); lesson.update(duration=520, course='momentum-work', course_stem=source.stem)
             atomic_json(directory / 'lesson.json', lesson)
             atomic_json(directory / 'asr.json', {'segments': [{'text': 'hello', 'words': [{'word': 'hello', 'start': 1, 'end': 2}]}]})
-            atomic_json(directory / 'timing.json', [])
-            (directory / 'narration.wav').write_bytes(b'fixture audio bytes - not real media')
+            rows = write_tone_narration(directory / 'narration.wav')
+            atomic_json(directory / 'timing.json', rows)
             atomic_json(directory / 'voice-check.json', {'pass': True, 'sha256': fingerprints(directory)})
             assets = root / 'assets'; assets.mkdir()
             for name in ['momo-mark.svg', 'archivo-black.ttf', 'nunito-sans.ttf', 'nunito-sans-bold.ttf', 'fraunces-bold.woff2', 'gsap.min.js', 'experience.png']:
@@ -155,6 +191,9 @@ class BuildContractTest(unittest.TestCase):
             self.assertEqual(len(list((project / 'compositions').glob('*.html'))), 12)
             self.assertIn('CHAPTER 12 / 12', (project / 'compositions/chapter-11.html').read_text())
             self.assertIn('WEBVTT', (project / 'captions.vtt').read_text())
+            mastering = json.loads((project / 'mastering.json').read_text())
+            self.assertEqual(mastering['source_sha256'], sha(directory / 'narration.wav'))
+            self.assertLessEqual(mastering['after']['true_peak_dbtp'], -1.7)
             atomic_json(root / 'HOLD.json', {'reason': 'fixture hold'})
             with self.assertRaisesRegex(AssertionError, 'held'):
                 build(directory / 'lesson.json', root / 'projects', assets)
