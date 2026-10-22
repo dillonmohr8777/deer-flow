@@ -48,7 +48,11 @@ The ordinary `task` boundary carries one narrow parent-loop middleware recorder 
 
 `mcp_plugins=[]` skips global MCP config reads and cached/lazy discovery before
 initialization; `None` and nonempty selections retain discovery and source-ID
-filtering. Keep the no-discovery regression in `test_capability_registry.py`.
+filtering. A selected private assembly may pass its already loaded
+`private_mcp_config`; that path narrows to selected private installations and
+never initializes the public cache. Keep the no-discovery regression in
+`test_capability_registry.py` and the cold Max selection check in
+`test_momobot_private_brain.py`.
 
 Scheduled-task runtime note:
 - Scheduled background runs resolve to the `scheduled` interaction policy through trusted `context.non_interactive=true` and therefore exclude `ask_clarification` from the lead-agent tool list. The legacy `context.non_interactive=true` key remains accepted only for internally authenticated scheduler calls during migration; arbitrary HTTP/IM clients cannot set it.

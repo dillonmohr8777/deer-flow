@@ -120,6 +120,7 @@ def harness(monkeypatch, tmp_path):
     monkeypatch.setattr(cache, "_mcp_tools_cache", [])
     monkeypatch.setattr(cache, "_is_cache_stale", lambda: False)
     discovered = []
+    client_connections = []
     transport_calls = []
     transport_entries = []
 
@@ -147,6 +148,7 @@ def harness(monkeypatch, tmp_path):
 
     class FakeClient:
         def __init__(self, connections, **kwargs):
+            client_connections.append(tuple(sorted(connections)))
             self.connections = connections
             self.callbacks = None
             self.tool_interceptors = []
@@ -185,7 +187,9 @@ def harness(monkeypatch, tmp_path):
         return captures[str(get_current_user().id)], config
 
     try:
-        yield SimpleNamespace(app=app, path=path, raw=raw, save=save, assemble=assemble, selected=selected, discovered=discovered, transport_calls=transport_calls, transport_entries=transport_entries, barrier=barrier)
+        yield SimpleNamespace(
+            app=app, path=path, raw=raw, save=save, assemble=assemble, selected=selected, discovered=discovered, client_connections=client_connections, transport_calls=transport_calls, transport_entries=transport_entries, barrier=barrier
+        )
     finally:
         reset_app_config()
 
@@ -298,6 +302,7 @@ def test_public_mcp_catalog_cannot_join_private_max_selection(harness, monkeypat
     from langchain_core.tools import StructuredTool
 
     from deerflow.mcp import cache
+    from deerflow.mcp.private_scope import matches_private_mcp_discovery
     from deerflow.tools.mcp_metadata import tag_mcp_tool
 
     async def public_query(runtime=None):
@@ -308,6 +313,12 @@ def test_public_mcp_catalog_cannot_join_private_max_selection(harness, monkeypat
     harness.raw["mcpServers"]["public"] = {"type": "http", "url": "https://public.synthetic.invalid/mcp"}
     harness.save()
     monkeypatch.setattr(cache, "_mcp_tools_cache", [public])
+    selected_server = ExtensionsConfig.from_file().mcp_servers["brain"]
+    public.metadata = {
+        **(public.metadata or {}),
+        "_deerflow_private_mcp_provenance": {"server_name": "brain", "configuration": selected_server.model_dump(mode="json")},
+    }
+    assert not matches_private_mcp_discovery(public, selected_server, server_name="brain")
     with _scope():
         captured, _config = harness.assemble()
     assert "public_query" not in {tool.name for tool in captured["tools"]}
@@ -315,14 +326,22 @@ def test_public_mcp_catalog_cannot_join_private_max_selection(harness, monkeypat
 
 
 @pytest.mark.asyncio
-async def test_cold_loader_public_transport_aba_cannot_enter_private_max(harness, monkeypatch):
+async def test_cold_private_max_starts_only_selected_brain_during_public_transport_aba(harness, monkeypatch):
     import deerflow.tools
     from deerflow.mcp import cache
     from deerflow.mcp.private_scope import matches_private_mcp_discovery
 
+    harness.raw["mcpServers"]["unrelated-public"] = {"type": "http", "url": "https://public.synthetic.invalid/mcp"}
+    harness.raw["mcpServers"]["unrelated-private"] = {
+        "type": "http",
+        "url": "https://private.synthetic.invalid/mcp",
+        "private_scope": {"actor_user_id": ACTOR, "organization_id": ORG},
+        "capability": {"id": "synthetic-unrelated-private-installation"},
+    }
+    harness.save()
     original = json.loads(json.dumps(harness.raw))
     selected_server = ExtensionsConfig.from_file().mcp_servers["brain"]
-    # No preseeded tools: the real cache must discover the temporary public B.
+    # A cold global cache must stay untouched while a temporary public B exists.
     monkeypatch.setattr(cache, "_cache_initialized", False)
     monkeypatch.setattr(cache, "_mcp_tools_cache", None)
     available = deerflow.tools.get_available_tools
@@ -343,12 +362,16 @@ async def test_cold_loader_public_transport_aba_cannot_enter_private_max(harness
     with _scope():
         captured, _config = harness.assemble()
         assert ExtensionsConfig.from_file().mcp_servers["brain"].model_dump() == selected_server.model_dump()
-        assert cache._mcp_tools_cache
-        assert {f"brain_{name}" for name in READS}.isdisjoint(tool.name for tool in captured["tools"])
-        for candidate in cache._mcp_tools_cache:
-            # A matching JSON metadata claim cannot manufacture provenance.
-            candidate.metadata = {**(candidate.metadata or {}), "_deerflow_private_mcp_provenance": {"server_name": "brain", "configuration": selected_server.model_dump(mode="json")}}
-            assert not matches_private_mcp_discovery(candidate, selected_server, server_name="brain")
+        actual = {tool.name: tool for tool in captured["tools"]}
+        expected = {f"brain_{name}" for name in READS}
+        assert expected <= actual.keys()
+        assert actual.keys() <= set(MOMOBOT_MAX_TOOL_NAMES) | expected
+        assert len(MOMOBOT_MAX_TOOL_NAMES) == 9
+        assert cache._cache_initialized is False
+        assert cache._mcp_tools_cache is None
+        for name in expected:
+            assert matches_private_mcp_discovery(actual[name], selected_server, server_name="brain")
+    assert harness.client_connections == [("brain",)]
     assert harness.discovered == ["brain"]
     assert harness.transport_entries == []
 
