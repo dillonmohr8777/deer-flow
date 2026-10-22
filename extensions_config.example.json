@@ -29,6 +29,22 @@
       },
       "description": "Optional anonymous Parallel Search tools for web search and fetching requested URLs"
     },
+    "slack-user": {
+      "enabled": false,
+      "type": "http",
+      "url": "https://mcp.slack.com/mcp",
+      "headers": {
+        "Authorization": "$SLACK_MCP_DISCOVERY_AUTH"
+      },
+      "user_auth": {
+        "enabled": true,
+        "header": "Authorization",
+        "users": {},
+        "on_missing": "deny"
+      },
+      "tool_name_prefix": true,
+      "description": "Read-only Slack for each signed-in person with their own Slack user token (search my messages, read channels I am in). Map each MomoBot user id in user_auth.users to '$SLACK_USER_AUTH_<NAME>' (an env var holding 'Bearer xoxp-...'). Never a bot token. See docs/MOMOBOT_ONBOARDING.md."
+    },
     "openviking": {
       "enabled": false,
       "type": "http",
