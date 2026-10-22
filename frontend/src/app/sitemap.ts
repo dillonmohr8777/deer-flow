@@ -8,6 +8,9 @@ import {
 } from "@/core/momo-daily";
 import { loadAllArticles } from "@/core/momo-daily/load";
 
+/** Read MOMOBOT_SITE_URL per request; a build-time prerender would bake in localhost. */
+export const dynamic = "force-dynamic";
+
 /** Public pages only: drafts never reach the sitemap. */
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const published = visibleArticles(await loadAllArticles(), {

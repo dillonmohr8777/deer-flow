@@ -124,7 +124,7 @@ describe("experience mode access", () => {
 });
 
 describe("the client sidebar", () => {
-  it("shows Chats, MomoBot Agents and About, and nothing internal", () => {
+  it("shows Chats, The Momo Daily, MomoBot Agents and About, and nothing internal", () => {
     // Even if the Gateway were to report every internal feature on.
     mocks.desk = true;
     mocks.internal = true;
@@ -133,9 +133,12 @@ describe("the client sidebar", () => {
     expect(hrefs(container)).toEqual([
       "/workspace/inbox",
       "/workspace/chats",
+      "/daily",
       "/workspace/lineup",
       "/workspace/about",
     ]);
+    // The Momo Daily is part of the base subscription every client gets.
+    expect(screen.getByText("The Momo Daily")).not.toBeNull();
     for (const name of [
       "Approvals",
       "Command Center",
@@ -145,7 +148,6 @@ describe("the client sidebar", () => {
       "Agents",
       "Scheduled tasks",
       "Capability Center",
-      "The Momo Daily",
       "Board",
       "Team",
       "AI Academy",
@@ -157,7 +159,11 @@ describe("the client sidebar", () => {
   it("drops the brand kit links when the server has none", () => {
     mocks.brandKit = false;
     const { container } = renderAs("client", <WorkspaceNavChatList />);
-    expect(hrefs(container)).toEqual(["/workspace/inbox", "/workspace/chats"]);
+    expect(hrefs(container)).toEqual([
+      "/workspace/inbox",
+      "/workspace/chats",
+      "/daily",
+    ]);
   });
 
   it("sends New chat and the logo to the chat with MomoBot Max", () => {

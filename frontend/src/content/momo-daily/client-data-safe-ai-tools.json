@@ -1,75 +1,259 @@
 {
-  "title": "How do you keep client data safe when your team uses AI tools?",
-  "dek": "AI tools can speed up client work without putting client data at risk, if you set the boundaries first.",
+  "title": "How to Keep Client Data Safe When Your Team Uses AI Tools",
+  "dek": "Keep client data safe with AI tools: what never goes into a free chatbot, how business plans handle training, and a one-page policy your team will follow.",
   "slug": "client-data-safe-ai-tools",
   "date": "2026-09-25",
-  "author": { "name": "Dillon Mohr", "title": "AI Marketing Director" },
+  "updated": "2026-10-22",
+  "author": {
+    "name": "Dillon Mohr",
+    "title": "AI Marketing Director"
+  },
   "keywords": [
-    "client data safety",
-    "AI tools",
-    "data privacy",
-    "agency data protection"
+    "keep client data safe AI tools",
+    "client data privacy AI",
+    "AI tools data policy for agencies",
+    "does ChatGPT train on my data",
+    "business vs free AI plans data training",
+    "AI acceptable use policy small business"
   ],
-  "summary": "Keeping client data safe when your team uses AI tools means limiting what each tool can see, knowing where a client's data actually goes once it is entered, and never treating a default setting as a safe one until you have checked it yourself.",
+  "summary": "You keep client data safe with AI tools by approving specific tools in writing, using business plans that exclude your data from training by default, and keeping real client details out of personal accounts. A person then reviews anything client-facing before it goes out. Most exposure comes from everyday habits, not hackers.",
   "section": "Safety",
   "hero": {
     "src": "/momentum/daily/art/client-data-safe-ai-tools.webp",
     "alt": "A 1930s pulp noir illustration of Momo the robot mascot as a night watchman holding a lantern, standing guard before a large bank vault door"
   },
-  "status": "draft",
+  "status": "published",
+  "takeaways": [
+    "The biggest client data risk with AI tools is a team member pasting real client details into a personal account, not a break-in.",
+    "OpenAI says ChatGPT Business workspace data is excluded from model training by default.",
+    "Anthropic says its commercial products, including Claude for Work and its API, do not train on your inputs by default, while consumer plans let each user choose.",
+    "A one-page list of approved tools and banned data types prevents more problems than any single setting.",
+    "Every AI draft that touches client information should be read by a person who knows the account before it leaves the building."
+  ],
   "body": [
     {
-      "heading": "What is actually at risk here?",
+      "heading": "What client data is at risk when your team uses AI tools?",
       "paragraphs": [
-        "Client data covers more than names and emails. It includes contracts, ad account access, customer lists, internal pricing, unreleased campaigns and anything a client shared expecting it to stay between your team and theirs. Once that information goes into an AI tool, the question is simple: where does it go from there, and who else can see it.",
-        "Most of the risk is not dramatic. It is not a hacker breaking in. It is a team member pasting a client's customer list into a free AI tool to save time, without knowing whether that tool stores the input, uses it to train a model, or hands it to a third party."
+        "Any information a client shared expecting it to stay private is at risk the moment it is typed into the wrong tool. That covers far more than names and email addresses."
+      ],
+      "subsections": [
+        {
+          "heading": "The obvious data",
+          "paragraphs": [
+            "Customer lists, contact details, contracts, invoices and login details are the clear cases. Most teams already know these are sensitive, yet they still end up in chats when someone is rushing."
+          ]
+        },
+        {
+          "heading": "The data people forget",
+          "paragraphs": [
+            "Unreleased campaigns, ad account exports, internal sales numbers, call recordings and meeting notes are just as private. A pasted spreadsheet of ad results can carry customer emails or revenue figures nobody meant to share."
+          ]
+        },
+        {
+          "heading": "How the leak actually happens",
+          "paragraphs": [
+            "The usual risk is not a hacker. It is a busy team member pasting a client file into a personal AI account to save ten minutes, without knowing how that account handles the input.",
+            "The right account type and a short written policy remove most of that risk. The rest comes down to habits, which a few minutes of training can fix."
+          ]
+        }
       ]
     },
     {
-      "heading": "What should never go into a general purpose AI tool?",
+      "heading": "How do AI tools use the data you type in?",
       "paragraphs": [
-        "A good rule: if you would not paste it into a public forum, do not paste it into a free consumer AI tool without checking its data policy first. That includes customer lists, financial figures, login credentials, unreleased creative, and anything covered by a signed confidentiality agreement.",
-        "This does not mean AI tools are off limits. It means the tool has to earn that level of trust first, with a clear answer to where the data goes, how long it is kept, and whether it is used to train anything beyond your own account."
+        "It depends on the plan, not just the company. The same AI provider often treats consumer accounts and business accounts very differently, so the plan your team logs into is the detail that matters."
+      ],
+      "subsections": [
+        {
+          "heading": "Consumer plans",
+          "paragraphs": [
+            "Free and personal paid plans often let the provider use chats to improve its models unless the user changes a setting. Anthropic, for example, [updated its consumer terms](https://www.anthropic.com/news/updates-to-our-consumer-terms) so that users on Claude Free, Pro and Max choose whether their chats can be used for training, with data kept up to five years if they opt in and 30 days if they do not."
+          ]
+        },
+        {
+          "heading": "Business plans",
+          "paragraphs": [
+            "Business and enterprise plans usually exclude your data from training by default. OpenAI says [ChatGPT Business workspace data](https://help.openai.com/en/articles/8798634-how-your-data-is-used-to-improve-model-performance) is excluded from training by default and encrypted in transit and at rest, and Anthropic says its [commercial products](https://privacy.anthropic.com/en/articles/7996868-is-my-data-used-for-model-training) such as Claude for Work and its API do not train on inputs or outputs by default.",
+            "Business plans also tend to add admin controls, so an owner can see who has access and remove people. Those controls matter as much as the training setting."
+          ]
+        },
+        {
+          "heading": "Feedback buttons",
+          "paragraphs": [
+            "Thumbs up and thumbs down buttons can change the rules for that chat. Anthropic says that when you send feedback this way it may store the whole related conversation for up to five years and use it to train models, even on commercial plans."
+          ]
+        }
       ]
     },
     {
-      "heading": "How do you check whether a tool is actually safe to use?",
+      "heading": "What should never go into a free AI tool?",
       "paragraphs": [
-        "Read the tool's data policy before the team starts using it, not after. Look specifically for whether it trains its models on your input by default, whether that can be turned off, and whether it offers a business or enterprise tier with stronger guarantees than the free version.",
-        "Favor tools that let you control retention, that support single sign on so access can be revoked the moment someone leaves the team, and that separate each client's data instead of pooling everything into one shared account.",
-        "When in doubt, ask the vendor directly. A vendor that cannot answer a plain question about where your data goes is telling you something, even if the answer is just silence.",
-        "It is worth revisiting this check even for tools already in use. Vendors change their data policies, sometimes quietly, and a tool that was safe to use a year ago may not be on the same terms today. A short annual review of the policies behind every tool your team relies on catches that drift before it becomes a problem."
+        "Anything you would not post on a public forum should stay out of a free or personal AI account. If a client would be upset to learn it left your systems, it does not go in.",
+        "That rule covers customer lists, financial figures, passwords and API keys, contracts, unreleased creative, health or legal details and anything under a signed confidentiality agreement. Free tools are still fine for general research, brainstorming and drafts that use placeholder details like Client A and 100 sample leads.",
+        "This is not a ban on AI. It is a rule that the tool has to earn trust first, with clear answers on training, retention and who can see the data.",
+        "Put these rules into a one-page policy that names the approved tools, the banned data types and who to ask when unsure. Share it with everyone who touches client accounts, contractors included."
       ]
     },
     {
-      "heading": "What does a safe setup actually look like day to day?",
+      "heading": "How do you check whether an AI tool is safe for client work?",
       "paragraphs": [
-        "Each client's work lives in its own space, with access limited to the people actually working on that account. Tools used for drafting or research run on business accounts with data retention and training turned off, not personal free accounts.",
-        "Anything an AI tool produces that touches client information gets reviewed by a person before it goes anywhere near the client or a live campaign. That review is not just about quality, it is a second check that nothing sensitive slipped into a draft that should not have it.",
-        "New tools go through a quick check before the team adopts them: what does the policy say, who has used it before, is there a business tier worth paying for. A five minute check before adoption is cheaper than explaining a leak afterward.",
-        "Training matters as much as the tools themselves. A team member who does not know why pasting a client list into a random AI tool is risky will do it anyway, not out of carelessness but because nobody explained the boundary. A short onboarding note on approved tools and why the line is drawn where it is closes that gap quickly."
+        "Check the plan's data terms before anyone uses it for client work, not after. Five questions cover most of what matters.",
+        "Step 1: Find the plan's privacy or data page and look for whether inputs are used to train models by default. Write down the exact plan name, because the answer often changes between free and business tiers.",
+        "Step 2: Check how long the provider keeps your data and whether an admin can change it. Shorter retention means less sitting on someone else's servers.",
+        "Step 3: Confirm the plan has an admin console, single sign on or at least a way to remove a user the day they leave. Access you cannot revoke is access you cannot control.",
+        "Step 4: Look at what connectors and integrations the tool can reach, like Google Drive or your inbox. A tool that can read a shared drive can read every client folder in it.",
+        "Step 5: If any answer is unclear, email the vendor and keep the reply. A vendor that cannot explain where your data goes has answered the question for you.",
+        "Step 6: Write the result into your approved tools list with the date you checked. When the vendor changes its terms later, you will know exactly what changed."
       ]
     },
     {
-      "heading": "Where should a small team start?",
+      "heading": "What does a safe day-to-day setup look like?",
       "paragraphs": [
-        "Write down, in one page, which tools the team is allowed to use for client work and what is off limits in each one. Share it with everyone who touches client accounts, not just the people who chose the tools. Review that list twice a year, since tools change their policies more often than most teams check.",
-        "None of this requires slowing down. It requires deciding the rules once, in writing, instead of leaving each person to guess. You can read more short guides like this one at The Momo Daily."
+        "A safe setup keeps each client separate, keeps client work on business accounts and keeps a person in the loop before anything goes out. None of it slows a good team down."
+      ],
+      "subsections": [
+        {
+          "heading": "Separate spaces per client",
+          "paragraphs": [
+            "Each client's files, prompts and outputs live in their own project or folder, open only to the people on that account. Pooling everything into one shared space is how one client's details end up in another's draft.",
+            "The same goes for AI agents that run routine tasks. Give each one access to a single client's folder, the way we describe in [a day in the life of an AI marketing agent](/daily/ai-marketing-agents-day-in-the-life)."
+          ]
+        },
+        {
+          "heading": "Business accounts only for client work",
+          "paragraphs": [
+            "Client work happens on approved business accounts with training off by default. Personal accounts stay for personal tasks."
+          ]
+        },
+        {
+          "heading": "A person reviews before anything ships",
+          "paragraphs": [
+            "Every AI draft that touches client information gets read by someone who knows the account before it goes to the client or a live campaign. We explain how that works in [why AI agents need human approval](/daily/human-approval-ai-agents) and [how AI agents hand work to people](/daily/how-ai-agents-hand-work-to-people)."
+          ]
+        },
+        {
+          "heading": "Placeholders in prompts",
+          "paragraphs": [
+            "When a task does not need the real details, swap them out before you paste. Client A and Product X work just as well for an outline, and the real names go back in later on an approved account."
+          ]
+        },
+        {
+          "heading": "Clean offboarding",
+          "paragraphs": [
+            "When someone leaves, remove their access to every AI tool on the same day you close their email. Old accounts are the access most teams forget.",
+            "Keep a simple list of which people have which AI accounts. It turns offboarding into a five minute checklist instead of a guess."
+          ]
+        }
+      ]
+    },
+    {
+      "heading": "A simple worked example: a six-person team",
+      "paragraphs": [
+        "Here is an example with made-up numbers, not a statistic. A six-person team where each person pastes client details into a personal AI account about 3 times a week creates 18 uncontrolled uses a week.",
+        "Over a year, that is 18 times 52, or 936 times client data went somewhere the business never reviewed. Spread across 12 months, it is about 78 a month.",
+        "Move the same work to one approved business workspace with training off by default, and the count of uncontrolled uses drops toward zero without anyone working slower. The time cost is one afternoon to set up the workspace and one page of rules.",
+        "The exact count is not the point. The example shows how small daily shortcuts add up to a large exposure that no one ever decided to accept."
+      ]
+    },
+    {
+      "heading": "What are the most common mistakes teams make?",
+      "paragraphs": [
+        "The most common mistake is assuming a paid plan is automatically a business plan. A personal paid subscription is often still a consumer plan with consumer data terms."
+      ],
+      "subsections": [
+        {
+          "heading": "Trusting the default without reading it",
+          "paragraphs": [
+            "Defaults change, and they differ by plan. Read the setting on the account your team actually uses."
+          ]
+        },
+        {
+          "heading": "Checking once and never again",
+          "paragraphs": [
+            "Providers update their terms, sometimes in ways that matter for client work. Review your approved list at least twice a year, and put the review on the calendar so it does not depend on memory."
+          ]
+        },
+        {
+          "heading": "Connecting everything",
+          "paragraphs": [
+            "Giving an AI tool access to your whole drive or inbox exposes every client at once. Connect only the folders a task needs."
+          ]
+        },
+        {
+          "heading": "Forgetting meeting tools",
+          "paragraphs": [
+            "AI note takers and transcription tools capture everything said on a call, including client details. Put them through the same check as any other AI tool or keep them off client calls."
+          ]
+        },
+        {
+          "heading": "No written rules",
+          "paragraphs": [
+            "If the rules live in one person's head, everyone else guesses. A one-page policy shared with everyone who touches client accounts fixes that."
+          ]
+        }
+      ]
+    },
+    {
+      "heading": "Do you need an enterprise AI plan for client work?",
+      "paragraphs": [
+        "Not always, but you do need a business-grade plan for anything that touches real client data. The right tier depends on your size and what your contracts require."
+      ],
+      "subsections": [
+        {
+          "heading": "A business or enterprise plan makes sense if",
+          "paragraphs": [
+            "Your team handles client files, customer lists or ad account data, or your client contracts include confidentiality or data handling terms. It also makes sense once more than one or two people use AI daily, because admin controls and offboarding start to matter."
+          ]
+        },
+        {
+          "heading": "Free or personal tools are fine if",
+          "paragraphs": [
+            "The work involves no real client details, such as general research, outlines or drafts with placeholders. If you are unsure where AI fits at all, start with our guide to [AI agents vs chatbots](/daily/ai-agents-vs-chatbots) and decide what jobs you actually need help with."
+          ]
+        },
+        {
+          "heading": "Ask your clients too",
+          "paragraphs": [
+            "Some clients set their own AI rules in contracts or vendor policies. Ask before you start and save their answer in that client's folder."
+          ]
+        }
       ]
     }
   ],
   "faq": [
     {
       "question": "Can I use free AI tools for client work at all?",
-      "answer": "Only for work that does not include client data: general research, brainstorming, or drafting with placeholder information. Anything containing real client details belongs on a business account with data training turned off."
+      "answer": "Only for work with no real client details, such as research, brainstorming or drafts with placeholder names. Anything with real client information belongs on an approved business account."
     },
     {
-      "question": "What should I check before letting my team use a new AI tool?",
-      "answer": "Read its data policy for whether it trains on your input by default, whether that can be disabled, and whether it offers a business tier with stronger data controls than the free version."
+      "question": "Does ChatGPT train on my team's data?",
+      "answer": "It depends on the plan. OpenAI says ChatGPT Business workspace data is excluded from training by default, while personal accounts have their own data controls that each user must check."
     },
     {
-      "question": "Who should review AI drafts before they reach a client?",
-      "answer": "A person who knows the client's account, not just anyone on the team. That review catches both quality issues and any sensitive detail that should not have made it into the draft."
+      "question": "Is a personal paid AI subscription safe for client data?",
+      "answer": "Not automatically. Many personal paid plans fall under consumer terms, so check the training and retention settings for that exact plan before using it for client work."
+    },
+    {
+      "question": "Can clicking thumbs up or down share my conversation?",
+      "answer": "It can. Anthropic, for example, says feedback sent this way may store the whole related conversation for up to five years and use it for training, even on commercial plans."
+    },
+    {
+      "question": "How often should we review our approved AI tools?",
+      "answer": "At least twice a year and whenever a provider announces new terms. Policies change more often than most teams check."
+    }
+  ],
+  "sources": [
+    {
+      "title": "Managing data, sharing, and privacy in ChatGPT Business (OpenAI Help Center)",
+      "url": "https://help.openai.com/en/articles/8798634-how-your-data-is-used-to-improve-model-performance"
+    },
+    {
+      "title": "Updates to Consumer Terms and Privacy Policy (Anthropic)",
+      "url": "https://www.anthropic.com/news/updates-to-our-consumer-terms"
+    },
+    {
+      "title": "Is my data used for model training? (Anthropic Privacy Center)",
+      "url": "https://privacy.anthropic.com/en/articles/7996868-is-my-data-used-for-model-training"
     }
   ]
 }

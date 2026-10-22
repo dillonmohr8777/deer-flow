@@ -1,75 +1,264 @@
 {
-  "title": "Why does human approval still matter when AI agents do the work?",
-  "dek": "AI agents can draft, research and check their own work, but the final yes should still belong to a person.",
+  "title": "Human Approval for AI Agents: What Needs a Person's Yes",
+  "dek": "Human approval for AI agents keeps costly mistakes from going out the door. Here is which agent actions need a person's yes, and how to keep it fast.",
   "slug": "human-approval-ai-agents",
   "date": "2026-09-27",
-  "author": { "name": "Dillon Mohr", "title": "AI Marketing Director" },
+  "author": {
+    "name": "Dillon Mohr",
+    "title": "AI Marketing Director"
+  },
   "keywords": [
-    "human approval",
-    "AI agents",
+    "human approval for AI agents",
     "human in the loop",
-    "AI oversight"
+    "AI agent oversight",
+    "AI agent approval workflow",
+    "when should AI agents ask permission",
+    "human review of AI output",
+    "AI agents for small business"
   ],
-  "summary": "Human approval still matters because AI agents can be confidently wrong, and some mistakes, a wrong client claim, a bad send, an overspend, are expensive to undo. A person reviewing the final draft catches what the agent could not see about the real world.",
+  "summary": "Human approval for AI agents means a person signs off before an agent takes an action that is hard to undo, like sending to a client, spending money or publishing. Agents can be confidently wrong about context they were never given. A short, named review step catches those mistakes without losing the speed.",
   "section": "Quality",
   "hero": {
     "src": "/momentum/daily/art/human-approval-ai-agents.webp",
     "alt": "A 1930s pulp noir illustration of Momo the robot mascot as a newspaper editor at a cluttered desk, one arm raised holding a large blank rubber stamp"
   },
-  "status": "draft",
+  "status": "published",
   "body": [
     {
-      "heading": "What does an AI agent actually get wrong?",
+      "heading": "Why does human approval still matter when AI agents do the work?",
       "paragraphs": [
-        "Not usually grammar or tone. Agents are good at those. What they get wrong is context they were never given: a client's promotion ended last week, a competitor changed its pricing, a phrase that reads fine in general but is wrong for this specific customer.",
-        "An agent can also sound completely confident while being wrong. It does not pause and say it is unsure the way a careful person might. That confidence is useful when the agent is right and dangerous when it is not, which is exactly why a second set of eyes matters before anything goes out.",
-        "This is not a flaw unique to AI. A new hire on their first week can make the same kind of confident mistake, missing context nobody handed them yet. The difference is speed: an agent can produce that confident, wrong output far faster than a person, so the review step has to keep pace with that speed rather than lag behind it."
+        "Human approval matters because AI agents can be confidently wrong, and some mistakes are expensive to undo. A wrong claim in a client email, an ad budget set too high or a post that misstates a price cannot be pulled back once it is out.",
+        "This guide is for small business owners and marketing teams who use AI agents, or plan to, and want a clear rule for what the agent can do alone and what waits for a person.",
+        "The goal is not to slow agents down. It is to put a person exactly where judgment matters and nowhere else."
+      ],
+      "subsections": [
+        {
+          "heading": "What human approval means",
+          "paragraphs": [
+            "Human approval is a checkpoint where an agent stops, shows a person what it plans to do, and waits for a yes before acting. People also call this human in the loop.",
+            "The agent still does the research, the drafting and the busywork. The person makes the final call on the few actions that carry real risk."
+          ]
+        },
+        {
+          "heading": "Why it matters more as agents do more",
+          "paragraphs": [
+            "A chatbot only suggests text, so a person always takes the last step by hand. An agent can take that step itself, such as sending the email or changing the bid, which is exactly why the checkpoint has to be designed on purpose."
+          ]
+        }
       ]
     },
     {
-      "heading": "What kind of work actually needs a human check?",
+      "heading": "What do AI agents actually get wrong?",
       "paragraphs": [
-        "Not everything needs the same level of review. Internal research and early drafts can move fast with light checking, since a mistake there costs almost nothing to fix. The bar rises sharply the closer work gets to something hard to undo: an email sent to a client's list, a live ad campaign, a public social post, a payment.",
-        "A simple test works well: if this were wrong, how hard would it be to take back. A typo in an internal note is nothing. A factual error in a client's newsletter, already sent, is a real problem. Match the review to the risk, not to a blanket rule that treats every draft the same.",
-        "It also helps to name who does that review, not just that a review happens. Leaving approval as an unassigned step means it gets skipped on a busy day. Assigning it to a specific person for each client keeps the check real instead of theoretical."
+        "Agents rarely get grammar or tone wrong. What they miss is context nobody gave them."
+      ],
+      "subsections": [
+        {
+          "heading": "Missing context",
+          "paragraphs": [
+            "An agent may not know that a promotion ended last week, that a customer asked not to be emailed, or that a phrase reads badly for one specific audience. A new hire in their first week makes the same kind of mistake."
+          ]
+        },
+        {
+          "heading": "Confident tone",
+          "paragraphs": [
+            "An agent often sounds just as sure when it is wrong as when it is right. It does not hesitate the way a careful person might, so the tone of a draft is no signal of its accuracy."
+          ]
+        },
+        {
+          "heading": "Over-literal goals",
+          "paragraphs": [
+            "Agents can take a goal further than you meant. Anthropic's [framework for safe and trustworthy agents](https://www.anthropic.com/news/our-framework-for-developing-safe-and-trustworthy-agents) gives the example of an agent asked to organize files that deletes what it thinks are duplicates and restructures the whole system."
+          ]
+        },
+        {
+          "heading": "Speed",
+          "paragraphs": [
+            "The difference from a new hire is speed. An agent can produce a confident, wrong result far faster than a person, so the review step has to keep pace."
+          ]
+        },
+        {
+          "heading": "Stale information",
+          "paragraphs": [
+            "Agents work from whatever data they were given or can find, and that data can be out of date. An agent may quote last season's hours, an old price list or a staff member who has left.",
+            "A person who knows the business spots those errors in seconds. That is a big part of why the final check belongs to someone close to the work."
+          ]
+        }
       ]
     },
     {
-      "heading": "Does this slow down the whole point of using agents?",
+      "heading": "Which AI agent actions need a person's yes?",
       "paragraphs": [
-        "Less than people expect. The agent still does the slow part: the research, the first draft, the resizing, the fact gathering. A person is reviewing a finished piece of work, not starting from a blank page. That review can take minutes instead of the hours the draft itself would have taken to produce by hand.",
-        "The speed gain is real even with a human check at the end. What changes is where the person's time goes: less time producing, more time judging, which is the part of the work that actually needs a human."
+        "Any action that is hard or costly to undo needs a person's yes. Most teams can sort their agent work into three groups."
+      ],
+      "subsections": [
+        {
+          "heading": "Always needs approval",
+          "paragraphs": [
+            "Sending anything to a client or customer list, spending money, changing a live ad campaign, publishing to a website or social account, and deleting data. These are the actions where a mistake reaches the real world."
+          ]
+        },
+        {
+          "heading": "Light check",
+          "paragraphs": [
+            "Internal drafts, research summaries and first versions of reports. A quick skim on a normal schedule is enough, since mistakes here cost little to fix."
+          ]
+        },
+        {
+          "heading": "No approval needed",
+          "paragraphs": [
+            "Reading files, gathering public data, resizing images or formatting a spreadsheet. These actions change nothing outside the agent's own workspace."
+          ]
+        },
+        {
+          "heading": "How the big platforms handle it",
+          "paragraphs": [
+            "AI companies build this split into their own tools. OpenAI's [production notes for GPT Actions](https://developers.openai.com/api/docs/actions/production) let builders flag an action as consequential, such as booking and paying for a hotel room, so ChatGPT always asks the user to confirm before running it. Anthropic notes that Claude Code reads by default but asks for approval before actions that modify code or systems."
+          ]
+        },
+        {
+          "heading": "Approval by job type",
+          "paragraphs": [
+            "For client email, approve the final draft and the recipient list. For ads, approve budget, bid and new campaign changes, while letting the agent pull reports freely.",
+            "For social posts, approve the post and the image before it is scheduled. For website changes, approve anything that goes live, while letting the agent prepare drafts on a staging copy. Our look at [a day in the life of AI marketing agents](/daily/ai-marketing-agents-day-in-the-life) walks through where these checkpoints fall in a normal workday."
+          ]
+        }
       ]
     },
     {
-      "heading": "What makes a review fast instead of a bottleneck?",
+      "heading": "Human approval makes sense if, and when to loosen it",
       "paragraphs": [
-        "A good handoff from the agent. A draft that shows its sources, states what it assumed, and flags anything it was unsure about lets a person check the right things quickly instead of re-researching from scratch. A draft with no explanation forces the reviewer to redo the agent's work just to trust it.",
-        "Clear rules about what needs approval also help. When everyone knows that client sends, spend and public posts always wait for a person, nobody is guessing whether this particular draft needs a look. The rule is set once, and it applies every time.",
-        "Trust in the agent's track record still matters, but it should change how carefully a person reads a draft, not whether they read it at all. An agent that has been reliable for months earns a faster review. It has not earned a skipped one."
+        "Strict approval makes sense when the action touches money, customers, public channels or data you cannot recover. It also makes sense for a new agent, a new client or a new type of task, when nobody knows the agent's habits yet.",
+        "You can loosen the review, not remove it, when an agent has a long clean record on a narrow, repeatable task. A weekly report built from the same data source every week is a good example.",
+        "Keep the rule written down. The [NIST AI Risk Management Framework](https://www.nist.gov/itl/ai-risk-management-framework) is a voluntary guide, but its core idea applies to a five person shop too: decide who is accountable for each AI system before something goes wrong."
       ]
     },
     {
-      "heading": "So what should a small business actually do?",
+      "heading": "How do you keep approval fast instead of a bottleneck?",
       "paragraphs": [
-        "Write down which actions always need a human yes: sending to a client, spending money, publishing publicly, changing a live campaign. Everything on that list waits for a person, no exceptions, no matter how good the agent's track record has been.",
-        "For everything else, let the agents move, and check the results on a normal schedule rather than watching every step. That balance, fast where mistakes are cheap, careful where they are not, is what makes AI agents genuinely useful instead of just fast. Find more of these plain rules on The Momo Daily.",
-        "Revisit the list occasionally as the work changes. A new type of campaign, a new client with stricter requirements, or a new agent taking on unfamiliar work is a reason to check whether the approval rule still fits, not a reason to assume the old rule still covers it."
+        "Approval is fast when the agent hands over finished work with its reasoning attached. A person then checks the right things instead of redoing the research."
+      ],
+      "subsections": [
+        {
+          "heading": "A good handoff",
+          "paragraphs": [
+            "The draft should show its sources, state what it assumed and flag anything it was unsure about. Our guide on [how AI agents hand work to people](/daily/how-ai-agents-hand-work-to-people) shows what a clean handoff looks like."
+          ]
+        },
+        {
+          "heading": "A named owner",
+          "paragraphs": [
+            "Every approval type needs one person who owns it. An unassigned review gets skipped on a busy day."
+          ]
+        },
+        {
+          "heading": "Clear checkpoints",
+          "paragraphs": [
+            "Anthropic's guide to [building effective agents](https://www.anthropic.com/engineering/building-effective-agents) describes agents that pause for human feedback at checkpoints or when they hit a blocker. Put the checkpoint right before the risky action, not after every small step."
+          ]
+        },
+        {
+          "heading": "What an approval request should include",
+          "paragraphs": [
+            "A good request fits on one screen. It says what the agent wants to do, who it affects, what it will cost if anything, the sources behind any claims, and what the agent was unsure about.",
+            "For example, an agent proposing an ad budget change should show the current budget, the new budget, the reason, and the last two weeks of results it based the change on. The approver can then say yes or no in a minute."
+          ]
+        },
+        {
+          "heading": "Batching",
+          "paragraphs": [
+            "Group routine approvals into one or two set times a day. A reviewer who clears ten small requests at once moves faster than one who is interrupted ten times."
+          ]
+        }
+      ]
+    },
+    {
+      "heading": "What are the most common approval mistakes?",
+      "paragraphs": [
+        "The first mistake is reviewing everything the same way. When every draft gets the same heavy review, people start skimming, and the risky ones slip through.",
+        "The second is skipping review because the agent has been reliable. Track record should change how carefully you read, not whether you read.",
+        "The third is approving without context. If the reviewer cannot see the sources or the agent's assumptions, the yes is a guess. The fourth is never updating the rule when a new client, channel or agent arrives."
+      ],
+      "subsections": [
+        {
+          "heading": "Rubber stamping",
+          "paragraphs": [
+            "When approvals pile up, reviewers start clicking yes without reading. That is worse than no review, because everyone assumes someone checked.",
+            "Keep the always approve list short so each request gets real attention. If the list grows past what one person can read carefully, split ownership."
+          ]
+        },
+        {
+          "heading": "No record of the yes",
+          "paragraphs": [
+            "If nobody records who approved what, a mistake turns into a guessing game. A simple log with the action, the approver and the time is enough.",
+            "That log also shows which agents earn a lighter review over time, because you can see their record instead of relying on memory."
+          ]
+        }
+      ]
+    },
+    {
+      "heading": "A simple worked example",
+      "paragraphs": [
+        "Here is an example with made up numbers to show the trade, not a measured result. Say writing a client newsletter by hand takes a marketer 3 hours.",
+        "With an agent, the research and first draft take the marketer 0 hours of their own time. Reviewing a draft that shows its sources takes about 20 minutes, so the marketer saves about 2 hours and 40 minutes per newsletter.",
+        "Now say 1 newsletter in 20 would have gone out with a wrong claim. Across 20 newsletters, review costs about 6 hours and 40 minutes in total and catches that one mistake before it reaches the client's whole list. Compared with 60 hours of hand writing, the team still saves over 53 hours."
+      ]
+    },
+    {
+      "heading": "How should a small business set up its approval rules?",
+      "paragraphs": [
+        "Step 1: Write down every action your agents can take. Step 2: Mark each one as always approve, light check or no approval, using the undo test. Step 3: Name one owner for each always approve action.",
+        "Step 4: Require every agent draft to include sources, assumptions and open questions. Step 5: Review the list each quarter, and any time you add a new client, channel or agent.",
+        "If you are still choosing tools, read our comparison of [AI agents vs chatbots](/daily/ai-agents-vs-chatbots) and our checklist for [keeping client data safe with AI tools](/daily/client-data-safe-ai-tools). At Momentum we run our own agents on this same rule: the agent drafts, a person approves anything that leaves the building."
       ]
     }
   ],
   "faq": [
     {
-      "question": "Should every AI generated draft go through human review?",
-      "answer": "Not with the same intensity. Low risk internal drafts can move with light checking. Anything that spends money or reaches a client publicly should always get a full human review before it goes out."
+      "question": "Should every AI generated draft get a full human review?",
+      "answer": "No. Match the review to the risk: light checks for internal drafts, full review for anything that reaches a client, spends money or goes public."
     },
     {
-      "question": "Does human review cancel out the speed benefit of using AI agents?",
-      "answer": "No. The agent still handles the slow research and drafting work. A person reviewing a finished draft usually takes minutes, not the hours the draft itself would have taken to write from scratch."
+      "question": "Does human review cancel out the time AI agents save?",
+      "answer": "No. The agent still does the slow research and drafting, and reviewing a finished draft with sources usually takes minutes, not hours."
     },
     {
-      "question": "What is the simplest rule for deciding what needs approval?",
-      "answer": "Ask how hard the action would be to undo. A typo in an internal note costs nothing. A wrong claim already sent to a client's inbox is expensive, so anything in that category always waits for a person."
+      "question": "What is human in the loop for AI agents?",
+      "answer": "It means a person is part of the workflow at set points, usually approving actions before they happen. The agent works on its own between those checkpoints."
+    },
+    {
+      "question": "Can an AI agent ever approve its own work?",
+      "answer": "It can check its own work, but it should not give the final yes on actions that are hard to undo. That call belongs to a named person."
+    },
+    {
+      "question": "Who should approve AI agent actions in a small team?",
+      "answer": "The person who would answer for the mistake, such as the account owner for client sends or the budget owner for ad spend. Name them in writing."
+    }
+  ],
+  "updated": "2026-10-22",
+  "takeaways": [
+    "The simplest approval rule is to ask how hard an action would be to undo, and require a person's yes for anything expensive to take back.",
+    "AI agent builders already work this way: Anthropic says humans should retain control before high-stakes decisions are made.",
+    "Review is fast when the agent hands over sources, assumptions and open questions along with the draft.",
+    "Approval only works when one named person owns it for each type of action.",
+    "A good track record earns an agent a faster review, never a skipped one."
+  ],
+  "sources": [
+    {
+      "title": "Our framework for developing safe and trustworthy agents, Anthropic",
+      "url": "https://www.anthropic.com/news/our-framework-for-developing-safe-and-trustworthy-agents"
+    },
+    {
+      "title": "Building effective agents, Anthropic",
+      "url": "https://www.anthropic.com/engineering/building-effective-agents"
+    },
+    {
+      "title": "Production notes on GPT Actions, OpenAI",
+      "url": "https://developers.openai.com/api/docs/actions/production"
+    },
+    {
+      "title": "AI Risk Management Framework, NIST",
+      "url": "https://www.nist.gov/itl/ai-risk-management-framework"
     }
   ]
 }

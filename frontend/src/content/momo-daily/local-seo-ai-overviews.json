@@ -1,84 +1,229 @@
 {
-  "title": "Local SEO when Google answers with AI first",
-  "dek": "What changes for a local business now that Google often shows an AI Overview before the map pack and the results list.",
+  "title": "Local SEO and Google AI Overviews: What to Fix First",
+  "dek": "Local SEO when Google answers with AI first: where AI Overviews get local business facts, how local ranking works, and the fixes that matter most.",
   "slug": "local-seo-ai-overviews",
   "date": "2026-09-19",
-  "author": { "name": "Dillon Mohr", "title": "AI Marketing Director" },
+  "updated": "2026-10-22",
+  "author": {
+    "name": "Dillon Mohr",
+    "title": "AI Marketing Director"
+  },
   "keywords": [
-    "local SEO",
-    "Google AI Overviews",
+    "local SEO AI Overviews",
+    "Google AI Overviews local business",
     "Google Business Profile",
-    "local search",
-    "AI search local business"
+    "local search ranking factors",
+    "Google AI Mode local search",
+    "how to show up in AI Overviews locally"
   ],
-  "summary": "Google AI Overviews now sit above many search results, including local ones, and pull from your Google Business Profile, your website, and public review sites. Local SEO has not stopped mattering. It has to work harder, because the AI summary can now answer a customer's question before they ever scroll down to your listing.",
+  "summary": "Local SEO still works when Google answers with AI first, and the core work barely changes. Google says AI Overviews and AI Mode need no special optimization. They draw on your Google Business Profile, your website and your reviews, so an accurate profile, plain service pages and steady reviews are what get a local business named.",
   "section": "Search and Growth",
   "hero": {
     "src": "/momentum/daily/art/local-seo-ai-overviews.webp",
     "alt": "Momo the blue robot mascot as a noir beat cop studying a city street map under a lamppost with a magnifying glass, in dramatic ink and halftone on cream newsprint"
   },
-  "status": "draft",
+  "status": "published",
+  "takeaways": [
+    "Google says there are no extra requirements to appear in AI Overviews or AI Mode, so standard local SEO is still the job.",
+    "Your Google Business Profile feeds both the map pack and Google's AI answers, which makes it the first thing to fix.",
+    "Local results still depend mainly on relevance, distance and prominence, and Google says you cannot pay for a better local ranking.",
+    "Reviews and matching facts across your profile and website give an AI summary something accurate to say about you.",
+    "Search Console's generative AI performance report shows how often your pages appear in AI Overviews and AI Mode."
+  ],
   "body": [
     {
-      "heading": "What actually changed on a local search results page?",
+      "heading": "What changes on a local search page with AI Overviews?",
       "paragraphs": [
-        "A search for something local, a plumber nearby, the best coffee shop downtown, restaurant hours tonight, increasingly returns an AI generated summary at the very top of the page, above the familiar map with a handful of pinned businesses and above the standard list of links. That summary often answers the question outright: naming a business, stating hours, or comparing a few options in a sentence or two.",
-        "The map pack and organic results have not disappeared. They still sit on the page, and most local searches still lead a person to click through eventually. But the AI Overview is now the first thing many people see and read, which makes it a new gatekeeper local businesses have to account for."
+        "A local search on Google can now open with an AI Overview, a short written answer that sits above the map pack and the regular links. Ask for an emergency plumber or a brunch spot nearby, and the summary may name businesses, mention hours or compare a few options before anyone scrolls.",
+        "The map pack and the organic results are still on the page. What changed is the reading order, which now puts the summary first and your listing second.",
+        "Google also offers AI Mode, a conversational search that can handle longer local questions like which roofer near me handles insurance claims. Both features run on the same index and the same business data, so the work in this guide covers both.",
+        "For a customer, this saves a step. For a business, it means the facts Google holds about you get read first, before your own listing gets a look."
       ]
     },
     {
-      "heading": "Where does an AI Overview get its local information?",
+      "heading": "Do you need special optimization to show up in AI Overviews?",
       "paragraphs": [
-        "For local questions specifically, the AI Overview leans heavily on the same sources it always has: your Google Business Profile, your website, and public review platforms. It is not pulling from a separate, mysterious source. It is reading the same information a person would find if they clicked through manually, and summarizing it.",
-        "That means the fastest way to influence what the AI Overview says about your business is the same work that has always mattered for local SEO, just done with more care: a complete, accurate Business Profile, a website that clearly states what you do and where, and reviews that reflect reality.",
-        "It also means there is no separate local GEO tool to buy. The work is the same work a good local SEO checklist has always called for. What changed is how quickly a gap in that work now shows up, since the AI Overview surfaces before a person ever has the chance to scroll past a thin listing."
+        "No, Google says you do not. Its [AI features documentation on Google Search Central](https://developers.google.com/search/docs/appearance/ai-features) states there are no additional requirements to appear in AI Overviews or AI Mode and no special optimizations needed beyond normal SEO best practices.",
+        "Google's [guide to optimizing for generative AI features](https://developers.google.com/search/docs/fundamentals/ai-optimization-guide) adds one point that matters a lot for local businesses. It says an accurate Google Business Profile can help your business show up in both AI responses and regular search results.",
+        "That is good news for a small business with a small budget. There is no separate local AI tool to buy and no secret file to add, which is the same idea behind [generative engine optimization](/daily/what-is-generative-engine-optimization). The difference now is that gaps in your basics show up in the very first thing a customer reads.",
+        "If someone pitches you an AI SEO package for local search, ask what it changes on your profile, your website and your reviews. If the answer is none of those, it is probably not touching what Google reads."
       ]
     },
     {
-      "heading": "Does the map pack still matter?",
+      "heading": "Where does Google get local business information for AI answers?",
       "paragraphs": [
-        "Yes, and for now it may matter more, not less. The map pack is still where most local clicks go once a person decides to act, and Google Business Profile data still feeds both the map pack and the AI Overview. Keeping that profile accurate and current does double duty.",
-        "Treat the map pack and the AI Overview as two views of the same underlying data, not two separate projects. A business that gets its Business Profile right is doing the work that supports both, rather than choosing which one to chase."
+        "Google pulls from the same places it uses for the rest of local search: your Google Business Profile, your website and what the rest of the web says about you. No hidden source exists, so the fastest way to change what the summary says is to fix those three."
+      ],
+      "subsections": [
+        {
+          "heading": "Your Google Business Profile",
+          "paragraphs": [
+            "Your Business Profile is the most structured record Google has about you. Name, primary category, hours, service area, phone number and description all feed the map pack directly.",
+            "When those fields are wrong or empty, an AI summary has less to work with or, worse, repeats the wrong detail."
+          ]
+        },
+        {
+          "heading": "Your website",
+          "paragraphs": [
+            "Your website confirms and expands what the profile says. A service page that names the town, the service and the hours in plain words gives Google text it can match to a real question.",
+            "Pages built this way are also the ones [answer engines quote](/daily/write-pages-answer-engines-quote), because the answer sits in the first sentence instead of under a slogan."
+          ]
+        },
+        {
+          "heading": "Reviews and mentions elsewhere",
+          "paragraphs": [
+            "Reviews and outside mentions tell Google how known and trusted you are. Google's own help page says review count, review score and links from other websites all feed into local ranking.",
+            "Specific recent reviews also give a summary real detail to repeat, like on time, fair quote, cleaned up after."
+          ]
+        }
+      ]
+    },
+    {
+      "heading": "How does Google decide which local businesses to show?",
+      "paragraphs": [
+        "Google says local results are based mainly on relevance, distance and prominence, and AI features did not change that. Its [local ranking tips for Google Business Profile](https://support.google.com/business/answer/7091) also say there is no way to request or pay for a better local ranking."
+      ],
+      "subsections": [
+        {
+          "heading": "Relevance",
+          "paragraphs": [
+            "Relevance is how well your profile matches what someone searched for. Complete, detailed business information helps Google match you to more of the right searches."
+          ]
+        },
+        {
+          "heading": "Distance",
+          "paragraphs": [
+            "Distance is how far your business is from the person searching or the place they named. You cannot change your address, but you can make sure your service area is listed correctly."
+          ]
+        },
+        {
+          "heading": "Prominence",
+          "paragraphs": [
+            "Prominence is how well known your business is, online and off. Google says links from other sites, review count and review score all count toward it, and your position in regular web results counts too.",
+            "Prominence is also where AI answers and the map pack overlap most. The same reviews and mentions that lift you in the map give a summary real detail to repeat."
+          ]
+        }
       ]
     },
     {
       "heading": "What should a local business fix first?",
       "paragraphs": [
-        "Start with the Google Business Profile: correct hours, correct service area, correct categories, and a description that states plainly what the business does and for whom. Inconsistent or outdated information here is one of the most common reasons a business gets left out of both the map pack and the AI summary, and it is usually the fastest fix on this list.",
-        "Next, check that the website itself states the same basic facts, in plain language, on the page a customer would actually land on. A homepage that never mentions the city or service area by name, relying instead on a logo and a tagline, gives an AI system very little to work with."
+        "Fix your Google Business Profile first, because it feeds both the map pack and the AI summary. Then work outward to your website and your reviews in this order.",
+        "Step 1: Open your Business Profile and check every field. Confirm the business name, primary category, hours, holiday hours, service area, phone number and website link, then write a description that says what you do, for whom and where.",
+        "Step 2: Make your website match the profile word for word on the basics. Your homepage and each service page should name the town or service area, the service and how to reach you in plain sentences, not only in a logo or footer.",
+        "Step 3: Give each main service its own page. A page that answers the top three questions customers ask about that service gives Google and AI answers a clear source, and [schema markup](/daily/schema-markup-for-ai-answers) can label the business facts on it.",
+        "Step 4: Ask every happy customer for a review and reply to every review you get. A calm, specific reply to a bad review shows future customers you are paying attention.",
+        "Step 5: Add real photos of your work, your team and your storefront. Photos help customers know what to expect before they call, and they round out a complete profile.",
+        "Step 6: Check your results once a month. Search Console's [generative AI performance report](https://support.google.com/webmasters/answer/16984139) shows impressions from AI Overviews and AI Mode by page, country and device, and our guide to [measuring AI search visibility](/daily/measure-ai-search-visibility) covers the rest."
       ]
     },
     {
-      "heading": "Do reviews still carry the same weight?",
+      "heading": "A simple worked example: two plumbers in one town",
       "paragraphs": [
-        "Reviews still matter, and arguably more so, because they are one of the few sources that reflect real customer experience rather than a business's own description of itself. An AI Overview comparing two similar local businesses is likely to lean on review content, especially specific, recent comments, when deciding how to characterize each one.",
-        "Responding to reviews, especially negative ones, with a calm and specific reply still helps. It shows both future customers and any system reading the page that the business is attentive and accountable."
+        "Here is an example with made-up numbers, not a statistic. Plumber A and Plumber B both serve the same town, and both get about 40 calls a month from Google.",
+        "Plumber A lists six services on its Business Profile, but its website only mentions two of them. If 1 in 4 calls is about water heaters, that is 10 calls a month tied to a service the website barely mentions, so an AI summary has little to say about Plumber A for that question.",
+        "Plumber A adds a water heater page and asks its last 30 customers for a review. If 1 in 3 of them leaves one, that is 10 new reviews, moving the profile from 18 reviews to 28 and giving Google fresh, specific detail to work with.",
+        "Nothing about this required a new tool. It took one page, one profile check and one round of review requests, which is the kind of work a small team can finish in a week."
       ]
     },
     {
-      "heading": "What does a monthly local SEO habit look like now?",
+      "heading": "What are the most common local SEO mistakes with AI search?",
       "paragraphs": [
-        "A short monthly check covers most of it: confirm the Business Profile is still accurate, especially hours around holidays, read new reviews and respond, and make sure any changes to services or pricing show up on the website in plain language, not just in an internal system. None of this requires new tools. It requires treating information that is already public as something worth keeping current. We check in on questions like this regularly over on The Momo Daily.",
-        "Assign the check to one person, even at a small business, rather than leaving it to whoever happens to notice something is out of date. A recurring fifteen minute task with a clear owner gets done far more reliably than a general intention to keep things updated."
+        "The most common mistake is treating AI search as a separate project and letting the basics slide. These are the others that show up again and again."
+      ],
+      "subsections": [
+        {
+          "heading": "Hours that are wrong on holidays",
+          "paragraphs": [
+            "Holiday hours are the detail most often left out of date. A customer who reads an AI summary saying you are open, then finds a locked door, does not come back. Set a reminder two weeks before each holiday to update them."
+          ]
+        },
+        {
+          "heading": "A website that never says where you work",
+          "paragraphs": [
+            "Many small business sites mention the town only in the footer or not at all. If the page does not say it in a sentence, Google has to guess."
+          ]
+        },
+        {
+          "heading": "Chasing tricks instead of facts",
+          "paragraphs": [
+            "Google's guide lists things it says are not needed for its AI features, including llms.txt files and special markup made just for AI. Time spent on tricks is time not spent on the profile and pages that actually feed the answer."
+          ]
+        },
+        {
+          "heading": "Different facts in different places",
+          "paragraphs": [
+            "When your profile, website and directory listings disagree on hours or phone number, Google has to pick one. Choose one version of every basic fact and use it everywhere."
+          ]
+        },
+        {
+          "heading": "Ignoring reviews",
+          "paragraphs": [
+            "A profile with a handful of old reviews gives Google little to go on. A steady habit of asking for reviews matters more than a one-time push."
+          ]
+        }
+      ]
+    },
+    {
+      "heading": "When is extra work on AI Overviews worth it?",
+      "paragraphs": [
+        "For most local businesses, the extra work is simply doing the basics well and checking them monthly. Whether to go further depends on how your customers search."
+      ],
+      "subsections": [
+        {
+          "heading": "It makes sense if",
+          "paragraphs": [
+            "Your customers ask longer questions before they call, like which dentist near me takes my insurance or which contractor handles permits. It also makes sense if competitors keep showing up in AI summaries for services you offer, which you can confirm by [checking how AI answer engines cite businesses](/daily/get-cited-by-ai-answer-engines) in your area.",
+            "It also makes sense when one of your services is worth far more than the rest, like implants for a dentist. A page that answers that service's questions in depth gives AI answers a clear source for exactly that job."
+          ]
+        },
+        {
+          "heading": "You can keep it simple if",
+          "paragraphs": [
+            "Most of your business comes from repeat customers, referrals or one or two short searches like your business name. In that case, an accurate profile, a clear website and a monthly review check cover almost everything."
+          ]
+        }
       ]
     }
   ],
   "faq": [
     {
-      "question": "Does an AI Overview replace the local map pack?",
-      "answer": "Not currently. Both typically appear on the same results page, with the AI Overview above and the map pack still visible below it."
+      "question": "Can a small local business show up in a Google AI Overview?",
+      "answer": "Yes. Google uses the same index and business data for AI Overviews as for its regular results, so a complete profile, a clear website and real reviews give a business of any size a fair shot."
     },
     {
-      "question": "What is the single most important fix for local visibility now?",
-      "answer": "Keeping the Google Business Profile complete and accurate, since it feeds both the map pack and most AI Overview summaries."
+      "question": "Can I pay Google to rank higher in local results or AI answers?",
+      "answer": "No. Google says there is no way to request or pay for a better local ranking, and its AI features draw on the same ranking systems as regular search."
     },
     {
-      "question": "Do online reviews still matter as much?",
-      "answer": "Yes, and possibly more, since reviews are one of the few sources that reflect actual customer experience rather than a business's own claims."
+      "question": "Do I need an llms.txt file for local AI search?",
+      "answer": "No. Google's guide to its generative AI features says llms.txt files and special AI-only markup are not needed to appear in them."
     },
     {
-      "question": "Should I change my website copy for this?",
-      "answer": "Mostly just make sure it plainly states your service area, services, and key facts in ordinary language, without relying only on a logo or a tagline to communicate that."
+      "question": "Where can I see whether my pages appear in AI Overviews?",
+      "answer": "Use the generative AI performance report in Google Search Console. It shows impressions from AI Overviews and AI Mode, grouped by page, country and device."
+    },
+    {
+      "question": "How often should I review my Google Business Profile?",
+      "answer": "Once a month, plus before every holiday. Hours and services change more often than most owners expect, and wrong hours cost real customers."
+    }
+  ],
+  "sources": [
+    {
+      "title": "AI Features and Your Website (Google Search Central)",
+      "url": "https://developers.google.com/search/docs/appearance/ai-features"
+    },
+    {
+      "title": "Google's Guide to Optimizing for Generative AI Features on Google Search (Google Search Central)",
+      "url": "https://developers.google.com/search/docs/fundamentals/ai-optimization-guide"
+    },
+    {
+      "title": "Tips to improve your local ranking on Google (Google Business Profile Help)",
+      "url": "https://support.google.com/business/answer/7091"
+    },
+    {
+      "title": "Generative AI performance report (Search) (Search Console Help)",
+      "url": "https://support.google.com/webmasters/answer/16984139"
     }
   ]
 }

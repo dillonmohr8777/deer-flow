@@ -6,17 +6,18 @@ import {
   articleJsonLd,
   articlePath,
   MOMO_DAILY_NAME,
+  relatedArticles,
   serializeJsonLd,
   visibleArticles,
 } from "@/core/momo-daily";
-import { isSignedIn, loadAllArticles } from "@/core/momo-daily/load";
+import { canSeeDrafts, loadAllArticles } from "@/core/momo-daily/load";
 
 type Props = { params: Promise<{ slug: string }> };
 
 /** Drafts resolve only for a signed-in workspace user; anyone else gets a 404. */
 async function findArticle(slug: string) {
   const articles = visibleArticles(await loadAllArticles(), {
-    signedIn: await isSignedIn(),
+    signedIn: await canSeeDrafts(),
   });
   return articles.find((article) => article.slug === slug);
 }
@@ -67,7 +68,10 @@ export default async function DailyArticlePage({ params }: Props) {
           dangerouslySetInnerHTML={{ __html: serializeJsonLd(graph) }}
         />
       ))}
-      <DailyArticleView article={article} />
+      <DailyArticleView
+        article={article}
+        related={relatedArticles(article, await loadAllArticles())}
+      />
     </>
   );
 }

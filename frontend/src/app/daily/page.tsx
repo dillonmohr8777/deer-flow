@@ -9,7 +9,7 @@ import {
   serializeJsonLd,
   visibleArticles,
 } from "@/core/momo-daily";
-import { isSignedIn, loadAllArticles } from "@/core/momo-daily/load";
+import { canSeeDrafts, loadAllArticles } from "@/core/momo-daily/load";
 
 const DESCRIPTION =
   "Momentum's newspaper for clients and the team: the latest in AI, explained plainly and answered first.";
@@ -35,7 +35,7 @@ export const metadata: Metadata = {
 
 export default async function DailyPage() {
   const articles = visibleArticles(await loadAllArticles(), {
-    signedIn: await isSignedIn(),
+    signedIn: await canSeeDrafts(),
   });
   const editionDate = new Date().toLocaleDateString("en-US", {
     weekday: "long",
