@@ -10,6 +10,13 @@ The upstream DeerFlow history stays in [CHANGELOG.md](../CHANGELOG.md).
 
 ## [Unreleased]
 
+## [momobot-prod-20261022-526b957d] - 2026-10-22
+
+### Changed
+
+- Align customer onboarding policy and isolate selected MCP discovery (#255)
+- MomoBot changelog momobot-prod-20261022-99e617fd, Oct 22 (#254)
+
 ## [momobot-prod-20261022-99e617fd] - 2026-10-22
 
 ### Changed
