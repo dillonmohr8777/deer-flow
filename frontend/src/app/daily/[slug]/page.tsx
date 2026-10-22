@@ -70,10 +70,7 @@ export default async function DailyArticlePage({ params }: Props) {
       ))}
       <DailyArticleView
         article={article}
-        related={relatedArticles(
-          article,
-          visibleArticles(await loadAllArticles(), { signedIn: false }),
-        )}
+        related={relatedArticles(article, await loadAllArticles())}
       />
     </>
   );

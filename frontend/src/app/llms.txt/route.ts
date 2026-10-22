@@ -8,6 +8,9 @@ import {
 } from "@/core/momo-daily";
 import { loadAllArticles } from "@/core/momo-daily/load";
 
+/** Read MOMOBOT_SITE_URL per request; a build-time prerender would bake in localhost. */
+export const dynamic = "force-dynamic";
+
 /** llms.txt (llmstxt.org): a plain map of the published Momo Daily for AI answer engines. */
 export async function GET() {
   const published = visibleArticles(await loadAllArticles(), {
