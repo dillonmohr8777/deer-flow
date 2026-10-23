@@ -228,7 +228,7 @@ async def submit_native_batch(
     submission_key = submission_key or f"{run_id or thread_id}:{tool_call_id}"
     execution_spec = {
         "subagent_config": asdict(config),
-        "parent_model": metadata.get("model_name"),
+        "parent_model": metadata.get("subagent_model_name") or metadata.get("model_name"),
         "tool_groups": metadata.get("tool_groups"),
         "mcp_plugins": metadata.get("mcp_plugins"),
         "user_role": context.get("user_role"),

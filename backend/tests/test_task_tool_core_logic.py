@@ -1232,6 +1232,36 @@ def test_task_tool_uses_subagent_model_override_for_tool_loading(monkeypatch):
     )
 
 
+def test_task_tool_inherit_uses_agent_subagent_model(monkeypatch):
+    """An inheriting subagent runs on the lead agent's subagent_model, not the lead's own model."""
+    config = _make_subagent_config()
+    runtime = _make_runtime()
+    runtime.config["metadata"]["subagent_model_name"] = "worker-model"
+    captured = {}
+    get_available_tools = MagicMock(return_value=[])
+
+    class DummyExecutor:
+        def __init__(self, **kwargs):
+            captured["parent_model"] = kwargs["parent_model"]
+
+        def execute_async(self, prompt, task_id=None):
+            return task_id or "generated-task-id"
+
+    monkeypatch.setattr(task_tool_module, "SubagentStatus", FakeSubagentStatus)
+    monkeypatch.setattr(task_tool_module, "SubagentExecutor", DummyExecutor)
+    monkeypatch.setattr(task_tool_module, "get_subagent_config", lambda _: config)
+    monkeypatch.setattr(task_tool_module, "get_background_task_result", lambda _: _make_result(FakeSubagentStatus.COMPLETED, result="done"))
+    monkeypatch.setattr(task_tool_module, "get_stream_writer", lambda: [].append)
+    monkeypatch.setattr(task_tool_module.asyncio, "sleep", _no_sleep)
+    monkeypatch.setattr("deerflow.tools.get_available_tools", get_available_tools)
+
+    output = _run_task_tool(runtime=runtime, prompt="research", subagent_type="general-purpose", tool_call_id="tc-sub-model")
+
+    assert _task_tool_message(output).content == "Task Succeeded. Result: done"
+    assert captured["parent_model"] == "worker-model"
+    assert get_available_tools.call_args.kwargs["model_name"] == "worker-model"
+
+
 def test_task_tool_inherits_parent_skill_allowlist_for_default_subagent(monkeypatch):
     config = _make_subagent_config()
     runtime = _make_runtime()
