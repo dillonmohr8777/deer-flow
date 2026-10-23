@@ -1,6 +1,7 @@
 """Offline org oversight through real SQLite, auth middleware and UUID users."""
 
-from contextlib import contextmanager
+import sqlite3
+from contextlib import closing, contextmanager
 from datetime import UTC, datetime
 from uuid import UUID
 
@@ -8,8 +9,10 @@ import httpx
 import pytest
 import pytest_asyncio
 from fastapi import FastAPI
-from org_isolation_fixtures import auth_headers, org_world  # noqa: F401
-from sqlalchemy import update
+from org_isolation_fixtures import auth_headers
+from org_isolation_fixtures import org_world_pooled as org_world  # noqa: F401
+from sqlalchemy import event, update
+from sqlalchemy.orm import Session
 
 from app.gateway.approval_adapters import execute_approved
 from app.gateway.auth.models import User
@@ -101,6 +104,47 @@ async def test_owner_admin_can_list_read_reject_with_real_uuid_and_audit(world, 
     decisions = [event for event in events if event["action"] == "approvals.rejected"]
     assert len(decisions) == 1
     assert decisions[0]["actor_user_id"] == reviewer and decisions[0]["target_id"] == row["id"]
+
+
+@pytest.mark.asyncio
+async def test_successful_reject_keeps_response_and_audit_after_post_commit_role_revocation(world):
+    sf, repo, client = world
+    row = await propose(repo)
+    downgraded = False
+
+    def downgrade_after_rejection_commits(session):
+        nonlocal downgraded
+        if downgraded:
+            return
+        with closing(sqlite3.connect(sf.kw["bind"].url.database)) as connection:
+            committed = connection.execute("SELECT status, decided_by FROM pending_actions WHERE id = ?", (row["id"],)).fetchone()
+            if committed != ("rejected", ADMIN):
+                return
+            connection.execute("UPDATE organization_members SET role = 'member' WHERE organization_id = ? AND user_id = ?", (ORG, ADMIN))
+            connection.commit()
+        downgraded = True
+
+    event.listen(Session, "after_commit", downgrade_after_rejection_commits)
+    try:
+        headers = auth_headers(ADMIN, ORG)
+        rejected = await client.post(f"/api/approvals/{row['id']}/reject", headers=headers)
+        assert downgraded
+        assert rejected.status_code == 200
+        assert (rejected.json()["status"], rejected.json()["decided_by"]) == ("rejected", ADMIN)
+        assert rejected.json()["payload"] == rejected.json()["original_payload"] == row["payload"]
+        with acting(MEMBER):
+            persisted = await repo.get(row["id"])
+            assert {key: persisted[key] for key in rejected.json()} == rejected.json()
+        assert (await client.post(f"/api/approvals/{row['id']}/reject", headers=headers)).status_code == 403
+        assert (await client.get(f"/api/approvals/{row['id']}", headers=headers)).status_code == 404
+        with acting(MEMBER):
+            assert await repo.get(row["id"]) == persisted
+        events, _ = await AuditEventRepository(sf).list(organization_id=ORG)
+        decisions = [event for event in events if event["action"] == "approvals.rejected"]
+        assert len(decisions) == 1
+        assert decisions[0]["actor_user_id"] == ADMIN and decisions[0]["target_id"] == row["id"]
+    finally:
+        event.remove(Session, "after_commit", downgrade_after_rejection_commits)
 
 
 @pytest.mark.asyncio

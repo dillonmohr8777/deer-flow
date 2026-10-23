@@ -175,13 +175,12 @@ class PendingActionRepository:
         if stmt is None:
             return None
         actor = get_current_user()
-        stmt = stmt.values(status="rejected", decided_by=str(actor.id), decided_at=datetime.now(UTC), updated_at=datetime.now(UTC))
+        stmt = stmt.values(status="rejected", decided_by=str(actor.id), decided_at=datetime.now(UTC), updated_at=datetime.now(UTC)).returning(PendingActionRow)
         async with self._sf() as session:
-            result = await session.execute(stmt)
+            row = (await session.execute(stmt)).scalars().first()
+            rejected = _to_dict(row) if row is not None else None
             await session.commit()
-            if result.rowcount != 1:
-                return None
-        return await self.get_composio_for_org(action_id)
+        return rejected
 
     async def _transition(self, action_id: str, uid: str, expected: str, **values: Any) -> dict | None:
         stmt = self._scope(update(PendingActionRow).where(PendingActionRow.id == action_id, PendingActionRow.status == expected), uid)
