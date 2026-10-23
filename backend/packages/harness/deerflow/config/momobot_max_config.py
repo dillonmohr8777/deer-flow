@@ -29,6 +29,10 @@ class MomobotMaxConfig(BaseModel):
         default_factory=list,
         description="Clients unlocked for MomoBot Max, by registry id (or id). Every other client account gets the base MomoBot chat.",
     )
+    client_default_agents: dict[str, str] = Field(
+        default_factory=dict,
+        description="Default custom workspace agent per authenticated client key, used only when no agent is requested; the existing workspace-agent gate still applies.",
+    )
     base_model: str = Field(default="claude-haiku-5-5", description="Name of the models: entry the base MomoBot chat runs on")
     base_effort: MomobotMaxEffort = Field(default="medium", description="Reasoning effort for the base MomoBot chat")
     staff_model: str | None = Field(

@@ -229,6 +229,20 @@ while `strip_internal_context_keys` scrubs both destinations. Treat
 `_normalize_input_messages` rejects canonical external system/developer roles;
 only `AUTH_SOURCE_INTERNAL` run input may retain them.
 
+### MomoBot Max client defaults
+
+Optional operator config `momobot_max.client_default_agents` maps an authenticated
+contact's client key to a default custom workspace agent. It applies only when
+both run-context carriers omit `agent_name` or set it to null; explicit names
+(including empty strings) keep the existing selection semantics. Defaults follow
+the stable authenticated client-key order, then the existing dedicated-workspace,
+Max-unlock, own-bucket, client-tag and model gates. An undiscovered default falls
+back to built-in `momobot-max`. The existing workspace-agent ceiling is unchanged:
+nine-tool intersection, no MCP, skills, self-update, memory or knowledge. Staff
+and unmapped clients keep their current behavior. This adds no guidance budget;
+custom SOUL and client profile guidance still consume the existing prompt budget
+and require owner content review before release.
+
 ### Momentum-internal surfaces (team board, AI Academy)
 
 `/api/team` (staff channels, members) and `/api/academy` (curriculum plus
