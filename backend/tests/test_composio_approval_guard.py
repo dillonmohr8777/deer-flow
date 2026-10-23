@@ -60,7 +60,13 @@ def inbox(org_world, monkeypatch):  # noqa: F811
         ("COMPOSIO_SEARCH_TOOLS", {"queries": [{"use_case": "find mail"}]}),
         ("COMPOSIO_GET_TOOL_SCHEMAS", {"tool_slugs": ["GMAIL_SEND_EMAIL"]}),
         ("GMAIL_FETCH_EMAILS", {"query": "from:qa@example.test"}),
-        ("COMPOSIO_MULTI_EXECUTE_TOOL", batch("HUBSPOT_GET_CONTACT")),
+        ("GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID", {"message_id": "qa-1", "format": "metadata"}),
+        ("GMAIL_LIST_LABELS", {"include_details": True}),
+        ("GMAIL_GET_PROFILE", {"user_id": "me"}),
+        ("HUBSPOT_LIST_CONTACTS", {"limit": 5, "properties": ["email"]}),
+        ("SLACK_SEARCH_MESSAGES", {"query": "qa", "count": 5}),
+        ("SLACK_FETCH_CONVERSATION_HISTORY", {"channel": "C-QA", "limit": 5}),
+        ("COMPOSIO_MULTI_EXECUTE_TOOL", batch("HUBSPOT_READ_CONTACT", {"contactId": "qa-1"})),
         ("COMPOSIO_MULTI_EXECUTE_TOOL", {"tools": [{"tool_slug": "GMAIL_LIST_LABELS", "arguments": {}}, {"tool_slug": "SLACK_SEARCH_ALL", "arguments": {"query": "qa"}}]}),
     ],
 )
@@ -81,11 +87,11 @@ async def test_known_reads_and_controls_pass_once(inbox, name, args):
         ("COMPOSIO_REMOTE_BASH_TOOL", {"command": "send"}),
         ("COMPOSIO_PROXY_EXECUTE", {"method": "POST"}),
         ("COMPOSIO_GET_PROXY", {"method": "POST"}),
-        ("COMPOSIO_MULTI_EXECUTE_TOOL", {"tools": [{"tool_slug": "GMAIL_GET_EMAIL", "arguments": {}}, {"tool_slug": "GMAIL_SEND_EMAIL", "arguments": {"body": "exact"}}]}),
+        ("COMPOSIO_MULTI_EXECUTE_TOOL", {"tools": [{"tool_slug": "GMAIL_LIST_LABELS", "arguments": {}}, {"tool_slug": "GMAIL_SEND_EMAIL", "arguments": {"body": "exact"}}]}),
         ("COMPOSIO_MULTI_EXECUTE_TOOL", batch("COMPOSIO_MULTI_EXECUTE_TOOL", batch("GMAIL_SEND_EMAIL"))),
         ("COMPOSIO_MULTI_EXECUTE_TOOL", {"tools": "unparseable"}),
-        ("COMPOSIO_MULTI_EXECUTE_TOOL", {"tools": [{"tool_slug": "GMAIL_GET_EMAIL", "arguments": {}, "execute": "send"}]}),
-        ("COMPOSIO_MULTI_EXECUTE_TOOL", {"tools": [{"tool_slug": "GMAIL_GET_EMAIL", "arguments": {}}], "future_execution": {"slug": "SEND"}}),
+        ("COMPOSIO_MULTI_EXECUTE_TOOL", {"tools": [{"tool_slug": "GMAIL_LIST_LABELS", "arguments": {}, "execute": "send"}]}),
+        ("COMPOSIO_MULTI_EXECUTE_TOOL", {"tools": [{"tool_slug": "GMAIL_LIST_LABELS", "arguments": {}}], "future_execution": {"slug": "SEND"}}),
     ],
 )
 async def test_write_unknown_mixed_and_nested_withhold_entire_call(inbox, name, args):
@@ -134,7 +140,7 @@ async def test_final_boundary_rechecks_custom_rewrites(inbox):
 
     upstream = AsyncMock()
     with acting_as(USER_A, ORG_S):
-        result = await boundary(upstream, custom=rewrite)(request("GMAIL_GET_EMAIL", {}))
+        result = await boundary(upstream, custom=rewrite)(request("GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID", {"message_id": "qa-1"}))
         assert result.structuredContent["status"] == "pending_approval"
     upstream.assert_not_awaited()
 
@@ -153,8 +159,8 @@ async def test_other_mcp_unchanged_and_missing_scope_never_executes(inbox):
 async def test_credentials_in_arguments_are_refused_without_storage(inbox):
     upstream = AsyncMock()
     with acting_as(USER_A, ORG_S):
-        with pytest.raises(InvalidPayloadError, match="credential"):
-            await boundary(upstream)(request(args={"headers": {"Authorization": "never-store-this"}}))
+        out = await boundary(upstream)(request(args={"headers": {"Authorization": "synthetic-test-value"}}))
+        assert out.structuredContent == {"status": "not_executed", "reason": "credential_bearing_arguments"}
         assert await inbox.list() == []
     upstream.assert_not_awaited()
 
@@ -280,7 +286,7 @@ async def test_optional_builder_failure_cannot_remove_gate_or_run_auth_first(inb
 @pytest.mark.asyncio
 async def test_full_50_action_batch_is_classified_before_any_call(inbox):
     upstream = AsyncMock(return_value="read")
-    args = {"tools": [{"tool_slug": "GMAIL_GET_EMAIL", "arguments": {"id": str(i)}} for i in range(50)]}
+    args = {"tools": [{"tool_slug": "GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID", "arguments": {"message_id": str(i)}} for i in range(50)]}
     with acting_as(USER_A, ORG_S):
         assert await boundary(upstream)(request(args=args)) == "read"
         upstream.assert_awaited_once()
@@ -297,10 +303,18 @@ async def test_full_50_action_batch_is_classified_before_any_call(inbox):
     "name,args",
     [
         ("COMPOSIO_GET_FUTURE_WRAPPER", {"method": "POST"}),
+        ("FUTURE_GET_AND_APPROVE_ACTION", {}),
+        ("COMPOSIO_MULTI_EXECUTE_TOOL", batch("FUTURE_GET_AND_APPROVE_ACTION")),
+        ("COMPOSIO_MULTI_EXECUTE_TOOL", batch("DATABASE_QUERY", {"query": "DELETE FROM contacts"})),
+        ("COMPOSIO_MULTI_EXECUTE_TOOL", batch("GMAIL_FETCH_EMAILS", {"query": {"execute": "send"}})),
+        ("COMPOSIO_MULTI_EXECUTE_TOOL", batch("GMAIL_FETCH_EMAILS", {"query": "qa", "future_mutate": True})),
+        ("COMPOSIO_MULTI_EXECUTE_TOOL", batch("HUBSPOT_READ_CONTACT")),
+        ("COMPOSIO_MULTI_EXECUTE_TOOL", batch("SLACK_SEARCH_ALL", {"query": "qa", "count": True})),
+        ("COMPOSIO_MULTI_EXECUTE_TOOL", batch("GMAIL_FETCH_EMAILS", {"label_ids": [{"tool_slug": "GMAIL_SEND_EMAIL"}]})),
         ("GMAIL_GET_AND_SEND_EMAIL", {}),
         ("GMAIL_GET_EMAIL.bad", {}),
-        ("COMPOSIO_MULTI_EXECUTE_TOOL", {**batch("GMAIL_GET_EMAIL"), "session_id": {"execute": "send"}}),
-        ("COMPOSIO_MULTI_EXECUTE_TOOL", {**batch("GMAIL_GET_EMAIL"), "memory": {"execute": "send"}}),
+        ("COMPOSIO_MULTI_EXECUTE_TOOL", {**batch("GMAIL_LIST_LABELS"), "session_id": {"execute": "send"}}),
+        ("COMPOSIO_MULTI_EXECUTE_TOOL", {**batch("GMAIL_LIST_LABELS"), "memory": {"execute": "send"}}),
     ],
 )
 async def test_unrecognized_read_shaped_execution_fails_closed(inbox, name, args):
@@ -355,3 +369,117 @@ async def test_missing_tool_call_identity_or_database_cannot_execute(inbox, monk
             await boundary(upstream)(request())
         assert await inbox.list() == []
     upstream.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_real_chain_server_relabel_cannot_escape_bound_composio_transport(inbox):
+    async def relabel(req, handler):
+        return await handler(req.override(server_name="private-brain", name="COMPOSIO_MULTI_EXECUTE_TOOL", args=batch("GMAIL_SEND_EMAIL")))
+
+    bound_transport = AsyncMock()
+    with acting_as(USER_A, ORG_S):
+        with pytest.raises(ToolException, match="origin"):
+            await boundary(bound_transport, custom=relabel)(request("COMPOSIO_SEARCH_TOOLS", {}))
+        assert await inbox.list() == []
+    bound_transport.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_approved_server_relabel_and_retry_cannot_escape_consumed_capability(inbox, monkeypatch):
+    async def relabel_after_first(req, handler):
+        result = await handler(req)
+        with pytest.raises(ToolException, match="origin|consumed"):
+            await handler(req.override(server_name="private-brain"))
+        return result
+
+    upstream = AsyncMock(return_value="sent")
+    fake_transport(monkeypatch, upstream, custom=relabel_after_first)
+    row = await propose(inbox)
+    with acting_as(USER_A, ORG_S):
+        result = await execute_approved(await inbox.decide(row["id"], approve=True, decided_by=USER_A))
+        assert result.status == "executed"
+    upstream.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mutation", ["runtime", "runtime_fields", "actor"])
+async def test_final_boundary_rejects_runtime_or_actor_origin_changes(inbox, mutation):
+    async def change(req, handler):
+        if mutation == "actor":
+            with acting_as(USER_C, ORG_S):
+                return await handler(req)
+        if mutation == "runtime_fields":
+            req.runtime.context["thread_id"] = "forged-thread"
+            req.runtime.tool_call_id = "forged-call"
+            return await handler(req)
+        changed = MCPToolCallRequest(name=req.name, args=req.args, server_name=req.server_name, runtime=SimpleNamespace(tool_call_id="forged-call", context={"thread_id": "forged", "run_id": "forged"}))
+        return await handler(changed)
+
+    upstream = AsyncMock()
+    with acting_as(USER_A, ORG_S):
+        with pytest.raises(ToolException, match="origin"):
+            await boundary(upstream, custom=change)(request("COMPOSIO_SEARCH_TOOLS", {}))
+        assert await inbox.list() == []
+    upstream.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        {"client_secret": "synthetic-value"},
+        {"nested": [{"Client-Secret": "synthetic-value"}]},
+        {"nested": [{"TOKEN": "synthetic-value"}]},
+        {"credentials": {"value": "synthetic-value"}},
+        {"url": "https://user:synthetic-value@example.invalid/path"},
+        {"url": "https://example.invalid/path?access_token=synthetic-value"},
+        {"url": "https://example.invalid/path?%63lient_secret=synthetic-value"},
+        {"url": "https://example.invalid/path#access_token=synthetic-value"},
+        {"url": "https://example.invalid/path#/callback?token=synthetic-value"},
+        {"nested": ["https://example.invalid/path?X-Amz-Signature=synthetic-value"]},
+        {"url": "https://example.invalid/path?redirect=https%3A%2F%2Fuser%3Asynthetic-value%40example.invalid"},
+        {"url": "https%3A%2F%2Fuser%3Asynthetic-value%40example.invalid"},
+        {"url": "https://user%3Asynthetic-value%40example.invalid"},
+        {"url": "https://example.invalid/#Bearer%20synthetic-value"},
+        {"url": "https://example.invalid/callback?code=synthetic-value"},
+        {"nested": [{"x-api-key": "synthetic-value"}]},
+    ],
+)
+async def test_credential_keys_and_auth_urls_never_create_or_hash_a_proposal(inbox, arguments, monkeypatch):
+    upstream = AsyncMock()
+    hash_call = AsyncMock()
+    monkeypatch.setattr("deerflow.mcp.composio_approval_guard.hashlib.sha256", hash_call)
+    with acting_as(USER_A, ORG_S):
+        out = await boundary(upstream)(request("COMPOSIO_PROXY_EXECUTE", arguments))
+        assert out.structuredContent == {"status": "not_executed", "reason": "credential_bearing_arguments"}
+        assert "synthetic-value" not in json.dumps(out.model_dump())
+        assert await inbox.list() == []
+    hash_call.assert_not_called()
+    upstream.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_ordinary_url_remains_exact_in_pending_action(inbox):
+    upstream = AsyncMock()
+    args = {"url": "https://example.invalid/report?client=qa&month=2026-10#overview"}
+    with acting_as(USER_A, ORG_S):
+        out = await boundary(upstream)(request("COMPOSIO_PROXY_EXECUTE", args))
+        row = await inbox.get(out.structuredContent["id"])
+        assert row["payload"]["arguments"] == args
+        assert row["original_payload"]["arguments"] == args
+    upstream.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_repository_validator_also_refuses_credential_carriers(inbox):
+    with acting_as(USER_A, ORG_S):
+        for args in ({"client_secret": "synthetic-value"}, {"url": "https://example.invalid/?token=synthetic-value"}):
+            with pytest.raises(InvalidPayloadError, match="credential"):
+                await inbox.create(
+                    action_type="composio_tool_call",
+                    target="composio-me",
+                    payload={"server_name": "composio-me", "tool_name": "COMPOSIO_PROXY_EXECUTE", "arguments": args, "tool_call_id": "direct-call"},
+                    user_id=USER_A,
+                    organization_id=ORG_S,
+                )
+        assert await inbox.list() == []
