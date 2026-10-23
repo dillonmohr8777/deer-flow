@@ -374,7 +374,8 @@ async def list_threads(
 @router.post("/threads")
 async def compose(body: Compose, request: Request):
     actor, org, admin, external = await _identity(request)
-    if body.client_id not in await _client_ids(actor, org, admin, external):
+    # Compose writes client-visible content immediately; keep its original admission.
+    if body.client_id not in await _client_ids(actor, org, admin):
         raise _missing()
     fingerprint = _hash(body.model_dump(exclude={"submission_key"}))
     thread_id = uuid.uuid4().hex

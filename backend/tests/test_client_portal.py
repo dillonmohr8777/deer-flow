@@ -13,9 +13,10 @@ from test_org_isolation_b_threads import world  # noqa: F401
 from app.gateway.auth_middleware import AuthMiddleware
 from app.gateway.routers import approvals, board, client_portal
 from deerflow.persistence.approvals import PendingActionRepository
+from deerflow.persistence.approvals.model import PendingActionRow
 from deerflow.persistence.audit_events import AuditEventRepository
 from deerflow.persistence.board import BoardRepository
-from deerflow.persistence.board.model import BoardMessageRow, BoardThreadRow
+from deerflow.persistence.board.model import BoardMessageRow, BoardPortalRow, BoardThreadRow
 from deerflow.persistence.clients import ClientRepository
 from deerflow.persistence.clients.model import ClientAssignmentRow, ClientRow
 from deerflow.persistence.organizations.identity import private_organization_id
@@ -116,6 +117,40 @@ async def test_bound_customer_assigned_member_reads_and_drafts_but_only_owner_pu
         published = await client.post(path + "/publish", headers=owner, json=publish)
         assert published.status_code == 200, published.text
         assert (await client.get(path, headers=contact)).json()["messages"][-1]["body"] == "Synthetic internal draft"
+
+
+async def test_bound_customer_assigned_member_cannot_compose_or_create_client_visible_rows(org_world):  # noqa: F811
+    await _seed_bound_customer(org_world)
+
+    async def counts():
+        async with org_world() as session:
+            return [await session.scalar(select(func.count()).select_from(model)) for model in (BoardThreadRow, BoardPortalRow, BoardMessageRow, PendingActionRow)]
+
+    async with _http(_app(org_world)) as client:
+        contact = auth_headers(USER_B, CUSTOMER_ORG)
+        created = await _compose(client, contact)
+        before = await counts()
+        response = await client.post(BASE, headers=auth_headers(USER_C, CUSTOMER_ORG), json={"client_id": "client-a", "submission_key": "am-compose-must-be-denied", "subject": "Unapproved request", "body": "Synthetic unapproved sentinel"})
+        assert await counts() == before, f"AM compose wrote rows (HTTP {response.status_code})"
+        assert response.status_code in {403, 404}
+        visible = (await client.get(f"{BASE}/{created['id']}", headers=contact)).json()
+        assert all(message["body"] != "Synthetic unapproved sentinel" for message in visible["messages"])
+        assert [thread["id"] for thread in (await client.get(BASE, headers=contact)).json()["threads"]] == [created["id"]]
+
+
+@pytest.mark.parametrize("legacy_actor", ["contact", "owner", "admin", "agency_member"])
+async def test_legacy_bound_contact_owner_admin_and_agency_compose_stays_allowed(org_world, legacy_actor):  # noqa: F811
+    await _seed_bound_customer(org_world)
+    actor, org = (USER_B, CUSTOMER_ORG) if legacy_actor == "contact" else (USER_A, CUSTOMER_ORG)
+    async with org_world() as session, session.begin():
+        if legacy_actor == "admin":
+            await session.execute(update(OrganizationMemberRow).where(OrganizationMemberRow.organization_id == CUSTOMER_ORG, OrganizationMemberRow.user_id == USER_A).values(role="admin"))
+        elif legacy_actor == "agency_member":
+            actor, org = USER_C, ORG_S
+            await session.execute(update(OrganizationMemberRow).where(OrganizationMemberRow.organization_id == ORG_S, OrganizationMemberRow.user_id == USER_C).values(role="member"))
+    async with _http(_app(org_world)) as client:
+        created = await _compose(client, auth_headers(actor, org))
+        assert created["client_id"] == "client-a" and created["messages"][0]["body"]
 
 
 @pytest.mark.parametrize(
