@@ -150,7 +150,7 @@ class SqlAgentStore(AgentStore):
             return None
         return row.soul or None
 
-    def list(self, *, user_id: str | None = None) -> list[AgentConfig]:
+    def list(self, *, user_id: str | None = None, include_legacy: bool = True) -> list[AgentConfig]:  # noqa: ARG002 -- rows are always the bucket's own; there is no shared layout
         effective_user = user_id or get_effective_user_id()
         stmt = select(AgentRow).where(AgentRow.user_id == effective_user).order_by(AgentRow.name.asc())
         stmt = _scope_to_active_organization(stmt)

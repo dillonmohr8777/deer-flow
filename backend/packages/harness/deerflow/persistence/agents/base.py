@@ -99,8 +99,14 @@ class AgentStore(abc.ABC):
         """Return the agent's ``SOUL.md`` content, or ``None`` if unset/empty."""
 
     @abc.abstractmethod
-    def list(self, *, user_id: str | None = None) -> list[AgentConfig]:
-        """Return every custom agent owned by ``user_id``, sorted by name."""
+    def list(self, *, user_id: str | None = None, include_legacy: bool = True) -> list[AgentConfig]:
+        """Return every custom agent owned by ``user_id``, sorted by name.
+
+        ``include_legacy=False`` returns only the agents stored in ``user_id``'s
+        own bucket: the file backend then skips the legacy shared layout every
+        user can read, so a caller that must show a bucket nothing else (the
+        client role) can rely on it. The SQL backend has no shared layout.
+        """
 
     @abc.abstractmethod
     def list_all(self) -> list[tuple[str, AgentConfig]]:
