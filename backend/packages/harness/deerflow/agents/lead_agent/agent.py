@@ -58,6 +58,7 @@ from deerflow.authz.runtime import resolve_authorization_provider
 from deerflow.authz.tool_filter import apply_tool_authorization
 from deerflow.config.agents_config import load_agent_config, validate_agent_name
 from deerflow.config.app_config import AppConfig, get_app_config
+from deerflow.config.builtin_agents import CLIENT_WORKSPACE_CEILING_KEY, client_workspace_ceiling
 from deerflow.config.memory_config import should_use_memory_tools
 from deerflow.config.subagents_config import (
     DEFAULT_MAX_TOTAL_SUBAGENTS_PER_RUN,
@@ -1003,6 +1004,9 @@ def _assemble_lead_agent(config: RunnableConfig, *, app_config: AppConfig) -> Le
         agent_config = load_agent_config(agent_name, user_id=resolved_user_id) if not is_bootstrap else None
         if agent_name and agent_config is None:
             raise ValueError("Existing agent config readback is unavailable")
+        if cfg.get(CLIENT_WORKSPACE_CEILING_KEY) is True and agent_config is not None:
+            # Set only by the Gateway's run policy: a client running their workspace's agent.
+            agent_config = client_workspace_ceiling(agent_config)
     tool_names = getattr(agent_config, "tool_names", None)
     public_news_channel = cfg.get("public_news_channel") is True
     if public_news_channel:

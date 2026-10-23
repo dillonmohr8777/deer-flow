@@ -26,6 +26,7 @@ subagents). Staff always get Max.
 from __future__ import annotations
 
 import asyncio
+import logging
 from typing import Any
 
 from fastapi import HTTPException
@@ -35,10 +36,12 @@ from app.gateway.authz import model_use_allowed
 from app.gateway.client_boundary import CLIENT_ROLE
 from deerflow.config.agents_config import AgentConfig
 from deerflow.config.app_config import AppConfig
-from deerflow.config.builtin_agents import MOMOBOT_MAX_NAME, is_builtin_agent_name
+from deerflow.config.builtin_agents import CLIENT_WORKSPACE_CEILING_KEY, MOMOBOT_MAX_NAME, is_builtin_agent_name
 from deerflow.persistence.clients.model import ClientAssignmentRow, ClientRow
 from deerflow.persistence.organizations.model import OrganizationRow
 from deerflow.runtime.user_context import get_effective_user_id, resolve_organization_id
+
+logger = logging.getLogger(__name__)
 
 # Same wording as every other "no such agent" answer, so a run can't probe for it.
 _UNRESOLVED_AGENT_DETAIL = "knowledge_scope assistant configuration could not be resolved"
@@ -114,12 +117,13 @@ async def client_keys_for_user(user_id: str, organization_id: str | None = None)
 
 
 async def client_workspace_agents(user: Any, actor_user_id: str | None, app_config: AppConfig) -> dict[str, AgentConfig]:
-    """The custom agents a client may see and run, by name: those stored in their dedicated customer workspace's own bucket.
+    """The custom agents a client may see and run, keyed by normalized name: those stored in their dedicated customer workspace's own bucket.
 
     Empty unless the caller is a ``client`` on the Max tier whose active
     workspace passes ``require_client_workspace``. Never a legacy shared-layout
-    agent, another bucket's agent or a built-in; read-only by construction, since
-    the client boundary admits no agent management route.
+    agent, another bucket's agent, an agent stamped for another client or a
+    built-in. A run of one is capped by ``client_workspace_ceiling``; a bucket
+    that can't be read leaves the client with the built-in only.
     """
     if getattr(user, "system_role", None) != CLIENT_ROLE or not app_config.momobot_max.enabled:
         return {}
@@ -129,12 +133,33 @@ async def client_workspace_agents(user: Any, actor_user_id: str | None, app_conf
         await require_client_workspace(user)
     except HTTPException:  # not a dedicated customer workspace: the built-in only, as before
         return {}
-    if await client_tier(actor_user_id, app_config) != "max":
+    keys = await client_keys_for_user(actor_user_id, resolve_organization_id()) if actor_user_id else ()
+    if not app_config.momobot_max.unlocked_for(keys):
         return {}
-    from deerflow.persistence.agents import get_agent_store
+    try:
+        agents = await asyncio.to_thread(_bucket_agents, get_effective_user_id())
+    except Exception:  # noqa: BLE001 - one unreadable row must not break the client's MomoBot Max chat
+        logger.warning("Client workspace agents unavailable; serving the built-in only", exc_info=True)
+        return {}
+    return {_agent_key(agent.name): agent for agent in agents if not is_builtin_agent_name(_agent_key(agent.name)) and (agent.client_id is None or agent.client_id in {str(key) for key in keys})}
 
-    agents = await asyncio.to_thread(get_agent_store().list, user_id=get_effective_user_id(), include_legacy=False)
-    return {agent.name: agent for agent in agents if not is_builtin_agent_name(agent.name)}
+
+def _bucket_agents(user_id: str) -> list[AgentConfig]:
+    """Agents stored in *user_id*'s own bucket, each resolvable by its config name there (never the legacy layout)."""
+    from deerflow.config.paths import get_paths
+    from deerflow.persistence.agents import get_agent_store
+    from deerflow.persistence.agents.file import FileAgentStore
+
+    store = get_agent_store()
+    agents = store.list(user_id=user_id, include_legacy=False)
+    if isinstance(store, FileAgentStore):
+        # A folder whose config.yaml names another agent would load that name from the legacy layout.
+        agents = [agent for agent in agents if (get_paths().user_agent_dir(user_id, _agent_key(agent.name)) / "config.yaml").exists()]
+    return agents
+
+
+def _agent_key(name: str) -> str:
+    return name.strip().lower().replace("_", "-")
 
 
 async def apply_run_policy(config: dict[str, Any], *, user: Any, actor_user_id: str | None, app_config: AppConfig, internal: bool = False) -> None:
@@ -150,16 +175,18 @@ async def apply_run_policy(config: dict[str, Any], *, user: Any, actor_user_id: 
         config.setdefault("context", {})
         config.setdefault("configurable", {})
         # A client runs MomoBot Max, or one of their own workspace's agents when they name it; any other name is dropped.
-        workspace_agents = await client_workspace_agents(user, actor_user_id, app_config)
         requested = _normalized_agent_name(config)
+        if requested not in ("", MOMOBOT_MAX_NAME):
+            workspace_agents = await client_workspace_agents(user, actor_user_id, app_config)
         pinned = requested if requested in workspace_agents else MOMOBOT_MAX_NAME
         for section in _sections(config):
             section["agent_name"] = pinned
             for key in ("model_name", "model", "is_bootstrap"):
                 section.pop(key, None)
     sections = _sections(config)
-    for section in sections:  # the tier is server-owned: set below for this agent only, never taken from a request
+    for section in sections:  # tier and ceiling are server-owned: set below for this agent only, never taken from a request
         section.pop("momobot_tier", None)
+        section.pop(CLIENT_WORKSPACE_CEILING_KEY, None)
     agent_name = _normalized_agent_name(config)
     if agent_name != MOMOBOT_MAX_NAME and agent_name not in workspace_agents:
         return
@@ -168,7 +195,15 @@ async def apply_run_policy(config: dict[str, Any], *, user: Any, actor_user_id: 
     # A client's tier and effort come from the client their workspace is bound to; staff keep every assignment.
     client_keys = await client_keys_for_user(actor_user_id, resolve_organization_id() if is_client else None) if actor_user_id else ()
     tier = "base" if is_client and not settings.unlocked_for(client_keys) else "max"
-    if not internal and (user is None or not momobot_max_available_to(user, app_config, tier=tier)):
+    workspace_agent = workspace_agents.get(agent_name)
+    if workspace_agent is not None:
+        # A client's own workspace agent runs on its own model, capped at MomoBot Max's ceiling.
+        model = workspace_agent.model or settings.model
+        if user is None or not model_use_allowed(user, model, is_internal=False, fail_closed=app_config.authorization.fail_closed):
+            raise HTTPException(status_code=422, detail=_UNRESOLVED_AGENT_DETAIL)
+        for section in sections:
+            section[CLIENT_WORKSPACE_CEILING_KEY] = True
+    elif not internal and (user is None or not momobot_max_available_to(user, app_config, tier=tier)):
         raise HTTPException(status_code=422, detail=_UNRESOLVED_AGENT_DETAIL)
     if tier == "base":
         for section in sections:

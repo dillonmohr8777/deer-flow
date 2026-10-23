@@ -155,3 +155,80 @@ def test_the_store_can_list_a_bucket_without_the_legacy_shared_layout(workspace)
     store = get_agent_store()
     assert [a.name for a in store.list(user_id=WORKSPACE_BUCKET)] == ["acme-dental-max", "internal-bot"]
     assert [a.name for a in store.list(user_id=WORKSPACE_BUCKET, include_legacy=False)] == ["acme-dental-max"]
+
+
+# -- the ceiling on a client run of a workspace agent ------------------------------
+
+
+@pytest.mark.asyncio
+async def test_a_client_run_of_a_workspace_agent_carries_the_server_set_ceiling_and_a_request_cannot_set_it(workspace):
+    config = await _policy({"agent_name": "acme-dental-max", "client_workspace_ceiling": False})
+    assert config["context"]["client_workspace_ceiling"] is True and config["configurable"]["client_workspace_ceiling"] is True
+    builtin = await _policy({"agent_name": MOMOBOT_MAX_NAME, "client_workspace_ceiling": True})
+    assert "client_workspace_ceiling" not in builtin["context"] and "client_workspace_ceiling" not in builtin["configurable"]
+
+
+def test_the_ceiling_keeps_a_workspace_agent_inside_momobot_maxs_tools_with_nothing_extra():
+    from deerflow.config.agents_config import AgentConfig
+    from deerflow.config.builtin_agents import MOMOBOT_MAX_TOOL_NAMES, client_workspace_ceiling
+
+    uncapped = client_workspace_ceiling(AgentConfig(name="acme-dental-max", model="claude-opus-5-5"))
+    assert uncapped.tool_names == list(MOMOBOT_MAX_TOOL_NAMES)
+    assert (uncapped.skills, uncapped.mcp_plugins, uncapped.self_update_enabled, uncapped.memory_enabled) == ([], [], False, False)
+    assert uncapped.knowledge_scope is not None and uncapped.knowledge_scope.mode == "disabled"
+    assert uncapped.model == "claude-opus-5-5"
+    narrowed = client_workspace_ceiling(AgentConfig(name="acme-dental-max", tool_names=["web_search", "bash", "update_agent"]))
+    assert narrowed.tool_names == ["web_search"]
+
+
+def test_the_lead_agent_applies_the_ceiling_with_role_permissions_off(monkeypatch):
+    """With authorization off and an agent that names no tools, a marked run still only gets MomoBot Max's tools."""
+    from unittest.mock import MagicMock, create_autospec
+
+    from test_lead_agent_model_resolution import _make_app_config, _make_model
+
+    import deerflow.agents.lead_agent.agent as lead_agent_module
+    import deerflow.tools as tools_module
+    from deerflow.config.agents_config import AgentConfig
+
+    app_config = _make_app_config([_make_model("safe-model", supports_thinking=False)])
+
+    def _named_tool(name: str):
+        tool = MagicMock()
+        tool.name = name
+        return tool
+
+    monkeypatch.setattr(lead_agent_module, "get_app_config", lambda: app_config)
+    monkeypatch.setattr(lead_agent_module, "load_agent_config", lambda name, **_: AgentConfig(name=name))
+    monkeypatch.setattr(tools_module, "get_available_tools", lambda **kwargs: [_named_tool("bash"), _named_tool("web_search"), _named_tool("gmail_send")])
+    monkeypatch.setattr(lead_agent_module, "build_middlewares", create_autospec(lead_agent_module.build_middlewares, return_value=[]))
+    monkeypatch.setattr(lead_agent_module, "apply_prompt_template", lambda **kwargs: "prompt")
+    monkeypatch.setattr(lead_agent_module, "create_chat_model", lambda **kwargs: object())
+    monkeypatch.setattr(lead_agent_module, "create_agent", lambda **kwargs: kwargs)
+
+    def tools_for(context):
+        result = lead_agent_module.make_lead_agent({"context": {"model_name": "safe-model", "thinking_enabled": False, "subagent_enabled": False, "agent_name": "acme-dental-max", **context}})
+        return sorted(tool.name for tool in result["tools"])
+
+    assert tools_for({}) == ["bash", "gmail_send", "update_agent", "web_search"]  # staff: the agent's own, uncapped
+    assert tools_for({"client_workspace_ceiling": True}) == ["web_search"]
+
+
+@pytest.mark.asyncio
+async def test_an_agent_stamped_for_another_client_or_with_a_capitalized_name_is_handled(workspace):
+    paths = get_paths()
+    other = paths.user_agent_dir(WORKSPACE_BUCKET, "rival-max")
+    other.mkdir(parents=True)
+    (other / "config.yaml").write_text("name: rival-max\ndescription: x\nclient_id: rival-co\n")
+    caps = paths.user_agent_dir(WORKSPACE_BUCKET, "acme-caps")
+    caps.mkdir(parents=True)
+    (caps / "config.yaml").write_text("name: Acme-Caps\ndescription: x\n")
+    with _admitted():
+        agents = await momobot_max.client_workspace_agents(_user("client"), "u-1", UNLOCKED)
+    assert sorted(agents) == ["acme-caps", "acme-dental-max"]
+
+
+@pytest.mark.asyncio
+async def test_an_unreadable_bucket_leaves_the_client_with_momobot_max_only(workspace):
+    with _admitted(), patch.object(momobot_max, "_bucket_agents", side_effect=ValueError("bad row")):
+        assert await momobot_max.client_workspace_agents(_user("client"), "u-1", UNLOCKED) == {}
