@@ -7,6 +7,7 @@ Snapshot mode reads an operator-installed cache and renderer without HTTP or reb
 
 import hashlib
 import json
+import math
 import os
 import re
 import stat
@@ -159,10 +160,18 @@ def _unique_snapshot_object(pairs):
     return result
 
 
+def _finite_snapshot_float(value):
+    parsed = float(value)
+    if not math.isfinite(parsed):
+        raise ConfigurationError()
+    return parsed
+
+
 def _snapshot_json(raw):
     return json.loads(
         raw.decode("utf-8"),
         parse_constant=_invalid_constant,
+        parse_float=_finite_snapshot_float,
         object_pairs_hook=_unique_snapshot_object,
     )
 

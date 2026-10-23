@@ -199,6 +199,39 @@ def test_mixed_pair_rejected_even_with_matching_mtimes(snapshot, publication):
     assert (root / "current.json").read_bytes() == pointer
 
 
+@pytest.mark.parametrize("token", ["1e400", "-1e400", "NaN", "Infinity", "-Infinity"])
+def test_non_finite_source_cannot_replace_current_generation(snapshot, publication, token):
+    module, publisher, root, renderer_hash = publication
+    first = publisher.publish(snapshot, root, renderer_hash)
+    adapter = snapshot_adapter(module, module.SnapshotRequester(root))
+    pointer = (root / "current.json").read_bytes()
+    revise(snapshot)
+    path = snapshot / "brain.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data["systems"]["sample"] = "SYNTHETIC_NUMBER_TOKEN"
+    path.write_text(json.dumps(data).replace('"SYNTHETIC_NUMBER_TOKEN"', token), encoding="utf-8")
+    with pytest.raises((module.ConfigurationError, ValueError)):
+        publisher.publish(snapshot, root, renderer_hash)
+    assert (root / "current.json").read_bytes() == pointer
+    assert call(adapter)["result"]["_meta"]["generation"] == first["generation"]
+    with pytest.raises((module.ConfigurationError, ValueError)):
+        module.SnapshotRequester(snapshot)
+
+
+def test_finite_exponent_source_still_publishes_and_reads(snapshot, publication):
+    module, publisher, root, renderer_hash = publication
+    path = snapshot / "brain.json"
+    path.chmod(0o600)
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data["systems"]["sample"] = "SYNTHETIC_NUMBER_TOKEN"
+    path.write_text(json.dumps(data).replace('"SYNTHETIC_NUMBER_TOKEN"', "1.25e200"), encoding="utf-8")
+    published = publisher.publish(snapshot, root, renderer_hash)
+    adapter = snapshot_adapter(module, module.SnapshotRequester(root))
+    result = call(adapter, "brain_systems")["result"]
+    assert result["_meta"]["generation"] == published["generation"]
+    assert "1.25e+200" in result["content"][0]["text"]
+
+
 @pytest.mark.parametrize("contents", [b"not JSON", b"{}", b'{"schemaVersion":1,"generation":"../outside"}', b'{"schemaVersion":1,"generation":"' + b"f" * 64 + b'"}', b"x" * 4097])
 def test_changed_pointer_fails_closed(snapshot, publication, contents):
     module, publisher, root, renderer_hash = publication
