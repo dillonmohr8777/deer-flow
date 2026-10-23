@@ -1,8 +1,8 @@
 """ORM model for the approvals inbox: outbound actions an agent proposed but has not been allowed to run.
 
-One row per proposal. ``user_id`` is the storage principal and ``organization_id``
-is always ``private_organization_id(user_id)`` (same shape as every other
-owner-scoped table). ``payload`` is what a human edits; ``original_payload`` is
+One row per proposal. Generic actions use a storage principal/private organization;
+Composio actions use the authenticated actor and active organization. ``payload``
+is what a human edits (exact Composio calls are immutable); ``original_payload`` is
 frozen at proposal time so the audit trail shows what the agent actually asked for.
 """
 

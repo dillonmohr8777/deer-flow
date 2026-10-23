@@ -176,9 +176,10 @@ def test_registered_after_oauth_in_shared_assembly():
         return await handler(request)
 
     interceptors = build_mcp_tool_interceptors(config, oauth_builder=lambda _cfg: oauth)
-    assert len(interceptors) == 2
-    assert interceptors[0] is oauth
-    assert interceptors[1].__name__ == "user_scoped_auth_interceptor"
+    assert len(interceptors) == 4
+    assert interceptors[0].__name__ == interceptors[-1].__name__ == "guard"
+    assert interceptors[1] is oauth
+    assert interceptors[2].__name__ == "user_scoped_auth_interceptor"
 
 
 def test_shared_assembly_skips_when_no_user_auth():
@@ -187,7 +188,8 @@ def test_shared_assembly_skips_when_no_user_auth():
         skills={},
     )
     interceptors = build_mcp_tool_interceptors(config, oauth_builder=lambda _cfg: None)
-    assert interceptors == []
+    assert len(interceptors) == 2
+    assert all(interceptor.__name__ == "guard" for interceptor in interceptors)
 
 
 def test_gateway_masks_user_auth_credentials():

@@ -6,6 +6,7 @@ import logging
 from typing import Any
 
 from deerflow.config.extensions_config import ExtensionsConfig
+from deerflow.mcp.composio_approval_guard import build_composio_approval_guard
 from deerflow.mcp.context_headers import build_context_headers_interceptor
 from deerflow.mcp.oauth import build_oauth_tool_interceptor
 from deerflow.mcp.user_scoped_auth import build_user_scoped_auth_interceptor
@@ -23,8 +24,8 @@ def build_mcp_tool_interceptors(
     resolver: Any = resolve_variable,
     target_logger: logging.Logger = logger,
 ) -> list[Any]:
-    """Build OAuth, user-scoped auth, context headers, then custom MCP interceptors."""
-    interceptors: list[Any] = []
+    """Surround auth/custom interceptors with mandatory Composio approval guards."""
+    interceptors: list[Any] = [build_composio_approval_guard()]
     oauth_interceptor = oauth_builder(extensions_config)
     if oauth_interceptor is not None:
         interceptors.append(oauth_interceptor)
@@ -73,6 +74,8 @@ def build_mcp_tool_interceptors(
                 f"Failed to load MCP interceptor {interceptor_path}",
                 exc_info=True,
             )
+    # Recheck after custom rewrites/retries, immediately before transport.
+    interceptors.append(build_composio_approval_guard(final=True))
     return interceptors
 
 

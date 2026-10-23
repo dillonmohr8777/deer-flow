@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from app.gateway.composio_approval_adapter import ComposioAdapter
 from deerflow.approvals import ActionAdapter, AdapterOutcome
 
 logger = logging.getLogger(__name__)
@@ -72,6 +73,9 @@ _EXTENSION_ADAPTERS: dict[str, ActionAdapter] = {}
 
 def register_adapter(action_type: str, adapter: ActionAdapter) -> None:
     _EXTENSION_ADAPTERS[action_type] = adapter
+
+
+register_adapter("composio_tool_call", ComposioAdapter())
 
 
 async def execute_approved(action: dict[str, Any]) -> AdapterOutcome:
