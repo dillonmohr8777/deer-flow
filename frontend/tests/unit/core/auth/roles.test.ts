@@ -4,6 +4,7 @@ import {
   CLIENT_AGENT_NAME,
   CLIENT_NEW_CHAT_PATH,
   CLIENT_SETTINGS_SECTIONS,
+  clientNewChatPath,
   isClientPath,
   isClientUser,
   isRoleUnresolved,
@@ -54,7 +55,7 @@ describe("client pages", () => {
     ]) {
       expect(isClientPath(path), path).toBe(true);
     }
-    expect(isClientPath(CLIENT_NEW_CHAT_PATH)).toBe(true);
+    expect(isClientPath("/workspace/agents/acme-max/chats/new")).toBe(true);
   });
 
   it("closes every internal page", () => {
@@ -72,7 +73,6 @@ describe("client pages", () => {
       "/workspace/browser-research",
       "/workspace/agents",
       "/workspace/agents/new",
-      "/workspace/agents/some-other-agent/chats/new",
       "/workspace/agents/momobot-max",
       "/workspace/scheduled-tasks",
       "/workspace/capabilities",
@@ -87,8 +87,12 @@ describe("client pages", () => {
 
   it("sends a new default chat to MomoBot Max instead of opening it", () => {
     expect(isClientPath("/workspace/chats/new")).toBe(false);
-    expect(CLIENT_NEW_CHAT_PATH).toBe(
+    expect(CLIENT_NEW_CHAT_PATH).toBe("/workspace/chats/new");
+    expect(clientNewChatPath([])).toBe(
       "/workspace/agents/momobot-max/chats/new",
+    );
+    expect(clientNewChatPath([{ name: "tenant-a", builtin: false }])).toBe(
+      "/workspace/agents/tenant-a/chats/new",
     );
   });
 

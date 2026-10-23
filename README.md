@@ -2593,3 +2593,5 @@ Optional Momentum integration: [synthetic offline SDK review worker](examples/mo
 For EC2 operators, an optional [read-only Brain snapshot adapter](deploy/momentum/ec2/README.md#private-read-only-brain-snapshot)
 can expose saved context without a Mac service or new collector. It is prepared only;
 production registration and private snapshot installation are separate release steps.
+
+Local client-readiness and throwaway backup restore checks are documented in [the EC2 runbook](deploy/momentum/ec2/README.md#local-daily-tenant-and-nightly-recovery-checks).

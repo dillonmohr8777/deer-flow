@@ -430,3 +430,5 @@ then honors the resolved/sticky Agents flag without toggling the query during
 background revalidation. Disabled flags hide cached lists. Keep the unknown-feature outage
 fallback; `core/agents/hooks.dom.test.tsx` and `agents-feature-disabled.spec.ts`
 cover discovery, disabled results and recovery.
+
+Resolved clients may use the workspace picker for their private legacy chats. Gateway membership gates list/select. Keep private and dedicated searches separate; never infer shared legacy ownership.

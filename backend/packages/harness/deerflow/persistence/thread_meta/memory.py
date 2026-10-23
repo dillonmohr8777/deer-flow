@@ -14,6 +14,7 @@ from langgraph.store.base import BaseStore
 
 from deerflow.persistence.json_compat import json_value_matches
 from deerflow.persistence.thread_meta.base import PROJECT_FILTER_UNSET, THREAD_ARCHIVED_METADATA_KEY, THREAD_PINNED_METADATA_KEY, ThreadMetaStore, ThreadOwnershipConflictError, _ProjectFilterUnset
+from deerflow.persistence.thread_meta.sql import _own_private_legacy, _private_actor_storage
 from deerflow.runtime.keyed_lock import AsyncKeyedLockTable
 from deerflow.runtime.user_context import AUTO, _AutoSentinel, resolve_user_id
 from deerflow.utils.time import coerce_iso, now_iso
@@ -56,7 +57,7 @@ class MemoryThreadMetaStore(ThreadMetaStore):
         if resolved is not None and record.get("user_id") != resolved:
             return None
         client_actor = await _client_actor_id()
-        if client_actor is not None and record.get("client_actor_id") != client_actor:
+        if client_actor is not None and record.get("client_actor_id") != client_actor and not _own_private_legacy(client_actor, record.get("user_id"), record.get("client_actor_id")):
             return None
         return record
 
@@ -86,7 +87,7 @@ class MemoryThreadMetaStore(ThreadMetaStore):
             if existing is not None and resolved_user_id is not None and existing.value.get("user_id") != resolved_user_id:
                 raise ThreadOwnershipConflictError(thread_id)
             client_actor = await _client_actor_id()
-            if existing is not None and client_actor is not None and existing.value.get("client_actor_id") != client_actor:
+            if existing is not None and client_actor is not None and existing.value.get("client_actor_id") != client_actor and not _own_private_legacy(client_actor, existing.value.get("user_id"), existing.value.get("client_actor_id")):
                 raise ThreadOwnershipConflictError(thread_id)
             now = now_iso()
             record: dict[str, Any] = {
@@ -148,7 +149,7 @@ class MemoryThreadMetaStore(ThreadMetaStore):
             return []
         filter_dict: dict[str, Any] = {}
         client_actor = await _client_actor_id()
-        if client_actor is not None:
+        if client_actor is not None and not _private_actor_storage(client_actor):
             filter_dict["client_actor_id"] = client_actor
         if status:
             filter_dict["status"] = status
@@ -172,6 +173,8 @@ class MemoryThreadMetaStore(ThreadMetaStore):
             search_offset += len(page)
 
         records = [self._item_to_dict(item) for item in items]
+        if client_actor is not None:
+            records = [record for record in records if record.get("client_actor_id") == client_actor or _own_private_legacy(client_actor, record.get("user_id"), record.get("client_actor_id"))]
         if metadata:
             records = [record for record in records if isinstance(record.get("metadata"), dict) and all(json_value_matches(record["metadata"], key, value) for key, value in metadata.items())]
         if archived is not None:
