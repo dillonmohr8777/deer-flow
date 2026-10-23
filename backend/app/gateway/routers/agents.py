@@ -11,7 +11,7 @@ from sqlalchemy import select
 
 from app.gateway.authz import resource_permission_dependency
 from app.gateway.client_boundary import CLIENT_ROLE
-from app.gateway.momobot_max import client_tier, momobot_max_available_to
+from app.gateway.momobot_max import client_tier, client_workspace_agents, momobot_max_available_to
 from deerflow.agents.memory.manager import get_memory_manager
 from deerflow.config.agents_api_config import get_agents_api_config
 from deerflow.config.agents_config import (
@@ -247,11 +247,13 @@ def _agent_config_to_response(agent_cfg: AgentConfig, include_soul: bool = False
 def _client_agent_response(agent_cfg: AgentConfig, tier: str) -> AgentResponse:
     """What a client sees of an agent: a name and a description, never its model, tools or instructions.
 
-    A client on the base subscription sees the same agent as MomoBot; MomoBot Max is base plus the all-in-one agent.
+    A client on the base subscription sees the same built-in agent as MomoBot; MomoBot Max is base plus
+    the all-in-one agent. A workspace agent (``client_workspace_agents``) only ever reaches a Max client.
     """
-    if tier == "base":
+    builtin = get_builtin_agent_config(agent_cfg.name) is not None
+    if builtin and tier == "base":
         return AgentResponse(name=agent_cfg.name, display_name=MOMOBOT_BASE_DISPLAY_NAME, description=MOMOBOT_BASE_DESCRIPTION, builtin=True)
-    return AgentResponse(name=agent_cfg.name, display_name=agent_cfg.display_name, description=agent_cfg.description, builtin=True)
+    return AgentResponse(name=agent_cfg.name, display_name=agent_cfg.display_name, description=agent_cfg.description, builtin=builtin)
 
 
 def _reject_builtin_name(name: str) -> None:
@@ -274,6 +276,14 @@ async def _caller_client_tier() -> str:
         return await client_tier(get_effective_actor_user_id(), get_app_config())
     except FileNotFoundError:  # no config.yaml: nothing is unlocked
         return "base"
+
+
+async def _caller_workspace_agents(user) -> dict[str, AgentConfig]:
+    """The calling client's own workspace agents, by name (empty for everyone else)."""
+    try:
+        return await client_workspace_agents(user, get_effective_actor_user_id(), get_app_config())
+    except FileNotFoundError:  # no config.yaml: nothing is enabled
+        return {}
 
 
 async def _is_active_org_admin(user_id: str) -> bool:
@@ -361,13 +371,14 @@ async def list_agents() -> AgentsListResponse:
     visible_client_ids = await _visible_client_ids(get_effective_actor_user_id())
     tier = await _caller_client_tier() if is_client else "max"
     builtin_visible = _builtin_visible_to(user, tier)
+    workspace_agents = await _caller_workspace_agents(user) if is_client else {}
 
     def _list() -> AgentsListResponse:
         # Worker thread: the store read plus the per-agent SOUL read inside
         # _agent_config_to_response are filesystem IO (file backend) or DB round
         # trips (db backend) and must stay off the event loop.
-        # A client sees MomoBot Max and nothing else (no personal or legacy shared agents).
-        agents = [] if is_client else list_custom_agents(user_id=user_id)
+        # A client sees MomoBot Max plus their own workspace's agents and nothing else (no personal or legacy shared agents).
+        agents = list(workspace_agents.values()) if is_client else list_custom_agents(user_id=user_id)
         # While the built-in exists its name is reserved and loaders return it first, so a stored row
         # that predates the reservation must not be listed beside it (off, the row is an agent again).
         if get_builtin_agent_config(MOMOBOT_MAX_NAME) is not None:
@@ -376,7 +387,7 @@ async def list_agents() -> AgentsListResponse:
             # An agent with no client_id isn't client-scoped (a personal or
             # staff agent); only a fleet-stamped agent needs this check.
             agents = [a for a in agents if a.client_id is None or a.client_id in visible_client_ids]
-        responses = [_agent_config_to_response(a, include_soul=True, user_id=user_id) for a in agents]
+        responses = [_client_agent_response(a, tier) if is_client else _agent_config_to_response(a, include_soul=True, user_id=user_id) for a in agents]
         builtin = get_builtin_agent_config(MOMOBOT_MAX_NAME) if builtin_visible else None
         if builtin is not None:
             responses.insert(0, _client_agent_response(builtin, tier) if is_client else _agent_config_to_response(builtin, include_soul=True, user_id=user_id))
@@ -450,14 +461,15 @@ async def get_agent(name: str) -> AgentResponse:
     user_id = get_effective_user_id()
     tier = await _caller_client_tier() if is_client else "max"
     builtin_visible = _builtin_visible_to(user, tier)
+    workspace_agents = await _caller_workspace_agents(user) if is_client else {}
 
     def _get() -> AgentResponse:
         # Worker thread: config read + SOUL read must stay off the event loop.
-        if is_client:  # a client can read MomoBot Max and nothing else
-            builtin = get_builtin_agent_config(name) if builtin_visible else None
-            if builtin is None:
+        if is_client:  # a client can read MomoBot Max and their own workspace's agents, nothing else
+            agent = (get_builtin_agent_config(name) if builtin_visible else None) or workspace_agents.get(name)
+            if agent is None:
                 raise FileNotFoundError(f"Agent '{name}' not found")
-            return _client_agent_response(builtin, tier)
+            return _client_agent_response(agent, tier)
         agent_cfg = load_agent_config(name, user_id=user_id)
         if agent_cfg is None or (get_builtin_agent_config(name) is not None and not builtin_visible):
             raise FileNotFoundError(f"Agent '{name}' config is unavailable")

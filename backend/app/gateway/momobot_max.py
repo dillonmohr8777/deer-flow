@@ -9,7 +9,12 @@ This module owns the parts that need a caller:
 * ``apply_run_policy``: client runs are pinned to the agent (any agent or model
   the request names is dropped), and every run of the agent gets the
   config-owned reasoning effort, thinking and delegation settings (including the total subagent cap), whatever
-  the request says.
+  the request says;
+* ``client_workspace_agents``: a Max client chatting inside their dedicated
+  customer workspace may also see and run the custom agents stored in that
+  workspace's own bucket (a tailored all-in-one agent). Those runs get the same
+  config-owned Max settings on the agent's own model; everything else about the
+  client boundary is unchanged (read-only, no SOUL, no management routes).
 
 The tier: MomoBot Max is the base subscription plus the all-in-one agent. A
 client whose client is listed in ``momobot_max.clients`` gets MomoBot Max (the
@@ -20,6 +25,7 @@ subagents). Staff always get Max.
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from fastapi import HTTPException
@@ -27,11 +33,12 @@ from sqlalchemy import select
 
 from app.gateway.authz import model_use_allowed
 from app.gateway.client_boundary import CLIENT_ROLE
+from deerflow.config.agents_config import AgentConfig
 from deerflow.config.app_config import AppConfig
-from deerflow.config.builtin_agents import MOMOBOT_MAX_NAME
+from deerflow.config.builtin_agents import MOMOBOT_MAX_NAME, is_builtin_agent_name
 from deerflow.persistence.clients.model import ClientAssignmentRow, ClientRow
 from deerflow.persistence.organizations.model import OrganizationRow
-from deerflow.runtime.user_context import resolve_organization_id
+from deerflow.runtime.user_context import get_effective_user_id, resolve_organization_id
 
 # Same wording as every other "no such agent" answer, so a run can't probe for it.
 _UNRESOLVED_AGENT_DETAIL = "knowledge_scope assistant configuration could not be resolved"
@@ -106,26 +113,55 @@ async def client_keys_for_user(user_id: str, organization_id: str | None = None)
     return tuple(key for row in rows for key in row if key)
 
 
+async def client_workspace_agents(user: Any, actor_user_id: str | None, app_config: AppConfig) -> dict[str, AgentConfig]:
+    """The custom agents a client may see and run, by name: those stored in their dedicated customer workspace's own bucket.
+
+    Empty unless the caller is a ``client`` on the Max tier whose active
+    workspace passes ``require_client_workspace``. Never a legacy shared-layout
+    agent, another bucket's agent or a built-in; read-only by construction, since
+    the client boundary admits no agent management route.
+    """
+    if getattr(user, "system_role", None) != CLIENT_ROLE or not app_config.momobot_max.enabled:
+        return {}
+    from app.gateway.client_workspace import require_client_workspace
+
+    try:
+        await require_client_workspace(user)
+    except HTTPException:  # not a dedicated customer workspace: the built-in only, as before
+        return {}
+    if await client_tier(actor_user_id, app_config) != "max":
+        return {}
+    from deerflow.persistence.agents import get_agent_store
+
+    agents = await asyncio.to_thread(get_agent_store().list, user_id=get_effective_user_id(), include_legacy=False)
+    return {agent.name: agent for agent in agents if not is_builtin_agent_name(agent.name)}
+
+
 async def apply_run_policy(config: dict[str, Any], *, user: Any, actor_user_id: str | None, app_config: AppConfig, internal: bool = False) -> None:
     """Mutate the run *config* in place; raise when the caller may not run MomoBot Max."""
     if not internal and user is not None:
         from app.gateway.client_workspace import require_client_workspace
 
         await require_client_workspace(user)
+    workspace_agents: dict[str, AgentConfig] = {}
     if getattr(user, "system_role", None) == CLIENT_ROLE:
         if not app_config.momobot_max.enabled:
             raise HTTPException(status_code=503, detail="MomoBot Max is not available yet")
         config.setdefault("context", {})
         config.setdefault("configurable", {})
+        # A client runs MomoBot Max, or one of their own workspace's agents when they name it; any other name is dropped.
+        workspace_agents = await client_workspace_agents(user, actor_user_id, app_config)
+        requested = _normalized_agent_name(config)
+        pinned = requested if requested in workspace_agents else MOMOBOT_MAX_NAME
         for section in _sections(config):
-            section["agent_name"] = MOMOBOT_MAX_NAME
+            section["agent_name"] = pinned
             for key in ("model_name", "model", "is_bootstrap"):
                 section.pop(key, None)
     sections = _sections(config)
     for section in sections:  # the tier is server-owned: set below for this agent only, never taken from a request
         section.pop("momobot_tier", None)
-    agent_name = next((section["agent_name"] for section in sections if isinstance(section.get("agent_name"), str)), "")
-    if agent_name.strip().lower().replace("_", "-") != MOMOBOT_MAX_NAME:
+    agent_name = _normalized_agent_name(config)
+    if agent_name != MOMOBOT_MAX_NAME and agent_name not in workspace_agents:
         return
     settings = app_config.momobot_max
     is_client = getattr(user, "system_role", None) == CLIENT_ROLE
@@ -150,3 +186,9 @@ async def apply_run_policy(config: dict[str, Any], *, user: Any, actor_user_id: 
 def _sections(config: dict[str, Any]) -> list[dict[str, Any]]:
     # ``context`` first: it wins over ``configurable`` when both name an agent.
     return [section for section in (config.get("context"), config.get("configurable")) if isinstance(section, dict)]
+
+
+def _normalized_agent_name(config: dict[str, Any]) -> str:
+    """The agent the run names, normalized the way the loaders match names (``""`` when none)."""
+    agent_name = next((section["agent_name"] for section in _sections(config) if isinstance(section.get("agent_name"), str)), "")
+    return agent_name.strip().lower().replace("_", "-")

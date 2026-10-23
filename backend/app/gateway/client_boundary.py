@@ -18,8 +18,6 @@ from __future__ import annotations
 
 import re
 
-from deerflow.config.builtin_agents import MOMOBOT_MAX_NAME
-
 CLIENT_ROLE = "client"
 
 _ID = r"[^/]+"
@@ -45,9 +43,11 @@ _RULES: tuple[tuple[frozenset[str], re.Pattern[str]], ...] = tuple(
         (_GET, rf"^/api/models(/{_ID})?$"),
         (_GET, r"^/api/momobot-brand/(kit|about|assets/.+)$"),
         (_GET, r"^/api/suggestions/config$"),
-        # The agents API, read-only. The router narrows it to MomoBot Max.
+        # The agents API, read-only. The router narrows it to MomoBot Max plus
+        # the agents of the client's own dedicated workspace (``momobot_max.py``);
+        # ``check`` is a management probe and stays closed.
         (_GET, r"^/api/agents$"),
-        (_GET, rf"^/api/agents/{MOMOBOT_MAX_NAME}$"),
+        (_GET, rf"^/api/agents/(?!check$){_ID}$"),
         # Chat: threads, runs, files, follow-ups, feedback. Deliberately absent:
         # run events and workspace-changes (tool and subagent internals, file
         # paths) and token-usage (model names, per-caller breakdown).

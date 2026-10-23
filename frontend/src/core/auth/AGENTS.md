@@ -36,9 +36,11 @@ parse, so it never signs in. A `client` (external customer) gets the client
 version of MomoBot: the sidebar shows New chat, Chats, MomoBot Agents and About
 only (`ClientNavList`), Settings keeps account, security, appearance,
 notifications and About, the composer hides model, mode, effort, skills and
-polish controls, and every new chat is `/workspace/agents/momobot-max/chats/new`.
-`RoleRouteGuard` shows other pages a polite "not available" page and moves
-`/workspace/chats/new` to the MomoBot Max chat. All of this is convenience: the
+polish controls, and every new chat starts at `/workspace/chats/new`
+(`CLIENT_NEW_CHAT_PATH`). `RoleRouteGuard` shows other pages a polite "not
+available" page and moves `/workspace/chats/new` to `clientNewChatPath(agents)`:
+the first non-built-in agent the Gateway lists (the client's own dedicated
+workspace's agent, Oct 22) else MomoBot Max. All of this is convenience: the
 Gateway's client route boundary and role policy answer 403 to anything else, so
 add a new client page to `isClientPath` and the Gateway table together. The
 OpenAI crew link shows for nobody until `/api/features` reports
