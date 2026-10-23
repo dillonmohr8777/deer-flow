@@ -1047,7 +1047,7 @@ Surface more operational detail than usual — model, reasoning effort, and tool
     return ""
 
 
-_USER_PROFILE_MAX_BYTES = 4096
+_USER_PROFILE_MAX_BYTES = 8192
 
 
 def _build_user_profile_section(user_id: str | None) -> str:

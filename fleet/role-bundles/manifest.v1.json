@@ -15,7 +15,7 @@
     "response_model": "UserProfileResponse",
     "body_field": "content",
     "storage_binding": "effective authenticated storage principal",
-    "prompt_limit_bytes": 4096,
+    "prompt_limit_bytes": 8192,
     "legacy_read_fallback": true,
     "readback_rule": "A GET response alone does not prove per-user or tenant storage provenance because the route can fall back to legacy shared USER.md. Verify identity, workspace, effective storage principal, source path, and destination readback before any owner-approved PUT.",
     "application_rule": "Source artifacts only. Preserve and review existing user context; never overwrite a profile automatically."
