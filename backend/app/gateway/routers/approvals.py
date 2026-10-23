@@ -1,7 +1,7 @@
 """Approvals inbox API: review, edit, approve or reject actions agents proposed.
 
-Reads are owner-scoped (``user_id`` + active organization, via the repository;
-a foreign row is a 404). Edit/approve/reject additionally need an active
+Reads are owner-scoped, with same-org Composio read/reject oversight for active
+organization owners/admins (a foreign row is a 404). Edit/approve/reject need an active
 organization owner/admin, since approving is what releases an outbound action.
 Only the caller that wins the pending->approved compare-and-set runs the
 adapter, so a double click or two reviewers can never send twice.
@@ -117,7 +117,10 @@ async def _audit(request: Request, action: str, actor: str, action_id: str, outc
 @router.get("", response_model=ApprovalListResponse)
 @require_permission("approvals", "read")
 async def list_approvals(request: Request, status: ActionStatus | None = None, limit: int = Query(default=100, ge=1, le=200)) -> ApprovalListResponse:
-    rows = await get_pending_action_repo(request).list(status=status, limit=limit)
+    repo = get_pending_action_repo(request)
+    own = await repo.list(status=status, limit=limit)
+    oversight = await repo.list_composio_for_org(status=status, limit=limit)
+    rows = sorted({r["id"]: r for r in [*own, *oversight]}.values(), key=lambda r: r["created_at"], reverse=True)[:limit]
     return ApprovalListResponse(approvals=[_out(r) for r in rows])
 
 
@@ -149,7 +152,8 @@ async def file_loop_action(body: LoopFilingRequest, request: Request) -> Approva
 @router.get("/{action_id}", response_model=ApprovalResponse)
 @require_permission("approvals", "read")
 async def get_approval(action_id: str, request: Request) -> ApprovalResponse:
-    row = await get_pending_action_repo(request).get(action_id)
+    repo = get_pending_action_repo(request)
+    row = await repo.get(action_id) or await repo.get_composio_for_org(action_id)
     if row is None:
         raise _not_found()
     return _out(row)
@@ -219,9 +223,10 @@ async def approve_action(action_id: str, request: Request) -> ApprovalResponse:
 async def reject_action(action_id: str, request: Request) -> ApprovalResponse:
     reviewer = await _require_reviewer(request)
     repo = get_pending_action_repo(request)
-    if await repo.get(action_id) is None:
+    own = await repo.get(action_id)
+    if own is None and await repo.get_composio_for_org(action_id) is None:
         raise _not_found()
-    rejected = await repo.decide(action_id, approve=False, decided_by=reviewer)
+    rejected = await repo.decide(action_id, approve=False, decided_by=reviewer) if own is not None else await repo.reject_composio_for_org(action_id)
     if rejected is None:
         raise HTTPException(status_code=409, detail="This action was already decided")
     await _audit(request, "approvals.rejected", reviewer, action_id, "success", None)
