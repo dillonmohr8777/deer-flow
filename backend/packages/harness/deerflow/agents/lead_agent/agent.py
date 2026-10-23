@@ -944,7 +944,8 @@ def _complete_assembly(
 
 def _assemble_lead_agent(config: RunnableConfig, *, app_config: AppConfig) -> LeadAgentAssembly:
     # Lazy import to avoid circular dependency
-    from deerflow.constants import MOMENTUM_SDK_CONTEXT_KEY
+    from deerflow.config.builtin_agents import MOMOBOT_MAX_ADMIN_DIAGNOSTIC_TOOL_NAMES, MOMOBOT_MAX_NAME
+    from deerflow.constants import MOMENTUM_SDK_CONTEXT_KEY, WSL_DIAGNOSTICS_CONTEXT_KEY
     from deerflow.tools import get_available_tools
     from deerflow.tools.builtins import setup_agent, update_agent
     from deerflow.tools.builtins.tool_search import assemble_deferred_tools, build_mcp_routing_middleware, get_mcp_routing_hints_prompt_section
@@ -1004,6 +1005,9 @@ def _assemble_lead_agent(config: RunnableConfig, *, app_config: AppConfig) -> Le
         if agent_name and agent_config is None:
             raise ValueError("Existing agent config readback is unavailable")
     tool_names = getattr(agent_config, "tool_names", None)
+    include_wsl_diagnostics = agent_name == MOMOBOT_MAX_NAME and not is_bootstrap and not cfg.get("is_subagent") and not cfg.get("channel_name") and cfg.get("user_role") == "admin" and callable(cfg.get(WSL_DIAGNOSTICS_CONTEXT_KEY))
+    if include_wsl_diagnostics and tool_names is not None:
+        tool_names = [*tool_names, *MOMOBOT_MAX_ADMIN_DIAGNOSTIC_TOOL_NAMES]
     public_news_channel = cfg.get("public_news_channel") is True
     if public_news_channel:
         if is_bootstrap or agent_name != "ai-tech-news" or agent_config is None:
@@ -1275,6 +1279,7 @@ def _assemble_lead_agent(config: RunnableConfig, *, app_config: AppConfig) -> Le
         subagent_enabled=subagent_enabled,
         include_conversation_reader=callable(cfg.get(CONVERSATION_READER_CONTEXT_KEY)) and not bool(cfg.get("is_subagent")),
         include_momentum_sdk=callable(cfg.get(MOMENTUM_SDK_CONTEXT_KEY)) and not bool(cfg.get("is_subagent")),
+        include_wsl_diagnostics=include_wsl_diagnostics,
         app_config=resolved_app_config,
         chat_model=chat_model,
     )
