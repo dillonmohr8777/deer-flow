@@ -35,7 +35,9 @@ def build_mcp_tool_interceptors(
     # override runs closer to the transport and wins the final header value.
     user_auth_interceptor = user_auth_builder(extensions_config)
     if user_auth_interceptor is not None:
-        interceptors.append(user_auth_interceptor)
+        from deerflow.mcp.composio_approval_authority import approved_credential_interceptor
+
+        interceptors.append(approved_credential_interceptor(user_auth_interceptor))
 
     # Last of the built-ins, by the same rule: a credential the caller chose for
     # this one request is more specific than a configured per-user or per-server

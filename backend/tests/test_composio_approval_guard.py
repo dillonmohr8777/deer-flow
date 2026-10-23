@@ -13,11 +13,23 @@ from langchain_mcp_adapters.interceptors import MCPToolCallRequest
 from org_isolation_fixtures import ORG_A, ORG_S, USER_A, USER_B, USER_C, acting_as, auth_headers, org_world, org_world_pooled  # noqa: F401
 from test_approvals_inbox import _app, _http
 
-from app.gateway.approval_adapters import execute_approved
+from app.gateway.approval_adapters import execute_approved as _execute_approved
 from deerflow.approvals import InvalidPayloadError
 from deerflow.config.extensions_config import ExtensionsConfig
+from deerflow.mcp.composio_approval_authority import bind_composio_authority, current_composio_authority, prepare_composio_authority
 from deerflow.mcp.interceptors import build_mcp_tool_interceptors, compose_tool_interceptors
 from deerflow.persistence.approvals import PendingActionRepository
+
+
+async def execute_approved(action):
+    """Install the host handoff for adapter-level tests that bypass the HTTP route."""
+    if action["status"] != "approved":
+        return await _execute_approved(action)
+    from deerflow.persistence.engine import get_session_factory
+
+    authority = await prepare_composio_authority(action, PendingActionRepository(get_session_factory()))
+    with bind_composio_authority(authority):
+        return await _execute_approved(action)
 
 
 def request(name="COMPOSIO_MULTI_EXECUTE_TOOL", args=None, *, server="composio-me", call_id="call-1", **context):
@@ -185,11 +197,11 @@ async def test_foreign_actor_and_org_cannot_list_get_approve_reject(inbox, org_w
 
 def fake_transport(monkeypatch, upstream, *, custom=None):
     async def call(runtime=None, **args):
-        return await boundary(upstream, custom=custom)(MCPToolCallRequest(name="COMPOSIO_MULTI_EXECUTE_TOOL", args=args, server_name="composio-me", runtime=runtime))
+        return await boundary(upstream, custom=custom)(MCPToolCallRequest(name="COMPOSIO_MULTI_EXECUTE_TOOL", args=args, server_name="composio-me", runtime=runtime, headers=current_composio_authority().headers()))
 
-    config = ExtensionsConfig.model_validate({"mcpServers": {"composio-me": {"type": "http", "url": "https://example.invalid/mcp", "enabled": True}}})
+    config = ExtensionsConfig.model_validate({"mcpServers": {"composio-me": {"type": "http", "url": "https://example.invalid/mcp", "enabled": True, "user_auth": {"users": {USER_A: "synthetic-proposer-binding"}}}}})
     monkeypatch.setattr(ExtensionsConfig, "from_file", lambda: config)
-    monkeypatch.setattr("deerflow.mcp.tools.get_mcp_tools", AsyncMock(return_value=[SimpleNamespace(name="composio-me_COMPOSIO_MULTI_EXECUTE_TOOL", coroutine=call)]))
+    monkeypatch.setattr("app.gateway.composio_approval_adapter._current_tool", AsyncMock(return_value=SimpleNamespace(name="composio-me_COMPOSIO_MULTI_EXECUTE_TOOL", coroutine=call)))
 
 
 @pytest.mark.asyncio

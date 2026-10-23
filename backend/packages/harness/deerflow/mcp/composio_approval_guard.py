@@ -280,7 +280,16 @@ def build_composio_approval_guard(*, final: bool = False):
         if attempt is not None:
             if attempt.consumed:
                 raise ToolException("Composio approval attempt was already consumed; reconcile before any new proposal.")
-            if (actor, organization, _json(payload)) != (attempt.actor, attempt.organization, attempt.payload):
+            from deerflow.mcp.composio_approval_authority import current_composio_authority
+
+            authority = current_composio_authority()
+            proposing_actor = actor
+            if authority is not None:
+                if authority.action_id != attempt.action_id or authority.decider != actor:
+                    raise ToolException("Composio approval handoff does not match the claimed attempt.")
+                await authority.verify(request, final=final)
+                proposing_actor = authority.proposer
+            if (proposing_actor, organization, _json(payload)) != (attempt.actor, attempt.organization, attempt.payload):
                 raise ToolException("Composio approval does not match the authenticated scope and exact call.")
             if final:
                 attempt.consumed = True

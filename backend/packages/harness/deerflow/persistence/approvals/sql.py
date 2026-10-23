@@ -3,7 +3,8 @@
 Generic reads filter the storage user; Composio reads require the authenticated
 actor and active organization, so a foreign row is indistinguishable from a
 missing one (routers map ``None`` to 404). Separate Composio-only methods grant
-active organization owners/admins list/read/reject oversight, never approval.
+active organization owners/admins list/read/reject oversight. Separate approval
+methods admit the active staff proposer or an actual same-org owner/admin.
 Every state change is a
 compare-and-set ``UPDATE ... WHERE status = <expected>``: returns ``None``
 when the row is missing, foreign, or no longer in the expected state.
@@ -15,14 +16,17 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import and_, or_, select, update
+from sqlalchemy import and_, exists, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from deerflow.approvals.workflow import STATUSES, InvalidPayloadError, notify_created, validate_payload
 from deerflow.persistence.approvals.model import PendingActionRow
+from deerflow.persistence.clients.model import ClientAssignmentRow
 from deerflow.persistence.organizations.identity import private_organization_id
+from deerflow.persistence.organizations.model import OrganizationMemberRow
 from deerflow.persistence.organizations.resolution import active_organization_for_user, storage_user_id_for_organization
+from deerflow.persistence.user.model import UserRow
 from deerflow.runtime.user_context import AUTO, _AutoSentinel, get_current_user, get_storage_context, resolve_organization_id, resolve_user_id
 from deerflow.utils.time import coerce_iso
 
@@ -141,7 +145,7 @@ class PendingActionRepository:
             return [_to_dict(r) for r in (await session.execute(stmt)).scalars()]
 
     async def _composio_oversight_scope(self, stmt: Any) -> Any | None:
-        """Separate, read/reject-only scope; never widen the ordinary actor filter."""
+        """Separate oversight scope; approval additionally verifies the proposer."""
         actor = get_current_user()
         context = get_storage_context()
         if actor is None or context is None or str(actor.id) != context.actor_user_id or not context.organization_id:
@@ -159,6 +163,85 @@ class PendingActionRepository:
         async with self._sf() as session:
             row = (await session.execute(stmt)).scalars().first()
             return _to_dict(row) if row is not None else None
+
+    async def _composio_approval_scope(self, stmt: Any) -> Any | None:
+        """Own active staff proposal, or an actual active same-org reviewer."""
+        actor, context = get_current_user(), get_storage_context()
+        if actor is None or context is None or str(actor.id) != context.actor_user_id or not context.organization_id:
+            return None
+        async with self._sf() as session:
+            user = await session.get(UserRow, str(actor.id))
+            organization = await active_organization_for_user(session, str(actor.id), context.organization_id)
+        if (
+            user is None
+            or user.disabled_at is not None
+            or user.system_role not in {"user", "exec", "admin"}
+            or organization is None
+            or organization.role not in {"owner", "admin", "member"}
+            or storage_user_id_for_organization(organization, str(actor.id)) != context.storage_user_id
+        ):
+            return None
+        proposer_active = exists().where(
+            OrganizationMemberRow.organization_id == PendingActionRow.organization_id,
+            OrganizationMemberRow.user_id == PendingActionRow.user_id,
+            OrganizationMemberRow.status == "active",
+            OrganizationMemberRow.role.in_({"owner", "admin", "member"}),
+        )
+        proposer_staff = exists().where(
+            UserRow.id == PendingActionRow.user_id,
+            UserRow.disabled_at.is_(None),
+            UserRow.system_role.in_({"user", "exec", "admin"}),
+        )
+        stmt = stmt.where(PendingActionRow.action_type == "composio_tool_call", PendingActionRow.organization_id == organization.id, proposer_active, proposer_staff)
+        for participant in (str(actor.id), PendingActionRow.user_id):
+            stmt = stmt.where(~exists().where(ClientAssignmentRow.organization_id == organization.id, ClientAssignmentRow.user_id == participant, ClientAssignmentRow.role == "client_contact"))
+        if organization.role not in {"owner", "admin"}:
+            stmt = stmt.where(PendingActionRow.user_id == str(actor.id))
+        return stmt
+
+    async def get_composio_for_approval(self, action_id: str) -> dict | None:
+        stmt = await self._composio_approval_scope(select(PendingActionRow).where(PendingActionRow.id == action_id))
+        if stmt is None:
+            return None
+        async with self._sf() as session:
+            row = (await session.execute(stmt)).scalars().first()
+            return _to_dict(row) if row is not None else None
+
+    async def _composio_approval_transition(self, action_id: str, *, expected: str, claim=False, **values) -> dict | None:
+        actor = get_current_user()
+        if actor is None:
+            return None
+        stmt = update(PendingActionRow).where(PendingActionRow.id == action_id, PendingActionRow.status == expected)
+        if expected == "approved":
+            stmt = stmt.where(PendingActionRow.decided_by == str(actor.id))
+        if claim:
+            stmt = stmt.where(PendingActionRow.execution_result.is_(None))
+        stmt = await self._composio_approval_scope(stmt)
+        if stmt is None:
+            return None
+        stmt = stmt.values(updated_at=datetime.now(UTC), **values).returning(PendingActionRow)
+        async with self._sf() as session:
+            row = (await session.execute(stmt)).scalars().first()
+            result = _to_dict(row) if row is not None else None
+            await session.commit()
+            return result
+
+    async def decide_composio(self, action_id: str, *, approve: bool) -> dict | None:
+        actor = get_current_user()
+        if actor is None:
+            return None
+        return await self._composio_approval_transition(action_id, expected="pending", status="approved" if approve else "rejected", decided_by=str(actor.id), decided_at=datetime.now(UTC))
+
+    async def claim_composio_handoff(self, action_id: str) -> dict | None:
+        return await self._composio_approval_transition(
+            action_id, expected="approved", claim=True, execution_result={"state": "outcome_unknown", "attempted": True}, error="outcome_unknown: reconcile Composio destination; never automatically retry"
+        )
+
+    async def record_composio_outcome(self, action_id: str, *, status: str, result: dict, error: str | None = None) -> dict | None:
+        values = {"status": status, "execution_result": result, "error": error}
+        if status == "executed":
+            values["executed_at"] = datetime.now(UTC)
+        return await self._composio_approval_transition(action_id, expected="approved", **values)
 
     async def list_composio_for_org(self, *, status: str | None = None, limit: int = 100) -> list[dict]:
         stmt = await self._composio_oversight_scope(select(PendingActionRow))
