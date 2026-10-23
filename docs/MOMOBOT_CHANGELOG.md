@@ -10,6 +10,14 @@ The upstream DeerFlow history stays in [CHANGELOG.md](../CHANGELOG.md).
 
 ## [Unreleased]
 
+## [momobot-prod-20261023-749fd34d] - 2026-10-23
+
+### Changed
+
+- WSL bridge env for EC2, Oct 23 (#274)
+- Changelog backfill, Oct 23 (#271)
+- MomoBot changelog momobot-prod-20261022-aaa418a7, Oct 22 (#270)
+
 ## [momobot-prod-20261022-aaa418a7] - 2026-10-22
 
 ### Changed
