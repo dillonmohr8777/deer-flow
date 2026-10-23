@@ -10,6 +10,8 @@
 # and UI). Any failure after the swap restores the previous source and tags on its own. On success the
 # operator side tags momobot-prod-YYYYMMDD-<sha8>, pushes the tag and opens a PR that adds the release to
 # docs/MOMOBOT_CHANGELOG.md. Every attempt appends a line to /var/log/momobot/releases.jsonl on the box.
+# A successful release keeps the newest 3 builds of each image plus the live and rollback tags, and
+# removes older builds (each costs about 2 to 3 GB on a box that refuses to release under 10 GiB free).
 #
 # Env: MOMOBOT_SSH (ssh destination, default ubuntu@momobot.needmomentum.com), MOMOBOT_SSH_KEY (optional).
 # The box half is this same file piped to `sudo bash -s`, so the box checkout need not carry it yet.
@@ -79,6 +81,15 @@ apply() {  # <source sha> <gateway image> <frontend image>: switch, restart, wai
   systemctl restart momobot && ready && smoke "$2" "$3"
 }
 
+prune_images() {  # <tag>...: keep the newest 3 builds per image and every tag passed in; never fails a release
+  local repo img
+  for repo in deer-flow-gateway deer-flow-frontend; do
+    docker image ls "$repo" --format '{{.Repository}}:{{.Tag}}' | tail -n +4 | while read -r img; do
+      [[ " $* " == *" $img "* ]] || docker image rm "$img" >/dev/null || true
+    done
+  done
+}
+
 take_lock() {
   exec 9>"$LOCK"
   flock -n 9 || die "another release holds $LOCK"
@@ -126,6 +137,7 @@ box_release() {
   fi
   printf 'PREV_SRC=%s\nPREV_GATEWAY=%s\nPREV_FRONTEND=%s\n' "$prev_src" "$prev_gw" "$prev_fe" >"$PREV"
   ledger release "$sha" "$gw" "$fe" true
+  prune_images "$gw" "$fe" "$prev_gw" "$prev_fe" || true
   echo "release: live on $gw and $fe (previous: $prev_gw, $prev_fe)"
 }
 
