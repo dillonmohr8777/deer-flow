@@ -2521,6 +2521,15 @@ receipts expose evidence, not acceptance or proof of whole-gateway spend control
 
 ## MomoBot iPhone and desktop app
 
+The optional `wsl_diagnostic` chat tool is available only to an authenticated
+Momo admin lead (including a verified internal admin delegation) while the
+existing WSL bridge is enabled. It selects only the existing true/false/uname
+diagnostics. Submission returns pending status; a later status call reports
+the verified receipt and whether it is attached to the current conversation.
+Clients, staff, channel runs and subagents receive no diagnostic capability.
+Runtime installation and real Linux cancellation/rollback acceptance remain
+the existing deployment owner's responsibility.
+
 The private workspace adds **OpenAI crew** at `/workspace/openai` for durable
 GPT-6.1 Sol hosted tasks with up to three subagents, saved results and file
 downloads. **Browser research** at `/workspace/browser-research` captures up to

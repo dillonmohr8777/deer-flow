@@ -16,8 +16,7 @@ from deerflow.knowledge_scope import KnowledgeScope
 
 MOMOBOT_MAX_NAME = "momobot-max"
 
-# The most a MomoBot Max run can ever call, whoever runs it and however the
-# role policy is configured. Role policy can narrow this further, never widen it.
+# The ordinary ceiling, including every client/staff run. Role policy can narrow it.
 MOMOBOT_MAX_TOOL_NAMES = [
     "web_search",
     "web_fetch",
@@ -29,6 +28,9 @@ MOMOBOT_MAX_TOOL_NAMES = [
     "task",
     "tool_search",
 ]
+
+# Only lead assembly with the authenticated host capability may add these names.
+MOMOBOT_MAX_ADMIN_DIAGNOSTIC_TOOL_NAMES = ["wsl_diagnostic"]
 
 _SOUL_PATH = Path(__file__).with_name("momobot_max.md")
 

@@ -50,6 +50,7 @@ from deerflow.agents.middlewares.view_image_middleware import _IMAGE_CONTEXT_MES
 from deerflow.config.agents_config import load_agent_config
 from deerflow.config.app_config import get_app_config
 from deerflow.config.database_config import resolve_checkpoint_graph_cache_max
+from deerflow.constants import WSL_DIAGNOSTICS_CONTEXT_KEY
 from deerflow.knowledge_scope import KNOWLEDGE_SCOPE_KEY, KNOWLEDGE_SCOPE_RUNTIME_KEY
 from deerflow.persistence.organizations.delegation import ActiveDelegation, OrganizationDelegationRepository
 from deerflow.persistence.organizations.resolution import storage_user_id_for_organization
@@ -621,6 +622,7 @@ _SERVER_OWNED_RUNTIME_CONTEXT_KEYS: frozenset[str] = (
             KNOWLEDGE_SCOPE_RUNTIME_KEY,
             AUTHENTICATED_CONTEXT_MARKER_KEY,
             PRIVATE_MCP_SESSION_CONTEXT_KEY,
+            WSL_DIAGNOSTICS_CONTEXT_KEY,
         }
     )
     | WORKSPACE_IDENTITY_CONTEXT_KEYS
@@ -2197,11 +2199,21 @@ async def start_run(
             # or strict verification failure:
             # its startup barrier is the single path that turns pending
             # cancellation into no-agent-construction plus publish_end.
+            from app.gateway.wsl_chat import prepare_wsl_diagnostics
+
+            wsl_diagnostics = await prepare_wsl_diagnostics(
+                request=request,
+                config=config,
+                app_config=get_app_config(),
+                thread_id=record.thread_id,
+                run_id=record.run_id,
+                internal_owner_user=internal_owner_user,
+            )
             await run_agent(
                 bridge,
                 run_mgr,
                 record,
-                ctx=run_ctx,
+                ctx=replace(run_ctx, wsl_diagnostics=wsl_diagnostics),
                 agent_factory=agent_factory,
                 graph_input=graph_input,
                 config=config,

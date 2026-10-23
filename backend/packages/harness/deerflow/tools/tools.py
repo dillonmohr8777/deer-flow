@@ -9,7 +9,7 @@ from pydantic import BaseModel
 
 from deerflow.config import get_app_config
 from deerflow.config.app_config import AppConfig
-from deerflow.constants import CONVERSATION_TOOL_USE, MOMENTUM_SDK_TOOL_USE
+from deerflow.constants import CONVERSATION_TOOL_USE, MOMENTUM_SDK_TOOL_USE, WSL_DIAGNOSTICS_TOOL_NAME, WSL_DIAGNOSTICS_TOOL_USE
 from deerflow.mcp.tasks.runtime import is_mcp_task_runtime_available
 from deerflow.reflection import resolve_variable
 from deerflow.sandbox.security import is_host_bash_allowed
@@ -119,6 +119,7 @@ def get_available_tools(
     include_upload_tool: bool = True,
     include_conversation_reader: bool = False,
     include_momentum_sdk: bool = False,
+    include_wsl_diagnostics: bool = False,
     app_config: AppConfig | None = None,
     extensions=None,
     chat_model: BaseChatModel | None = None,
@@ -143,6 +144,7 @@ def get_available_tools(
         include_conversation_reader: Allow the configured conversation reader
             only when the host provides its authorized runtime capability.
             Defaults to false for embedded callers and subagents.
+        include_wsl_diagnostics: Add the fixed diagnostic tool only for a host-authorized Momo admin lead.
         private_mcp_config: Optional preloaded MCP snapshot for a targeted
             private selection. It bypasses global public-cache discovery.
 
@@ -155,6 +157,8 @@ def get_available_tools(
         tool_configs = [tool for tool in tool_configs if tool.use != MOMENTUM_SDK_TOOL_USE]
     if not include_conversation_reader:
         tool_configs = [tool for tool in tool_configs if tool.use != CONVERSATION_TOOL_USE]
+    if not include_wsl_diagnostics:
+        tool_configs = [tool for tool in tool_configs if tool.use != WSL_DIAGNOSTICS_TOOL_USE]
 
     # Knowledge tools are opt-in as a group. Provider connection and retrieval
     # settings live on each tool entry; the generic capability flag controls
@@ -180,6 +184,8 @@ def get_available_tools(
     # Also deny alternate import aliases resolving to this sensitive tool.
     if not include_momentum_sdk or groups is None or "momentum_sdk" not in groups:
         loaded_tools_raw = [(cfg, loaded) for cfg, loaded in loaded_tools_raw if loaded.name != "momentum_sdk_draft"]
+    if not include_wsl_diagnostics:
+        loaded_tools_raw = [(cfg, loaded) for cfg, loaded in loaded_tools_raw if loaded.name != WSL_DIAGNOSTICS_TOOL_NAME]
 
     # Warn when the config ``name`` field and the tool object's ``.name``
     # attribute diverge — this mismatch is the root cause of issue #1803 where
@@ -198,6 +204,10 @@ def get_available_tools(
 
     # Conditionally add tools based on config
     builtin_tools = BUILTIN_TOOLS.copy()
+    if include_wsl_diagnostics:
+        from deerflow.tools.wsl_diagnostics import wsl_diagnostic
+
+        builtin_tools.append(wsl_diagnostic)
     if is_mcp_task_runtime_available():
         builtin_tools.extend((list_background_tasks, cancel_background_task))
     if include_upload_tool:

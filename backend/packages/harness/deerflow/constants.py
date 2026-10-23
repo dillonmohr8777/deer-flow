@@ -10,6 +10,9 @@ CONVERSATION_TOOL_USE = "deerflow.tools.conversation:read_conversation"
 CONVERSATION_TOOL_NAME = "read_conversation"
 MOMENTUM_SDK_CONTEXT_KEY = "__momentum_sdk_reviewer"
 MOMENTUM_SDK_TOOL_USE = "deerflow.community.momentum_sdk.tools:momentum_sdk_draft"
+WSL_DIAGNOSTICS_CONTEXT_KEY = "__wsl_diagnostics"
+WSL_DIAGNOSTICS_TOOL_NAME = "wsl_diagnostic"
+WSL_DIAGNOSTICS_TOOL_USE = "deerflow.tools.wsl_diagnostics:wsl_diagnostic"
 
 # Hidden subdirectory (under a thread's outputs dir) that holds the browser
 # tools' per-step screenshots. These are transient live-progress frames, not
