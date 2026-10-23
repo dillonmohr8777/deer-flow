@@ -1,5 +1,13 @@
 ### Gateway API (`app/gateway/`)
 
+The default-disabled `wsl_bridge` is a separate diagnostic exchange, never an
+executor. Its thread routes bind actual actor/org/thread plus storage identity;
+only delegated internal callers or the existing SSH operator CLI may ingest a
+validated receipt. Preserve the full digest, SQLite process-writer fence,
+uncertain holds, bounded output and fixed-name attachment under the existing
+durable `artifact_write` reservation. GET and imports have no write/startup side
+effects. See [WSL diagnostic contract](../../docs/WSL_DIAGNOSTIC_BRIDGE.md).
+
 `public_news_channel` is internal runtime context only. Forward it through the
 authenticated internal channel boundary so assembly applies the managed public
 tool/privacy ceiling, and strip it from external request config. Direct assembly
