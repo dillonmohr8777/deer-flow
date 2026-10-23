@@ -383,7 +383,7 @@ async def list_agents() -> AgentsListResponse:
         # that predates the reservation must not be listed beside it (off, the row is an agent again).
         if get_builtin_agent_config(MOMOBOT_MAX_NAME) is not None:
             agents = [a for a in agents if not is_builtin_agent_name(_normalize_agent_name(a.name))]
-        if visible_client_ids is not None:
+        if visible_client_ids is not None and not is_client:  # a client's workspace agents are already narrowed to their own client
             # An agent with no client_id isn't client-scoped (a personal or
             # staff agent); only a fleet-stamped agent needs this check.
             agents = [a for a in agents if a.client_id is None or a.client_id in visible_client_ids]

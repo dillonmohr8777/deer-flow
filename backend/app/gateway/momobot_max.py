@@ -203,6 +203,8 @@ async def apply_run_policy(config: dict[str, Any], *, user: Any, actor_user_id: 
             raise HTTPException(status_code=422, detail=_UNRESOLVED_AGENT_DETAIL)
         for section in sections:
             section[CLIENT_WORKSPACE_CEILING_KEY] = True
+            if not workspace_agent.model:  # run on the model just checked, never the global default
+                section["model_name"] = model
     elif not internal and (user is None or not momobot_max_available_to(user, app_config, tier=tier)):
         raise HTTPException(status_code=422, detail=_UNRESOLVED_AGENT_DETAIL)
     if tier == "base":

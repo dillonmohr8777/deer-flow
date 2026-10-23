@@ -232,3 +232,15 @@ async def test_an_agent_stamped_for_another_client_or_with_a_capitalized_name_is
 async def test_an_unreadable_bucket_leaves_the_client_with_momobot_max_only(workspace):
     with _admitted(), patch.object(momobot_max, "_bucket_agents", side_effect=ValueError("bad row")):
         assert await momobot_max.client_workspace_agents(_user("client"), "u-1", UNLOCKED) == {}
+
+
+@pytest.mark.asyncio
+async def test_a_workspace_agent_with_no_model_runs_on_the_model_that_was_checked(workspace):
+    agent_dir = get_paths().user_agent_dir(WORKSPACE_BUCKET, "acme-plain")
+    agent_dir.mkdir(parents=True)
+    (agent_dir / "config.yaml").write_text("name: acme-plain\ndescription: x\n")
+    config = await _policy({"agent_name": "acme-plain"})
+    assert config["context"]["agent_name"] == "acme-plain"
+    assert config["context"]["model_name"] == UNLOCKED.momobot_max.model
+    with_model = await _policy({"agent_name": "acme-dental-max"})
+    assert "model_name" not in with_model["context"]

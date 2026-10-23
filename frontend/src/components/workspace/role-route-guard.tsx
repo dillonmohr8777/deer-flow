@@ -37,9 +37,9 @@ export function RoleRouteGuard({ children }: { children: ReactNode }) {
     }
   }, [agents, agentsLoading, router, startsDefaultChat]);
 
-  if (unresolved) return null;
+  // Waiting for the agents list to pick where the new chat starts.
+  if (unresolved || startsDefaultChat) return null;
   if (!isClient || isClientPath(pathname)) return <>{children}</>;
-  if (startsDefaultChat) return null;
   return (
     <div className="flex size-full items-center justify-center p-6">
       <EmptyState
