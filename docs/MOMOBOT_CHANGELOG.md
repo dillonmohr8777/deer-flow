@@ -10,6 +10,14 @@ The upstream DeerFlow history stays in [CHANGELOG.md](../CHANGELOG.md).
 
 ## [Unreleased]
 
+## [momobot-prod-20261023-db2a5e1a] - 2026-10-23
+
+### Changed
+
+- Allow assigned AM members to read, work and draft in client portals (#281)
+- Default client runs to admitted workspace agents when unspecified (#280)
+- MomoBot changelog momobot-prod-20261023-ff8263f9, Oct 23 (#279)
+
 ## [momobot-prod-20261023-ff8263f9] - 2026-10-23
 
 ### Changed
