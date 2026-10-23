@@ -77,7 +77,9 @@ def test_local_route_free_and_audited(gate):
 def test_subcap_and_ceiling_are_not_additive(gate):
     gate.reserve("openrouter", 10_000_000, "a")
     assert denied(gate, "openrouter", 1, "b") == "route_subcap"
-    gate.reserve("jevbox_llm", 10_000_000, "c")
+    # Owner-raised subcaps (registry) still share the one monthly ceiling.
+    (gate.dir / "registry.json").write_text(json.dumps({"subcaps": {"openrouter": 10_000_000, "jevbox_llm": pa.CEILING_MICRO - 10_000_000}}))
+    gate.reserve("jevbox_llm", pa.CEILING_MICRO - 10_000_000, "c")
     assert denied(gate, "brain_forge", 1, "d") == "monthly_ceiling"  # subcap has room, shared ceiling does not
     assert gate.status()["used_micro"] == pa.CEILING_MICRO
 
