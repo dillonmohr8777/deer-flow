@@ -882,6 +882,35 @@ def test_user_profile_section_falls_back_to_legacy_shared_file(monkeypatch, tmp_
     assert "Legacy shared profile." in section
 
 
+def test_user_profile_section_preserves_complete_twin_preferences(monkeypatch, tmp_path):
+    paths = _patch_paths(monkeypatch, tmp_path)
+    profile_path = paths.user_md_file_for("private-max")
+    profile_path.parent.mkdir(parents=True, exist_ok=True)
+    final_preference = "TWIN_FINAL_PREFERENCE"
+    content = "p" * 3395 + "t" * (5186 - 3395 - len(final_preference)) + final_preference
+    profile_path.write_text(content, encoding="utf-8")
+
+    section = prompt_module._build_user_profile_section("private-max")
+
+    assert content in section
+    assert "[...truncated]" not in section
+
+
+def test_user_profile_section_truncates_on_utf8_byte_boundary(monkeypatch, tmp_path):
+    paths = _patch_paths(monkeypatch, tmp_path)
+    profile_path = paths.user_md_file_for("unicode")
+    profile_path.parent.mkdir(parents=True, exist_ok=True)
+    profile_path.write_text("\u732b" * 5000, encoding="utf-8")
+
+    section = prompt_module._build_user_profile_section("unicode")
+
+    retained = section.removeprefix("<user_profile>\n").removesuffix("\n</user_profile>\n")
+    assert retained.endswith("\n[...truncated]")
+    retained = retained.removesuffix("\n[...truncated]")
+    assert retained == "\u732b" * (prompt_module._USER_PROFILE_MAX_BYTES // 3)
+    assert len(retained.encode("utf-8")) <= prompt_module._USER_PROFILE_MAX_BYTES
+
+
 def test_user_profile_section_bounded(monkeypatch, tmp_path):
     paths = _patch_paths(monkeypatch, tmp_path)
     profile_path = paths.user_md_file_for("verbose")

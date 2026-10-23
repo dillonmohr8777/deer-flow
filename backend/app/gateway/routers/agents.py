@@ -273,7 +273,9 @@ def _builtin_visible_to(user, tier: str = "max") -> bool:
 async def _caller_client_tier() -> str:
     """The calling client's subscription: ``max`` when their client is unlocked for MomoBot Max, else ``base``."""
     try:
-        return await client_tier(get_effective_actor_user_id(), get_app_config())
+        actor_user_id = get_effective_actor_user_id()
+        config = await asyncio.to_thread(get_app_config)
+        return await client_tier(actor_user_id, config)
     except FileNotFoundError:  # no config.yaml: nothing is unlocked
         return "base"
 
@@ -281,7 +283,7 @@ async def _caller_client_tier() -> str:
 async def _caller_workspace_agents(user) -> dict[str, AgentConfig]:
     """The calling client's own workspace agents, by name (empty for everyone else)."""
     try:
-        return await client_workspace_agents(user, get_effective_actor_user_id(), get_app_config())
+        return await client_workspace_agents(user, get_effective_actor_user_id(), await asyncio.to_thread(get_app_config))
     except FileNotFoundError:  # no config.yaml: nothing is enabled
         return {}
 
@@ -370,13 +372,11 @@ async def list_agents() -> AgentsListResponse:
     user_id = get_effective_user_id()
     visible_client_ids = await _visible_client_ids(get_effective_actor_user_id())
     tier = await _caller_client_tier() if is_client else "max"
-    builtin_visible = _builtin_visible_to(user, tier)
     workspace_agents = await _caller_workspace_agents(user) if is_client else {}
 
     def _list() -> AgentsListResponse:
-        # Worker thread: the store read plus the per-agent SOUL read inside
-        # _agent_config_to_response are filesystem IO (file backend) or DB round
-        # trips (db backend) and must stay off the event loop.
+        # Worker thread: config, store and per-agent SOUL reads must stay off the event loop.
+        builtin_visible = _builtin_visible_to(user, tier)
         # A client sees MomoBot Max plus their own workspace's agents and nothing else (no personal or legacy shared agents).
         agents = list(workspace_agents.values()) if is_client else list_custom_agents(user_id=user_id)
         # While the built-in exists its name is reserved and loaders return it first, so a stored row
@@ -460,11 +460,11 @@ async def get_agent(name: str) -> AgentResponse:
     name = _normalize_agent_name(name)
     user_id = get_effective_user_id()
     tier = await _caller_client_tier() if is_client else "max"
-    builtin_visible = _builtin_visible_to(user, tier)
     workspace_agents = await _caller_workspace_agents(user) if is_client else {}
 
     def _get() -> AgentResponse:
         # Worker thread: config read + SOUL read must stay off the event loop.
+        builtin_visible = _builtin_visible_to(user, tier)
         if is_client:  # a client can read MomoBot Max and their own workspace's agents, nothing else
             agent = (get_builtin_agent_config(name) if builtin_visible else None) or workspace_agents.get(name)
             if agent is None:
