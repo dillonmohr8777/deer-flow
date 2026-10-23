@@ -69,6 +69,7 @@ from app.gateway.routers import (
     workflows,
     workspace_branding,
     workspaces,
+    wsl_diagnostics,
 )
 from app.gateway.trace_middleware import TraceMiddleware
 from deerflow.config import app_config as deerflow_app_config
@@ -1396,6 +1397,7 @@ This gateway provides runtime endpoints for agent runs plus custom endpoints for
 
     # Artifacts API is mounted at /api/threads/{thread_id}/artifacts
     app.include_router(artifacts.router)
+    app.include_router(wsl_diagnostics.router)
 
     # Browser API is mounted at /api/threads/{thread_id}/browser
     app.include_router(browser.router)
