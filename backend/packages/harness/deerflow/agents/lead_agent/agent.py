@@ -1051,6 +1051,15 @@ def _assemble_lead_agent(config: RunnableConfig, *, app_config: AppConfig) -> Le
     # Phase 3: enforce model:use authorization. On deny, fall back to the first
     # allowed model (graceful) rather than crashing the run (RFC §9).
     model_name = _authorize_model_name(model_name, context=cfg, app_config=resolved_app_config)
+    # Inheriting subagents run on the agent's subagent_model when it names a configured model the caller may use.
+    agent_subagent_model = getattr(agent_config, "subagent_model", None) if agent_config else None
+    subagent_model_name = None
+    if agent_subagent_model and resolved_app_config.get_model_config(agent_subagent_model):
+        # A denied model would come back as a fallback; then subagents just inherit the lead model.
+        if _authorize_model_name(agent_subagent_model, context=cfg, app_config=resolved_app_config) == agent_subagent_model:
+            subagent_model_name = agent_subagent_model
+    elif agent_subagent_model:
+        logger.warning("Agent '%s' subagent_model '%s' is not configured; subagents inherit the lead model.", agent_name, agent_subagent_model)
 
     model_config = resolved_app_config.get_model_config(model_name)
 
@@ -1080,6 +1089,7 @@ def _assemble_lead_agent(config: RunnableConfig, *, app_config: AppConfig) -> Le
         {
             "agent_name": agent_name or "default",
             "model_name": model_name or "default",
+            "subagent_model_name": subagent_model_name,
             "thinking_enabled": thinking_enabled,
             "reasoning_effort": reasoning_effort,
             "is_plan_mode": is_plan_mode,
