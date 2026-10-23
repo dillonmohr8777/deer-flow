@@ -10,6 +10,12 @@ The upstream DeerFlow history stays in [CHANGELOG.md](../CHANGELOG.md).
 
 ## [Unreleased]
 
+## [momobot-prod-20261023-67b28bc8] - 2026-10-23
+
+### Fixed
+
+- Fix client agent registry tag visibility (#285)
+
 ## [momobot-prod-20261023-ff8263f9] - 2026-10-23
 
 ### Changed
