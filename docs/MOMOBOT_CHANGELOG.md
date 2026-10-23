@@ -10,6 +10,12 @@ The upstream DeerFlow history stays in [CHANGELOG.md](../CHANGELOG.md).
 
 ## [Unreleased]
 
+## [momobot-prod-20261023-fb58a660] - 2026-10-23
+
+### Changed
+
+- Gate all Composio writes through scoped durable approvals (#286)
+
 ## [momobot-prod-20261023-ff8263f9] - 2026-10-23
 
 ### Changed
