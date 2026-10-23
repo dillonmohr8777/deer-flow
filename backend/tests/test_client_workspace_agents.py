@@ -12,12 +12,14 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi import HTTPException
+from pydantic import ValidationError
 from test_momobot_max import _config, _run_config, _user, agent_env, as_role  # noqa: F401 -- fixtures
 
 from app.gateway import momobot_max
 from app.gateway.momobot_max import apply_run_policy
 from app.gateway.routers.agents import get_agent, list_agents
 from deerflow.config.builtin_agents import MOMOBOT_MAX_NAME
+from deerflow.config.momobot_max_config import MomobotMaxConfig
 from deerflow.config.paths import get_paths
 from deerflow.persistence.agents import get_agent_store
 from deerflow.runtime.user_context import WorkspaceStorageContext, reset_storage_context, set_storage_context
@@ -25,6 +27,7 @@ from deerflow.runtime.user_context import WorkspaceStorageContext, reset_storage
 WORKSPACE_BUCKET = "ws-acme-dental"  # the dedicated workspace's storage principal, not a login
 OTHER_BUCKET = "ws-someone-else"
 UNLOCKED = _config(momobot_max={"enabled": True, "clients": ["acme-dental"]})
+DEFAULTED = _config(momobot_max={"enabled": True, "clients": ["acme-dental"], "client_effort": {"acme-dental": "medium"}, "client_default_agents": {"acme-dental": "acme-dental-max"}})
 
 
 def _store_agent(bucket: str, name: str, *, legacy: bool = False) -> None:
@@ -119,10 +122,10 @@ async def test_staff_listing_is_unchanged(workspace, as_role):  # noqa: F811
 # -- the run policy -----------------------------------------------------------------
 
 
-async def _policy(context: dict, *, keys=("acme-dental",), workspace_check=None) -> dict:
-    config = _run_config(context=context)
-    with _admitted(keys=keys, workspace_check=workspace_check):
-        await apply_run_policy(config, user=_user("client"), actor_user_id="u-1", app_config=UNLOCKED)
+async def _policy(context: dict, *, keys=("acme-dental",), workspace_check=None, app_config=UNLOCKED, configurable=None) -> dict:
+    config = _run_config(context=context, configurable=configurable or {})
+    with _admitted(keys=keys, workspace_check=workspace_check, app_config=app_config):
+        await apply_run_policy(config, user=_user("client"), actor_user_id="u-1", app_config=app_config)
     return config
 
 
@@ -146,6 +149,127 @@ async def test_a_client_run_naming_any_other_agent_is_pinned_to_momobot_max(work
 async def test_a_base_client_run_naming_the_workspace_agent_falls_back_to_the_base_chat(workspace):
     config = await _policy({"agent_name": "acme-dental-max"}, keys=("not-unlocked",))
     assert config["context"]["agent_name"] == MOMOBOT_MAX_NAME and config["context"]["momobot_tier"] == "base"
+
+
+# -- operator defaults use the same workspace gate ----------------------------------
+
+
+def test_client_defaults_are_optional_string_mappings():
+    assert MomobotMaxConfig().client_default_agents == {}
+    assert DEFAULTED.momobot_max.client_default_agents == {"acme-dental": "acme-dental-max"}
+    with pytest.raises(ValidationError):
+        MomobotMaxConfig(client_default_agents={"acme-dental": ["acme-dental-max"]})
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("context,configurable", [({}, {}), ({"agent_name": None}, {}), ({}, {"agent_name": None}), ({"agent_name": None}, {"agent_name": None})])
+async def test_an_omitted_or_null_agent_uses_the_contacts_default_with_the_exact_explicit_policy(workspace, context, configurable):
+    default = await _policy(context, configurable=configurable, app_config=DEFAULTED)
+    explicit = await _policy({"agent_name": "acme-dental-max"}, app_config=DEFAULTED)
+    assert default == explicit
+    assert default["context"]["agent_name"] == "acme-dental-max"
+    assert default["context"]["client_workspace_ceiling"] is True
+    assert default["context"]["reasoning_effort"] == "medium"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("carrier", ["context", "configurable"])
+async def test_an_explicit_valid_agent_wins_over_the_default_in_either_carrier(workspace, carrier):
+    _store_agent(WORKSPACE_BUCKET, "acme-other-max")
+    sections = {carrier: {"agent_name": "Acme_Other_Max"}}
+    config = await _policy(sections.get("context", {}), configurable=sections.get("configurable"), app_config=DEFAULTED)
+    assert config["context"]["agent_name"] == "acme-other-max"
+    assert config["context"]["client_workspace_ceiling"] is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("named", ["", "   ", MOMOBOT_MAX_NAME, "someone-elses-max", 7])
+async def test_an_explicit_empty_builtin_foreign_or_invalid_name_keeps_existing_fallback(workspace, named):
+    config = await _policy({"agent_name": named}, app_config=DEFAULTED)
+    assert config["context"]["agent_name"] == MOMOBOT_MAX_NAME
+    assert "client_workspace_ceiling" not in config["context"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("default", ["missing-max", "someone-elses-max", "internal-bot", MOMOBOT_MAX_NAME])
+async def test_missing_foreign_legacy_and_builtin_defaults_fall_back_to_momobot_max(workspace, default):
+    settings = _config(momobot_max={"enabled": True, "clients": ["acme-dental"], "client_default_agents": {"acme-dental": default}})
+    config = await _policy({}, app_config=settings)
+    assert config["context"]["agent_name"] == MOMOBOT_MAX_NAME
+    assert "client_workspace_ceiling" not in config["context"]
+
+
+@pytest.mark.asyncio
+async def test_a_default_stamped_for_another_client_is_not_selected(workspace):
+    config_path = get_paths().user_agent_dir(WORKSPACE_BUCKET, "acme-dental-max") / "config.yaml"
+    with config_path.open("a", encoding="utf-8") as stream:
+        stream.write("client_id: rival-co\n")
+    config = await _policy({}, app_config=DEFAULTED)
+    assert config["context"]["agent_name"] == MOMOBOT_MAX_NAME
+
+
+@pytest.mark.asyncio
+async def test_a_default_does_not_unlock_a_base_client(workspace):
+    settings = _config(momobot_max={"enabled": True, "client_default_agents": {"acme-dental": "acme-dental-max"}})
+    config = await _policy({}, app_config=settings)
+    assert config["context"]["agent_name"] == MOMOBOT_MAX_NAME
+    assert config["context"]["momobot_tier"] == "base"
+
+
+@pytest.mark.asyncio
+async def test_a_default_does_not_skip_workspace_or_model_admission(workspace):
+    refused = AsyncMock(side_effect=HTTPException(403, "no dedicated workspace"))
+    with pytest.raises(HTTPException) as denied:
+        await _policy({}, app_config=DEFAULTED, workspace_check=refused)
+    assert denied.value.status_code == 403
+    with patch.object(momobot_max, "model_use_allowed", return_value=False) as check:
+        with pytest.raises(HTTPException) as model_denied:
+            await _policy({}, app_config=DEFAULTED)
+    assert model_denied.value.status_code == 422
+    assert check.call_args.args[1] == "claude-opus-5-5"
+
+
+@pytest.mark.asyncio
+async def test_default_lookup_uses_only_the_authenticated_actor_and_bound_workspace_keys(workspace):
+    forged = {"user_id": "foreign-actor", "client_keys": ["rival-co"], "client_id": "rival-co", "client_default_agents": {"rival-co": "someone-elses-max"}}
+    config = _run_config(context=forged, configurable=forged)
+    keys = AsyncMock(return_value=("acme-dental", "c-1"))
+    with _admitted(app_config=DEFAULTED), patch.object(momobot_max, "client_keys_for_user", keys):
+        await apply_run_policy(config, user=_user("client"), actor_user_id="u-1", app_config=DEFAULTED)
+    assert keys.await_args_list and all(call.args == ("u-1", "org-acme") for call in keys.await_args_list)
+    assert config["context"]["agent_name"] == "acme-dental-max"
+
+
+@pytest.mark.asyncio
+async def test_the_first_authenticated_client_key_wins_in_stable_order_not_map_order(workspace):
+    _store_agent(WORKSPACE_BUCKET, "acme-other-max")
+    settings = _config(momobot_max={"enabled": True, "clients": ["acme-dental"], "client_default_agents": {"c-1": "acme-other-max", "acme-dental": "Acme_Dental_Max"}})
+    config = await _policy({}, keys=("acme-dental", "c-1"), app_config=settings)
+    assert config["context"]["agent_name"] == "acme-dental-max"
+    reversed_keys = await _policy({}, keys=("c-1", "acme-dental"), app_config=settings)
+    assert reversed_keys["context"]["agent_name"] == "acme-other-max"
+
+
+@pytest.mark.asyncio
+async def test_an_unmapped_client_and_a_disabled_feature_keep_existing_behavior(workspace):
+    assert await _policy({}, app_config=UNLOCKED) == await _policy({}, app_config=_config(momobot_max={"enabled": True, "clients": ["acme-dental"], "client_default_agents": {"rival-co": "someone-elses-max"}}))
+    disabled = _config(momobot_max={"client_default_agents": {"acme-dental": "acme-dental-max"}})
+    with pytest.raises(HTTPException) as unavailable:
+        await _policy({}, app_config=disabled)
+    assert unavailable.value.status_code == 503
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("role", ["user", "exec", "admin"])
+@pytest.mark.parametrize("context", [{}, {"agent_name": MOMOBOT_MAX_NAME}])
+async def test_client_defaults_leave_staff_and_admin_run_policy_unchanged(workspace, role, context):
+    results = []
+    for settings in (UNLOCKED, _config(momobot_max={**UNLOCKED.momobot_max.model_dump(), "client_default_agents": {"acme-dental": "acme-dental-max"}})):
+        config = _run_config(context=context)
+        with _admitted(app_config=settings):
+            await apply_run_policy(config, user=_user(role), actor_user_id="u-1", app_config=settings)
+        results.append(config)
+    assert results[0] == results[1]
 
 
 # -- the store ----------------------------------------------------------------------

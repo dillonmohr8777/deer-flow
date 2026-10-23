@@ -174,8 +174,12 @@ async def apply_run_policy(config: dict[str, Any], *, user: Any, actor_user_id: 
             raise HTTPException(status_code=503, detail="MomoBot Max is not available yet")
         config.setdefault("context", {})
         config.setdefault("configurable", {})
-        # A client runs MomoBot Max, or one of their own workspace's agents when they name it; any other name is dropped.
+        # A client runs MomoBot Max, or one of their own workspace's agents; any other name is dropped.
         requested = _normalized_agent_name(config)
+        defaults = app_config.momobot_max.client_default_agents
+        if defaults and not any(section.get("agent_name") is not None for section in _sections(config)):
+            keys = await client_keys_for_user(actor_user_id, resolve_organization_id()) if actor_user_id else ()
+            requested = _agent_key(next((defaults[key] for key in keys if key in defaults), ""))
         if requested not in ("", MOMOBOT_MAX_NAME):
             workspace_agents = await client_workspace_agents(user, actor_user_id, app_config)
         pinned = requested if requested in workspace_agents else MOMOBOT_MAX_NAME
