@@ -436,10 +436,15 @@ Agents propose outbound actions with `propose_action`; nothing executes before a
 The client portal (`/api/client-portal`) also admits an active non-client member
 of a bound customer workspace when their `account_manager` assignment names the
 bound active canonical client and belongs to that client's agency organization.
-They may list/read requests, start internal work and save drafts; review,
-approval and publication remain restricted to that workspace's owner/admin.
-Client-contact behavior and the unbound agency-workspace path are unchanged.
-Tests: `tests/test_client_portal.py`.
+They may list/read requests, start internal work and save drafts; assignment
+alone grants no approval or publication authority, which remains with that
+workspace's owner/admin. The server-owned work prompt marks replies as internal
+drafts, calls for current authoritative sources for legal/compliance claims,
+prohibits CAN-SPAM exemption inferences from a professional relationship or
+absence of an offer, and leaves unresolved classifications or requirements for
+qualified human review. This guidance does not verify output or grant sender
+authority. Client-contact behavior and the unbound agency-workspace path are
+unchanged. Tests: `tests/test_client_portal.py`.
 
 ## Fact checker (`verify_claims`)
 

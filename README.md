@@ -2395,6 +2395,14 @@ Runtime execution and artifact controls remain in the existing DeerFlow services
 For an independent local preview, set `NEXT_BUILD_DIR=.next-momentum` and run the
 frontend on a separate loopback port with the existing gateway configured.
 
+Client portal work creates an internal, unsent reply draft and deliverable for
+staff review. Assigned account managers may work, edit, and save; publication
+review requires an authorized workspace owner or admin. Draft guidance requires
+current authoritative sources for legal/compliance claims, rejects inferring a
+CAN-SPAM exemption from a professional relationship or no offer, and leaves
+unresolved classifications or requirements for qualified human review. It does
+not verify output or grant sender authority.
+
 Agent-seat weekly scorecard checks require a confirmed `#exec` post before
 resetting an employee's missed-week streak. A completed blank scorecard counts
 as a missed week only after its miss notice is delivered; two evaluated misses
