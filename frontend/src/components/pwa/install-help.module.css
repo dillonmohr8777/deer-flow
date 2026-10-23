@@ -106,6 +106,13 @@
   .hint[data-workspace="true"] {
     bottom: calc(88px + env(safe-area-inset-bottom));
   }
+
+  /* Phones: on public pages the hint sat on the sign-in form's Sign in
+     button and on the fixed Pause motion control. The installed app opens
+     /workspace, so the hint waits there, above the composer. */
+  .hint:not([data-workspace="true"]) {
+    display: none;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
