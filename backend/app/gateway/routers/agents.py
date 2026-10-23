@@ -342,7 +342,7 @@ async def _visible_client_ids(user_id: str) -> frozenset[str] | None:
     client_tags: set[str] | None = None
     user = get_current_user()
     if getattr(user, "system_role", None) == CLIENT_ROLE:
-        if getattr(user, "id", None) != user_id:
+        if str(getattr(user, "id", "")) != str(user_id):
             return frozenset()
         from app.gateway.client_workspace import require_client_workspace
         from app.gateway.momobot_max import client_keys_for_user

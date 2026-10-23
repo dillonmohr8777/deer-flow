@@ -19,7 +19,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from fastapi import HTTPException
+from fastapi import HTTPException, Request
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.store.memory import InMemoryStore
 from org_isolation_fixtures import ORG_B, ORG_S, STORAGE_S, USER_A, USER_B, USER_C, acting_as, org_world  # noqa: F401
@@ -450,3 +450,171 @@ async def test_a_scalar_agent_name_refuses_with_422_instead_of_crashing(stamped_
         result = await _start(USER_D, body, f"thread-scalar-{label.replace('.', '-')}")
         assert isinstance(result, HTTPException), (label, result)
         assert (result.status_code, result.detail) == (422, MISSING_DETAIL), label
+
+
+@pytest.mark.asyncio
+async def test_uuid_client_actor_can_list_get_and_run_bound_customer_agents_through_auth_middleware(stamped_agents, monkeypatch) -> None:
+    """Exercise the UUID-to-string boundary with the real auth User and middleware."""
+    from datetime import UTC, datetime
+    from uuid import UUID, uuid4
+
+    import httpx
+    from fastapi import FastAPI
+    from org_isolation_fixtures import private_organization_id, private_organization_slug
+
+    from app.gateway.auth.models import User
+    from app.gateway.auth_middleware import AuthMiddleware
+    from app.gateway.routers.agents import router as agents_router
+    from deerflow.persistence.clients.model import ClientAssignmentRow
+    from deerflow.persistence.organizations.model import OrganizationMemberRow, OrganizationRow
+    from deerflow.persistence.user.model import UserRow
+    from deerflow.runtime.user_context import get_effective_actor_user_id, get_effective_user_id
+
+    actor_id = str(uuid4())
+    organization_id = private_organization_id(actor_id)
+    user = User(id=UUID(actor_id), email="uuid-client@example.com", system_role="client")
+    assert isinstance(user.id, UUID)
+
+    client_repo = ClientRepository(stamped_agents)
+    with acting_as(USER_A, ORG_S):
+        bound = await client_repo.create(display_name="UUID Bound Client", registry_id="uuid-bound-registry")
+        foreign = await client_repo.create(display_name="UUID Foreign Client", registry_id="uuid-foreign-registry")
+
+    now = datetime.now(UTC)
+    async with stamped_agents() as session, session.begin():
+        session.add(UserRow(id=actor_id, email=str(user.email), password_hash=None, system_role="client", needs_setup=False, token_version=0, created_at=now))
+        session.add(
+            OrganizationRow(
+                id=organization_id,
+                slug=private_organization_slug(actor_id),
+                name="UUID customer workspace",
+                status="active",
+                customer_client_id=bound["id"],
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        session.add(
+            OrganizationMemberRow(
+                organization_id=organization_id,
+                user_id=actor_id,
+                role="client",
+                status="active",
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        session.add(ClientAssignmentRow(client_id=bound["id"], user_id=actor_id, organization_id=organization_id, role="client_contact"))
+
+    # Bind only this client's organization. The foreign client remains outside the assignment.
+    assert foreign["id"] != bound["id"]
+    load_agents_api_config_from_dict({"enabled": True})
+    set_app_config(
+        AppConfig.model_validate(
+            {
+                "sandbox": {"use": "deerflow.community.aio_sandbox:AioSandboxProvider", "network": {"mode": "isolated"}},
+                "models": [{"name": "claude-opus-5-5", "use": "langchain_openai:ChatOpenAI", "model": "claude-opus-5-5"}],
+                "momobot_max": {"enabled": True, "clients": [bound["id"], bound["registry_id"]]},
+            }
+        )
+    )
+
+    from deerflow.runtime.user_context import WorkspaceStorageContext, reset_current_user, reset_storage_context, set_current_user, set_storage_context
+
+    user_token = set_current_user(user)
+    storage_token = set_storage_context(
+        WorkspaceStorageContext(actor_user_id=actor_id, organization_id=organization_id, storage_user_id=actor_id, role="client")
+    )
+    try:
+        store = get_agent_store()
+        for name, tag in (
+            ("uuid-bound-row-agent", bound["id"]),
+            ("uuid-bound-registry-agent", bound["registry_id"]),
+            ("uuid-foreign-agent", foreign["registry_id"]),
+        ):
+            store.create(name, {"name": name, "description": "UUID actor visibility regression", "client_id": tag}, "soul", user_id=actor_id)
+    finally:
+        reset_storage_context(storage_token)
+        reset_current_user(user_token)
+
+    async def authenticate_uuid_user(_request):
+        return user
+
+    monkeypatch.setattr("app.gateway.deps.get_current_user_from_request", authenticate_uuid_user)
+    runtime_agents: list[str] = []
+
+    async def fake_run_agent(*_args, **kwargs):
+        runtime_agents.append(kwargs["config"].get("context", {}).get("agent_name"))
+        return None
+
+    app = FastAPI()
+    app.add_middleware(AuthMiddleware)
+    app.include_router(agents_router)
+    app.state.stream_bridge = SimpleNamespace()
+    app.state.run_manager = RunManager(store=MemoryRunStore())
+    app.state.checkpointer = InMemorySaver()
+    app.state.store = InMemoryStore()
+    app.state.run_event_store = MemoryRunEventStore()
+    app.state.run_events_config = None
+    app.state.thread_store = MemoryThreadMetaStore(InMemoryStore())
+
+    @app.post("/api/threads/{thread_id}/runs/stream")
+    async def run_agent_route(thread_id: str, request: Request, payload: dict):
+        from app.gateway.routers.agents import _visible_client_ids
+
+        actual_user = request.state.user
+        runtime_agents.clear()
+        await app.state.thread_store.create(thread_id, user_id=get_effective_user_id(), metadata={})
+        record = await start_run(_body(assistant_id=payload["assistant_id"]), thread_id, request)
+        await record.task
+        return {
+            "authenticated_user_id_type": type(actual_user.id).__name__,
+            "authenticated_user_id": str(actual_user.id),
+            "effective_actor_user_id_type": type(get_effective_actor_user_id()).__name__,
+            "effective_actor_user_id": get_effective_actor_user_id(),
+            "visible_client_ids": sorted(await _visible_client_ids(get_effective_actor_user_id()) or ()),
+            "runtime_agent": runtime_agents[-1] if runtime_agents else None,
+        }
+
+    with (
+        patch("app.gateway.services.resolve_agent_factory", return_value=object()),
+        patch("app.gateway.services.run_agent", side_effect=fake_run_agent),
+    ):
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+            headers = {"Cookie": f"access_token={actor_id}"}
+            listed = await client.get("/api/agents", headers=headers)
+            assert listed.status_code == 200
+            listed_names = {agent["name"] for agent in listed.json()["agents"]}
+            assert {"uuid-bound-row-agent", "uuid-bound-registry-agent"} <= listed_names
+            assert "uuid-foreign-agent" not in listed_names
+
+            for name, tag in (
+                ("uuid-bound-row-agent", bound["id"]),
+                ("uuid-bound-registry-agent", bound["registry_id"]),
+            ):
+                got = await client.get(f"/api/agents/{name}", headers=headers)
+                assert got.status_code == 200, got.text
+                runtime_agents.clear()
+                started = await client.post(
+                    f"/api/threads/thread-{name}/runs/stream",
+                    headers=headers,
+                    json={"assistant_id": name},
+                )
+                assert started.status_code == 200, started.text
+                run_result = started.json()
+                assert run_result["authenticated_user_id_type"] == "UUID"
+                assert run_result["authenticated_user_id"] == actor_id
+                assert run_result["effective_actor_user_id_type"] == "str"
+                assert run_result["effective_actor_user_id"] == actor_id
+                assert tag in run_result["visible_client_ids"]
+                assert run_result["runtime_agent"] == name
+
+            foreign_get = await client.get("/api/agents/uuid-foreign-agent", headers=headers)
+            assert foreign_get.status_code == 404
+            foreign_run = await client.post(
+                "/api/threads/thread-uuid-foreign-agent/runs/stream",
+                headers=headers,
+                json={"assistant_id": "uuid-foreign-agent"},
+            )
+            assert foreign_run.status_code == 200, foreign_run.text
+            assert foreign_run.json()["runtime_agent"] != "uuid-foreign-agent"
