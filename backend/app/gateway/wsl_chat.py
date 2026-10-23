@@ -80,7 +80,7 @@ async def prepare_wsl_diagnostics(*, request, config, app_config, thread_id, run
             return None
         # This validates the existing deployment flag/root but opens no spool or queue.
         await asyncio.to_thread(BridgeStore.from_environment)
-    except (HTTPException, BridgeError):
+    except (HTTPException, BridgeError, OSError):
         return None
 
     async def diagnostic(*, action, diagnostic, job_id, tool_call_id, current_thread_id, current_run_id):

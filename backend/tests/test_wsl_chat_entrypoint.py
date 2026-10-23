@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from langchain_core.messages import AIMessage
@@ -346,3 +346,41 @@ def test_worker_rejects_forged_callbacks_in_both_carriers_and_releases_host_refe
     _release_run_scoped_references([config], context, None)
     assert WSL_DIAGNOSTICS_CONTEXT_KEY not in context
     assert WSL_DIAGNOSTICS_CONTEXT_KEY not in config["context"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("error_type", [PermissionError, FileNotFoundError])
+async def test_optional_root_io_failure_preserves_admitted_gateway_run(host, monkeypatch, error_type):
+    from test_gateway_services import _make_start_run_persistence_context
+
+    from app.gateway import services
+    from app.gateway.run_models import RunCreateRequest
+    from deerflow.config.app_config import AppConfig, reset_app_config, set_app_config
+    from deerflow.runtime.user_context import reset_current_user, set_current_user
+
+    request, run_store, _ = _make_start_run_persistence_context()
+    request.state.user = host.request.state.user
+    request.state.auth = AuthContext(request.state.user, list(host.request.state.auth.permissions), "org", actor_user_id="actor", storage_user_id="actor")
+    request.state.storage_user_id = "actor"
+    request.state.actor_user_id = "actor"
+    request.state.organization_id = "org"
+    request.state.auth_source = "session"
+    worker = AsyncMock()
+    monkeypatch.setattr(services, "run_agent", worker)
+    monkeypatch.setattr(services, "resolve_agent_factory", lambda *_: object())
+    monkeypatch.setattr(services, "_admit_effective_run_model", AsyncMock(return_value="offline"))
+    monkeypatch.setattr(services, "apply_momobot_max_run_policy", AsyncMock())
+    monkeypatch.setattr(BridgeStore, "from_environment", Mock(side_effect=error_type))
+    set_app_config(AppConfig.model_validate({"sandbox": {"use": "deerflow.sandbox.local:LocalSandboxProvider"}, "momobot_max": {"enabled": True}}))
+    token = set_current_user(request.state.user)
+    try:
+        body = RunCreateRequest(config={"context": {"agent_name": "momobot-max"}}, input={"messages": [{"role": "user", "content": "An ordinary Momo conversation"}]})
+        record = await services.start_run(body, "current", request)
+        assert await run_store.get(record.run_id) is not None
+        await record.task
+        worker.assert_awaited_once()
+        assert worker.call_args.kwargs["ctx"].wsl_diagnostics is None
+        assert not host.store.path.exists()
+    finally:
+        reset_current_user(token)
+        reset_app_config()
