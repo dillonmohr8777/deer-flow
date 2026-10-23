@@ -431,4 +431,4 @@ background revalidation. Disabled flags hide cached lists. Keep the unknown-feat
 fallback; `core/agents/hooks.dom.test.tsx` and `agents-feature-disabled.spec.ts`
 cover discovery, disabled results and recovery.
 
-The workspace picker is available to resolved client accounts as well as staff, so a customer can return to their personally owned legacy chats in My private workspace. The Gateway list/select membership check is the authority; never merge private and dedicated thread searches or infer ownership for shared legacy history.
+Resolved clients may use the workspace picker for their private legacy chats. Gateway membership gates list/select. Keep private and dedicated searches separate; never infer shared legacy ownership.

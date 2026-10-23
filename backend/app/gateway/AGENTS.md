@@ -78,7 +78,7 @@ read-only into the run context. The server-reserved `deerflow_project_id`
 metadata key is a read-only exposure of the `threads_meta.project_id` column and
 is stripped from client writes.
 
-The `client` role (`client_boundary.py`, `momobot_max.py`) reads MomoBot Max plus, inside its dedicated customer workspace on the Max tier, the custom agents stored in that workspace's own bucket (`client_workspace_agents`: `AgentStore.list(include_legacy=False)`, never the legacy shared layout or another bucket). A client run may name one of those agents and keeps it on the agent's own model with the config-owned Max settings; any other name is pinned to MomoBot Max. Clients never read a SOUL or reach `check`/create/update/delete.
+Clients read/run MomoBot Max or, in Max-tier dedicated workspaces, own-bucket agents (`client_workspace_agents`, `include_legacy=False`). Keep the agent's model and config-owned Max settings; otherwise pin MomoBot Max. No shared/foreign/legacy bucket, SOUL, `check` or CRUD access.
 
 The client roster (`routers/clients.py`, `/api/clients`, migration `0034_clients`) is organization-owned: `clients` and `client_assignments` carry no `user_id`, so every route scopes on `resolve_organization_id()` alone, like `organizations`/`organization_members`. Assignments are keyed `(client_id, user_id)` and `POST .../assignments` upserts the role. `projects.client_id` (nullable, unenforced) is the only link to Projects; no route sets it yet. `POST /api/clients/import` is admin-only (`require_admin_user`, like `capabilities.py::install`) and upserts the `client-operations/registry/clients.json` roster by `registry_id` in the caller's active organization; it never deletes and never infers owners.
 
