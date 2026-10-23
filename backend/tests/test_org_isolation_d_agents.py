@@ -574,6 +574,66 @@ async def test_client_scoped_agent_hidden_from_unassigned_member(org_world, tmp_
 
 
 @pytest.mark.asyncio
+async def test_registry_tagged_agent_list_and_get_are_assigned_org_scoped(org_world, tmp_path, monkeypatch) -> None:  # noqa: F811
+    monkeypatch.setenv("DEER_FLOW_HOME", str(tmp_path))
+    monkeypatch.setattr("deerflow.config.paths._paths", None)
+    load_agents_api_config_from_dict({"enabled": True})
+    try:
+        from app.gateway.routers.agents import get_agent, list_agents
+
+        client_repo = ClientRepository(org_world)
+        with acting_as(USER_A, ORG_S):
+            assigned = await client_repo.create(display_name="Registry Client", registry_id="assigned-registry-id")
+            unassigned = await client_repo.create(display_name="Unassigned Registry Client", registry_id="unassigned-registry-id")
+            await client_repo.add_assignment(assigned["id"], USER_D, "client_contact")
+
+            owner_user_id = get_effective_user_id()
+            store = get_agent_store()
+            store.create("registry-agent", {"name": "registry-agent", "description": "assigned registry tag", "client_id": assigned["registry_id"]}, "soul", user_id=owner_user_id)
+            store.create("unassigned-registry-agent", {"name": "unassigned-registry-agent", "description": "unassigned registry tag", "client_id": unassigned["registry_id"]}, "soul", user_id=owner_user_id)
+
+        with acting_as(USER_B, ORG_B):
+            foreign = await client_repo.create(display_name="Foreign Org Registry Client", registry_id="foreign-org-registry-id")
+        with acting_as(USER_A, ORG_S):
+            store.create("foreign-registry-agent", {"name": "foreign-registry-agent", "description": "foreign org registry tag", "client_id": foreign["registry_id"]}, "soul", user_id=owner_user_id)
+
+        with acting_as(USER_D, ORG_S):
+            names = [agent.name for agent in (await list_agents()).agents]
+            assert "registry-agent" in names
+            assert "unassigned-registry-agent" not in names
+            assert "foreign-registry-agent" not in names
+            assert (await get_agent("registry-agent")).client_id == assigned["registry_id"]
+            for name in ("unassigned-registry-agent", "foreign-registry-agent"):
+                with pytest.raises(HTTPException) as excinfo:
+                    await get_agent(name)
+                assert excinfo.value.status_code == 404
+    finally:
+        load_agents_api_config_from_dict({})
+
+
+@pytest.mark.asyncio
+async def test_agent_client_visibility_fails_closed_without_actor_or_on_repository_error(org_world, monkeypatch) -> None:  # noqa: F811
+    from app.gateway.routers.agents import _visible_client_ids
+
+    client_repo = ClientRepository(org_world)
+    with acting_as(USER_A, ORG_S):
+        assigned = await client_repo.create(display_name="Fail Closed Client", registry_id="fail-closed-registry-id")
+        await client_repo.add_assignment(assigned["id"], USER_D, "client_contact")
+
+    with monkeypatch.context() as m:
+        m.setattr("deerflow.persistence.clients.sql.get_workspace_actor_user_id", lambda: None)
+        with acting_as(USER_D, ORG_S):
+            assert await _visible_client_ids(USER_D) == frozenset()
+
+    with monkeypatch.context() as m:
+        m.setattr(ClientRepository, "list", AsyncMock(side_effect=RuntimeError("repository unavailable")))
+        with acting_as(USER_D, ORG_S):
+            assert await _visible_client_ids(USER_D) == frozenset()
+
+    assert await _visible_client_ids(USER_D) == frozenset()
+
+
+@pytest.mark.asyncio
 async def test_client_scoped_agent_write_routes_hidden_from_unassigned_member(org_world, tmp_path, monkeypatch) -> None:  # noqa: F811
     """f85 (review follow-up on PR #69): the read fix (f74) filtered list/get,
     but update_agent and delete_agent skipped the same check -- an unassigned

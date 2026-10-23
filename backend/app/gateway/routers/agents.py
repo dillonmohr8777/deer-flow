@@ -318,22 +318,43 @@ async def _is_active_org_admin(user_id: str) -> bool:
 
 
 async def _visible_client_ids(user_id: str) -> frozenset[str] | None:
-    """Client ids *user_id* may see a fleet-stamped agent for, or ``None`` for "all" (org admin).
+    """Exact client tags *user_id* may see for, or ``None`` for "all" (org admin).
 
-    A fleet template stamps an agent with ``client_id`` set (``clients.py``'s
-    ``stamp_client_agent``); this keeps that agent as visible as the client
-    itself -- an org admin sees every client's agents, everyone else only the
-    clients they're assigned to (``client_assignments``), same as
-    ``GET /api/clients`` and the Momo Board.
+    Fleet agents may carry either a canonical client row id or its registry id.
+    Resolve both only within the active organization and only when the tag
+    uniquely names an assigned row; ambiguous aliases stay hidden.
     """
-    if await _is_active_org_admin(user_id):
-        return None
+    if resolve_organization_id() is None:
+        return frozenset()
+    try:
+        if await _is_active_org_admin(user_id):
+            return None
+    except Exception:
+        logger.exception("Failed to resolve agent client visibility")
+        return frozenset()
+
     from deerflow.persistence.engine import get_session_factory
 
     session_factory = get_session_factory()
     if session_factory is None:
         return frozenset()
-    return frozenset(c["id"] for c in await ClientRepository(session_factory).list_mine())
+    try:
+        repository = ClientRepository(session_factory)
+        clients = await repository.list()
+        assigned_client_ids = {client["id"] for client in await repository.list_mine()}
+    except Exception:
+        logger.exception("Failed to resolve agent client visibility")
+        return frozenset()
+
+    token_client_ids: dict[str, set[str]] = {}
+    for client in clients:
+        client_id = client["id"]
+        token_client_ids.setdefault(client_id, set()).add(client_id)
+        registry_id = client.get("registry_id")
+        if isinstance(registry_id, str) and registry_id:
+            token_client_ids.setdefault(registry_id, set()).add(client_id)
+
+    return frozenset(token for token, client_ids in token_client_ids.items() if len(client_ids) == 1 and client_ids <= assigned_client_ids)
 
 
 async def _require_visible_client_id(client_id: str | None, name: str) -> None:

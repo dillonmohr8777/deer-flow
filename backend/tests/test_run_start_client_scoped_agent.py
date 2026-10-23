@@ -21,7 +21,7 @@ import pytest
 from fastapi import HTTPException
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.store.memory import InMemoryStore
-from org_isolation_fixtures import ORG_S, STORAGE_S, USER_A, USER_C, acting_as, org_world  # noqa: F401
+from org_isolation_fixtures import ORG_B, ORG_S, STORAGE_S, USER_A, USER_B, USER_C, acting_as, org_world  # noqa: F401
 
 from app.gateway.services import start_run
 from deerflow.config.agents_api_config import load_agents_api_config_from_dict
@@ -159,6 +159,60 @@ async def test_owner_admin_and_assigned_member_can_still_start_the_stamped_agent
         }.items():
             result = await _start(actor, body, f"thread-{actor}-{label.replace('.', '-')}")
             assert not isinstance(result, HTTPException), (actor, label, result)
+
+
+@pytest.mark.asyncio
+async def test_assigned_member_can_start_agent_tagged_with_own_registry_id(stamped_agents) -> None:
+    client_repo = ClientRepository(stamped_agents)
+    with acting_as(USER_A, ORG_S):
+        client = await client_repo.create(display_name="Registry Client", registry_id="registry-client-1")
+        await client_repo.add_assignment(client["id"], USER_D, "client_contact")
+        get_agent_store().create(
+            "registry-agent",
+            {"name": "registry-agent", "description": "registry tagged", "client_id": client["registry_id"]},
+            "registry client soul",
+            user_id=STORAGE_S,
+        )
+
+    result = await _start(USER_D, _body(assistant_id="registry-agent"), "thread-registry-own")
+    assert not isinstance(result, HTTPException), result
+
+
+@pytest.mark.asyncio
+async def test_foreign_organization_registry_tag_cannot_start_agent(stamped_agents) -> None:
+    client_repo = ClientRepository(stamped_agents)
+    with acting_as(USER_B, ORG_B):
+        foreign_client = await client_repo.create(display_name="Foreign Registry Client", registry_id="foreign-registry-only")
+    with acting_as(USER_A, ORG_S):
+        get_agent_store().create(
+            "foreign-registry-agent",
+            {"name": "foreign-registry-agent", "description": "foreign registry tagged", "client_id": foreign_client["registry_id"]},
+            "foreign client soul",
+            user_id=STORAGE_S,
+        )
+
+    result = await _start(USER_D, _body(assistant_id="foreign-registry-agent"), "thread-registry-foreign-org")
+    assert isinstance(result, HTTPException)
+    assert (result.status_code, result.detail) == (422, MISSING_DETAIL)
+
+
+@pytest.mark.asyncio
+async def test_client_row_registry_collision_cannot_start_agent_even_when_assigned(stamped_agents) -> None:
+    client_repo = ClientRepository(stamped_agents)
+    with acting_as(USER_A, ORG_S):
+        assigned = await client_repo.create(display_name="Assigned Client")
+        await client_repo.add_assignment(assigned["id"], USER_D, "client_contact")
+        await client_repo.create(display_name="Registry Collision", registry_id=assigned["id"])
+        get_agent_store().create(
+            "collision-agent",
+            {"name": "collision-agent", "description": "ambiguous client tag", "client_id": assigned["id"]},
+            "assigned client soul",
+            user_id=STORAGE_S,
+        )
+
+    result = await _start(USER_D, _body(assistant_id="collision-agent"), "thread-registry-collision")
+    assert isinstance(result, HTTPException)
+    assert (result.status_code, result.detail) == (422, MISSING_DETAIL)
 
 
 @pytest.mark.asyncio
