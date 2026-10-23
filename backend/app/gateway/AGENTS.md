@@ -15,11 +15,6 @@ tests alone do not prove this boundary or sandbox-free Slack execution.
 
 Read [security](../../docs/SECURITY_HARDENING.md).
 
-The approvals inbox includes active-org owner/admin list/read/reject oversight
-of Composio proposals through dedicated Composio-only repository methods. Keep
-cross-actor approve/edit/execution actor-scoped; reject retains the deciding
-actor and audit event. See [approvals](../../docs/APPROVALS_INBOX.md).
-
 Agent Room: keep actor/admin isolation, shared budgets, uncertain-admission holds; read [contract](../../docs/AGENT_ROOM.md). Bind persisted `supervisor` (strict boolean, default off) to idempotency/resume.
 
 Capability Center's `business` adapter uses bundled credential fields and normal
