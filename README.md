@@ -69,6 +69,10 @@ the current role, including an unresolved role, focus the allowed Appearance fal
 Agent lists show loading during initial feature discovery and hide cached agents
 when the Agents API is disabled.
 
+Agent prompts include up to 8 KiB of UTF-8 from the effective user's `USER.md`
+profile. Larger profiles are truncated at a valid UTF-8 boundary with a visible
+marker; profile content remains HTML-escaped and is omitted in public channels.
+
 ## Sister Projects
 
 <img width="446" height="280" alt="image" align="middle" src="https://github.com/user-attachments/assets/077edef4-d560-41af-bb0d-d0a5f14fcc20" />
