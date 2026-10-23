@@ -64,11 +64,37 @@ The upstream DeerFlow history stays in [CHANGELOG.md](../CHANGELOG.md).
 
 - MomoBot Max for the team, short sidebar, Easy/Medium/Hard switch, Oct 22 (#243)
 
+## [momobot-prod-20261022-d2fd3334] - 2026-10-22
+
+### Changed
+
+- Private workspace shows its own name, Oct 22 (#241)
+- Paper fonts in dark mode, Oct 22 (#242)
+
+## [momobot-prod-20261022-0f485d40] - 2026-10-22
+
+### Changed
+
+- Daily search verification and takeaway bullets, Oct 22 (#238)
+- MomoBot changelog momobot-prod-20261022-cfb3fba0, Oct 22 (#240)
+
 ## [momobot-prod-20261022-cfb3fba0] - 2026-10-22
 
 ### Changed
 
 - Calm, smooth MomoBot: no static or glitch motion, Oct 22 (#239)
+
+## [momobot-prod-20261022-76744ed9] - 2026-10-22
+
+- Momo Daily published and built to rank, Oct 22 (#235)
+- Sean's MomoBot access: Easy, exec and Google auto-join on invite, Oct 22 (#231)
+- MomoBot base and MomoBot Max client tiers, Oct 22 (#233)
+- Release script: smoke the real container names, Oct 22 (#232)
+- One-command MomoBot prod release, Oct 21 (#228)
+- Bump katex from 0.16.28 to 0.18.2 in /frontend (#224)
+- Fictional client name in tests, Oct 21 (#229)
+- Placement extension mount on EC2, Oct 21 (#226)
+- Approvals race test on a real pool, Oct 21 (#227)
 
 ## [momobot-prod-20261021-43f1453f] - 2026-10-21
 
