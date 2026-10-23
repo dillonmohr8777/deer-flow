@@ -411,3 +411,72 @@ Verify all ten targets are allowed and private Composio tools remain denied.
 ## Momo Daily staff portraits
 
 Keep the seven staff portraits outside Git in `/opt/momobot/data/brand/daily-people`, named by the slugs in `frontend/src/components/momentum/daily/staff-box.tsx`, as WebP files. The EC2 layer mounts that directory read-only into the frontend public assets. The existing encrypted brand backup includes it. Before release, compare each staged file SHA-256 with its source receipt; after release, fetch all seven rendered portraits and reject placeholder fallbacks. Never add these private images to the public repository or bake them into an untracked local build.
+
+## Isolated nightly backup validation
+
+`restore_check.py` accepts one already-downloaded local EC2 nightly archive:
+
+```sh
+python3 deploy/momentum/ec2/restore_check.py /private/path/momobot-YYYYMMDDTHHMMSSZ.tgz
+```
+
+It verifies exact `MANIFEST.sha256` coverage and SHA-256 values for the outer
+`lightsail/backup.sh` format: `gateway-data.tgz`, `config.yaml`,
+`extensions_config.json`, `redis.rdb`, `ec2-mounts.tgz` and `ec2-recovery.json`.
+It unpacks the outer and nested archives only inside a private
+`TemporaryDirectory`, rejecting traversal, duplicate paths, hardlinks and special
+files, with an aggregate 4 GiB expanded-byte and 100,000-member budget. There is
+no live-target argument, Docker call, service startup, credential read or network
+operation. Temporary restored files are removed when validation returns.
+
+Every SQLite database must match the gateway snapshot receipt's database set,
+pass SQLite `integrity_check`, and reproduce every recorded table row count.
+The backup must contain at least one recoverable database row. Required EC2
+mounts, recovery JSON fields, extensions JSON object, nonempty config and Redis
+RDB header are also checked. Success emits counts-only JSON and exits 0; failure
+emits a generic JSON error and exits 1, without database contents or archive
+member names. A scheduler can fetch the newest object into private local storage
+then invoke this CLI, preserving the source object and reporting download or
+validation failure separately. Freshness and source selection belong to that
+caller; this checker does not schedule itself.
+
+This validates SQLite payload recovery, not application boot or a complete
+production recovery. Redis gets header/hash validation only, and YAML syntax,
+SSM secrets, extension installation, external services and Redis load are not
+validated. Encrypted `MOMOBK1` offsite blobs, PostgreSQL dumps, legacy migration
+archives are unsupported and fail closed. Relative symlinks are created only after
+regular extraction and accepted only when their final existing target resolves inside
+the throwaway root. Absolute, escaping, cyclic and broken links, and archive entries
+under a symlink ancestor, are rejected; link chains must meet the same final check. The
+synthetic offline suite does not establish that a current production backup
+restores; run the checker against an actual downloaded nightly object separately.
+
+Offline check: `python -m pytest backend/tests/test_ec2_restore_check.py -q --noconftest`.
+
+## Local daily tenant and nightly recovery checks
+
+`readiness_check.py tenant --receipts /private/path/ledger.jsonl` runs synthetic
+Gateway owner/org probes (including thread search and artifact archive exports),
+client workspace admission/run policy, and rendered React client route guards.
+It makes no model calls and starts no MomoBot server. The UI check is a mocked
+component test, not a real signed-in browser acceptance test.
+
+`readiness_check.py restore --receipts /private/path/ledger.jsonl` reads the newest
+`nightly/momobot-*.tgz` from the existing encrypted private S3 bucket through read-only SSH and the
+EC2 backup operator's existing S3 access (no local expiring AWS session), then calls `restore_check.verify_backup` on a private
+throwaway target. Missing/expired access, backup age over 36 hours, a download
+above 2 GiB, or under 7 GiB free scratch space fails the drill. `--backup FILE`
+checks an already retrieved archive offline. No production data is overwritten.
+Read the restore-check limitations above before calling this full disaster recovery.
+
+Generate local launchd plists with `readiness_launchd.py --checkout ABS_CHECKOUT
+--python ABS_TEST_VENV_PYTHON --pnpm ABS_PNPM --output PRIVATE_PLIST_DIR
+--receipts PRIVATE_RECEIPT_DIR`. The checkout must be retained, pinned to the
+reviewed commit, and have its existing test dependencies available. Daily tenant
+checks run at 13:15 and nightly restore checks at 05:15 in the Mac's timezone.
+The generator does not load jobs. After review, load each plist with
+`launchctl bootstrap gui/$(id -u) /absolute/job.plist`; unload with
+`launchctl bootout gui/$(id -u)/com.dillon.momo-readiness-tenant` (or `-restore`).
+Inspect the append-only ledger and launchd exit status after a manual first run.
+Tracked checkout edits fail rather than certifying an untested commit. These
+jobs perform checks only; they do not host, build or restart MomoBot on the Mac.

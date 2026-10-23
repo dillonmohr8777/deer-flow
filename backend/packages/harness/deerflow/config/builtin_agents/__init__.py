@@ -12,6 +12,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from deerflow.config.agents_config import AgentConfig
+from deerflow.knowledge_scope import KnowledgeScope
 
 MOMOBOT_MAX_NAME = "momobot-max"
 
@@ -67,6 +68,30 @@ def get_builtin_agent_config(name: str | None) -> AgentConfig | None:
         mcp_plugins=[],
         tool_names=list(MOMOBOT_MAX_TOOL_NAMES),
         self_update_enabled=False,
+    )
+
+
+# Run-config key the Gateway sets (never a request) when a client runs one of their workspace's agents.
+CLIENT_WORKSPACE_CEILING_KEY = "client_workspace_ceiling"
+
+
+def client_workspace_ceiling(agent: AgentConfig) -> AgentConfig:
+    """*agent* as a client may run it: never more than MomoBot Max's own ceiling.
+
+    A workspace agent is staff-authored, so a client run keeps its model, SOUL and
+    tool choice only within MomoBot Max's tools, with no skills, MCP servers,
+    self-editing, shared memory (it may hold staff conversations) or knowledge search.
+    """
+    tools = agent.tool_names if agent.tool_names is not None else MOMOBOT_MAX_TOOL_NAMES
+    return agent.model_copy(
+        update={
+            "tool_names": [name for name in tools if name in MOMOBOT_MAX_TOOL_NAMES],
+            "skills": [],
+            "mcp_plugins": [],
+            "self_update_enabled": False,
+            "memory_enabled": False,
+            "knowledge_scope": KnowledgeScope(version=1, mode="disabled"),
+        }
     )
 
 

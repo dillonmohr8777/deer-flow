@@ -1737,3 +1737,24 @@ def test_make_lead_agent_no_agent_settings_passes_none_overrides(monkeypatch):
     lead_agent_module._make_lead_agent({"context": {"model_name": "safe-model"}}, app_config=app_config)
 
     assert captured["model_overrides"] is None
+
+
+@pytest.mark.parametrize(("subagent_model", "expected"), [("worker-model", "worker-model"), ("missing-model", None), (None, None)])
+def test_agent_subagent_model_reaches_run_metadata_only_when_configured(monkeypatch, subagent_model, expected):
+    """An Opus lead can hand its inheriting subagents a cheaper configured model; unknown names fall back to inherit."""
+    app_config = _make_app_config([_make_model("agent-model", supports_thinking=False), _make_model("worker-model", supports_thinking=False)])
+    agent_config = _make_agent_config(model="agent-model", subagent_model=subagent_model)
+
+    import deerflow.tools as tools_module
+
+    monkeypatch.setattr(lead_agent_module, "load_agent_config", lambda name, *, user_id=None: agent_config)
+    monkeypatch.setattr(tools_module, "get_available_tools", lambda **kwargs: [])
+    monkeypatch.setattr(lead_agent_module, "build_middlewares", lambda config, model_name, agent_name=None, **kwargs: [])
+    monkeypatch.setattr(lead_agent_module, "create_chat_model", lambda **kwargs: object())
+    monkeypatch.setattr(lead_agent_module, "create_agent", lambda **kwargs: kwargs)
+
+    config = {"context": {"agent_name": "researcher"}}
+    lead_agent_module._make_lead_agent(config, app_config=app_config)
+
+    assert config["metadata"]["model_name"] == "agent-model"
+    assert config["metadata"]["subagent_model_name"] == expected

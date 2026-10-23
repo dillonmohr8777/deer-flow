@@ -222,6 +222,58 @@ async def provision_customer_workspace(body: CustomerWorkspace, request: Request
     return {"workspace_id": target.id, "client_id": body.client_id, "user_id": body.user_id, "delivery": "portal"}
 
 
+@router.post("/customer-workspaces/migrations", status_code=201)
+async def migrate_customer_workspace(body: CustomerWorkspace, request: Request):
+    """Explicit admin migration of one agency contact; never move shared history."""
+    from app.gateway.routers.invitations import _locked_invitation_user, record_audit_event
+    from app.gateway.routers.workspaces import _create_workspace_rows
+
+    actor, org = await _customer_admin(request)
+    now = datetime.now(UTC)
+    async with _sf()() as session, session.begin():
+        canonical = await _customer_client(session, client_id=body.client_id, org=org, actor=actor)
+        customer = await _locked_invitation_user(session, body.user_id)
+        if customer is None or customer.system_role != CLIENT_ROLE or customer.disabled_at is not None:
+            raise HTTPException(422, "Choose an existing active client account")
+        assignments = (await session.scalars(select(ClientAssignmentRow).where(ClientAssignmentRow.user_id == customer.id))).all()
+        memberships = (
+            await session.scalars(
+                select(OrganizationMemberRow)
+                .join(OrganizationRow, OrganizationRow.id == OrganizationMemberRow.organization_id)
+                .where(OrganizationMemberRow.user_id == customer.id, OrganizationMemberRow.status == "active", OrganizationRow.storage_user_id.is_not(None))
+            )
+        ).all()
+        if (
+            len(assignments) != 1
+            or assignments[0].client_id != canonical.id
+            or assignments[0].organization_id != org
+            or assignments[0].role != "client_contact"
+            or len(memberships) != 1
+            or memberships[0].organization_id != org
+            or memberships[0].role != "client"
+        ):
+            raise HTTPException(409, "Migration requires one matching agency client contact and no other shared membership")
+        target = await _bound_customer_workspace(session, canonical=canonical, actor=actor)
+        if target is None:
+            target = await _create_workspace_rows(session, actor_id=actor, name=body.name, now=now)
+            target.customer_client_id = canonical.id
+            await validate_customer_workspace(session, organization=target, actor_id=actor, canonical=canonical)
+        # Preserve private membership/history; shared storage has no per-person provenance.
+        memberships[0].status = "inactive"
+        memberships[0].updated_at = now
+        assignments[0].organization_id = target.id
+        assignments[0].updated_at = now
+        member = await session.get(OrganizationMemberRow, {"organization_id": target.id, "user_id": customer.id})
+        if member is None:
+            session.add(OrganizationMemberRow(organization_id=target.id, user_id=customer.id, role="client", status="active", created_at=now, updated_at=now))
+        else:
+            member.role, member.status, member.updated_at = "client", "active", now
+    await record_audit_event(
+        request, action="customer_workspace.migrated", outcome="success", actor_user_id=actor, organization_id=target.id, target_type="user", target_id=body.user_id, details={"source_workspace_id": org, "client_id": body.client_id}
+    )
+    return {"workspace_id": target.id, "client_id": body.client_id, "user_id": body.user_id, "delivery": "portal"}
+
+
 @router.post("/customer-workspaces/invitations", status_code=201)
 async def invite_customer_workspace(body: CustomerWorkspaceInvitation, request: Request, response: Response):
     """Create/bind first, then issue the existing private single-use invitation."""
