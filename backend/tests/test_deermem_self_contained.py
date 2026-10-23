@@ -81,8 +81,8 @@ def test_add_swallows_queue_full_so_backpressure_does_not_break_caller(deermem_d
     assert dm._queue.pending_count == 1
 
 
-def test_di_construction_owns_dependencies():
-    dm = DeerMem(backend_config={"max_facts": 50, "storage_path": "/tmp/x"})
+def test_di_construction_owns_dependencies(tmp_path):
+    dm = DeerMem(backend_config={"max_facts": 50, "storage_path": str(tmp_path / "root")})
     assert dm._config.max_facts == 50
     assert dm._storage is not None and dm._updater is not None and dm._queue is not None
     # dependencies are wired (DI), not globals:
@@ -871,7 +871,7 @@ def test_build_llm_degrades_to_none_on_init_failure(caplog):
     assert any("build_llm failed" in r.message for r in caplog.records)
 
 
-def test_from_backend_config_warns_on_unknown_keys(caplog):
+def test_from_backend_config_warns_on_unknown_keys(caplog, tmp_path):
     """Unknown backend_config keys log a WARNING so a typo (e.g. ``storage_pat``
     missing the ``h``) does not silently fall back to the default and write
     memory to an unintended location. Mirrors the host layer's
@@ -880,25 +880,25 @@ def test_from_backend_config_warns_on_unknown_keys(caplog):
 
     cfg_logger = "deerflow.agents.memory.backends.deermem.deermem.config"
     with caplog.at_level("WARNING", logger=cfg_logger):
-        cfg = DeerMemConfig.from_backend_config({"storage_path": "/tmp/x", "storage_pat": "/tmp/y"})
+        cfg = DeerMemConfig.from_backend_config({"storage_path": str(tmp_path / "root"), "storage_pat": "/tmp/y"})
 
     # known key parsed; unknown key ignored but warned about
-    assert cfg.storage_path == "/tmp/x"
+    assert cfg.storage_path == str(tmp_path / "root")
     assert any("Unknown backend_config keys" in r.message for r in caplog.records)
     assert any("storage_pat" in r.message for r in caplog.records)
 
 
-def test_from_backend_config_silent_on_known_keys(caplog):
+def test_from_backend_config_silent_on_known_keys(caplog, tmp_path):
     """No warning when every key is known (regression guard for the typo warning)."""
     from deerflow.agents.memory.backends.deermem.deermem.config import DeerMemConfig
 
     cfg_logger = "deerflow.agents.memory.backends.deermem.deermem.config"
     with caplog.at_level("WARNING", logger=cfg_logger):
-        DeerMemConfig.from_backend_config({"storage_path": "/tmp/x", "max_facts": 20})
+        DeerMemConfig.from_backend_config({"storage_path": str(tmp_path / "root"), "max_facts": 20})
     assert not any("Unknown backend_config keys" in r.message for r in caplog.records)
 
 
-def test_from_backend_config_null_values_fall_back_to_defaults():
+def test_from_backend_config_null_values_fall_back_to_defaults(tmp_path):
     """Explicit YAML ``null`` values must behave like omitted keys, not crash.
 
     ``config.example.yaml`` ships ``backend_config.model:`` as a bare key with
@@ -912,13 +912,13 @@ def test_from_backend_config_null_values_fall_back_to_defaults():
         DeerMemModelConfig,
     )
 
-    cfg = DeerMemConfig.from_backend_config({"model": None, "debounce_seconds": None, "storage_path": "/tmp/x"})
+    cfg = DeerMemConfig.from_backend_config({"model": None, "debounce_seconds": None, "storage_path": str(tmp_path / "root")})
 
     # None entries fall back to field defaults; real values still parse
     assert isinstance(cfg.model, DeerMemModelConfig)
     assert cfg.model.model is None  # default = no extraction LLM configured
     assert cfg.debounce_seconds == DeerMemConfig().debounce_seconds
-    assert cfg.storage_path == "/tmp/x"
+    assert cfg.storage_path == str(tmp_path / "root")
 
 
 def test_from_backend_config_null_values_do_not_warn_as_unknown(caplog):
