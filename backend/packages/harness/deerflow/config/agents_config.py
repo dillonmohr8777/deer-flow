@@ -229,6 +229,9 @@ class AgentConfig(BaseModel):
     # The default Lead Agent has no AgentConfig and therefore keeps access to
     # the full catalog.
     allowed_subagents: list[str] | None = None
+    # Model for this agent's subagents whose type says ``model: inherit``
+    # (e.g. an Opus lead with Haiku workers). None = inherit the lead's model.
+    subagent_model: str | None = None
     # Per-agent LLM sampling overrides (temperature / max_tokens) layered on top
     # of the referenced model profile. None = no overrides (issue #4336).
     model_settings: AgentModelSettings | None = None

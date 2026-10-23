@@ -833,7 +833,7 @@ async def task_tool(
             thread_id = runtime.config.get("configurable", {}).get("thread_id")
 
         # Try to get parent model from configurable
-        parent_model = metadata.get("model_name")
+        parent_model = metadata.get("subagent_model_name") or metadata.get("model_name")
 
         # Get or generate trace_id for distributed tracing
         trace_id = metadata.get("trace_id") or str(uuid.uuid4())[:8]
