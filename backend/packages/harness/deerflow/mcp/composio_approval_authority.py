@@ -7,6 +7,7 @@ import json
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
+from functools import wraps
 from typing import Any
 
 from langchain_core.tools import ToolException
@@ -117,6 +118,7 @@ def bind_composio_authority(authority: ComposioApprovalAuthority):
 
 
 def approved_credential_interceptor(normal_interceptor):
+    @wraps(normal_interceptor)
     async def scoped(request, handler):
         authority = current_composio_authority()
         if authority is None:
