@@ -10,6 +10,15 @@ The upstream DeerFlow history stays in [CHANGELOG.md](../CHANGELOG.md).
 
 ## [Unreleased]
 
+## [momobot-prod-20261022-207ab8a7] - 2026-10-22
+
+### Changed
+
+- Move agent read config lookups off event loop (#262)
+- Preserve complete Twin profiles within an 8 KiB prompt budget (#260)
+- Release script refuses process substitution, Oct 22 (#261)
+- MomoBot changelog momobot-prod-20261022-331f7395, Oct 22 (#259)
+
 ## [momobot-prod-20261022-331f7395] - 2026-10-22
 
 ### Changed
