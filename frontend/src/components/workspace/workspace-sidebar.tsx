@@ -35,8 +35,8 @@ export function WorkspaceSidebar({
   const { setOpenMobile } = useSidebar();
   const isSidebarOpen = useSidebarExpanded();
   const { motionOn } = useWorkspaceAppearance();
-  // A client sees chats and nothing internal: no workspace switcher, plugin
-  // pages, channels, projects or background work.
+  // Clients can switch between their dedicated and private chat histories.
+  // Plugin pages, channels, projects and background work remain internal.
   const isClient = useIsClient();
   // Until the role resolves the user may be a client: show no internal UI.
   const unresolved = useIsRoleUnresolved();
@@ -83,7 +83,7 @@ export function WorkspaceSidebar({
           onClickCapture={closeMobileSidebarForWorkspaceLink}
         >
           <WorkspaceHeader />
-          {isSidebarOpen && showInternal && <WorkspaceSelector />}
+          {isSidebarOpen && !unresolved && <WorkspaceSelector />}
         </SidebarHeader>
         <SidebarContent
           className={styles.phoneTargets}

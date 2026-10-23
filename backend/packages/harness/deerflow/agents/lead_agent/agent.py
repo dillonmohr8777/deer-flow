@@ -58,6 +58,7 @@ from deerflow.authz.runtime import resolve_authorization_provider
 from deerflow.authz.tool_filter import apply_tool_authorization
 from deerflow.config.agents_config import load_agent_config, validate_agent_name
 from deerflow.config.app_config import AppConfig, get_app_config
+from deerflow.config.builtin_agents import CLIENT_WORKSPACE_CEILING_KEY, client_workspace_ceiling
 from deerflow.config.memory_config import should_use_memory_tools
 from deerflow.config.subagents_config import (
     DEFAULT_MAX_TOTAL_SUBAGENTS_PER_RUN,
@@ -1004,6 +1005,9 @@ def _assemble_lead_agent(config: RunnableConfig, *, app_config: AppConfig) -> Le
         agent_config = load_agent_config(agent_name, user_id=resolved_user_id) if not is_bootstrap else None
         if agent_name and agent_config is None:
             raise ValueError("Existing agent config readback is unavailable")
+        if cfg.get(CLIENT_WORKSPACE_CEILING_KEY) is True and agent_config is not None:
+            # Set only by the Gateway's run policy: a client running their workspace's agent.
+            agent_config = client_workspace_ceiling(agent_config)
     tool_names = getattr(agent_config, "tool_names", None)
     include_wsl_diagnostics = agent_name == MOMOBOT_MAX_NAME and not is_bootstrap and not cfg.get("is_subagent") and not cfg.get("channel_name") and cfg.get("user_role") == "admin" and callable(cfg.get(WSL_DIAGNOSTICS_CONTEXT_KEY))
     if include_wsl_diagnostics and tool_names is not None:
@@ -1051,6 +1055,15 @@ def _assemble_lead_agent(config: RunnableConfig, *, app_config: AppConfig) -> Le
     # Phase 3: enforce model:use authorization. On deny, fall back to the first
     # allowed model (graceful) rather than crashing the run (RFC §9).
     model_name = _authorize_model_name(model_name, context=cfg, app_config=resolved_app_config)
+    # Inheriting subagents run on the agent's subagent_model when it names a configured model the caller may use.
+    agent_subagent_model = getattr(agent_config, "subagent_model", None) if agent_config else None
+    subagent_model_name = None
+    if agent_subagent_model and resolved_app_config.get_model_config(agent_subagent_model):
+        # A denied model would come back as a fallback; then subagents just inherit the lead model.
+        if _authorize_model_name(agent_subagent_model, context=cfg, app_config=resolved_app_config) == agent_subagent_model:
+            subagent_model_name = agent_subagent_model
+    elif agent_subagent_model:
+        logger.warning("Agent '%s' subagent_model '%s' is not configured; subagents inherit the lead model.", agent_name, agent_subagent_model)
 
     model_config = resolved_app_config.get_model_config(model_name)
 
@@ -1080,6 +1093,7 @@ def _assemble_lead_agent(config: RunnableConfig, *, app_config: AppConfig) -> Le
         {
             "agent_name": agent_name or "default",
             "model_name": model_name or "default",
+            "subagent_model_name": subagent_model_name,
             "thinking_enabled": thinking_enabled,
             "reasoning_effort": reasoning_effort,
             "is_plan_mode": is_plan_mode,

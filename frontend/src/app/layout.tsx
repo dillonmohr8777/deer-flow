@@ -16,6 +16,9 @@ export const metadata: Metadata = {
     title: "MomoBot",
     statusBarStyle: "default",
   },
+  // Next emits only mobile-web-app-capable for appleWebApp.capable; older
+  // iOS home-screen launches still read the apple- prefixed name.
+  other: { "apple-mobile-web-app-capable": "yes" },
   formatDetection: { telephone: false },
   icons: {
     icon: [

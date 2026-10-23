@@ -429,6 +429,7 @@
 .paperWordmark {
   display: inline-flex;
   align-items: center;
+  min-height: 2.75rem;
 }
 
 /*
@@ -730,7 +731,9 @@
  */
 .paperHero .paperMomos {
   width: min(100%, 15rem);
-  margin: 0 auto clamp(0.5rem, 3vw, 1.5rem);
+  /* The bounce lifts the photo ~28px above its box and the scrap above it
+     is tilted; this keeps "still invite only" clear (72rem resets it). */
+  margin: 2.75rem auto clamp(0.5rem, 3vw, 1.5rem);
 }
 
 @media (min-width: 40rem) {
@@ -866,11 +869,17 @@
 }
 
 .paperFooterLink {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
   color: var(--paper-ink-muted);
   text-decoration: none;
-  border-bottom: 1px solid transparent;
+  text-underline-offset: 0.25em;
 }
 
+/* An underline, not a border: the 44px box would drop a border-bottom
+   well below the text. */
 .paperFooterLink:hover {
-  border-bottom-color: var(--paper-royal);
+  text-decoration: underline;
+  text-decoration-color: var(--paper-royal);
 }

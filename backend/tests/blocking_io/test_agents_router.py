@@ -272,7 +272,8 @@ async def test_client_agent_list_and_get_keep_tier_visibility_with_config_off_lo
 
         assert client_keys_for_user.await_args_list == [call(actor_id, organization_id)] * 3
         assert visible_client_actor_ids == [actor_id]
-        assert len(config_threads) == 6
+        # Per call: tier lookup, workspace-agent lookup and built-in visibility, all off the loop.
+        assert len(config_threads) == 9
         assert all(thread_id != loop_thread_id for thread_id in config_threads)
     finally:
         await asyncio.to_thread(reset_app_config)

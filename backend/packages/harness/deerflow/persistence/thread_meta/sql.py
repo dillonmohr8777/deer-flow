@@ -7,7 +7,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import case, column, select, table, text, update
+from sqlalchemy import and_, case, column, or_, select, table, text, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm.attributes import flag_modified
 
@@ -27,6 +27,17 @@ def _in_active_organization(model) -> tuple:
     return () if organization_id is None else (model.organization_id == organization_id,)
 
 
+def _private_actor_storage(actor: str) -> bool:
+    from deerflow.persistence.organizations.identity import private_organization_id
+    from deerflow.runtime.user_context import get_effective_user_id
+
+    return resolve_organization_id() == private_organization_id(actor) and get_effective_user_id() == actor
+
+
+def _own_private_legacy(actor: str, owner: str | None, creator: str | None) -> bool:
+    return creator is None and owner == actor and _private_actor_storage(actor)
+
+
 async def _visible(row: ThreadMetaRow | None, user_id: str | None, session) -> bool:
     """Whether ``row`` passes the user filter (skipped for an explicit ``None``) and the organization filter.
 
@@ -37,7 +48,7 @@ async def _visible(row: ThreadMetaRow | None, user_id: str | None, session) -> b
     if row is None or (user_id is not None and row.user_id != user_id):
         return False
     actor = await _client_actor(session)
-    if actor is not None and row.client_actor_id != actor:
+    if actor is not None and row.client_actor_id != actor and not _own_private_legacy(actor, row.user_id, row.client_actor_id):
         return False
     organization_id = resolve_organization_id()
     return organization_id is None or row.organization_id == organization_id
@@ -293,7 +304,11 @@ class ThreadMetaRepository(ThreadMetaStore):
             )
         )
         if client_actor is not None:
-            stmt = stmt.where(ThreadMetaRow.client_actor_id == client_actor)
+            creator_filter = ThreadMetaRow.client_actor_id == client_actor
+            # Old private chats predate creator stamps; their exact owner is authoritative.
+            if _private_actor_storage(client_actor):
+                creator_filter = or_(creator_filter, and_(ThreadMetaRow.client_actor_id.is_(None), ThreadMetaRow.user_id == client_actor))
+            stmt = stmt.where(creator_filter)
         if resolved_user_id is not None:
             stmt = stmt.where(ThreadMetaRow.user_id == resolved_user_id)
         if status:

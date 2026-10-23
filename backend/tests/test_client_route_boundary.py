@@ -32,6 +32,7 @@ CLIENT_REACHABLE_ROUTES = [
     "GET /api/client-portal/threads/{thread_id}",
     "GET /api/client-portal/threads/{thread_id}/messages/{message_id}/attachments/{name}",
     "GET /api/agents",
+    "GET /api/agents/{name}",
     "GET /api/features",
     "GET /api/models",
     "GET /api/models/{model_name}",
@@ -126,7 +127,8 @@ INTERNAL_CALLS = [
     ("PUT", "/api/agents/momobot-max"),
     ("DELETE", "/api/agents/momobot-max"),
     ("GET", "/api/agents/check"),
-    ("GET", "/api/agents/some-other-agent"),
+    ("PUT", "/api/agents/acme-dental-max"),
+    ("DELETE", "/api/agents/acme-dental-max"),
     ("GET", "/api/user-profile"),
     ("GET", "/api/workflows/runs"),
     ("POST", "/api/workflows/runs"),
@@ -177,10 +179,14 @@ def test_the_chat_routes_a_client_needs_are_allowed(entry):
     assert is_client_allowed_route(method, _concrete(template))
 
 
-def test_the_agents_api_admits_momobot_max_and_no_other_name():
+def test_the_agents_api_admits_reading_one_agent_but_never_the_name_probe_or_management():
+    # Which names answer is the router's call (MomoBot Max plus the client's own workspace agents, momobot_max.py).
     assert is_client_allowed_route("GET", "/api/agents/momobot-max")
-    assert not is_client_allowed_route("GET", "/api/agents/momobot-max-2")
-    assert not is_client_allowed_route("GET", "/api/agents/Momobot-Max/")
+    assert is_client_allowed_route("GET", "/api/agents/acme-dental-max")
+    assert not is_client_allowed_route("GET", "/api/agents/check")
+    assert not is_client_allowed_route("GET", "/api/agents/acme-dental-max/soul")
+    for method in ("POST", "PUT", "PATCH", "DELETE"):
+        assert not is_client_allowed_route(method, "/api/agents/acme-dental-max")
 
 
 @pytest.mark.parametrize(("method", "path"), INTERNAL_CALLS)

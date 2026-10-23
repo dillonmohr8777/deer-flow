@@ -229,6 +229,20 @@ while `strip_internal_context_keys` scrubs both destinations. Treat
 `_normalize_input_messages` rejects canonical external system/developer roles;
 only `AUTH_SOURCE_INTERNAL` run input may retain them.
 
+### MomoBot Max client defaults
+
+Optional operator config `momobot_max.client_default_agents` maps an authenticated
+contact's client key to a default custom workspace agent. It applies only when
+both run-context carriers omit `agent_name` or set it to null; explicit names
+(including empty strings) keep the existing selection semantics. Defaults follow
+the stable authenticated client-key order, then the existing dedicated-workspace,
+Max-unlock, own-bucket, client-tag and model gates. An undiscovered default falls
+back to built-in `momobot-max`. The existing workspace-agent ceiling is unchanged:
+nine-tool intersection, no MCP, skills, self-update, memory or knowledge. Staff
+and unmapped clients keep their current behavior. This adds no guidance budget;
+custom SOUL and client profile guidance still consume the existing prompt budget
+and require owner content review before release.
+
 ### Momentum-internal surfaces (team board, AI Academy)
 
 `/api/team` (staff channels, members) and `/api/academy` (curriculum plus
@@ -418,6 +432,14 @@ See `docs/` directory for detailed documentation:
 ## Approvals inbox (`/api/approvals`)
 
 Agents propose outbound actions with `propose_action`; nothing executes before an org owner/admin approves (compare-and-set, exactly-once). Proposals and edited approvals are fact-checked (contradicted claims are refused), and edits are recorded per client in `client_corrections`, whose last 10 entries `ClientCorrectionsMiddleware` injects. Detail: [docs/APPROVALS_INBOX.md](docs/APPROVALS_INBOX.md). Tests: `tests/test_approvals_inbox.py`, `tests/test_client_memory.py`.
+
+The client portal (`/api/client-portal`) also admits an active non-client member
+of a bound customer workspace when their `account_manager` assignment names the
+bound active canonical client and belongs to that client's agency organization.
+They may list/read requests, start internal work and save drafts; review,
+approval and publication remain restricted to that workspace's owner/admin.
+Client-contact behavior and the unbound agency-workspace path are unchanged.
+Tests: `tests/test_client_portal.py`.
 
 ## Fact checker (`verify_claims`)
 
