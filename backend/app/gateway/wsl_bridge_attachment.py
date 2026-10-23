@@ -5,7 +5,9 @@ from __future__ import annotations
 import asyncio
 import os
 import stat
+from collections.abc import Callable
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -23,10 +25,12 @@ def _attachment_path(store, job_id, thread_id, user_id):
     return expected
 
 
-def _attach_fixed_file(path: Path, content: bytes) -> None:
+def _attach_fixed_file(path: Path, content: bytes, check_ownership: Callable[[], None] | None = None) -> None:
     """Pin output ancestors and link a flushed temporary file without overwrite."""
     if not hasattr(os, "O_NOFOLLOW") or os.open not in os.supports_dir_fd or os.link not in os.supports_dir_fd:
         raise BridgeError("Secure diagnostic attachment is unavailable", 503)
+    if check_ownership is not None:
+        check_ownership()
     import secrets
 
     handles = []
@@ -49,6 +53,8 @@ def _attach_fixed_file(path: Path, content: bytes) -> None:
             output.flush()
             os.fsync(output.fileno())
         try:
+            if check_ownership is not None:
+                check_ownership()
             os.link(temporary, path.name, src_dir_fd=parent, dst_dir_fd=parent, follow_symlinks=False)
             os.fsync(parent)
         except FileExistsError:
@@ -69,9 +75,8 @@ def _attach_fixed_file(path: Path, content: bytes) -> None:
 
 
 async def attach_receipt(store, job_id, request):
-    from app.gateway.deps import get_thread_store
-    from app.gateway.routers.artifacts import reserve_artifact_write
-    from deerflow.runtime import ConflictError
+    from app.gateway.deps import get_run_manager, get_thread_store
+    from deerflow.runtime import ConflictError, RunManager, ThreadOperationKind
     from deerflow.utils.file_io import await_drained
 
     record = await asyncio.to_thread(store.read, job_id)
@@ -86,15 +91,27 @@ async def attach_receipt(store, job_id, request):
         raise BridgeError("Diagnostic origin thread is unavailable", 404)
     if record["attached"]:
         return store._view(record)
+    run_manager = get_run_manager(request)
+    caller = asyncio.current_task()
     try:
-        async with reserve_artifact_write(request, thread_id, user_id=record["storage_user_id"]):
+        async with run_manager.reserve_thread_operation(thread_id, kind=ThreadOperationKind.artifact_write, user_id=record["storage_user_id"]) as reservation:
+
+            def check_ownership():
+                deadline = RunManager._parse_lease_deadline(reservation.lease_expires_at)
+                if caller.cancelling() or reservation.ownership_lost or reservation.abort_event.is_set() or (run_manager.heartbeat_enabled and (deadline is None or deadline <= datetime.now(UTC))):
+                    raise ConflictError("Diagnostic attachment reservation is no longer owned")
+
             if not await thread_store.check_access(thread_id, record["storage_user_id"], require_existing=True):
                 raise BridgeError("Diagnostic origin thread is unavailable", 404)
             path = await asyncio.to_thread(_attachment_path, store, job_id, thread_id, record["storage_user_id"])
             content = (compact_json({field: record["receipt"][field] for field in RECEIPT_FIELDS}) + "\n").encode()
-            # Drain cancellation before releasing the durable thread reservation.
-            await await_drained(asyncio.to_thread(_attach_fixed_file, path, content))
-            return await asyncio.to_thread(store.mark_attached, job_id, record["receipt_sha256"])
+
+            def write_and_mark():
+                _attach_fixed_file(path, content, check_ownership)
+                return store.mark_attached(job_id, record["receipt_sha256"], check_ownership=check_ownership)
+
+            # Keep renewal and the reservation alive until all worker I/O drains.
+            return await await_drained(asyncio.to_thread(write_and_mark))
     except ConflictError:
         raise BridgeError("Origin thread is busy; receipt remains durable", 409) from None
 
@@ -112,6 +129,7 @@ async def _local_request(record):
     from deerflow.persistence.thread_meta import ThreadMetaRepository
     from deerflow.runtime import RunManager
     from deerflow.runtime.user_context import WorkspaceStorageContext, reset_current_user, reset_storage_context, set_current_user, set_storage_context
+    from deerflow.utils.file_io import await_drained
 
     config = await asyncio.to_thread(get_app_config)
     database = config.database
@@ -130,16 +148,21 @@ async def _local_request(record):
         auth = AuthContext(user=user, organization_id=organization_id, actor_user_id=actor_user_id, storage_user_id=record["storage_user_id"])
         user_token = set_current_user(user)
         storage_token = set_storage_context(WorkspaceStorageContext(actor_user_id=actor_user_id, organization_id=organization_id, storage_user_id=record["storage_user_id"], role=organization.role))
+        run_manager = RunManager(store=RunRepository(sf), run_ownership_config=config.run_ownership)
         try:
+            await run_manager.start_heartbeat(reconcile_orphans=False)
             yield SimpleNamespace(
                 state=SimpleNamespace(auth=auth),
-                app=SimpleNamespace(state=SimpleNamespace(thread_store=ThreadMetaRepository(sf), run_manager=RunManager(store=RunRepository(sf)))),
+                app=SimpleNamespace(state=SimpleNamespace(thread_store=ThreadMetaRepository(sf), run_manager=run_manager)),
             )
         finally:
-            reset_storage_context(storage_token)
-            reset_current_user(user_token)
+            try:
+                await await_drained(run_manager.stop_heartbeat())
+            finally:
+                reset_storage_context(storage_token)
+                reset_current_user(user_token)
     finally:
-        await engine.dispose()
+        await await_drained(engine.dispose())
 
 
 async def ingest_local_receipt(store, job_id, receipt):

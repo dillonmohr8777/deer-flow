@@ -325,13 +325,17 @@ class BridgeStore:
     def _view(record):
         return {"protocol": PROTOCOL, "job_id": record["job"]["id"], "state": record["state"], "attached": record["attached"], "receipt_sha256": record["receipt_sha256"]}
 
-    def mark_attached(self, job_id, digest):
+    def mark_attached(self, job_id, digest, *, check_ownership=None):
         with self._connect(write=True) as conn:
             record = self._record(conn.execute("SELECT id,state,record FROM requests WHERE id=?", (job_id,)).fetchone())
             if record["receipt_sha256"] != digest or record["state"] not in {"done", "failed"}:
                 raise BridgeError("Diagnostic attachment is held")
+            if check_ownership is not None:
+                check_ownership()
             record.update(attached=True, artifact_path=self.artifact_path(job_id))
             self._save(conn, record)
+            if check_ownership is not None:
+                check_ownership()
             return self._view(record)
 
 

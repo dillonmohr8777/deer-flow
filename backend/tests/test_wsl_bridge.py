@@ -227,3 +227,17 @@ def test_fixed_artifact_survives_ack_restart_and_denies_links(tmp_path):
     linked.symlink_to(target)
     with pytest.raises(bridge.BridgeError):
         _attach_fixed_file(linked, b"receipt\n")
+    guarded = target.parent / "guarded.json"
+    checks = 0
+
+    def check_ownership():
+        nonlocal checks
+        checks += 1
+        if checks == 2:
+            raise bridge.BridgeError("reservation expired before publication")
+
+    with pytest.raises(bridge.BridgeError, match="expired before publication"):
+        _attach_fixed_file(guarded, b"receipt\n", check_ownership)
+    assert checks == 2
+    assert not guarded.exists()
+    assert not list(target.parent.glob(".wsl-receipt-*"))

@@ -1806,7 +1806,7 @@ class RunManager:
         *,
         kind: ThreadOperationKind,
         user_id: str | None = None,
-    ) -> AsyncIterator[None]:
+    ) -> AsyncIterator[RunRecord]:
         """Hold exclusive durable admission for a non-run thread operation.
 
         The reservation is a short-lived pending row, so the same durable
@@ -1832,7 +1832,7 @@ class RunManager:
                     lease_lost = record.abort_event.is_set()
             if lease_lost:
                 raise asyncio.CancelledError()
-            yield
+            yield record
         except asyncio.CancelledError:
             if record.abort_event.is_set():
                 raise ConflictError(f"Thread {thread_id} reservation lease was lost") from None
@@ -2050,17 +2050,18 @@ class RunManager:
         logger.error("Run %s lost lease ownership; local execution was fenced: %s", record.run_id, reason)
         return True
 
-    async def start_heartbeat(self) -> None:
+    async def start_heartbeat(self, *, reconcile_orphans: bool = True) -> None:
         """Start the background lease-renewal task.
 
         No-op when ``heartbeat_enabled`` is ``False`` or the task is already running.
+        Bounded operation owners can disable unrelated orphan recovery.
         """
         if not self.heartbeat_enabled:
             return
         if self._heartbeat_task is not None and not self._heartbeat_task.done():
             return
         self._heartbeat_stop = asyncio.Event()
-        task = asyncio.create_task(self._heartbeat_loop())
+        task = asyncio.create_task(self._heartbeat_loop(reconcile_orphans=reconcile_orphans))
         task.set_name("deerflow-run-lease-heartbeat")
         self._heartbeat_task = task
         logger.info("Run lease heartbeat started for worker %s", self._worker_id)
@@ -2084,7 +2085,7 @@ class RunManager:
         self._heartbeat_stop = None
         logger.info("Run lease heartbeat stopped for worker %s", self._worker_id)
 
-    async def _heartbeat_loop(self) -> None:
+    async def _heartbeat_loop(self, *, reconcile_orphans: bool = True) -> None:
         """Periodically renew leases and reclaim orphaned runs from dead peers.
 
         Lease renewal runs every ``lease_seconds / 3``. Reconciliation
@@ -2122,7 +2123,7 @@ class RunManager:
             # expires between restarts — e.g. Worker A crashes, its
             # replacement starts before the lease expires, and the
             # startup pass skips the still-valid lease.
-            if cycle % 3 == 0:
+            if reconcile_orphans and cycle % 3 == 0:
                 self._schedule_orphan_reconciliation()
 
     async def _renew_leases(self) -> None:

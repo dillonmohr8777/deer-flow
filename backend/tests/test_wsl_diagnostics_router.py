@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
@@ -38,9 +39,9 @@ def app(store, monkeypatch, tmp_path):
     async def reserve(thread_id, *, kind, user_id):
         assert (thread_id, user_id, kind.value) == ("thread", "storage", "artifact_write")
         app.state.operation_count += 1
-        yield
+        yield SimpleNamespace(lease_expires_at=None, ownership_lost=False, abort_event=asyncio.Event())
 
-    app.state.run_manager = SimpleNamespace(reserve_thread_operation=reserve)
+    app.state.run_manager = SimpleNamespace(reserve_thread_operation=reserve, heartbeat_enabled=False)
 
     @app.middleware("http")
     async def authenticate(request, call_next):
@@ -53,7 +54,8 @@ def app(store, monkeypatch, tmp_path):
         request.state.storage_user_id = identity["storage"]
         return await call_next(request)
 
-    def attach(path, content):
+    def attach(path, content, check_ownership):
+        check_ownership()
         assert path.name.startswith("wsl-diagnostic-momo-")
         assert json.loads(content)["stdout_b64"] == "TGludXgK"
         app.state.write_count += 1
