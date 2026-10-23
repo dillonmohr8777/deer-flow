@@ -23,6 +23,15 @@ The Gateway sizes pages to the `CONVERSATION_TOOL_NAME` tool-output budget so
 results stay inline. Cut messages carry a `message_seq`/`offset` continuation that
 the same host reader serves; keep reading guidance separate from permission enforcement.
 
+`wsl_diagnostics.py` exposes only true/false/uname selectors to an authenticated
+Momo admin lead with the Gateway's per-run `RunContext.wsl_diagnostics` callback.
+The worker strips forged callbacks from both config carriers and releases the
+host reference at termination. Clients, staff, channels, bootstrap, subagents
+and ordinary embedded callers receive no grant. The existing bridge flag,
+thread ownership/permissions, durable request keys and attachment path remain
+authoritative; tool results contain bounded status/receipt metadata, never host
+paths or raw output. Regression: `tests/test_wsl_chat_entrypoint.py`.
+
 Lead and bootstrap assembly pass the constructed `chat_model` to tool assembly.
 The cloned `write_file` budget hint uses that instance's effective `max_tokens`,
 including custom-agent and thinking-mode overrides; an absent cap omits the hint.
