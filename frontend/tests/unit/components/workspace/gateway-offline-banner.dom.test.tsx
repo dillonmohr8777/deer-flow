@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, rs } from "@rstest/core";
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -8,7 +9,7 @@ import {
 } from "@testing-library/react";
 
 import { GatewayOfflineBanner } from "@/components/workspace/gateway-offline-banner";
-import { AuthProvider } from "@/core/auth/AuthProvider";
+import { AuthProvider, useAuth } from "@/core/auth/AuthProvider";
 
 // AuthProvider pulls useRouter/usePathname from next/navigation. Hand it a
 // no-op router so logout()'s `router.push("/")` stays inert under happy-dom
@@ -93,7 +94,82 @@ function renderBanner() {
   );
 }
 
+function RecoveryControls() {
+  const { user, logout } = useAuth();
+  return (
+    <>
+      <output data-testid="recovered-user">{user?.id ?? "signed-out"}</output>
+      <button type="button" onClick={() => void logout()}>
+        Sign out recovered session
+      </button>
+    </>
+  );
+}
+
 describe("GatewayOfflineBanner logout recovery (#3001)", () => {
+  it.each([false, true])(
+    "does not restore or probe a logging-out session (probe resolved before logout: %s)",
+    async (recoverFirst) => {
+      let resolveProbe!: (response: Response) => void;
+      let resolveLogout!: (response: Response) => void;
+      const probe = new Promise<Response>((resolve) => {
+        resolveProbe = resolve;
+      });
+      const logout = new Promise<Response>((resolve) => {
+        resolveLogout = resolve;
+      });
+      const fetchMock = rs
+        .spyOn(globalThis, "fetch")
+        .mockImplementation((input) =>
+          input === "/api/v1/auth/logout" ? logout : probe,
+        );
+      render(
+        <AuthProvider initialUser={null}>
+          <GatewayOfflineBanner gatewayUnavailable />
+          <RecoveryControls />
+        </AuthProvider>,
+      );
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+
+      const recover = async () => {
+        await act(async () => {
+          resolveProbe(
+            new Response(
+              JSON.stringify({
+                id: "user-a",
+                email: "a@example.test",
+                system_role: "user",
+              }),
+              { status: 200 },
+            ),
+          );
+          await probe;
+        });
+      };
+      if (recoverFirst) {
+        await recover();
+        expect(screen.getByTestId("recovered-user").textContent).toBe("user-a");
+      }
+
+      fireEvent.click(
+        screen.getByRole("button", { name: "Sign out recovered session" }),
+      );
+      if (!recoverFirst) await recover();
+
+      expect(screen.getByTestId("recovered-user").textContent).toBe(
+        "signed-out",
+      );
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      await act(async () => {
+        resolveLogout(new Response(null, { status: 200 }));
+        await logout;
+      });
+      expect(screen.getByTestId("recovered-user").textContent).toBe(
+        "signed-out",
+      );
+    },
+  );
+
   it("renders a <button> (not a GET-style link) as the logout affordance", async () => {
     installFetch();
     renderBanner();

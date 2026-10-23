@@ -26,7 +26,11 @@ STUBS = {
     "df": "printf 'Filesystem 1024-blocks Used Available Capacity Mounted\\nfake 1 1 99999999 1%% /\\n'",
     # `docker image inspect` misses (forces a build); `docker inspect -f ... <name>` reports what settings.env holds
     # for the containers prod really runs (compose.funnel.yaml names them momobot-prod-*), and no such container otherwise.
-    "docker": """[[ "$1" == image ]] && exit 1
+    # `docker image ls <repo>` lists STUB_IMAGES entries of that repo (newest first); `docker image rm` is logged.
+    "docker": """if [[ "$1" == image ]]; then
+  case "$2" in ls) printf '%s\\n' ${STUB_IMAGES:-} | grep "^$3:" ;; rm) echo "rmi $3" >> "$STUB_LOG" ;; *) exit 1 ;; esac
+  exit
+fi
 case "${!#}" in momobot-prod-gateway) key=MOMENTUM_GATEWAY_IMAGE ;; momobot-prod-frontend) key=MOMENTUM_FRONTEND_IMAGE ;; *) exit 1 ;; esac
 sed -n "s/^$key=//p" "$MOMOBOT_DEPLOY_DIR/settings.env\"""",
     # Readiness always passes; the public smoke answers 502 while BAD_IMAGE is the configured gateway.
@@ -129,3 +133,21 @@ def test_refuses_commit_not_on_main(box):
     result = run("box-release", "0" * 40)
     assert result.returncode != 0
     assert state()["stub"] == "" and state()["gateway"] == "gw:old"
+
+
+def test_refuses_process_substitution_instead_of_tagging_a_no_op(box):
+    # Regression (Oct 22): `bash <(...)` piped an empty script to the box, exited 0 and tagged a release that never deployed.
+    result = subprocess.run(["bash", "-c", 'bash <(cat "$0") rollback', str(SCRIPT)], capture_output=True, text=True, timeout=60)
+    assert result.returncode == 1
+    assert "run release.sh from a file" in result.stderr
+
+
+def test_release_prunes_builds_past_newest_three_but_keeps_rollback(box, tmp_path):
+    run, state, _old, new = box
+    settings = tmp_path / "deploy/settings.env"
+    settings.write_text(settings.read_text().replace("gw:old", "deer-flow-gateway:d"))  # rollback tag is the oldest build
+    tag = f"main-{new[:8]}"
+    images = f"deer-flow-gateway:{tag} deer-flow-gateway:a deer-flow-gateway:b deer-flow-gateway:c deer-flow-gateway:d deer-flow-frontend:{tag} deer-flow-frontend:a"
+    result = run("box-release", new, STUB_IMAGES=images)
+    assert result.returncode == 0, result.stderr
+    assert [line for line in state()["stub"].splitlines() if line.startswith("rmi ")] == ["rmi deer-flow-gateway:c"]

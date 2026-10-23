@@ -21,16 +21,20 @@ const current = () =>
 
 function renderDialog(
   props: Partial<React.ComponentProps<typeof SettingsDialog>> = {},
-  role: User["system_role"] = "user",
+  role: User["system_role"] | null = "user",
 ) {
   return render(
     <AuthProvider
-      initialUser={{
-        id: "u1",
-        email: "u@example.test",
-        system_role: role,
-        needs_setup: false,
-      }}
+      initialUser={
+        role === null
+          ? null
+          : {
+              id: "u1",
+              email: "u@example.test",
+              system_role: role,
+              needs_setup: false,
+            }
+      }
     >
       <SettingsDialog open {...props} />
     </AuthProvider>,
@@ -81,6 +85,18 @@ describe("settings sections by role", () => {
       name: enUS.settings.sections.appearance,
     });
     expect(current()).toEqual([appearance]);
+    expect(document.activeElement).toBe(appearance);
+  });
+
+  it("falls back to appearance while the role is unresolved", async () => {
+    renderDialog({ defaultSection: "invite" }, null);
+    const appearance = await screen.findByRole("button", {
+      name: enUS.settings.sections.appearance,
+    });
+    expect(current()).toEqual([appearance]);
+    expect(
+      screen.queryByRole("button", { name: enUS.settings.sections.invite }),
+    ).toBeNull();
   });
 
   it.each(["admin", "exec", "user"] as const)(

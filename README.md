@@ -50,6 +50,29 @@ This first workflow has local failure and restart tests. Live Slack delivery, un
 Learn more and see **real demos** on our [**official website**](https://deerflow.tech).
 The landing-page case studies open as allowlisted, read-only showcases without requiring a sign-in.
 
+### MomoBot workspace recovery and mobile navigation
+
+Temporary connection failures keep the last confirmed sign-in visible. An expired
+session returns both REST and chat requests to sign-in with the current page and
+query preserved. Logout and identity changes discard stale refresh responses;
+logout clears cached responses after its request completes and suppresses late
+sign-in redirects. Switching between confirmed accounts reloads the page to
+discard the previous account's queries and observers. A chat request's 401 only
+redirects after a separate session check also confirms the session has expired.
+
+Phone navigation remains expanded even when the desktop sidebar was collapsed.
+The drawer closes after page or query navigation and when moving to a desktop
+layout, while a starting chat assigning its thread URL keeps the drawer open.
+Installation prompts stay off sign-in, setup and invitation pages.
+Settings deep links include `?settings=invite`; links to sections unavailable to
+the current role, including an unresolved role, focus the allowed Appearance fallback.
+Agent lists show loading during initial feature discovery and hide cached agents
+when the Agents API is disabled.
+
+Agent prompts include up to 8 KiB of UTF-8 from the effective user's `USER.md`
+profile. Larger profiles are truncated at a valid UTF-8 boundary with a visible
+marker; profile content remains HTML-escaped and is omitted in public channels.
+
 ## Sister Projects
 
 <img width="446" height="280" alt="image" align="middle" src="https://github.com/user-attachments/assets/077edef4-d560-41af-bb0d-d0a5f14fcc20" />
@@ -2208,6 +2231,11 @@ See [backend/docs/TUI.md](backend/docs/TUI.md) for the full guide.
 
 ## Documentation
 
+The optional [authenticated WSL diagnostic exchange](backend/docs/WSL_DIAGNOSTIC_BRIDGE.md)
+is disabled by default. Its Gateway routes queue only three bounded diagnostic
+commands for the existing SSH/PCW relay and attach verified receipts to the
+originating thread; runtime installation and enablement remain operator-owned.
+
 - [Contributing Guide](CONTRIBUTING.md) - Development environment setup and workflow
 - [Configuration Guide](backend/docs/CONFIGURATION.md) - Setup and configuration instructions
 - [Architecture Overview](backend/CLAUDE.md) - Technical architecture details
@@ -2562,6 +2590,6 @@ historical. See the exact invocation in [private setup](docs/MOMOBOT_APP_RELEASE
 
 Optional Momentum integration: [synthetic offline SDK review worker](examples/momentum-sdk-review/README.md). Disabled by default; does not perform live client work or inference.
 
-For EC2 operators, an optional [read-only Brain snapshot adapter](deploy/momentum/ec2/README.md#optional-read-only-brain-snapshot-prepared-not-enabled)
+For EC2 operators, an optional [read-only Brain snapshot adapter](deploy/momentum/ec2/README.md#private-read-only-brain-snapshot)
 can expose saved context without a Mac service or new collector. It is prepared only;
 production registration and private snapshot installation are separate release steps.

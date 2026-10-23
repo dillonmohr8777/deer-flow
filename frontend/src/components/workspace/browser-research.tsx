@@ -5,7 +5,7 @@ import { Download, ExternalLink, RefreshCw, Square } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 
 import { Button } from "@/components/ui/button";
-import { SidebarTrigger } from "@/components/ui/sidebar";
+import { WorkspaceSidebarTrigger } from "@/components/workspace/workspace-sidebar-trigger";
 import { useAuth } from "@/core/auth/AuthProvider";
 import { hasPermission, PERMISSIONS } from "@/core/auth/permissions";
 import {
@@ -304,7 +304,7 @@ export function BrowserResearchWorkspace() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <SidebarTrigger className="-ml-2 min-h-11 min-w-11 md:hidden" />
+              <WorkspaceSidebarTrigger className="-ml-2 min-h-11 min-w-11 md:hidden" />
               <h1 className="text-2xl">Browser research</h1>
             </div>
             <p className="text-muted-foreground mt-1 text-sm">

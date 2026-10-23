@@ -75,10 +75,11 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   rs.resetAllMocks();
+  rs.restoreAllMocks();
 });
 
 describe("actual Room composer account lifecycle", () => {
-  it("retains B's new draft when A's pending owner post settles after a real boundary switch", async () => {
+  it("retains B's draft when A's pending owner post settles after a full page identity reload", async () => {
     let settle!: (message: AgentRoomMessage) => void;
     rs.mocked(postAgentRoomMessage).mockImplementation(
       () =>
@@ -89,7 +90,7 @@ describe("actual Room composer account lifecycle", () => {
     const cache = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
-    render(
+    const viewA = render(
       <AuthProvider initialUser={OWNER_A}>
         <QueryClientProvider client={cache}>
           <AccountSwitch />
@@ -104,11 +105,28 @@ describe("actual Room composer account lifecycle", () => {
     fireEvent.click(screen.getByRole("button", { name: "Post to room" }));
     await waitFor(() => expect(postAgentRoomMessage).toHaveBeenCalledTimes(1));
     const oldMutation = cache.getMutationCache().getAll()[0]!;
+    const reload = rs
+      .spyOn(window.location, "reload")
+      .mockImplementation(() => undefined);
     fireEvent.click(screen.getByRole("button", { name: "Switch account" }));
-    const newInput = await screen.findByLabelText(
+    expect(reload).toHaveBeenCalledTimes(1);
+    viewA.unmount();
+    const cacheB = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const viewB = render(
+      <AuthProvider initialUser={OWNER_B}>
+        <QueryClientProvider client={cacheB}>
+          <UserPreferencesBoundary>
+            <AgentRoom />
+          </UserPreferencesBoundary>
+        </QueryClientProvider>
+      </AuthProvider>,
+    );
+    const newInput = await screen.findByLabelText<HTMLTextAreaElement>(
       "Leave an instruction or note",
     );
-    expect((newInput as HTMLTextAreaElement).value).toBe("");
+    expect(newInput.value).toBe("");
     fireEvent.change(newInput, { target: { value: "Owner B retained draft" } });
     await act(async () => {
       settle({
@@ -129,9 +147,13 @@ describe("actual Room composer account lifecycle", () => {
         .value,
     ).toBe("Owner B retained draft");
     expect(screen.queryByText("Owner A private draft")).toBeNull();
-    expect(cache.getQueryData(["agent-room", "messages", "owner-B"])).toEqual(
+    expect(
+      cacheB.getQueryData(["agent-room", "messages", "owner-A"]),
+    ).toBeUndefined();
+    expect(cacheB.getQueryData(["agent-room", "messages", "owner-B"])).toEqual(
       [],
     );
+    expect(viewB.container.textContent).not.toContain("Owner A private draft");
   });
 
   it("shows the authorized feed but disables posting for a read-only owner", async () => {
@@ -249,6 +271,9 @@ describe("actual Room composer account lifecycle", () => {
         created_at: "2026-09-30T00:00:00Z",
       },
     ]);
+    const reload = rs
+      .spyOn(window.location, "reload")
+      .mockImplementation(() => undefined);
     const authMe = rs.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(
         JSON.stringify({ ...OWNER_B, permissions: ["threads:read"] }),
@@ -261,7 +286,7 @@ describe("actual Room composer account lifecycle", () => {
     const cache = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
-    render(
+    const viewA = render(
       <AuthProvider initialUser={OWNER_A}>
         <QueryClientProvider client={cache}>
           <UserPreferencesBoundary>
@@ -283,6 +308,20 @@ describe("actual Room composer account lifecycle", () => {
     });
 
     await waitFor(() => expect(authMe).toHaveBeenCalled());
+    await waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
+    viewA.unmount();
+    const cacheB = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <AuthProvider initialUser={{ ...OWNER_B, permissions: ["threads:read"] }}>
+        <QueryClientProvider client={cacheB}>
+          <UserPreferencesBoundary>
+            <AgentRoom />
+          </UserPreferencesBoundary>
+        </QueryClientProvider>
+      </AuthProvider>,
+    );
     await waitFor(() =>
       expect(fetchAgentRoomEnabled).toHaveBeenCalledWith(
         OWNER_B.id,
@@ -319,6 +358,9 @@ describe("actual Room composer account lifecycle", () => {
     await screen.findByText("Private note for owner-B");
     expect(screen.queryByText("Private note for owner-A")).toBeNull();
     expect(postAgentRoomMessage).not.toHaveBeenCalled();
+    expect(
+      cacheB.getQueryData(["agent-room", "messages", "owner-A"]),
+    ).toBeUndefined();
   });
 
   it("hides the room when a tab-refocus refresh comes back 401 (f134 review)", async () => {

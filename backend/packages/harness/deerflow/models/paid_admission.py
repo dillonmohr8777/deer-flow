@@ -35,7 +35,7 @@ from langchain_core.language_models import BaseChatModel
 
 logger = logging.getLogger(__name__)
 
-CEILING_MICRO = 20_000_000  # one monthly ceiling; subcaps below are NOT additive to it
+CEILING_MICRO = 100_000_000  # one monthly ceiling ($100, Dillon Oct 23 2026, invoiced to Momentum); subcaps below are NOT additive to it
 # Default per-route subcaps (micro-USD). Their sum exceeds the ceiling on purpose:
 # each route is capped alone AND the total of all routes is capped at CEILING_MICRO.
 DEFAULT_SUBCAPS = {

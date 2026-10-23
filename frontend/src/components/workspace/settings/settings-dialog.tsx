@@ -24,7 +24,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { useIsClient } from "@/core/auth/AuthProvider";
+import { useIsClient, useIsRoleUnresolved } from "@/core/auth/AuthProvider";
 import { CLIENT_SETTINGS_SECTIONS } from "@/core/auth/roles";
 import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
@@ -140,6 +140,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
   const { defaultSection = "appearance", ...dialogProps } = props;
   const { t } = useI18n();
   const isClient = useIsClient();
+  const roleUnresolved = useIsRoleUnresolved();
   const [selectedSection, setActiveSection] =
     useState<SettingsSection>(defaultSection);
   const navRef = useRef<HTMLElement>(null);
@@ -242,14 +243,14 @@ export function SettingsDialog(props: SettingsDialogProps) {
       t.settings.sections.about,
     ],
   );
-  // A client keeps account, appearance and about; the rest are internal or
-  // admin tools. A deep link to a hidden section falls back to appearance.
+  // Clients and unresolved roles get only client-safe sections. A deep link to
+  // a hidden section falls back to appearance.
   const sections = useMemo(
     () =>
-      isClient
+      isClient || roleUnresolved
         ? allSections.filter(({ id }) => CLIENT_SETTINGS_SECTIONS.has(id))
         : allSections,
-    [allSections, isClient],
+    [allSections, isClient, roleUnresolved],
   );
   const activeSection = sections.some(({ id }) => id === selectedSection)
     ? selectedSection
@@ -267,7 +268,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
           // is selected: two highlights at once. Focus the selected one.
           event.preventDefault();
           navRef.current
-            ?.querySelector<HTMLElement>(`[data-section="${defaultSection}"]`)
+            ?.querySelector<HTMLElement>(`[data-section="${activeSection}"]`)
             ?.focus();
         }}
       >

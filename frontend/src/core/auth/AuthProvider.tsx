@@ -7,15 +7,18 @@ import React, {
   useState,
   useCallback,
   useEffect,
+  useLayoutEffect,
+  useRef,
   type ReactNode,
 } from "react";
 
 import { queryClient } from "@/components/query-client-provider";
+import { redirectOnUnauthorized, setLoggingOut } from "@/core/api/fetcher";
 
 import { isStaticWebsiteOnly } from "../static-mode";
 
 import { isClientUser, isRoleUnresolved } from "./roles";
-import { type User, buildLoginUrl } from "./types";
+import { type User, buildLoginUrl, userSchema } from "./types";
 
 // Re-export for consumers
 export type { User };
@@ -27,12 +30,16 @@ interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  isLoggingOut: boolean;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
   applyUser: (user: User | null) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+const useIsomorphicLayoutEffect =
+  typeof window === "undefined" ? useEffect : useLayoutEffect;
 
 interface AuthProviderProps {
   children: ReactNode;
@@ -50,27 +57,73 @@ interface AuthProviderProps {
 export function AuthProvider({ children, initialUser }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(initialUser);
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const logoutStartedRef = useRef(false);
+  const currentUserRef = useRef(initialUser);
+  const initialUserRef = useRef(initialUser);
+  const authGenerationRef = useRef(0);
+  const refreshRequestIdRef = useRef(0);
   const router = useRouter();
-  const pathname = usePathname();
   const staticMode = isStaticWebsiteOnly();
 
   const isAuthenticated = user !== null;
 
-  /**
-   * Apply a user value supplied by a caller (e.g. banner probe) that has
-   * already fetched it. Equivalent to setUser, exposed with a stable name
-   * so consumers don't reach into React internals.
-   */
-  const applyUser = useCallback((next: User | null) => {
-    setUser(next);
+  useIsomorphicLayoutEffect(() => {
+    setLoggingOut(false);
   }, []);
+
+  const invalidateAuthRequests = useCallback(() => {
+    authGenerationRef.current += 1;
+    refreshRequestIdRef.current += 1;
+  }, []);
+
+  /**
+   * Apply a confirmed user, fencing older refreshes. A different signed-in
+   * account reloads the page to discard its observers and cached data together.
+   */
+  const applyUser = useCallback(
+    (next: User | null) => {
+      if (logoutStartedRef.current) return;
+      // Callers such as the offline banner already hold an authoritative user
+      // response. Fence any older /auth/me request before applying it.
+      invalidateAuthRequests();
+      if (
+        currentUserRef.current &&
+        next &&
+        currentUserRef.current.id !== next.id
+      ) {
+        setIsLoading(true);
+        window.location.reload();
+        return;
+      }
+      currentUserRef.current = next;
+      setUser(next);
+      setIsLoading(false);
+    },
+    [invalidateAuthRequests],
+  );
+
+  // Layout sync keeps a newly server-confirmed identity from being hidden by
+  // the provider's initial useState value during client-side route updates.
+  // It also fences a refresh started under the previous server identity.
+  useIsomorphicLayoutEffect(() => {
+    if (initialUserRef.current === initialUser) return;
+    initialUserRef.current = initialUser;
+    applyUser(initialUser);
+  }, [initialUser, applyUser]);
 
   /**
    * Fetch current user from FastAPI
    * Used when initialUser might be stale (e.g., after tab was inactive)
    */
   const refreshUser = useCallback(async () => {
-    if (staticMode) return;
+    if (staticMode || logoutStartedRef.current) return;
+
+    const requestId = ++refreshRequestIdRef.current;
+    const authGeneration = authGenerationRef.current;
+    const isCurrentRequest = () =>
+      refreshRequestIdRef.current === requestId &&
+      authGenerationRef.current === authGeneration;
 
     try {
       setIsLoading(true);
@@ -79,23 +132,33 @@ export function AuthProvider({ children, initialUser }: AuthProviderProps) {
       });
 
       if (res.ok) {
-        const data = await res.json();
-        setUser(data);
+        const parsed = userSchema.safeParse(await res.json());
+        if (isCurrentRequest()) {
+          if (parsed.success) {
+            applyUser(parsed.data);
+          } else {
+            console.warn("Failed to refresh user: invalid /auth/me response");
+          }
+        }
       } else if (res.status === 401) {
         // Session expired or invalid
-        setUser(null);
-        // Redirect to login if on a protected route
-        if (pathname?.startsWith("/workspace")) {
-          router.push(buildLoginUrl(pathname));
+        if (isCurrentRequest()) {
+          applyUser(null);
+          redirectOnUnauthorized(res);
         }
       }
     } catch (err) {
-      console.error("Failed to refresh user:", err);
-      setUser(null);
+      // A transport or parse failure does not establish that the session is
+      // invalid. Keep the last confirmed user; only a 401 clears it.
+      if (isCurrentRequest()) {
+        console.error("Failed to refresh user:", err);
+      }
     } finally {
-      setIsLoading(false);
+      if (isCurrentRequest()) {
+        setIsLoading(false);
+      }
     }
-  }, [staticMode, pathname, router]);
+  }, [staticMode, applyUser]);
 
   /**
    * Logout - call FastAPI logout endpoint and clear local state
@@ -109,10 +172,18 @@ export function AuthProvider({ children, initialUser }: AuthProviderProps) {
    * logout used to.
    */
   const logout = useCallback(async () => {
-    // Immediately clear local state to prevent UI flicker
+    // Fence recovery without rebuilding mounted queries under a live session.
+    // The workspace/auth layout's provider unmounts on navigation to home.
+    logoutStartedRef.current = true;
+    setLoggingOut(true);
+    invalidateAuthRequests();
+    currentUserRef.current = null;
     setUser(null);
+    setIsLoading(false);
+    setIsLoggingOut(true);
 
     if (staticMode) {
+      queryClient.clear();
       router.push("/");
       return;
     }
@@ -141,7 +212,7 @@ export function AuthProvider({ children, initialUser }: AuthProviderProps) {
     queryClient.clear();
     // Redirect to home page
     router.push("/");
-  }, [staticMode, router]);
+  }, [staticMode, router, invalidateAuthRequests]);
 
   /**
    * Handle visibility change - refresh user when tab becomes visible again.
@@ -170,6 +241,7 @@ export function AuthProvider({ children, initialUser }: AuthProviderProps) {
     user,
     isAuthenticated,
     isLoading,
+    isLoggingOut,
     logout,
     refreshUser,
     applyUser,

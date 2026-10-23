@@ -401,3 +401,32 @@ List/detail page over `GET/PATCH/POST /api/approvals` (`src/core/approvals/`, `s
 Channel connection setup belongs to the caller's private workspace. Use `core/workspaces/hooks.ts` for the sidebar setup handoff and workspace selector; never submit channel setup against a shared workspace. A successful switch hard-navigates to discard old workspace caches.
 
 The sidebar's Easy / Medium / Hard entry opens the existing Experience settings for staff, including account managers. Keep it hidden for client or unresolved roles, matching the Settings dialog's section policy.
+
+AuthProvider refreshes retain the confirmed user on transport/parse failures and
+clear it only after a confirmed 401 or explicit identity change. Fence responses
+by auth generation and request order; switching between confirmed user IDs must
+reload the page so cached responses and mounted observers are discarded together.
+Same-user refreshes stay in place. REST and refreshUser 401s share the live-URL,
+query-preserving redirect. LangGraph 401s redirect only after a separate raw
+`/auth/me` request also confirms 401; retain the SDK's HTTP 401 no-retry behavior.
+Validate refresh bodies with `userSchema` and warn on invalid 200 responses.
+Logout fences refresh/banner recovery and the shared `redirectOnUnauthorized`
+helper used by REST and LangGraph, then clears queries after its POST. A fresh
+AuthProvider mount resets that shared logout guard; `useRequireAuth` has no
+production callers.
+Regression coverage is in `auth-logout-clears-cache.dom.test.tsx` and
+`core/api/fetcher.dom.test.ts`.
+
+Mobile sidebar presentation shares `useSidebarExpanded`, while the desktop
+collapse preference remains independent. The workspace location watcher closes
+the drawer on pathname/query navigation, except a new chat assigning its thread
+URL; desktop breakpoint changes also close it. Keep these fixes in workspace components,
+with coverage in `ui-polish-mobile.spec.ts`, rather than generated UI primitives.
+Installation help stays hidden on authentication/invitation routes; Settings
+autofocus targets the resolved role-allowed section. An unresolved role uses the
+client-safe section set, so an Invite deep link falls back to Appearance.
+The shared `useAgents` list query reports loading during initial feature discovery,
+then honors the resolved/sticky Agents flag without toggling the query during
+background revalidation. Disabled flags hide cached lists. Keep the unknown-feature outage
+fallback; `core/agents/hooks.dom.test.tsx` and `agents-feature-disabled.spec.ts`
+cover discovery, disabled results and recovery.

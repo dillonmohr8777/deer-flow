@@ -85,6 +85,7 @@ function installHookState() {
         user: authUser,
         isAuthenticated: authUser !== null,
         isLoading: authLoading,
+        isLoggingOut: false,
         logout: rs.fn(),
         refreshUser: rs.fn(),
         applyUser: rs.fn(),

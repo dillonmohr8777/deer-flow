@@ -215,6 +215,8 @@ async def test_admin_onboards_fresh_customer_workspace_without_cloning_client(or
     async with org_world() as session, session.begin():
         session.add(ClientRow(id="canonical-alpha", organization_id=ORG_S, display_name="Synthetic Alpha"))
         await session.execute(update(UserRow).where(UserRow.id == USER_B).values(system_role="client"))
+        # The shared binding check reads the issuer from the database (a real global admin).
+        await session.execute(update(UserRow).where(UserRow.id == USER_A).values(system_role="admin"))
 
     async def user(request):
         actor = request.cookies["access_token"]

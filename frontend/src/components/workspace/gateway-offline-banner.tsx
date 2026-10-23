@@ -26,7 +26,7 @@ export function GatewayOfflineBanner({
   gatewayUnavailable,
 }: GatewayOfflineBannerProps) {
   const { t } = useI18n();
-  const { user, applyUser, refreshUser, logout } = useAuth();
+  const { user, isLoggingOut, applyUser, refreshUser, logout } = useAuth();
   // Guard against piling up probe calls while the gateway is still slow.
   const inFlightRef = useRef(false);
   // Count consecutive 401s so we can distinguish "transient warm-up 401"
@@ -34,7 +34,7 @@ export function GatewayOfflineBanner({
   const authFailuresRef = useRef(0);
 
   useEffect(() => {
-    if (!gatewayUnavailable) return;
+    if (!gatewayUnavailable || isLoggingOut) return;
     // Once AuthProvider has a user again the banner has served its
     // purpose; tear down the polling so we don't keep probing every 10s
     // for the entire lifetime of the page (gatewayUnavailable is a
@@ -100,7 +100,7 @@ export function GatewayOfflineBanner({
     return () => {
       window.clearInterval(handle);
     };
-  }, [gatewayUnavailable, user, applyUser, refreshUser]);
+  }, [gatewayUnavailable, user, isLoggingOut, applyUser, refreshUser]);
 
   if (!shouldShowOfflineBanner(user, gatewayUnavailable)) {
     return null;

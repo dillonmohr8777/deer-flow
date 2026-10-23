@@ -106,7 +106,18 @@ export function InstallHelp() {
     }
   }
 
-  if (installed || dismissed || (!ios && !installPrompt && !promptFailed))
+  // Keep installation UI away from sign-in, MFA and invitation controls.
+  const authenticating =
+    pathname === "/login" ||
+    pathname === "/setup" ||
+    pathname === "/invite" ||
+    pathname?.startsWith("/auth/");
+  if (
+    authenticating ||
+    installed ||
+    dismissed ||
+    (!ios && !installPrompt && !promptFailed)
+  )
     return null;
 
   return (

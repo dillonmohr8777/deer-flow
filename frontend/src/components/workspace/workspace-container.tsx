@@ -12,8 +12,8 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
-import { SidebarTrigger } from "@/components/ui/sidebar";
 import { BackgroundJobs } from "@/components/workspace/command-center/background-jobs";
+import { WorkspaceSidebarTrigger } from "@/components/workspace/workspace-sidebar-trigger";
 import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
 
@@ -59,7 +59,7 @@ export function WorkspaceHeader({
       {...props}
     >
       <div className="flex min-w-0 items-center gap-2 px-2 sm:px-4">
-        <SidebarTrigger className="size-11 md:hidden" />
+        <WorkspaceSidebarTrigger className="size-11 md:hidden" />
         <Breadcrumb>
           <BreadcrumbList>
             {segments?.[0] && (

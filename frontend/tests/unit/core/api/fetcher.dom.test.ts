@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, rs } from "@rstest/core";
 
-import { fetch as apiFetch } from "@/core/api/fetcher";
+import { getAPIClient } from "@/core/api/api-client";
+import { fetch as apiFetch, setLoggingOut } from "@/core/api/fetcher";
 
 describe("api fetcher unauthorized redirect", () => {
   let originalFetch: typeof globalThis.fetch;
@@ -13,6 +14,7 @@ describe("api fetcher unauthorized redirect", () => {
   });
 
   afterEach(() => {
+    setLoggingOut(false);
     globalThis.fetch = originalFetch;
   });
 
@@ -36,6 +38,36 @@ describe("api fetcher unauthorized redirect", () => {
     ).searchParams.get("next");
     expect(next).toBe(
       "/artifacts/view?path=%2Fmnt%2Fuser-data%2Foutputs%2Freport.md&thread_id=t-1",
+    );
+  });
+
+  it("does not redirect a 401 while logout is in progress", async () => {
+    window.history.replaceState(
+      {},
+      "",
+      "/workspace/chats/new?settings=security",
+    );
+    const currentUrl = window.location.href;
+    setLoggingOut(true);
+
+    await expect(apiFetch("/api/threads")).rejects.toThrow();
+
+    expect(window.location.href).toBe(currentUrl);
+  });
+
+  it("returns SDK requests to sign-in without retrying an expired session", async () => {
+    window.history.replaceState(
+      {},
+      "",
+      "/workspace/chats/new?settings=security",
+    );
+
+    await expect(getAPIClient(true).threads.search({})).rejects.toThrow();
+
+    expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+    expect(window.location.pathname).toBe("/login");
+    expect(new URL(window.location.href).searchParams.get("next")).toBe(
+      "/workspace/chats/new?settings=security",
     );
   });
 });

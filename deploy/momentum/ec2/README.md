@@ -262,32 +262,114 @@ python -m pytest tests/test_org_isolation_g_memory.py -q
 Do not trigger a Claude extraction probe during the 01:30–08:30 ET quiet window. A config
 readback proves profile selection, not a completed provider extraction.
 
-## Optional read-only Brain snapshot (prepared, not enabled)
+## Private read-only Brain snapshot
 
 `brain_readonly_adapter.py` preserves the existing fixed-destination HTTP adapter and adds
-an offline mode selected by `BRAIN_SNAPSHOT_DIR`. It does not enable an MCP server or alter
-production configuration. The existing collector remains the only Brain writer.
+an offline mode selected by `BRAIN_SNAPSHOT_DIR`. The existing collector remains the only
+Brain writer.
 
-For snapshot mode, the deployment owner installs one coherent private directory containing
-`brain.json`, `NOW.md`, and the unchanged trusted `brain.py` renderer. Mount it read-only on
-EC2 and run the adapter with the existing gateway Python interpreter:
+For snapshot mode, the deployment owner keeps the unchanged trusted `brain.py` renderer
+in a private directory mounted read-only on EC2. Run the adapter with the existing gateway
+Python interpreter:
 
 ```sh
 BRAIN_SNAPSHOT_DIR=/opt/momobot/brain-snapshot python3 brain_readonly_adapter.py
 ```
 
-Keep those three files outside Git and model prompts. Only `brain_now`, `brain_client`,
+Keep all snapshot files outside Git and model prompts. Only `brain_now`, `brain_client`,
 `brain_open_items`, and `brain_systems` are exposed; calls go directly to pure renderer
 functions. The adapter never invokes Brain's auto-refreshing `load`, collector, capture,
 search, or HTTP service in snapshot mode. No bearer token or new network endpoint is needed.
-Every result includes the saved `generated_at` as `sourceObservedAt`, even if the files are
-old. These are saved observations, not live health or a fresh communication sweep.
+Every tool result and listed tool includes the saved `generated_at` as `sourceObservedAt`
+and a `generation` identifier. `generated_at` records the collector's build observation,
+not the freshness of every underlying record. Transfer/publication time does not change it.
+Old snapshots remain explicitly saved observations; no freshness TTL or live communication
+sweep is implied. Refresh cadence and source-age checks remain the owner's responsibility.
 
-The deployment owner must independently review the change, stage the private renderer/cache
-and adapter, add a read-only mount, replace the missing `/run/momo-security` adapter path in
-the existing disabled MCP entry, then verify useful MCP output before enabling it. Do not
+The deployment owner stages the private renderer/cache and the adapter, keeps the `brain`
+MCP entry pointed at `/run/momo-security/brain_readonly_adapter.py`, and verifies useful MCP
+output and the denials before enabling it. Do not
 add a collector, timer, Mac bridge or competing writer. Cache transfer, authentication,
 production integration and client-scoped access remain unverified by the offline test.
+
+`compose.ec2.yaml` mounts both read-only into the gateway container only, with
+`create_host_path: false` so a release fails instead of creating empty paths:
+`/opt/momobot/brain-snapshot` (0700, root, files 0600) and the adapter at
+`/run/momo-security/brain_readonly_adapter.py` (staged from this directory to
+`/opt/momobot/code/`, covered by `backup_extra.py`). The snapshot is not backed up; it is
+regenerated from the Mac Brain. The `brain` MCP entry carries `private_scope` (Dillon's actor
+plus exact private organization) and `BRAIN_SNAPSHOT_DIR=/opt/momobot/brain-snapshot`.
+
+The existing bound root directory must retain its inode. Do not `mv` a replacement directory
+over `/opt/momobot/brain-snapshot`, or rsync a new pair over the selected generation.
+`brain.py` stays in that root-only directory; only the deployment owner stages trusted code.
+The adapter pins its bytes at startup and fails reads if those bytes change. A planned
+renderer upgrade requires owner validation and an adapter restart.
+
+For each manual refresh, transfer the existing Mac-built `brain.json` and `NOW.md` to a
+separate private staging directory. With the reviewed adapter and publisher side by side
+on the host, the owner invokes the publisher using the renderer hash already verified in
+the release receipt:
+
+```sh
+python3 publish_brain_snapshot.py \
+  --source-dir /opt/momobot/private-brain-stage \
+  --snapshot-dir /opt/momobot/brain-snapshot \
+  --renderer-sha256 "$VERIFIED_BRAIN_RENDERER_SHA256"
+```
+
+This explicit host command has no MCP refresh operation, timer, upstream request or collector
+side effect. It executes only the hash-verified root renderer, never source-directory code.
+It requires exact `render_now(brain.json) == NOW.md` agreement, required JSON shapes and an
+aware observation timestamp. Pair mtimes are not coherence evidence. Files are bounded to
+1 MiB each; metadata is bounded to 4 KiB. Duplicate JSON keys, non-finite numbers, linked or
+special files, symlinked directories and non-hex generation paths are rejected.
+
+The publisher writes private files (0600) in a new generation directory (0700) inside
+`generations/`. Its manifest binds both payload hashes, the trusted renderer hash and the
+original observation timestamp into the generation ID. It flushes/fsyncs payloads and
+directories, then atomically replaces only `current.json` and fsyncs the bound root. Existing
+generation contents are never rewritten. An identical selected generation is a validated
+no-op; observations older than the currently published one are rejected. An exclusive
+`.publish.lock` rejects concurrent publishers, and a changed pointer before commit aborts
+publication. A crash can leave a lock or an unselected staging/generation directory; the
+owner checks that no publisher is active before removing a leftover lock. Cleanup is manual.
+
+Validation, staging and fsync failures before pointer replacement preserve the previous
+pointer. A failure after replacement can mean publication committed but its crash durability
+is unconfirmed; inspect `current.json` and validate destination reads before retrying. CLI
+failures emit only `Brain snapshot publication failed.` Success prints generation,
+`sourceObservedAt` and whether the selection changed, with no snapshot body.
+
+On every permitted tool read/list, an already-running requester checks the bounded pointer.
+It validates the entire selected generation, then rechecks the pointer before swapping its
+complete in-memory state when the selection changes. An unchanged pointer also requires
+full validation before serving its cached state, detecting selected-file deletion or damage
+after an earlier successful read. Generations are immutable by publisher convention;
+root privileges can still alter them. Malformed, missing or mismatched selected data returns the existing generic error,
+without silently serving the cached prior generation. The read-only bind exposes in-place
+pointer changes without a gateway recreation. Destination acceptance still requires the owner
+to verify all four tools and listed tool metadata from the same running requester.
+
+Legacy migration: before any pointer is present, startup accepts a bounded, schema-validated
+root `brain.json`/`NOW.md` pair only if the trusted renderer reproduces it exactly. It labels
+that frozen startup state `generation=legacy`. Later root-pair writes do not refresh that
+cache; the first successful pointer publication switches the same process to generation mode.
+Once a process has observed a pointer, removing it fails closed. Do not remove the pointer
+after migration: a restart without it explicitly re-enters legacy startup validation. Keep
+the root legacy pair unchanged while migrating; a mixed pair now fails startup validation.
+Do not use pointer deletion as rollback.
+
+To roll back data, the owner atomically selects a retained, validated prior generation by
+writing a valid `current.json` pointer with `schemaVersion: 1` and its 64-character hex
+`generation` ID, using the same exclusive `.publish.lock` ownership, flush/fsync and
+atomic-replace procedure. All pointer writers must honor that lock. The reader permits
+that explicit selection and reports the older saved observation. The publisher intentionally
+does not accept an observation regression. No automatic pruning or rollback is performed.
+
+To disable access, set `enabled: false` on the `brain` entry (no tool is offered). To withdraw the data
+as well, empty `/opt/momobot/brain-snapshot`; the gateway is root, so a mounted file is
+readable by any gateway process.
 
 Offline contract check (synthetic fixture only):
 
@@ -295,6 +377,9 @@ Offline contract check (synthetic fixture only):
 cd backend
 python -m pytest tests/test_ec2_brain_snapshot.py -q --noconftest
 ```
+
+The publisher targets POSIX hosts with directory fsync support. Windows tests substitute
+directory fsync only; run the same synthetic suite on POSIX before owner runtime acceptance.
 
 ## Account-manager public research
 

@@ -63,12 +63,15 @@ rule `/inspect` and `/accept` apply). Otherwise it is the same 403 as
 created keep signing in after their invitation is used, because the gate only
 applies to creating a user. When every pending invitation for the email is a
 `client` invitation, the account is created with the `client` system role (the
-same as a password sign-up through it), because accepting later keeps an
-existing account's role. The OAuth callback then joins that new account to
-every workspace its verified email holds a pending invitation to
-(`invitations.join_invited_workspaces`: same bar as `/accept`, each invitation
-consumed, audited with `via: sso`) and opens the newest one, so an invitee who
-signs in with the provider needs no token. Existing accounts still accept
+same as a password sign-up through it), because generic invitations preserve
+existing system roles. The OAuth callback then applies eligible pending invitations (`invitations.join_invited_workspaces`,
+audited with `via: sso`) and opens the newest joined workspace. An eligible
+dedicated customer `client` invitation takes precedence over all other links:
+only that dedicated workspace is joined; unrelated and conflicting-role links
+stay pending. Multiple dedicated customer workspaces fail closed. A dedicated
+invitation that no longer passes the binding or recipient checks is skipped
+(left pending), never fatal to the other joins. Generic staff invitations
+retain multi-workspace joining. Existing accounts still accept
 through the invitation link.
 
 Accepting any invitation seeds the `experience_mode: easy` preference (the
@@ -95,7 +98,17 @@ can never authenticate. Every admin check compares `system_role == "admin"`;
 An admin sets a role with `PUT /api/admin/users/{id}/role` (audited, never your
 own role, 409 while `authorization.provider.config.roles` has no block for it,
 because RBAC denies an undefined role everywhere). A new account created from a
-`client` invitation starts as `client`; an existing account keeps its role.
+`client` invitation starts as `client`. A dedicated customer invitation upgrades
+an eligible existing plain `user` to `client`, retains an existing `client`, and
+rejects admin/exec/other staff accounts before issue or acceptance. Generic
+staff invitations retain their existing role rules. Shared customer binding
+and fresh-contact checks live in `app.gateway.invitation_policy`: canonical
+active agency client, one active dedicated workspace, distinct agency storage,
+no local roster, and an issuer still an active global admin and owner/admin of
+both workspaces. Both provisioners run it on the new workspace. A dedicated
+customer workspace takes `client` invitations only (issue 409, accept 403).
+Acceptance rechecks this before reserving the token and rolls back all changes
+on conflict; an unauthenticated holder gets the uniform 403, never binding state.
 `client_boundary.py` is the default-deny route table `AuthMiddleware` applies to
 a client whatever `authorization.*` says, in the shape of the PAT policy above;
 `tests/test_client_route_boundary.py` pins every registered route it admits, so

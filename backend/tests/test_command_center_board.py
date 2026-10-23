@@ -25,7 +25,7 @@ def test_admission_reads_used_and_ceiling(tmp_path):
     gate.settle(rid, 1_500_000)
     tile = mod.admission_tile(tmp_path)
     assert tile["available"] is True
-    assert tile["used_usd"] == 1.5 and tile["ceiling_usd"] == 20.0
+    assert tile["used_usd"] == 1.5 and tile["ceiling_usd"] == 100.0
     assert tile["by_route"] == {"openrouter": 1.5}
     assert tile["as_of"]
 

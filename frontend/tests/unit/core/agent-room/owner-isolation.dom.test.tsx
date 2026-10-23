@@ -93,6 +93,17 @@ function mount(
   return { ...view, cache };
 }
 
+function reloadTo(view: ReturnType<typeof mount>, user: User, boundary = true) {
+  const reload = rs
+    .spyOn(window.location, "reload")
+    .mockImplementation(() => undefined);
+  reload.mockClear();
+  act(() => view.result.current.auth.applyUser(user));
+  expect(reload).toHaveBeenCalledTimes(1);
+  view.unmount();
+  return mount(user, boundary);
+}
+
 beforeEach(() => {
   rs.mocked(fetchAgentRoomEnabled).mockResolvedValue(true);
   rs.mocked(listAgentRoomMessages).mockResolvedValue([]);
@@ -105,29 +116,28 @@ afterEach(() => {
 });
 
 describe("private Agent Room account isolation", () => {
-  it("hides owner A cache while authenticated B's read is pending through the actual preferences boundary", async () => {
+  it("hides owner A cache while B's read is pending after a full page identity reload", async () => {
     rs.mocked(listAgentRoomMessages).mockResolvedValueOnce([
       message("owner-A"),
     ]);
     const pendingB = deferred<AgentRoomMessage[]>();
     rs.mocked(listAgentRoomMessages).mockImplementation(() => pendingB.promise);
-    const view = mount();
+    const viewA = mount();
     await waitFor(() =>
-      expect(view.result.current.room.data?.[0]?.user_id).toBe("owner-A"),
+      expect(viewA.result.current.room.data?.[0]?.user_id).toBe("owner-A"),
     );
-    act(() => view.result.current.auth.applyUser(OWNER_B));
-    await waitFor(() =>
-      expect(view.result.current.auth.user?.id).toBe("owner-B"),
-    );
+    const viewB = reloadTo(viewA, OWNER_B);
+    await waitFor(() => expect(listAgentRoomMessages).toHaveBeenCalledTimes(2));
+    expect(viewB.result.current.room.data).toBeUndefined();
     expect(
-      view.result.current.room.data?.some((item) => item.user_id === "owner-A"),
-    ).not.toBe(true);
+      viewB.cache.getQueryData(["agent-room", "messages", "owner-A"]),
+    ).toBeUndefined();
     pendingB.resolve([message("owner-B")]);
     await waitFor(() =>
-      expect(view.result.current.room.data?.[0]?.user_id).toBe("owner-B"),
+      expect(viewB.result.current.room.data?.[0]?.user_id).toBe("owner-B"),
     );
     expect(
-      view.cache.getQueryData(["agent-room", "messages", "owner-A"]),
+      viewA.cache.getQueryData(["agent-room", "messages", "owner-A"]),
     ).toEqual([message("owner-A")]);
   });
 
@@ -200,79 +210,84 @@ describe("private Agent Room account isolation", () => {
     expect(postAgentRoomMessage).not.toHaveBeenCalled();
   });
 
-  it("cancels and fences a late owner A read after switching to B", async () => {
+  it("cancels and fences a late owner A read across a full page identity reload", async () => {
     const pendingA = deferred<AgentRoomMessage[]>();
     rs.mocked(listAgentRoomMessages)
       .mockImplementationOnce(() => pendingA.promise)
       .mockResolvedValue([message("owner-B")]);
-    const view = mount();
+    const viewA = mount();
     await waitFor(() => expect(listAgentRoomMessages).toHaveBeenCalledTimes(1));
     const signal = rs.mocked(listAgentRoomMessages).mock.calls[0]?.[1];
-    act(() => view.result.current.auth.applyUser(OWNER_B));
+    const viewB = reloadTo(viewA, OWNER_B);
     await waitFor(() =>
-      expect(view.result.current.room.data?.[0]?.user_id).toBe("owner-B"),
+      expect(viewB.result.current.room.data?.[0]?.user_id).toBe("owner-B"),
     );
     expect(signal?.aborted).toBe(true);
     pendingA.resolve([message("owner-A")]);
     await act(async () => {
       await pendingA.promise;
     });
-    expect(view.result.current.room.data).toEqual([message("owner-B")]);
+    expect(viewB.result.current.room.data).toEqual([message("owner-B")]);
     expect(
-      view.cache.getQueryData(["agent-room", "messages", "owner-A"]),
+      viewA.cache.getQueryData(["agent-room", "messages", "owner-A"]),
+    ).toBeUndefined();
+    expect(
+      viewB.cache.getQueryData(["agent-room", "messages", "owner-A"]),
     ).toBeUndefined();
   });
 
-  it("settling an old owner's pending post cannot insert private data into B or update A after unmount", async () => {
+  it("settling A's pending post after a full page reload cannot insert it into B", async () => {
     const pending = deferred<AgentRoomMessage>();
     rs.mocked(postAgentRoomMessage).mockImplementation(() => pending.promise);
-    const view = mount();
-    await waitFor(() => expect(view.result.current.room.data).toEqual([]));
+    const viewA = mount();
+    await waitFor(() => expect(viewA.result.current.room.data).toEqual([]));
     let outcome!: Promise<unknown>;
     act(() => {
-      outcome = view.result.current.post
+      outcome = viewA.result.current.post
         .mutateAsync(INPUT)
         .catch((error: unknown) => error);
     });
     await waitFor(() => expect(postAgentRoomMessage).toHaveBeenCalledTimes(1));
-    act(() => view.result.current.auth.applyUser(OWNER_B));
-    await waitFor(() =>
-      expect(view.result.current.auth.user?.id).toBe("owner-B"),
-    );
+    const viewB = reloadTo(viewA, OWNER_B);
+    await waitFor(() => expect(viewB.result.current.room.data).toEqual([]));
     pending.resolve(message("owner-A"));
     const result = await outcome;
     expect(result).toBeInstanceOf(Error);
-    await waitFor(() => expect(view.result.current.room.data).toEqual([]));
+    await waitFor(() => expect(viewB.result.current.room.data).toEqual([]));
     expect(
-      view.cache.getQueryData(["agent-room", "messages", "owner-A"]),
+      viewA.cache.getQueryData(["agent-room", "messages", "owner-A"]),
     ).toEqual([]);
     expect(
-      view.cache.getQueryData(["agent-room", "messages", "owner-B"]),
+      viewB.cache.getQueryData(["agent-room", "messages", "owner-A"]),
+    ).toBeUndefined();
+    expect(
+      viewB.cache.getQueryData(["agent-room", "messages", "owner-B"]),
     ).toEqual([]);
   });
 
-  it("fences a late post even when a caller does not mount the preferences boundary", async () => {
+  it("keeps a late post out of a fresh owner when neither page uses the preferences boundary", async () => {
     const pending = deferred<AgentRoomMessage>();
     rs.mocked(postAgentRoomMessage).mockImplementation(() => pending.promise);
-    const view = mount(OWNER_A, false);
-    await waitFor(() => expect(view.result.current.room.data).toEqual([]));
+    const viewA = mount(OWNER_A, false);
+    await waitFor(() => expect(viewA.result.current.room.data).toEqual([]));
     let outcome!: Promise<unknown>;
     act(() => {
-      outcome = view.result.current.post
+      outcome = viewA.result.current.post
         .mutateAsync(INPUT)
         .catch((error: unknown) => error);
     });
     await waitFor(() => expect(postAgentRoomMessage).toHaveBeenCalledTimes(1));
-    act(() => view.result.current.auth.applyUser(OWNER_B));
-    await waitFor(() =>
-      expect(view.result.current.auth.user?.id).toBe("owner-B"),
-    );
+    const viewB = reloadTo(viewA, OWNER_B, false);
+    await waitFor(() => expect(viewB.result.current.room.data).toEqual([]));
     pending.resolve(message("owner-A"));
     expect(await outcome).toBeInstanceOf(Error);
-    await waitFor(() => expect(view.result.current.room.data).toEqual([]));
+    await waitFor(() => expect(viewB.result.current.room.data).toEqual([]));
     expect(
-      view.cache.getQueryData(["agent-room", "messages", "owner-A"]),
+      viewA.cache.getQueryData(["agent-room", "messages", "owner-A"]),
     ).toEqual([]);
+    expect(
+      viewB.cache.getQueryData(["agent-room", "messages", "owner-A"]),
+    ).toBeUndefined();
   });
 
   it("rejects mixed-owner read responses without exposing their data", async () => {
@@ -310,21 +325,24 @@ describe("private Agent Room account isolation", () => {
   });
 
   it("hides private cache while the real AuthProvider refresh is confirming identity", async () => {
+    const reload = rs
+      .spyOn(window.location, "reload")
+      .mockImplementation(() => undefined);
     const pendingAuth = deferred<Response>();
     rs.spyOn(globalThis, "fetch").mockImplementation(() => pendingAuth.promise);
     rs.mocked(listAgentRoomMessages)
       .mockResolvedValueOnce([message("owner-A")])
       .mockResolvedValue([message("owner-B")]);
-    const view = mount();
+    const viewA = mount();
     await waitFor(() =>
-      expect(view.result.current.room.data?.[0]?.user_id).toBe("owner-A"),
+      expect(viewA.result.current.room.data?.[0]?.user_id).toBe("owner-A"),
     );
     let refresh!: Promise<void>;
     act(() => {
-      refresh = view.result.current.auth.refreshUser();
+      refresh = viewA.result.current.auth.refreshUser();
     });
-    await waitFor(() => expect(view.result.current.auth.isLoading).toBe(true));
-    expect(view.result.current.room.data).toBeUndefined();
+    await waitFor(() => expect(viewA.result.current.auth.isLoading).toBe(true));
+    expect(viewA.result.current.room.data).toBeUndefined();
     pendingAuth.resolve(
       new Response(JSON.stringify(OWNER_B), {
         status: 200,
@@ -334,9 +352,15 @@ describe("private Agent Room account isolation", () => {
     await act(async () => {
       await refresh;
     });
+    expect(reload).toHaveBeenCalledTimes(1);
+    viewA.unmount();
+    const viewB = mount(OWNER_B);
     await waitFor(() =>
-      expect(view.result.current.room.data?.[0]?.user_id).toBe("owner-B"),
+      expect(viewB.result.current.room.data?.[0]?.user_id).toBe("owner-B"),
     );
+    expect(
+      viewB.cache.getQueryData(["agent-room", "messages", "owner-A"]),
+    ).toBeUndefined();
   });
 
   it("resolves and caches a pending post through a same-owner auth refresh mid-flight (f135)", async () => {
@@ -411,32 +435,32 @@ describe("private Agent Room account isolation", () => {
     });
   }
 
-  it("does not re-admit A instantly after an intervening switch to B, before A's own fresh discovery settles (f134 review, low)", async () => {
-    const gateA = deferred<boolean>();
+  it("requires a fresh owner-specific admission after each full page identity reload", async () => {
+    const firstGateA = deferred<boolean>();
     const gateB = deferred<boolean>();
-    rs.mocked(fetchAgentRoomEnabled).mockImplementation((ownerId: string) =>
-      ownerId === "owner-A" ? gateA.promise : gateB.promise,
-    );
-    // No `UserPreferencesBoundary`: that boundary remounts its subtree on
-    // every user change, which would reset `admittedOwner`'s ref itself and
-    // mask exactly the bug this test targets (per the review: "In
-    // production this is masked by the UserPreferencesBoundary remount").
-    const view = mount(OWNER_A, false);
-    gateA.resolve(true);
+    const secondGateA = deferred<boolean>();
+    let ownerACalls = 0;
+    rs.mocked(fetchAgentRoomEnabled).mockImplementation((ownerId: string) => {
+      if (ownerId === "owner-B") return gateB.promise;
+      ownerACalls += 1;
+      return ownerACalls === 1 ? firstGateA.promise : secondGateA.promise;
+    });
+    // Each confirmed account change reloads the page, so the next owner's
+    // admission starts with a fresh provider, query client and gate request.
+    let view = mount(OWNER_A, false);
+    firstGateA.resolve(true);
     await waitFor(() => expect(view.result.current.access.enabled).toBe(true));
 
-    // A real, different owner: switching to B must not carry A's admission
-    // over, and switching straight back to A (before B's own discovery
-    // settles) must not instantly re-admit A off stale memory either -- A
-    // needs its own fresh discovery to complete again.
-    act(() => view.result.current.auth.applyUser(OWNER_B));
+    view = reloadTo(view, OWNER_B, false);
+    await waitFor(() => expect(fetchAgentRoomEnabled).toHaveBeenCalledTimes(2));
     expect(view.result.current.access.enabled).toBe(false);
-    act(() => view.result.current.auth.applyUser(OWNER_A));
-    expect(view.result.current.access.enabled).toBe(false);
+    gateB.resolve(true);
+    await waitFor(() => expect(view.result.current.access.enabled).toBe(true));
 
-    // A's re-admission is a genuinely new call (`gateA.promise` was already
-    // resolved, so this settles on the next tick without a further resolve()).
+    view = reloadTo(view, OWNER_A, false);
     await waitFor(() => expect(fetchAgentRoomEnabled).toHaveBeenCalledTimes(3));
+    expect(view.result.current.access.enabled).toBe(false);
+    secondGateA.resolve(true);
     await waitFor(() => expect(view.result.current.access.enabled).toBe(true));
   });
 });

@@ -20,12 +20,12 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  useSidebar,
 } from "@/components/ui/sidebar";
 import { useIsClient, useIsRoleUnresolved } from "@/core/auth/AuthProvider";
 import { useI18n } from "@/core/i18n/hooks";
 
 import { useSettingsDialog } from "./settings";
+import { useSidebarExpanded } from "./use-sidebar-expanded";
 
 function NavMenuButtonContent({
   isSidebarOpen,
@@ -50,7 +50,7 @@ function NavMenuButtonContent({
 export function WorkspaceNavMenu() {
   const { openSettings } = useSettingsDialog();
   const [mounted, setMounted] = useState(false);
-  const { open: isSidebarOpen } = useSidebar();
+  const isSidebarOpen = useSidebarExpanded();
   const { t } = useI18n();
   const isClient = useIsClient();
   const unresolved = useIsRoleUnresolved();
