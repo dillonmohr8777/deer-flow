@@ -1617,7 +1617,7 @@ async def test_poller_done_clears_stop_state_and_ignores_stale_callback(monkeypa
 
 @pytest.mark.asyncio
 async def test_stop_returns_with_timed_out_poller_and_start_does_not_overlap(monkeypatch):
-    monkeypatch.setattr(service_module, "_CANCELLATION_DRAIN_TIMEOUT_SECONDS", 0.01)
+    monkeypatch.setattr(service_module, "_CANCELLATION_DRAIN_TIMEOUT_SECONDS", 0.05)
     poller_started = asyncio.Event()
     cleanup_started = asyncio.Event()
     finish = asyncio.Event()
@@ -2245,7 +2245,7 @@ async def _wait_for_compensation_tasks_to_clear(service: McpTaskService) -> None
 
 @pytest.mark.asyncio
 async def test_cancelled_hung_claim_returns_then_releases_delayed_result(monkeypatch):
-    monkeypatch.setattr(service_module, "_CANCELLATION_DRAIN_TIMEOUT_SECONDS", 0.01)
+    monkeypatch.setattr(service_module, "_CANCELLATION_DRAIN_TIMEOUT_SECONDS", 0.05)
     claim_started = asyncio.Event()
     claim_gate = asyncio.Event()
     release_calls = []
@@ -2299,7 +2299,7 @@ async def test_cancelled_hung_claim_returns_then_releases_delayed_result(monkeyp
 @pytest.mark.asyncio
 @pytest.mark.parametrize("phase", ["poll", "cancel", "notification"])
 async def test_single_flight_claim_releases_late_uncancelled_claim(phase, monkeypatch):
-    monkeypatch.setattr(service_module, "_CANCELLATION_DRAIN_TIMEOUT_SECONDS", 0.01)
+    monkeypatch.setattr(service_module, "_CANCELLATION_DRAIN_TIMEOUT_SECONDS", 0.05)
 
     class BlockingClaimRepository:
         def __init__(self):
@@ -2422,7 +2422,7 @@ async def test_single_flight_claim_skip_logs_unresolved_owner(caplog):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("phase", ["poll", "cancel", "notification"])
 async def test_single_flight_claim_releases_owner_before_stuck_release(phase, monkeypatch):
-    monkeypatch.setattr(service_module, "_CANCELLATION_DRAIN_TIMEOUT_SECONDS", 0.01)
+    monkeypatch.setattr(service_module, "_CANCELLATION_DRAIN_TIMEOUT_SECONDS", 0.05)
 
     class BlockingClaimAndReleaseRepository:
         def __init__(self):
@@ -3256,7 +3256,7 @@ class OrdinaryReleaseBatchRepository:
 @pytest.mark.parametrize("phase", ["poll", "cancel", "notification"])
 @pytest.mark.parametrize("outcome", ["success", "failure", "self_cancel"])
 async def test_ordinary_batch_release_is_handed_off_without_duplication(phase, outcome, monkeypatch, caplog):
-    monkeypatch.setattr(service_module, "_CANCELLATION_DRAIN_TIMEOUT_SECONDS", 0.01)
+    monkeypatch.setattr(service_module, "_CANCELLATION_DRAIN_TIMEOUT_SECONDS", 0.05)
     repo = OrdinaryReleaseBatchRepository(phase=phase, outcome=outcome)
     drivers = McpTaskDriverRegistry()
     if phase == "poll":
@@ -3309,7 +3309,7 @@ async def test_ordinary_batch_release_is_handed_off_without_duplication(phase, o
 @pytest.mark.asyncio
 @pytest.mark.parametrize("phase", ["poll", "cancel", "notification"])
 async def test_ordinary_batch_release_timeout_has_service_owned_strong_root(phase, monkeypatch):
-    monkeypatch.setattr(service_module, "_CANCELLATION_DRAIN_TIMEOUT_SECONDS", 0.01)
+    monkeypatch.setattr(service_module, "_CANCELLATION_DRAIN_TIMEOUT_SECONDS", 0.05)
     repo = OrdinaryReleaseBatchRepository(phase=phase, outcome="success")
     drivers = McpTaskDriverRegistry()
     if phase == "poll":
@@ -3371,7 +3371,7 @@ async def test_ordinary_batch_release_completion_same_tick_is_terminal(monkeypat
 @pytest.mark.asyncio
 @pytest.mark.parametrize("phase", ["poll", "cancel", "notification"])
 async def test_repeated_outer_cancellation_keeps_one_ordinary_release(phase, monkeypatch):
-    monkeypatch.setattr(service_module, "_CANCELLATION_DRAIN_TIMEOUT_SECONDS", 0.01)
+    monkeypatch.setattr(service_module, "_CANCELLATION_DRAIN_TIMEOUT_SECONDS", 0.05)
     repo = OrdinaryReleaseBatchRepository(phase=phase, outcome="success")
     drivers = McpTaskDriverRegistry()
     if phase == "poll":
@@ -3580,7 +3580,7 @@ async def test_same_tick_outer_claim_cancellation_wins_and_preserves_args():
 async def test_poll_retry_release_hang_does_not_block_run_once(monkeypatch):
     import app.mcp_tasks.service as service_module
 
-    monkeypatch.setattr(service_module, "_CANCELLATION_DRAIN_TIMEOUT_SECONDS", 0.01, raising=False)
+    monkeypatch.setattr(service_module, "_CANCELLATION_DRAIN_TIMEOUT_SECONDS", 0.05, raising=False)
 
     class HangingReleaseRepo(FakeRepository):
         def __init__(self):
@@ -3618,7 +3618,7 @@ async def test_poll_retry_release_hang_does_not_block_run_once(monkeypatch):
 async def test_notification_failure_release_hang_does_not_block(monkeypatch):
     import app.mcp_tasks.service as service_module
 
-    monkeypatch.setattr(service_module, "_CANCELLATION_DRAIN_TIMEOUT_SECONDS", 0.01, raising=False)
+    monkeypatch.setattr(service_module, "_CANCELLATION_DRAIN_TIMEOUT_SECONDS", 0.05, raising=False)
 
     class HangingNotificationReleaseRepo:
         def __init__(self, records):
@@ -3665,7 +3665,7 @@ async def test_notification_failure_release_hang_does_not_block(monkeypatch):
 async def test_claim_hang_does_not_block_run_once(monkeypatch):
     import app.mcp_tasks.service as service_module
 
-    monkeypatch.setattr(service_module, "_CANCELLATION_DRAIN_TIMEOUT_SECONDS", 0.01, raising=False)
+    monkeypatch.setattr(service_module, "_CANCELLATION_DRAIN_TIMEOUT_SECONDS", 0.05, raising=False)
 
     class HangingClaimRepo(FakeRepository):
         def __init__(self):
@@ -4105,7 +4105,7 @@ async def test_dispatched_notification_cancellation_preserves_phase_when_releasi
 
 @pytest.mark.asyncio
 async def test_hung_cancellation_compensation_transfers_to_background(monkeypatch):
-    monkeypatch.setattr(service_module, "_CANCELLATION_DRAIN_TIMEOUT_SECONDS", 0.01)
+    monkeypatch.setattr(service_module, "_CANCELLATION_DRAIN_TIMEOUT_SECONDS", 0.05)
     release_started = asyncio.Event()
     release_gate = asyncio.Event()
     release_calls = []
@@ -4157,7 +4157,7 @@ async def test_hung_cancellation_compensation_transfers_to_background(monkeypatc
 
 @pytest.mark.asyncio
 async def test_background_compensation_failure_is_consumed(monkeypatch, caplog):
-    monkeypatch.setattr(service_module, "_CANCELLATION_DRAIN_TIMEOUT_SECONDS", 0.01)
+    monkeypatch.setattr(service_module, "_CANCELLATION_DRAIN_TIMEOUT_SECONDS", 0.05)
     release_started = asyncio.Event()
     release_gate = asyncio.Event()
     release_calls = []

@@ -1621,7 +1621,7 @@ def test_unhealthy_drop_holds_the_teardown_marker_for_its_stop():
     """
     from deerflow.config.sandbox_config import SandboxOwnershipConfig
 
-    lease_ttl = 0.15
+    lease_ttl = 0.5  # 0.15s lapsed when the 0.05s heartbeat ran late under host load; 10x margin, same property
     shared = _make_shared_ownership_store(ttl_seconds=lease_ttl)
     worker_a = _make_provider_for_reconciliation(worker_id="worker-a", store=shared)
     worker_b = _make_provider_for_reconciliation(worker_id="worker-b", store=shared)
@@ -1673,7 +1673,7 @@ def test_destroy_holds_the_teardown_marker_for_its_stop():
     """
     from deerflow.config.sandbox_config import SandboxOwnershipConfig
 
-    lease_ttl = 0.15
+    lease_ttl = 0.5  # 0.15s lapsed when the 0.05s heartbeat ran late under host load; 10x margin, same property
     shared = _make_shared_ownership_store(ttl_seconds=lease_ttl)
     worker_a = _make_provider_for_reconciliation(worker_id="worker-a", store=shared)
     worker_b = _make_provider_for_reconciliation(worker_id="worker-b", store=shared)
