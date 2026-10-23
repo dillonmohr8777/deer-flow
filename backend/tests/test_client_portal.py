@@ -13,16 +13,21 @@ from test_org_isolation_b_threads import world  # noqa: F401
 from app.gateway.auth_middleware import AuthMiddleware
 from app.gateway.routers import approvals, board, client_portal
 from deerflow.persistence.approvals import PendingActionRepository
+from deerflow.persistence.approvals.model import PendingActionRow
 from deerflow.persistence.audit_events import AuditEventRepository
 from deerflow.persistence.board import BoardRepository
-from deerflow.persistence.board.model import BoardMessageRow, BoardThreadRow
+from deerflow.persistence.board.model import BoardMessageRow, BoardPortalRow, BoardThreadRow
 from deerflow.persistence.clients import ClientRepository
 from deerflow.persistence.clients.model import ClientAssignmentRow, ClientRow
+from deerflow.persistence.organizations.identity import private_organization_id
 from deerflow.persistence.organizations.model import OrganizationMemberRow, OrganizationRow
 from deerflow.persistence.thread_meta import ThreadMetaRepository
+from deerflow.persistence.user.model import UserRow
 
 pytestmark = pytest.mark.asyncio
 BASE = "/api/client-portal/threads"
+CUSTOMER_STORAGE = "synthetic-portal-customer"
+CUSTOMER_ORG = private_organization_id(CUSTOMER_STORAGE)
 
 
 def _app(sf):
@@ -59,6 +64,147 @@ async def _compose(client, headers):
     duplicate = await client.post(BASE, headers=headers, json=payload)
     assert duplicate.status_code == 200 and duplicate.json()["id"] == response.json()["id"]
     return response.json()
+
+
+async def _seed_bound_customer(sf):
+    """One canonical agency client, a customer contact and a member assigned as its AM."""
+    now = datetime.now(UTC)
+    async with sf() as session, session.begin():
+        session.add(UserRow(id=CUSTOMER_STORAGE, email="portal-storage@example.test", password_hash=None, system_role="user", needs_setup=False, token_version=0, created_at=now))
+        session.add(OrganizationRow(id=CUSTOMER_ORG, slug=CUSTOMER_STORAGE, name="Synthetic customer", status="active", storage_user_id=CUSTOMER_STORAGE, customer_client_id="client-a"))
+        session.add_all(
+            [
+                OrganizationMemberRow(organization_id=CUSTOMER_ORG, user_id=USER_A, role="owner", status="active"),
+                OrganizationMemberRow(organization_id=CUSTOMER_ORG, user_id=USER_B, role="client", status="active"),
+                OrganizationMemberRow(organization_id=CUSTOMER_ORG, user_id=USER_C, role="member", status="active"),
+                ClientRow(id="client-a", organization_id=ORG_S, display_name="Synthetic Alpha"),
+                ClientRow(id="client-b", organization_id=ORG_S, display_name="Synthetic Beta"),
+                ClientAssignmentRow(client_id="client-a", user_id=USER_B, organization_id=CUSTOMER_ORG, role="client_contact"),
+                ClientAssignmentRow(client_id="client-a", user_id=USER_C, organization_id=ORG_S, role="account_manager"),
+            ]
+        )
+
+
+async def test_bound_customer_assigned_member_reads_and_drafts_but_only_owner_publishes(org_world):  # noqa: F811
+    await _seed_bound_customer(org_world)
+    contact, member, owner = (auth_headers(user, CUSTOMER_ORG) for user in (USER_B, USER_C, USER_A))
+    async with _http(_app(org_world)) as client:
+        created = await _compose(client, contact)
+        path = f"{BASE}/{created['id']}"
+        roster = await client.get("/api/client-portal/clients", headers=member)
+        assert roster.status_code == 200, roster.text
+        assert roster.json()["clients"] == [{"id": "client-a", "name": "Synthetic Alpha"}]
+        assert roster.json()["can_draft"] is True and roster.json()["can_review"] is False
+        listed = await client.get(BASE, headers=member)
+        assert [thread["id"] for thread in listed.json()["threads"]] == [created["id"]]
+        detail = await client.get(path, headers=member)
+        assert detail.status_code == 200 and detail.json()["can_draft"] is True and detail.json()["can_review"] is False
+        # Even an admin in the agency sees no customer threads without selecting that workspace.
+        assert (await client.get(path, headers=auth_headers(USER_C, ORG_S))).status_code == 404
+        draft = await client.post(path + "/draft", headers=member, json={"expected_revision": 0, "body": "Synthetic internal draft"})
+        assert draft.status_code == 200, draft.text
+        version = draft.json()
+        assert version["draft"]["body"] == "Synthetic internal draft" and version["publish_receipt"] is None
+        assert (await client.post(f"/api/approvals/{version['approval_id']}/approve", headers=member)).status_code == 403
+        publish = {"approval_id": version["approval_id"], "expected_revision": 1}
+        assert (await client.post(path + "/publish", headers=member, json=publish)).status_code == 403
+        hidden = (await client.get(path, headers=contact)).json()
+        assert hidden["can_draft"] is False and hidden["can_review"] is False and "draft" not in hidden
+        assert len(hidden["messages"]) == 1
+        assert (await client.post(path + "/draft", headers=contact, json={"expected_revision": 1, "body": "Contact must not draft"})).status_code == 403
+        owner_detail = (await client.get(path, headers=owner)).json()
+        assert owner_detail["can_review"] is True and owner_detail["can_draft"] is True
+        published = await client.post(path + "/publish", headers=owner, json=publish)
+        assert published.status_code == 200, published.text
+        assert (await client.get(path, headers=contact)).json()["messages"][-1]["body"] == "Synthetic internal draft"
+
+
+async def test_bound_customer_assigned_member_cannot_compose_or_create_client_visible_rows(org_world):  # noqa: F811
+    await _seed_bound_customer(org_world)
+
+    async def counts():
+        async with org_world() as session:
+            return [await session.scalar(select(func.count()).select_from(model)) for model in (BoardThreadRow, BoardPortalRow, BoardMessageRow, PendingActionRow)]
+
+    async with _http(_app(org_world)) as client:
+        contact = auth_headers(USER_B, CUSTOMER_ORG)
+        created = await _compose(client, contact)
+        before = await counts()
+        response = await client.post(BASE, headers=auth_headers(USER_C, CUSTOMER_ORG), json={"client_id": "client-a", "submission_key": "am-compose-must-be-denied", "subject": "Unapproved request", "body": "Synthetic unapproved sentinel"})
+        assert await counts() == before, f"AM compose wrote rows (HTTP {response.status_code})"
+        assert response.status_code in {403, 404}
+        visible = (await client.get(f"{BASE}/{created['id']}", headers=contact)).json()
+        assert all(message["body"] != "Synthetic unapproved sentinel" for message in visible["messages"])
+        assert [thread["id"] for thread in (await client.get(BASE, headers=contact)).json()["threads"]] == [created["id"]]
+
+
+@pytest.mark.parametrize("legacy_actor", ["contact", "owner", "admin", "agency_member"])
+async def test_legacy_bound_contact_owner_admin_and_agency_compose_stays_allowed(org_world, legacy_actor):  # noqa: F811
+    await _seed_bound_customer(org_world)
+    actor, org = (USER_B, CUSTOMER_ORG) if legacy_actor == "contact" else (USER_A, CUSTOMER_ORG)
+    async with org_world() as session, session.begin():
+        if legacy_actor == "admin":
+            await session.execute(update(OrganizationMemberRow).where(OrganizationMemberRow.organization_id == CUSTOMER_ORG, OrganizationMemberRow.user_id == USER_A).values(role="admin"))
+        elif legacy_actor == "agency_member":
+            actor, org = USER_C, ORG_S
+            await session.execute(update(OrganizationMemberRow).where(OrganizationMemberRow.organization_id == ORG_S, OrganizationMemberRow.user_id == USER_C).values(role="member"))
+    async with _http(_app(org_world)) as client:
+        created = await _compose(client, auth_headers(actor, org))
+        assert created["client_id"] == "client-a" and created["messages"][0]["body"]
+
+
+@pytest.mark.parametrize(
+    "denial",
+    ["unassigned", "other_client", "wrong_agency", "contact_assignment", "inactive_member", "nonmember", "client_membership", "inactive_client", "same_org_client", "system_client", "global_admin_unassigned", "inactive_workspace"],
+)
+async def test_bound_customer_member_requires_exact_agency_assignment_and_active_nonclient_membership(org_world, monkeypatch, denial):  # noqa: F811
+    await _seed_bound_customer(org_world)
+    async with _http(_app(org_world)) as client:
+        created = await _compose(client, auth_headers(USER_B, CUSTOMER_ORG))
+        async with org_world() as session, session.begin():
+            assignment = await session.get(ClientAssignmentRow, {"client_id": "client-a", "user_id": USER_C})
+            member = await session.get(OrganizationMemberRow, {"organization_id": CUSTOMER_ORG, "user_id": USER_C})
+            if denial in {"unassigned", "global_admin_unassigned"}:
+                await session.delete(assignment)
+            elif denial == "other_client":
+                assignment.client_id = "client-b"
+            elif denial == "wrong_agency":
+                assignment.organization_id = ORG_A
+            elif denial == "contact_assignment":
+                assignment.role = "client_contact"
+            elif denial == "inactive_member":
+                member.status = "revoked"
+            elif denial == "nonmember":
+                await session.delete(member)
+            elif denial == "client_membership":
+                member.role = "client"
+            elif denial == "inactive_client":
+                await session.execute(update(ClientRow).where(ClientRow.id == "client-a").values(status="inactive"))
+            elif denial == "same_org_client":
+                await session.execute(update(ClientRow).where(ClientRow.id == "client-a").values(organization_id=CUSTOMER_ORG))
+                assignment.organization_id = CUSTOMER_ORG
+            elif denial == "inactive_workspace":
+                await session.execute(update(OrganizationRow).where(OrganizationRow.id == CUSTOMER_ORG).values(status="inactive"))
+        if denial in {"system_client", "global_admin_unassigned"}:
+
+            async def user(request):
+                return SimpleNamespace(id=USER_C, system_role="client" if denial == "system_client" else "admin", email="synthetic@example.test")
+
+            monkeypatch.setattr("app.gateway.deps.get_current_user_from_request", user)
+            monkeypatch.setattr(client_portal, "get_current_user_from_request", user)
+        headers = {**auth_headers(USER_C, CUSTOMER_ORG), "X-User-Role": "admin", "X-User-Id": USER_A}
+        roster = await client.get("/api/client-portal/clients", headers=headers)
+        listed = await client.get(BASE, headers=headers)
+        if denial in {"inactive_member", "nonmember", "inactive_workspace"}:
+            assert roster.status_code == listed.status_code == 403
+        else:
+            assert roster.status_code == listed.status_code == 200
+            assert roster.json()["clients"] == [] and listed.json()["threads"] == []
+            assert roster.json()["can_review"] is False
+        path = f"{BASE}/{created['id']}"
+        assert (await client.get(path, headers=headers)).status_code in {403, 404}
+        assert (await client.post(path + "/work", headers=headers)).status_code in {403, 404}
+        assert (await client.post(path + "/draft", headers=headers, json={"expected_revision": 0, "body": "Denied"})).status_code in {403, 404}
 
 
 async def test_weekly_report_published_exactly_once_and_survives_reopen(org_world):  # noqa: F811
@@ -347,10 +493,15 @@ async def test_edited_generic_approval_cannot_publish_and_approved_crash_resumes
             assert approved.status == "executed" and approved.execution_result["delivery"] == "portal"
 
 
-async def test_staff_work_uses_existing_durable_run_admission_once(world):  # noqa: F811
+@pytest.mark.parametrize("assigned_member", [False, True])
+async def test_staff_work_uses_existing_durable_run_admission_once(world, assigned_member):  # noqa: F811
     from deerflow.config.app_config import AppConfig, set_app_config
 
-    await _seed(world.sf)
+    if assigned_member:
+        await _seed_bound_customer(world.sf)
+    else:
+        await _seed(world.sf)
+    org = CUSTOMER_ORG if assigned_member else ORG_S
     set_app_config(
         AppConfig.model_validate(
             {
@@ -366,16 +517,17 @@ async def test_staff_work_uses_existing_durable_run_admission_once(world):  # no
     world.app.state.audit_repo = AuditEventRepository(world.sf)
     world.app.include_router(client_portal.router)
     async with _http(world.app) as client:
-        created = await _compose(client, auth_headers(USER_B, ORG_S))
+        created = await _compose(client, auth_headers(USER_B, org))
         path = f"{BASE}/{created['id']}/work"
-        staff = auth_headers(USER_A, ORG_S)
+        staff = auth_headers(USER_C if assigned_member else USER_A, org)
         work = await client.post(path, headers=staff)
         assert work.status_code == 200, work.text
         repeated = await client.post(path, headers=staff)
         assert repeated.status_code == 200 and repeated.json()["run_id"] == work.json()["run_id"]
         detail = (await client.get(f"{BASE}/{created['id']}", headers=staff)).json()
         assert detail["work_run_id"] == work.json()["run_id"] and detail["work_chat_id"] == work.json()["chat_id"]
-        visible = (await client.get(f"{BASE}/{created['id']}", headers=auth_headers(USER_B, ORG_S))).json()
+        assert detail["can_draft"] is True and detail["can_review"] is not assigned_member
+        visible = (await client.get(f"{BASE}/{created['id']}", headers=auth_headers(USER_B, org))).json()
         assert "work_chat_id" not in visible and "work_run_id" not in visible
-        assert (await client.get(f"/api/threads/{work.json()['chat_id']}", headers=auth_headers(USER_B, ORG_S))).status_code == 404
-        assert (await client.post(path, headers=auth_headers(USER_B, ORG_S))).status_code == 404
+        assert (await client.get(f"/api/threads/{work.json()['chat_id']}", headers=auth_headers(USER_B, org))).status_code == 404
+        assert (await client.post(path, headers=auth_headers(USER_B, org))).status_code == 404

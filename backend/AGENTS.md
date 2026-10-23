@@ -433,6 +433,14 @@ See `docs/` directory for detailed documentation:
 
 Agents propose outbound actions with `propose_action`; nothing executes before an org owner/admin approves (compare-and-set, exactly-once). Proposals and edited approvals are fact-checked (contradicted claims are refused), and edits are recorded per client in `client_corrections`, whose last 10 entries `ClientCorrectionsMiddleware` injects. Detail: [docs/APPROVALS_INBOX.md](docs/APPROVALS_INBOX.md). Tests: `tests/test_approvals_inbox.py`, `tests/test_client_memory.py`.
 
+The client portal (`/api/client-portal`) also admits an active non-client member
+of a bound customer workspace when their `account_manager` assignment names the
+bound active canonical client and belongs to that client's agency organization.
+They may list/read requests, start internal work and save drafts; review,
+approval and publication remain restricted to that workspace's owner/admin.
+Client-contact behavior and the unbound agency-workspace path are unchanged.
+Tests: `tests/test_client_portal.py`.
+
 ## Fact checker (`verify_claims`)
 
 Built-in tool backed by the pure module `deerflow/factcheck/core.py`: extracts numeric, date and named-source claims from an outbound draft and checks each against run evidence (successful tool outputs plus caller-supplied `evidence`). Verdicts: supported (with pointer), contradicted, unsupported, unverifiable. Gate: any contradicted -> `block`, any unsupported/unverifiable -> `flag`, else `pass`. Rules: missing data is never 0, "up/down X%" needs before/after values from one source, platform labels must match the evidence's source. Deterministic first; a model judge runs only for ambiguous claims and only when `use_model=true`. Integrators (e.g. approvals) call `verify_draft(draft, evidence).to_dict()` and refuse to enqueue when `gate == "block"`. Tests: `tests/test_factcheck.py`.

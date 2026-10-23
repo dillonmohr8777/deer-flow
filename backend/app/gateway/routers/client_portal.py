@@ -15,7 +15,7 @@ from typing import Literal
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
-from sqlalchemy import select, update
+from sqlalchemy import and_, or_, select, update
 from sqlalchemy.exc import IntegrityError
 
 from app.gateway.approval_adapters import register_adapter
@@ -126,14 +126,22 @@ async def _identity(request):
     return str(user.id), org, admin and not external, external
 
 
-async def _client_ids(actor, org, admin):
+async def _client_ids(actor, org, admin, external=True):
     async with _sf()() as session:
         binding = await session.scalar(select(OrganizationRow.customer_client_id).where(OrganizationRow.id == org))
         if binding:
             # Read the canonical agency client; never clone it into a second roster.
             stmt = select(ClientRow.id, ClientRow.display_name).where(ClientRow.id == binding, ClientRow.status == "active")
             if not admin:
-                stmt = stmt.join(ClientAssignmentRow, ClientAssignmentRow.client_id == ClientRow.id).where(ClientAssignmentRow.user_id == actor, ClientAssignmentRow.organization_id == org, ClientAssignmentRow.role == "client_contact")
+                assigned = and_(ClientAssignmentRow.organization_id == org, ClientAssignmentRow.role == "client_contact")
+                if not external:
+                    active_member = (
+                        select(OrganizationMemberRow.user_id)
+                        .where(OrganizationMemberRow.organization_id == org, OrganizationMemberRow.user_id == actor, OrganizationMemberRow.status == "active", OrganizationMemberRow.role.in_(("owner", "admin", "member")))
+                        .exists()
+                    )
+                    assigned = or_(assigned, and_(ClientAssignmentRow.organization_id == ClientRow.organization_id, ClientAssignmentRow.role == "account_manager", ClientRow.organization_id != org, active_member))
+                stmt = stmt.join(ClientAssignmentRow, ClientAssignmentRow.client_id == ClientRow.id).where(ClientAssignmentRow.user_id == actor, assigned)
             return {row.id: row.display_name for row in (await session.execute(stmt)).all()}
         stmt = select(ClientRow.id, ClientRow.display_name).where(ClientRow.organization_id == org, ClientRow.status == "active")
         if not admin:
@@ -146,7 +154,7 @@ async def _client_ids(actor, org, admin):
 
 async def _load(request, thread_id):
     actor, org, admin, external = await _identity(request)
-    ids = await _client_ids(actor, org, admin)
+    ids = await _client_ids(actor, org, admin, external)
     async with _sf()() as session:
         row = (
             await session.execute(
@@ -338,7 +346,7 @@ async def _summary(thread, portal, staff, request):
 @router.get("/clients")
 async def portal_clients(request: Request):
     actor, org, admin, external = await _identity(request)
-    ids = await _client_ids(actor, org, admin)
+    ids = await _client_ids(actor, org, admin, external)
     return {"workspace_id": org, "clients": [{"id": key, "name": name} for key, name in ids.items()], "can_review": admin, "can_draft": not external}
 
 
@@ -347,7 +355,7 @@ async def list_threads(
     request: Request, q: str = Query(default="", max_length=200), state: Literal["all", "pending", "needs_approval", "published"] = "all", limit: int = Query(default=50, ge=1, le=100), offset: int = Query(default=0, ge=0, le=10000)
 ):
     actor, org, admin, external = await _identity(request)
-    ids = await _client_ids(actor, org, admin)
+    ids = await _client_ids(actor, org, admin, external)
     stmt = select(BoardThreadRow, BoardPortalRow).join(BoardPortalRow, BoardPortalRow.thread_id == BoardThreadRow.id).where(BoardThreadRow.organization_id == org, BoardPortalRow.organization_id == org, BoardThreadRow.client_id.in_(ids))
     if q.strip():
         # Literal substring, not caller-controlled SQL wildcard syntax.
@@ -366,6 +374,7 @@ async def list_threads(
 @router.post("/threads")
 async def compose(body: Compose, request: Request):
     actor, org, admin, external = await _identity(request)
+    # Compose writes client-visible content immediately; keep its original admission.
     if body.client_id not in await _client_ids(actor, org, admin):
         raise _missing()
     fingerprint = _hash(body.model_dump(exclude={"submission_key"}))
