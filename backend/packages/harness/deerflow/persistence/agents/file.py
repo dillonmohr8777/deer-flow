@@ -86,12 +86,13 @@ class FileAgentStore(AgentStore):
         content = soul_path.read_text(encoding="utf-8").strip()
         return content or None
 
-    def list(self, *, user_id: str | None = None) -> list[AgentConfig]:
+    def list(self, *, user_id: str | None = None, include_legacy: bool = True) -> list[AgentConfig]:
         paths = _ac.get_paths()
         effective_user = user_id or _ac.get_effective_user_id()
         seen: set[str] = set()
         agents: list[AgentConfig] = []
-        for root in (paths.user_agents_dir(effective_user), paths.agents_dir):
+        roots = (paths.user_agents_dir(effective_user), paths.agents_dir) if include_legacy else (paths.user_agents_dir(effective_user),)
+        for root in roots:
             if not root.exists():
                 continue
             for entry in sorted(root.iterdir()):
