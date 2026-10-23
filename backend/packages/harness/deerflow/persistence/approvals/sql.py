@@ -24,7 +24,7 @@ from deerflow.approvals.workflow import STATUSES, InvalidPayloadError, notify_cr
 from deerflow.persistence.approvals.model import PendingActionRow
 from deerflow.persistence.clients.model import ClientAssignmentRow
 from deerflow.persistence.organizations.identity import private_organization_id
-from deerflow.persistence.organizations.model import OrganizationMemberRow
+from deerflow.persistence.organizations.model import OrganizationMemberRow, OrganizationRow
 from deerflow.persistence.organizations.resolution import active_organization_for_user, storage_user_id_for_organization
 from deerflow.persistence.user.model import UserRow
 from deerflow.runtime.user_context import AUTO, _AutoSentinel, get_current_user, get_storage_context, resolve_organization_id, resolve_user_id
@@ -193,8 +193,15 @@ class PendingActionRepository:
             UserRow.system_role.in_({"user", "exec", "admin"}),
         )
         stmt = stmt.where(PendingActionRow.action_type == "composio_tool_call", PendingActionRow.organization_id == organization.id, proposer_active, proposer_staff)
+        bound_client_id = select(OrganizationRow.customer_client_id).where(OrganizationRow.id == organization.id, OrganizationRow.status == "active").scalar_subquery()
         for participant in (str(actor.id), PendingActionRow.user_id):
-            stmt = stmt.where(~exists().where(ClientAssignmentRow.organization_id == organization.id, ClientAssignmentRow.user_id == participant, ClientAssignmentRow.role == "client_contact"))
+            stmt = stmt.where(
+                ~exists().where(
+                    ClientAssignmentRow.user_id == participant,
+                    ClientAssignmentRow.role == "client_contact",
+                    or_(ClientAssignmentRow.organization_id == organization.id, ClientAssignmentRow.client_id == bound_client_id),
+                )
+            )
         if organization.role not in {"owner", "admin"}:
             stmt = stmt.where(PendingActionRow.user_id == str(actor.id))
         return stmt

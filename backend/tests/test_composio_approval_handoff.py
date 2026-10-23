@@ -3,6 +3,7 @@
 import asyncio
 from datetime import UTC, datetime
 from types import SimpleNamespace
+from uuid import UUID
 
 import pytest
 from langchain_core.tools import ToolException
@@ -24,12 +25,14 @@ from test_composio_admin_oversight import (
 )
 
 from app.gateway.approval_adapters import execute_approved
+from app.gateway.invitation_policy import validate_customer_workspace
 from deerflow.config.extensions_config import ExtensionsConfig
 from deerflow.mcp.composio_approval_authority import bind_composio_authority, current_composio_authority, prepare_composio_authority
 from deerflow.mcp.interceptors import compose_tool_interceptors
 from deerflow.persistence.audit_events import AuditEventRepository
-from deerflow.persistence.clients.model import ClientAssignmentRow
-from deerflow.persistence.organizations.model import OrganizationMemberRow
+from deerflow.persistence.clients.model import ClientAssignmentRow, ClientRow
+from deerflow.persistence.organizations.identity import private_organization_id, private_organization_slug
+from deerflow.persistence.organizations.model import OrganizationMemberRow, OrganizationRow
 from deerflow.persistence.user.model import UserRow
 from deerflow.runtime.user_context import get_current_user
 
@@ -181,6 +184,52 @@ async def test_member_cannot_approve_another_or_foreign_org(world, transport):  
     assert (await client.post(f"/api/approvals/{row['id']}/approve", headers=auth_headers(MEMBER, ORG))).status_code == 404
     assert (await client.post(f"/api/approvals/{row['id']}/approve", headers=auth_headers(FOREIGN, FOREIGN_ORG))).status_code == 404
     assert transport.calls == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "contact_actor,reviewer,relation,allowed",
+    [
+        (MEMBER, MEMBER, "bound", False),
+        (MEMBER, ADMIN, "bound", False),
+        (ADMIN, ADMIN, "bound", False),
+        (MEMBER, MEMBER, "unrelated", True),
+        (MEMBER, ADMIN, "unrelated", True),
+        (ADMIN, ADMIN, "unrelated", True),
+        (MEMBER, ADMIN, "current", False),
+    ],
+)
+async def test_bound_customer_contact_exclusion_uses_real_canonical_client(world, transport, contact_actor, reviewer, relation, allowed):  # noqa: F811
+    sf, repo, client = world
+    agency_storage, bound_client_id, unrelated_client_id = [str(UUID(int=value)) for value in (1001, 1002, 1003)]
+    agency_id = private_organization_id(agency_storage)
+    async with sf() as session, session.begin():
+        session.add(UserRow(id=agency_storage, email="agency-storage@example.test", system_role="user"))
+        session.add(OrganizationRow(id=agency_id, slug=private_organization_slug(agency_storage), name="Synthetic Agency", storage_user_id=agency_storage, status="active"))
+        session.add(OrganizationMemberRow(organization_id=agency_id, user_id=OWNER, role="owner", status="active"))
+        session.add_all([ClientRow(id=client_id, organization_id=agency_id, display_name=f"Synthetic {client_id}", status="active") for client_id in (bound_client_id, unrelated_client_id)])
+        await session.execute(update(UserRow).where(UserRow.id == OWNER).values(system_role="admin"))
+        await session.execute(update(OrganizationRow).where(OrganizationRow.id == ORG).values(customer_client_id=bound_client_id))
+        session.add(ClientAssignmentRow(client_id=unrelated_client_id if relation == "unrelated" else bound_client_id, user_id=contact_actor, organization_id=ORG if relation == "current" else agency_id, role="client_contact"))
+        await session.flush()
+        customer = await session.get(OrganizationRow, ORG)
+        canonical = await validate_customer_workspace(session, organization=customer, actor_id=OWNER)
+        assert canonical.id == bound_client_id and canonical.organization_id == agency_id
+        assert customer.id != agency_id and customer.storage_user_id != agency_storage
+    row = await propose(repo)
+    result = await client.post(f"/api/approvals/{row['id']}/approve", headers=auth_headers(reviewer, ORG))
+    if allowed:
+        assert result.status_code == 200 and result.json()["status"] == "executed"
+        assert len(transport.calls) == 1
+        assert transport.calls[0][0] == reviewer
+        assert transport.calls[0][1].headers == {"x-consumer-api-key": f"fake-binding-{MEMBER}"}
+        assert (await client.post(f"/api/approvals/{row['id']}/approve", headers=auth_headers(reviewer, ORG))).status_code == 409
+        assert len(transport.calls) == 1
+    else:
+        assert result.status_code == 404
+        assert transport.calls == []
+        with acting(OWNER):
+            assert (await repo.get_composio_for_org(row["id"]))["status"] == "pending"
 
 
 @pytest.mark.asyncio
