@@ -23,6 +23,7 @@ _CONTROLS = {"COMPOSIO_MANAGE_CONNECTIONS", "COMPOSIO_SEARCH_TOOLS", "COMPOSIO_G
 _MULTI = "COMPOSIO_MULTI_EXECUTE_TOOL"
 # Reviewed public toolkit contracts, 2026-10-23: docs.composio.dev/toolkits/{gmail,hubspot,slack}.
 # Gmail 20261018_00; HubSpot 20261020_01; Slack 20261020_00. Unknown actions/keys require approval.
+# Public research: composio_search 20260903_00, inspo_mcp 20260925_00, godaddy_mcp 20261018_00.
 _READ_ACTIONS = {
     "GMAIL_FETCH_EMAILS": (set(), {"query": str, "user_id": str, "verbose": bool, "ids_only": bool, "label_ids": list, "page_token": str, "max_results": int, "include_payload": bool, "include_spam_trash": bool}),
     "GMAIL_FETCH_MESSAGE_BY_MESSAGE_ID": ({"message_id"}, {"message_id": str, "user_id": str, "format": str}),
@@ -33,6 +34,41 @@ _READ_ACTIONS = {
     "SLACK_SEARCH_ALL": ({"query"}, {"query": str, "count": int, "highlight": bool, "page": int, "sort": str, "sort_dir": str, "team_id": str}),
     "SLACK_SEARCH_MESSAGES": ({"query"}, {"query": str, "auto_paginate": bool, "cursor": str, "count": int, "highlight": bool, "page": int, "sort": str, "sort_dir": str, "team_id": str}),
     "SLACK_FETCH_CONVERSATION_HISTORY": ({"channel"}, {"channel": str, "cursor": str, "include_all_metadata": bool, "inclusive": bool, "latest": str, "limit": int, "oldest": str}),
+    "COMPOSIO_SEARCH_WEB": ({"query"}, {"query": str}),
+    "COMPOSIO_SEARCH_NEWS": (set(), {"query": str, "gl": str, "hl": str, "start": int, "when": str}),
+    "COMPOSIO_SEARCH_TRENDS": ({"query"}, {"query": str, "data_type": str, "date": str}),
+    "COMPOSIO_SEARCH_GOOGLE_MAPS": ({"q"}, {"q": str, "ll": str, "start": int}),
+    "COMPOSIO_SEARCH_EXA_SIMILARLINK": (
+        {"url"},
+        {"url": str, "numResults": int, "includeDomains": list, "excludeDomains": list, "category": str, "type": str, "useAutoprompt": bool, "startCrawlDate": str, "endCrawlDate": str, "startPublishedDate": str, "endPublishedDate": str},
+    ),
+    "COMPOSIO_SEARCH_NPPESNPI_LOOKUP": (
+        set(),
+        {"number": str, "enumeration_type": str, "first_name": str, "last_name": str, "organization_name": str, "city": str, "state": str, "postal_code": str, "taxonomy_description": str, "limit": int, "skip": int, "version": str},
+    ),
+    "INSPO_MCP_SEARCH_SCREENS": (
+        set(),
+        {
+            "query": str,
+            "accentHue": str,
+            "color": str,
+            "detail": str,
+            "device": str,
+            "displayClass": str,
+            "industry": str,
+            "limit": int,
+            "macrostructure": str,
+            "maxTokens": int,
+            "mode": str,
+            "pageType": str,
+            "paperBand": str,
+            "style": str,
+            "vibe": str,
+        },
+    ),
+    "INSPO_MCP_GET_SCREEN": ({"slug"}, {"slug": str}),
+    "GODADDY_MCP_DOMAINS_CHECK_AVAILABILITY": ({"domains"}, {"domains": str}),
+    "GODADDY_MCP_DOMAINS_SUGGEST": ({"query"}, {"query": str, "limit": int}),
 }
 _CREDENTIAL_KEYS = {
     "headers",

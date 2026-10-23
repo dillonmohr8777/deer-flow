@@ -483,3 +483,123 @@ async def test_repository_validator_also_refuses_credential_carriers(inbox):
                     organization_id=ORG_S,
                 )
         assert await inbox.list() == []
+
+
+# Owner-listed existing research tools; fixtures use public documented parameter shapes.
+PUBLIC_RESEARCH_READS = [
+    ("COMPOSIO_SEARCH_WEB", {"query": "Philadelphia marketing agencies"}),
+    ("COMPOSIO_SEARCH_NEWS", {"query": "marketing", "gl": "us", "hl": "en", "start": 0, "when": "7d"}),
+    ("COMPOSIO_SEARCH_TRENDS", {"query": "marketing", "data_type": "TIMESERIES", "date": "today 1-m"}),
+    ("COMPOSIO_SEARCH_GOOGLE_MAPS", {"q": "marketing Philadelphia", "ll": "@39.95,-75.16,12z", "start": 0}),
+    (
+        "COMPOSIO_SEARCH_EXA_SIMILARLINK",
+        {
+            "url": "https://example.test/",
+            "numResults": 5,
+            "includeDomains": ["example.test"],
+            "excludeDomains": ["excluded.example.test"],
+            "category": "company",
+            "type": "neural",
+            "useAutoprompt": False,
+            "startCrawlDate": "2026-01-01",
+            "endCrawlDate": "2026-10-23",
+            "startPublishedDate": "2026-01-01",
+            "endPublishedDate": "2026-10-23",
+        },
+    ),
+    (
+        "COMPOSIO_SEARCH_NPPESNPI_LOOKUP",
+        {
+            "number": "1234567890",
+            "enumeration_type": "NPI-1",
+            "first_name": "QA",
+            "last_name": "Fixture",
+            "organization_name": "QA Clinic",
+            "city": "Philadelphia",
+            "state": "PA",
+            "postal_code": "19103",
+            "taxonomy_description": "Dentist",
+            "limit": 5,
+            "skip": 0,
+            "version": "2.1",
+        },
+    ),
+    (
+        "INSPO_MCP_SEARCH_SCREENS",
+        {
+            "query": "agency",
+            "accentHue": "warm",
+            "color": "muted",
+            "detail": "concise",
+            "device": "desktop",
+            "displayClass": "grotesk-sans",
+            "industry": "agency",
+            "limit": 5,
+            "macrostructure": "feature-stack",
+            "maxTokens": 1000,
+            "mode": "light",
+            "pageType": "landing",
+            "paperBand": "light",
+            "style": "minimalism",
+            "vibe": "calm",
+        },
+    ),
+    ("INSPO_MCP_GET_SCREEN", {"slug": "qa-example-screen"}),
+    ("GODADDY_MCP_DOMAINS_CHECK_AVAILABILITY", {"domains": "qa-example.test,qa-example.invalid"}),
+    ("GODADDY_MCP_DOMAINS_SUGGEST", {"query": "qa agency", "limit": 5}),
+]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("slug,args", PUBLIC_RESEARCH_READS)
+@pytest.mark.parametrize("multi", [False, True])
+@pytest.mark.parametrize("unknown_argument", [False, True])
+async def test_existing_public_research_read_parity(inbox, slug, args, multi, unknown_argument):
+    upstream = AsyncMock(return_value="public research result")
+    supplied = {**args, **({"future_unknown_argument": "unreviewed"} if unknown_argument else {})}
+    call = request("COMPOSIO_MULTI_EXECUTE_TOOL" if multi else slug, batch(slug, supplied) if multi else supplied, server="composio-marketing")
+    with acting_as(USER_A, ORG_S):
+        out = await boundary(upstream)(call)
+        if unknown_argument:
+            assert out.structuredContent["status"] == "pending_approval"
+            row = await inbox.get(out.structuredContent["id"])
+            assert row["payload"]["arguments"] == call.args
+            upstream.assert_not_awaited()
+        else:
+            assert out == "public research result"
+            upstream.assert_awaited_once_with(call)
+            assert await inbox.list() == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "slug,args",
+    [
+        ("COMPOSIO_SEARCH_WEB", {}),
+        ("COMPOSIO_SEARCH_TRENDS", {"query": 123}),
+        ("COMPOSIO_SEARCH_GOOGLE_MAPS", {"query": "wrong field"}),
+        ("COMPOSIO_SEARCH_EXA_SIMILARLINK", {"url": "https://example.test/", "includeDomains": [{"execute": "send"}]}),
+        ("INSPO_MCP_GET_SCREEN", {}),
+        ("INSPO_MCP_SEARCH_SCREENS", {"limit": "five"}),
+        ("GODADDY_MCP_DOMAINS_CHECK_AVAILABILITY", {"domains": ["qa-example.test"]}),
+        ("GODADDY_MCP_DOMAINS_SUGGEST", {}),
+        ("COMPOSIO_SEARCH_NEW_PROVIDER", {"query": "unknown"}),
+    ],
+)
+async def test_public_research_unknown_shapes_still_require_approval(inbox, slug, args):
+    upstream = AsyncMock()
+    with acting_as(USER_A, ORG_S):
+        out = await boundary(upstream)(request(slug, args, server="composio-marketing"))
+        assert out.structuredContent["status"] == "pending_approval"
+    upstream.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_public_read_catalog_does_not_bypass_credential_rejection(inbox):
+    upstream = AsyncMock()
+    with acting_as(USER_A, ORG_S):
+        for slug, args in PUBLIC_RESEARCH_READS:
+            out = await boundary(upstream)(request(slug, {**args, "client_secret": "synthetic-value"}, server="composio-marketing"))
+            assert out.structuredContent == {"status": "not_executed", "reason": "credential_bearing_arguments"}
+        assert await inbox.list() == []
+    upstream.assert_not_awaited()
