@@ -40,6 +40,7 @@ def transport(monkeypatch):
         calls=[],
         custom=None,
         error=None,
+        discovery=None,
         config=ExtensionsConfig.model_validate(
             {
                 "mcpServers": {
@@ -59,8 +60,13 @@ def transport(monkeypatch):
         def __init__(self, connections, *, tool_interceptors, **kwargs):
             self.connections = connections
             self.tool_interceptors = tool_interceptors
+            self.callbacks = None
+            state.client = self
 
         async def get_tools(self, *, server_name):
+            if state.discovery is not None:
+                await state.discovery()
+
             async def upstream(request):
                 state.calls.append((str(get_current_user().id), request))
                 if state.error:
@@ -73,10 +79,70 @@ def transport(monkeypatch):
                     chain.insert(-1, state.custom)
                 return await compose_tool_interceptors(chain, upstream)(MCPToolCallRequest(server_name=server_name, name="GMAIL_SEND_EMAIL", args=arguments, runtime=runtime))
 
-            return [SimpleNamespace(name=f"{server_name}_GMAIL_SEND_EMAIL", coroutine=call)]
+            name = f"{server_name}_GMAIL_SEND_EMAIL" if state.config.mcp_servers[server_name].tool_name_prefix else "GMAIL_SEND_EMAIL"
+            return [SimpleNamespace(name=name, coroutine=call)]
 
     monkeypatch.setattr("langchain_mcp_adapters.client.MultiServerMCPClient", FakeClient)
     return state
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("prefix", [True, False])
+@pytest.mark.parametrize("timeout", [0.01, None])
+async def test_discovery_bound_and_explicit_none_on_both_prefix_paths(world, transport, monkeypatch, prefix, timeout):  # noqa: F811
+    _, repo, client = world
+    server = transport.config.mcp_servers["composio-me"]
+    server.tool_name_prefix = prefix
+    server.session_init_timeout = timeout
+    entered, release, cancelled = asyncio.Event(), asyncio.Event(), asyncio.Event()
+    bounds = []
+
+    def bounded_discovery(awaitable, *, timeout):
+        bounds.append(timeout)
+        return asyncio.wait_for(awaitable, timeout=timeout)
+
+    monkeypatch.setattr("app.gateway.composio_approval_adapter.asyncio", SimpleNamespace(to_thread=asyncio.to_thread, wait_for=bounded_discovery))
+
+    async def discovery():
+        entered.set()
+        try:
+            await release.wait()
+        except asyncio.CancelledError:
+            cancelled.set()
+            raise
+
+    async def unprefixed_discovery(*args, **kwargs):
+        assert kwargs["tool_name_prefix"] is False
+        return await transport.client.get_tools(server_name=kwargs["server_name"])
+
+    transport.discovery = discovery
+    monkeypatch.setattr("langchain_mcp_adapters.tools.load_mcp_tools", unprefixed_discovery)
+    row = await propose(repo)
+    task = asyncio.create_task(client.post(f"/api/approvals/{row['id']}/approve", headers=auth_headers(ADMIN, ORG)))
+    try:
+        await asyncio.wait_for(entered.wait(), 1)
+        if timeout is None:
+            assert not task.done()
+            release.set()
+        result = await asyncio.wait_for(task, 1)
+        assert result.status_code == 200
+        with acting(ADMIN):
+            stored = await repo.get_composio_for_org(row["id"])
+        if timeout is None:
+            assert bounds == []
+            assert result.json()["status"] == "executed"
+            assert len(transport.calls) == 1 and not cancelled.is_set()
+        else:
+            assert bounds == [timeout]
+            assert cancelled.is_set() and transport.calls == []
+            assert result.json()["status"] == "failed"
+            assert result.json()["error"] == "Current scoped Composio transport is unavailable"
+            assert stored["execution_result"] == {} and stored["executed_at"] is None
+    finally:
+        release.set()
+        if not task.done():
+            task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
 
 
 @pytest.mark.asyncio

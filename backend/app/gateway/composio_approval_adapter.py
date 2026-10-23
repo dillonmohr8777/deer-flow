@@ -20,6 +20,7 @@ async def _current_tool(action: dict[str, Any]):
     from deerflow.mcp.client import build_server_params
     from deerflow.mcp.interceptors import build_mcp_tool_interceptors
     from deerflow.mcp.private_scope import require_private_mcp_access
+    from deerflow.mcp.tools import _resolve_session_init_timeout
 
     authority = current_composio_authority()
     if authority is None:
@@ -33,9 +34,11 @@ async def _current_tool(action: dict[str, Any]):
     selected = config.model_copy(update={"mcp_servers": {name: server}})
     client = MultiServerMCPClient({name: build_server_params(name, server)}, tool_interceptors=build_mcp_tool_interceptors(selected), tool_name_prefix=True)
     if server.tool_name_prefix:
-        tools = await client.get_tools(server_name=name)
+        discovery = client.get_tools(server_name=name)
     else:
-        tools = await load_mcp_tools(None, connection=client.connections[name], callbacks=client.callbacks, server_name=name, tool_interceptors=client.tool_interceptors, tool_name_prefix=False)
+        discovery = load_mcp_tools(None, connection=client.connections[name], callbacks=client.callbacks, server_name=name, tool_interceptors=client.tool_interceptors, tool_name_prefix=False)
+    timeout = _resolve_session_init_timeout(server)
+    tools = await discovery if timeout is None else await asyncio.wait_for(discovery, timeout=timeout)
     tool_name = action["payload"]["tool_name"]
     visible_name = f"{name}_{tool_name}" if server.tool_name_prefix else tool_name
     matches = [tool for tool in tools if tool.name == visible_name]
