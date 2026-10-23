@@ -885,6 +885,28 @@ async def test_shutdown_applies_shared_deadline_to_heartbeat_stop():
 
 
 @pytest.mark.anyio
+async def test_renewal_only_heartbeat_does_not_recover_unrelated_runs():
+    """A bounded CLI owner can renew its reservation without running recovery."""
+    store = MemoryRunStore()
+    manager = _make_manager(
+        store=store,
+        run_ownership_config=_lease_config(heartbeat_enabled=True, lease_seconds=5),
+    )
+    active = await manager.create_or_reject("active-thread")
+    initial_expiry = active.lease_expires_at
+    expired = (datetime.now(UTC) - timedelta(seconds=60)).isoformat()
+    await store.put("unrelated-orphan", thread_id="other-thread", status="running", lease_expires_at=expired)
+    try:
+        await manager.start_heartbeat(reconcile_orphans=False)
+        await asyncio.sleep(3.2)
+        assert active.lease_expires_at > initial_expiry
+        assert (await store.get("unrelated-orphan"))["status"] == "running"
+        assert manager._orphan_recovery_task is None
+    finally:
+        await manager.stop_heartbeat()
+
+
+@pytest.mark.anyio
 async def test_heartbeat_renews_active_run_leases():
     """Heartbeat must extend the lease on active runs owned by this worker."""
     config = _lease_config(lease_seconds=30, heartbeat_enabled=True)

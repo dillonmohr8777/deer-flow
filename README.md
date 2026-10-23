@@ -2231,6 +2231,11 @@ See [backend/docs/TUI.md](backend/docs/TUI.md) for the full guide.
 
 ## Documentation
 
+The optional [authenticated WSL diagnostic exchange](backend/docs/WSL_DIAGNOSTIC_BRIDGE.md)
+is disabled by default. Its Gateway routes queue only three bounded diagnostic
+commands for the existing SSH/PCW relay and attach verified receipts to the
+originating thread; runtime installation and enablement remain operator-owned.
+
 - [Contributing Guide](CONTRIBUTING.md) - Development environment setup and workflow
 - [Configuration Guide](backend/docs/CONFIGURATION.md) - Setup and configuration instructions
 - [Architecture Overview](backend/CLAUDE.md) - Technical architecture details

@@ -85,6 +85,7 @@ def _collect_thread_id_routes():
         thread_runs,
         threads,
         uploads,
+        wsl_diagnostics,
     )
 
     routers = [
@@ -103,6 +104,7 @@ def _collect_thread_id_routes():
         thread_runs,
         threads,
         uploads,
+        wsl_diagnostics,
     ]
     cases = []
     for module in routers:
