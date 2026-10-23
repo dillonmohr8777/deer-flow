@@ -10,6 +10,13 @@ The upstream DeerFlow history stays in [CHANGELOG.md](../CHANGELOG.md).
 
 ## [Unreleased]
 
+## [momobot-prod-20261023-a111cc9b] - 2026-10-23
+
+### Changed
+
+- Clarify client portal internal draft guidance (#283)
+- Momo PC diagnostics in chat, Oct 23 (#277)
+
 ## [momobot-prod-20261023-ff8263f9] - 2026-10-23
 
 ### Changed
