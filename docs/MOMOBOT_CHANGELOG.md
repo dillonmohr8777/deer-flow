@@ -10,6 +10,16 @@ The upstream DeerFlow history stays in [CHANGELOG.md](../CHANGELOG.md).
 
 ## [Unreleased]
 
+## [momobot-prod-20261022-ae496b71] - 2026-10-22
+
+### Changed
+
+- MomoBot changelog momobot-prod-20261022-207ab8a7, Oct 22 (#265)
+
+### Security
+
+- Add default-disabled authenticated WSL diagnostic exchange (#266)
+
 ## [momobot-prod-20261022-207ab8a7] - 2026-10-22
 
 ### Changed
