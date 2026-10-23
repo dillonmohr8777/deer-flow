@@ -617,8 +617,14 @@ async def start_work(thread_id: ThreadId, request: Request):
                     "role": "user",
                     "content": (
                         f"Client request: {thread.subject}\n{first.body if first else ''}\n"
-                        "Produce a source-backed reply draft and useful deliverable for staff review. "
-                        "Never send or publish. Save outputs and identify evidence; no invented metrics."
+                        "Produce a source-backed INTERNAL DRAFT reply and useful deliverable for staff review. "
+                        "Never send or publish. Assigned account managers may work, edit, and save drafts; "
+                        "assignment alone grants no approval or publication authority. Publication review "
+                        "requires an authorized workspace owner/admin. Support legal/compliance claims with "
+                        "current authoritative sources; never infer a CAN-SPAM exemption from a professional "
+                        "relationship or absence of an offer. Leave unresolved classifications/requirements "
+                        "for qualified human review. Save outputs and identify evidence; no invented metrics. "
+                        "This guidance does not verify facts or grant sender authority."
                     ),
                 }
             ]
