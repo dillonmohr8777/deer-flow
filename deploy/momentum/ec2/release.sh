@@ -147,6 +147,9 @@ box_rollback() {
 # ---------------------------------------------------------------- operator half (local checkout)
 
 on_box() {
+  # `bash <(git show ...)` leaves BASH_SOURCE an already-read pipe, so the box would get an empty
+  # script, exit 0, and the operator half would tag a release that never deployed.
+  [[ -f "${BASH_SOURCE[0]}" ]] || die "run release.sh from a file (e.g. git show origin/main:deploy/momentum/ec2/release.sh > /tmp/release.sh), not bash <(...)"
   local ssh=(ssh)
   [[ -n "${MOMOBOT_SSH_KEY:-}" ]] && ssh+=(-i "$MOMOBOT_SSH_KEY")
   "${ssh[@]}" "${MOMOBOT_SSH:-ubuntu@momobot.needmomentum.com}" "sudo bash -s -- $*" <"${BASH_SOURCE[0]}"
