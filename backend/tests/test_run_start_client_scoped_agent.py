@@ -14,6 +14,7 @@ missing one.
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
@@ -36,6 +37,46 @@ from deerflow.runtime.runs.store.memory import MemoryRunStore
 USER_D = "user-d"  # client contact assigned to c1 only
 USER_E = "user-e"  # client contact assigned to c2
 MISSING_DETAIL = "knowledge_scope assistant configuration could not be resolved"
+BOUND_REGISTRY_ID = "bound-customer-registry"
+
+
+@contextmanager
+def _client_actor(actor: str = USER_B, *, system_role: str = "client", organization_role: str = "client"):
+    from deerflow.runtime.user_context import WorkspaceStorageContext, get_storage_context, reset_current_user, reset_storage_context, set_current_user, set_storage_context
+
+    with acting_as(actor, ORG_B):
+        current = get_storage_context()
+        storage_token = set_storage_context(WorkspaceStorageContext(actor_user_id=actor, organization_id=ORG_B, storage_user_id=current.storage_user_id, role=organization_role))
+        token = set_current_user(SimpleNamespace(id=actor, system_role=system_role))
+        try:
+            yield
+        finally:
+            reset_current_user(token)
+            reset_storage_context(storage_token)
+
+
+async def _seed_bound_customer(session_factory):
+    from sqlalchemy import update
+
+    from deerflow.persistence.clients.model import ClientAssignmentRow
+    from deerflow.persistence.organizations.model import OrganizationMemberRow, OrganizationRow
+    from deerflow.persistence.user.model import UserRow
+
+    client_repo = ClientRepository(session_factory)
+    with acting_as(USER_A, ORG_S):
+        client = await client_repo.create(display_name="Bound Synthetic Client", registry_id=BOUND_REGISTRY_ID)
+    async with session_factory() as session, session.begin():
+        await session.execute(update(OrganizationRow).where(OrganizationRow.id == ORG_B).values(customer_client_id=client["id"]))
+        await session.execute(update(OrganizationMemberRow).where(OrganizationMemberRow.organization_id == ORG_B, OrganizationMemberRow.user_id == USER_B).values(role="client"))
+        await session.execute(update(UserRow).where(UserRow.id == USER_B).values(system_role="client"))
+        session.add_all(
+            [
+                ClientAssignmentRow(client_id=client["id"], user_id=USER_B, organization_id=ORG_B, role="client_contact"),
+                OrganizationMemberRow(organization_id=ORG_B, user_id=USER_C, role="member", status="active"),
+                ClientAssignmentRow(client_id=client["id"], user_id=USER_C, organization_id=ORG_S, role="account_manager"),
+            ]
+        )
+    return client
 
 
 def _body(*, assistant_id: str = "lead_agent", config: dict | None = None) -> SimpleNamespace:
@@ -91,6 +132,61 @@ async def _start(actor: str, body: SimpleNamespace, thread_id: str):
         # The dedicated-workspace gate has its own suite (test_client_portal);
         # these cases exercise agent scoping behind it.
         patch("app.gateway.client_workspace.require_client_workspace", new=AsyncMock()),
+    ):
+        try:
+            record = await start_run(body, thread_id, request)
+        except HTTPException as exc:
+            return exc
+        await record.task
+        return record
+
+
+async def _start_bound_client(
+    body: SimpleNamespace,
+    thread_id: str,
+    *,
+    actor: str = USER_B,
+    system_role: str = "client",
+    organization_role: str = "client",
+    runtime_agents: list[str] | None = None,
+    runtime_contexts: list[dict] | None = None,
+):
+    thread_store = MemoryThreadMetaStore(InMemoryStore())
+    with _client_actor(actor, system_role=system_role, organization_role=organization_role):
+        await thread_store.create(thread_id, user_id=USER_B, metadata={})
+    state = SimpleNamespace(
+        stream_bridge=SimpleNamespace(),
+        run_manager=RunManager(store=MemoryRunStore()),
+        checkpointer=InMemorySaver(),
+        store=InMemoryStore(),
+        run_event_store=MemoryRunEventStore(),
+        run_events_config=None,
+        thread_store=thread_store,
+    )
+    request = SimpleNamespace(
+        headers={},
+        state=SimpleNamespace(
+            auth_source="session",
+            user=SimpleNamespace(id=actor, system_role=system_role),
+            actor_user_id=actor,
+            storage_user_id=USER_B,
+            organization_id=ORG_B,
+            organization_role=organization_role,
+        ),
+        app=SimpleNamespace(state=state),
+    )
+
+    async def fake_run_agent(*_args, **_kwargs):
+        if runtime_agents is not None:
+            runtime_agents.append(_kwargs["config"].get("context", {}).get("agent_name"))
+        if runtime_contexts is not None:
+            runtime_contexts.append(dict(_kwargs["config"].get("context", {})))
+        return None
+
+    with (
+        _client_actor(actor, system_role=system_role, organization_role=organization_role),
+        patch("app.gateway.services.resolve_agent_factory", return_value=object()),
+        patch("app.gateway.services.run_agent", side_effect=fake_run_agent),
     ):
         try:
             record = await start_run(body, thread_id, request)
@@ -176,6 +272,113 @@ async def test_assigned_member_can_start_agent_tagged_with_own_registry_id(stamp
 
     result = await _start(USER_D, _body(assistant_id="registry-agent"), "thread-registry-own")
     assert not isinstance(result, HTTPException), result
+
+
+@pytest.mark.asyncio
+async def test_bound_customer_contact_can_start_row_and_registry_tagged_agents(stamped_agents) -> None:
+    client = await _seed_bound_customer(stamped_agents)
+    set_app_config(
+        AppConfig.model_validate(
+            {
+                "sandbox": {"use": "deerflow.community.aio_sandbox:AioSandboxProvider", "network": {"mode": "isolated"}},
+                "models": [{"name": "claude-opus-5-5", "use": "langchain_openai:ChatOpenAI", "model": "claude-opus-5-5"}],
+                "momobot_max": {"enabled": True, "clients": [client["id"], client["registry_id"]]},
+            }
+        )
+    )
+    with _client_actor():
+        store = get_agent_store()
+        for name, tag in (("bound-row-agent", client["id"]), ("bound-registry-agent", client["registry_id"])):
+            store.create(name, {"name": name, "description": "bound customer agent", "client_id": tag}, "bound client soul", user_id=USER_B)
+
+    for name in ("bound-row-agent", "bound-registry-agent"):
+        runtime_contexts: list[dict] = []
+        result = await _start_bound_client(_body(assistant_id=name), f"thread-{name}", runtime_contexts=runtime_contexts)
+        assert not isinstance(result, HTTPException), result
+        assert runtime_contexts[0]["client_workspace_ceiling"] is True
+        assert runtime_contexts[0]["momobot_tier"] == "max"
+        assert runtime_contexts[0]["model_name"] == "claude-opus-5-5"
+
+
+@pytest.mark.asyncio
+async def test_bound_customer_account_manager_member_does_not_gain_agent_run_access(stamped_agents) -> None:
+    client = await _seed_bound_customer(stamped_agents)
+    set_app_config(
+        AppConfig.model_validate(
+            {
+                "sandbox": {"use": "deerflow.community.aio_sandbox:AioSandboxProvider", "network": {"mode": "isolated"}},
+                "models": [{"name": "claude-opus-5-5", "use": "langchain_openai:ChatOpenAI", "model": "claude-opus-5-5"}],
+                "momobot_max": {"enabled": True, "clients": [client["id"], client["registry_id"]]},
+            }
+        )
+    )
+    with _client_actor():
+        get_agent_store().create("bound-row-agent", {"name": "bound-row-agent", "description": "bound customer agent", "client_id": client["id"]}, "soul", user_id=USER_B)
+
+    result = await _start_bound_client(
+        _body(assistant_id="bound-row-agent"),
+        "thread-account-manager",
+        actor=USER_C,
+        system_role="user",
+        organization_role="member",
+    )
+    assert isinstance(result, HTTPException)
+    assert (result.status_code, result.detail) == (422, MISSING_DETAIL)
+
+
+@pytest.mark.asyncio
+async def test_bound_customer_run_rejects_unassigned_tags_and_foreign_bucket(stamped_agents) -> None:
+    client = await _seed_bound_customer(stamped_agents)
+    client_repo = ClientRepository(stamped_agents)
+    with acting_as(USER_A, ORG_S):
+        other = await client_repo.create(display_name="Other Bound Client", registry_id="other-bound-registry")
+    set_app_config(
+        AppConfig.model_validate(
+            {
+                "sandbox": {"use": "deerflow.community.aio_sandbox:AioSandboxProvider", "network": {"mode": "isolated"}},
+                "models": [{"name": "claude-opus-5-5", "use": "langchain_openai:ChatOpenAI", "model": "claude-opus-5-5"}],
+                "momobot_max": {"enabled": True, "clients": [client["id"], client["registry_id"]]},
+            }
+        )
+    )
+    with _client_actor():
+        store = get_agent_store()
+        store.create("other-bound-agent", {"name": "other-bound-agent", "description": "unassigned other client", "client_id": other["registry_id"]}, "other client soul", user_id=USER_B)
+        store.create("foreign-bucket-agent", {"name": "foreign-bucket-agent", "description": "foreign bucket", "client_id": client["id"]}, "foreign bucket soul", user_id="another-customer-storage")
+
+    # Existing CLIENT policy falls back to MomoBot Max; neither tagged custom agent executes.
+    for name in ("other-bound-agent", "foreign-bucket-agent"):
+        runtime_agents: list[str] = []
+        result = await _start_bound_client(_body(assistant_id=name), f"thread-{name}", runtime_agents=runtime_agents)
+        assert not isinstance(result, HTTPException), result
+        assert runtime_agents == ["momobot-max"]
+
+
+@pytest.mark.asyncio
+async def test_bound_customer_run_rejects_ambiguous_row_id_but_accepts_unique_registry_id(stamped_agents) -> None:
+    client = await _seed_bound_customer(stamped_agents)
+    client_repo = ClientRepository(stamped_agents)
+    with acting_as(USER_A, ORG_S):
+        await client_repo.create(display_name="Registry Collision", registry_id=client["id"])
+    set_app_config(
+        AppConfig.model_validate(
+            {
+                "sandbox": {"use": "deerflow.community.aio_sandbox:AioSandboxProvider", "network": {"mode": "isolated"}},
+                "models": [{"name": "claude-opus-5-5", "use": "langchain_openai:ChatOpenAI", "model": "claude-opus-5-5"}],
+                "momobot_max": {"enabled": True, "clients": [client["id"], client["registry_id"]]},
+            }
+        )
+    )
+    with _client_actor():
+        store = get_agent_store()
+        store.create("bound-row-agent", {"name": "bound-row-agent", "description": "ambiguous row tag", "client_id": client["id"]}, "soul", user_id=USER_B)
+        store.create("bound-registry-agent", {"name": "bound-registry-agent", "description": "unique registry tag", "client_id": client["registry_id"]}, "soul", user_id=USER_B)
+
+    denied = await _start_bound_client(_body(assistant_id="bound-row-agent"), "thread-bound-row-collision")
+    assert isinstance(denied, HTTPException)
+    assert (denied.status_code, denied.detail) == (422, MISSING_DETAIL)
+    allowed = await _start_bound_client(_body(assistant_id="bound-registry-agent"), "thread-bound-registry-collision")
+    assert not isinstance(allowed, HTTPException), allowed
 
 
 @pytest.mark.asyncio

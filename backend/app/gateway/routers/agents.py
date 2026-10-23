@@ -324,7 +324,8 @@ async def _visible_client_ids(user_id: str) -> frozenset[str] | None:
     Resolve both only within the active organization and only when the tag
     uniquely names an assigned row; ambiguous aliases stay hidden.
     """
-    if resolve_organization_id() is None:
+    organization_id = resolve_organization_id()
+    if organization_id is None:
         return frozenset()
     try:
         if await _is_active_org_admin(user_id):
@@ -338,13 +339,44 @@ async def _visible_client_ids(user_id: str) -> frozenset[str] | None:
     session_factory = get_session_factory()
     if session_factory is None:
         return frozenset()
-    try:
-        repository = ClientRepository(session_factory)
-        clients = await repository.list()
-        assigned_client_ids = {client["id"] for client in await repository.list_mine()}
-    except Exception:
-        logger.exception("Failed to resolve agent client visibility")
-        return frozenset()
+    client_tags: set[str] | None = None
+    user = get_current_user()
+    if getattr(user, "system_role", None) == CLIENT_ROLE:
+        if getattr(user, "id", None) != user_id:
+            return frozenset()
+        from app.gateway.client_workspace import require_client_workspace
+        from app.gateway.momobot_max import client_keys_for_user
+        from deerflow.persistence.clients.model import ClientRow
+        from deerflow.persistence.organizations.model import OrganizationRow
+
+        try:
+            await require_client_workspace(user)
+            client_tags = set(await client_keys_for_user(user_id, organization_id))
+            if not client_tags:
+                return frozenset()
+            async with session_factory() as session:
+                bound_client_id = await session.scalar(select(OrganizationRow.customer_client_id).where(OrganizationRow.id == organization_id, OrganizationRow.status == "active"))
+                if not bound_client_id or bound_client_id not in client_tags:
+                    return frozenset()
+                bound_client = await session.get(ClientRow, bound_client_id)
+                if bound_client is None or bound_client.status != "active" or bound_client.organization_id == organization_id:
+                    return frozenset()
+                result = await session.execute(select(ClientRow.id, ClientRow.registry_id).where(ClientRow.organization_id == bound_client.organization_id))
+                clients = [{"id": row.id, "registry_id": row.registry_id} for row in result]
+            assigned_client_ids = {bound_client_id}
+        except HTTPException:
+            return frozenset()
+        except Exception:
+            logger.exception("Failed to resolve agent client visibility")
+            return frozenset()
+    else:
+        try:
+            repository = ClientRepository(session_factory)
+            clients = await repository.list()
+            assigned_client_ids = {client["id"] for client in await repository.list_mine()}
+        except Exception:
+            logger.exception("Failed to resolve agent client visibility")
+            return frozenset()
 
     token_client_ids: dict[str, set[str]] = {}
     for client in clients:
@@ -354,7 +386,7 @@ async def _visible_client_ids(user_id: str) -> frozenset[str] | None:
         if isinstance(registry_id, str) and registry_id:
             token_client_ids.setdefault(registry_id, set()).add(client_id)
 
-    return frozenset(token for token, client_ids in token_client_ids.items() if len(client_ids) == 1 and client_ids <= assigned_client_ids)
+    return frozenset(token for token, client_ids in token_client_ids.items() if len(client_ids) == 1 and client_ids <= assigned_client_ids and (client_tags is None or token in client_tags))
 
 
 async def _require_visible_client_id(client_id: str | None, name: str) -> None:
@@ -404,9 +436,8 @@ async def list_agents() -> AgentsListResponse:
         # that predates the reservation must not be listed beside it (off, the row is an agent again).
         if get_builtin_agent_config(MOMOBOT_MAX_NAME) is not None:
             agents = [a for a in agents if not is_builtin_agent_name(_normalize_agent_name(a.name))]
-        if visible_client_ids is not None and not is_client:  # a client's workspace agents are already narrowed to their own client
-            # An agent with no client_id isn't client-scoped (a personal or
-            # staff agent); only a fleet-stamped agent needs this check.
+        if visible_client_ids is not None:
+            # Also rejects tags that are ambiguous across the bound client's agency roster.
             agents = [a for a in agents if a.client_id is None or a.client_id in visible_client_ids]
         responses = [_client_agent_response(a, tier) if is_client else _agent_config_to_response(a, include_soul=True, user_id=user_id) for a in agents]
         builtin = get_builtin_agent_config(MOMOBOT_MAX_NAME) if builtin_visible else None
@@ -483,28 +514,28 @@ async def get_agent(name: str) -> AgentResponse:
     tier = await _caller_client_tier() if is_client else "max"
     workspace_agents = await _caller_workspace_agents(user) if is_client else {}
 
-    def _get() -> AgentResponse:
+    def _get() -> tuple[AgentResponse, str | None]:
         # Worker thread: config read + SOUL read must stay off the event loop.
         builtin_visible = _builtin_visible_to(user, tier)
         if is_client:  # a client can read MomoBot Max and their own workspace's agents, nothing else
             agent = (get_builtin_agent_config(name) if builtin_visible else None) or workspace_agents.get(name)
             if agent is None:
                 raise FileNotFoundError(f"Agent '{name}' not found")
-            return _client_agent_response(agent, tier)
+            return _client_agent_response(agent, tier), agent.client_id
         agent_cfg = load_agent_config(name, user_id=user_id)
         if agent_cfg is None or (get_builtin_agent_config(name) is not None and not builtin_visible):
             raise FileNotFoundError(f"Agent '{name}' config is unavailable")
-        return _agent_config_to_response(agent_cfg, include_soul=True, user_id=user_id)
+        return _agent_config_to_response(agent_cfg, include_soul=True, user_id=user_id), agent_cfg.client_id
 
     try:
-        response = await asyncio.to_thread(_get)
+        response, client_id = await asyncio.to_thread(_get)
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail=f"Agent '{name}' not found")
     except Exception as e:
         logger.error(f"Failed to get agent '{name}': {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to get agent: {str(e)}")
 
-    await _require_visible_client_id(response.client_id, name)
+    await _require_visible_client_id(client_id, name)
     return response
 
 

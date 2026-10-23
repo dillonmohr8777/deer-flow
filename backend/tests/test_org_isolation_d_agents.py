@@ -28,6 +28,7 @@ the user filter.
 from __future__ import annotations
 
 import json
+from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -62,6 +63,48 @@ from deerflow.runtime.user_context import get_effective_user_id
 
 GATEWAY_ROOT = Path(__file__).parent.parent / "app" / "gateway"
 USER_D = "user-d"
+BOUND_REGISTRY_ID = "bound-customer-registry"
+
+
+@contextmanager
+def _client_actor(actor: str = USER_B, organization_id: str = ORG_B, *, system_role: str = "client", organization_role: str = "client"):
+    from deerflow.runtime.user_context import WorkspaceStorageContext, get_storage_context, reset_current_user, reset_storage_context, set_current_user, set_storage_context
+
+    with acting_as(actor, organization_id):
+        current = get_storage_context()
+        storage_token = set_storage_context(WorkspaceStorageContext(actor_user_id=actor, organization_id=organization_id, storage_user_id=current.storage_user_id, role=organization_role))
+        token = set_current_user(SimpleNamespace(id=actor, system_role=system_role))
+        try:
+            yield
+        finally:
+            reset_current_user(token)
+            reset_storage_context(storage_token)
+
+
+async def _seed_bound_customer_for_agents(session_factory):
+    from sqlalchemy import update
+
+    from deerflow.persistence.clients.model import ClientAssignmentRow
+    from deerflow.persistence.organizations.model import OrganizationMemberRow
+    from deerflow.persistence.user.model import UserRow
+
+    client_repo = ClientRepository(session_factory)
+    with acting_as(USER_A, ORG_S):
+        bound = await client_repo.create(display_name="Bound Synthetic Client", registry_id=BOUND_REGISTRY_ID)
+        unassigned = await client_repo.create(display_name="Other Synthetic Client", registry_id="other-customer-registry")
+    async with session_factory() as session, session.begin():
+        await session.execute(update(OrganizationRow).where(OrganizationRow.id == ORG_B).values(customer_client_id=bound["id"]))
+        await session.execute(update(OrganizationMemberRow).where(OrganizationMemberRow.organization_id == ORG_B, OrganizationMemberRow.user_id == USER_B).values(role="client"))
+        await session.execute(update(UserRow).where(UserRow.id == USER_B).values(system_role="client"))
+        session.add_all(
+            [
+                ClientAssignmentRow(client_id=bound["id"], user_id=USER_B, organization_id=ORG_B, role="client_contact"),
+                OrganizationMemberRow(organization_id=ORG_B, user_id=USER_C, role="member", status="active"),
+                OrganizationMemberRow(organization_id=ORG_S, user_id=USER_B, role="member", status="active"),
+                ClientAssignmentRow(client_id=bound["id"], user_id=USER_C, organization_id=ORG_S, role="account_manager"),
+            ]
+        )
+    return bound, unassigned
 
 
 def _seed_organizations(url: str) -> None:
@@ -631,6 +674,123 @@ async def test_agent_client_visibility_fails_closed_without_actor_or_on_reposito
             assert await _visible_client_ids(USER_D) == frozenset()
 
     assert await _visible_client_ids(USER_D) == frozenset()
+
+
+@pytest.mark.asyncio
+async def test_bound_customer_agent_row_and_registry_tags_list_and_get(org_world, tmp_path, monkeypatch) -> None:  # noqa: F811
+    monkeypatch.setenv("DEER_FLOW_HOME", str(tmp_path))
+    monkeypatch.setattr("deerflow.config.paths._paths", None)
+    load_agents_api_config_from_dict({"enabled": True})
+    bound, unassigned = await _seed_bound_customer_for_agents(org_world)
+    set_app_config(
+        AppConfig.model_validate(
+            {
+                "sandbox": {"use": "deerflow.community.aio_sandbox:AioSandboxProvider", "network": {"mode": "isolated"}},
+                "models": [{"name": "claude-opus-5-5", "use": "langchain_openai:ChatOpenAI", "model": "claude-opus-5-5"}],
+                "momobot_max": {"enabled": True, "clients": [bound["id"], bound["registry_id"]]},
+            }
+        )
+    )
+    try:
+        from app.gateway.routers.agents import _visible_client_ids, get_agent, list_agents
+
+        with _client_actor():
+            store = get_agent_store()
+            for name, tag in (("bound-row-agent", bound["id"]), ("bound-registry-agent", bound["registry_id"])):
+                store.create(name, {"name": name, "description": "bound customer agent", "client_id": tag}, "soul", user_id=USER_B)
+            store.create(
+                "other-customer-agent",
+                {"name": "other-customer-agent", "description": "unassigned other customer", "client_id": unassigned["registry_id"]},
+                "soul",
+                user_id=USER_B,
+            )
+            store.create(
+                "foreign-bucket-agent",
+                {"name": "foreign-bucket-agent", "description": "wrong storage bucket", "client_id": bound["id"]},
+                "soul",
+                user_id="another-customer-storage",
+            )
+
+        with _client_actor():
+            visible = await _visible_client_ids(USER_B)
+            names = [agent.name for agent in (await list_agents()).agents]
+            assert bound["id"] in visible and bound["registry_id"] in visible
+            assert {"bound-row-agent", "bound-registry-agent"} <= set(names)
+            assert {"other-customer-agent", "foreign-bucket-agent"}.isdisjoint(names)
+            assert (await get_agent("bound-row-agent")).name == "bound-row-agent"
+            assert (await get_agent("bound-registry-agent")).name == "bound-registry-agent"
+            for name in ("other-customer-agent", "foreign-bucket-agent"):
+                with pytest.raises(HTTPException) as excinfo:
+                    await get_agent(name)
+                assert excinfo.value.status_code == 404
+
+        # A bound-workspace member with the agency account-manager assignment
+        # keeps the portal workflow, but does not gain direct agent visibility.
+        with _client_actor(USER_C, system_role="user", organization_role="member"):
+            assert "bound-row-agent" not in [agent.name for agent in (await list_agents()).agents]
+            with pytest.raises(HTTPException) as excinfo:
+                await get_agent("bound-row-agent")
+            assert excinfo.value.status_code == 404
+
+        with _client_actor(USER_B, ORG_S, organization_role="member"):
+            assert await _visible_client_ids(USER_B) == frozenset()
+    finally:
+        load_agents_api_config_from_dict({})
+        reset_app_config()
+
+
+@pytest.mark.asyncio
+async def test_bound_customer_client_tag_collision_fails_closed_for_row_tag(org_world, tmp_path, monkeypatch) -> None:  # noqa: F811
+    monkeypatch.setenv("DEER_FLOW_HOME", str(tmp_path))
+    monkeypatch.setattr("deerflow.config.paths._paths", None)
+    load_agents_api_config_from_dict({"enabled": True})
+    bound, _ = await _seed_bound_customer_for_agents(org_world)
+    set_app_config(AppConfig.model_validate({"sandbox": {"use": "deerflow.sandbox.local:LocalSandboxProvider"}, "momobot_max": {"enabled": True, "clients": [bound["id"], bound["registry_id"]]}}))
+    try:
+        from app.gateway.routers.agents import get_agent, list_agents
+
+        client_repo = ClientRepository(org_world)
+        with acting_as(USER_A, ORG_S):
+            await client_repo.create(display_name="Registry Collision", registry_id=bound["id"])
+        with _client_actor():
+            store = get_agent_store()
+            store.create("bound-row-agent", {"name": "bound-row-agent", "description": "ambiguous row tag", "client_id": bound["id"]}, "soul", user_id=USER_B)
+            store.create("bound-registry-agent", {"name": "bound-registry-agent", "description": "unique registry tag", "client_id": bound["registry_id"]}, "soul", user_id=USER_B)
+
+        with _client_actor():
+            names = [agent.name for agent in (await list_agents()).agents]
+            assert "bound-row-agent" not in names
+            assert "bound-registry-agent" in names
+            with pytest.raises(HTTPException) as excinfo:
+                await get_agent("bound-row-agent")
+            assert excinfo.value.status_code == 404
+            assert (await get_agent("bound-registry-agent")).name == "bound-registry-agent"
+    finally:
+        load_agents_api_config_from_dict({})
+        reset_app_config()
+
+
+@pytest.mark.parametrize("denial", ["missing_binding", "inactive_binding", "missing_assignment", "wrong_assignment_org"])
+@pytest.mark.asyncio
+async def test_bound_customer_tag_visibility_fails_closed_for_invalid_binding_or_assignment(org_world, denial: str) -> None:  # noqa: F811
+    from sqlalchemy import delete, update
+
+    from app.gateway.routers.agents import _visible_client_ids
+    from deerflow.persistence.clients.model import ClientAssignmentRow
+
+    bound, _ = await _seed_bound_customer_for_agents(org_world)
+    async with org_world() as session, session.begin():
+        if denial == "missing_binding":
+            await session.execute(update(OrganizationRow).where(OrganizationRow.id == ORG_B).values(customer_client_id=None))
+        elif denial == "inactive_binding":
+            await session.execute(update(OrganizationRow).where(OrganizationRow.id == ORG_B).values(status="inactive"))
+        elif denial == "missing_assignment":
+            await session.execute(delete(ClientAssignmentRow).where(ClientAssignmentRow.client_id == bound["id"], ClientAssignmentRow.user_id == USER_B))
+        else:
+            await session.execute(update(ClientAssignmentRow).where(ClientAssignmentRow.client_id == bound["id"], ClientAssignmentRow.user_id == USER_B).values(organization_id=ORG_S))
+
+    with _client_actor():
+        assert await _visible_client_ids(USER_B) == frozenset()
 
 
 @pytest.mark.asyncio
