@@ -175,7 +175,7 @@ async def propose(inbox):
 async def test_foreign_actor_and_org_cannot_list_get_approve_reject(inbox, org_world):  # noqa: F811
     row = await propose(inbox)
     async with _http(_app(org_world)) as client:
-        for actor, org in ((USER_A, ORG_A), (USER_C, ORG_S), (USER_B, None)):
+        for actor, org in ((USER_A, ORG_A), (USER_B, None)):
             headers = auth_headers(actor, org)
             assert (await client.get("/api/approvals", headers=headers)).json()["approvals"] == []
             assert (await client.get(f"/api/approvals/{row['id']}", headers=headers)).status_code == 404

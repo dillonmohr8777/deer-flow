@@ -8,6 +8,12 @@ Alembic stamp/upgrade workers started inside `bootstrap_schema()` remain owned b
 
 # Organization isolation (M3)
 
+`approvals/sql.py` keeps ordinary actor/storage scope unchanged. Its separate
+Composio oversight methods revalidate current actor/context and active-org
+owner/admin membership for list/read/reject only, always filtering the literal
+`composio_tool_call` type and active organization. Never reuse that broader
+scope for edit, approve, execution claims or outcomes.
+
 Every organization id is `private_organization_id(storage principal)`. A private organization's principal is its owner; a shared workspace's is a password-less storage user that is never a member. Repositories build on three helpers:
 
 - `deerflow.runtime.user_context.resolve_organization_id()` returns the active organization `AuthMiddleware` verified for a session or PAT caller. Add an `organization_id == active` filter beside the user filter only when it is non-null; internal callers, auth-disabled mode and background work get `None` and keep the user filter alone.

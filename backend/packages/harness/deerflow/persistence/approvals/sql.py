@@ -2,7 +2,9 @@
 
 Generic reads filter the storage user; Composio reads require the authenticated
 actor and active organization, so a foreign row is indistinguishable from a
-missing one (routers map ``None`` to 404). Every state change is a
+missing one (routers map ``None`` to 404). Separate Composio-only methods grant
+active organization owners/admins list/read/reject oversight, never approval.
+Every state change is a
 compare-and-set ``UPDATE ... WHERE status = <expected>``: returns ``None``
 when the row is missing, foreign, or no longer in the expected state.
 """
@@ -20,7 +22,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from deerflow.approvals.workflow import STATUSES, InvalidPayloadError, notify_created, validate_payload
 from deerflow.persistence.approvals.model import PendingActionRow
 from deerflow.persistence.organizations.identity import private_organization_id
-from deerflow.runtime.user_context import AUTO, _AutoSentinel, get_current_user, resolve_organization_id, resolve_user_id
+from deerflow.persistence.organizations.resolution import active_organization_for_user, storage_user_id_for_organization
+from deerflow.runtime.user_context import AUTO, _AutoSentinel, get_current_user, get_storage_context, resolve_organization_id, resolve_user_id
 from deerflow.utils.time import coerce_iso
 
 _TIME_KEYS = ("created_at", "updated_at", "decided_at", "executed_at")
@@ -136,6 +139,49 @@ class PendingActionRepository:
         stmt = stmt.order_by(PendingActionRow.created_at.desc()).limit(max(1, min(limit, 200)))
         async with self._sf() as session:
             return [_to_dict(r) for r in (await session.execute(stmt)).scalars()]
+
+    async def _composio_oversight_scope(self, stmt: Any) -> Any | None:
+        """Separate, read/reject-only scope; never widen the ordinary actor filter."""
+        actor = get_current_user()
+        context = get_storage_context()
+        if actor is None or context is None or str(actor.id) != context.actor_user_id or not context.organization_id:
+            return None
+        async with self._sf() as session:
+            organization = await active_organization_for_user(session, str(actor.id), context.organization_id)
+        if organization is None or organization.role not in {"owner", "admin"} or storage_user_id_for_organization(organization, str(actor.id)) != context.storage_user_id:
+            return None
+        return stmt.where(PendingActionRow.action_type == "composio_tool_call", PendingActionRow.organization_id == organization.id)
+
+    async def get_composio_for_org(self, action_id: str) -> dict | None:
+        stmt = await self._composio_oversight_scope(select(PendingActionRow).where(PendingActionRow.id == action_id))
+        if stmt is None:
+            return None
+        async with self._sf() as session:
+            row = (await session.execute(stmt)).scalars().first()
+            return _to_dict(row) if row is not None else None
+
+    async def list_composio_for_org(self, *, status: str | None = None, limit: int = 100) -> list[dict]:
+        stmt = await self._composio_oversight_scope(select(PendingActionRow))
+        if stmt is None or (status is not None and status not in STATUSES):
+            return []
+        if status is not None:
+            stmt = stmt.where(PendingActionRow.status == status)
+        stmt = stmt.order_by(PendingActionRow.created_at.desc()).limit(max(1, min(limit, 200)))
+        async with self._sf() as session:
+            return [_to_dict(row) for row in (await session.execute(stmt)).scalars()]
+
+    async def reject_composio_for_org(self, action_id: str) -> dict | None:
+        stmt = await self._composio_oversight_scope(update(PendingActionRow).where(PendingActionRow.id == action_id, PendingActionRow.status == "pending"))
+        if stmt is None:
+            return None
+        actor = get_current_user()
+        stmt = stmt.values(status="rejected", decided_by=str(actor.id), decided_at=datetime.now(UTC), updated_at=datetime.now(UTC))
+        async with self._sf() as session:
+            result = await session.execute(stmt)
+            await session.commit()
+            if result.rowcount != 1:
+                return None
+        return await self.get_composio_for_org(action_id)
 
     async def _transition(self, action_id: str, uid: str, expected: str, **values: Any) -> dict | None:
         stmt = self._scope(update(PendingActionRow).where(PendingActionRow.id == action_id, PendingActionRow.status == expected), uid)
