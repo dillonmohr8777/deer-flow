@@ -10,6 +10,17 @@ The upstream DeerFlow history stays in [CHANGELOG.md](../CHANGELOG.md).
 
 ## [Unreleased]
 
+## [momobot-prod-20261022-aaa418a7] - 2026-10-22
+
+### Changed
+
+- Paid admission ceiling $100, Oct 23 (#269)
+- MomoBot changelog momobot-prod-20261022-ae496b71, Oct 22 (#268)
+
+### Fixed
+
+- Fix saved Brain snapshot generation publication and reload (#267)
+
 ## [momobot-prod-20261022-ae496b71] - 2026-10-22
 
 ### Changed
