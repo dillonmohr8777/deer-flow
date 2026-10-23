@@ -15,6 +15,10 @@ services:
       - MOMO_PEOPLE_DIR=/var/momo-people
       # The base compose sets GITHUB_TOKEN from GITHUB_PERSONAL_ACCESS_TOKEN (unset here), which would blank it.
       - GITHUB_TOKEN=${GITHUB_TOKEN:-}
+      # WSL diagnostic bridge (backend/docs/WSL_DIAGNOSTIC_BRIDGE.md). Off unless settings.env sets
+      # MOMO_WSL_BRIDGE_ENABLED=true; the root lives in the persistent gateway data volume (0700).
+      - MOMO_WSL_BRIDGE_ENABLED=${MOMO_WSL_BRIDGE_ENABLED:-false}
+      - MOMO_WSL_BRIDGE_ROOT=/app/backend/.deer-flow/wsl-bridge
     volumes:
       - /opt/momobot/data/skills:/app/skills:ro
       - /opt/momobot/data/admission:/var/momo-admission
