@@ -431,7 +431,7 @@ See `docs/` directory for detailed documentation:
 
 ## Approvals inbox (`/api/approvals`)
 
-Agents propose outbound actions with `propose_action`; nothing executes before an org owner/admin approves (compare-and-set, exactly-once). Proposals and edited approvals are fact-checked (contradicted claims are refused), and edits are recorded per client in `client_corrections`, whose last 10 entries `ClientCorrectionsMiddleware` injects. Detail: [docs/APPROVALS_INBOX.md](docs/APPROVALS_INBOX.md). Tests: `tests/test_approvals_inbox.py`, `tests/test_client_memory.py`.
+Agents propose outbound actions with `propose_action`; nothing executes before an org owner/admin approves (one winning compare-and-set decision). Mandatory built-in MCP guards also file every Composio write/unknown call, including `composio-sean`, through actor-and-active-org-scoped `composio_tool_call` approvals. These use stable proposal IDs and a durable execution claim for at most one upstream attempt per action; uncertain completion remains approved/outcome_unknown without automatic replay. Proposals and edited approvals are fact-checked (contradicted claims are refused), and edits are recorded per client in `client_corrections`, whose last 10 entries `ClientCorrectionsMiddleware` injects. Detail: [docs/APPROVALS_INBOX.md](docs/APPROVALS_INBOX.md). Tests: `tests/test_approvals_inbox.py`, `tests/test_composio_approval_guard.py`, `tests/test_client_memory.py`.
 
 The client portal (`/api/client-portal`) also admits an active non-client member
 of a bound customer workspace when their `account_manager` assignment names the

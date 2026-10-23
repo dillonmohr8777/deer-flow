@@ -1,7 +1,7 @@
 """Owner-scoped repository for ``pending_actions``.
 
-Every read filters ``user_id == resolve_user_id(AUTO)`` plus the active
-organization when one is set, so a foreign row is indistinguishable from a
+Generic reads filter the storage user; Composio reads require the authenticated
+actor and active organization, so a foreign row is indistinguishable from a
 missing one (routers map ``None`` to 404). Every state change is a
 compare-and-set ``UPDATE ... WHERE status = <expected>``: returns ``None``
 when the row is missing, foreign, or no longer in the expected state.
@@ -13,13 +13,14 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import select, update
+from sqlalchemy import and_, or_, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from deerflow.approvals.workflow import STATUSES, notify_created, validate_payload
+from deerflow.approvals.workflow import STATUSES, InvalidPayloadError, notify_created, validate_payload
 from deerflow.persistence.approvals.model import PendingActionRow
 from deerflow.persistence.organizations.identity import private_organization_id
-from deerflow.runtime.user_context import AUTO, _AutoSentinel, resolve_organization_id, resolve_user_id
+from deerflow.runtime.user_context import AUTO, _AutoSentinel, get_current_user, resolve_organization_id, resolve_user_id
 from deerflow.utils.time import coerce_iso
 
 _TIME_KEYS = ("created_at", "updated_at", "decided_at", "executed_at")
@@ -43,8 +44,15 @@ class PendingActionRepository:
 
     @staticmethod
     def _scope(stmt: Any, user_id: str) -> Any:
-        stmt = stmt.where(PendingActionRow.user_id == user_id)
+        # Composio connections belong to the actor, even in shared storage.
+        actor = get_current_user()
         organization_id = resolve_organization_id()
+        stmt = stmt.where(
+            or_(
+                and_(PendingActionRow.action_type != "composio_tool_call", PendingActionRow.user_id == user_id),
+                and_(PendingActionRow.action_type == "composio_tool_call", PendingActionRow.user_id == (str(actor.id) if actor else ""), PendingActionRow.organization_id == (organization_id or "")),
+            )
+        )
         if organization_id is not None:
             stmt = stmt.where(PendingActionRow.organization_id == organization_id)
         return stmt
@@ -61,13 +69,20 @@ class PendingActionRepository:
         agent_name: str | None = None,
         fact_check: dict | None = None,
         user_id: str | None | _AutoSentinel = AUTO,
+        organization_id: str | None = None,
+        action_id: str | None = None,
     ) -> dict:
         uid = resolve_user_id(user_id, method_name="PendingActionRepository.create")
         validate_payload(action_type, target, payload)
+        selected_org = organization_id if organization_id is not None else private_organization_id(uid)
+        if action_type == "composio_tool_call":
+            actor = get_current_user()
+            if actor is None or str(actor.id) != uid or not resolve_organization_id() or selected_org != resolve_organization_id():
+                raise InvalidPayloadError("Composio proposals require the authenticated actor and active organization")
         row = PendingActionRow(
-            id=uuid.uuid4().hex,
+            id=action_id or uuid.uuid4().hex,
             user_id=uid,
-            organization_id=private_organization_id(uid),
+            organization_id=selected_org,
             action_type=action_type,
             title=title[:255],
             target=target[:512],
@@ -81,7 +96,24 @@ class PendingActionRepository:
         )
         async with self._sf() as session:
             session.add(row)
-            await session.commit()
+            try:
+                await session.commit()
+            except IntegrityError:
+                await session.rollback()
+                if action_id is None:
+                    raise
+                existing = await session.get(PendingActionRow, action_id)
+                if existing is None or (existing.user_id, existing.organization_id, existing.action_type, existing.target, existing.original_payload, existing.thread_id, existing.run_id) != (
+                    uid,
+                    selected_org,
+                    action_type,
+                    target,
+                    payload,
+                    thread_id,
+                    run_id,
+                ):
+                    raise InvalidPayloadError("Composio proposal identity conflict") from None
+                return _to_dict(existing)
             await session.refresh(row)
             created = _to_dict(row)
         await notify_created(created)
@@ -123,6 +155,8 @@ class PendingActionRepository:
             return None
         new_target = current["target"] if target is None else target
         new_payload = current["payload"] if payload is None else payload
+        if current["action_type"] == "composio_tool_call" and (new_target != current["target"] or new_payload != current["payload"]):
+            raise InvalidPayloadError("Composio approvals bind an exact immutable call; file a new proposal")
         validate_payload(current["action_type"], new_target, new_payload)
         values: dict[str, Any] = {"target": new_target[:512], "payload": new_payload}
         if title is not None:
@@ -152,3 +186,22 @@ class PendingActionRepository:
         if status == "executed":
             values["executed_at"] = datetime.now(UTC)
         return await self._transition(action_id, uid, "approved", **values)
+
+    async def claim_composio_execution(self, action_id: str) -> dict | None:
+        """Durably fence one attempt before transport; a crash leaves unknown, never retryable."""
+        uid = resolve_user_id(AUTO, method_name="PendingActionRepository.claim_composio_execution")
+        stmt = self._scope(
+            update(PendingActionRow).where(
+                PendingActionRow.id == action_id,
+                PendingActionRow.action_type == "composio_tool_call",
+                PendingActionRow.status == "approved",
+                PendingActionRow.execution_result.is_(None),
+            ),
+            uid,
+        ).values(execution_result={"state": "outcome_unknown", "attempted": True}, error="outcome_unknown: reconcile Composio destination; never automatically retry", updated_at=datetime.now(UTC))
+        async with self._sf() as session:
+            result = await session.execute(stmt)
+            await session.commit()
+            if result.rowcount != 1:
+                return None
+        return await self.get(action_id)
