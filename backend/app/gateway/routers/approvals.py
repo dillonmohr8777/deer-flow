@@ -25,6 +25,7 @@ from deerflow.approvals import InvalidPayloadError
 from deerflow.factcheck import Evidence, check_for_filing, draft_text, verify_draft
 from deerflow.persistence.approvals.corrections import ClientCorrectionRepository
 from deerflow.persistence.organizations.delegation import OrganizationDelegationRepository
+from deerflow.persistence.organizations.resolution import active_organization_for_user
 from deerflow.runtime.user_context import resolve_organization_id
 
 logger = logging.getLogger(__name__)
@@ -209,6 +210,12 @@ async def approve_action(action_id: str, request: Request) -> ApprovalResponse:
     if current["action_type"] == "composio_tool_call":
         from deerflow.mcp.composio_approval_authority import bind_composio_authority, prepare_composio_authority
 
+        reviewer = str((await get_current_user_from_request(request)).id)
+        if current["user_id"] != reviewer:
+            async with repo.session_factory() as session:
+                organization = await active_organization_for_user(session, reviewer, resolve_organization_id())
+            if organization is None or organization.role != "owner":
+                raise HTTPException(403, "Only the active workspace owner can approve another member's Composio action")
         current = await repo.get_composio_for_approval(action_id)
         if current is None:
             raise _not_found()

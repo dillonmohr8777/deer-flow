@@ -153,7 +153,7 @@ async def test_cross_member_approve_requires_proposer_binding_and_edit_stays_hid
     _, repo, client = world
     row = await propose(repo)
     headers = auth_headers(reviewer, ORG)
-    assert (await client.post(f"/api/approvals/{row['id']}/approve", headers=headers)).status_code == 409
+    assert (await client.post(f"/api/approvals/{row['id']}/approve", headers=headers)).status_code == (409 if reviewer == OWNER else 403)
     assert (await client.patch(f"/api/approvals/{row['id']}", json={"title": "Changed"}, headers=headers)).status_code == 404
     with acting(MEMBER):
         assert await repo.get(row["id"]) == row

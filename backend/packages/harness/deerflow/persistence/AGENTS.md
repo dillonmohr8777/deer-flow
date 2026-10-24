@@ -1,9 +1,9 @@
 # Persistence lifecycle
 
-Composio decisions use dedicated proposer-or-org-reviewer scopes and CAS methods;
+Composio approvals use dedicated proposer-or-current-owner scopes and CAS methods;
 never widen generic action reads. Claims recheck current staff membership and
 persist unknown outcome before transport. Keep deciding and proposing actors
-distinct; no user-context impersonation.
+distinct; no user-context impersonation. Admin list/read/reject remains separate.
 
 Postgres bootstrap owns its session-scoped advisory lock until `pg_advisory_unlock` completes. Drain that unlock across host cancellation before leaving the SQLAlchemy connection context; repeated cancellation must not return a pooled session while it still holds the bootstrap mutex. Ordinary database errors remain best-effort and are logged.
 

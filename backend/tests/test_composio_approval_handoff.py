@@ -121,7 +121,7 @@ async def test_discovery_bound_and_explicit_none_on_both_prefix_paths(world, tra
     transport.discovery = discovery
     monkeypatch.setattr("langchain_mcp_adapters.tools.load_mcp_tools", unprefixed_discovery)
     row = await propose(repo)
-    task = asyncio.create_task(client.post(f"/api/approvals/{row['id']}/approve", headers=auth_headers(ADMIN, ORG)))
+    task = asyncio.create_task(client.post(f"/api/approvals/{row['id']}/approve", headers=auth_headers(OWNER, ORG)))
     try:
         await asyncio.wait_for(entered.wait(), 1)
         if timeout is None:
@@ -129,7 +129,7 @@ async def test_discovery_bound_and_explicit_none_on_both_prefix_paths(world, tra
             release.set()
         result = await asyncio.wait_for(task, 1)
         assert result.status_code == 200
-        with acting(ADMIN):
+        with acting(OWNER):
             stored = await repo.get_composio_for_org(row["id"])
         if timeout is None:
             assert bounds == []
@@ -149,8 +149,8 @@ async def test_discovery_bound_and_explicit_none_on_both_prefix_paths(world, tra
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("reviewer", [MEMBER, OWNER, ADMIN])
-async def test_self_or_admin_approves_once_with_proposer_binding_and_audit(world, transport, reviewer):  # noqa: F811
+@pytest.mark.parametrize("reviewer", [MEMBER, OWNER])
+async def test_self_or_owner_approves_once_with_proposer_binding_and_audit(world, transport, reviewer):  # noqa: F811
     sf, repo, client = world
     row = await propose(repo)
     result = await client.post(f"/api/approvals/{row['id']}/approve", headers=auth_headers(reviewer, ORG))
@@ -187,16 +187,85 @@ async def test_member_cannot_approve_another_or_foreign_org(world, transport):  
 
 
 @pytest.mark.asyncio
+async def test_admin_retains_oversight_and_reject_but_cannot_approve_another(world, transport):  # noqa: F811
+    _, repo, client = world
+    row = await propose(repo)
+    headers = auth_headers(ADMIN, ORG)
+    assert (await client.get(f"/api/approvals/{row['id']}", headers=headers)).status_code == 200
+    assert row["id"] in [item["id"] for item in (await client.get("/api/approvals", headers=headers)).json()["approvals"]]
+    result = await client.post(f"/api/approvals/{row['id']}/approve", headers=headers)
+    assert result.status_code == 403 and "owner" in result.json()["detail"]
+    with acting(ADMIN):
+        assert await repo.get_composio_for_approval(row["id"]) is None
+        assert await repo.decide_composio(row["id"], approve=True) is None
+        stored = await repo.get_composio_for_org(row["id"])
+        assert stored["status"] == "pending" and stored["execution_result"] is None
+    assert transport.calls == []
+    rejected = await client.post(f"/api/approvals/{row['id']}/reject", headers=headers)
+    assert rejected.status_code == 200 and rejected.json()["decided_by"] == ADMIN
+    assert rejected.json()["status"] == "rejected" and transport.calls == []
+
+
+@pytest.mark.asyncio
+async def test_admin_can_still_approve_own_proposal(world, transport):  # noqa: F811
+    _, repo, client = world
+    row = await propose(repo, actor=ADMIN)
+    result = await client.post(f"/api/approvals/{row['id']}/approve", headers=auth_headers(ADMIN, ORG))
+    assert result.status_code == 200 and result.json()["status"] == "executed"
+    assert len(transport.calls) == 1
+    assert transport.calls[0][0] == ADMIN
+    assert transport.calls[0][1].headers == {"x-consumer-api-key": f"fake-binding-{ADMIN}"}
+
+
+@pytest.mark.asyncio
+async def test_owner_downgrade_blocks_crossactor_cas_before_decision(world, transport):  # noqa: F811
+    sf, repo, _ = world
+    row = await propose(repo)
+    with acting(OWNER):
+        await prepare_composio_authority(row, repo)
+        async with sf() as session, session.begin():
+            await session.execute(update(OrganizationMemberRow).where(OrganizationMemberRow.organization_id == ORG, OrganizationMemberRow.user_id == OWNER).values(role="admin"))
+        assert await repo.decide_composio(row["id"], approve=True) is None
+        assert (await repo.get_composio_for_org(row["id"]))["status"] == "pending"
+    assert transport.calls == []
+
+
+@pytest.mark.asyncio
+async def test_owner_downgrade_after_scope_read_still_blocks_decision_cas(world, transport, monkeypatch):  # noqa: F811
+    from deerflow.persistence.approvals import sql
+
+    sf, repo, _ = world
+    row = await propose(repo)
+    resolve = sql.active_organization_for_user
+    changed = False
+
+    async def revoke_after_scope_read(session, actor, organization):
+        nonlocal changed
+        scoped = await resolve(session, actor, organization)
+        if actor == OWNER and not changed:
+            changed = True
+            async with sf() as writer, writer.begin():
+                await writer.execute(update(OrganizationMemberRow).where(OrganizationMemberRow.organization_id == ORG, OrganizationMemberRow.user_id == OWNER).values(role="admin"))
+        return scoped
+
+    monkeypatch.setattr(sql, "active_organization_for_user", revoke_after_scope_read)
+    with acting(OWNER):
+        assert await repo.decide_composio(row["id"], approve=True) is None
+        assert (await repo.get_composio_for_org(row["id"]))["status"] == "pending"
+    assert changed and transport.calls == []
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "contact_actor,reviewer,relation,allowed",
     [
         (MEMBER, MEMBER, "bound", False),
-        (MEMBER, ADMIN, "bound", False),
-        (ADMIN, ADMIN, "bound", False),
+        (MEMBER, OWNER, "bound", False),
+        (OWNER, OWNER, "bound", False),
         (MEMBER, MEMBER, "unrelated", True),
-        (MEMBER, ADMIN, "unrelated", True),
-        (ADMIN, ADMIN, "unrelated", True),
-        (MEMBER, ADMIN, "current", False),
+        (MEMBER, OWNER, "unrelated", True),
+        (OWNER, OWNER, "unrelated", True),
+        (MEMBER, OWNER, "current", False),
     ],
 )
 async def test_bound_customer_contact_exclusion_uses_real_canonical_client(world, transport, contact_actor, reviewer, relation, allowed):  # noqa: F811
@@ -251,7 +320,7 @@ async def test_revoked_or_unsupported_proposer_has_no_approval_or_upstream(world
         del transport.config.mcp_servers["composio-me"].user_auth.users[MEMBER]
     else:
         transport.config.mcp_servers["composio-me"].user_auth = None
-    result = await client.post(f"/api/approvals/{row['id']}/approve", headers=auth_headers(ADMIN, ORG))
+    result = await client.post(f"/api/approvals/{row['id']}/approve", headers=auth_headers(OWNER, ORG))
     assert result.status_code in {404, 409}
     assert transport.calls == []
     with acting(ADMIN):
@@ -259,7 +328,7 @@ async def test_revoked_or_unsupported_proposer_has_no_approval_or_upstream(world
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("rewrite", ["payload", "header", "duplicate_header", "runtime", "server", "membership", "binding", "decider_membership"])
+@pytest.mark.parametrize("rewrite", ["payload", "header", "duplicate_header", "runtime", "server", "membership", "binding", "decider_membership", "owner_downgrade"])
 async def test_final_boundary_rechecks_authority_after_custom_interceptor(world, transport, rewrite):  # noqa: F811
     sf, repo, client = world
     row = await propose(repo)
@@ -277,17 +346,20 @@ async def test_final_boundary_rechecks_authority_after_custom_interceptor(world,
             request = request.override(server_name="public")
         elif rewrite in {"membership", "decider_membership"}:
             async with sf() as session, session.begin():
-                await session.execute(update(OrganizationMemberRow).where(OrganizationMemberRow.organization_id == ORG, OrganizationMemberRow.user_id == (MEMBER if rewrite == "membership" else ADMIN)).values(status="inactive"))
+                await session.execute(update(OrganizationMemberRow).where(OrganizationMemberRow.organization_id == ORG, OrganizationMemberRow.user_id == (MEMBER if rewrite == "membership" else OWNER)).values(status="inactive"))
+        elif rewrite == "owner_downgrade":
+            async with sf() as session, session.begin():
+                await session.execute(update(OrganizationMemberRow).where(OrganizationMemberRow.organization_id == ORG, OrganizationMemberRow.user_id == OWNER).values(role="admin"))
         else:
             transport.config.mcp_servers["composio-me"].user_auth.users[MEMBER] = "new-binding"
         return await handler(request)
 
     transport.custom = custom
-    result = await client.post(f"/api/approvals/{row['id']}/approve", headers=auth_headers(ADMIN, ORG))
+    result = await client.post(f"/api/approvals/{row['id']}/approve", headers=auth_headers(OWNER, ORG))
     assert result.status_code == 200
     assert result.json()["execution_result"]["state"] == "outcome_unknown"
     assert transport.calls == []
-    with acting(OWNER):
+    with acting(ADMIN):
         stored = await repo.get_composio_for_org(row["id"])
     assert stored["execution_result"]["state"] == "outcome_unknown"
     assert current_composio_authority() is None
@@ -299,7 +371,7 @@ async def test_timeout_and_cancellation_hold_claim_and_reset_authority(world, tr
     for call_id, failure in [("timeout", TimeoutError("secret-provider-error")), ("cancel", asyncio.CancelledError())]:
         row = await propose(repo, call_id=call_id)
         transport.error = failure
-        with acting(ADMIN):
+        with acting(OWNER):
             authority = await prepare_composio_authority(row, repo)
             approved = await repo.decide_composio(row["id"], approve=True)
             with bind_composio_authority(authority):
@@ -319,7 +391,7 @@ async def test_timeout_and_cancellation_hold_claim_and_reset_authority(world, tr
 async def test_missing_or_argument_shaped_authority_never_impersonates(world, transport):  # noqa: F811
     _, repo, _ = world
     row = await propose(repo)
-    with acting(ADMIN):
+    with acting(OWNER):
         approved = await repo.decide_composio(row["id"], approve=True)
         assert (await execute_approved({**approved, "authority": {"proposer": MEMBER}})).status == "failed"
         with pytest.raises(ToolException):
@@ -332,7 +404,7 @@ async def test_missing_or_argument_shaped_authority_never_impersonates(world, tr
 async def test_concurrent_approve_has_one_winner_and_one_attempt(world, transport):  # noqa: F811
     _, repo, client = world
     row = await propose(repo)
-    results = await asyncio.gather(*(client.post(f"/api/approvals/{row['id']}/approve", headers=auth_headers(ADMIN, ORG)) for _ in range(3)))
+    results = await asyncio.gather(*(client.post(f"/api/approvals/{row['id']}/approve", headers=auth_headers(OWNER, ORG)) for _ in range(3)))
     assert sorted(result.status_code for result in results) == [200, 409, 409]
     assert len(transport.calls) == 1
 

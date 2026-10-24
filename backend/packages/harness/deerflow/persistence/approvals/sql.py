@@ -4,7 +4,7 @@ Generic reads filter the storage user; Composio reads require the authenticated
 actor and active organization, so a foreign row is indistinguishable from a
 missing one (routers map ``None`` to 404). Separate Composio-only methods grant
 active organization owners/admins list/read/reject oversight. Separate approval
-methods admit the active staff proposer or an actual same-org owner/admin.
+methods admit the active staff proposer or an actual same-org owner.
 Every state change is a
 compare-and-set ``UPDATE ... WHERE status = <expected>``: returns ``None``
 when the row is missing, foreign, or no longer in the expected state.
@@ -165,7 +165,7 @@ class PendingActionRepository:
             return _to_dict(row) if row is not None else None
 
     async def _composio_approval_scope(self, stmt: Any) -> Any | None:
-        """Own active staff proposal, or an actual active same-org reviewer."""
+        """Own active staff proposal, or an actual active same-org owner."""
         actor, context = get_current_user(), get_storage_context()
         if actor is None or context is None or str(actor.id) != context.actor_user_id or not context.organization_id:
             return None
@@ -202,9 +202,13 @@ class PendingActionRepository:
                     or_(ClientAssignmentRow.organization_id == organization.id, ClientAssignmentRow.client_id == bound_client_id),
                 )
             )
-        if organization.role not in {"owner", "admin"}:
-            stmt = stmt.where(PendingActionRow.user_id == str(actor.id))
-        return stmt
+        owner_active = exists().where(
+            OrganizationMemberRow.organization_id == organization.id,
+            OrganizationMemberRow.user_id == str(actor.id),
+            OrganizationMemberRow.status == "active",
+            OrganizationMemberRow.role == "owner",
+        )
+        return stmt.where(or_(PendingActionRow.user_id == str(actor.id), owner_active))
 
     async def get_composio_for_approval(self, action_id: str) -> dict | None:
         stmt = await self._composio_approval_scope(select(PendingActionRow).where(PendingActionRow.id == action_id))
