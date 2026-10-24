@@ -375,3 +375,55 @@ async def test_user_stop_then_host_cancel_during_actual_metadata_drain_finishes(
             factory.assert_not_called()
     finally:
         reset_app_config()
+
+
+@pytest.mark.asyncio
+async def test_public_stop_before_guard_entry_adopts_owned_finalization():
+    store, end = MemoryRunStore(), AsyncMock()
+    manager = RunManager(store=store, on_unstarted_limit=end)
+    record = await manager.create_or_reject("pre-entry-public-stop")
+    worker_entered, callback_entered, release = asyncio.Event(), asyncio.Event(), asyncio.Event()
+    completed = []
+    shutdown = None
+
+    async def worker():
+        worker_entered.set()
+        await asyncio.Event().wait()
+
+    async def completion(actual):
+        assert actual is record and not worker_entered.is_set()
+        assert actual.status == RunStatus.error and (await store.get(actual.run_id))["status"] == "error"
+        assert actual.abort_action == "rollback" and actual.finalizing and end.await_count == 0
+        completed.append(actual)
+        callback_entered.set()
+        await release.wait()
+
+    original = manager.create_worker_task(record, worker(), on_unstarted_completed=completion)
+    try:
+        await manager.cancel(record.run_id, action="rollback")
+        assert not worker_entered.is_set()
+        original.cancel("host-before-guard-entry")
+        shutdown = asyncio.create_task(manager.shutdown(timeout=2))
+        await asyncio.wait_for(callback_entered.wait(), 2)
+        adopted = record.task
+        assert adopted is not original and original.cancelled() and not adopted.done()
+        assert record.finalizing and await manager.has_inflight(record.thread_id)
+        with pytest.raises(ConflictError):
+            await manager.create_or_reject(record.thread_id)
+        await manager.cancel(record.run_id, action="interrupt")
+        assert record.task is adopted and record.abort_action == "rollback"
+        for _ in range(10):
+            await asyncio.sleep(0)
+        assert not shutdown.done() and not adopted.done() and end.await_count == 0
+    finally:
+        release.set()
+        await asyncio.wait_for(asyncio.gather(record.task, return_exceptions=True), 5)
+        if shutdown is not None:
+            await asyncio.wait_for(shutdown, 5)
+        await manager.stop_run_limit(record.run_id)
+    assert completed == [record] and not record.finalizing and record.task.done()
+    assert not worker_entered.is_set() and record.status == RunStatus.error
+    end.assert_awaited_once_with(record.run_id)
+    replacement = await manager.create_or_reject(record.thread_id)
+    await manager.cancel(replacement.run_id)
+    await manager.stop_run_limit(replacement.run_id)

@@ -235,6 +235,7 @@ class RunRecord:
     # Private server state, separate from public metadata/kwargs.
     run_limits: dict[str, Any] | None = field(default=None, repr=False)
     worker_entered: bool = field(default=False, repr=False)
+    preflight_owner_ready: asyncio.Event | None = field(default=None, repr=False)
     end_published: bool = field(default=False, repr=False)
     limit_error_published: bool = field(default=False, repr=False)
     limit_finalization_started: bool = field(default=False, repr=False)
@@ -377,22 +378,28 @@ class RunManager:
     ) -> asyncio.Task:
         """Attach without yielding; own cancellation before run_agent's guard starts."""
         entered = False
+        owner_ready = asyncio.Event()
+        record.preflight_owner_ready = owner_ready
+
+        def owns_stopped_preflight() -> bool:
+            return (
+                not record.worker_entered
+                and record.operation_kind == ThreadOperationKind.run
+                and not record.ownership_lost
+                and self._runs.get(record.run_id) is record
+                and record.stop_reason != "cleanup_unconfirmed"
+                and record.abort_event.is_set()
+                and record.abort_action in ("interrupt", "rollback", *LIMIT_ACTIONS)
+            )
 
         async def guarded() -> None:
             nonlocal entered
             entered = True
+            owner_ready.set()
             try:
                 await worker
             except asyncio.CancelledError:
-                if (
-                    record.worker_entered
-                    or record.operation_kind != ThreadOperationKind.run
-                    or record.ownership_lost
-                    or self._runs.get(record.run_id) is not record
-                    or record.stop_reason == "cleanup_unconfirmed"
-                    or not record.abort_event.is_set()
-                    or record.abort_action not in ("interrupt", "rollback", *LIMIT_ACTIONS)
-                ):
+                if not owns_stopped_preflight():
                     raise
                 await self._finish_unstarted_run(record, preflight_drained=True, on_completed=on_unstarted_completed)
 
@@ -405,7 +412,22 @@ class RunManager:
 
         def close_unentered(done: asyncio.Task) -> None:
             if not entered:
-                worker.close()
+                try:
+                    worker.close()  # Never entered: no child or graph could start.
+                    if record.task is done and owns_stopped_preflight():
+                        adopted = asyncio.create_task(
+                            self._finish_unstarted_run(record, preflight_drained=True, on_completed=on_unstarted_completed),
+                            name=f"run-preflight-handoff-{record.run_id}",
+                        )
+                        record.task = adopted
+
+                        def observe_finalization(completed: asyncio.Task) -> None:
+                            if not completed.cancelled() and completed.exception() is not None:
+                                logger.error("Owned preflight finalization failed for %s", record.run_id, exc_info=completed.exception())
+
+                        adopted.add_done_callback(observe_finalization)
+                finally:
+                    owner_ready.set()
 
         task.add_done_callback(close_unentered)
         record.task = task
@@ -545,15 +567,16 @@ class RunManager:
                 if task is not None and not task.done():
                     if not was_finalizing:
                         task.cancel()
-                    if not record.worker_entered:
+                    if not record.worker_entered and record.preflight_owner_ready is None:
 
                         def close_unstarted(done: asyncio.Task) -> None:
                             if not record.worker_entered:
-                                cleanup = asyncio.create_task(self._finish_unstarted_run(record), name=f"run-limit-unstarted-{record.run_id}")
+                                cleanup = asyncio.create_task(self._finish_unstarted_run(record, preflight_drained=True), name=f"run-limit-unstarted-{record.run_id}")
+                                record.task = cleanup
                                 cleanup.add_done_callback(lambda completed: completed.exception() if not completed.cancelled() else None)
 
                         task.add_done_callback(close_unstarted)
-            if task is None or task.done():
+            if (task is None or task.done()) and (record.preflight_owner_ready is None or record.preflight_owner_ready.is_set()):
                 await self._finish_unstarted_run(record)
 
     def _index_run_locked(self, record: RunRecord) -> None:
@@ -2746,8 +2769,17 @@ class RunManager:
         loop = asyncio.get_running_loop()
         deadline = loop.time() + timeout
 
+        def handoff_pending(record: RunRecord) -> bool:
+            return record.operation_kind == ThreadOperationKind.run and record.preflight_owner_ready is not None and not record.preflight_owner_ready.is_set()
+
         async with self._lock:
-            inflight = [record for record in self._runs.values() if record.status in (RunStatus.pending, RunStatus.running) and record.task is not None and not record.task.done()]
+            inflight = [
+                record
+                for record in self._runs.values()
+                if (record.status in (RunStatus.pending, RunStatus.running) or (record.operation_kind == ThreadOperationKind.run and record.finalizing and record.limit_finalization_started and not record.worker_entered))
+                and record.task is not None
+                and (not record.task.done() or handoff_pending(record))
+            ]
             for record in inflight:
                 if record.abort_event.is_set():
                     continue
@@ -2772,6 +2804,13 @@ class RunManager:
             except TimeoutError:
                 logger.warning("Run shutdown could not confirm cancellation claim for %s within its budget", record.run_id)
 
+        ready = [record.preflight_owner_ready.wait() for record in inflight if handoff_pending(record)]
+        if ready:
+            try:
+                await asyncio.wait_for(asyncio.gather(*ready), timeout=max(0.0, deadline - loop.time()))
+            except TimeoutError:
+                logger.warning("Run shutdown budget expired while preflight ownership was handing off")
+
         for run_id in list(self._limit_tasks):
             await self.stop_run_limit(run_id)
         await self.stop_heartbeat(timeout=max(0.0, deadline - loop.time()))
@@ -2781,7 +2820,10 @@ class RunManager:
             return
 
         tasks = [record.task for record in inflight]
-        _, pending = await asyncio.wait(tasks, timeout=max(0.0, deadline - loop.time()))
+        await asyncio.wait(tasks, timeout=max(0.0, deadline - loop.time()))
+        # A cancelled old Task is not drain proof if its same-record owner
+        # was adopted meanwhile. Inspect the current owner after the wait.
+        pending = {record.task for record in inflight if record.task is not None and (not record.task.done() or handoff_pending(record))}
 
         # Only mark/persist ``interrupted`` for runs that did not settle on their
         # own (still pending after the timeout, or ended cancelled). A run that
@@ -2792,6 +2834,12 @@ class RunManager:
                 task = record.task
                 if record.abort_action in HOLD_ACTIONS or (record.run_limits is not None and (task in pending or record.finalizing)):
                     # No terminal fiction over actual pending/finalizing work.
+                    continue
+                if record.limit_finalization_started and not record.worker_entered and record.status not in (RunStatus.pending, RunStatus.running):
+                    # This owner already confirmed final truth before its
+                    # callback. A callback cancellation cannot replace it.
+                    if task.done() and not task.cancelled():
+                        task.exception()
                     continue
                 if task not in pending and not task.cancelled():
                     # Completed on its own — retrieve any surfaced exception so it

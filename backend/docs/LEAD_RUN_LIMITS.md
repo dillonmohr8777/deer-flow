@@ -67,6 +67,12 @@ existing completion hook once with the same real final record, then publishes
 one END. This path never constructs the graph or restores a checkpoint for work
 that never started. Unknown cleanup holds, non-run operations and historical
 store-only rows are not finalized by this owner-only path.
+If cancellation wins before the attached guard's first step, closing the
+never-entered coroutine proves no child started. Its done callback immediately
+adopts the same-record finalization Task as `record.task`; it is owned and its
+exceptions are observed. Shutdown joins the handoff and current adopted owner
+within its existing budget, rather than treating the cancelled old Task as
+completion proof. Admission remains held locally until callback/END finish.
 Ordinary children mark actual cleanup entry separately from public result state;
 their sandbox/task-stop cleanup is also shielded and joined across the entry
 race. No cancelled Future or outer awaiter substitutes for actual completion.
