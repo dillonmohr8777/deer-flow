@@ -1,5 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+
+import { invalidateStoppedThreadCaches } from "@/core/threads/hooks";
 
 import {
   COMPOSIO_STATUS_QUERY_KEY,
@@ -37,6 +39,10 @@ export type ConnectPhase =
  * One connect flow. Pass ``handle`` when a tool already minted the attempt
  * (in-chat prompt); otherwise a fresh attempt is created for ``toolkit``.
  * ``threadId`` lets a retried step refresh its thread once the receipt lands.
+ *
+ * A tool-minted handle is single use: after any failure the next press starts
+ * a fresh attempt with no retry intent, and the person is told to ask MomoBot
+ * again. The browser never replays the waiting step itself.
  */
 export function useConnect({
   toolkit,
@@ -49,10 +55,11 @@ export function useConnect({
 }) {
   const queryClient = useQueryClient();
   const [phase, setPhase] = useState<ConnectPhase>({ kind: "idle" });
+  const toolHandle = useRef(handle);
 
   const start = useCallback(() => {
-    // Opened synchronously in the click so pop-up blockers allow it.
-    const popup = window.open("", "momo-connect", "popup,width=520,height=720");
+    // Its own window per attempt, opened synchronously so blockers allow it.
+    const popup = window.open("", "_blank", "popup,width=520,height=720");
     if (!popup) {
       setPhase({
         kind: "error",
@@ -61,9 +68,12 @@ export function useConnect({
       return;
     }
     setPhase({ kind: "working" });
+    const fromTool = toolHandle.current;
     void (async () => {
       try {
-        const attempt = handle ?? (await createConnectAttempt(toolkit)).handle;
+        const attempt = fromTool
+          ? { handle: fromTool, toolkit }
+          : await createConnectAttempt(toolkit);
         const result = await finishInPopup(popup, attempt);
         setPhase({ kind: "done", message: retryText(result.retry) });
         await queryClient.invalidateQueries({
@@ -71,23 +81,29 @@ export function useConnect({
         });
         const source = result.retry.source_run_id;
         if (threadId && source && result.retry.state === "submitted") {
-          // The receipt can be stored after run.end; read it the normal way.
+          // The receipt can be stored after run.end; read it the normal way,
+          // then let the chat's own run/history queries pick up the retry.
           if (await hasConnectedReceipt(threadId, source, result.handle)) {
-            await queryClient.invalidateQueries({
-              queryKey: ["threads", threadId],
-            });
+            invalidateStoppedThreadCaches(queryClient, threadId);
           }
         }
       } catch (error) {
         if (!popup.closed) popup.close();
+        toolHandle.current = undefined;
         const code = error instanceof Error ? error.message : String(error);
-        setPhase({ kind: "error", message: reasonText(code) || code });
+        const text = reasonText(code) || code;
+        setPhase({
+          kind: "error",
+          message: fromTool
+            ? `${text} After you connect, ask MomoBot to try that step again.`
+            : text,
+        });
         await queryClient.invalidateQueries({
           queryKey: COMPOSIO_STATUS_QUERY_KEY,
         });
       }
     })();
-  }, [handle, queryClient, threadId, toolkit]);
+  }, [queryClient, threadId, toolkit]);
 
   return { phase, start };
 }

@@ -109,54 +109,59 @@ export function parseConnectHint(text: string | undefined): ConnectHint | null {
 }
 
 /**
- * Open the provider in a same-origin popup and resolve with the callback's JSON.
- * ``popup`` must be opened synchronously inside the click handler (before any
- * await) or browsers block it. The callback lands on our own origin, so its
- * body is readable once the provider hands control back.
+ * Open the provider in this attempt's own popup and resolve with the callback's
+ * JSON. ``popup`` must be opened synchronously inside the click handler (before
+ * any await) or browsers block it. The callback and the server's own ``/open``
+ * errors land on our origin, so both are readable here. A callback for any
+ * other handle or toolkit is rejected, never counted as this attempt's success.
  */
 export function finishInPopup(
   popup: Window,
-  handle: string,
+  attempt: ConnectHint,
   timeoutMs = 15 * 60 * 1000,
 ): Promise<ConnectResult> {
-  popup.location.href = connectOpenURL(handle);
+  const openPath = `/api/integrations/connect/${encodeURIComponent(attempt.handle)}/open`;
+  popup.location.href = connectOpenURL(attempt.handle);
   return new Promise((resolve, reject) => {
     const started = Date.now();
     const timer = window.setInterval(() => {
-      if (popup.closed) {
+      const finish = (error: string | null, body?: ConnectResult) => {
         window.clearInterval(timer);
-        reject(new Error("connect_window_closed"));
-        return;
-      }
-      if (Date.now() - started > timeoutMs) {
-        window.clearInterval(timer);
-        popup.close();
-        reject(new Error("connect_attempt_expired"));
-        return;
-      }
+        if (!popup.closed) popup.close();
+        if (error) reject(new Error(error));
+        else resolve(body!);
+      };
+      if (popup.closed) return finish("connect_window_closed");
+      if (Date.now() - started > timeoutMs)
+        return finish("connect_attempt_expired");
+      let path: string;
       let text: string;
       try {
         // Throws while the popup is on the provider's origin.
-        if (!popup.location.pathname.endsWith(CALLBACK_PATH)) return;
+        path = popup.location.pathname;
+        if (!path.endsWith(CALLBACK_PATH) && !path.endsWith(openPath)) return;
         if (popup.document.readyState !== "complete") return;
         text = popup.document.body?.innerText ?? "";
       } catch {
         return;
       }
-      window.clearInterval(timer);
-      popup.close();
+      let body: (ConnectResult & { detail?: unknown }) | null = null;
       try {
-        const body = JSON.parse(text) as ConnectResult & { detail?: unknown };
-        if (body.status === "connected") resolve(body);
-        else
-          reject(
-            new Error(
-              typeof body.detail === "string" ? body.detail : "connect_failed",
-            ),
-          );
+        body = JSON.parse(text) as ConnectResult & { detail?: unknown };
       } catch {
-        reject(new Error("connect_failed"));
+        // An /open that is still redirecting has no JSON body yet.
+        if (path.endsWith(openPath)) return;
       }
+      if (body && typeof body.detail === "string") return finish(body.detail);
+      if (path.endsWith(openPath)) return;
+      if (
+        body?.status !== "connected" ||
+        body.handle !== attempt.handle ||
+        body.toolkit !== attempt.toolkit
+      ) {
+        return finish(body ? "connect_result_mismatch" : "connect_failed");
+      }
+      finish(null, body);
     }, 500);
   });
 }
@@ -228,6 +233,12 @@ const REASON: Record<string, string> = {
   connect_window_closed: "The sign-in window closed before finishing.",
   connect_attempt_expired: "That sign-in link expired. Start again.",
   connect_attempt_not_found: "That sign-in link expired. Start again.",
+  connect_open_consumed:
+    "That sign-in link was already used. Press Connect to start a fresh one.",
+  connect_result_mismatch:
+    "That sign-in finished for a different connection. Press Connect to try again.",
+  connect_attempt_in_progress:
+    "A sign-in for this tool is already open. Finish it there first.",
   connect_nonce_denied: "Finish connecting in the same browser you started in.",
   composio_actor_denied: "This connection belongs to someone else.",
   connect_backend_unavailable: "Connections are briefly unavailable.",
