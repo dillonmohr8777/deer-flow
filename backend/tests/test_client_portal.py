@@ -166,9 +166,7 @@ async def test_bound_customer_draft_audit_keeps_authenticated_actor_and_storage_
             assert draft.author_kind == "momo" and draft.author_user_id is None
             assert pending.user_id == CUSTOMER_STORAGE
             assert pending.thread_id == "synthetic-work-thread" and pending.run_id == "synthetic-work-run"
-            draft_count = await session.scalar(
-                select(func.count()).select_from(BoardMessageRow).where(BoardMessageRow.thread_id == created["id"], BoardMessageRow.author_kind == "momo")
-            )
+            draft_count = await session.scalar(select(func.count()).select_from(BoardMessageRow).where(BoardMessageRow.thread_id == created["id"], BoardMessageRow.author_kind == "momo"))
             pending_count = await session.scalar(select(func.count()).select_from(PendingActionRow).where(PendingActionRow.target == created["id"]))
 
         assert event["details"] == {
@@ -194,9 +192,7 @@ async def test_bound_customer_draft_audit_keeps_authenticated_actor_and_storage_
         async with org_world() as session:
             portal = await session.get(BoardPortalRow, created["id"])
             assert portal.revision == 1
-            assert await session.scalar(
-                select(func.count()).select_from(BoardMessageRow).where(BoardMessageRow.thread_id == created["id"], BoardMessageRow.author_kind == "momo")
-            ) == draft_count == 1
+            assert await session.scalar(select(func.count()).select_from(BoardMessageRow).where(BoardMessageRow.thread_id == created["id"], BoardMessageRow.author_kind == "momo")) == draft_count == 1
             assert await session.scalar(select(func.count()).select_from(PendingActionRow).where(PendingActionRow.target == created["id"])) == pending_count == 1
 
 
