@@ -462,7 +462,7 @@ class ConnectManager:
         return items
 
     async def status(self):
-        await self.authorize()
+        scope = await self.authorize()
         rows = []
         for toolkit in self.config.composio_me.toolkits:
             reason = self.unavailable(toolkit)
@@ -470,10 +470,19 @@ class ConnectManager:
             if reason is None:
                 try:
                     connected = bool(await self.accounts(toolkit))
+                    slot = await self.repo.get_key(scope.actor_user_id, self.slot_key(scope, toolkit))
+                    if not connected and slot is not None:
+                        attempt = await self.repo.get_key(scope.actor_user_id, self.attempt_key(slot["handle"]))
+                        if slot.get("state") != "ready" or not isinstance(attempt, dict) or attempt.get("state") != "ready" or attempt.get("nonce") != slot.get("nonce"):
+                            reason = "connect_attempt_held"
                 except ComposioSessionError:
                     reason = "connection_verification_unavailable"
             rows.append({"toolkit": toolkit, "connected": connected, "connectable": reason is None and not connected, "reason": reason})
         return rows
+
+    @staticmethod
+    def slot_key(scope, toolkit):
+        return "__cs_" + hashlib.sha256(f"{scope.organization_id}:{toolkit}".encode()).hexdigest()[:24]
 
     @staticmethod
     def attempt_key(handle):
@@ -522,7 +531,7 @@ class ConnectManager:
             raise ComposioSessionError(reason)
         if await self.accounts(toolkit):
             raise ComposioSessionError("already_connected")
-        slot = "__cs_" + hashlib.sha256(f"{scope.organization_id}:{toolkit}".encode()).hexdigest()[:24]
+        slot = self.slot_key(scope, toolkit)
         existing = await self.repo.get_key(scope.actor_user_id, slot)
         if isinstance(existing, dict):
             current_attempt = await self.repo.get_key(scope.actor_user_id, self.attempt_key(existing["handle"]))

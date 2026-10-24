@@ -365,6 +365,8 @@ async def test_concurrent_first_connect_one_link_and_uncertain_creation_never_re
     state.failure = None
     assert (await client.post("/api/integrations/connect", json={"toolkit": "gmail"}, headers=headers(client))).status_code == 409
     assert len([request for request in state.requests if request.url.path.endswith("/link")]) == 1
+    status = await client.get("/api/integrations/status", headers=headers(client))
+    assert status.json()["toolkits"] == [{"toolkit": "gmail", "connected": False, "connectable": False, "reason": "connect_attempt_held"}]
 
 
 @pytest.mark.asyncio
