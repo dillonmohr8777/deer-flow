@@ -380,7 +380,7 @@ class RunManager:
             except asyncio.CancelledError:
                 if record.worker_entered or record.abort_action not in LIMIT_ACTIONS:
                     raise
-                await self._finish_unstarted_limit(record, preflight_drained=True)
+                await await_drained(self._finish_unstarted_limit(record, preflight_drained=True))
 
         guard = guarded()
         try:
@@ -1588,16 +1588,19 @@ class RunManager:
                 record.stop_reason = "prestart_wait_timeout" if action == "prestart_timeout" else "execution_timeout"
                 record.error = "Run expired before execution started" if action == "prestart_timeout" else "Run execution deadline exceeded"
             task_active = record.task is not None and not record.task.done()
-            record.finalizing = task_active
-            if task_active and record.status == RunStatus.running:
+            was_finalizing = record.finalizing
+            record.finalizing = was_finalizing or task_active
+            if task_active and record.status == RunStatus.running and not was_finalizing:
                 record.task.cancel()
         logger.info("Run %s cancellation signalled locally (action=%s)", run_id, action)
 
     async def cancel(self, run_id: str, *, action: str = "interrupt") -> CancelOutcome:
         """Request cancellation of a run.
 
-        When the call lands on the owning worker the run is cancelled
-        locally as before (in-memory abort + status persisted to store).
+        The owning worker records the first stop cause and signals abort.
+        An attached worker keeps its active status/admission through actual
+        cleanup, then commits the terminal status. A run with no attached
+        work can acknowledge cancellation immediately.
 
         When the call lands on a non-owning worker in a multi-worker
         deployment with heartbeat enabled:
@@ -1637,7 +1640,7 @@ class RunManager:
                     return CancelOutcome.not_cancellable
 
         durable_cancel_won = False
-        if record is not None and self.heartbeat_enabled and self._store is not None:
+        if record is not None and self._store is not None and (self.heartbeat_enabled or record.run_limits is not None):
             outcome, winning_action = await self._request_durable_cancel(
                 run_id,
                 action=action,
@@ -1668,11 +1671,18 @@ class RunManager:
                 record.abort_event.set()
                 record.limit_changed.set()
                 task_active = record.task is not None and not record.task.done()
-                record.finalizing = task_active
-                if task_active and record.status == RunStatus.running:
+                was_finalizing = record.finalizing
+                record.finalizing = was_finalizing or task_active
+                if task_active and record.status == RunStatus.running and not was_finalizing:
                     record.task.cancel()
-                record.status = RunStatus.interrupted
+                if not record.finalizing:
+                    record.status = RunStatus.interrupted
                 record.updated_at = _now_iso()
+
+        # An attached worker owns actual drain and the final status commit.
+        # The durable first-cause claim holds admission in the meantime.
+        if record is not None and record.finalizing:
+            return CancelOutcome.cancelled
 
         # Persist outside the lock so store calls don't block other mutations.
         if record is not None:
@@ -2295,7 +2305,7 @@ class RunManager:
             await asyncio.sleep(delay)
         async with self._lock:
             record = self._runs.get(run_id)
-            if record is not None and record.abort_action in HOLD_ACTIONS and (record.finalizing or record.status in (RunStatus.pending, RunStatus.running)):
+            if record is not None and (record.finalizing or (record.abort_action in HOLD_ACTIONS and record.status in (RunStatus.pending, RunStatus.running))):
                 return
             record = self._runs.pop(run_id, None)
             if record is not None:
@@ -2669,7 +2679,9 @@ class RunManager:
         slow store under DB pressure) cannot hang worker shutdown — the
         precondition for the signal-reentrancy deadlock guarded by
         ``app.gateway.app._SHUTDOWN_HOOK_TIMEOUT_SECONDS``. Runs still active
-        after ``timeout`` are logged and may still race teardown.
+        after ``timeout`` are logged and may still race teardown. Captured
+        RUNs with unconfirmed owned cleanup retain active admission; the
+        shutdown budget is not evidence that their work has stopped.
         """
         loop = asyncio.get_running_loop()
         deadline = loop.time() + timeout
@@ -2682,9 +2694,23 @@ class RunManager:
                 record.abort_action = "interrupt"
                 record.abort_event.set()
                 record.limit_changed.set()
-                record.task.cancel()  # type: ignore[union-attr]  # filtered above
+                if record.status == RunStatus.running and not record.finalizing:
+                    record.task.cancel()  # type: ignore[union-attr]  # filtered above
                 # Status is decided AFTER the drain (below), not here: a run that
                 # completes on its own during the drain must keep its real status.
+
+        # Stop claims hold captured admission if the bounded shutdown returns
+        # while real owned cleanup is still draining. Never extend its budget.
+        for record in inflight:
+            if self._store is None or record.run_limits is None:
+                continue
+            remaining = deadline - loop.time()
+            if remaining <= 0:
+                break
+            try:
+                await asyncio.wait_for(self._request_durable_cancel(record.run_id, action=record.abort_action), timeout=remaining)
+            except TimeoutError:
+                logger.warning("Run shutdown could not confirm cancellation claim for %s within its budget", record.run_id)
 
         for run_id in list(self._limit_tasks):
             await self.stop_run_limit(run_id)
@@ -2704,8 +2730,8 @@ class RunManager:
         async with self._lock:
             for record in inflight:
                 task = record.task
-                if record.abort_action in HOLD_ACTIONS:
-                    # An unconfirmed timeout cleanup remains held, even on shutdown.
+                if record.abort_action in HOLD_ACTIONS or (record.run_limits is not None and (task in pending or record.finalizing)):
+                    # No terminal fiction over actual pending/finalizing work.
                     continue
                 if task not in pending and not task.cancelled():
                     # Completed on its own — retrieve any surfaced exception so it

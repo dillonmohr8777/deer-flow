@@ -23,10 +23,15 @@ def timing_deadline(timing: dict[str, Any] | None, *, pending: bool) -> datetime
     return datetime.fromisoformat(value).astimezone(UTC) if value else None
 
 
-def execution_deadline_expired(row: dict[str, Any], now: datetime) -> bool:
-    if row.get("operation_kind", "run") != "run" or row.get("status") != "running":
+def captured_run_recovery_held(row: dict[str, Any], now: datetime) -> bool:
+    """New captured RUNs cannot be retired over unconfirmed owned cleanup."""
+    status = row.get("status")
+    timing = row.get("run_limits")
+    if row.get("operation_kind", "run") != "run" or status not in ("pending", "running") or not isinstance(timing, dict) or not timing.get("admitted_at"):
         return False
-    deadline = timing_deadline(row.get("run_limits"), pending=False)
+    if row.get("cancel_action") is not None:
+        return True
+    deadline = timing_deadline(timing, pending=status == "pending")
     return deadline is not None and now >= deadline
 
 

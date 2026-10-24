@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from deerflow.persistence.organizations.resolution import organization_for_write, organization_from_owned_parent
 from deerflow.persistence.run.model import RunChangeClockRow, RunRow
 from deerflow.persistence.thread_meta.model import ThreadMetaRow
-from deerflow.runtime.runs.schemas import HOLD_ACTIONS, execution_deadline_expired, start_run_timing, timing_deadline
+from deerflow.runtime.runs.schemas import HOLD_ACTIONS, captured_run_recovery_held, start_run_timing, timing_deadline
 from deerflow.runtime.runs.store.base import (
     LeaseRenewal,
     RunIdempotencyConflict,
@@ -35,10 +35,23 @@ def _lease_expired_or_null(lease_col, cutoff: datetime):
     return or_(lease_col.is_(None), lease_col < cutoff)
 
 
-def _execution_deadline_reclaimable():
-    # A committed clock fences an expired execution even if its timeout claim failed.
-    deadline = RunRow.run_limits_json["execution_deadline_at"].as_string()
-    return or_(RunRow.operation_kind != "run", RunRow.status != "running", deadline.is_(None), deadline > datetime.now(UTC).isoformat())
+def _captured_run_reclaimable():
+    # Captured RUNs retain admission through any requested stop, including
+    # user interrupt/rollback. Persisted phase expiry fences failed claims.
+    timing = RunRow.run_limits_json
+    pending_deadline = timing["prestart_deadline_at"].as_string()
+    execution_deadline = timing["execution_deadline_at"].as_string()
+    now = datetime.now(UTC).isoformat()
+    return or_(
+        RunRow.operation_kind != "run",
+        RunRow.status.not_in(("pending", "running")),
+        timing["admitted_at"].as_string().is_(None),
+        and_(
+            RunRow.cancel_action.is_(None),
+            or_(RunRow.status != "pending", pending_deadline.is_(None), pending_deadline > now),
+            or_(RunRow.status != "running", execution_deadline.is_(None), execution_deadline > now),
+        ),
+    )
 
 
 def _in_active_organization() -> tuple:
@@ -857,7 +870,7 @@ class RunRepository(RunStore):
                     RunRow.status.in_(("pending", "running")),
                     _lease_expired_or_null(RunRow.lease_expires_at, cutoff),
                     or_(RunRow.cancel_action.is_(None), RunRow.cancel_action.not_in(HOLD_ACTIONS)),
-                    _execution_deadline_reclaimable(),
+                    _captured_run_reclaimable(),
                     RunRow.operation_kind != "upload_write",
                 )
                 .values(**values)
@@ -885,7 +898,7 @@ class RunRepository(RunStore):
                 RunRow.created_at <= before_dt,
                 _lease_expired_or_null(RunRow.lease_expires_at, cutoff),
                 or_(RunRow.cancel_action.is_(None), RunRow.cancel_action.not_in(HOLD_ACTIONS)),
-                _execution_deadline_reclaimable(),
+                _captured_run_reclaimable(),
                 RunRow.operation_kind != "upload_write",
             )
             .order_by(RunRow.created_at.asc())
@@ -972,8 +985,8 @@ class RunRepository(RunStore):
                 )
                 result = await session.execute(stmt)
                 for row in result.scalars():
-                    if row.cancel_action in HOLD_ACTIONS or execution_deadline_expired(self._row_to_dict(row), datetime.now(UTC)):
-                        raise ConflictError(f"Thread {thread_id} has timeout cleanup awaiting its original worker")
+                    if row.cancel_action in HOLD_ACTIONS or captured_run_recovery_held(self._row_to_dict(row), datetime.now(UTC)):
+                        raise ConflictError(f"Thread {thread_id} has owned cleanup awaiting its original worker")
                     if row.operation_kind == "upload_write":
                         raise ConflictError(f"Thread {thread_id} has an upload awaiting its original writer")
                     lease_expired = False

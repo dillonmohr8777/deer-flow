@@ -49,8 +49,20 @@ The supervisor starts at admission, including when no worker attaches. It
 bounds the prior-finalization barrier and pending preflight separately from
 execution. `create_worker_task()` owns the preflight coroutine, including
 cancellation before its first step. An expiry cancels owned execution through
-the existing abort path. The first durable cancellation cause wins; ordinary
-interrupt and rollback semantics remain unchanged.
+the existing abort path. The first durable cancellation cause wins; interrupt
+keeps the checkpoint and rollback restores the pre-run checkpoint.
+
+Actual services metadata preparation owns and drains its metadata and abort
+children before the outer preflight returns, including repeated cancellation.
+Metadata work is created only inside the admitted worker; refused or reused
+admissions do not create that child. The lead worker joins its shielded finalizer
+through child, sandbox and task-stop cleanup, final status, callback and END.
+Host cancellation cannot abandon that owned cleanup. The existing completion
+callback tail remains cancellable after final status commits; its interruption
+still reaches the final END and local cleanup.
+Ordinary children mark actual cleanup entry separately from public result state;
+their sandbox/task-stop cleanup is also shielded and joined across the entry
+race. No cancelled Future or outer awaiter substitutes for actual completion.
 
 Pre-start expiry is `error` with `stop_reason=prestart_wait_timeout`. Execution
 expiry is `timeout` with `stop_reason=execution_timeout`. Both emit the existing
@@ -61,10 +73,16 @@ interrupt/rollback admission; unknown cleanup remains held for operator repair.
 An independently detected cleanup failure uses private `cleanup_hold`, active
 status and `cleanup_unconfirmed`; it is not mislabeled as an early timeout.
 These internal causes are never additional public HTTP cancellation actions.
-A persisted expired execution deadline independently fences orphan takeover and
-replacement, even if the deadline-time cancellation write failed. Only the
-original worker's confirmed terminal drain releases that row. Pending/pre-start,
-non-run, legacy and disabled-policy recovery retain their existing behavior.
+A captured active RUN retains durable admission after any persisted stop
+request, including user interrupt and rollback, until actual cleanup finishes.
+Attached workers keep local and stored status active during that drain. Either
+expired captured phase deadline (pre-start or execution) independently fences
+orphan takeover and replacement if the timeout claim could not be persisted.
+An expired pending capture with no confirmed owner therefore remains held for
+operator repair; a peer cannot assume that metadata work has stopped. Only the
+original worker's confirmed terminal drain releases the row. Non-run operations,
+terminal or uncaptured legacy rows, and disabled captures without a stop request
+retain their previous recovery behavior.
 Pre-deadline partition behavior remains the inherited lease protocol; this is
 not a claim of complete distributed fault tolerance.
 Timeouts do not settle/refund unknown paid reservations, retry external actions

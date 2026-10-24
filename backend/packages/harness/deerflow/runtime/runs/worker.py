@@ -847,8 +847,11 @@ def _defer_finalization_interrupt(
 async def _await_task_stop_after_host_cancellation(
     task: asyncio.Task[None],
     deferred: BaseException | None,
+    *,
+    interruptible_callback: asyncio.Event | None = None,
 ) -> BaseException | None:
-    """Wait for one task-stop fan-out despite repeated host cancellation."""
+    """Join cleanup; preserve the existing cancellable completion-hook tail."""
+    callback_cancel_forwarded = False
     while True:
         try:
             await asyncio.shield(task)
@@ -856,8 +859,17 @@ async def _await_task_stop_after_host_cancellation(
         except asyncio.CancelledError as exc:
             host = asyncio.current_task()
             if host is None or not host.cancelling():
-                # The fan-out task itself was cancelled rather than the host.
+                # shield reports a child's cancellation without its message.
+                # Keep the first real host interrupt, or retrieve the child's
+                # actual cancellation after it has finished all finalization.
+                if deferred is not None:
+                    raise deferred
+                if task.cancelled():
+                    task.result()
                 raise
+            if interruptible_callback is not None and interruptible_callback.is_set() and not callback_cancel_forwarded:
+                callback_cancel_forwarded = True
+                task.cancel(*exc.args)
             deferred = _defer_finalization_interrupt(deferred, exc)
 
 
@@ -912,6 +924,7 @@ async def run_agent(
     snapshot_capture_failed = False
     llm_error_fallback_message: str | None = None
     checkpoint_rollback_completed = False
+    checkpoint_rollback_attempted = False
     # Message ids checkpointed *before* this run started. The stream loop uses
     # this set to mask out ``deerflow_error_fallback`` markers that belong to
     # earlier runs on the same thread — without it, one stale fallback in
@@ -945,6 +958,7 @@ async def run_agent(
     started = False
     owned_children = OwnedRunChildren()
     sandbox_released = False
+    owned_cleanup_drained = False
 
     def outcome_status() -> RunStatus:
         return record.staged_status or record.status
@@ -954,7 +968,7 @@ async def run_agent(
         *,
         restore_checkpoint: bool = True,
     ) -> None:
-        nonlocal checkpoint_rollback_completed
+        nonlocal checkpoint_rollback_completed, checkpoint_rollback_attempted
         if not record.finalizing:
             await run_manager.set_finalizing(run_id, True)
         if action in LIMIT_ACTIONS:
@@ -967,8 +981,9 @@ async def run_agent(
                 error="Rolled back by user",
                 **terminal_status_kwargs,
             )
-            if not restore_checkpoint:
+            if not restore_checkpoint or not started or not owned_cleanup_drained or checkpoint_rollback_attempted:
                 return
+            checkpoint_rollback_attempted = True
             try:
                 checkpoint_rollback_completed = await _rollback_to_pre_run_checkpoint(
                     accessor=accessor,
@@ -1550,209 +1565,32 @@ async def run_agent(
     finally:
         reset_composio_context(composio_token)
         reset_private_mcp_context(private_mcp_token)
-        try:
-            if not record.ownership_lost:
-                if agent is not None and not record.finalizing:
-                    await run_manager.set_finalizing(run_id, True)
-                try:
-                    await owned_children.drain(record.abort_event)
-                    from deerflow.sandbox.lease import release_sandbox_execution_lease_async
 
-                    if not sandbox_released:
-                        await release_sandbox_execution_lease_async(runtime_ctx)
-                    sandbox_released = True
-                except Exception:
-                    await run_manager.hold_cleanup(record)
-                    raise
-            if record.abort_action in LIMIT_ACTIONS and record.abort_event.is_set() and not record.ownership_lost:
-                await run_manager.set_status(
-                    run_id,
-                    RunStatus.error if record.abort_action == "prestart_timeout" else RunStatus.timeout,
-                    error=record.error,
-                    stop_reason=record.stop_reason,
-                    persist=False,
-                    stage=True,
-                )
-                await run_manager.record_limit_error(record, event_store)
-            if record.ownership_lost:
-                logger.warning(
-                    "Skipping durable finalization for run %s because this worker no longer owns its lease",
-                    run_id,
-                )
+        completion_hook_active = asyncio.Event()
 
-            if not record.ownership_lost and _is_edit_replay_run(record) and outcome_status() != RunStatus.success:
-                if not record.finalizing:
-                    await run_manager.set_finalizing(run_id, True)
-                try:
-                    if not checkpoint_rollback_completed:
-                        checkpoint_rollback_completed = await _rollback_to_pre_run_checkpoint(
-                            accessor=accessor,
-                            checkpointer=checkpointer,
-                            thread_id=thread_id,
-                            run_id=run_id,
-                            rollback_point=rollback_point,
-                            snapshot_capture_failed=snapshot_capture_failed,
-                        )
-                    if checkpoint_rollback_completed:
-                        await _publish_restored_checkpoint_values(
-                            bridge=bridge,
-                            run_id=run_id,
-                            accessor=accessor,
-                            thread_id=thread_id,
-                        )
-                        logger.info("Run %s edit replay restored pre-run checkpoint %s", run_id, pre_run_checkpoint_id)
-                except Exception:
-                    logger.warning("Run %s edit replay rollback failed", run_id, exc_info=True)
+        async def finalize_owned_run() -> None:
+            nonlocal agent, accessor, runtime, runtime_ctx, rollback_point, subagent_events, goal_evaluator_model
+            nonlocal task_store, task_info, pre_run_workspace_snapshot, delivery_content, produced_output_paths, graph_input
+            nonlocal checkpoint_rollback_completed, completion_data, sandbox_released, deferred_finalization_interrupt
+            nonlocal owned_cleanup_drained
+            try:
+                if not record.ownership_lost:
+                    if agent is not None and not record.finalizing:
+                        await run_manager.set_finalizing(run_id, True)
+                    try:
+                        await owned_children.drain(record.abort_event)
+                        from deerflow.sandbox.lease import release_sandbox_execution_lease_async
 
-            # Persist any subagent step events still buffered (#3779) — including on
-            # abort/exception paths, where the stream loop broke before its own flush.
-            if not record.ownership_lost and subagent_events is not None:
-                await subagent_events.flush()
-
-            if not record.ownership_lost and event_store is not None and pre_run_workspace_snapshot is not None:
-                try:
-                    await record_workspace_changes(
-                        event_store,
-                        thread_id,
-                        run_id,
-                        pre_run_workspace_snapshot,
-                        user_id=workspace_changes_user_id,
-                        extra_excluded_dir_names=workspace_excluded_dir_names,
-                    )
-                except Exception:
-                    logger.warning("Failed to record workspace changes for run %s", run_id, exc_info=True)
-
-            # Flush buffered journal events before the terminal receipt. The
-            # receipt uses a run-scoped idempotent write shared with recovery, then
-            # the staged terminal status is persisted. This ordering closes the
-            # crash window where a terminal run could otherwise outlive its receipt.
-            # A fenced worker leaves receipt recovery to the peer that claimed it.
-            if not record.ownership_lost and journal is not None:
-                try:
-                    await journal.flush()
-                except Exception:
-                    logger.warning("Failed to flush journal for run %s", run_id, exc_info=True)
-
-                if delivery_content is None:
-                    if produced_output_paths is None:
-                        produced_output_paths = await _produced_output_paths(
-                            pre_run_workspace_snapshot,
-                            thread_id=thread_id,
-                            user_id=workspace_changes_user_id,
-                            extra_excluded_dir_names=workspace_excluded_dir_names,
-                        )
-                    delivery_content = _delivery_content_with_outputs(journal.get_delivery_content(), produced_output_paths)
-                receipt_persisted = await _persist_delivery_receipt(
-                    event_store,
-                    thread_id=thread_id,
-                    run_id=run_id,
-                    content=delivery_content,
-                )
-                if produced_output_paths and outcome_status() == RunStatus.success and not receipt_persisted:
-                    await run_manager.set_status(
-                        run_id,
-                        RunStatus.error,
-                        error=_DELIVERY_RECEIPT_FAILED_ERROR,
-                        persist=False,
-                        stage=True,
-                    )
-
-            if not record.ownership_lost and journal is not None and persist_completion:
-                try:
-                    # Advance the final completion fields and timestamp without
-                    # terminalizing the durable row. That active row continues to
-                    # fence peer checkpoint writers through the duration write.
-                    completion_data = journal.get_completion_data()
-                    await run_manager.update_finalizing_progress(run_id, **completion_data)
-                except Exception:
-                    logger.warning("Failed to persist finalizing run progress for %s (non-fatal)", run_id, exc_info=True)
-
-            # Keep the durable run row active through its final duration checkpoint
-            # write. A peer Gateway admits history migration from the durable row,
-            # not this worker's staged terminal status; terminalizing first would
-            # let that migration read an unfinished lifetime and race this write.
-            if started and not record.ownership_lost and checkpointer is not None and outcome_status() == RunStatus.success:
-                try:
-                    created = datetime.fromisoformat(record.created_at.replace("Z", "+00:00"))
-                    updated = datetime.fromisoformat(record.updated_at.replace("Z", "+00:00"))
-                    # Match legacy history semantics: turn_duration is the whole
-                    # RunRecord lifetime in integer seconds, including admission
-                    # delay. Persist zero for sub-second successful turns.
-                    duration = max(0, int((updated - created).total_seconds()))
-                    await _persist_run_duration(
-                        checkpointer=checkpointer,
-                        thread_id=thread_id,
-                        run_id=run_id,
-                        duration_seconds=duration,
-                    )
-                except Exception:
-                    logger.debug("Failed to persist run duration for thread %s run %s (non-fatal)", thread_id, run_id)
-
-            if started and not record.ownership_lost and checkpointer is not None and outcome_status() == RunStatus.interrupted and not _is_edit_replay_run(record):
-                try:
-                    await run_manager.wait_for_prior_finalizing(thread_id, run_id)
-                    if not await run_manager.has_later_started_run(thread_id, run_id):
-                        await _ensure_interrupted_title(checkpointer=checkpointer, thread_id=thread_id, app_config=ctx.app_config, graph_input=graph_input)
-                except Exception:
-                    logger.debug("Failed to generate interrupted title for thread %s (non-fatal)", thread_id)
-
-            # Sync title from checkpoint to threads_meta.display_name
-            if started and not record.ownership_lost and checkpointer is not None and thread_store is not None:
-                try:
-                    ckpt_config = {"configurable": {"thread_id": thread_id, "checkpoint_ns": ""}}
-                    ckpt_tuple = await checkpointer.aget_tuple(ckpt_config)
-                    if ckpt_tuple is not None:
-                        ckpt = getattr(ckpt_tuple, "checkpoint", {}) or {}
-                        title = ckpt.get("channel_values", {}).get("title")
-                        if title:
-                            await thread_store.update_display_name(thread_id, title)
-                except Exception:
-                    logger.debug("Failed to sync title for thread %s (non-fatal)", thread_id)
-
-            if task_info is not None and task_store is not None:
-                # Keep the finalizing barrier held until stop observers finish, so
-                # a same-thread replacement cannot overlap this task's lifecycle.
-                task_stop = asyncio.create_task(
-                    notify_task_stop(
-                        extensions,
-                        task_store,
-                        task_info,
-                        lead_task_outcome(
-                            aborted=(record.abort_event.is_set() or outcome_status() == RunStatus.interrupted),
-                            succeeded=outcome_status() == RunStatus.success,
-                        ),
-                        timeout=_EXTENSION_TASK_NOTIFY_TIMEOUT_SECONDS,
-                    ),
-                    name=f"extension-task-stop-{run_id}",
-                )
-                try:
-                    deferred_finalization_interrupt = await _await_task_stop_after_host_cancellation(
-                        task_stop,
-                        deferred_finalization_interrupt,
-                    )
-                except Exception:
-                    logger.warning(
-                        "Extension task-stop notification failed for run %s (non-fatal)",
-                        run_id,
-                        exc_info=True,
-                    )
-                except BaseException as exc:
-                    # Cancellation here must not strand the finalizing barrier or
-                    # leave stream consumers waiting for the end frame.
-                    deferred_finalization_interrupt = _defer_finalization_interrupt(
-                        deferred_finalization_interrupt,
-                        exc,
-                    )
-                    logger.warning(
-                        "Extension task-stop notification interrupted for run %s; completing cleanup first",
-                        run_id,
-                    )
-            if not record.ownership_lost:
-                # Last deadline check includes continuations, evaluator and cleanup.
-                expire_limit = getattr(run_manager, "expire_limit_if_due", None)
-                if expire_limit is not None:
-                    await expire_limit(run_id)
-                if record.abort_action in LIMIT_ACTIONS and record.abort_event.is_set():
+                        if not sandbox_released:
+                            await release_sandbox_execution_lease_async(runtime_ctx)
+                        sandbox_released = True
+                        owned_cleanup_drained = True
+                    except BaseException:
+                        await run_manager.hold_cleanup(record)
+                        raise
+                if record.abort_event.is_set() and not record.ownership_lost:
+                    await _finish_cancellation(record.abort_action)
+                if record.abort_action in LIMIT_ACTIONS and record.abort_event.is_set() and not record.ownership_lost:
                     await run_manager.set_status(
                         run_id,
                         RunStatus.error if record.abort_action == "prestart_timeout" else RunStatus.timeout,
@@ -1762,130 +1600,329 @@ async def run_agent(
                         stage=True,
                     )
                     await run_manager.record_limit_error(record, event_store)
-                stop_limit = getattr(run_manager, "stop_run_limit", None)
-                if stop_limit is not None:
-                    await stop_limit(run_id)
-                if record.abort_event.is_set():
-                    await run_manager.set_status(run_id, outcome_status(), error=record.error, stop_reason=record.stop_reason, persist=False)
-                    await run_manager.persist_current_status(run_id)
-                else:
-                    cancel_action = await run_manager.set_status_if_not_cancelled(
+                if record.ownership_lost:
+                    logger.warning(
+                        "Skipping durable finalization for run %s because this worker no longer owns its lease",
                         run_id,
-                        outcome_status(),
-                        error=record.error,
-                        stop_reason=record.stop_reason,
                     )
-                    if cancel_action is not None:
-                        await _finish_cancellation(cancel_action)
-                        await run_manager.set_status(run_id, outcome_status(), error=record.error, stop_reason=record.stop_reason, persist=False)
-                        await run_manager.persist_current_status(run_id)
+
+                if not record.ownership_lost and _is_edit_replay_run(record) and outcome_status() != RunStatus.success:
+                    if not record.finalizing:
+                        await run_manager.set_finalizing(run_id, True)
+                    try:
+                        if not checkpoint_rollback_completed:
+                            checkpoint_rollback_completed = await _rollback_to_pre_run_checkpoint(
+                                accessor=accessor,
+                                checkpointer=checkpointer,
+                                thread_id=thread_id,
+                                run_id=run_id,
+                                rollback_point=rollback_point,
+                                snapshot_capture_failed=snapshot_capture_failed,
+                            )
+                        if checkpoint_rollback_completed:
+                            await _publish_restored_checkpoint_values(
+                                bridge=bridge,
+                                run_id=run_id,
+                                accessor=accessor,
+                                thread_id=thread_id,
+                            )
+                            logger.info("Run %s edit replay restored pre-run checkpoint %s", run_id, pre_run_checkpoint_id)
+                    except Exception:
+                        logger.warning("Run %s edit replay rollback failed", run_id, exc_info=True)
+
+                # Persist any subagent step events still buffered (#3779) — including on
+                # abort/exception paths, where the stream loop broke before its own flush.
+                if not record.ownership_lost and subagent_events is not None:
+                    await subagent_events.flush()
+
+                if not record.ownership_lost and event_store is not None and pre_run_workspace_snapshot is not None:
+                    try:
+                        await record_workspace_changes(
+                            event_store,
+                            thread_id,
+                            run_id,
+                            pre_run_workspace_snapshot,
+                            user_id=workspace_changes_user_id,
+                            extra_excluded_dir_names=workspace_excluded_dir_names,
+                        )
+                    except Exception:
+                        logger.warning("Failed to record workspace changes for run %s", run_id, exc_info=True)
+
+                # Flush buffered journal events before the terminal receipt. The
+                # receipt uses a run-scoped idempotent write shared with recovery, then
+                # the staged terminal status is persisted. This ordering closes the
+                # crash window where a terminal run could otherwise outlive its receipt.
+                # A fenced worker leaves receipt recovery to the peer that claimed it.
                 if not record.ownership_lost and journal is not None:
-                    journal.finish_managed_terminal(succeeded=record.status == RunStatus.success)
                     try:
                         await journal.flush()
                     except Exception:
-                        logger.warning("Failed to flush terminal run event for %s", run_id, exc_info=True)
+                        logger.warning("Failed to flush journal for run %s", run_id, exc_info=True)
+
+                    if delivery_content is None:
+                        if produced_output_paths is None:
+                            produced_output_paths = await _produced_output_paths(
+                                pre_run_workspace_snapshot,
+                                thread_id=thread_id,
+                                user_id=workspace_changes_user_id,
+                                extra_excluded_dir_names=workspace_excluded_dir_names,
+                            )
+                        delivery_content = _delivery_content_with_outputs(journal.get_delivery_content(), produced_output_paths)
+                    receipt_persisted = await _persist_delivery_receipt(
+                        event_store,
+                        thread_id=thread_id,
+                        run_id=run_id,
+                        content=delivery_content,
+                    )
+                    if produced_output_paths and outcome_status() == RunStatus.success and not receipt_persisted:
+                        await run_manager.set_status(
+                            run_id,
+                            RunStatus.error,
+                            error=_DELIVERY_RECEIPT_FAILED_ERROR,
+                            persist=False,
+                            stage=True,
+                        )
+
                 if not record.ownership_lost and journal is not None and persist_completion:
                     try:
-                        completion_data = completion_data or journal.get_completion_data()
-                        await run_manager.update_run_completion(run_id, status=record.status.value, **completion_data)
+                        # Advance the final completion fields and timestamp without
+                        # terminalizing the durable row. That active row continues to
+                        # fence peer checkpoint writers through the duration write.
+                        completion_data = journal.get_completion_data()
+                        await run_manager.update_finalizing_progress(run_id, **completion_data)
                     except Exception:
-                        logger.warning("Failed to persist run completion for %s (non-fatal)", run_id, exc_info=True)
-                if started and not record.ownership_lost and thread_store is not None:
+                        logger.warning("Failed to persist finalizing run progress for %s (non-fatal)", run_id, exc_info=True)
+
+                # Keep the durable run row active through its final duration checkpoint
+                # write. A peer Gateway admits history migration from the durable row,
+                # not this worker's staged terminal status; terminalizing first would
+                # let that migration read an unfinished lifetime and race this write.
+                if started and not record.ownership_lost and checkpointer is not None and outcome_status() == RunStatus.success:
                     try:
-                        await thread_store.update_status(thread_id, "idle" if record.status == RunStatus.success else record.status.value)
+                        created = datetime.fromisoformat(record.created_at.replace("Z", "+00:00"))
+                        updated = datetime.fromisoformat(record.updated_at.replace("Z", "+00:00"))
+                        # Match legacy history semantics: turn_duration is the whole
+                        # RunRecord lifetime in integer seconds, including admission
+                        # delay. Persist zero for sub-second successful turns.
+                        duration = max(0, int((updated - created).total_seconds()))
+                        await _persist_run_duration(
+                            checkpointer=checkpointer,
+                            thread_id=thread_id,
+                            run_id=run_id,
+                            duration_seconds=duration,
+                        )
                     except Exception:
-                        logger.debug("Failed to update thread_meta status for %s (non-fatal)", thread_id)
-            if not record.ownership_lost and ctx.on_run_completed is not None:
-                try:
-                    await ctx.on_run_completed(record)
-                except Exception:
-                    logger.warning("Run completion hook failed for %s (non-fatal)", run_id, exc_info=True)
-                except BaseException as exc:
-                    # A terminal hook must not leave replacement runs blocked or
-                    # stream consumers waiting indefinitely.
-                    deferred_finalization_interrupt = _defer_finalization_interrupt(
-                        deferred_finalization_interrupt,
-                        exc,
-                    )
-                    logger.warning(
-                        "Run completion hook interrupted for %s; completing finalization first",
-                        run_id,
-                    )
+                        logger.debug("Failed to persist run duration for thread %s run %s (non-fatal)", thread_id, run_id)
 
-            if record.finalizing:
-                await run_manager.set_finalizing(run_id, False)
-
-            publish_once = getattr(run_manager, "publish_end_once", None)
-            if publish_once is not None:
-                await publish_once(run_id, bridge.publish_end)
-            else:
-                await bridge.publish_end(run_id)
-
-            if deferred_finalization_interrupt is not None:
-                raise deferred_finalization_interrupt
-        finally:
-            try:
-                stop_limit = getattr(run_manager, "stop_run_limit", None)
-                if stop_limit is not None:
-                    await stop_limit(run_id)
-                if journal is not None:
+                if started and not record.ownership_lost and checkpointer is not None and outcome_status() == RunStatus.interrupted and not _is_edit_replay_run(record):
                     try:
-                        await journal.close(flush=not record.ownership_lost)
+                        await run_manager.wait_for_prior_finalizing(thread_id, run_id)
+                        if not await run_manager.has_later_started_run(thread_id, run_id):
+                            await _ensure_interrupted_title(checkpointer=checkpointer, thread_id=thread_id, app_config=ctx.app_config, graph_input=graph_input)
                     except Exception:
-                        logger.warning("Failed to close journal for run %s", run_id, exc_info=True)
+                        logger.debug("Failed to generate interrupted title for thread %s (non-fatal)", thread_id)
+
+                # Sync title from checkpoint to threads_meta.display_name
+                if started and not record.ownership_lost and checkpointer is not None and thread_store is not None:
+                    try:
+                        ckpt_config = {"configurable": {"thread_id": thread_id, "checkpoint_ns": ""}}
+                        ckpt_tuple = await checkpointer.aget_tuple(ckpt_config)
+                        if ckpt_tuple is not None:
+                            ckpt = getattr(ckpt_tuple, "checkpoint", {}) or {}
+                            title = ckpt.get("channel_values", {}).get("title")
+                            if title:
+                                await thread_store.update_display_name(thread_id, title)
+                    except Exception:
+                        logger.debug("Failed to sync title for thread %s (non-fatal)", thread_id)
+
+                if task_info is not None and task_store is not None:
+                    # Keep the finalizing barrier held until stop observers finish, so
+                    # a same-thread replacement cannot overlap this task's lifecycle.
+                    task_stop = asyncio.create_task(
+                        notify_task_stop(
+                            extensions,
+                            task_store,
+                            task_info,
+                            lead_task_outcome(
+                                aborted=(record.abort_event.is_set() or outcome_status() == RunStatus.interrupted),
+                                succeeded=outcome_status() == RunStatus.success,
+                            ),
+                            timeout=_EXTENSION_TASK_NOTIFY_TIMEOUT_SECONDS,
+                        ),
+                        name=f"extension-task-stop-{run_id}",
+                    )
+                    try:
+                        deferred_finalization_interrupt = await _await_task_stop_after_host_cancellation(
+                            task_stop,
+                            deferred_finalization_interrupt,
+                        )
+                    except Exception:
+                        logger.warning(
+                            "Extension task-stop notification failed for run %s (non-fatal)",
+                            run_id,
+                            exc_info=True,
+                        )
+                    except BaseException as exc:
+                        # Cancellation here must not strand the finalizing barrier or
+                        # leave stream consumers waiting for the end frame.
+                        deferred_finalization_interrupt = _defer_finalization_interrupt(
+                            deferred_finalization_interrupt,
+                            exc,
+                        )
+                        logger.warning(
+                            "Extension task-stop notification interrupted for run %s; completing cleanup first",
+                            run_id,
+                        )
+                if not record.ownership_lost:
+                    # Last deadline check includes continuations, evaluator and cleanup.
+                    expire_limit = getattr(run_manager, "expire_limit_if_due", None)
+                    if expire_limit is not None:
+                        await expire_limit(run_id)
+                    if record.abort_action in LIMIT_ACTIONS and record.abort_event.is_set():
+                        await run_manager.set_status(
+                            run_id,
+                            RunStatus.error if record.abort_action == "prestart_timeout" else RunStatus.timeout,
+                            error=record.error,
+                            stop_reason=record.stop_reason,
+                            persist=False,
+                            stage=True,
+                        )
+                        await run_manager.record_limit_error(record, event_store)
+                    stop_limit = getattr(run_manager, "stop_run_limit", None)
+                    if stop_limit is not None:
+                        await stop_limit(run_id)
+                    if record.abort_event.is_set():
+                        await _finish_cancellation(record.abort_action)
+                        await run_manager.set_status(run_id, outcome_status(), error=record.error, stop_reason=record.stop_reason, persist=False)
+                        await run_manager.persist_current_status(run_id)
+                    else:
+                        cancel_action = await run_manager.set_status_if_not_cancelled(
+                            run_id,
+                            outcome_status(),
+                            error=record.error,
+                            stop_reason=record.stop_reason,
+                        )
+                        if cancel_action is not None:
+                            await _finish_cancellation(cancel_action)
+                            await run_manager.set_status(run_id, outcome_status(), error=record.error, stop_reason=record.stop_reason, persist=False)
+                            await run_manager.persist_current_status(run_id)
+                    if not record.ownership_lost and journal is not None:
+                        journal.finish_managed_terminal(succeeded=record.status == RunStatus.success)
+                        try:
+                            await journal.flush()
+                        except Exception:
+                            logger.warning("Failed to flush terminal run event for %s", run_id, exc_info=True)
+                    if not record.ownership_lost and journal is not None and persist_completion:
+                        try:
+                            completion_data = completion_data or journal.get_completion_data()
+                            await run_manager.update_run_completion(run_id, status=record.status.value, **completion_data)
+                        except Exception:
+                            logger.warning("Failed to persist run completion for %s (non-fatal)", run_id, exc_info=True)
+                    if started and not record.ownership_lost and thread_store is not None:
+                        try:
+                            await thread_store.update_status(thread_id, "idle" if record.status == RunStatus.success else record.status.value)
+                        except Exception:
+                            logger.debug("Failed to update thread_meta status for %s (non-fatal)", thread_id)
+                if not record.ownership_lost and ctx.on_run_completed is not None:
+                    completion_hook_active.set()
+                    try:
+                        await ctx.on_run_completed(record)
+                    except Exception:
+                        logger.warning("Run completion hook failed for %s (non-fatal)", run_id, exc_info=True)
+                    except BaseException as exc:
+                        # A terminal hook must not leave replacement runs blocked or
+                        # stream consumers waiting indefinitely.
+                        deferred_finalization_interrupt = _defer_finalization_interrupt(
+                            deferred_finalization_interrupt,
+                            exc,
+                        )
+                        logger.warning(
+                            "Run completion hook interrupted for %s; completing finalization first",
+                            run_id,
+                        )
+                    finally:
+                        completion_hook_active.clear()
+
+                if record.finalizing:
+                    await run_manager.set_finalizing(run_id, False)
+
+                publish_once = getattr(run_manager, "publish_end_once", None)
+                if publish_once is not None:
+                    await publish_once(run_id, bridge.publish_end)
+                else:
+                    await bridge.publish_end(run_id)
+
+                if deferred_finalization_interrupt is not None:
+                    raise deferred_finalization_interrupt
             finally:
-                lease_cleanup_interrupt: BaseException | None = None
                 try:
-                    from deerflow.sandbox.lease import release_sandbox_execution_lease_async
-
-                    if not sandbox_released:
-                        await release_sandbox_execution_lease_async(runtime_ctx)
-                except Exception:
-                    logger.warning("Failed to release sandbox execution lease for run %s", run_id, exc_info=True)
-                except BaseException as exc:
-                    # release_async completes the underlying cleanup before it
-                    # re-raises cancellation. Defer that interruption until the
-                    # worker has dropped all other run-scoped references too.
-                    lease_cleanup_interrupt = exc
-                    logger.warning(
-                        "Sandbox execution lease cleanup was interrupted for run %s; completing local cleanup first",
-                        run_id,
-                    )
+                    stop_limit = getattr(run_manager, "stop_run_limit", None)
+                    if stop_limit is not None:
+                        await stop_limit(run_id)
+                    if journal is not None:
+                        try:
+                            await journal.close(flush=not record.ownership_lost)
+                        except Exception:
+                            logger.warning("Failed to close journal for run %s", run_id, exc_info=True)
                 finally:
-                    _release_run_scoped_references(
-                        runnable_configs,
-                        runtime_ctx,
-                        journal,
-                    )
-                # Drop graph and per-run payload references before the terminal
-                # worker task itself becomes collectable.
-                agent = None
-                accessor = None
-                runtime = None
-                runtime_ctx = None
-                rollback_point = None
-                subagent_events = None
-                goal_evaluator_model = None
-                task_store = None
-                task_info = None
-                pre_run_workspace_snapshot = None
-                delivery_content = None
-                produced_output_paths = None
-                graph_input = {}
+                    lease_cleanup_interrupt: BaseException | None = None
+                    try:
+                        from deerflow.sandbox.lease import release_sandbox_execution_lease_async
 
-                # Durable finalization and terminal publication may depend on
-                # external backends, but local housekeeping must always run.
-                _create_contextless_task(bridge.cleanup(run_id, delay=60))
-                # Preserve the existing five-minute grace period for local
-                # join/status paths, then release the terminal record, completed
-                # task, and request payload. Durable run history remains available
-                # through RunStore.
-                _create_contextless_task(run_manager.cleanup(run_id))
-                _schedule_terminal_cycle_collection()
+                        if not sandbox_released:
+                            await release_sandbox_execution_lease_async(runtime_ctx)
+                    except Exception:
+                        logger.warning("Failed to release sandbox execution lease for run %s", run_id, exc_info=True)
+                    except BaseException as exc:
+                        # release_async completes the underlying cleanup before it
+                        # re-raises cancellation. Defer that interruption until the
+                        # worker has dropped all other run-scoped references too.
+                        lease_cleanup_interrupt = exc
+                        logger.warning(
+                            "Sandbox execution lease cleanup was interrupted for run %s; completing local cleanup first",
+                            run_id,
+                        )
+                    finally:
+                        _release_run_scoped_references(
+                            runnable_configs,
+                            runtime_ctx,
+                            journal,
+                        )
+                    # Drop graph and per-run payload references before the terminal
+                    # worker task itself becomes collectable.
+                    agent = None
+                    accessor = None
+                    runtime = None
+                    runtime_ctx = None
+                    rollback_point = None
+                    subagent_events = None
+                    goal_evaluator_model = None
+                    task_store = None
+                    task_info = None
+                    pre_run_workspace_snapshot = None
+                    delivery_content = None
+                    produced_output_paths = None
+                    graph_input = {}
 
-                if lease_cleanup_interrupt is not None:
-                    raise lease_cleanup_interrupt
+                    # Durable finalization and terminal publication may depend on
+                    # external backends, but local housekeeping must always run.
+                    _create_contextless_task(bridge.cleanup(run_id, delay=60))
+                    # Preserve the existing five-minute grace period for local
+                    # join/status paths, then release the terminal record, completed
+                    # task, and request payload. Durable run history remains available
+                    # through RunStore.
+                    _create_contextless_task(run_manager.cleanup(run_id))
+                    _schedule_terminal_cycle_collection()
+
+                    if lease_cleanup_interrupt is not None:
+                        raise lease_cleanup_interrupt
+
+        # The worker remains the join owner. Host cancellation cannot abandon
+        # child/sandbox/observer cleanup or skip the final callback and END.
+        finalizer = asyncio.create_task(finalize_owned_run(), name=f"run-finalize-{run_id}")
+        host_interrupt = await _await_task_stop_after_host_cancellation(finalizer, None, interruptible_callback=completion_hook_active)
+        if host_interrupt is not None:
+            raise host_interrupt
 
 
 # ---------------------------------------------------------------------------

@@ -12,6 +12,7 @@ OWNED_CHILDREN_CONTEXT_KEY = "__run_owned_children"
 class OwnedChild:
     cancel: Callable[[], None]
     completed: threading.Event = field(default_factory=threading.Event)
+    cleanup_started: threading.Event = field(default_factory=threading.Event)
     entered: bool = False
     execution_entered: bool = False
     cleanup_reached: bool = False
@@ -60,7 +61,7 @@ class OwnedRunChildren:
                 children = list(self._children)
                 cancelling = self._cancelling
             for child in children:
-                if cancelling and not child.completed.is_set() and id(child) not in cancelled:
+                if cancelling and not child.completed.is_set() and not child.cleanup_started.is_set() and id(child) not in cancelled:
                     cancelled.add(id(child))
                     child.cancel()
             if all(child.completed.is_set() for child in children):

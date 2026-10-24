@@ -1947,7 +1947,7 @@ async def test_first_cancel_action_wins_when_retry_lands_on_owner():
 
 
 @pytest.mark.anyio
-async def test_local_owner_cancel_falls_back_when_durable_request_fails():
+async def test_local_owner_cancel_falls_back_when_durable_request_fails(monkeypatch):
     """A local owner can still abort its own task when durable cancel persistence fails."""
 
     class FailingCancelStore(MemoryRunStore):
@@ -1962,26 +1962,42 @@ async def test_local_owner_cancel_falls_back_when_durable_request_fails():
     )
 
     record = await manager.create_or_reject("thread-1")
-    await manager.set_status(record.run_id, RunStatus.running)
-    record.task = asyncio.create_task(asyncio.sleep(3600))
+    from test_lead_run_limits import bridge, start_worker
+
+    entered, cancelling, release = asyncio.Event(), asyncio.Event(), asyncio.Event()
+
+    class BlockingGraph:
+        async def astream(self, *args, **kwargs):
+            entered.set()
+            try:
+                await asyncio.Event().wait()
+            finally:
+                cancelling.set()
+                await release.wait()
+            yield
+
+    monkeypatch.setattr("deerflow.sandbox.lease.release_sandbox_execution_lease_async", AsyncMock())
+    output = bridge()
+    start_worker(manager, record, output, factory=lambda **kwargs: BlockingGraph())
 
     try:
+        await asyncio.wait_for(entered.wait(), 2)
         assert await manager.cancel(record.run_id, action="rollback") == CancelOutcome.cancelled
         assert record.abort_event.is_set()
         assert record.abort_action == "rollback"
 
-        with pytest.raises(asyncio.CancelledError):
-            await record.task
-
+        await asyncio.wait_for(cancelling.wait(), 2)
         stored = await store.get(record.run_id)
         assert stored is not None
-        assert stored["status"] == "interrupted"
+        assert stored["status"] == "running" and record.status == RunStatus.running
         assert stored["cancel_action"] is None
+        output.publish_end.assert_not_awaited()
     finally:
-        if not record.task.done():
-            record.task.cancel()
-            with pytest.raises(asyncio.CancelledError):
-                await record.task
+        release.set()
+        await asyncio.wait_for(record.task, 5)
+    assert (await store.get(record.run_id))["status"] == "error"
+    assert record.status == RunStatus.error and not record.finalizing
+    output.publish_end.assert_awaited_once_with(record.run_id)
 
 
 @pytest.mark.anyio

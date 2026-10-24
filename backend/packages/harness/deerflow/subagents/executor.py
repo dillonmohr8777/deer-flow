@@ -62,6 +62,7 @@ from deerflow.tracing import (
     build_tracing_callbacks,
     inject_langfuse_metadata,
 )
+from deerflow.utils.file_io import await_drained
 from deerflow.utils.messages import message_content_to_text
 
 if TYPE_CHECKING:
@@ -1805,46 +1806,57 @@ class SubagentExecutor:
             )
 
         finally:
-            if execution_context is not None and execution_context.get("sandbox_id") is not None:
-                try:
-                    from deerflow.sandbox import get_sandbox_provider
-                    from deerflow.sandbox.lease import get_sandbox_lease_manager
-
-                    provider = get_sandbox_provider()
-                    await get_sandbox_lease_manager(provider).release_async(sandbox_lease_owner_id)
-                except Exception:
-                    if result._owned_completion is not None:
-                        result._owned_completion.cleanup_failed = True
-                    logger.warning(
-                        "[trace=%s] Failed to release sandbox execution lease for subagent %s",
-                        self.trace_id,
-                        self.config.name,
-                        exc_info=True,
-                    )
-            if task_info is not None and task_store is not None:
-                try:
-                    await notify_task_stop(
-                        loaded_extensions,
-                        task_store,
-                        task_info,
-                        subagent_task_outcome(
-                            cancelled=result.status is SubagentStatus.CANCELLED,
-                            succeeded=result.status is SubagentStatus.COMPLETED,
-                        ),
-                        timeout=_EXTENSION_TASK_NOTIFY_TIMEOUT_SECONDS,
-                    )
-                except Exception:
-                    if result._owned_completion is not None:
-                        result._owned_completion.cleanup_failed = True
-                    logger.warning(
-                        "[trace=%s] Extension task-stop notification failed for subagent %s (non-fatal)",
-                        self.trace_id,
-                        self.config.name,
-                        exc_info=True,
-                    )
-
             if result._owned_completion is not None:
-                result._owned_completion.cleanup_reached = True
+                result._owned_completion.cleanup_started.set()
+
+            async def drain_actual_cleanup() -> None:
+                if execution_context is not None and execution_context.get("sandbox_id") is not None:
+                    try:
+                        from deerflow.sandbox import get_sandbox_provider
+                        from deerflow.sandbox.lease import get_sandbox_lease_manager
+
+                        provider = get_sandbox_provider()
+                        await get_sandbox_lease_manager(provider).release_async(sandbox_lease_owner_id)
+                    except Exception:
+                        if result._owned_completion is not None:
+                            result._owned_completion.cleanup_failed = True
+                        logger.warning(
+                            "[trace=%s] Failed to release sandbox execution lease for subagent %s",
+                            self.trace_id,
+                            self.config.name,
+                            exc_info=True,
+                        )
+                if task_info is not None and task_store is not None:
+                    try:
+                        await notify_task_stop(
+                            loaded_extensions,
+                            task_store,
+                            task_info,
+                            subagent_task_outcome(
+                                cancelled=result.status is SubagentStatus.CANCELLED,
+                                succeeded=result.status is SubagentStatus.COMPLETED,
+                            ),
+                            timeout=_EXTENSION_TASK_NOTIFY_TIMEOUT_SECONDS,
+                        )
+                    except Exception:
+                        if result._owned_completion is not None:
+                            result._owned_completion.cleanup_failed = True
+                        logger.warning(
+                            "[trace=%s] Extension task-stop notification failed for subagent %s (non-fatal)",
+                            self.trace_id,
+                            self.config.name,
+                            exc_info=True,
+                        )
+
+                if result._owned_completion is not None:
+                    result._owned_completion.cleanup_reached = True
+
+            # Future cancellation may race cleanup entry. The actual coroutine
+            # retains its cleanup until sandbox and task-stop really finish.
+            if result._owned_completion is not None:
+                await await_drained(drain_actual_cleanup())
+            else:
+                await drain_actual_cleanup()
 
         return result
 

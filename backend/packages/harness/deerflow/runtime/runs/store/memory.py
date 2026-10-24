@@ -9,7 +9,7 @@ from copy import deepcopy
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from deerflow.runtime.runs.schemas import HOLD_ACTIONS, execution_deadline_expired, start_run_timing, timing_deadline
+from deerflow.runtime.runs.schemas import HOLD_ACTIONS, captured_run_recovery_held, start_run_timing, timing_deadline
 from deerflow.runtime.runs.store.base import (
     LeaseRenewal,
     RunIdempotencyConflict,
@@ -446,7 +446,7 @@ class MemoryRunStore(RunStore):
         run = self._runs.get(run_id)
         if run is None or run.get("operation_kind") == "upload_write":
             return False
-        if run.get("cancel_action") in HOLD_ACTIONS or execution_deadline_expired(run, datetime.now(UTC)):
+        if run.get("cancel_action") in HOLD_ACTIONS or captured_run_recovery_held(run, datetime.now(UTC)):
             return False
         if run["status"] not in ("pending", "running"):
             return False
@@ -471,7 +471,7 @@ class MemoryRunStore(RunStore):
         cutoff = datetime.now(UTC) - timedelta(seconds=grace_seconds)
         results = []
         for r in self._runs.values():
-            if r.get("cancel_action") in HOLD_ACTIONS or execution_deadline_expired(r, datetime.now(UTC)):
+            if r.get("cancel_action") in HOLD_ACTIONS or captured_run_recovery_held(r, datetime.now(UTC)):
                 continue
             if r.get("operation_kind") == "upload_write":
                 continue
@@ -558,8 +558,8 @@ class MemoryRunStore(RunStore):
                     continue
                 if r["status"] not in ("pending", "running"):
                     continue
-                if r.get("cancel_action") in HOLD_ACTIONS or execution_deadline_expired(r, datetime.now(UTC)):
-                    raise ConflictError(f"Thread {thread_id} has timeout cleanup awaiting its original worker")
+                if r.get("cancel_action") in HOLD_ACTIONS or captured_run_recovery_held(r, datetime.now(UTC)):
+                    raise ConflictError(f"Thread {thread_id} has owned cleanup awaiting its original worker")
                 if r.get("operation_kind") == "upload_write":
                     raise ConflictError(f"Thread {thread_id} has an upload awaiting its original writer")
                 lease_expired = False
