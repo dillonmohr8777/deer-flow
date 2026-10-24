@@ -100,11 +100,16 @@ function projectUrl(projectId: string, suffix = ""): string {
   return `${getBackendBaseURL()}/api/projects/${encodeURIComponent(projectId)}${suffix}`;
 }
 
-export async function listProjects(status?: ProjectStatus): Promise<Project[]> {
+export async function listProjects(
+  status?: ProjectStatus,
+  options: { signal?: AbortSignal } = {},
+): Promise<Project[]> {
   const response = await fetchWithAuth(
     `${getBackendBaseURL()}/api/projects${status ? `?status=${encodeURIComponent(status)}` : ""}`,
     {
       method: "GET",
+      signal: options.signal,
+      cache: "no-store",
     },
   );
 
