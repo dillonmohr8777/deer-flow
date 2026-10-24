@@ -675,10 +675,20 @@ async def test_current_toolkit_revocation_blocks_existing_attempt_before_io(conn
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("variant", ["batch", "public", "search", "schemas"])
-async def test_all_argument_shapes_reject_credentials_before_session_state(connect_world, variant, caplog):
+async def test_all_argument_shapes_reject_credentials_before_session_state(connect_world, variant, caplog, monkeypatch):
     from deerflow.mcp.composio_sessions import ComposioSessionError, composio_tools
+    from deerflow.persistence.user.preferences import UserPreferencesRepository
 
     state, repo, client, config = connect_world
+    kv_requests = []
+    for name in ("get_key", "reserve_key", "transition_key"):
+        original = getattr(UserPreferencesRepository, name)
+
+        async def tracked(self, *args, _method=original, _name=name, **kwargs):
+            kv_requests.append(_name)
+            return await _method(self, *args, **kwargs)
+
+        monkeypatch.setattr(UserPreferencesRepository, name, tracked)
     secret = {"headers": {"Authorization": "SYNTHETIC_BOUNDARY_FORBIDDEN"}}
     if variant == "batch":
         name, arguments = "COMPOSIO_MULTI_EXECUTE_TOOL", {"tools": [{"tool_slug": "GMAIL_FETCH_EMAILS", "arguments": secret}, {"tool_slug": "GMAIL_LIST_LABELS", "arguments": {}}]}
@@ -690,7 +700,7 @@ async def test_all_argument_shapes_reject_credentials_before_session_state(conne
         name, arguments = "COMPOSIO_GET_TOOL_SCHEMAS", {"tool_slugs": ["GMAIL_FETCH_EMAILS"], **secret}
     with actor(A) as runtime, pytest.raises(ComposioSessionError, match="call_failed"):
         await composio_tools(runtime.context, config)[0].coroutine(tool_name=name, arguments=arguments, runtime=runtime)
-    assert state.requests == [] and state.mcp.calls == [] and not await repo.get(A)
+    assert kv_requests == [] and state.requests == [] and state.mcp.calls == [] and not await repo.get(A)
     assert "SYNTHETIC_BOUNDARY_FORBIDDEN" not in caplog.text
 
 
