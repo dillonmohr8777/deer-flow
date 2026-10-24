@@ -10,6 +10,14 @@ The upstream DeerFlow history stays in [CHANGELOG.md](../CHANGELOG.md).
 
 ## [Unreleased]
 
+## [momobot-prod-20261024-ce8e9c67] - 2026-10-24
+
+### Changed
+
+- Validate explicit client links for account project evidence (#317)
+- Give account managers scoped client context and request history (#316)
+- MomoBot changelog momobot-prod-20261024-94e99a44, Oct 24 (#315)
+
 ## [momobot-prod-20261024-94e99a44] - 2026-10-24
 
 ### Changed
