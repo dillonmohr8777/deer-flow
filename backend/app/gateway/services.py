@@ -110,6 +110,7 @@ from deerflow.sandbox.lease import SANDBOX_SERVER_OWNED_CONTEXT_KEYS
 from deerflow.subagents.status_contract import SUBAGENT_ACCEPTANCE_VERDICT_KEY, SUBAGENT_RECEIPT_VERDICT_KEY, SUBAGENT_TOOL_RECEIPTS_KEY
 from deerflow.trace_context import DEERFLOW_TRACE_METADATA_KEY, ensure_trace_context, ensure_trace_id
 from deerflow.utils.assembly_io import run_assembly
+from deerflow.utils.file_io import await_drained
 from deerflow.utils.messages import ORIGINAL_USER_CONTENT_KEY, UNTRUSTED_INPUT_KEY
 from deerflow.utils.thread_id import validate_thread_id
 
@@ -2216,20 +2217,19 @@ async def start_run(
                     if require_existing_thread:
                         metadata_failure = TimeoutError("Timed out verifying existing thread metadata")
             finally:
-                if metadata_task.done():
+
+                async def drain_metadata_children() -> None:
+                    # Cancellation of this awaiter does not prove that the
+                    # metadata child's finally/transaction has completed.
+                    if not metadata_task.done():
+                        metadata_task.cancel()
+                    if not abort_task.done():
+                        abort_task.cancel()
+                    await asyncio.gather(metadata_task, abort_task, return_exceptions=True)
                     if not metadata_failure_logged:
                         _log_thread_metadata_task_result(metadata_task, thread_id=thread_id)
-                else:
-                    metadata_task.cancel()
-                    metadata_task.add_done_callback(
-                        lambda task: _log_thread_metadata_task_result(
-                            task,
-                            thread_id=thread_id,
-                        )
-                    )
-                if not abort_task.done():
-                    abort_task.cancel()
-                    abort_task.add_done_callback(_consume_task_result)
+
+                await await_drained(drain_metadata_children())
             if metadata_failure is not None and require_existing_thread:
                 await run_mgr.fail_start_if_pending(
                     record.run_id,
@@ -2344,7 +2344,7 @@ async def start_run(
                     # worker so a pending cancellation can bypass stalled
                     # thread-store IO and still reach run_agent's startup
                     # barrier / stream finalization.
-                    record.task = asyncio.create_task(worker)
+                    record.task = run_mgr.create_worker_task(record, worker, on_unstarted_completed=run_ctx.on_run_completed)
                 except Exception as exc:
                     worker.close()
                     await run_mgr.fail_start_if_pending(

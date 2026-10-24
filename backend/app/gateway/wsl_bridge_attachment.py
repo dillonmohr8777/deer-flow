@@ -148,7 +148,7 @@ async def _local_request(record):
         auth = AuthContext(user=user, organization_id=organization_id, actor_user_id=actor_user_id, storage_user_id=record["storage_user_id"])
         user_token = set_current_user(user)
         storage_token = set_storage_context(WorkspaceStorageContext(actor_user_id=actor_user_id, organization_id=organization_id, storage_user_id=record["storage_user_id"], role=organization.role))
-        run_manager = RunManager(store=RunRepository(sf), run_ownership_config=config.run_ownership)
+        run_manager = RunManager(store=RunRepository(sf), run_ownership_config=config.run_ownership, run_config=getattr(config, "run", None))
         try:
             await run_manager.start_heartbeat(reconcile_orphans=False)
             yield SimpleNamespace(

@@ -43,6 +43,7 @@ STARTUP_ONLY_PREFIX = "startup-only:"
 #: field is restart-required — so an operator changing the value knows
 #: which subsystem to restart.
 STARTUP_ONLY_FIELDS: dict[str, str] = {
+    "run": "RunManager captures operator run limits at startup; each normal run persists that policy at admission. Restart to change limits for new runs; existing deadlines never extend.",
     "workflow_hai_budget_bridge": "The original-owner JPY bridge, evidence pins and selected ledger are constructed once at Gateway startup; changing this infrastructure section requires a controlled restart.",
     "plugins": ("load_extensions() runs once during create_app() and the process-wide middleware registry is not rebuilt on config.yaml edits; adding, removing or reconfiguring a plugin requires a restart."),
     "database": ("init_engine_from_config() runs once during langgraph_runtime() startup; the SQLAlchemy engine holds the connection pool and is not rebuilt on config.yaml edits."),

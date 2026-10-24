@@ -1,6 +1,38 @@
 """Run status and disconnect mode enums."""
 
+from datetime import UTC, datetime, timedelta
 from enum import StrEnum
+from typing import Any
+
+LIMIT_ACTIONS = ("prestart_timeout", "execution_timeout")
+HOLD_ACTIONS = (*LIMIT_ACTIONS, "cleanup_hold")
+
+
+def start_run_timing(timing: dict[str, Any] | None, now: datetime) -> dict[str, Any] | None:
+    """Stamp execution time only in the store's successful pending -> running CAS."""
+    if timing is None or timing.get("started_at") is not None:
+        return timing
+    seconds = timing["execution_timeout_seconds"]
+    return {**timing, "started_at": now.isoformat(), "execution_deadline_at": (now + timedelta(seconds=seconds)).isoformat() if seconds else None}
+
+
+def timing_deadline(timing: dict[str, Any] | None, *, pending: bool) -> datetime | None:
+    if timing is None:
+        return None
+    value = timing.get("prestart_deadline_at" if pending else "execution_deadline_at")
+    return datetime.fromisoformat(value).astimezone(UTC) if value else None
+
+
+def captured_run_recovery_held(row: dict[str, Any], now: datetime) -> bool:
+    """New captured RUNs cannot be retired over unconfirmed owned cleanup."""
+    status = row.get("status")
+    timing = row.get("run_limits")
+    if row.get("operation_kind", "run") != "run" or status not in ("pending", "running") or not isinstance(timing, dict) or not timing.get("admitted_at"):
+        return False
+    if row.get("cancel_action") is not None:
+        return True
+    deadline = timing_deadline(timing, pending=status == "pending")
+    return deadline is not None and now >= deadline
 
 
 class ThreadOperationKind(StrEnum):

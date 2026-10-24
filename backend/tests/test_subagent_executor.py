@@ -5904,3 +5904,107 @@ def test_utcnow_helper_returns_utc_aware_datetime(classes):
     assert now.tzinfo is not None
     assert now.utcoffset() is not None
     assert now.utcoffset().total_seconds() == 0.0
+
+
+@pytest.mark.anyio
+async def test_owned_lead_drain_waits_past_future_cancel_until_real_cleanup(classes, base_config, monkeypatch):
+    from deerflow.runtime.runs.owned_children import OwnedRunChildren
+
+    module = sys.modules["deerflow.subagents.executor"]
+    tracker = OwnedRunChildren()
+    entered, cleanup_entered, release = threading.Event(), threading.Event(), threading.Event()
+
+    class Agent:
+        async def astream(self, state, *, context, **kwargs):
+            from deerflow.runtime.runs.owned_children import OWNED_CHILDREN_CONTEXT_KEY
+
+            assert context[OWNED_CHILDREN_CONTEXT_KEY] is tracker
+            context["sandbox_id"] = "synthetic-owned-child"
+            entered.set()
+            await asyncio.Event().wait()
+            yield
+
+    async def sandbox_cleanup(_owner):
+        cleanup_entered.set()
+        while not release.is_set():
+            await asyncio.sleep(0.005)
+
+    executor = classes["SubagentExecutor"](config=base_config, tools=[], parent_model="synthetic", thread_id="owned-child", run_id="owned-lead")
+    monkeypatch.setattr(executor, "_build_initial_state", AsyncMock(return_value=({"messages": []}, [], None)))
+    monkeypatch.setattr(executor, "_create_agent", lambda *args, **kwargs: Agent())
+    monkeypatch.setattr("deerflow.sandbox.lease.get_sandbox_lease_manager", lambda _provider: SimpleNamespace(release_async=sandbox_cleanup))
+    execution_id = executor.execute_async("synthetic", owned_children=tracker)
+    abort = asyncio.Event()
+    try:
+        async with asyncio.timeout(2):
+            while not entered.is_set():
+                await asyncio.sleep(0.005)
+        abort.set()
+        drain = asyncio.create_task(tracker.drain(abort))
+        async with asyncio.timeout(2):
+            while not cleanup_entered.is_set():
+                await asyncio.sleep(0.005)
+        assert not tracker._children[0].completed.is_set()
+        assert not drain.done()
+        # The concurrent Future is already removed/cancelled; it is no drain proof.
+        assert execution_id not in module._background_futures
+    finally:
+        release.set()
+        if "drain" in locals():
+            await asyncio.wait_for(drain, 2)
+        module.cleanup_background_task(execution_id)
+    assert tracker._children[0].confirmed
+
+
+@pytest.mark.anyio
+async def test_owned_child_cleanup_failure_is_not_reported_as_drained(classes, base_config, monkeypatch):
+    from deerflow.runtime.runs.owned_children import OwnedRunChildren
+
+    module = sys.modules["deerflow.subagents.executor"]
+    tracker = OwnedRunChildren()
+
+    class Agent:
+        async def astream(self, state, *, context, **kwargs):
+            context["sandbox_id"] = "synthetic-failed-cleanup"
+            yield {"messages": []}
+
+    executor = classes["SubagentExecutor"](config=base_config, tools=[], parent_model="synthetic", thread_id="failed-child", run_id="failed-lead")
+    monkeypatch.setattr(executor, "_build_initial_state", AsyncMock(return_value=({"messages": []}, [], None)))
+    monkeypatch.setattr(executor, "_create_agent", lambda *args, **kwargs: Agent())
+    monkeypatch.setattr("deerflow.sandbox.lease.get_sandbox_lease_manager", lambda _provider: SimpleNamespace(release_async=AsyncMock(side_effect=RuntimeError("synthetic cleanup failure"))))
+    execution_id = executor.execute_async("synthetic", owned_children=tracker)
+    try:
+        with pytest.raises(RuntimeError, match="cleanup is unconfirmed"):
+            await asyncio.wait_for(tracker.drain(asyncio.Event()), 2)
+        assert tracker._children[0].completed.is_set() and not tracker._children[0].confirmed
+    finally:
+        module.cleanup_background_task(execution_id)
+
+
+@pytest.mark.anyio
+async def test_owned_child_cancel_before_entry_fences_late_coroutine(classes, base_config, monkeypatch):
+    from concurrent.futures import Future
+
+    from deerflow.runtime.runs.owned_children import OwnedRunChildren
+
+    module = sys.modules["deerflow.subagents.executor"]
+    tracker, factories = OwnedRunChildren(), []
+    future = Future()
+
+    def submit(_context, factory):
+        factories.append(factory)
+        return future
+
+    executor = classes["SubagentExecutor"](config=base_config, tools=[], parent_model="synthetic")
+    actual_execution = AsyncMock(side_effect=AssertionError("cancelled child must never enter execution"))
+    monkeypatch.setattr(executor, "_aexecute", actual_execution)
+    monkeypatch.setattr(module, "_submit_to_isolated_loop_in_context", submit)
+    execution_id = executor.execute_async("synthetic", owned_children=tracker)
+    try:
+        module.request_cancel_background_task(execution_id)
+        await asyncio.wait_for(tracker.drain(asyncio.Event()), 1)
+        assert tracker._children[0].confirmed and not tracker._children[0].entered
+        await factories[0]()
+        actual_execution.assert_not_awaited()
+    finally:
+        module.cleanup_background_task(execution_id)

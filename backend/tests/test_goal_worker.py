@@ -805,6 +805,10 @@ async def test_run_agent_does_not_stream_continuation_after_abort(monkeypatch):
             await self.set_status(_run_id, status, **kwargs)
             return None
 
+        async def persist_current_status(self, _run_id):
+            # This storeless manager double has no durable write to perform.
+            return True
+
         async def update_model_name(self, *_args, **_kwargs):
             return None
 

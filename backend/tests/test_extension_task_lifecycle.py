@@ -318,7 +318,7 @@ async def test_lead_stop_runs_after_completion_hook_and_before_stream_end():
         config={},
     )
 
-    assert events == ["run-completed", "task-stop", "stream-end"]
+    assert events == ["task-stop", "run-completed", "stream-end"]
     assert record.finalizing is False
 
 
@@ -419,7 +419,6 @@ async def test_second_real_stop_cancellation_finishes_all_observers_and_cleanup(
 
     async def _block_completion(_record):
         completion_hook_entered.set()
-        await asyncio.Event().wait()
 
     class _FirstStop(_RunRecorder):
         async def on_task_stop(self, app_store, task_store, info, outcome):
@@ -448,15 +447,16 @@ async def test_second_real_stop_cancellation_finishes_all_observers_and_cleanup(
         )
     )
 
-    await asyncio.wait_for(completion_hook_entered.wait(), timeout=1)
-    task.cancel("first completion cancellation")
     await asyncio.wait_for(first_stop_entered.wait(), timeout=1)
+    task.cancel("first task-stop cancellation")
+    await asyncio.sleep(0)
     task.cancel("second task-stop cancellation")
     await asyncio.sleep(0)
     release_first_stop.set()
 
-    with pytest.raises(asyncio.CancelledError, match="first completion cancellation"):
+    with pytest.raises(asyncio.CancelledError, match="first task-stop cancellation"):
         await asyncio.wait_for(task, timeout=1)
+    assert completion_hook_entered.is_set()
     await asyncio.sleep(0)
 
     expected = [("stop", record.run_id, "completed")]

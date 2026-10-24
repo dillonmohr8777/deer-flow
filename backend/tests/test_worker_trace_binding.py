@@ -52,6 +52,9 @@ class _FakeRunManager:
     async def set_status(self, *_args, **_kwargs) -> None:
         return None
 
+    async def set_finalizing(self, run_id: str, finalizing: bool) -> None:
+        return None
+
     async def set_status_if_not_cancelled(self, *_args, **_kwargs) -> None:
         return None
 

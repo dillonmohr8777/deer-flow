@@ -1615,7 +1615,7 @@ async def test_run_agent_rolls_back_failed_edit_replay_and_publishes_restored_va
     original_set_status = run_manager.set_status
 
     async def _set_status(run_id, status, **kwargs):
-        if run_id == record.run_id and status == RunStatus.error:
+        if run_id == record.run_id and status == RunStatus.error and not kwargs.get("stage"):
             error_status_finalizing_states.append(record.finalizing)
         return await original_set_status(run_id, status, **kwargs)
 
@@ -3180,7 +3180,7 @@ async def test_admitted_pending_replacement_does_not_steal_interrupted_title_rec
     original_wait_for_prior_finalizing = run_manager.wait_for_prior_finalizing
 
     async def _wait_for_prior_finalizing(thread_id, run_id, **kwargs):
-        if run_id == old_record.run_id and old_record.status == RunStatus.interrupted and old_record.finalizing:
+        if run_id == old_record.run_id and (old_record.staged_status or old_record.status) == RunStatus.interrupted and old_record.finalizing:
             old_title_gate_entered.set()
             await release_old_title_gate.wait()
         return await original_wait_for_prior_finalizing(thread_id, run_id, **kwargs)

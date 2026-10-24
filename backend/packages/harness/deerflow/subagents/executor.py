@@ -38,6 +38,7 @@ from deerflow.config import get_app_config
 from deerflow.config.app_config import AppConfig
 from deerflow.knowledge_scope import KNOWLEDGE_SCOPE_RUNTIME_KEY, execution_scope
 from deerflow.models import create_chat_model
+from deerflow.runtime.runs.owned_children import OWNED_CHILDREN_CONTEXT_KEY, OwnedChild, OwnedRunChildren
 from deerflow.runtime.runs.stream_cleanup import close_agent_stream
 from deerflow.runtime.user_context import DEFAULT_USER_ID
 from deerflow.skills.types import Skill
@@ -61,6 +62,7 @@ from deerflow.tracing import (
     build_tracing_callbacks,
     inject_langfuse_metadata,
 )
+from deerflow.utils.file_io import await_drained
 from deerflow.utils.messages import message_content_to_text
 
 if TYPE_CHECKING:
@@ -173,6 +175,8 @@ class SubagentResult:
     tool_receipts: list[dict[str, Any]] | None = field(default=None, kw_only=True)
     bash_executions: list[dict[str, Any]] | None = field(default=None, kw_only=True)
     cancel_event: threading.Event = field(default_factory=threading.Event, repr=False)
+    _owned_completion: OwnedChild | None = field(default=None, repr=False)
+    _owned_tracker: OwnedRunChildren | None = field(default=None, repr=False)
     _state_lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
 
     def __post_init__(self):
@@ -1430,6 +1434,8 @@ class SubagentExecutor:
                 started_at=_utcnow(),
             )
         sandbox_lease_owner_id = f"subagent:{result.task_id}"
+        if result._owned_completion is not None:
+            result._owned_completion.execution_entered = True
         execution_context: dict[str, Any] | None = None
         from deerflow_extension_api import ExtensionData, TaskInfo
 
@@ -1579,6 +1585,8 @@ class SubagentExecutor:
             context["oauth_provider"] = self.oauth_provider
             context["oauth_id"] = self.oauth_id
             context["run_id"] = self.run_id
+            if result._owned_tracker is not None:
+                context[OWNED_CHILDREN_CONTEXT_KEY] = result._owned_tracker
             if task_store is not None:
                 from deerflow_extension_api import EXTENSION_TASK_STORE_KEY
 
@@ -1798,39 +1806,57 @@ class SubagentExecutor:
             )
 
         finally:
-            if execution_context is not None and execution_context.get("sandbox_id") is not None:
-                try:
-                    from deerflow.sandbox import get_sandbox_provider
-                    from deerflow.sandbox.lease import get_sandbox_lease_manager
+            if result._owned_completion is not None:
+                result._owned_completion.cleanup_started.set()
 
-                    provider = get_sandbox_provider()
-                    await get_sandbox_lease_manager(provider).release_async(sandbox_lease_owner_id)
-                except Exception:
-                    logger.warning(
-                        "[trace=%s] Failed to release sandbox execution lease for subagent %s",
-                        self.trace_id,
-                        self.config.name,
-                        exc_info=True,
-                    )
-            if task_info is not None and task_store is not None:
-                try:
-                    await notify_task_stop(
-                        loaded_extensions,
-                        task_store,
-                        task_info,
-                        subagent_task_outcome(
-                            cancelled=result.status is SubagentStatus.CANCELLED,
-                            succeeded=result.status is SubagentStatus.COMPLETED,
-                        ),
-                        timeout=_EXTENSION_TASK_NOTIFY_TIMEOUT_SECONDS,
-                    )
-                except Exception:
-                    logger.warning(
-                        "[trace=%s] Extension task-stop notification failed for subagent %s (non-fatal)",
-                        self.trace_id,
-                        self.config.name,
-                        exc_info=True,
-                    )
+            async def drain_actual_cleanup() -> None:
+                if execution_context is not None and execution_context.get("sandbox_id") is not None:
+                    try:
+                        from deerflow.sandbox import get_sandbox_provider
+                        from deerflow.sandbox.lease import get_sandbox_lease_manager
+
+                        provider = get_sandbox_provider()
+                        await get_sandbox_lease_manager(provider).release_async(sandbox_lease_owner_id)
+                    except Exception:
+                        if result._owned_completion is not None:
+                            result._owned_completion.cleanup_failed = True
+                        logger.warning(
+                            "[trace=%s] Failed to release sandbox execution lease for subagent %s",
+                            self.trace_id,
+                            self.config.name,
+                            exc_info=True,
+                        )
+                if task_info is not None and task_store is not None:
+                    try:
+                        await notify_task_stop(
+                            loaded_extensions,
+                            task_store,
+                            task_info,
+                            subagent_task_outcome(
+                                cancelled=result.status is SubagentStatus.CANCELLED,
+                                succeeded=result.status is SubagentStatus.COMPLETED,
+                            ),
+                            timeout=_EXTENSION_TASK_NOTIFY_TIMEOUT_SECONDS,
+                        )
+                    except Exception:
+                        if result._owned_completion is not None:
+                            result._owned_completion.cleanup_failed = True
+                        logger.warning(
+                            "[trace=%s] Extension task-stop notification failed for subagent %s (non-fatal)",
+                            self.trace_id,
+                            self.config.name,
+                            exc_info=True,
+                        )
+
+                if result._owned_completion is not None:
+                    result._owned_completion.cleanup_reached = True
+
+            # Future cancellation may race cleanup entry. The actual coroutine
+            # retains its cleanup until sandbox and task-stop really finish.
+            if result._owned_completion is not None:
+                await await_drained(drain_actual_cleanup())
+            else:
+                await drain_actual_cleanup()
 
         return result
 
@@ -1900,7 +1926,7 @@ class SubagentExecutor:
             result.try_set_terminal(SubagentStatus.FAILED, error=str(e))
             return result
 
-    def execute_async(self, task: str, task_id: str | None = None) -> str:
+    def execute_async(self, task: str, task_id: str | None = None, *, owned_children: OwnedRunChildren | None = None) -> str:
         """Start a task execution in the background.
 
         Args:
@@ -1941,7 +1967,17 @@ class SubagentExecutor:
         with _background_tasks_lock:
             _background_tasks[execution_id] = result
 
+        completion = None
+        if isinstance(owned_children, OwnedRunChildren):
+            completion = OwnedChild(cancel=lambda: request_cancel_background_task(execution_id))
+            result._owned_completion = completion
+            result._owned_tracker = owned_children
+            owned_children.register(completion)
+
         async def run_with_timeout() -> SubagentResult:
+            if completion is not None and not completion.enter():
+                result.try_set_terminal(SubagentStatus.CANCELLED, error="Cancelled before execution")
+                return result
             try:
                 return await asyncio.wait_for(
                     self._aexecute(task, result),
@@ -1964,13 +2000,20 @@ class SubagentExecutor:
                 )
                 return result
             except Exception as exc:
+                if completion is not None and completion.execution_entered:
+                    completion.cleanup_failed = True
                 logger.exception("[trace=%s] Subagent %s async execution failed", self.trace_id, self.config.name)
                 result.try_set_terminal(SubagentStatus.FAILED, error=str(exc))
                 return result
+            finally:
+                if completion is not None:
+                    completion.finish()
 
         try:
             execution_future = _submit_to_isolated_loop_in_context(parent_context, run_with_timeout)
         except Exception:
+            if completion is not None:
+                completion.cancel_before_entry()
             # Submitting can fail before any coroutine starts (e.g. the
             # persistent loop failed to spin up). The caller then sees the
             # exception and never polls this execution_id, and
@@ -1984,6 +2027,8 @@ class SubagentExecutor:
             _background_futures[execution_id] = execution_future
 
         def forget_future(_future: Future[SubagentResult]) -> None:
+            if completion is not None and _future.cancelled():
+                completion.cancel_before_entry()
             with _background_tasks_lock:
                 _background_futures.pop(execution_id, None)
 

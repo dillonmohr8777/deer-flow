@@ -5,9 +5,11 @@ Equivalent to the original RunManager._runs dict behavior.
 
 from __future__ import annotations
 
+from copy import deepcopy
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from deerflow.runtime.runs.schemas import HOLD_ACTIONS, captured_run_recovery_held, start_run_timing, timing_deadline
 from deerflow.runtime.runs.store.base import (
     LeaseRenewal,
     RunIdempotencyConflict,
@@ -19,6 +21,8 @@ from deerflow.runtime.runs.store.base import (
 
 
 class MemoryRunStore(RunStore):
+    supports_run_limits = True
+
     def __init__(self) -> None:
         self._runs: dict[str, dict[str, Any]] = {}
         self._change_seq = 0
@@ -66,6 +70,7 @@ class MemoryRunStore(RunStore):
         owner_worker_id=None,
         lease_expires_at=None,
         idempotency_key=None,
+        run_limits=None,
     ):
         now = datetime.now(UTC).isoformat()
         existing = self._runs.get(run_id)
@@ -82,6 +87,7 @@ class MemoryRunStore(RunStore):
             "multitask_strategy": multitask_strategy,
             "metadata": metadata or {},
             "kwargs": kwargs or {},
+            "run_limits": deepcopy(existing.get("run_limits") if existing else run_limits),
             "error": error,
             "stop_reason": stop_reason,
             "created_at": created_at or now,
@@ -202,8 +208,13 @@ class MemoryRunStore(RunStore):
 
     async def start_run(self, run_id) -> bool:
         run = self._runs.get(run_id)
-        if run is None or run["status"] != "pending" or run.get("operation_kind") == "upload_write":
+        if run is None or run["status"] != "pending" or run.get("operation_kind") == "upload_write" or run.get("cancel_action") is not None:
             return False
+        now = datetime.now(UTC)
+        deadline = timing_deadline(run.get("run_limits"), pending=True)
+        if deadline is not None and now >= deadline:
+            return False
+        run["run_limits"] = start_run_timing(run.get("run_limits"), now)
         run["status"] = "running"
         run["updated_at"] = datetime.now(UTC).isoformat()
         self._mark_changed(run)
@@ -381,10 +392,12 @@ class MemoryRunStore(RunStore):
         )
 
     async def request_cancel(self, run_id: str, *, action: str) -> str | None:
-        if action not in ("interrupt", "rollback"):
+        if action not in ("interrupt", "rollback", *HOLD_ACTIONS):
             raise ValueError(f"Unsupported cancellation action: {action}")
         run = self._runs.get(run_id)
         if run is None or run["status"] not in ("pending", "running") or run.get("operation_kind") == "upload_write":
+            return None
+        if action in HOLD_ACTIONS and run.get("operation_kind", "run") != "run":
             return None
         if run.get("cancel_action") is None:
             run["cancel_action"] = action
@@ -433,6 +446,8 @@ class MemoryRunStore(RunStore):
         run = self._runs.get(run_id)
         if run is None or run.get("operation_kind") == "upload_write":
             return False
+        if run.get("cancel_action") in HOLD_ACTIONS or captured_run_recovery_held(run, datetime.now(UTC)):
+            return False
         if run["status"] not in ("pending", "running"):
             return False
         lease = run.get("lease_expires_at")
@@ -456,6 +471,8 @@ class MemoryRunStore(RunStore):
         cutoff = datetime.now(UTC) - timedelta(seconds=grace_seconds)
         results = []
         for r in self._runs.values():
+            if r.get("cancel_action") in HOLD_ACTIONS or captured_run_recovery_held(r, datetime.now(UTC)):
+                continue
             if r.get("operation_kind") == "upload_write":
                 continue
             if r["status"] not in ("pending", "running"):
@@ -507,6 +524,7 @@ class MemoryRunStore(RunStore):
         created_at: str | None = None,
         grace_seconds: int = 10,
         idempotency_key: str | None = None,
+        run_limits: dict[str, Any] | None = None,
     ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
         from deerflow.runtime.runs.manager import ConflictError
 
@@ -540,6 +558,8 @@ class MemoryRunStore(RunStore):
                     continue
                 if r["status"] not in ("pending", "running"):
                     continue
+                if r.get("cancel_action") in HOLD_ACTIONS or captured_run_recovery_held(r, datetime.now(UTC)):
+                    raise ConflictError(f"Thread {thread_id} has owned cleanup awaiting its original worker")
                 if r.get("operation_kind") == "upload_write":
                     raise ConflictError(f"Thread {thread_id} has an upload awaiting its original writer")
                 lease_expired = False
@@ -593,6 +613,7 @@ class MemoryRunStore(RunStore):
             "multitask_strategy": multitask_strategy,
             "metadata": metadata or {},
             "kwargs": kwargs or {},
+            "run_limits": deepcopy(run_limits) if operation_kind == "run" else None,
             "error": None,
             "owner_worker_id": owner_worker_id,
             "lease_expires_at": lease_expires_at,

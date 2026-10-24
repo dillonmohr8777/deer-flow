@@ -241,12 +241,15 @@ class RunJournal(BaseCallbackHandler):
         flush_threshold: int = 20,
         progress_reporter: Callable[[dict], Awaitable[None]] | None = None,
         progress_flush_interval: float = 5.0,
+        managed_terminal: bool = False,
     ):
         super().__init__()
         self.run_id = run_id
         self.thread_id = thread_id
         self._store: RunEventStore | None = event_store
         self._closed = False
+        self._managed_terminal = managed_terminal
+        self._staged_root_end: Any | None = None
         self._track_tokens = track_token_usage
         self._flush_threshold = flush_threshold
         self._progress_reporter = progress_reporter
@@ -379,6 +382,9 @@ class RunJournal(BaseCallbackHandler):
         if parent_run_id is not None:
             return
         self._reconcile_final_tool_messages(outputs)
+        if self._managed_terminal:
+            self._staged_root_end = deepcopy(outputs)
+            return
         self._put(
             event_type=RUN_END_EVENT.event_type,
             category=RUN_END_EVENT.category,
@@ -386,6 +392,12 @@ class RunJournal(BaseCallbackHandler):
             metadata={"status": "success"},
         )
         self._flush_sync()
+
+    def finish_managed_terminal(self, *, succeeded: bool) -> None:
+        """Publish one root success only after the host's complete run has drained."""
+        outputs, self._staged_root_end = self._staged_root_end, None
+        if self._managed_terminal and succeeded and outputs is not None:
+            self._put(event_type=RUN_END_EVENT.event_type, category=RUN_END_EVENT.category, content=outputs, metadata={"status": "success"})
 
     def on_chain_error(self, error: BaseException, *, run_id: UUID, **kwargs: Any) -> None:
         self._put(
@@ -1233,6 +1245,7 @@ class RunJournal(BaseCallbackHandler):
     def _detach_runtime_dependencies(self) -> None:
         """Drop every external or potentially cyclic run-scoped reference."""
         self._closed = True
+        self._staged_root_end = None
         self._store = None
         self._progress_reporter = None
         self._buffer.clear()

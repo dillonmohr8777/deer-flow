@@ -628,6 +628,8 @@ async def langgraph_runtime(app: FastAPI, startup_config: AppConfig) -> AsyncGen
         app.state.run_manager = RunManager(
             store=app.state.run_store,
             run_ownership_config=run_ownership_config,
+            run_config=getattr(config, "run", None),
+            on_unstarted_limit=app.state.stream_bridge.publish_end,
             event_store=app.state.run_event_store,
             on_orphans_recovered=terminalize_recovered_runs,
         )
