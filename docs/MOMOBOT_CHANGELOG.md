@@ -10,6 +10,16 @@ The upstream DeerFlow history stays in [CHANGELOG.md](../CHANGELOG.md).
 
 ## [Unreleased]
 
+## [momobot-prod-20261024-11880443] - 2026-10-24
+
+### Changed
+
+- Accept exact unversioned Composio MCP session URL (#306)
+
+### Fixed
+
+- Fix delayed policy fixture runtime compatibility (#304)
+
 ## [momobot-prod-20261023-ff8263f9] - 2026-10-23
 
 ### Changed
