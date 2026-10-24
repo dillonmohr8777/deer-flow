@@ -136,7 +136,7 @@ async def test_workspace_memory_capture_obeys_server_role(monkeypatch, role, pat
     middleware = memory_middleware.MemoryMiddleware(agent_name="momobot-max", memory_config=MemoryConfig(enabled=True))
 
     if path == "compaction":
-        summarization_hook.memory_flush_hook(SummarizationEvent(tuple(messages), (), "synthetic-thread", "momobot-max", runtime))
+        summarization_hook.memory_flush_hook(SummarizationEvent(tuple(m for m in messages if not isinstance(m, SystemMessage)), (), "synthetic-thread", "momobot-max", runtime, original_messages=tuple(messages)))
         capture = manager.add_nowait
     elif path == "async":
         await middleware.aafter_agent({"messages": messages}, runtime)

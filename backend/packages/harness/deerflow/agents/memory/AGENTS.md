@@ -44,6 +44,19 @@ only messages after the last trusted current-scope boundary. Gateway strips
 incoming scope provenance; persisted message IDs or current-run creation prove
 the boundary. Manual Max compaction without that proof skips optional memory
 flush; normal validated private/client runs continue recalling and capturing.
+Summarization hooks receive the original ordered source snapshot before
+partition/rescue. Memory selects its trusted span there, then intersects the
+actual removed message objects; preserved reminders cannot be concatenated
+with removed messages to manufacture chronology.
+
+Scoped capture may carry optional `storage_owner_user_id` lifecycle metadata.
+DeerMem retains it only on its existing pending queue; it never enters updater,
+model/provider authentication or storage-key selection. Agent deletion cancels
+pending work by physical storage owner plus agent before/after deletion, leaving
+other owners/agents untouched. Legacy keyword-free backends keep their call
+contract; cancellation capability is optional. Already-processing work is not
+interrupted. Persisted scoped facts are retained, so same-name agent recreation
+can reuse that owner's prior facts until explicitly cleared/curated.
 
 Server-owned `langgraph_auth_user_id` takes precedence over ordinary client identity.
 Lead-agent construction normalizes it with `make_safe_user_id`.
@@ -59,6 +72,9 @@ scope. Auth-disabled generic DeerFlow retains its default-user behavior.
 Max's Python SDK management methods reuse the same private-scope helper and
 require authenticated host actor/workspace context before accessing a manager.
 Generic non-Momo SDK methods retain their existing storage behavior.
+Momo onboarding uses this same private Max scope only after authenticated actor
+and active-workspace proof; unproven shared seeding skips rather than writing to
+a legacy team bucket.
 
 Mixed legacy workspace memory is retained and never auto-imported into staff
 scopes. Curation and any explicit migration require separate owner review and

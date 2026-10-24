@@ -74,6 +74,7 @@ async def api(repo, people_dir, monkeypatch):
             return {}, "fact-id"
 
     monkeypatch.setattr(onboarding, "_repository", lambda: repo)
+    monkeypatch.setattr(onboarding, "_momo_memory_enabled", lambda: False)
     monkeypatch.setattr(onboarding, "get_effective_user_id", lambda: identity.id)
     monkeypatch.setattr("deerflow.agents.memory.get_memory_manager", lambda: Memory())
     monkeypatch.setattr("app.gateway.deps.is_admin_user", lambda request: _async(users[identity.id].system_role == "admin"))

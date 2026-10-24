@@ -209,6 +209,7 @@ class DeerMem(MemoryManager):
         agent_name: str | None = None,
         user_id: str | None = None,
         trace_id: str | None = None,
+        storage_owner_user_id: str | None = None,
     ) -> None:
         """Filter, validate, detect signals, then enqueue (debounced).
 
@@ -235,6 +236,7 @@ class DeerMem(MemoryManager):
                 user_id=user_id,
                 trace_id=trace_id,
                 signals=signals,
+                storage_owner_user_id=storage_owner_user_id,
             )
         except QueueFull as e:
             logger.warning("Memory update rejected under backpressure (thread=%s): %s", thread_id, e)
@@ -246,6 +248,7 @@ class DeerMem(MemoryManager):
         *,
         agent_name: str | None = None,
         user_id: str | None = None,
+        storage_owner_user_id: str | None = None,
     ) -> None:
         """Filter, validate, detect signals, then enqueue for immediate flush.
 
@@ -267,6 +270,7 @@ class DeerMem(MemoryManager):
                 agent_name=_resolve_agent_name(agent_name),
                 user_id=user_id,
                 signals=signals,
+                storage_owner_user_id=storage_owner_user_id,
             )
         except QueueFull as e:
             logger.warning("Memory emergency flush rejected under backpressure (thread=%s): %s", thread_id, e)
@@ -552,6 +556,11 @@ class DeerMem(MemoryManager):
             memory_data = _call_backend(lambda: self._updater.clear_memory_data(agent_name=_resolve_agent_name(agent_name), user_id=user_id))
         self.cancel_by_agent(agent_name, user_id=user_id)
         return _compat_document(memory_data)
+
+    def cancel_by_storage_owner(self, agent_name: str, *, storage_owner_user_id: str) -> int:
+        if not storage_owner_user_id:
+            return 0
+        return self._queue.cancel_by_agent(_resolve_agent_name(agent_name), storage_owner_user_id=storage_owner_user_id)
 
     def import_memory(
         self,

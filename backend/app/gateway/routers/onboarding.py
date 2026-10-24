@@ -28,7 +28,7 @@ from app.gateway.people_profiles import PersonProfile, load_own_profile
 from app.gateway.routers import user_preferences
 from deerflow.persistence.user.model import UserPreferenceRow, UserRow
 from deerflow.persistence.user.preferences import UserPreferencesRepository
-from deerflow.runtime.user_context import get_effective_user_id
+from deerflow.runtime.user_context import get_effective_user_id, get_storage_context
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/auth/onboarding", tags=["auth"])
@@ -216,11 +216,27 @@ async def _state_async(owner: str, user, stored: dict) -> OnboardingState:
     return await asyncio.to_thread(_state, owner, user, stored)
 
 
-async def _seed_memory(owner: str, profile: PersonProfile, role: str, team: str, tools: list[str], other: str, catalog: dict[str, CatalogEntry]) -> None:
-    # Memory lives under the storage principal. In a shared workspace that is the
-    # whole team's memory, so personal facts would leak to every member: skip.
-    if get_effective_user_id() != owner:
-        return
+def _momo_memory_enabled() -> bool:
+    from deerflow.config.app_config import get_app_config
+
+    return get_app_config().momobot_max.enabled
+
+
+async def _seed_memory(owner: str, profile: PersonProfile, role: str, team: str, tools: list[str], other: str, catalog: dict[str, CatalogEntry], *, user: object | None = None) -> None:
+    # Momo seeds only the authenticated actor's private scope. Legacy storage
+    # still skips a shared bucket because personal facts would reach the team.
+    if _momo_memory_enabled():
+        from deerflow.agents.memory.scope import private_memory_scope
+
+        scope = private_memory_scope(user, get_storage_context(), agent_name="momobot-max")
+        if scope is None or scope.actor_user_id != owner:
+            logger.warning("Onboarding memory seed skipped: trusted private staff scope is unavailable")
+            return
+        scope_args = {"user_id": scope.user_id, "agent_name": scope.agent_name}
+    else:
+        if get_effective_user_id() != owner:
+            return
+        scope_args = {"user_id": owner}
     facts = [f"Role at Momentum: {role}. Team: {team}."]
     if profile.clients:
         facts.append(f"Clients this person works on: {', '.join(profile.clients)}.")
@@ -233,7 +249,7 @@ async def _seed_memory(owner: str, profile: PersonProfile, role: str, team: str,
 
     manager = await asyncio.to_thread(get_memory_manager)
     for content in facts:
-        await asyncio.to_thread(manager.create_fact, content=content, category="context", confidence=0.9, user_id=owner)
+        await asyncio.to_thread(manager.create_fact, content=content, category="context", confidence=0.9, **scope_args)
 
 
 async def _claim_completion(owner: str, stamp: str) -> bool:
@@ -321,7 +337,7 @@ async def complete_onboarding(request: Request, x_expected_user_id: str = Header
     await _repository().patch(owner, values)
     profile = await asyncio.to_thread(load_own_profile, getattr(user, "email", None)) or PersonProfile()
     try:
-        await _seed_memory(owner, profile, saved["role"], saved["team"], tools_step.get("tools", []), tools_step.get("other", ""), catalog)
+        await _seed_memory(owner, profile, saved["role"], saved["team"], tools_step.get("tools", []), tools_step.get("other", ""), catalog, user=user)
     except Exception:
         # Memory is a convenience; onboarding stays complete either way.
         logger.warning("Onboarding memory seed failed for user %s", owner, exc_info=True)
