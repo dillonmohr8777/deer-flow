@@ -866,20 +866,45 @@ def test_user_profile_section_absent_when_missing(monkeypatch, tmp_path):
 
 
 def test_user_profile_section_absent_for_unset_user_id(monkeypatch, tmp_path):
-    _patch_paths(monkeypatch, tmp_path)
+    paths = _patch_paths(monkeypatch, tmp_path)
+    paths.user_md_file.write_text("GLOBAL_PRIVATE_SENTINEL", encoding="utf-8")
 
     assert prompt_module._build_user_profile_section(None) == ""
 
 
-def test_user_profile_section_falls_back_to_legacy_shared_file(monkeypatch, tmp_path):
-    """Read-side fallback mirrors GET /api/agents/user-profile (7001a7b2)."""
+def test_user_profile_section_missing_scope_never_reads_shared_file(monkeypatch, tmp_path):
     paths = _patch_paths(monkeypatch, tmp_path)
-    paths.user_md_file.parent.mkdir(parents=True, exist_ok=True)
-    paths.user_md_file.write_text("Legacy shared profile.", encoding="utf-8")
+    paths.user_md_file.write_text("GLOBAL_PRIVATE_SENTINEL", encoding="utf-8")
+    reads = []
+    read_text = Path.read_text
 
-    section = prompt_module._build_user_profile_section("nobody-yet")
+    def record_read(path, *args, **kwargs):
+        reads.append(path)
+        return read_text(path, *args, **kwargs)
 
-    assert "Legacy shared profile." in section
+    monkeypatch.setattr(Path, "read_text", record_read)
+
+    assert prompt_module._build_user_profile_section("missing-workspace") == ""
+    assert reads == []
+
+
+@pytest.mark.parametrize("principal", ["private-operator", "agency", "alpha", "beta"])
+def test_user_profile_section_uses_only_exact_principal(monkeypatch, tmp_path, principal):
+    paths = _patch_paths(monkeypatch, tmp_path)
+    paths.user_md_file.write_text("GLOBAL_PRIVATE_SENTINEL", encoding="utf-8")
+    profiles = {"private-operator": "PRIVATE_OPERATOR", "agency": "AGENCY", "alpha": "ALPHA", "beta": "BETA"}
+    for scope, content in profiles.items():
+        profile_path = paths.user_md_file_for(scope)
+        profile_path.parent.mkdir(parents=True, exist_ok=True)
+        profile_path.write_text(content, encoding="utf-8")
+
+    section = prompt_module._build_user_profile_section(principal)
+
+    assert profiles[principal] in section
+    assert "GLOBAL_PRIVATE_SENTINEL" not in section
+    for scope, content in profiles.items():
+        if scope != principal:
+            assert content not in section
 
 
 def test_user_profile_section_preserves_complete_twin_preferences(monkeypatch, tmp_path):
@@ -944,7 +969,8 @@ def test_apply_prompt_template_includes_user_profile_when_present(monkeypatch, t
 
 
 def test_apply_prompt_template_omits_user_profile_when_absent(monkeypatch, tmp_path):
-    _patch_paths(monkeypatch, tmp_path)
+    paths = _patch_paths(monkeypatch, tmp_path)
+    paths.user_md_file.write_text("GLOBAL_PRIVATE_SENTINEL", encoding="utf-8")
 
     config = _make_minimal_app_config()
     monkeypatch.setattr("deerflow.config.get_app_config", lambda: config)
@@ -954,3 +980,4 @@ def test_apply_prompt_template_omits_user_profile_when_absent(monkeypatch, tmp_p
     prompt = prompt_module.apply_prompt_template(app_config=config, user_id="nobody", skill_names=frozenset())
 
     assert "<user_profile>" not in prompt
+    assert "GLOBAL_PRIVATE_SENTINEL" not in prompt

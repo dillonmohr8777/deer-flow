@@ -193,9 +193,8 @@ class Paths:
 
         New code should use :meth:`user_md_file_for`. This path is
         process-global — every user and every workspace resolves to the same
-        file — so a write through it is visible to all of them. It remains only
-        as a read-side fallback for installations that predate per-user
-        profiles, mirroring :attr:`agents_dir`.
+        file — so a write through it is visible to all of them. It remains for
+        explicit legacy tooling; scoped profile reads must not fall back to it.
         """
         return self.base_dir / "USER.md"
 

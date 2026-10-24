@@ -794,13 +794,11 @@ class UserProfileUpdateRequest(BaseModel):
 async def get_user_profile() -> UserProfileResponse:
     """Return the calling user's USER.md content.
 
-    Reads `{base_dir}/users/{user_id}/USER.md`, falling back to the legacy
-    shared `{base_dir}/USER.md` when this user has no per-user file yet, so
-    installations that predate per-user profiles keep their existing content
-    until the first write migrates it.
+    Reads only `{base_dir}/users/{storage_user_id}/USER.md` for the active
+    storage principal. A missing profile never falls back to a shared file.
 
     Returns:
-        UserProfileResponse with content=None if neither file exists.
+        UserProfileResponse with content=None if that profile is absent.
     """
     _require_agents_api_enabled()
     user_id = get_effective_user_id()
@@ -808,9 +806,6 @@ async def get_user_profile() -> UserProfileResponse:
     try:
         paths = get_paths()
         user_md_path = paths.user_md_file_for(user_id)
-        if not user_md_path.exists():
-            # Read-side fallback only. Writes always go to the per-user path.
-            user_md_path = paths.user_md_file
         if not user_md_path.exists():
             return UserProfileResponse(content=None)
         raw = user_md_path.read_text(encoding="utf-8").strip()

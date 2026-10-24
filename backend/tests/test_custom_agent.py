@@ -556,6 +556,8 @@ def test_agent_routes_refuse_unauthenticated_callers() -> None:
     with TestClient(app) as client:
         assert client.get("/api/agents").status_code == 401
         assert client.post("/api/agents", json={"name": "reviewer"}).status_code == 401
+        assert client.get("/api/user-profile").status_code == 401
+        assert client.put("/api/user-profile", json={"content": "blocked"}).status_code == 401
 
 
 @pytest.fixture()
@@ -889,10 +891,34 @@ class TestAgentsAPI:
 
 
 class TestUserProfileAPI:
+    @pytest.mark.parametrize("method", ["GET", "PUT"])
+    @pytest.mark.parametrize("private_workspace_enabled", [False, True])
+    def test_profile_routes_remain_pat_denied(self, method, private_workspace_enabled):
+        from app.gateway.auth.pat import is_pat_allowed_route
+
+        assert not is_pat_allowed_route(method, "/api/user-profile", private_workspace_enabled=private_workspace_enabled)
+
     def test_get_user_profile_empty(self, agent_client):
         response = agent_client.get("/api/user-profile")
         assert response.status_code == 200
         assert response.json()["content"] is None
+
+    def test_missing_profile_never_reads_shared_file(self, agent_client, tmp_path, monkeypatch):
+        (tmp_path / "USER.md").write_text("GLOBAL_PRIVATE_SENTINEL", encoding="utf-8")
+        reads = []
+        read_text = Path.read_text
+
+        def record_read(path, *args, **kwargs):
+            reads.append(path)
+            return read_text(path, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "read_text", record_read)
+
+        response = agent_client.get("/api/user-profile")
+
+        assert response.status_code == 200
+        assert response.json()["content"] is None
+        assert tmp_path / "USER.md" not in reads
 
     def test_put_user_profile(self, agent_client, tmp_path):
         content = "# User Profile\n\nI am a developer."
@@ -929,7 +955,7 @@ class TestUserProfileAPI:
         from deerflow.runtime.user_context import WorkspaceStorageContext, reset_current_user, reset_storage_context, set_current_user, set_storage_context
 
         legacy = tmp_path / "USER.md"
-        legacy.write_text("legacy root", encoding="utf-8")
+        legacy.write_text("GLOBAL_PRIVATE_SENTINEL", encoding="utf-8")
 
         def call(actor: str, storage: str, operation):
             actor_token = set_current_user(SimpleNamespace(id=actor))
@@ -953,18 +979,21 @@ class TestUserProfileAPI:
         async def write(content: str):
             return await update_user_profile(UserProfileUpdateRequest(content=content))
 
-        assert call("actor-a", "private-a", read).content == "legacy root"
-        assert call("actor-a", "private-a", lambda: write("private-a")).content == "private-a"
-        assert call("actor-b", "private-b", read).content == "legacy root"
-        assert call("actor-b", "private-b", lambda: write("private-b")).content == "private-b"
-        assert call("actor-a", "private-a", read).content == "private-a"
+        assert call("private-operator", "private-operator", read).content is None
+        assert call("private-operator", "private-operator", lambda: write("PRIVATE_OPERATOR")).content == "PRIVATE_OPERATOR"
+        assert call("actor-a", "agency", read).content is None
+        assert call("actor-a", "agency", lambda: write("AGENCY")).content == "AGENCY"
+        assert call("actor-b", "agency", read).content == "AGENCY"
+        assert call("actor-a", "alpha", read).content is None
+        assert call("actor-a", "alpha", lambda: write("ALPHA")).content == "ALPHA"
+        assert call("actor-a", "beta", read).content is None
+        assert call("actor-a", "beta", lambda: write("BETA")).content == "BETA"
+        assert call("actor-a", "alpha", read).content == "ALPHA"
+        assert call("actor-a", "agency", read).content == "AGENCY"
+        assert call("private-operator", "private-operator", read).content == "PRIVATE_OPERATOR"
 
-        assert call("actor-a", "shared-workspace", read).content == "legacy root"
-        assert call("actor-a", "shared-workspace", lambda: write("shared")).content == "shared"
-        assert call("actor-b", "shared-workspace", read).content == "shared"
-        assert call("actor-c", "other-workspace", read).content == "legacy root"
-
-        assert legacy.read_text(encoding="utf-8") == "legacy root"
+        assert legacy.read_text(encoding="utf-8") == "GLOBAL_PRIVATE_SENTINEL"
+        assert {path.parent.name for path in (tmp_path / "users").glob("*/USER.md")} == {"private-operator", "agency", "alpha", "beta"}
 
 
 class TestAgentsApiDisabled:
