@@ -192,8 +192,10 @@ role, and a self annotation. Load more teammates and Retry teammates preserve
 unsaved edits. A saved person outside the current page remains identifiable when
 the directory confirms eligibility; unavailable saved selections can be cleared
 or replaced. A directory failure preserves selections without declaring anyone
-ineligible. Saving rechecks eligibility on the server and retains the existing
-revision conflict behavior.
+ineligible. A directory snapshot from a different saved-plan revision also leaves
+eligibility unconfirmed and offers retry; it cannot establish that an older saved
+selection is unavailable. Saving rechecks eligibility on the server and retains
+the existing revision conflict behavior.
 
 ## License
 

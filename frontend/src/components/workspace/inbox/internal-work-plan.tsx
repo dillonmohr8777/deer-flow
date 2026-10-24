@@ -194,13 +194,19 @@ function PlanForm({
       .at(-1)
       ?.selected_items.map((item) => [item.user_id, item] as const),
   );
+  const directoryRevisionMatches =
+    directory.data?.pages.every(
+      (page) => page.plan_revision === record.revision,
+    ) ?? false;
+  const eligibilityConfirmed =
+    directoryRevisionMatches && !directory.isError && !directory.isFetching;
   for (const item of selected.values()) participants.set(item.user_id, item);
-  // Saved eligibility comes from selected_items, including people outside this page.
+  // Only the same saved revision can confirm an off-page participant is unavailable.
   for (const id of [
     record.plan?.assignee_user_id,
     record.plan?.verifier_user_id,
   ])
-    if (id && directory.data && !selected.has(id)) participants.delete(id);
+    if (id && eligibilityConfirmed && !selected.has(id)) participants.delete(id);
   const active = useRef(true);
   const write = useRef<AbortController | null>(null);
   useEffect(() => {
@@ -335,7 +341,7 @@ function PlanForm({
                       ? "Saved"
                       : "Selected"}{" "}
                     {label.toLowerCase()} —{" "}
-                    {directory.data && !directory.isError
+                    {eligibilityConfirmed
                       ? "unavailable; clear or replace"
                       : "eligibility not checked"}
                   </option>
@@ -352,10 +358,13 @@ function PlanForm({
         {directory.isFetching && (
           <p role="status">Loading eligible teammates…</p>
         )}
-        {directory.error && (
+        {(directory.error ||
+          (directory.data && !directoryRevisionMatches)) && (
           <div className="space-y-2">
             <p role="alert">
-              {directory.error.message} Your selections and edits are retained;
+              {directory.error?.message ??
+                "The teammate snapshot does not match the loaded plan revision."}{" "}
+              Your selections and edits are retained;
               eligibility could not be checked.
             </p>
             <Button
@@ -373,17 +382,19 @@ function PlanForm({
             </Button>
           </div>
         )}
-        {directory.hasNextPage && !directory.error && (
-          <Button
-            type="button"
-            variant="outline"
-            className="min-h-11"
-            disabled={directory.isFetching}
-            onClick={() => void directory.fetchNextPage()}
-          >
-            Load more teammates
-          </Button>
-        )}
+        {directory.hasNextPage &&
+          !directory.error &&
+          directoryRevisionMatches && (
+            <Button
+              type="button"
+              variant="outline"
+              className="min-h-11"
+              disabled={directory.isFetching}
+              onClick={() => void directory.fetchNextPage()}
+            >
+              Load more teammates
+            </Button>
+          )}
         <label className="block min-w-0 space-y-1">
           <span>Due date</span>
           <Input

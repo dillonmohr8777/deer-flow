@@ -404,7 +404,10 @@ client and request; consumed AbortSignals and query cancellation discard late
 scope/page responses. Paging/retry must keep the local plan mounted and dirty.
 Render only supplied account email/role; selected_items confirms saved people
 outside the page. Missing saved IDs remain visibly unavailable and repairable;
-load failures preserve fields with unconfirmed eligibility. No profile reads,
+only interpret that absence when required directory `plan_revision` matches the
+local record revision and the query is neither pending nor failed. Different
+snapshot revisions offer retry and preserve fields as unconfirmed. Keep the
+existing record-revision query key for save/reload refresh. No profile reads,
 invented names, automatic link fetches or access grants. Synthetic browser QA in
 `client-inbox-work-plan.spec.ts` covers paging/retry, CAS and 390/768/1440 geometry.
 

@@ -14,6 +14,7 @@ import { InternalWorkPlan } from "@/components/workspace/inbox/internal-work-pla
 import type {
   WorkPlan,
   WorkPlanParticipant,
+  WorkPlanRecord,
 } from "@/core/client-portal/work-plan";
 
 const mocks = rs.hoisted(() => ({ fetch: rs.fn() }));
@@ -82,10 +83,12 @@ function participants(
   items: WorkPlanParticipant[] = [self],
   selected: WorkPlanParticipant[] = [],
   nextCursor: string | null = null,
+  revision = 7,
 ) {
   return {
     schema: "work_plan_participants.v1",
     source: { thread_id: requestId },
+    plan_revision: revision,
     items,
     selected_items: selected,
     limit: 50,
@@ -104,12 +107,27 @@ function mockPlanFetch(
     options: RequestInit,
   ) => Response | Promise<Response>,
 ) {
-  mocks.fetch.mockImplementation((url: string, options: RequestInit) => {
+  let current: WorkPlanRecord | null = null;
+  mocks.fetch.mockImplementation(async (url: string, options: RequestInit) => {
     if (url.includes("/participants?")) {
       const requestId = decodeURIComponent(url.split("/").at(-3)!);
-      return Promise.resolve(response(participants(requestId)));
+      const selected = [
+        current?.plan?.assignee_user_id,
+        current?.plan?.verifier_user_id,
+      ].includes(self.user_id)
+        ? [self]
+        : [];
+      return response(
+        participants(requestId, [self], selected, null, current?.revision ?? 7),
+      );
     }
-    return Promise.resolve(implementation(url, options));
+    const result = await implementation(url, options);
+    const body = (await result
+      .clone()
+      .json()
+      .catch(() => null)) as WorkPlanRecord | null;
+    if (result.ok && body?.schema === "internal_work_plan.v1") current = body;
+    return result;
   });
 }
 function mockDirectoryFetch(
@@ -394,6 +412,118 @@ describe("InternalWorkPlan recorded staff plans", () => {
         verifier_user_id: props.userId,
       },
     });
+  });
+
+  for (const concurrentSnapshot of [false, true]) {
+    it(`keeps a newly saved teammate ${concurrentSnapshot ? "unconfirmed when a concurrent snapshot omits them" : "identifiable after the post-save directory refresh"}`, async () => {
+      let saved: WorkPlan | null = null;
+      mocks.fetch.mockImplementation(
+        async (url: string, options: RequestInit) => {
+          if (url.includes("/participants?")) {
+            return response(
+              participants(
+                props.requestId,
+                saved ? [self] : [self, peer],
+                saved && !concurrentSnapshot ? [peer] : [],
+                null,
+                saved ? (concurrentSnapshot ? 9 : 8) : 7,
+              ),
+            );
+          }
+          if (options.method === "PUT") {
+            saved = (JSON.parse(options.body as string) as { plan: WorkPlan })
+              .plan;
+            return response(record(props.requestId, 8, saved));
+          }
+          return response(record());
+        },
+      );
+      render(view());
+      await ready();
+      choose("Owner", /teammate@synthetic.invalid/);
+      save();
+      await screen.findByText(/Saved work plan revision 8/);
+      await waitFor(() => expect(participantCalls()).toHaveLength(2));
+      await waitFor(() =>
+        expect(screen.queryByText("Loading eligible teammates…")).toBeNull(),
+      );
+      const owner = screen.getByLabelText<HTMLSelectElement>("Owner");
+      expect(owner.value).toBe(peer.user_id);
+      expect(
+        within(owner).getByRole<HTMLOptionElement>("option", {
+          name: concurrentSnapshot
+            ? /eligibility not checked/
+            : /teammate@synthetic.invalid · Account manager/,
+        }).selected,
+      ).toBe(true);
+      expect(screen.queryByText(/unavailable; clear or replace/)).toBeNull();
+    });
+  }
+
+  it("keeps the saved selection unconfirmed through a pending and failed post-save refresh, then retries without resetting edits", async () => {
+    const refresh = deferred<Response>();
+    let saved: WorkPlan | null = null;
+    let directoryReads = 0;
+    mocks.fetch.mockImplementation(async (url: string, options: RequestInit) => {
+      if (url.includes("/participants?")) {
+        directoryReads++;
+        if (directoryReads === 2) return refresh.promise;
+        return response(
+          participants(
+            props.requestId,
+            saved ? [self] : [self, peer],
+            saved ? [peer] : [],
+            null,
+            saved ? 8 : 7,
+          ),
+        );
+      }
+      if (options.method === "PUT") {
+        saved = (JSON.parse(options.body as string) as { plan: WorkPlan }).plan;
+        return response(record(props.requestId, 8, saved));
+      }
+      return response(record());
+    });
+    render(view());
+    await ready();
+    choose("Owner", /teammate@synthetic.invalid/);
+    save();
+    await screen.findByText(/Saved work plan revision 8/);
+    await waitFor(() => expect(participantCalls()).toHaveLength(2));
+    expect(screen.getByLabelText<HTMLSelectElement>("Owner").value).toBe(
+      peer.user_id,
+    );
+    expect(
+      within(screen.getByLabelText("Owner")).getByRole("option", {
+        name: /eligibility not checked/,
+      }),
+    ).toBeTruthy();
+    expect(screen.queryByText(/unavailable; clear or replace/)).toBeNull();
+    change("Outcome", "Keep edits through failed post-save refresh");
+    await act(async () => {
+      refresh.resolve(response({}, 503));
+    });
+    await screen.findByRole("button", { name: "Retry teammates" });
+    expect(
+      within(screen.getByLabelText("Owner")).getByRole("option", {
+        name: /eligibility not checked/,
+      }),
+    ).toBeTruthy();
+    expect(screen.queryByText(/unavailable; clear or replace/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Retry teammates" }));
+    await waitFor(() =>
+      expect(
+        within(screen.getByLabelText("Owner")).getByRole<HTMLOptionElement>(
+          "option",
+          { name: /teammate@synthetic.invalid/ },
+        ).selected,
+      ).toBe(true),
+    );
+    expect(screen.getByLabelText<HTMLTextAreaElement>("Outcome").value).toBe(
+      "Keep edits through failed post-save refresh",
+    );
+    expect(participantCalls()).toHaveLength(3);
+    expect(calls("PUT")).toHaveLength(1);
   });
 
   it("identifies an eligible saved person outside the loaded page through selected_items", async () => {
