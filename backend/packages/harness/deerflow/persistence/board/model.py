@@ -97,3 +97,7 @@ class BoardPortalRow(Base):
     client_chat_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     work_chat_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     work_run_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    work_plan: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    work_plan_revision: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    work_plan_updated_by_user_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    work_plan_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

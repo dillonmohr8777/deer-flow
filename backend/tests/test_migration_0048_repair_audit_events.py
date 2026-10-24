@@ -17,7 +17,7 @@ from deerflow.persistence.bootstrap import _get_alembic_config, bootstrap_schema
 
 PREVIOUS = "0047_merge_agent_room_exec"
 REPAIR = "0048_repair_audit_events"
-HEAD = "0052_board_portal"  # later revisions chain after the repair; their table is outside this test
+HEAD = "0053_board_work_plan"  # later revisions chain after the repair; their table is outside this test
 INDEXES = {"ix_audit_events_occurred_at", "ix_audit_events_action", "ix_audit_events_organization_id", "ix_audit_events_actor_user_id"}
 
 

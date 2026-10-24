@@ -12,6 +12,8 @@ All routes require a real authenticated active workspace membership. Mutations u
 | `GET /threads?q=&state=&limit=&offset=` | Literal subject search; all/pending/needs_approval/published; bounded pagination |
 | `POST /threads` | `{client_id,submission_key,subject,body}`. Unique workspace/actor/key; identical retry returns same conversation, changed payload 409 |
 | `GET /threads/{id}` | Published messages only for clients; staff also see immutable drafts, approval and work refs |
+| `GET /threads/{id}/work-plan` | Exact authorized staff only; current recorded internal plan and independent revision; no-store |
+| `PUT /threads/{id}/work-plan` | Exact authorized staff `{expected_revision,plan}`; records internal planning with CAS and actual-actor audit; no execution |
 | `POST /threads/{id}/draft` | Staff `{expected_revision,body,attachments:[{name,content}]}`. CAS revision; creates immutable draft and real pending approval. Existing pending approval superseded |
 | `POST /threads/{id}/publish` | Owner/admin `{approval_id,expected_revision}`. Existing approval executor publishes exact original snapshot once, returns durable receipt |
 | `GET /threads/{id}/messages/{message}/attachments/{name}` | Authorized immutable md/txt/csv file; no-store; `X-Content-SHA256` readback |
@@ -101,6 +103,62 @@ The initial `/work` input is a stored snapshot. A later normal chat turn does
 not automatically refresh portal messages added after that snapshot. Staff can
 read the context endpoint again, but this slice adds no live-context middleware
 or per-turn retrieval tool.
+
+### Recorded internal work planning
+
+`client_work_plan.py` stores one typed current plan on the existing
+`board_portal` row. No new client registry, task queue, scheduler, message or
+approval is created. Planning has an independent `work_plan_revision`; draft
+revision, run identity, publication state and existing `/work` retry behavior
+are unchanged. Stale writes return 409. Missing or foreign requests remain 404.
+
+The full-replacement PUT body has `expected_revision` and `plan`. A plan records
+`outcome`, nullable `assignee_user_id`, nullable timezone-aware `due_at`, up to
+10 unique `dependency_thread_ids`, nullable `verifier_user_id`, `status`,
+`next_action` and up to 10 `evidence_refs`. Each evidence reference has `kind`
+(`source` or `delivery`) and a bounded `reference` string. Outcome and next
+action are nonblank and at most 2,000 characters each; reference strings are at
+most 512 characters; the complete UTF-8 plan JSON is at most 8,000 bytes. Due
+dates normalize to UTC. Null owner, verifier and date remain unknown, never
+inferred. Dependencies must name other opt-in requests for the same exact
+client and workspace; they are references, not an executable dependency graph.
+
+Read/write authorization reuses the active canonical-client staff gate:
+active workspace owner/admin, or active staff member with the exact canonical
+agency AM assignment. Every non-null assignee and verifier must independently
+pass that same current gate in the selected workspace. Contacts, arbitrary
+user IDs, disabled accounts, inactive memberships/clients and foreign scope
+are denied. Writes first check scope, then take the existing portal row's write
+lock and recheck scope before validating participants and saving by revision.
+The no-op lock preserves draft revision and serializes SQLite/Postgres writers.
+Audit action `client_portal.work_plan.saved` records the actual requesting
+actor separately from workspace storage, source client and saved revision;
+request data cannot supply an audit actor. Plan text is not copied into audit
+details.
+
+Statuses are `planned`, `in_progress`, `blocked`, and `reported_complete`.
+Reported completion requires a recorded evidence reference. Every response is
+explicitly `staff_recorded_unverified`: an evidence string does not prove its
+destination, grant file/account access, verify work or record verifier approval.
+The assigned verifier is a recorded participant, not evidence they reviewed it.
+The API does not dispatch a worker/model, schedule, send, publish, approve or
+update the canonical client queue. Existing approval rules still apply.
+
+The dedicated staff GET returns source row, revision, actual recording actor
+and timestamp. Authorized `/context` includes compact per-request plan status
+and the full selected-request plan; initial `/work` therefore receives the
+recorded current plan as untrusted evidence. The separate missing delivery/CRM
+integration markers remain missing. Later ordinary chat turns still do not
+refresh that initial snapshot automatically. Contact list/detail/messages and
+ordinary Board list/detail/messages omit all plan fields and references.
+This backend API adds no model write tool or work-plan editor UI.
+
+Migration `0053_board_work_plan` follows `0052_board_portal` and adds nullable
+plan/recording metadata plus an independent revision defaulting to zero.
+Existing portal rows, drafts and messages are preserved. Upgrade and downgrade
+are idempotent; downgrade removes new plan data. Native must use the normal
+quiet-writer backup, staging migration and matching-source rollout/rollback
+process. Offline migration checks are not production recovery proof.
 
 ### Selected client project evidence
 

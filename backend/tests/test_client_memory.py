@@ -168,7 +168,7 @@ async def test_migration_0051_chains_after_0050_with_one_head(tmp_path):
     engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'm.db'}")
     cfg = _get_alembic_config(engine)
     try:
-        assert ScriptDirectory.from_config(cfg).get_heads() == ["0052_board_portal"]
+        assert ScriptDirectory.from_config(cfg).get_heads() == ["0053_board_work_plan"]
         await asyncio.to_thread(command.upgrade, cfg, "head")
         await asyncio.to_thread(command.downgrade, cfg, "0050_pending_action_fact_check")
         await asyncio.to_thread(command.upgrade, cfg, "head")
