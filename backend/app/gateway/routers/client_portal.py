@@ -20,7 +20,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.gateway.approval_adapters import register_adapter
 from app.gateway.client_boundary import CLIENT_ROLE
-from app.gateway.deps import get_current_user_from_request
+from app.gateway.deps import audit_actor_id, get_current_user_from_request, record_audit_event
 from app.gateway.invitation_policy import fresh_customer_assignments, validate_customer_workspace
 from app.gateway.routers.clients import _is_active_org_admin
 from deerflow.approvals import AdapterOutcome, InvalidPayloadError, register_action_type
@@ -430,6 +430,7 @@ async def save_draft(thread_id: ThreadId, body: Draft, request: Request):
     revision = body.expected_revision + 1
     approval_id = uuid.uuid4().hex
     payload = _snapshot(thread_id, revision, draft)
+    storage_user_id = get_effective_user_id()
     async with _sf()() as session, session.begin():
         result = await session.execute(
             update(BoardPortalRow)
@@ -442,7 +443,7 @@ async def save_draft(thread_id: ThreadId, body: Draft, request: Request):
         session.add(
             PendingActionRow(
                 id=approval_id,
-                user_id=get_effective_user_id(),
+                user_id=storage_user_id,
                 organization_id=portal.organization_id,
                 action_type="portal_publish",
                 title=f"Publish: {thread.subject}"[:255],
@@ -464,6 +465,23 @@ async def save_draft(thread_id: ThreadId, body: Draft, request: Request):
                 .values(status="rejected", error="Superseded by a new draft", updated_at=now)
             )
         await session.execute(update(BoardThreadRow).where(BoardThreadRow.id == thread_id).values(status="drafted", updated_at=now))
+    await record_audit_event(
+        request,
+        action="client_portal.draft.saved",
+        outcome="success",
+        actor_user_id=audit_actor_id(request),
+        organization_id=portal.organization_id,
+        target_type="client_portal_thread",
+        target_id=thread_id,
+        details={
+            "source": "client_portal",
+            "storage_user_id": storage_user_id,
+            "work_thread_id": portal.work_chat_id,
+            "run_id": portal.work_run_id,
+            "draft_id": draft.id,
+            "revision": revision,
+        },
+    )
     return await detail(thread_id, request)
 
 
