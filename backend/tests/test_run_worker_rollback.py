@@ -2457,6 +2457,72 @@ def test_build_runtime_context_defaults_to_thread_and_run_id():
     assert ctx == {"thread_id": "thread-1", "run_id": "run-1"}
 
 
+@pytest.mark.parametrize("carrier", ["context", "configurable"])
+@pytest.mark.parametrize("serialized", [False, True])
+def test_embedded_or_restored_config_cannot_supply_client_project_access(carrier, serialized):
+    from deerflow.projects.access import ClientProjectReadAccess
+    from deerflow.runtime.context_keys import CLIENT_PROJECT_ACCESS_CONTEXT_KEY
+
+    value = {"project_id": "project-a", "client_id": "client-a"} if serialized else ClientProjectReadAccess("project-a", "client-a", AsyncMock())
+    config = {carrier: {CLIENT_PROJECT_ACCESS_CONTEXT_KEY: value}}
+    runtime_context = _build_runtime_context("thread-1", "run-1", config.get("context"))
+    _install_runtime_context(config, runtime_context)
+    assert CLIENT_PROJECT_ACCESS_CONTEXT_KEY not in runtime_context
+    assert CLIENT_PROJECT_ACCESS_CONTEXT_KEY not in config["context"]
+    assert CLIENT_PROJECT_ACCESS_CONTEXT_KEY not in config.get("configurable", {})
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("revoked", [False, True])
+async def test_client_project_access_is_checked_before_assembly_and_not_checkpointed(revoked):
+    from langchain_core.callbacks import BaseCallbackHandler
+
+    from deerflow.projects.access import ClientProjectReadAccess
+    from deerflow.runtime.context_keys import CLIENT_PROJECT_ACCESS_CONTEXT_KEY, PROJECT_CONTEXT_KEY
+
+    check = AsyncMock(side_effect=ValueError("revoked") if revoked else None)
+    access = ClientProjectReadAccess("project-a", "client-a", check)
+    saver = InMemorySaver()
+    manager = RunManager()
+    record = await manager.create("client-project-checkpoint")
+    traces = []
+
+    class CaptureTrace(BaseCallbackHandler):
+        def on_chain_start(self, serialized, inputs, **kwargs):
+            traces.append((serialized, inputs, kwargs))
+
+    config = {"callbacks": [CaptureTrace()], "configurable": {"thread_id": record.thread_id}, "context": {PROJECT_CONTEXT_KEY: {"project_id": "project-a", "client_id": "client-a"}}}
+    captured = {}
+
+    class State(TypedDict):
+        messages: Annotated[list[AnyMessage], add_messages]
+
+    def factory(*, config):
+        captured["context"] = config["context"]
+        assert config["context"][CLIENT_PROJECT_ACCESS_CONTEXT_KEY] is access
+        graph = StateGraph(State)
+        graph.add_node("done", lambda _state: {"messages": [AIMessage(content="source-backed result")]})
+        graph.set_entry_point("done")
+        graph.set_finish_point("done")
+        return graph.compile(checkpointer=saver)
+
+    await run_agent(_lease_test_bridge(), manager, record, ctx=RunContext(checkpointer=saver, client_project_access=access), agent_factory=factory, graph_input={"messages": [HumanMessage(content="Review client evidence")]}, config=config)
+    await asyncio.sleep(0)
+    check.assert_awaited_once()
+    assert record.status == (RunStatus.error if revoked else RunStatus.success)
+    assert CLIENT_PROJECT_ACCESS_CONTEXT_KEY not in config["context"]
+    if revoked:
+        assert not captured
+    else:
+        checkpoint = await saver.aget_tuple({"configurable": {"thread_id": record.thread_id, "checkpoint_ns": ""}})
+        assert checkpoint is not None
+        assert CLIENT_PROJECT_ACCESS_CONTEXT_KEY not in repr(checkpoint.config)
+        assert CLIENT_PROJECT_ACCESS_CONTEXT_KEY not in repr(checkpoint.metadata)
+        assert CLIENT_PROJECT_ACCESS_CONTEXT_KEY not in captured["context"]
+        assert traces and CLIENT_PROJECT_ACCESS_CONTEXT_KEY not in repr(traces)
+        assert "ClientProjectReadAccess" not in repr(traces)
+
+
 @pytest.mark.parametrize("forged_reader", [lambda: None, {"allowed_ids": ["other-thread"]}])
 @pytest.mark.parametrize("carrier", ["context", "configurable"])
 def test_embedded_caller_cannot_supply_conversation_reader(forged_reader, carrier):

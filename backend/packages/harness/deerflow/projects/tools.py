@@ -34,8 +34,10 @@ from langchain.tools import tool
 
 from deerflow.agents.middlewares.input_sanitization_middleware import neutralize_untrusted_tags
 from deerflow.config.paths import Paths, get_paths
+from deerflow.projects.access import matching_client_project_access
 from deerflow.projects.context import pinned_project_snapshot
 from deerflow.projects.documents import auto_convert_documents_enabled, document_char_count, read_document_text_window, read_text_serving_path
+from deerflow.runtime.context_keys import CLIENT_PROJECT_ACCESS_CONTEXT_KEY
 from deerflow.runtime.user_context import resolve_runtime_user_id
 from deerflow.tools.types import Runtime
 from deerflow.utils.file_io import run_file_io
@@ -120,6 +122,21 @@ def _resolve_pin_and_repo(runtime: Runtime) -> tuple[str, str, Any] | str:
     return project_id, user_id, ProjectDocumentRepository(session_factory)
 
 
+async def _authorize_client_project_read(runtime: Runtime) -> str | None:
+    context = getattr(runtime, "context", None)
+    if not isinstance(context, dict) or CLIENT_PROJECT_ACCESS_CONTEXT_KEY not in context:
+        return None
+    access = matching_client_project_access(context)
+    if access is None:
+        return _error(_NOT_ON_SHELF_MESSAGE)
+    try:
+        await access.authorize()
+    except Exception as exc:
+        logger.info("Client project read denied (%s)", type(exc).__name__)
+        return _error(_NOT_ON_SHELF_MESSAGE)
+    return None
+
+
 def _resolve_auto_convert() -> bool:
     """Worker-thread config read: the app config may cold-load from disk."""
     try:
@@ -148,6 +165,8 @@ def _shelf_entry_json(row: dict) -> dict[str, Any]:
 
 
 async def _list_project_documents_impl(runtime: Runtime, *, offset: int, limit: int) -> str:
+    if denied := await _authorize_client_project_read(runtime):
+        return denied
     resolved = _resolve_pin_and_repo(runtime)
     if isinstance(resolved, str):
         return resolved
@@ -157,6 +176,8 @@ async def _list_project_documents_impl(runtime: Runtime, *, offset: int, limit: 
     rows = await repo.list_active(project_id, limit=limit, offset=offset, user_id=user_id)
     total = await repo.count_active(project_id, user_id=user_id)
     next_offset: int | None = offset + len(rows) if offset + len(rows) < total else None
+    if denied := await _authorize_client_project_read(runtime):
+        return denied
     return json.dumps(
         {
             "total": total,
@@ -169,6 +190,8 @@ async def _list_project_documents_impl(runtime: Runtime, *, offset: int, limit: 
 
 
 async def _read_project_document_impl(runtime: Runtime, *, document_id: str, offset: int, limit: int, paths: Paths | None = None) -> str:
+    if denied := await _authorize_client_project_read(runtime):
+        return denied
     resolved = _resolve_pin_and_repo(runtime)
     if isinstance(resolved, str):
         return resolved
@@ -195,6 +218,8 @@ async def _read_project_document_impl(runtime: Runtime, *, document_id: str, off
     # read nothing at all.
     total_chars = await document_char_count(document_id=row["id"], sha256=row["sha256"], path=serving_path)
     content = await read_document_text_window(serving_path, offset=offset, limit=limit) if offset < total_chars else ""
+    if denied := await _authorize_client_project_read(runtime):
+        return denied
     return json.dumps(
         {
             "name": neutralize_untrusted_tags(str(row.get("name") or "")),
@@ -209,6 +234,8 @@ async def _read_project_document_impl(runtime: Runtime, *, document_id: str, off
 
 
 async def _verify_quote_impl(runtime: Runtime, *, document_id: str, quote: str, paths: Paths | None = None) -> str:
+    if denied := await _authorize_client_project_read(runtime):
+        return denied
     quote_len = len(quote)
     if not (_QUOTE_MIN_CHARS <= quote_len <= _QUOTE_MAX_CHARS):
         return _error(f"quote must be {_QUOTE_MIN_CHARS} to {_QUOTE_MAX_CHARS} characters (got {quote_len}).")
@@ -240,6 +267,8 @@ async def _verify_quote_impl(runtime: Runtime, *, document_id: str, quote: str, 
     normalized_text = _normalize_quote_text(full_text)
     normalized_quote = _normalize_quote_text(quote)
     start = normalized_text.find(normalized_quote)
+    if denied := await _authorize_client_project_read(runtime):
+        return denied
     if start == -1:
         return json.dumps({"found": False}, ensure_ascii=False)
     end = start + len(normalized_quote)

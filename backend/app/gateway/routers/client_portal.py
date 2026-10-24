@@ -20,7 +20,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.gateway.approval_adapters import register_adapter
 from app.gateway.client_boundary import CLIENT_ROLE
-from app.gateway.client_context import client_operating_context, require_staff_client
+from app.gateway.client_context import bind_staff_work_project, client_operating_context, require_staff_client, require_staff_project
 from app.gateway.deps import audit_actor_id, get_current_user_from_request, record_audit_event
 from app.gateway.invitation_policy import fresh_customer_assignments, validate_customer_workspace
 from app.gateway.routers.clients import _is_active_org_admin
@@ -62,6 +62,10 @@ class Compose(Closed):
     submission_key: str = Field(min_length=8, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
     subject: str = Field(min_length=1, max_length=255)
     body: str = Field(min_length=1, max_length=12000)
+
+
+class Work(Closed):
+    project_id: str | None = Field(default=None, min_length=1, max_length=64)
 
 
 class Attachment(Closed):
@@ -629,11 +633,45 @@ async def client_chat(thread_id: ThreadId, request: Request):
 
 
 @router.post("/threads/{thread_id}/work")
-async def start_work(thread_id: ThreadId, request: Request):
+async def start_work(thread_id: ThreadId, request: Request, selection: Work | None = None):
+    selected_project = selection.project_id if selection is not None else None
+    if selected_project is not None:
+        thread, portal, _, _ = await _load(request, thread_id)
+        actor = str((await get_current_user_from_request(request)).id)
+        await require_staff_project(actor_id=actor, organization_id=portal.organization_id, client_id=thread.client_id, project_id=selected_project, storage_user_id=get_effective_user_id())
     chat = await _chat(thread_id, request, work=True)
     thread, portal, _, external = await _load(request, thread_id)
     if portal.published_id or portal.approval_id:
         raise HTTPException(409, "A draft or published response already exists")
+    if selected_project is not None:
+        from app.gateway.deps import get_thread_store
+        from app.gateway.services import reserve_checkpoint_write
+        from deerflow.persistence.thread_meta import THREAD_PROJECT_METADATA_KEY
+        from deerflow.runtime.runs.manager import ConflictError
+
+        store = get_thread_store(request)
+
+        async def check_selection():
+            row = await store.get(chat["chat_id"])
+            if row is None:
+                raise _missing()
+            current = (row.get("metadata") or {}).get(THREAD_PROJECT_METADATA_KEY)
+            _, bound, _, _ = await _load(request, thread_id)
+            if current != selected_project and (current is not None or bound.work_run_id):
+                raise HTTPException(409, "Work is already bound; its project cannot be changed")
+            return current
+
+        if await check_selection() != selected_project:
+            try:
+                # Existing durable thread admission serializes first selection
+                # across workers and releases before create_run admits the run.
+                async with reserve_checkpoint_write(request, chat["chat_id"], user_id=get_effective_user_id()):
+                    if await check_selection() != selected_project:
+                        await require_staff_project(actor_id=actor, organization_id=portal.organization_id, client_id=thread.client_id, project_id=selected_project, storage_user_id=get_effective_user_id())
+                        if not await bind_staff_work_project(actor_id=actor, organization_id=portal.organization_id, client_id=thread.client_id, project_id=selected_project, storage_user_id=get_effective_user_id(), chat_id=chat["chat_id"]):
+                            raise HTTPException(409, "Work project selection changed; reload before retrying")
+            except ConflictError as exc:
+                raise HTTPException(409, "Work is being prepared; retry the same project shortly") from exc
     from app.gateway.routers.thread_runs import create_run
     from app.gateway.run_models import RunCreateRequest
 

@@ -839,6 +839,16 @@ async def test_start_run_preserves_system_messages_from_internal_auth(_stub_app_
     assert graph_input["messages"][0].content == "Trusted internal context"
 
 
+@pytest.mark.parametrize("section", ["context", "configurable"])
+def test_build_run_config_strips_client_project_access_capability(section):
+    from app.gateway.services import build_run_config
+    from deerflow.runtime.context_keys import CLIENT_PROJECT_ACCESS_CONTEXT_KEY
+
+    config = build_run_config("thread-1", {section: {CLIENT_PROJECT_ACCESS_CONTEXT_KEY: {"project_id": "other-client", "authorized": True}}}, None)
+    assert CLIENT_PROJECT_ACCESS_CONTEXT_KEY not in config.get("context", {})
+    assert CLIENT_PROJECT_ACCESS_CONTEXT_KEY not in config.get("configurable", {})
+
+
 def test_build_run_config_basic():
     from app.gateway.services import build_run_config
 

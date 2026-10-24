@@ -7,13 +7,16 @@ registry, a connector, or a grant to company memory and project documents.
 from datetime import UTC
 
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.gateway.client_boundary import CLIENT_ROLE
 from deerflow.persistence.board.model import BoardMessageRow, BoardPortalRow, BoardThreadRow
 from deerflow.persistence.clients.model import ClientAssignmentRow, ClientRow
 from deerflow.persistence.organizations.model import OrganizationMemberRow, OrganizationRow
+from deerflow.persistence.projects.model import ProjectRow
+from deerflow.persistence.run.model import RunRow
+from deerflow.persistence.thread_meta.model import ThreadMetaRow
 from deerflow.persistence.user.model import UserRow
 
 MAX_REQUESTS = 25
@@ -77,7 +80,41 @@ async def require_staff_client(*, actor_id, organization_id, client_id):
         raise HTTPException(503, "Client authorization could not be read") from None
 
 
-async def require_portal_work_access(*, actor_id, organization_id, chat_id) -> bool:
+async def _staff_project(session, *, actor_id, organization_id, client_id, project_id, storage_user_id):
+    await _staff_client(session, actor_id=actor_id, organization_id=organization_id, client_id=client_id)
+    project = await session.scalar(
+        select(ProjectRow.id).where(ProjectRow.id == project_id, ProjectRow.organization_id == organization_id, ProjectRow.user_id == storage_user_id, ProjectRow.client_id == client_id, ProjectRow.status == "active")
+    )
+    if project is None:
+        raise _missing()
+
+
+async def require_staff_project(*, actor_id, organization_id, client_id, project_id, storage_user_id):
+    try:
+        async with _factory()() as session:
+            await _staff_project(session, actor_id=actor_id, organization_id=organization_id, client_id=client_id, project_id=project_id, storage_user_id=storage_user_id)
+    except SQLAlchemyError:
+        raise HTTPException(503, "Client project authorization could not be read") from None
+
+
+async def bind_staff_work_project(*, actor_id, organization_id, client_id, project_id, storage_user_id, chat_id) -> bool:
+    """First selection is a NULL-only CAS, never a project move or rebind."""
+    try:
+        async with _factory()() as session, session.begin():
+            await _staff_project(session, actor_id=actor_id, organization_id=organization_id, client_id=client_id, project_id=project_id, storage_user_id=storage_user_id)
+            # The durable run can survive a crash before the portal saves its pointer.
+            prior_run = select(RunRow.run_id).where(RunRow.thread_id == chat_id, RunRow.operation_kind == "run").exists()
+            changed = await session.execute(
+                update(ThreadMetaRow)
+                .where(ThreadMetaRow.thread_id == chat_id, ThreadMetaRow.organization_id == organization_id, ThreadMetaRow.user_id == storage_user_id, ThreadMetaRow.client_actor_id.is_(None), ThreadMetaRow.project_id.is_(None), ~prior_run)
+                .values(project_id=project_id, updated_at=ThreadMetaRow.updated_at)
+            )
+            return changed.rowcount == 1
+    except SQLAlchemyError:
+        raise HTTPException(503, "Client project selection could not be saved") from None
+
+
+async def require_portal_work_access(*, actor_id, organization_id, chat_id, storage_user_id=None) -> dict | None:
     """Recheck actual server-bound work chats on every admission, including resume.
 
     A name prefix, request context or claimed client ID never establishes a
@@ -87,19 +124,24 @@ async def require_portal_work_access(*, actor_id, organization_id, chat_id) -> b
 
     factory = get_session_factory()
     if factory is None:
-        return False  # With no persistent repository there are no portal bindings.
+        return None  # With no persistent repository there are no portal bindings.
     try:
         async with factory() as session:
             rows = (await session.execute(select(BoardPortalRow, BoardThreadRow).outerjoin(BoardThreadRow, BoardThreadRow.id == BoardPortalRow.thread_id).where(BoardPortalRow.work_chat_id == chat_id).limit(2))).all()
             if not rows:
-                return False
+                return None
             if len(rows) != 1 or not actor_id or not organization_id:
                 raise _missing()
             portal, thread = rows[0]
             if thread is None or portal.organization_id != organization_id or thread.organization_id != organization_id:
                 raise _missing()
             await _staff_client(session, actor_id=actor_id, organization_id=organization_id, client_id=thread.client_id)
-            return True
+            metadata = await session.get(ThreadMetaRow, chat_id)
+            if metadata is None or metadata.organization_id != organization_id or metadata.user_id != storage_user_id or metadata.client_actor_id is not None:
+                raise _missing()
+            if metadata.project_id:
+                await _staff_project(session, actor_id=actor_id, organization_id=organization_id, client_id=thread.client_id, project_id=metadata.project_id, storage_user_id=storage_user_id)
+            return {"thread_id": thread.id, "client_id": thread.client_id, "project_id": metadata.project_id}
     except SQLAlchemyError:
         raise HTTPException(503, "Client authorization could not be read") from None
 

@@ -88,6 +88,44 @@ not automatically refresh portal messages added after that snapshot. Staff can
 read the context endpoint again, but this slice adds no live-context middleware
 or per-turn retrieval tool.
 
+### Selected client project evidence
+
+Staff may send `{"project_id":"<exact project id>"}` to `/work`; omitting the
+body keeps the existing path. Selection requires an active project owned by
+the selected workspace's storage principal and organization, with its explicit
+`client_id` matching the request's canonical client. A contact, foreign,
+unbound, archived or other-client project is denied before creating a work
+chat. Matching display names grant nothing. Project link administration stays
+owner/admin-only; choosing an existing authorized link does not change it.
+
+First selection uses the existing durable thread-operation reservation and a
+NULL-only membership compare-and-set. It does not move an already selected
+project or attach evidence after a work run has started. The reservation ends
+before normal run admission. An idempotent retry with the same selection keeps
+the original run; requesting another selection returns 409.
+
+Each new bound run, including replay, validates the current staff assignment,
+client, selected project, storage and organization before and after checkpoint
+preparation. Explicit selected-project resolution failure denies the run rather
+than proceeding unassigned. The worker checks again before assembly. Gateway
+binds the read capability through its in-process `RunContext`, not serialized
+request context. Config, saved run kwargs and checkpoints cannot recreate that
+capability; a worker without the host capability gains no extra Max tools.
+
+Only a matching staff client/project capability adds the existing
+`list_project_documents`, `read_project_document` and `verify_quote` tools to
+that Max run. The global Max and client tool ceilings, MCP/skills and private
+Brain policy are unchanged. Each shelf operation rechecks current authority
+before reading and before returning successful data, retaining the existing
+document/project/owner/organization checks. Revocation or changing the link or
+stored selection denies subsequent shelf results. Already issued model input
+cannot be recalled; this is not an instantaneous cancellation guarantee.
+
+Project instructions and shelf indexes retain their existing per-run transient
+rendering. The initial portal-request snapshot still does not refresh on later
+ordinary turns. This feature does not narrow existing Project REST permissions,
+prove connected CRM/reporting sources, or establish full AM acceptance.
+
 - Backend: `cd backend && uv run pytest tests/test_customer_workspace_invitations.py tests/test_workspace_invitations.py tests/test_oidc_callback_invite_join.py tests/test_client_portal.py tests/test_client_route_boundary.py tests/test_board_router.py tests/test_org_isolation_b_threads.py tests/test_org_isolation_g_memory.py tests/test_momobot_max.py -q`.
 - Frontend: `cd frontend && pnpm exec eslint src/components/workspace/inbox/client-inbox.tsx src/app/workspace/inbox/page.tsx src/components/workspace/workspace-nav-chat-list.tsx src/core/auth/roles.ts src/core/approvals/types.ts src/components/workspace/approvals/approvals-data.ts src/components/workspace/approvals/approvals.tsx tests/e2e/client-inbox.spec.ts && pnpm typecheck && pnpm build`.
 - UI: `pnpm exec playwright test tests/e2e/client-inbox.spec.ts --project=chromium`. Fixture UI tests save 390/768/1440 screenshots and assert no document overflow. They do not substitute for backend authorization acceptance.
