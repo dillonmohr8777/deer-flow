@@ -464,26 +464,29 @@ describe("InternalWorkPlan recorded staff plans", () => {
     const refresh = deferred<Response>();
     let saved: WorkPlan | null = null;
     let directoryReads = 0;
-    mocks.fetch.mockImplementation(async (url: string, options: RequestInit) => {
-      if (url.includes("/participants?")) {
-        directoryReads++;
-        if (directoryReads === 2) return refresh.promise;
-        return response(
-          participants(
-            props.requestId,
-            saved ? [self] : [self, peer],
-            saved ? [peer] : [],
-            null,
-            saved ? 8 : 7,
-          ),
-        );
-      }
-      if (options.method === "PUT") {
-        saved = (JSON.parse(options.body as string) as { plan: WorkPlan }).plan;
-        return response(record(props.requestId, 8, saved));
-      }
-      return response(record());
-    });
+    mocks.fetch.mockImplementation(
+      async (url: string, options: RequestInit) => {
+        if (url.includes("/participants?")) {
+          directoryReads++;
+          if (directoryReads === 2) return refresh.promise;
+          return response(
+            participants(
+              props.requestId,
+              saved ? [self] : [self, peer],
+              saved ? [peer] : [],
+              null,
+              saved ? 8 : 7,
+            ),
+          );
+        }
+        if (options.method === "PUT") {
+          saved = (JSON.parse(options.body as string) as { plan: WorkPlan })
+            .plan;
+          return response(record(props.requestId, 8, saved));
+        }
+        return response(record());
+      },
+    );
     render(view());
     await ready();
     choose("Owner", /teammate@synthetic.invalid/);
