@@ -1335,15 +1335,31 @@ async def test_internal_work_plan_migration_preserves_existing_portal_rows_and_i
     import importlib
 
     import sqlalchemy as sa
+    from alembic import command
     from alembic.migration import MigrationContext
     from alembic.operations import Operations
+    from sqlalchemy.ext.asyncio import create_async_engine
+
+    from deerflow.persistence.bootstrap import _get_alembic_config
 
     revision = importlib.import_module("deerflow.persistence.migrations.versions.0053_board_work_plan")
-    engine = sa.create_engine(f"sqlite:///{tmp_path / 'work-plan-upgrade.db'}")
+    db = tmp_path / "work-plan-upgrade.db"
+    engine = create_async_engine(f"sqlite+aiosqlite:///{db}")
+    sync_engine = sa.create_engine(f"sqlite:///{db}")
+    config = _get_alembic_config(engine)
     try:
-        with engine.begin() as connection:
-            connection.execute(sa.text("CREATE TABLE board_portal (thread_id VARCHAR(64) PRIMARY KEY, organization_id VARCHAR(64) NOT NULL, revision INTEGER NOT NULL DEFAULT 0, draft_id VARCHAR(64))"))
-            connection.execute(sa.text("INSERT INTO board_portal VALUES ('existing','existing-org',7,'immutable-draft')"))
+        await asyncio.to_thread(command.upgrade, config, "0052_board_portal")
+        with sync_engine.begin() as connection:
+            old_columns = {column["name"] for column in sa.inspect(connection).get_columns("board_portal")}
+            assert "work_plan" not in old_columns
+            connection.execute(
+                sa.text(
+                    "INSERT INTO board_portal(thread_id,organization_id,actor_id,submission_key,submission_hash,revision,draft_id) "
+                    "VALUES ('existing','existing-org','existing-actor','existing-submission','existing-hash',7,'immutable-draft')"
+                )
+            )
+        await asyncio.to_thread(command.upgrade, config, "0053_board_work_plan")
+        with sync_engine.begin() as connection:
             with Operations.context(MigrationContext.configure(connection)):
                 revision.upgrade()
                 revision.upgrade()
@@ -1353,10 +1369,18 @@ async def test_internal_work_plan_migration_preserves_existing_portal_rows_and_i
             with Operations.context(MigrationContext.configure(connection)):
                 revision.upgrade()
             assert connection.execute(sa.text("SELECT work_plan_revision FROM board_portal")).scalar_one() == 2
+            assert connection.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one() == "0053_board_work_plan"
+        await asyncio.to_thread(command.downgrade, config, "0052_board_portal")
+        with sync_engine.begin() as connection:
             with Operations.context(MigrationContext.configure(connection)):
                 revision.downgrade()
                 revision.downgrade()
-            assert {column["name"] for column in sa.inspect(connection).get_columns("board_portal")} == {"thread_id", "organization_id", "revision", "draft_id"}
-            assert connection.execute(sa.text("SELECT * FROM board_portal")).one() == ("existing", "existing-org", 7, "immutable-draft")
+            assert {column["name"] for column in sa.inspect(connection).get_columns("board_portal")} == old_columns
+            assert connection.execute(sa.text("SELECT thread_id,organization_id,revision,draft_id FROM board_portal")).one() == ("existing", "existing-org", 7, "immutable-draft")
+            assert connection.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one() == "0052_board_portal"
+        await asyncio.to_thread(command.upgrade, config, "0053_board_work_plan")
+        with sync_engine.connect() as connection:
+            assert connection.execute(sa.text("SELECT revision,draft_id,work_plan,work_plan_revision FROM board_portal")).one() == (7, "immutable-draft", None, 0)
     finally:
-        engine.dispose()
+        sync_engine.dispose()
+        await engine.dispose()
