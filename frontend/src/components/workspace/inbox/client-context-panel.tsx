@@ -45,6 +45,7 @@ const DOMAIN_NAMES: Record<string, string> = {
   campaign_performance: "Campaign performance",
   meetings: "Meetings",
   delivery_priorities: "Delivery priorities",
+  internal_work_planning: "Internal work planning",
 };
 
 export function ClientContextPanel({

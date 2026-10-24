@@ -18,6 +18,7 @@ import { getBackendBaseURL } from "@/core/config";
 import { isStaticWebsiteOnly } from "@/core/static-mode";
 
 import { ClientContextPanel, type ClientContext } from "./client-context-panel";
+import { InternalWorkPlan } from "./internal-work-plan";
 import { WorkProjectPicker } from "./work-project-picker";
 
 type DraftAttachment = { name: string; content: string };
@@ -643,6 +644,23 @@ function InboxSession({
                           </li>
                         ))}
                       </ol>
+                      {current.can_draft && workspace && userId && (
+                        <InternalWorkPlan
+                          userId={userId}
+                          workspace={workspace}
+                          clientId={current.client_id}
+                          requestId={current.id}
+                          requests={
+                            context.data?.client.id === current.client_id &&
+                            context.data.current_request?.id === current.id
+                              ? context.data.requests.items
+                              : []
+                          }
+                          requestsLoading={context.isFetching}
+                          requestsError={context.error?.message}
+                          hasMoreRequests={context.data?.requests.has_more}
+                        />
+                      )}
                       {current.can_draft && !current.publish_receipt && (
                         <div className="mt-6 space-y-3 border-t pt-4">
                           <h3 className="font-medium">Internal reply draft</h3>
