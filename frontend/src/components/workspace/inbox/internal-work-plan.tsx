@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { useEffect, useRef, useState } from "react";
 
@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
   getWorkPlan,
+  getWorkPlanParticipants,
   putWorkPlan,
   validateWorkPlan,
   type WorkPlan,
@@ -130,6 +131,62 @@ function PlanForm({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
+  const directory = useInfiniteQuery({
+    queryKey: [
+      "portal",
+      props.userId,
+      props.workspace,
+      "work-plan-participants",
+      props.clientId,
+      props.requestId,
+      record.revision,
+    ],
+    initialPageParam: {
+      cursor: null as string | null,
+      userIds: [] as string[],
+      cursors: [] as string[],
+    },
+    queryFn: async ({ signal, pageParam }) => {
+      const page = await getWorkPlanParticipants({
+        workspace: props.workspace,
+        requestId: props.requestId,
+        signal,
+        cursor: pageParam.cursor,
+      });
+      if (
+        page.items.some((item) => pageParam.userIds.includes(item.user_id)) ||
+        (page.next_cursor !== null && pageParam.cursors.includes(page.next_cursor))
+      ) {
+        throw new Error("The server returned a repeated teammate page.");
+      }
+      return page;
+    },
+    getNextPageParam: (page, pages) =>
+      page.has_more
+        ? {
+            cursor: page.next_cursor,
+            userIds: pages.flatMap((previous) => previous.items.map((item) => item.user_id)),
+            cursors: pages.flatMap((previous) => previous.next_cursor ? [previous.next_cursor] : []),
+          }
+        : undefined,
+    gcTime: 0,
+    staleTime: Infinity,
+    retry: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+  });
+  const participants = new Map(
+    directory.data?.pages.flatMap((page) =>
+      page.items.map((item) => [item.user_id, item] as const),
+    ),
+  );
+  const selected = new Map(
+    directory.data?.pages.at(-1)?.selected_items.map((item) => [item.user_id, item] as const),
+  );
+  for (const item of selected.values()) participants.set(item.user_id, item);
+  // Saved eligibility comes from selected_items, including people outside this page.
+  for (const id of [record.plan?.assignee_user_id, record.plan?.verifier_user_id])
+    if (id && directory.data && !selected.has(id)) participants.delete(id);
   const active = useRef(true);
   const write = useRef<AbortController | null>(null);
   useEffect(() => {
@@ -247,22 +304,54 @@ function PlanForm({
                 }
               >
                 <option value="">Unassigned</option>
-                <option value={props.userId}>Me</option>
-                {record.plan?.[field] &&
-                  record.plan[field] !== props.userId && (
-                    <option value={record.plan[field]}>
-                      Saved {label.toLowerCase()} (directory unavailable)
-                    </option>
-                  )}
+                {[...participants.values()].map((item) => (
+                  <option key={item.user_id} value={item.user_id}>
+                    {item.email} · {item.role === "account_manager" ? "Account manager" : item.role === "admin" ? "Admin" : "Owner"}
+                    {item.user_id === props.userId ? " (you)" : ""}
+                  </option>
+                ))}
+                {plan[field] && !participants.has(plan[field]) && (
+                  <option value={plan[field]} disabled>
+                    {record.plan?.[field] === plan[field] ? "Saved" : "Selected"} {label.toLowerCase()} — {directory.data && !directory.isError ? "unavailable; clear or replace" : "eligibility not checked"}
+                  </option>
+                )}
               </select>
             </label>
           ))}
         </div>
         <p className="text-muted-foreground text-sm">
-          A client-authorized teammate directory is unavailable. Saved
-          selections are preserved; you can assign yourself or leave them
-          unassigned.
+          Only currently eligible teammates for this client are listed. Saving
+          rechecks eligibility. Unavailable selections can be cleared or replaced.
         </p>
+        {directory.isFetching && <p role="status">Loading eligible teammates…</p>}
+        {directory.error && (
+          <div className="space-y-2">
+            <p role="alert">
+              {directory.error.message} Your selections and edits are retained;
+              eligibility could not be checked.
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              className="min-h-11"
+              disabled={directory.isFetching}
+              onClick={() => void (directory.isFetchNextPageError ? directory.fetchNextPage() : directory.refetch())}
+            >
+              Retry teammates
+            </Button>
+          </div>
+        )}
+        {directory.hasNextPage && !directory.error && (
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-11"
+            disabled={directory.isFetching}
+            onClick={() => void directory.fetchNextPage()}
+          >
+            Load more teammates
+          </Button>
+        )}
         <label className="block min-w-0 space-y-1">
           <span>Due date</span>
           <Input
