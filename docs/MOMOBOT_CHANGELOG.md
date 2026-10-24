@@ -10,6 +10,19 @@ The upstream DeerFlow history stays in [CHANGELOG.md](../CHANGELOG.md).
 
 ## [Unreleased]
 
+## [momobot-prod-20261024-93d29084] - 2026-10-24
+
+### Changed
+
+- Scope client inbox context, Oct 24 (#319)
+- Allow scoped project evidence reads in account-manager work (#320)
+- Keep workspace profiles from falling back to shared USER text (#321)
+- MomoBot changelog momobot-prod-20261024-ce8e9c67, Oct 24 (#318)
+
+### Fixed
+
+- Normalize the client role check and restore locked formatting (#322)
+
 ## [momobot-prod-20261024-ce8e9c67] - 2026-10-24
 
 ### Changed
