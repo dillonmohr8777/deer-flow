@@ -101,6 +101,7 @@ const participantsSchema = z
   .object({
     schema: z.literal("work_plan_participants.v1"),
     source: z.object({ thread_id: recordId }).strict(),
+    plan_revision: z.number().int().min(0).max(2147483647),
     items: z.array(participantSchema).max(100),
     selected_items: z.array(participantSchema).max(2),
     limit: z.number().int().min(1).max(100),

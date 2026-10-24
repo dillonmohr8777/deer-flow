@@ -43,6 +43,7 @@ const teammate = {
 const directory = {
   schema: "work_plan_participants.v1",
   source: { thread_id: scope.requestId },
+  plan_revision: 1,
   items: [teammate],
   selected_items: [],
   limit: 50,
@@ -74,6 +75,7 @@ describe("work plan participant directory", () => {
   test("accepts eligible saved people outside the page and terminal bounded pages", async () => {
     const body = {
       ...directory,
+      plan_revision: 2147483647,
       items: [],
       selected_items: [teammate],
       limit: 100,
@@ -89,6 +91,10 @@ describe("work plan participant directory", () => {
   test("rejects malformed, leaking, duplicate, over-limit and mismatched source pages", async () => {
     for (const patch of [
       { schema: "users.v1" },
+      { plan_revision: undefined },
+      { plan_revision: -1 },
+      { plan_revision: 1.5 },
+      { plan_revision: 2147483648 },
       { source: { thread_id: "other-request" } },
       { source: { ...directory.source, client_id: "other-client" } },
       { items: [{ ...teammate, profile: "private" }] },

@@ -129,6 +129,7 @@ for (const width of [390, 768, 1440]) {
           json: {
             schema: "work_plan_participants.v1",
             source: { thread_id: id },
+            plan_revision: revision,
             items: cursor === null ? [teammates[0]] : [teammates[1]],
             selected_items: teammates.filter(
               (item) =>
