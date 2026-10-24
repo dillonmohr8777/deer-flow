@@ -101,10 +101,11 @@ async def bind_staff_work_project(*, actor_id, organization_id, client_id, proje
     try:
         async with _factory()() as session, session.begin():
             await _staff_project(session, actor_id=actor_id, organization_id=organization_id, client_id=client_id, project_id=project_id, storage_user_id=storage_user_id)
-            active_run = select(RunRow.run_id).where(RunRow.thread_id == chat_id, RunRow.operation_kind == "run", RunRow.status.in_(("pending", "running"))).exists()
+            # The durable run can survive a crash before the portal saves its pointer.
+            prior_run = select(RunRow.run_id).where(RunRow.thread_id == chat_id, RunRow.operation_kind == "run").exists()
             changed = await session.execute(
                 update(ThreadMetaRow)
-                .where(ThreadMetaRow.thread_id == chat_id, ThreadMetaRow.organization_id == organization_id, ThreadMetaRow.user_id == storage_user_id, ThreadMetaRow.client_actor_id.is_(None), ThreadMetaRow.project_id.is_(None), ~active_run)
+                .where(ThreadMetaRow.thread_id == chat_id, ThreadMetaRow.organization_id == organization_id, ThreadMetaRow.user_id == storage_user_id, ThreadMetaRow.client_actor_id.is_(None), ThreadMetaRow.project_id.is_(None), ~prior_run)
                 .values(project_id=project_id, updated_at=ThreadMetaRow.updated_at)
             )
             return changed.rowcount == 1

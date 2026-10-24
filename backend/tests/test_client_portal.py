@@ -257,6 +257,38 @@ async def test_work_started_without_project_cannot_acquire_one_on_retry(project_
         assert len(state.project_calls) == 1
 
 
+@pytest.mark.parametrize("prior_kind", ["run", "checkpoint_write", "artifact_write"])
+async def test_first_project_selection_checks_terminal_run_history_when_portal_pointer_is_missing(project_work_world, prior_kind):
+    from deerflow.persistence.run.model import RunRow
+    from deerflow.persistence.thread_meta.model import ThreadMetaRow
+
+    state = project_work_world
+    async with _http(state.app) as client:
+        created = await _compose(client, auth_headers(USER_B, CUSTOMER_ORG))
+        async with state.sf() as session, session.begin():
+            session.add(ThreadMetaRow(thread_id="work-with-missing-run-pointer", user_id=CUSTOMER_STORAGE, organization_id=CUSTOMER_ORG, assistant_id="momobot-max"))
+            session.add(RunRow(run_id="terminal-prior-work", thread_id="work-with-missing-run-pointer", user_id=CUSTOMER_STORAGE, organization_id=CUSTOMER_ORG, assistant_id="momobot-max", status="success", operation_kind=prior_kind))
+            portal = await session.get(BoardPortalRow, created["id"])
+            portal.work_chat_id = "work-with-missing-run-pointer"
+            assert portal.work_run_id is None
+        response = await client.post(f"{BASE}/{created['id']}/work", headers=auth_headers(USER_C, CUSTOMER_ORG), json={"project_id": "project-a"})
+        assert response.status_code == (409 if prior_kind == "run" else 200), response.text
+        if prior_kind != "run":
+            record = state.app.state.run_manager._runs[response.json()["run_id"]]
+            if record.task:
+                await record.task
+        async with state.sf() as session:
+            metadata = await session.get(ThreadMetaRow, "work-with-missing-run-pointer")
+            portal = await session.get(BoardPortalRow, created["id"])
+            if prior_kind == "run":
+                assert metadata.project_id is None and portal.work_run_id is None
+                assert await session.scalar(select(func.count()).select_from(RunRow).where(RunRow.thread_id == metadata.thread_id, RunRow.operation_kind == "run")) == 1
+                assert not state.project_calls
+            else:
+                assert metadata.project_id == "project-a" and portal.work_run_id == record.run_id
+                assert len(state.project_calls) == 1
+
+
 pytestmark = pytest.mark.asyncio
 BASE = "/api/client-portal/threads"
 CUSTOMER_STORAGE = "synthetic-portal-customer"
