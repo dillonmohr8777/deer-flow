@@ -47,6 +47,10 @@ Each saved draft has a new immutable message id, revision and PendingAction orig
 
 After publication the conversation is immutable in this first slice; follow-up work is a new request. Attachments are small UTF-8 text deliverables, not arbitrary uploads or external URLs. Existing chat outputs stay behind the ordinary authorized thread/artifact APIs; staff work refs never appear in a client projection. SQL and memory thread stores bind customer chats to the server-owned creator; list/direct/mutations/access checks exclude staff and other-client chats even in a shared storage bucket.
 
+## Workspace migration and legacy visibility
+
+Customer workspace migration is explicit (`POST /api/client-portal/customer-workspaces/migrations`): global + agency admin, one exact source client-contact assignment and one shared client membership. Move the assignment and deactivate source membership atomically; never attribute shared history to a person. Private legacy thread visibility requires exact actor ownership and the server-selected private storage/org; creator scope still holds for shared storage.
+
 ## Verification and rollout
 
 Staff may read `GET /api/client-portal/clients/{client_id}/context`, optionally

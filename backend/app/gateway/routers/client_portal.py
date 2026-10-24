@@ -352,7 +352,7 @@ async def portal_clients(request: Request):
 
 
 @router.get("/clients/{client_id}/context")
-async def operating_context(client_id: str, request: Request, response: Response, thread_id: ThreadId | None = None):
+async def operating_context(client_id: str, request: Request, response: Response, thread_id: ThreadId = None):
     response.headers["Cache-Control"] = "no-store"
     actor, org, _, external = await _identity(request)
     if external:
