@@ -617,10 +617,16 @@ async def start_work(thread_id: ThreadId, request: Request):
                     "role": "user",
                     "content": (
                         f"Client request: {thread.subject}\n{first.body if first else ''}\n"
-                        "Produce a source-backed INTERNAL DRAFT reply and useful deliverable for staff review. "
+                        "Match the client's requested scope and length. Treat supplied facts as drafting inputs and "
+                        "mark missing details as missing; do not invent facts or withhold usable copy for nonessential "
+                        "details. Put the requested deliverable first, then briefly flag any genuinely required "
+                        "missing information, if needed. Research external sources only when the request calls for it or when you introduce "
+                        "a material factual, legal, or compliance claim. Do not expand routine drafting into an "
+                        "unsolicited memo or invent extra approval or confirmation requirements; preserve existing "
+                        "approval rules. Produce an INTERNAL DRAFT reply for staff review. "
                         "Never send or publish. Assigned account managers may work, edit, and save drafts; "
                         "assignment alone grants no approval or publication authority. Publication review "
-                        "requires an authorized workspace owner/admin. Support legal/compliance claims with "
+                        "requires an authorized workspace owner/admin. When you make legal/compliance claims, support them with "
                         "current authoritative sources; never infer a CAN-SPAM exemption from a professional "
                         "relationship or absence of an offer. Leave unresolved classifications/requirements "
                         "for qualified human review. Save outputs and identify evidence; no invented metrics. "
