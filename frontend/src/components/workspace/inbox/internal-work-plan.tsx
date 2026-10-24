@@ -1,6 +1,10 @@
 "use client";
 
-import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useInfiniteQuery,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { format } from "date-fns";
 import { useEffect, useRef, useState } from "react";
 
@@ -155,7 +159,8 @@ function PlanForm({
       });
       if (
         page.items.some((item) => pageParam.userIds.includes(item.user_id)) ||
-        (page.next_cursor !== null && pageParam.cursors.includes(page.next_cursor))
+        (page.next_cursor !== null &&
+          pageParam.cursors.includes(page.next_cursor))
       ) {
         throw new Error("The server returned a repeated teammate page.");
       }
@@ -165,8 +170,12 @@ function PlanForm({
       page.has_more
         ? {
             cursor: page.next_cursor,
-            userIds: pages.flatMap((previous) => previous.items.map((item) => item.user_id)),
-            cursors: pages.flatMap((previous) => previous.next_cursor ? [previous.next_cursor] : []),
+            userIds: pages.flatMap((previous) =>
+              previous.items.map((item) => item.user_id),
+            ),
+            cursors: pages.flatMap((previous) =>
+              previous.next_cursor ? [previous.next_cursor] : [],
+            ),
           }
         : undefined,
     gcTime: 0,
@@ -181,11 +190,16 @@ function PlanForm({
     ),
   );
   const selected = new Map(
-    directory.data?.pages.at(-1)?.selected_items.map((item) => [item.user_id, item] as const),
+    directory.data?.pages
+      .at(-1)
+      ?.selected_items.map((item) => [item.user_id, item] as const),
   );
   for (const item of selected.values()) participants.set(item.user_id, item);
   // Saved eligibility comes from selected_items, including people outside this page.
-  for (const id of [record.plan?.assignee_user_id, record.plan?.verifier_user_id])
+  for (const id of [
+    record.plan?.assignee_user_id,
+    record.plan?.verifier_user_id,
+  ])
     if (id && directory.data && !selected.has(id)) participants.delete(id);
   const active = useRef(true);
   const write = useRef<AbortController | null>(null);
@@ -306,13 +320,24 @@ function PlanForm({
                 <option value="">Unassigned</option>
                 {[...participants.values()].map((item) => (
                   <option key={item.user_id} value={item.user_id}>
-                    {item.email} · {item.role === "account_manager" ? "Account manager" : item.role === "admin" ? "Admin" : "Owner"}
+                    {item.email} ·{" "}
+                    {item.role === "account_manager"
+                      ? "Account manager"
+                      : item.role === "admin"
+                        ? "Admin"
+                        : "Owner"}
                     {item.user_id === props.userId ? " (you)" : ""}
                   </option>
                 ))}
                 {plan[field] && !participants.has(plan[field]) && (
                   <option value={plan[field]} disabled>
-                    {record.plan?.[field] === plan[field] ? "Saved" : "Selected"} {label.toLowerCase()} — {directory.data && !directory.isError ? "unavailable; clear or replace" : "eligibility not checked"}
+                    {record.plan?.[field] === plan[field]
+                      ? "Saved"
+                      : "Selected"}{" "}
+                    {label.toLowerCase()} —{" "}
+                    {directory.data && !directory.isError
+                      ? "unavailable; clear or replace"
+                      : "eligibility not checked"}
                   </option>
                 )}
               </select>
@@ -321,9 +346,12 @@ function PlanForm({
         </div>
         <p className="text-muted-foreground text-sm">
           Only currently eligible teammates for this client are listed. Saving
-          rechecks eligibility. Unavailable selections can be cleared or replaced.
+          rechecks eligibility. Unavailable selections can be cleared or
+          replaced.
         </p>
-        {directory.isFetching && <p role="status">Loading eligible teammates…</p>}
+        {directory.isFetching && (
+          <p role="status">Loading eligible teammates…</p>
+        )}
         {directory.error && (
           <div className="space-y-2">
             <p role="alert">
@@ -335,7 +363,11 @@ function PlanForm({
               variant="outline"
               className="min-h-11"
               disabled={directory.isFetching}
-              onClick={() => void (directory.isFetchNextPageError ? directory.fetchNextPage() : directory.refetch())}
+              onClick={() =>
+                void (directory.isFetchNextPageError
+                  ? directory.fetchNextPage()
+                  : directory.refetch())
+              }
             >
               Retry teammates
             </Button>

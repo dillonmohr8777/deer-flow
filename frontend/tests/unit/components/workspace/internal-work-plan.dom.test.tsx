@@ -11,7 +11,10 @@ import {
 } from "@testing-library/react";
 
 import { InternalWorkPlan } from "@/components/workspace/inbox/internal-work-plan";
-import type { WorkPlan, WorkPlanParticipant } from "@/core/client-portal/work-plan";
+import type {
+  WorkPlan,
+  WorkPlanParticipant,
+} from "@/core/client-portal/work-plan";
 
 const mocks = rs.hoisted(() => ({ fetch: rs.fn() }));
 rs.mock("@/core/api/fetcher", () => ({ fetch: mocks.fetch }));
@@ -91,9 +94,16 @@ function participants(
   };
 }
 function participantCalls() {
-  return mocks.fetch.mock.calls.filter(([url]) => String(url).includes("/participants?"));
+  return mocks.fetch.mock.calls.filter(([url]) =>
+    String(url).includes("/participants?"),
+  );
 }
-function mockPlanFetch(implementation: (url: string, options: RequestInit) => Response | Promise<Response>) {
+function mockPlanFetch(
+  implementation: (
+    url: string,
+    options: RequestInit,
+  ) => Response | Promise<Response>,
+) {
   mocks.fetch.mockImplementation((url: string, options: RequestInit) => {
     if (url.includes("/participants?")) {
       const requestId = decodeURIComponent(url.split("/").at(-3)!);
@@ -103,14 +113,20 @@ function mockPlanFetch(implementation: (url: string, options: RequestInit) => Re
   });
 }
 function mockDirectoryFetch(
-  implementation: (url: string, options: RequestInit) => Response | Promise<Response>,
+  implementation: (
+    url: string,
+    options: RequestInit,
+  ) => Response | Promise<Response>,
   saved = plan,
 ) {
   mocks.fetch.mockImplementation(async (url: string, options: RequestInit) => {
     if (url.includes("/participants?")) return implementation(url, options);
     const requestId = decodeURIComponent(url.split("/").at(-2)!);
     if (options.method === "PUT") {
-      const body = JSON.parse(options.body as string) as { expected_revision: number; plan: WorkPlan };
+      const body = JSON.parse(options.body as string) as {
+        expected_revision: number;
+        plan: WorkPlan;
+      };
       return response(record(requestId, body.expected_revision + 1, body.plan));
     }
     return response(record(requestId, 7, saved));
@@ -118,7 +134,9 @@ function mockDirectoryFetch(
 }
 function calls(method: string) {
   return mocks.fetch.mock.calls.filter(
-    ([url, options]) => (options as RequestInit).method === method && !String(url).includes("/participants?"),
+    ([url, options]) =>
+      (options as RequestInit).method === method &&
+      !String(url).includes("/participants?"),
   );
 }
 function change(label: string, value: string) {
@@ -165,20 +183,18 @@ describe("InternalWorkPlan recorded staff plans", () => {
       },
     });
     mocks.fetch.mockReset();
-    mockPlanFetch(
-      async (_url: string, options: RequestInit) => {
-        if (options.method === "PUT") {
-          const body = JSON.parse(options.body as string) as {
-            expected_revision: number;
-            plan: WorkPlan;
-          };
-          return response(
-            record(props.requestId, body.expected_revision + 1, body.plan),
-          );
-        }
-        return response(record());
-      },
-    );
+    mockPlanFetch(async (_url: string, options: RequestInit) => {
+      if (options.method === "PUT") {
+        const body = JSON.parse(options.body as string) as {
+          expected_revision: number;
+          plan: WorkPlan;
+        };
+        return response(
+          record(props.requestId, body.expected_revision + 1, body.plan),
+        );
+      }
+      return response(record());
+    });
   });
   afterEach(() => {
     cleanup();
@@ -236,11 +252,10 @@ describe("InternalWorkPlan recorded staff plans", () => {
   for (const status of [404, 409, 503]) {
     it(`retains edits after ${status}, makes no automatic retry, and reloads only explicitly`, async () => {
       let current = record();
-      mockPlanFetch(
-        async (_url: string, options: RequestInit) =>
-          options.method === "PUT"
-            ? response({ detail: `Synthetic save failure ${status}` }, status)
-            : response(current),
+      mockPlanFetch(async (_url: string, options: RequestInit) =>
+        options.method === "PUT"
+          ? response({ detail: `Synthetic save failure ${status}` }, status)
+          : response(current),
       );
       render(view());
       await ready();
@@ -314,48 +329,90 @@ describe("InternalWorkPlan recorded staff plans", () => {
       }),
     ).toBeTruthy();
     await screen.findAllByText(/unavailable; clear or replace/);
-    expect(screen.getByLabelText<HTMLSelectElement>("Owner").value).toBe(saved.assignee_user_id);
-    fireEvent.click(screen.getByRole("checkbox", { name: "Saved dependency outside recent requests" }));
+    expect(screen.getByLabelText<HTMLSelectElement>("Owner").value).toBe(
+      saved.assignee_user_id,
+    );
+    fireEvent.click(
+      screen.getByRole("checkbox", {
+        name: "Saved dependency outside recent requests",
+      }),
+    );
     choose("Owner", /\(you\)$/);
     choose("Verifier", /^Unassigned$/);
     save();
     await waitFor(() => expect(calls("PUT").length).toBe(1));
     expect(
       JSON.parse((calls("PUT")[0]![1] as RequestInit).body as string).plan,
-    ).toEqual({ ...saved, assignee_user_id: props.userId, verifier_user_id: null, dependency_thread_ids: [] });
+    ).toEqual({
+      ...saved,
+      assignee_user_id: props.userId,
+      verifier_user_id: null,
+      dependency_thread_ids: [],
+    });
   });
 
   it("pages identifiable teammates without replacing dirty fields, then saves a newly eligible teammate", async () => {
-    mockDirectoryFetch((url) => response(
-      url.includes("cursor=")
-        ? participants(props.requestId, [peer])
-        : participants(props.requestId, [self], [], "opaque+/="),
-    ));
+    mockDirectoryFetch((url) =>
+      response(
+        url.includes("cursor=")
+          ? participants(props.requestId, [peer])
+          : participants(props.requestId, [self], [], "opaque+/="),
+      ),
+    );
     render(view());
     await ready();
     await screen.findByRole("button", { name: "Load more teammates" });
     change("Outcome", "Keep dirty outcome while paging");
     choose("Verifier", /\(you\)$/);
-    fireEvent.click(screen.getByRole("button", { name: "Load more teammates" }));
-    await waitFor(() => expect(within(screen.getByLabelText("Owner")).getByRole("option", { name: /teammate@synthetic.invalid · Account manager/ })).toBeTruthy());
-    expect(screen.getByLabelText<HTMLTextAreaElement>("Outcome").value).toBe("Keep dirty outcome while paging");
-    expect(screen.getByLabelText<HTMLSelectElement>("Verifier").value).toBe(props.userId);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Load more teammates" }),
+    );
+    await waitFor(() =>
+      expect(
+        within(screen.getByLabelText("Owner")).getByRole("option", {
+          name: /teammate@synthetic.invalid · Account manager/,
+        }),
+      ).toBeTruthy(),
+    );
+    expect(screen.getByLabelText<HTMLTextAreaElement>("Outcome").value).toBe(
+      "Keep dirty outcome while paging",
+    );
+    expect(screen.getByLabelText<HTMLSelectElement>("Verifier").value).toBe(
+      props.userId,
+    );
     expect(participantCalls()[1]![0]).toContain("cursor=opaque%2B%2F%3D");
     choose("Owner", /teammate@synthetic.invalid/);
     save();
     await waitFor(() => expect(calls("PUT").length).toBe(1));
-    expect(JSON.parse((calls("PUT")[0]![1] as RequestInit).body as string)).toMatchObject({
+    expect(
+      JSON.parse((calls("PUT")[0]![1] as RequestInit).body as string),
+    ).toMatchObject({
       expected_revision: 7,
-      plan: { outcome: "Keep dirty outcome while paging", assignee_user_id: peer.user_id, verifier_user_id: props.userId },
+      plan: {
+        outcome: "Keep dirty outcome while paging",
+        assignee_user_id: peer.user_id,
+        verifier_user_id: props.userId,
+      },
     });
   });
 
   it("identifies an eligible saved person outside the loaded page through selected_items", async () => {
-    mockDirectoryFetch(() => response(participants(props.requestId, [self], [peer], "next")), { ...plan, assignee_user_id: peer.user_id });
+    mockDirectoryFetch(
+      () => response(participants(props.requestId, [self], [peer], "next")),
+      { ...plan, assignee_user_id: peer.user_id },
+    );
     render(view());
     await ready();
-    await waitFor(() => expect(within(screen.getByLabelText("Owner")).getByRole("option", { name: /teammate@synthetic.invalid/ })).toBeTruthy());
-    expect(screen.getByLabelText<HTMLSelectElement>("Owner").value).toBe(peer.user_id);
+    await waitFor(() =>
+      expect(
+        within(screen.getByLabelText("Owner")).getByRole("option", {
+          name: /teammate@synthetic.invalid/,
+        }),
+      ).toBeTruthy(),
+    );
+    expect(screen.getByLabelText<HTMLSelectElement>("Owner").value).toBe(
+      peer.user_id,
+    );
     expect(screen.queryByText(/unavailable; clear or replace/)).toBeNull();
   });
 
@@ -363,23 +420,43 @@ describe("InternalWorkPlan recorded staff plans", () => {
     it(`preserves saved and unsaved selections after directory ${status} and retries explicitly`, async () => {
       let failed = true;
       const saved = { ...plan, assignee_user_id: peer.user_id };
-      mockDirectoryFetch(() => failed
-        ? response({}, status)
-        : response(participants(props.requestId, [self], [peer])), saved);
+      mockDirectoryFetch(
+        () =>
+          failed
+            ? response({}, status)
+            : response(participants(props.requestId, [self], [peer])),
+        saved,
+      );
       render(view());
       await ready();
       await screen.findByRole("button", { name: "Retry teammates" });
-      expect(screen.getByLabelText<HTMLSelectElement>("Owner").value).toBe(peer.user_id);
+      expect(screen.getByLabelText<HTMLSelectElement>("Owner").value).toBe(
+        peer.user_id,
+      );
       expect(screen.queryByText(/unavailable; clear or replace/)).toBeNull();
-      expect(within(screen.getByLabelText("Owner")).getByRole("option", { name: /eligibility not checked/ })).toBeTruthy();
+      expect(
+        within(screen.getByLabelText("Owner")).getByRole("option", {
+          name: /eligibility not checked/,
+        }),
+      ).toBeTruthy();
       change("Outcome", "Keep dirty outcome after directory failure");
       choose("Verifier", /^Unassigned$/);
       expect(participantCalls().length).toBe(1);
       failed = false;
       fireEvent.click(screen.getByRole("button", { name: "Retry teammates" }));
-      await waitFor(() => expect(within(screen.getByLabelText("Owner")).getByRole("option", { name: /teammate@synthetic.invalid/ })).toBeTruthy());
-      expect(screen.getByLabelText<HTMLTextAreaElement>("Outcome").value).toBe("Keep dirty outcome after directory failure");
-      expect(screen.getByLabelText<HTMLSelectElement>("Owner").value).toBe(peer.user_id);
+      await waitFor(() =>
+        expect(
+          within(screen.getByLabelText("Owner")).getByRole("option", {
+            name: /teammate@synthetic.invalid/,
+          }),
+        ).toBeTruthy(),
+      );
+      expect(screen.getByLabelText<HTMLTextAreaElement>("Outcome").value).toBe(
+        "Keep dirty outcome after directory failure",
+      );
+      expect(screen.getByLabelText<HTMLSelectElement>("Owner").value).toBe(
+        peer.user_id,
+      );
       expect(participantCalls().length).toBe(2);
       expect(calls("PUT").length).toBe(0);
     });
@@ -388,36 +465,68 @@ describe("InternalWorkPlan recorded staff plans", () => {
   it("retries a failed next page without dropping an unsaved participant or outcome", async () => {
     let nextAttempts = 0;
     mockDirectoryFetch((url) => {
-      if (!url.includes("cursor=")) return response(participants(props.requestId, [self], [], "next"));
+      if (!url.includes("cursor="))
+        return response(participants(props.requestId, [self], [], "next"));
       nextAttempts++;
-      return nextAttempts === 1 ? response({}, 503) : response(participants(props.requestId, [peer]));
+      return nextAttempts === 1
+        ? response({}, 503)
+        : response(participants(props.requestId, [peer]));
     });
     render(view());
     await ready();
     await screen.findByRole("button", { name: "Load more teammates" });
     choose("Owner", /\(you\)$/);
     change("Outcome", "Dirty through next-page retry");
-    fireEvent.click(screen.getByRole("button", { name: "Load more teammates" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Load more teammates" }),
+    );
     await screen.findByRole("button", { name: "Retry teammates" });
     expect(nextAttempts).toBe(1);
     fireEvent.click(screen.getByRole("button", { name: "Retry teammates" }));
-    await waitFor(() => expect(within(screen.getByLabelText("Owner")).getByRole("option", { name: /teammate@synthetic.invalid/ })).toBeTruthy());
-    expect(screen.getByLabelText<HTMLSelectElement>("Owner").value).toBe(props.userId);
-    expect(screen.getByLabelText<HTMLTextAreaElement>("Outcome").value).toBe("Dirty through next-page retry");
+    await waitFor(() =>
+      expect(
+        within(screen.getByLabelText("Owner")).getByRole("option", {
+          name: /teammate@synthetic.invalid/,
+        }),
+      ).toBeTruthy(),
+    );
+    expect(screen.getByLabelText<HTMLSelectElement>("Owner").value).toBe(
+      props.userId,
+    );
+    expect(screen.getByLabelText<HTMLTextAreaElement>("Outcome").value).toBe(
+      "Dirty through next-page retry",
+    );
     expect(nextAttempts).toBe(2);
     expect(participantCalls().length).toBe(3);
   });
 
   it("rejects duplicate participants across pages without erasing the dirty form", async () => {
-    mockDirectoryFetch((url) => response(participants(props.requestId, [self], [], url.includes("cursor=") ? null : "next")));
+    mockDirectoryFetch((url) =>
+      response(
+        participants(
+          props.requestId,
+          [self],
+          [],
+          url.includes("cursor=") ? null : "next",
+        ),
+      ),
+    );
     render(view());
     await ready();
     await screen.findByRole("button", { name: "Load more teammates" });
     change("Outcome", "Keep dirty duplicate-page outcome");
-    fireEvent.click(screen.getByRole("button", { name: "Load more teammates" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Load more teammates" }),
+    );
     await screen.findByText(/repeated teammate page/);
-    expect(screen.getByLabelText<HTMLTextAreaElement>("Outcome").value).toBe("Keep dirty duplicate-page outcome");
-    expect(within(screen.getByLabelText("Owner")).getAllByRole("option", { name: /self@synthetic.invalid/ })).toHaveLength(1);
+    expect(screen.getByLabelText<HTMLTextAreaElement>("Outcome").value).toBe(
+      "Keep dirty duplicate-page outcome",
+    );
+    expect(
+      within(screen.getByLabelText("Owner")).getAllByRole("option", {
+        name: /self@synthetic.invalid/,
+      }),
+    ).toHaveLength(1);
   });
 
   for (const field of [
@@ -432,13 +541,16 @@ describe("InternalWorkPlan recorded staff plans", () => {
       let directoryReads = 0;
       mockDirectoryFetch(() => {
         directoryReads++;
-        if (directoryReads === 1) return response(participants(props.requestId, [self], [], "next"));
+        if (directoryReads === 1)
+          return response(participants(props.requestId, [self], [], "next"));
         return directoryReads === 2 ? oldPage.promise : fresh.promise;
       });
       const { rerender } = render(view());
       await ready();
       await screen.findByRole("button", { name: "Load more teammates" });
-      fireEvent.click(screen.getByRole("button", { name: "Load more teammates" }));
+      fireEvent.click(
+        screen.getByRole("button", { name: "Load more teammates" }),
+      );
       await waitFor(() => expect(participantCalls().length).toBe(2));
       const oldSignal = (participantCalls()[1]![1] as RequestInit).signal;
       const next = { [field]: `synthetic-new-${field}` };
@@ -446,14 +558,38 @@ describe("InternalWorkPlan recorded staff plans", () => {
       expect(screen.queryAllByText(/self@synthetic.invalid/)).toHaveLength(0);
       await waitFor(() => expect(participantCalls().length).toBe(3));
       expect(oldSignal?.aborted).toBe(true);
-      await act(async () => { oldPage.resolve(response(participants(props.requestId, [peer]))); });
-      expect(screen.queryAllByText(/teammate@synthetic.invalid/)).toHaveLength(0);
+      await act(async () => {
+        oldPage.resolve(response(participants(props.requestId, [peer])));
+      });
+      expect(screen.queryAllByText(/teammate@synthetic.invalid/)).toHaveLength(
+        0,
+      );
       const requestId = field === "requestId" ? next[field]! : props.requestId;
       await act(async () => {
-        fresh.resolve(response(participants(requestId, [{ ...peer, user_id: "fresh-person", email: "fresh@synthetic.invalid" }])));
+        fresh.resolve(
+          response(
+            participants(requestId, [
+              {
+                ...peer,
+                user_id: "fresh-person",
+                email: "fresh@synthetic.invalid",
+              },
+            ]),
+          ),
+        );
       });
-      await waitFor(() => expect(within(screen.getByLabelText("Owner")).getByRole("option", { name: /fresh@synthetic.invalid/ })).toBeTruthy());
-      expect(screen.queryAllByText(/self@synthetic.invalid|teammate@synthetic.invalid/)).toHaveLength(0);
+      await waitFor(() =>
+        expect(
+          within(screen.getByLabelText("Owner")).getByRole("option", {
+            name: /fresh@synthetic.invalid/,
+          }),
+        ).toBeTruthy(),
+      );
+      expect(
+        screen.queryAllByText(
+          /self@synthetic.invalid|teammate@synthetic.invalid/,
+        ),
+      ).toHaveLength(0);
     });
 
     it(`suppresses a late load after ${field} changes`, async () => {
@@ -487,19 +623,17 @@ describe("InternalWorkPlan recorded staff plans", () => {
 
     it(`suppresses a late save after ${field} changes`, async () => {
       const pending = deferred<Response>();
-      mockPlanFetch(
-        async (url: string, options: RequestInit) => {
-          if (options.method === "PUT") return pending.promise;
-          const requestId = decodeURIComponent(url.split("/").at(-2)!);
-          return response(
-            record(requestId, 7, {
-              ...plan,
-              outcome:
-                calls("GET").length > 1 ? "Fresh scope outcome" : plan.outcome,
-            }),
-          );
-        },
-      );
+      mockPlanFetch(async (url: string, options: RequestInit) => {
+        if (options.method === "PUT") return pending.promise;
+        const requestId = decodeURIComponent(url.split("/").at(-2)!);
+        return response(
+          record(requestId, 7, {
+            ...plan,
+            outcome:
+              calls("GET").length > 1 ? "Fresh scope outcome" : plan.outcome,
+          }),
+        );
+      });
       const { rerender } = render(view());
       await ready();
       change("Outcome", "Old scope save");
@@ -537,14 +671,12 @@ describe("InternalWorkPlan recorded staff plans", () => {
   });
 
   it("creates an absent plan from revision zero after required fields are entered", async () => {
-    mockPlanFetch(
-      async (_url: string, options: RequestInit) => {
-        if (options.method === "GET")
-          return response(record(props.requestId, 0, null));
-        const body = JSON.parse(options.body as string) as { plan: WorkPlan };
-        return response(record(props.requestId, 1, body.plan));
-      },
-    );
+    mockPlanFetch(async (_url: string, options: RequestInit) => {
+      if (options.method === "GET")
+        return response(record(props.requestId, 0, null));
+      const body = JSON.parse(options.body as string) as { plan: WorkPlan };
+      return response(record(props.requestId, 1, body.plan));
+    });
     render(view());
     await screen.findByText("No recorded plan yet.");
     save();
@@ -562,14 +694,12 @@ describe("InternalWorkPlan recorded staff plans", () => {
 
   it("preserves the saved due timestamp exactly when another field is edited", async () => {
     const due = "2026-11-01T01:30:42.125-04:00";
-    mockPlanFetch(
-      async (_url: string, options: RequestInit) => {
-        if (options.method === "GET")
-          return response(record(props.requestId, 7, { ...plan, due_at: due }));
-        const body = JSON.parse(options.body as string) as { plan: WorkPlan };
-        return response(record(props.requestId, 8, body.plan));
-      },
-    );
+    mockPlanFetch(async (_url: string, options: RequestInit) => {
+      if (options.method === "GET")
+        return response(record(props.requestId, 7, { ...plan, due_at: due }));
+      const body = JSON.parse(options.body as string) as { plan: WorkPlan };
+      return response(record(props.requestId, 8, body.plan));
+    });
     render(view());
     await ready();
     change("Outcome", "Another synthetic outcome");

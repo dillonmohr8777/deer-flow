@@ -111,7 +111,8 @@ const participantsSchema = z
   .superRefine((page, context) => {
     if (
       page.items.length > page.limit ||
-      new Set(page.items.map((item) => item.user_id)).size !== page.items.length ||
+      new Set(page.items.map((item) => item.user_id)).size !==
+        page.items.length ||
       new Set(page.selected_items.map((item) => item.user_id)).size !==
         page.selected_items.length ||
       page.has_more !== (page.next_cursor !== null) ||
@@ -124,7 +125,10 @@ const participantsSchema = z
         ),
       )
     ) {
-      context.addIssue({ code: "custom", message: "Invalid participant page." });
+      context.addIssue({
+        code: "custom",
+        message: "Invalid participant page.",
+      });
     }
   });
 
