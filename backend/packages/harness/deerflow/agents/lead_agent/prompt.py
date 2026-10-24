@@ -1058,8 +1058,8 @@ def _build_user_profile_section(user_id: str | None) -> str:
     HTML-escaped before entering the prompt (same injection defense as
     #4097/#4119/#4128/#4099) and truncated to ``_USER_PROFILE_MAX_BYTES`` with
     a note so an unbounded profile cannot blow out prompt prefix-cache
-    stability. Falls back to the legacy shared file on a read miss, exactly
-    like the ``GET /api/agents/user-profile`` route.
+    stability. Reads only the resolved principal's profile, exactly like the
+    ``GET /api/agents/user-profile`` route; a missing profile stays empty.
     """
     if not user_id:
         return ""
@@ -1068,8 +1068,6 @@ def _build_user_profile_section(user_id: str | None) -> str:
 
         paths = get_paths()
         profile_path = paths.user_md_file_for(user_id)
-        if not profile_path.exists():
-            profile_path = paths.user_md_file
         if not profile_path.exists():
             return ""
         content = profile_path.read_text(encoding="utf-8").strip()
