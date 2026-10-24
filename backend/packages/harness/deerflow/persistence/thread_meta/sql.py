@@ -13,7 +13,19 @@ from sqlalchemy.orm.attributes import flag_modified
 
 from deerflow.persistence.json_compat import json_match
 from deerflow.persistence.organizations.resolution import organization_from_owned_parent, private_organization_for_user
-from deerflow.persistence.thread_meta.base import PROJECT_FILTER_UNSET, THREAD_ARCHIVED_METADATA_KEY, THREAD_PINNED_METADATA_KEY, THREAD_PROJECT_METADATA_KEY, InvalidMetadataFilterError, ThreadMetaStore, _ProjectFilterUnset
+from deerflow.persistence.thread_meta.base import (
+    PROJECT_FILTER_UNSET,
+    THREAD_ARCHIVED_METADATA_KEY,
+    THREAD_PINNED_METADATA_KEY,
+    THREAD_PROJECT_METADATA_KEY,
+    THREAD_UPLOAD_RESERVATION_METADATA_KEY,
+    InvalidMetadataFilterError,
+    ThreadMetaStore,
+    ThreadOwnershipConflictError,
+    _ProjectFilterUnset,
+    has_unowned_thread_data,
+    thread_metadata,
+)
 from deerflow.persistence.thread_meta.model import ThreadMetaRow
 from deerflow.runtime.user_context import AUTO, _AutoSentinel, resolve_organization_id, resolve_user_id
 from deerflow.utils.time import coerce_iso
@@ -86,7 +98,9 @@ class ThreadMetaRepository(ThreadMetaStore):
     @staticmethod
     def _row_to_dict(row: ThreadMetaRow) -> dict[str, Any]:
         d = row.to_dict()
-        d["metadata"] = dict(d.pop("metadata_json", None) or {})
+        metadata = d.pop("metadata_json", None) or {}
+        d["metadata"] = thread_metadata(metadata)
+        d["upload_reserved"] = row.incarnation is not None and metadata.get(THREAD_UPLOAD_RESERVATION_METADATA_KEY) == row.incarnation
         project_id = d.pop("project_id", None)
         if project_id is not None:
             d["metadata"][THREAD_PROJECT_METADATA_KEY] = project_id
@@ -107,6 +121,8 @@ class ThreadMetaRepository(ThreadMetaStore):
         display_name: str | None = None,
         metadata: dict | None = None,
         project_id: str | None = None,
+        preserve_existing: bool = False,
+        finalize_upload: bool = False,
     ) -> dict:
         # Auto-resolve user_id from contextvar when AUTO; explicit None
         # creates an orphan row (used by migration scripts).
@@ -115,6 +131,21 @@ class ThreadMetaRepository(ThreadMetaStore):
         async with self._sf() as session:
             if session.get_bind().dialect.name == "sqlite":
                 await session.execute(text("BEGIN IMMEDIATE"))
+            existing = await session.get(ThreadMetaRow, thread_id)
+            if existing is not None and preserve_existing:
+                if existing.user_id is None or not await _visible(existing, resolved_user_id, session):
+                    raise ThreadOwnershipConflictError(thread_id)
+                return self._row_to_dict(existing)
+            finalizing = existing is not None and existing.incarnation is not None and (existing.metadata_json or {}).get(THREAD_UPLOAD_RESERVATION_METADATA_KEY) == existing.incarnation
+            if existing is not None and finalize_upload and not finalizing:
+                if existing.user_id is None or not await _visible(existing, resolved_user_id, session):
+                    raise ThreadOwnershipConflictError(thread_id)
+                return self._row_to_dict(existing)
+            finalizing = finalizing and finalize_upload
+            if finalizing and (existing.user_id is None or not await _visible(existing, resolved_user_id, session)):
+                raise ThreadOwnershipConflictError(thread_id)
+            if existing is None and await has_unowned_thread_data(thread_id, resolved_user_id):
+                raise ThreadOwnershipConflictError(thread_id)
             if project_id is not None:
                 from deerflow.persistence.projects import ProjectNotAssignableError
                 from deerflow.persistence.projects.model import ProjectRow
@@ -140,20 +171,43 @@ class ThreadMetaRepository(ThreadMetaStore):
                 organization_id = organization_from_owned_parent(project, resolved_user_id, parent_name="project")
             else:
                 organization_id = await private_organization_for_user(session, resolved_user_id)
-            row = ThreadMetaRow(
-                thread_id=thread_id,
-                client_actor_id=await _client_actor(session),
-                incarnation=uuid.uuid4().hex,
-                assistant_id=assistant_id,
-                user_id=resolved_user_id,
-                organization_id=organization_id,
-                display_name=display_name,
-                status="idle",
-                metadata_json=metadata or {},
-                project_id=project_id,
-                created_at=now,
-                updated_at=now,
+            if finalizing:
+                # Match project move/delete's project -> thread lock order.
+                await session.refresh(existing, with_for_update=True)
+                if existing.user_id is None or not await _visible(existing, resolved_user_id, session):
+                    raise ThreadOwnershipConflictError(thread_id)
+                if (existing.metadata_json or {}).get(THREAD_UPLOAD_RESERVATION_METADATA_KEY) != existing.incarnation:
+                    return self._row_to_dict(existing)
+            incarnation = existing.incarnation if finalizing else uuid.uuid4().hex
+            clean_metadata = thread_metadata(metadata)
+            if preserve_existing:
+                clean_metadata[THREAD_UPLOAD_RESERVATION_METADATA_KEY] = incarnation
+            if existing is not None and not finalizing:
+                session.expunge(existing)
+            row = (
+                existing
+                if finalizing
+                else ThreadMetaRow(
+                    thread_id=thread_id,
+                    client_actor_id=await _client_actor(session),
+                    incarnation=incarnation,
+                    assistant_id=assistant_id,
+                    user_id=resolved_user_id,
+                    organization_id=organization_id,
+                    display_name=display_name,
+                    status="idle",
+                    metadata_json=clean_metadata,
+                    project_id=project_id,
+                    created_at=now,
+                    updated_at=now,
+                )
             )
+            if finalizing:
+                row.assistant_id = assistant_id
+                row.display_name = display_name if display_name is not None else row.display_name
+                row.metadata_json = clean_metadata
+                row.project_id = project_id
+                row.updated_at = now
             session.add(row)
             await session.commit()
             await session.refresh(row)
@@ -259,16 +313,14 @@ class ThreadMetaRepository(ThreadMetaStore):
         (``user_id`` NULL, legacy pre-auth data) fail closed for every caller:
         nobody may read, write, delete or claim them (M3).
 
-        A missing row passes only with ``require_existing=False``. Thread-scoped
-        routes require an existing row; the row-less exceptions are
-        upload-before-create, which writes only into the caller's own storage
-        bucket, and the creation paths (PUT goal, stateless run admission), which
-        must not create a row over another owner's checkpoint.
+        A missing row passes only with ``require_existing=False`` and no legacy
+        thread data in its storage bucket. Uploads reserve an owned row before writing;
+        creation paths must not adopt unknown files or another owner's checkpoint.
         """
         async with self._sf() as session:
             row = await session.get(ThreadMetaRow, thread_id)
             if row is None:
-                return not require_existing
+                return not require_existing and not await has_unowned_thread_data(thread_id, user_id)
             return row.user_id is not None and await _visible(row, user_id, session)
 
     async def search(
@@ -424,7 +476,7 @@ class ThreadMetaRepository(ThreadMetaStore):
             if not await _visible(row, resolved_user_id, session):
                 return
             merged = dict(row.metadata_json or {})
-            merged.update(metadata)
+            merged.update(thread_metadata(metadata))
             row.metadata_json = merged
             if touch:
                 row.updated_at = datetime.now(UTC)

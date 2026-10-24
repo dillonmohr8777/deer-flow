@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Any
 from sqlalchemy.exc import IntegrityError as SAIntegrityError
 
 from deerflow.runtime.user_context import AUTO, _AutoSentinel, get_current_user, resolve_user_id
+from deerflow.utils.file_io import await_drained
 from deerflow.utils.time import is_lease_expired
 from deerflow.utils.time import now_iso as _now_iso
 
@@ -24,6 +25,7 @@ from .schemas import DisconnectMode, RunStatus, ThreadOperationKind
 from .store.base import (
     EditReplayVisibility,
     RunIdempotencyConflict,
+    RunStore,
     normalize_run_created_at_iso,
     run_is_before_cursor,
     run_sort_key,
@@ -32,7 +34,6 @@ from .store.base import (
 if TYPE_CHECKING:
     from deerflow.config.run_ownership_config import RunOwnershipConfig
     from deerflow.runtime.events.store.base import RunEventStore
-    from deerflow.runtime.runs.store.base import RunStore
 
 logger = logging.getLogger(__name__)
 
@@ -896,6 +897,8 @@ class RunManager:
             record = self._runs.get(run_id)
         if record is None:
             raise RunStartupError(f"Cannot start unknown run {run_id}")
+        if record.operation_kind == ThreadOperationKind.upload_write:
+            return RunStartOutcome.cancelled
 
         async with record.start_lock:
             async with self._lock:
@@ -1002,6 +1005,8 @@ class RunManager:
             record = self._runs.get(run_id)
             if record is None:
                 logger.warning("set_status called for unknown run %s", run_id)
+                return
+            if record.operation_kind == ThreadOperationKind.upload_write:
                 return
             if record.ownership_lost:
                 logger.warning(
@@ -1342,6 +1347,8 @@ class RunManager:
         async with self._lock:
             record = self._runs.get(run_id)
             if record is not None:
+                if record.operation_kind == ThreadOperationKind.upload_write:
+                    return CancelOutcome.not_cancellable
                 if record.status == RunStatus.interrupted:
                     return CancelOutcome.cancelled  # idempotent
                 if record.status not in (RunStatus.pending, RunStatus.running) and (not self.heartbeat_enabled or self._store is None):
@@ -1426,6 +1433,9 @@ class RunManager:
 
         if row is None:
             return CancelOutcome.unknown
+
+        if row.get("operation_kind") == ThreadOperationKind.upload_write.value:
+            return CancelOutcome.not_cancellable
 
         store_status = row.get("status")
         if store_status == "interrupted":
@@ -1524,6 +1534,14 @@ class RunManager:
 
     async def _close_cancelled_admission(self, record: RunRecord) -> None:
         """Terminalize an unseen replacement and confirm its durable state."""
+        if record.operation_kind == ThreadOperationKind.upload_write:
+            # Admission never returned, so no upload worker could have started.
+            if self._store is not None and not await self._store.release_upload_operation(record.run_id, user_id=record.user_id, owner_worker_id=self._worker_id):
+                raise RuntimeError("Upload admission release is unconfirmed; verify durable state before repair")
+            async with self._lock:
+                self._runs.pop(record.run_id, None)
+                self._unindex_run_locked(record.run_id, record.thread_id)
+            return
         await self.cancel(record.run_id)
         if self._store is None:
             return
@@ -1815,6 +1833,8 @@ class RunManager:
         """
         if kind == ThreadOperationKind.run:
             raise ValueError("Normal runs must be admitted with create_or_reject()")
+        if kind == ThreadOperationKind.upload_write and (self._store is None or getattr(type(self._store), "release_upload_operation", RunStore.release_upload_operation) is RunStore.release_upload_operation):
+            raise ConflictError("Upload admission requires a durable operation store")
         record = await self._admit_thread_operation(
             thread_id,
             operation_kind=kind,
@@ -1841,14 +1861,27 @@ class RunManager:
             try:
                 if self._store is not None:
                     try:
-                        await self._call_store_with_retry(
-                            "release thread operation",
-                            record.run_id,
-                            lambda: self._store.delete_thread_operation(record.run_id, user_id=record.user_id),
-                        )
+                        if kind == ThreadOperationKind.upload_write:
+                            released = await await_drained(
+                                self._call_store_with_retry(
+                                    "release drained upload operation",
+                                    record.run_id,
+                                    lambda: self._store.release_upload_operation(record.run_id, user_id=record.user_id, owner_worker_id=self._worker_id),
+                                )
+                            )
+                            if not released:
+                                logger.error("Upload operation %s release was not confirmed; verify durable state before repair", record.run_id)
+                        else:
+                            await self._call_store_with_retry(
+                                "release thread operation",
+                                record.run_id,
+                                lambda: self._store.delete_thread_operation(record.run_id, user_id=record.user_id),
+                            )
                     except Exception:
                         logger.warning(
-                            "Failed to release persisted thread operation %s; leaving it for orphan reconciliation",
+                            "Failed to release persisted thread operation %s; upload release unconfirmed, verify durable state before repair"
+                            if kind == ThreadOperationKind.upload_write
+                            else "Failed to release persisted thread operation %s; leaving it for orphan reconciliation",
                             record.run_id,
                             exc_info=True,
                         )
@@ -1899,6 +1932,9 @@ class RunManager:
                 record = self._record_from_store(row)
             except Exception:
                 logger.warning("Failed to map orphaned run row during reconciliation", exc_info=True)
+                continue
+
+            if record.operation_kind == ThreadOperationKind.upload_write:
                 continue
 
             async with self._lock:

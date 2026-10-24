@@ -5,18 +5,22 @@ import os
 import stat
 import tempfile
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import BinaryIO
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from pydantic import BaseModel, Field
+from sqlalchemy.exc import IntegrityError
 
 from app.gateway.authz import require_permission, try_acquire_sandbox_for_request
-from app.gateway.deps import get_config
+from app.gateway.deps import get_checkpointer, get_config, get_run_manager, get_thread_store
 from app.gateway.upload_ingestion import ThreadUploadIngestionService, UnsafeFilenameError, UnsafeUploadDestinationError
 from deerflow.config.app_config import AppConfig
 from deerflow.config.paths import get_paths
+from deerflow.persistence.thread_meta import ThreadOwnershipConflictError
+from deerflow.runtime import ConflictError, ThreadOperationKind
 from deerflow.runtime.user_context import get_effective_user_id
 from deerflow.sandbox.sandbox_provider import SandboxProvider, get_sandbox_provider
 from deerflow.uploads.manager import (
@@ -37,7 +41,7 @@ from deerflow.uploads.manager import (
     validate_path_traversal,
 )
 from deerflow.utils.file_conversion import CONVERTIBLE_EXTENSIONS, convert_file_to_markdown
-from deerflow.utils.file_io import run_file_io
+from deerflow.utils.file_io import await_drained, run_file_io
 from deerflow.utils.thread_id import ThreadId
 
 logger = logging.getLogger(__name__)
@@ -344,10 +348,29 @@ def _auto_convert_documents_enabled(app_config: AppConfig) -> bool:
         return False
 
 
+async def _reserve_upload_thread(thread_id: str, request: Request) -> None:
+    store = get_thread_store(request)
+    # A rowless checkpoint is unknown legacy data, never a new chat to adopt.
+    checkpoint = await get_checkpointer(request).aget_tuple({"configurable": {"thread_id": thread_id, "checkpoint_ns": ""}})
+    if checkpoint is not None and await store.get(thread_id) is None:
+        raise HTTPException(status_code=404, detail="Thread not found")
+    try:
+        await store.create(thread_id, preserve_existing=True)
+    except (IntegrityError, ThreadOwnershipConflictError):
+        # A concurrent insert can commit its row/files after our missing-row read.
+        if not await store.check_access(thread_id, get_effective_user_id(), require_existing=True):
+            raise HTTPException(status_code=404, detail="Thread not found") from None
+
+
+@asynccontextmanager
+async def reserve_upload_write(thread_id: str, request: Request) -> AsyncIterator[None]:
+    # The same durable admission blocks DELETE in every Gateway worker.
+    async with get_run_manager(request).reserve_thread_operation(thread_id, kind=ThreadOperationKind.upload_write, user_id=get_effective_user_id()):
+        yield
+
+
 @router.post("", response_model=UploadResponse)
-# Upload-before-create (with GET /limits and /list) is the one thread surface open to a
-# row-less id: new chats attach files before the thread exists, and every read or write
-# stays in the caller's own storage bucket. Ownerless and foreign rows still answer 404.
+# New chats reserve durable actor ownership before opening the upload directory.
 @require_permission("threads", "write", owner_check=True, require_existing=False)
 async def upload_files(
     thread_id: ThreadId,
@@ -372,6 +395,17 @@ async def upload_files(
     limits = _get_upload_limits(config)
     if len(files) > limits.max_files:
         raise HTTPException(status_code=413, detail=f"Too many files: maximum is {limits.max_files}")
+
+    try:
+        async with reserve_upload_write(thread_id, request):
+            # Cancellation must not release admission over an active file worker.
+            return await await_drained(_upload_files_with_reservation(thread_id, request, files, config))
+    except ConflictError:
+        raise HTTPException(status_code=409, detail="Thread has work in flight. Retry the upload after it finishes.") from None
+
+
+async def _upload_files_with_reservation(thread_id: str, request: Request, files: list[UploadFile], config: AppConfig) -> UploadResponse:
+    await _reserve_upload_thread(thread_id, request)
 
     # Setup runs INSIDE the cleanup scope: open() can acquire the sandbox
     # request lease and then raise (e.g. the acquired lease yields no

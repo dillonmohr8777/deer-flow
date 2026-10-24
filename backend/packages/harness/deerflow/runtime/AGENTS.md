@@ -1,10 +1,12 @@
+Read [upload](../../../../docs/UPLOAD_OWNERSHIP.md).
+
 ### Stream Bridge Heartbeats
 
-Memory and Redis bridges keep the startup-only `stream_bridge.heartbeat_interval_seconds` default on the instance; explicit `subscribe(..., heartbeat_interval=...)` overrides it per subscription. Provider context managers own cache/bridge backends through exit: drain `aclose()` / `close()` across caller cancellation before propagating cancellation.
+Memory/Redis bridges keep instance default `stream_bridge.heartbeat_interval_seconds` (startup-only); explicit `subscribe(..., heartbeat_interval=...)` overrides it per subscription. Provider context managers own cache/bridge backends through exit; drain `aclose()`/`close()` across caller cancellation before propagating it.
 
 ### Checkpoint Channel Modes (`full` / `delta`)
 
-Checkpointer storage runs in one of two channel modes, selected by `checkpoint_channel_mode` in `config.yaml` (default `full`). `delta` mode adopts LangGraph 1.2's `DeltaChannel` for `messages`: checkpoints store a sentinel + per-step writes instead of the full message list, so storage/serde grows O(N) instead of O(N²) in turns. All checkpointer backends (memory/sqlite/postgres) serve both modes unchanged — the semantics live in the compiled graph's channel table, not in the saver.
+Checkpointer storage uses two modes, selected by `checkpoint_channel_mode` in `config.yaml` (`full` by default). `delta` uses LangGraph 1.2's `DeltaChannel` for `messages`, storing a sentinel plus per-step writes instead of the full message list; storage/serde thus grows O(N), not O(N²), in turns. All checkpointer backends (memory/sqlite/postgres) serve both modes unchanged; semantics live in the compiled graph's channel table, not the saver.
 
 **Mode is process-frozen and restart-required.** `make_lead_agent` and the embedded `DeerFlowClient` freeze the resolved mode (`runtime/checkpoint_mode.py::freeze_checkpoint_channel_mode`) before compiling the graph with the mode-matched schema (`agents/thread_state.py::get_thread_state_schema`, plus `adapt_state_schema_for_mode` / `normalize_middleware_state_schemas` for middleware state). Adapted middleware schemas are cached by schema, mode, and resolved snapshot frequency so a pre-freeze ephemeral graph cannot leave a stale default-frequency schema behind. A second, different mode or frequency in the same process raises `CheckpointModeReconfigurationError`. To switch: edit config, restart.
 

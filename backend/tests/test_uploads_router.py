@@ -2,6 +2,7 @@ import asyncio
 import os
 import stat
 import threading
+from contextlib import asynccontextmanager
 from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
@@ -16,6 +17,19 @@ from app.gateway import upload_ingestion
 from app.gateway.deps import get_config
 from app.gateway.routers import uploads
 from deerflow.sandbox.lease import get_sandbox_lease_manager
+
+
+@pytest.fixture(autouse=True)
+def _stub_upload_ownership_reservation(monkeypatch):
+    # These ingestion/path unit tests have no real auth/store/checkpointer.
+    # Real reservation and ownership are exercised by test_client_file_role_isolation.
+    monkeypatch.setattr(uploads, "_reserve_upload_thread", AsyncMock())
+    monkeypatch.setattr(uploads, "reserve_upload_write", _allow_upload_write)
+
+
+@asynccontextmanager
+async def _allow_upload_write(*_args, **_kwargs):
+    yield
 
 
 class ChunkedUpload:

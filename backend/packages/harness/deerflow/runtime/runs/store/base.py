@@ -234,6 +234,14 @@ class RunStore(abc.ABC):
         """
         await self.delete(run_id)
 
+    async def release_upload_operation(self, run_id: str, *, user_id: str | None, owner_worker_id: str) -> bool:
+        """Release only the original upload writer's pending reservation after drain.
+
+        Upload workers may outlive their lease. Generic cancellation/recovery must
+        leave this row held; unsupported stores must never fall back to delete.
+        """
+        return False
+
     @abc.abstractmethod
     async def update_model_name(
         self,
