@@ -11,8 +11,8 @@ from langgraph.runtime import Runtime
 
 from deerflow.agents.memory import get_memory_manager
 from deerflow.agents.memory.admission import memory_access_allowed
+from deerflow.agents.memory.scope import resolve_memory_scope, scoped_capture_messages
 from deerflow.config.memory_config import get_memory_config
-from deerflow.runtime.user_context import resolve_runtime_user_id
 from deerflow.trace_context import DEERFLOW_TRACE_METADATA_KEY, resolve_trace_id
 
 if TYPE_CHECKING:
@@ -77,7 +77,13 @@ class MemoryMiddleware(AgentMiddleware[MemoryMiddlewareState]):
         # Capture user_id at enqueue time while the request context is still alive.
         # threading.Timer fires on a different thread where ContextVar values are not
         # propagated, so we must store user_id explicitly in ConversationContext.
-        user_id = resolve_runtime_user_id(runtime)
+        scope = resolve_memory_scope(runtime, self._agent_name)
+        if scope is None:
+            return None
+        user_id = scope.user_id
+        messages = scoped_capture_messages(messages, scope, runtime)
+        if not messages:
+            return None
         # The memory update fires on a threading.Timer thread that inherits no
         # ContextVars, so the id is captured here, while the request context is
         # still alive, and carried as data. The runtime context is authoritative

@@ -42,6 +42,7 @@ from app.gateway.run_models import RunCreateRequest
 from app.gateway.utils import sanitize_log_param
 from app.mcp_tasks.errors import PermanentNotificationError
 from deerflow.agents.human_input import read_human_input_response
+from deerflow.agents.memory.scope import STAFF_MEMORY_PROVENANCE_KEY, STAFF_MEMORY_SCOPE_KEY, staff_memory_scope
 from deerflow.agents.middlewares.dynamic_context_middleware import _DYNAMIC_CONTEXT_REMINDER_KEY, _REMINDER_DATE_KEY
 from deerflow.agents.middlewares.input_sanitization_middleware import frame_untrusted_text
 from deerflow.agents.middlewares.message_utils import _SUMMARY_MESSAGE_NAME, is_genuine_user_message
@@ -149,6 +150,7 @@ _SERVER_OWNED_MESSAGE_METADATA_KEYS = (
         {
             _DYNAMIC_CONTEXT_REMINDER_KEY,
             _REMINDER_DATE_KEY,
+            STAFF_MEMORY_PROVENANCE_KEY,
             _IMAGE_CONTEXT_MESSAGE_MARKER_KEY,
             KNOWLEDGE_SCOPE_RUNTIME_KEY,
             TOOL_RECEIPT_KEY,
@@ -649,6 +651,7 @@ _SERVER_OWNED_RUNTIME_CONTEXT_KEYS: frozenset[str] = (
             KNOWLEDGE_SCOPE_RUNTIME_KEY,
             AUTHENTICATED_CONTEXT_MARKER_KEY,
             PRIVATE_MCP_SESSION_CONTEXT_KEY,
+            STAFF_MEMORY_SCOPE_KEY,
             WSL_DIAGNOSTICS_CONTEXT_KEY,
         }
     )
@@ -2192,6 +2195,14 @@ async def start_run(
         )
         if project_context is not None:
             config["context"][PROJECT_CONTEXT_KEY] = project_context
+        # The portal lookup and agent visibility checks above own this binding.
+        # Free-form config/client IDs and project labels cannot select memory.
+        if get_app_config().momobot_max.enabled:
+            config["context"][STAFF_MEMORY_SCOPE_KEY] = staff_memory_scope(
+                config["context"],
+                agent_name=raw_scope_agent_name,
+                client_id=portal_work_scope["client_id"] if portal_work_scope else None,
+            )
         if portal_work_scope is not None and portal_work_scope["project_id"] is not None:
             from app.gateway.client_context import require_portal_work_access
             from deerflow.projects.access import ClientProjectReadAccess
@@ -2332,6 +2343,7 @@ async def start_run(
                     for section in ("context", "configurable"):
                         if isinstance(run_record_config.get(section), dict):
                             run_record_config[section].pop(CLIENT_PROJECT_ACCESS_CONTEXT_KEY, None)
+                            run_record_config[section].pop(STAFF_MEMORY_SCOPE_KEY, None)
                 record = await run_mgr.create_or_reject(
                     thread_id,
                     body.assistant_id,

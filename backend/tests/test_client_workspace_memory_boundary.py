@@ -14,6 +14,7 @@ from deerflow.agents.memory import admission, summarization_hook
 from deerflow.agents.memory import tools as memory_tools
 from deerflow.agents.memory.backends.deermem.deer_mem import DeerMem
 from deerflow.agents.memory.backends.deermem.deermem.core.storage import create_empty_memory
+from deerflow.agents.memory.scope import STAFF_MEMORY_SCOPE_KEY, resolve_memory_scope, staff_memory_scope
 from deerflow.agents.middlewares import memory_middleware
 from deerflow.agents.middlewares.dynamic_context_middleware import DynamicContextMiddleware
 from deerflow.agents.middlewares.summarization_middleware import SummarizationEvent
@@ -21,6 +22,8 @@ from deerflow.config import builtin_agents
 from deerflow.config.memory_config import MemoryConfig
 from deerflow.runtime.context_keys import CURRENT_RUN_PRE_EXISTING_MESSAGE_IDS_KEY
 from deerflow.runtime.runs.worker import _build_runtime_context
+
+pytestmark = pytest.mark.no_auto_user
 
 
 def _runtime(role, workspace="synthetic-workspace"):
@@ -38,6 +41,7 @@ def _runtime(role, workspace="synthetic-workspace"):
         )
     )
     inject_authenticated_user_context(config, request)
+    config["context"][STAFF_MEMORY_SCOPE_KEY] = staff_memory_scope(config["context"], agent_name="momobot-max")
     context = _build_runtime_context("synthetic-thread", "synthetic-run", config["context"])
     assert context["user_role"] == role
     assert context["storage_user_id"] == workspace
@@ -75,7 +79,7 @@ def test_explicit_memory_tools_obey_server_role(monkeypatch, role, tool_name, ar
         assert "error" not in result
         operation_mock = getattr(manager, operation)
         operation_mock.assert_called_once()
-        assert operation_mock.call_args.kwargs["user_id"] == "synthetic-workspace"
+        assert operation_mock.call_args.kwargs["user_id"] == resolve_memory_scope(runtime, "momobot-max").user_id
         assert operation_mock.call_args.kwargs["agent_name"] == "momobot-max"
 
 
@@ -93,8 +97,10 @@ def test_builtin_workspace_recall_obeys_server_role(tmp_path, monkeypatch, role,
     storage = DeerMem(backend_config=backend_config)._storage
     summary_memory = create_empty_memory()
     summary_memory["user"]["workContext"]["summary"] = summary
-    storage.save(summary_memory, user_id="synthetic-workspace")
-    storage.save(memory, "momobot-max", user_id="synthetic-workspace")
+    # Seed only the current actor's isolated scope; the other workspace cannot read it.
+    scope = resolve_memory_scope(_runtime(role if role != "client" else "admin"), "momobot-max")
+    storage.save(summary_memory, user_id=scope.user_id)
+    storage.save(memory, "momobot-max", user_id=scope.user_id)
     # Reload from disk so a process-local cache cannot explain the result.
     manager = DeerMem(backend_config=backend_config)
     monkeypatch.setattr("deerflow.agents.memory.get_memory_manager", lambda: manager)
@@ -122,6 +128,11 @@ async def test_workspace_memory_capture_obeys_server_role(monkeypatch, role, pat
     monkeypatch.setattr(summarization_hook, "get_memory_config", lambda: MemoryConfig(enabled=True))
     runtime = _runtime(role)
     messages = [HumanMessage(content="Remember a synthetic preference"), AIMessage(content="Understood")]
+    if role != "client":
+        scope = resolve_memory_scope(runtime, "momobot-max")
+        boundary = SystemMessage(id="server-boundary", content="date", additional_kwargs={"dynamic_context_reminder": True, "deerflow_memory_scope": scope.user_id})
+        scope.boundary_ids.add(boundary.id)
+        messages.insert(0, boundary)
     middleware = memory_middleware.MemoryMiddleware(agent_name="momobot-max", memory_config=MemoryConfig(enabled=True))
 
     if path == "compaction":
@@ -139,7 +150,7 @@ async def test_workspace_memory_capture_obeys_server_role(monkeypatch, role, pat
         capture.assert_not_called()
     else:
         capture.assert_called_once()
-        assert capture.call_args.kwargs["user_id"] == "synthetic-workspace"
+        assert capture.call_args.kwargs["user_id"] == scope.user_id
         assert capture.call_args.kwargs["agent_name"] == "momobot-max"
 
 

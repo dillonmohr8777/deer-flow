@@ -4,12 +4,27 @@ import threading
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-from _router_auth_helpers import make_authed_test_app
+import pytest
+from _router_auth_helpers import make_authed_test_app as _make_authed_test_app
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from app.gateway.routers import memory
 from deerflow.agents.memory import MemoryConflictError, MemoryCorruptionError
 from deerflow.agents.memory.backends.deermem.deer_mem import DeerMem
+
+
+def make_authed_test_app():
+    return _make_authed_test_app(user_factory=lambda: SimpleNamespace(id="alice", system_role="user"))
+
+
+def _private_key(actor="alice"):
+    return memory._private_memory_scope(SimpleNamespace(id=actor, system_role="user"), None).user_id
+
+
+@pytest.fixture(autouse=True)
+def _synthetic_momo_mode(monkeypatch):
+    monkeypatch.setattr(memory, "_momo_memory_enabled", lambda: True)
 
 
 def _sample_memory(facts: list[dict] | None = None) -> dict:
@@ -52,7 +67,7 @@ def test_get_memory_route_offloads_manager_call_from_event_loop() -> None:
     called_from: list[int] = []
     manager = MagicMock()
 
-    def get_memory(*, user_id: str) -> dict:
+    def get_memory(*, user_id: str, agent_name=None) -> dict:
         called_from.append(threading.get_ident())
         return _sample_memory()
 
@@ -111,7 +126,7 @@ def test_import_memory_route_returns_imported_memory() -> None:
     assert response.json()["facts"] == imported_memory["facts"]
 
 
-def test_import_route_without_agent_name_persists_default_bucket_markdown(tmp_path) -> None:
+def test_import_route_without_agent_name_persists_private_max_bucket_markdown(tmp_path) -> None:
     app = make_authed_test_app()
     app.include_router(memory.router)
     manager = DeerMem(backend_config={"storage_path": str(tmp_path)})
@@ -119,7 +134,7 @@ def test_import_route_without_agent_name_persists_default_bucket_markdown(tmp_pa
         facts=[
             {
                 "id": "fact_gateway_import",
-                "content": "Gateway imports use the default agent bucket.",
+                "content": "Gateway imports use the private Max agent bucket.",
                 "category": "context",
                 "confidence": 0.9,
                 "createdAt": "2026-07-21T00:00:00Z",
@@ -135,9 +150,9 @@ def test_import_route_without_agent_name_persists_default_bucket_markdown(tmp_pa
     ):
         response = client.post("/api/memory/import", json=imported_memory)
 
-    assert response.status_code == 200
+    assert response.status_code == 200, response.text
     assert [fact["id"] for fact in response.json()["facts"]] == ["fact_gateway_import"]
-    facts_root = tmp_path / "users" / "alice" / "agents" / "__default__" / "facts"
+    facts_root = tmp_path / "users" / _private_key() / "agents" / "momobot-max" / "facts"
     assert [path.stem for path in facts_root.glob("**/*.md")] == ["fact_gateway_import"]
 
 
@@ -281,7 +296,7 @@ def test_update_memory_fact_route_returns_updated_memory() -> None:
     assert response.json()["facts"] == updated_memory["facts"]
 
 
-def test_settings_fact_crud_without_agent_name_uses_default_agent(tmp_path) -> None:
+def test_settings_fact_crud_uses_private_max_without_importing_legacy(tmp_path) -> None:
     """The current Settings API sends no agent_name; it must remain usable."""
     app = make_authed_test_app()
     app.include_router(memory.router)
@@ -309,11 +324,11 @@ def test_settings_fact_crud_without_agent_name_uses_default_agent(tmp_path) -> N
     ):
         fetched = client.get("/api/memory")
         assert fetched.status_code == 200
-        assert [fact["content"] for fact in fetched.json()["facts"]] == ["Legacy global fact"]
+        assert fetched.json()["facts"] == []
 
         exported = client.get("/api/memory/export")
         assert exported.status_code == 200
-        assert [fact["content"] for fact in exported.json()["facts"]] == ["Legacy global fact"]
+        assert exported.json()["facts"] == []
 
         created = client.post("/api/memory/facts", json={"content": "Project uses Python", "category": "context", "confidence": 0.8})
         assert created.status_code == 200
@@ -326,16 +341,15 @@ def test_settings_fact_crud_without_agent_name_uses_default_agent(tmp_path) -> N
 
         deleted = client.delete(f"/api/memory/facts/{fact_id}")
         assert deleted.status_code == 200
-        assert [fact["id"] for fact in deleted.json()["facts"]] == ["fact_legacy"]
+        assert deleted.json()["facts"] == []
 
         deleted_legacy = client.delete("/api/memory/facts/fact_legacy")
-        assert deleted_legacy.status_code == 200
-        assert deleted_legacy.json()["facts"] == []
+        assert deleted_legacy.status_code == 404
 
-    facts_root = tmp_path / "users" / "alice" / "agents" / "__default__" / "facts"
+    facts_root = tmp_path / "users" / _private_key() / "agents" / "momobot-max" / "facts"
     assert facts_root.exists()
     assert not list(facts_root.glob("**/*.md"))
-    assert "facts" not in json.loads(memory_path.read_text(encoding="utf-8"))
+    assert json.loads(memory_path.read_text(encoding="utf-8")) == legacy
 
 
 def test_update_memory_fact_route_preserves_omitted_fields() -> None:
@@ -401,38 +415,21 @@ def _internal_owner_request(owner_user_id: str) -> SimpleNamespace:
     )
 
 
-def test_get_memory_honors_bound_owner_header() -> None:
-    seen: dict[str, str] = {}
-
-    def fake_get_memory(*, user_id: str) -> dict:
-        seen["user_id"] = user_id
-        return _sample_memory(facts=[{"id": "f", "content": "owner fact", "category": "context", "confidence": 0.9, "createdAt": "", "source": "owner"}])
-
+def test_get_memory_requires_actual_owner_workspace_proof() -> None:
     mock_mgr = MagicMock()
-    mock_mgr.get_memory.side_effect = fake_get_memory
     with patch("app.gateway.routers.memory.get_memory_manager", return_value=mock_mgr):
-        response = asyncio.run(memory.get_memory(_internal_owner_request("owner-1")))
-    assert seen["user_id"] == "owner-1"
-    assert response.facts[0].content == "owner fact"
+        with pytest.raises(HTTPException, match="verified owner and workspace"):
+            asyncio.run(memory.get_memory(_internal_owner_request("owner-1")))
+    mock_mgr.get_memory.assert_not_called()
 
 
-def test_get_memory_sanitizes_unsafe_owner_header() -> None:
-    from deerflow.config.paths import make_safe_user_id
-
+def test_get_memory_unsafe_owner_header_cannot_mint_scope() -> None:
     raw_owner = "feishu|ou_AbC/123"
-    seen: dict[str, str] = {}
-
-    def fake_get_memory(*, user_id: str) -> dict:
-        seen["user_id"] = user_id
-        return _sample_memory()
-
     mock_mgr = MagicMock()
-    mock_mgr.get_memory.side_effect = fake_get_memory
     with patch("app.gateway.routers.memory.get_memory_manager", return_value=mock_mgr):
-        asyncio.run(memory.get_memory(_internal_owner_request(raw_owner)))
-    expected = make_safe_user_id(raw_owner)
-    assert seen["user_id"] == expected
-    assert seen["user_id"] != raw_owner
+        with pytest.raises(HTTPException):
+            asyncio.run(memory.get_memory(_internal_owner_request(raw_owner)))
+    mock_mgr.get_memory.assert_not_called()
 
 
 def test_get_memory_falls_back_to_effective_user_for_browser_requests() -> None:
@@ -440,7 +437,7 @@ def test_get_memory_falls_back_to_effective_user_for_browser_requests() -> None:
 
     seen: dict[str, str] = {}
 
-    def fake_get_memory(*, user_id: str) -> dict:
+    def fake_get_memory(*, user_id: str, agent_name=None) -> dict:
         seen["user_id"] = user_id
         return _sample_memory()
 
@@ -454,7 +451,7 @@ def test_get_memory_falls_back_to_effective_user_for_browser_requests() -> None:
     with patch("app.gateway.routers.memory.get_memory_manager", return_value=mock_mgr):
         with patch("app.gateway.routers.memory.get_effective_user_id", return_value="real-user"):
             asyncio.run(memory.get_memory(browser_request))
-    assert seen["user_id"] == "real-user"
+    assert seen["user_id"] == _private_key("real-user")
 
 
 def _browser_request_with_spoofed_owner_header() -> SimpleNamespace:
@@ -469,38 +466,40 @@ def _browser_request_with_spoofed_owner_header() -> SimpleNamespace:
 def test_clear_memory_scopes_destructive_write_to_bound_owner() -> None:
     seen: dict[str, str] = {}
 
-    def fake_clear(*, user_id: str) -> dict:
+    def fake_clear(*, user_id: str, agent_name=None) -> dict:
         seen["user_id"] = user_id
         return _sample_memory()
 
     mock_mgr = MagicMock()
     mock_mgr.clear_memory.side_effect = fake_clear
     with patch("app.gateway.routers.memory.get_memory_manager", return_value=mock_mgr):
-        asyncio.run(memory.clear_memory(_internal_owner_request("owner-1")))
-        assert seen["user_id"] == "owner-1"
+        with pytest.raises(HTTPException):
+            asyncio.run(memory.clear_memory(_internal_owner_request("owner-1")))
+        assert seen == {}
 
         with patch("app.gateway.routers.memory.get_effective_user_id", return_value="real-user"):
             asyncio.run(memory.clear_memory(_browser_request_with_spoofed_owner_header()))
-        assert seen["user_id"] == "real-user"
+        assert seen["user_id"] == _private_key("real-user")
 
 
 def test_import_memory_scopes_overwrite_to_bound_owner() -> None:
     seen: dict[str, str] = {}
     payload = memory.MemoryResponse(**_sample_memory())
 
-    def fake_import(_data: dict, *, user_id: str) -> dict:
+    def fake_import(_data: dict, *, user_id: str, agent_name=None) -> dict:
         seen["user_id"] = user_id
         return _sample_memory()
 
     mock_mgr = MagicMock()
     mock_mgr.import_memory.side_effect = fake_import
     with patch("app.gateway.routers.memory.get_memory_manager", return_value=mock_mgr):
-        asyncio.run(memory.import_memory(payload, _internal_owner_request("owner-1")))
-        assert seen["user_id"] == "owner-1"
+        with pytest.raises(HTTPException):
+            asyncio.run(memory.import_memory(payload, _internal_owner_request("owner-1")))
+        assert seen == {}
 
         with patch("app.gateway.routers.memory.get_effective_user_id", return_value="real-user"):
             asyncio.run(memory.import_memory(payload, _browser_request_with_spoofed_owner_header()))
-        assert seen["user_id"] == "real-user"
+        assert seen["user_id"] == _private_key("real-user")
 
 
 # ── unsupported-backend 501s ────────────────────────────────────────────────
