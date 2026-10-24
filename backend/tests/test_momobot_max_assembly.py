@@ -38,6 +38,35 @@ EVERY_TOOL = [
 ]
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("case", ["staff", "staff_user", "staff_exec", "client", "forged", "wrong_project", "wrong_client", "channel", "subagent", "missing"])
+async def test_only_host_bound_staff_client_project_adds_shelf_reads(monkeypatch, tmp_path, case):
+    from deerflow.projects.access import ClientProjectReadAccess
+    from deerflow.runtime.context_keys import CLIENT_PROJECT_ACCESS_CONTEXT_KEY, PROJECT_CONTEXT_KEY
+
+    snapshot = {"project_id": "project-a", "client_id": "client-a", "name": "A", "instructions": ""}
+    access = ClientProjectReadAccess(project_id="project-a", client_id="client-a", authorize=AsyncMock())
+    context = {PROJECT_CONTEXT_KEY: snapshot, CLIENT_PROJECT_ACCESS_CONTEXT_KEY: access}
+    if case == "forged":
+        context[CLIENT_PROJECT_ACCESS_CONTEXT_KEY] = {"project_id": "project-a", "client_id": "client-a"}
+    elif case == "wrong_project":
+        snapshot["project_id"] = "project-b"
+    elif case == "wrong_client":
+        snapshot["client_id"] = "client-b"
+    elif case == "channel":
+        context["channel_name"] = "slack"
+    elif case == "subagent":
+        context["is_subagent"] = True
+    elif case == "missing":
+        context.pop(CLIENT_PROJECT_ACCESS_CONTEXT_KEY)
+    role = {"client": "client", "staff_user": "user", "staff_exec": "exec"}.get(case, "admin")
+    _, captured = await _assemble(monkeypatch, tmp_path, role=role, app=_app_config(), keys=("c-max",), context=context)
+    shelf = {"list_project_documents", "read_project_document", "verify_quote"}
+    names = {tool.name for tool in captured["tools"]}
+    assert names & shelf == (shelf if case in {"staff", "staff_user", "staff_exec"} else set())
+    assert {"bash", "update_agent", "propose_action", "client_mcp_tool"}.isdisjoint(names)
+
+
 class OfflineModel(BaseChatModel):
     @property
     def _llm_type(self):
@@ -60,7 +89,7 @@ def _app_config(**extra) -> AppConfig:
     return app
 
 
-async def _assemble(monkeypatch, tmp_path, *, role: str, app: AppConfig, keys=()):
+async def _assemble(monkeypatch, tmp_path, *, role: str, app: AppConfig, keys=(), context=None):
     import deerflow.tools
     from deerflow.agents.lead_agent import agent, prompt
 
@@ -106,6 +135,7 @@ async def _assemble(monkeypatch, tmp_path, *, role: str, app: AppConfig, keys=()
     config = {"configurable": {"thread_id": "t-1"}, "context": {"agent_name": "momobot-max", "user_id": "u-1", "user_role": role, "model_name": "claude-opus-5-5"}}
     await apply_run_policy(config, user=SimpleNamespace(id="u-1", system_role=role, oauth_provider=None, oauth_id=None), actor_user_id="u-1", app_config=app)
     config["context"]["user_role"] = role
+    config["context"].update(context or {})
     try:
         agent._assemble_lead_agent(config, app_config=app)
     finally:

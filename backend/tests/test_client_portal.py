@@ -1,11 +1,13 @@
 """Real SQL + AuthMiddleware portal acceptance; synthetic text, no model/sends."""
 
+import asyncio
 import json
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 import httpx
 import pytest
+import pytest_asyncio
 from fastapi import FastAPI
 from org_isolation_fixtures import ORG_A, ORG_B, ORG_S, USER_A, USER_B, USER_C, acting_as, auth_headers, org_world  # noqa: F401
 from sqlalchemy import delete, func, select, update
@@ -24,6 +26,236 @@ from deerflow.persistence.organizations.identity import private_organization_id
 from deerflow.persistence.organizations.model import OrganizationMemberRow, OrganizationRow
 from deerflow.persistence.thread_meta import ThreadMetaRepository
 from deerflow.persistence.user.model import UserRow
+
+
+@pytest_asyncio.fixture
+async def project_work_world(world, monkeypatch):  # noqa: F811
+    from app.gateway import services
+    from deerflow.config.app_config import AppConfig, set_app_config
+    from deerflow.persistence.projects import ProjectDocumentRepository, ProjectRepository
+    from deerflow.persistence.projects.model import ProjectRow
+
+    await _seed_bound_customer(world.sf)
+    set_app_config(
+        AppConfig.model_validate(
+            {
+                "sandbox": {"use": "deerflow.community.aio_sandbox:AioSandboxProvider", "network": {"mode": "isolated"}},
+                "models": [{"name": "claude-opus-5-5", "use": "langchain_openai:ChatOpenAI", "model": "synthetic-no-provider"}],
+                "momobot_max": {"enabled": True},
+            }
+        )
+    )
+    world.app.state.client_repo = ClientRepository(world.sf)
+    world.app.state.board_repo = BoardRepository(world.sf)
+    world.app.state.pending_action_repo = PendingActionRepository(world.sf)
+    world.app.state.project_repo = ProjectRepository(world.sf)
+    world.app.state.project_document_repo = ProjectDocumentRepository(world.sf)
+    world.app.include_router(client_portal.router)
+    async with world.sf() as session, session.begin():
+        for identifier, client, storage, org, status in (
+            ("project-a", "client-a", CUSTOMER_STORAGE, CUSTOMER_ORG, "active"),
+            ("project-a2", "client-a", CUSTOMER_STORAGE, CUSTOMER_ORG, "active"),
+            ("project-b", "client-b", CUSTOMER_STORAGE, CUSTOMER_ORG, "active"),
+            ("project-unbound", None, CUSTOMER_STORAGE, CUSTOMER_ORG, "active"),
+            ("project-foreign", "client-a", USER_A, ORG_A, "active"),
+            ("project-storage", "client-a", USER_A, CUSTOMER_ORG, "active"),
+            ("project-archived", "client-a", CUSTOMER_STORAGE, CUSTOMER_ORG, "archived"),
+        ):
+            session.add(ProjectRow(id=identifier, name="Same display name", client_id=client, user_id=storage, organization_id=org, status=status, instructions="Synthetic client account goals"))
+    previous = services.run_agent
+    world.project_calls = []
+
+    async def capture(bridge, manager, record, **kwargs):
+        world.project_calls.append(kwargs)
+        await previous(bridge, manager, record, **kwargs)
+
+    monkeypatch.setattr(services, "run_agent", capture)
+    return world
+
+
+@pytest.mark.parametrize("project", ["missing", "project-b", "project-unbound", "project-foreign", "project-storage", "project-archived"])
+async def test_invalid_client_project_is_denied_before_work_chat_creation(project_work_world, project):
+    from deerflow.persistence.thread_meta.model import ThreadMetaRow
+
+    world = project_work_world  # noqa: F811
+    async with _http(world.app) as client:
+        created = await _compose(client, auth_headers(USER_B, CUSTOMER_ORG))
+        async with world.sf() as session:
+            before = await session.scalar(select(func.count()).select_from(ThreadMetaRow))
+        result = await client.post(f"{BASE}/{created['id']}/work", headers=auth_headers(USER_C, CUSTOMER_ORG), json={"project_id": project})
+        assert result.status_code == 404, result.text
+        async with world.sf() as session:
+            portal = await session.get(BoardPortalRow, created["id"])
+            assert portal.work_chat_id is None and portal.work_run_id is None
+            assert await session.scalar(select(func.count()).select_from(ThreadMetaRow)) == before
+        assert not world.project_calls
+
+
+async def test_selected_client_project_retry_is_fixed_and_contact_cannot_select(project_work_world):
+    from deerflow.persistence.thread_meta.model import ThreadMetaRow
+
+    world = project_work_world  # noqa: F811
+    async with _http(world.app) as client:
+        created = await _compose(client, auth_headers(USER_B, CUSTOMER_ORG))
+        path = f"{BASE}/{created['id']}/work"
+        assert (await client.post(path, headers=auth_headers(USER_B, CUSTOMER_ORG), json={"project_id": "project-a"})).status_code == 404
+        staff = auth_headers(USER_C, CUSTOMER_ORG)
+        result = await client.post(path, headers=staff, json={"project_id": "project-a"})
+        assert result.status_code == 200, result.text
+        record = world.app.state.run_manager._runs[result.json()["run_id"]]
+        if record.task:
+            await record.task
+        assert (await client.post(path, headers=staff, json={"project_id": "project-a"})).json()["run_id"] == record.run_id
+        assert (await client.post(path, headers=staff, json={"project_id": "project-a2"})).status_code == 409
+        async with world.sf() as session:
+            row = await session.get(ThreadMetaRow, record.thread_id)
+            assert row.project_id == "project-a"
+        assert len(world.project_calls) == 1
+
+
+@pytest.mark.parametrize("revoke", ["assignment", "link", "project", "selection"])
+async def test_client_project_host_grant_rechecks_live_scope_and_is_not_serialized(project_work_world, revoke):
+    from deerflow.persistence.projects.model import ProjectRow
+    from deerflow.persistence.thread_meta.model import ThreadMetaRow
+    from deerflow.runtime.context_keys import CLIENT_PROJECT_ACCESS_CONTEXT_KEY, PROJECT_CONTEXT_KEY
+
+    world = project_work_world  # noqa: F811
+    async with _http(world.app) as client:
+        created = await _compose(client, auth_headers(USER_B, CUSTOMER_ORG))
+        staff = auth_headers(USER_C, CUSTOMER_ORG)
+        result = await client.post(f"{BASE}/{created['id']}/work", headers=staff, json={"project_id": "project-a"})
+        assert result.status_code == 200, result.text
+        record = world.app.state.run_manager._runs[result.json()["run_id"]]
+        if record.task:
+            await record.task
+        access = world.project_calls[-1]["ctx"].client_project_access
+        assert (access.project_id, access.client_id) == ("project-a", "client-a")
+        await access.authorize()
+        assert world.project_calls[-1]["config"]["context"][PROJECT_CONTEXT_KEY]["client_id"] == "client-a"
+        assert CLIENT_PROJECT_ACCESS_CONTEXT_KEY not in json.dumps(record.kwargs)
+        forged = {
+            "assistant_id": "momobot-max",
+            "input": {"messages": [{"role": "user", "content": "Read selected evidence"}]},
+            "context": {CLIENT_PROJECT_ACCESS_CONTEXT_KEY: {"project_id": "project-b"}},
+            "config": {"context": {CLIENT_PROJECT_ACCESS_CONTEXT_KEY: {"authorized": True}}, "configurable": {CLIENT_PROJECT_ACCESS_CONTEXT_KEY: {"authorized": True}}},
+        }
+        response = await client.post(f"/api/threads/{record.thread_id}/runs", headers=staff, json=forged)
+        assert response.status_code == 200, response.text
+        second = world.app.state.run_manager._runs[response.json()["run_id"]]
+        if second.task:
+            await second.task
+        assert world.project_calls[-1]["ctx"].client_project_access.project_id == "project-a"
+        assert CLIENT_PROJECT_ACCESS_CONTEXT_KEY not in json.dumps(second.kwargs)
+        async with world.sf() as session, session.begin():
+            if revoke == "assignment":
+                row = await session.get(ClientAssignmentRow, ("client-a", USER_C))
+                row.role = "contributor"
+            elif revoke == "selection":
+                row = await session.get(ThreadMetaRow, record.thread_id)
+                row.project_id = "project-a2"
+            else:
+                row = await session.get(ProjectRow, "project-a")
+                if revoke == "link":
+                    row.client_id = "client-b"
+                else:
+                    row.status = "archived"
+        with pytest.raises(Exception):
+            await access.authorize()
+        count = len(world.project_calls)
+        if revoke != "selection":
+            denied = await client.post(f"/api/threads/{record.thread_id}/runs", headers=staff, json=forged)
+            assert denied.status_code == 404, denied.text
+            assert len(world.project_calls) == count
+
+
+async def test_selected_project_change_during_preparation_is_denied(project_work_world, monkeypatch):
+    from app.gateway import services
+    from deerflow.persistence.projects.model import ProjectRow
+
+    world = project_work_world  # noqa: F811
+    prepare = services.ensure_checkpoint_history_seeded
+
+    async def revoke(*args, **kwargs):
+        await prepare(*args, **kwargs)
+        async with world.sf() as session, session.begin():
+            row = await session.get(ProjectRow, "project-a")
+            row.status = "archived"
+
+    monkeypatch.setattr(services, "ensure_checkpoint_history_seeded", revoke)
+    async with _http(world.app) as client:
+        created = await _compose(client, auth_headers(USER_B, CUSTOMER_ORG))
+        response = await client.post(f"{BASE}/{created['id']}/work", headers=auth_headers(USER_C, CUSTOMER_ORG), json={"project_id": "project-a"})
+        assert response.status_code == 404, response.text
+        assert not world.project_calls
+
+
+async def test_explicit_project_resolution_failure_does_not_degrade_to_unassigned(project_work_world, monkeypatch):
+    from unittest.mock import AsyncMock
+
+    from app.gateway import services
+
+    world = project_work_world  # noqa: F811
+    monkeypatch.setattr(services, "resolve_project_context", AsyncMock(return_value=None))
+    async with _http(world.app) as client:
+        created = await _compose(client, auth_headers(USER_B, CUSTOMER_ORG))
+        response = await client.post(f"{BASE}/{created['id']}/work", headers=auth_headers(USER_C, CUSTOMER_ORG), json={"project_id": "project-a"})
+        assert response.status_code == 503, response.text
+        assert not world.project_calls
+
+
+async def test_concurrent_first_work_project_selection_has_one_winner(project_work_world):
+    from deerflow.persistence.thread_meta.model import ThreadMetaRow
+
+    world = project_work_world  # noqa: F811
+    async with _http(world.app) as client:
+        created = await _compose(client, auth_headers(USER_B, CUSTOMER_ORG))
+        # Existing chat creation has separate coverage. Isolate concurrent
+        # first project selection from the in-memory fixture's shared connection.
+        async with world.sf() as session, session.begin():
+            session.add(ThreadMetaRow(thread_id="unselected-work", user_id=CUSTOMER_STORAGE, organization_id=CUSTOMER_ORG, assistant_id="momobot-max"))
+            portal = await session.get(BoardPortalRow, created["id"])
+            portal.work_chat_id = "unselected-work"
+        path = f"{BASE}/{created['id']}/work"
+        results = await asyncio.gather(*(client.post(path, headers=auth_headers(USER_C, CUSTOMER_ORG), json={"project_id": project}) for project in ("project-a", "project-a2")))
+        assert sorted(result.status_code for result in results) == [200, 409], [result.text for result in results]
+        winner = next(result for result in results if result.status_code == 200)
+        record = world.app.state.run_manager._runs[winner.json()["run_id"]]
+        if record.task:
+            await record.task
+        async with world.sf() as session:
+            row = await session.get(ThreadMetaRow, record.thread_id)
+            assert row.project_id in {"project-a", "project-a2"}
+        assert len(world.project_calls) == 1
+
+
+async def test_stale_first_project_selector_cannot_replace_a_committed_selection(project_work_world):
+    from app.gateway.client_context import bind_staff_work_project
+    from deerflow.persistence.thread_meta.model import ThreadMetaRow
+
+    state = project_work_world
+    async with state.sf() as session, session.begin():
+        session.add(ThreadMetaRow(thread_id="fixed-selection", user_id=CUSTOMER_STORAGE, organization_id=CUSTOMER_ORG, project_id="project-a2", assistant_id="momobot-max"))
+    changed = await bind_staff_work_project(actor_id=USER_C, organization_id=CUSTOMER_ORG, client_id="client-a", project_id="project-a", storage_user_id=CUSTOMER_STORAGE, chat_id="fixed-selection")
+    assert changed is False
+    async with state.sf() as session:
+        row = await session.get(ThreadMetaRow, "fixed-selection")
+        assert row.project_id == "project-a2"
+
+
+async def test_work_started_without_project_cannot_acquire_one_on_retry(project_work_world):
+    state = project_work_world
+    async with _http(state.app) as client:
+        created = await _compose(client, auth_headers(USER_B, CUSTOMER_ORG))
+        path = f"{BASE}/{created['id']}/work"
+        staff = auth_headers(USER_C, CUSTOMER_ORG)
+        first = await client.post(path, headers=staff)
+        assert first.status_code == 200, first.text
+        record = state.app.state.run_manager._runs[first.json()["run_id"]]
+        if record.task:
+            await record.task
+        assert (await client.post(path, headers=staff, json={"project_id": "project-a"})).status_code == 409
+        assert len(state.project_calls) == 1
+
 
 pytestmark = pytest.mark.asyncio
 BASE = "/api/client-portal/threads"

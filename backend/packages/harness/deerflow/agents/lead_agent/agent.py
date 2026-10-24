@@ -1012,6 +1012,11 @@ def _assemble_lead_agent(config: RunnableConfig, *, app_config: AppConfig) -> Le
     include_wsl_diagnostics = agent_name == MOMOBOT_MAX_NAME and not is_bootstrap and not cfg.get("is_subagent") and not cfg.get("channel_name") and cfg.get("user_role") == "admin" and callable(cfg.get(WSL_DIAGNOSTICS_CONTEXT_KEY))
     if include_wsl_diagnostics and tool_names is not None:
         tool_names = [*tool_names, *MOMOBOT_MAX_ADMIN_DIAGNOSTIC_TOOL_NAMES]
+
+    from deerflow.projects.access import matching_client_project_access
+
+    if agent_name == MOMOBOT_MAX_NAME and tool_names is not None and cfg.get("user_role") in {"user", "exec", "admin"} and not cfg.get("is_subagent") and not cfg.get("channel_name") and matching_client_project_access(cfg) is not None:
+        tool_names = [*tool_names, "list_project_documents", "read_project_document", "verify_quote"]
     public_news_channel = cfg.get("public_news_channel") is True
     if public_news_channel:
         if is_bootstrap or agent_name != "ai-tech-news" or agent_config is None:

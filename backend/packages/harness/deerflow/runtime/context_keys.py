@@ -18,6 +18,9 @@ DEFAULT_AGENT_NAME_METADATA_VALUE: Final[str] = "__default__"
 # Gateway admission and refused by the run worker's runtime-context merge.
 PROJECT_CONTEXT_KEY: Final[str] = "__deerflow_project_context"
 
+# A nonserializable host capability, never a request/config/checkpoint grant.
+CLIENT_PROJECT_ACCESS_CONTEXT_KEY: Final[str] = "__deerflow_client_project_access"
+
 
 def checkpoint_agent_binding_metadata(metadata: object) -> dict[str, str]:
     """Copy a checkpoint's server-authored agent binding for a state rewrite.

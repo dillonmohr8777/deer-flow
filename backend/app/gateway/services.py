@@ -81,7 +81,7 @@ from deerflow.runtime.checkpoint_mode import (
     inject_checkpoint_mode,
 )
 from deerflow.runtime.checkpoint_state import graph_state_schema
-from deerflow.runtime.context_keys import PROJECT_CONTEXT_KEY
+from deerflow.runtime.context_keys import CLIENT_PROJECT_ACCESS_CONTEXT_KEY, PROJECT_CONTEXT_KEY
 from deerflow.runtime.cost_router import CostRouterRefusal, admit_run
 from deerflow.runtime.events.message_identity import MESSAGE_SEQ_KEY
 from deerflow.runtime.goal import goal_thread_lock
@@ -644,6 +644,7 @@ _SERVER_OWNED_RUNTIME_CONTEXT_KEYS: frozenset[str] = (
             # at admission from threads_meta; a client-supplied value must
             # never survive in either run-config section.
             PROJECT_CONTEXT_KEY,
+            CLIENT_PROJECT_ACCESS_CONTEXT_KEY,
             KNOWLEDGE_SCOPE_KEY,
             KNOWLEDGE_SCOPE_RUNTIME_KEY,
             AUTHENTICATED_CONTEXT_MARKER_KEY,
@@ -1094,6 +1095,7 @@ def build_run_config(
         else:
             configurable = {"thread_id": thread_id}
             configurable.update(request_config.get("configurable") or {})
+            configurable.pop(CLIENT_PROJECT_ACCESS_CONTEXT_KEY, None)
             configurable["thread_id"] = thread_id
             config["configurable"] = configurable
         for k, v in request_config.items():
@@ -1925,10 +1927,10 @@ async def start_run(
         if sandbox_config.use != "deerflow.community.aio_sandbox:AioSandboxProvider" or sandbox_config.network.mode == "open":
             raise HTTPException(status_code=503, detail="Shared workspace tools require the isolated workspace sandbox")
 
-    portal_work_bound = False
+    portal_work_scope = None
 
     async def thread_access_allowed() -> bool:
-        nonlocal portal_work_bound
+        nonlocal portal_work_scope
 
         from app.gateway.client_context import require_portal_work_access
         from deerflow.runtime.user_context import resolve_organization_id
@@ -1936,7 +1938,10 @@ async def start_run(
         # Staff work belongs to its server-bound portal client, not merely the
         # shared storage principal. Recheck on initial admission and the
         # existing post-preparation access check, including replay/resume.
-        portal_work_bound = await require_portal_work_access(actor_id=actor_user_id, organization_id=resolve_organization_id(), chat_id=thread_id)
+        current_scope = await require_portal_work_access(actor_id=actor_user_id, organization_id=resolve_organization_id(), chat_id=thread_id, storage_user_id=content_user_id)
+        if portal_work_scope is not None and current_scope != portal_work_scope:
+            raise HTTPException(404, "Client work scope changed during preparation")
+        portal_work_scope = current_scope
         if user is None:
             if not require_existing_thread:
                 return True
@@ -2187,6 +2192,23 @@ async def start_run(
         )
         if project_context is not None:
             config["context"][PROJECT_CONTEXT_KEY] = project_context
+        if portal_work_scope is not None and portal_work_scope["project_id"] is not None:
+            from app.gateway.client_context import require_portal_work_access
+            from deerflow.projects.access import ClientProjectReadAccess
+            from deerflow.runtime.user_context import resolve_organization_id
+
+            selected_scope = dict(portal_work_scope)
+            selected_org = resolve_organization_id()
+            if project_context is None or project_context.get("project_id") != selected_scope["project_id"]:
+                raise HTTPException(503, "Selected client project context could not be read")
+
+            async def authorize_client_project_read():
+                current = await require_portal_work_access(actor_id=actor_user_id, organization_id=selected_org, chat_id=thread_id, storage_user_id=content_user_id)
+                if current != selected_scope:
+                    raise HTTPException(404, "Client project access is no longer available")
+
+            project_context["client_id"] = selected_scope["client_id"]
+            run_ctx = replace(run_ctx, client_project_access=ClientProjectReadAccess(project_id=selected_scope["project_id"], client_id=selected_scope["client_id"], authorize=authorize_client_project_read))
 
         async def run_after_metadata(record: RunRecord) -> None:
             metadata_task = asyncio.create_task(
@@ -2289,7 +2311,7 @@ async def start_run(
                 # delete route holds a durable thread-operation reservation,
                 # so after this point either the run or the delete wins; they
                 # cannot both succeed across Gateway workers.
-                if (require_existing_thread or portal_work_bound) and not await thread_access_allowed():
+                if (require_existing_thread or portal_work_scope) and not await thread_access_allowed():
                     raise HTTPException(status_code=404, detail=f"Thread {thread_id} not found")
                 if not require_existing_thread:
                     from sqlalchemy.exc import IntegrityError
@@ -2305,6 +2327,11 @@ async def start_run(
                             raise HTTPException(status_code=404, detail=f"Thread {thread_id} not found") from None
                 if composio_retry is not None:
                     await composio_retry.verify(thread_id)
+                run_record_config = redact_config_secrets(body.config)
+                if isinstance(run_record_config, dict):
+                    for section in ("context", "configurable"):
+                        if isinstance(run_record_config.get(section), dict):
+                            run_record_config[section].pop(CLIENT_PROJECT_ACCESS_CONTEXT_KEY, None)
                 record = await run_mgr.create_or_reject(
                     thread_id,
                     body.assistant_id,
@@ -2317,7 +2344,7 @@ async def start_run(
                     kwargs={
                         "input": run_record_input,
                         **({"knowledge_default_request_hash": knowledge_default_request_hash} if accepts_knowledge_default else {}),
-                        "config": redact_config_secrets(body.config),
+                        "config": run_record_config,
                         **({"conversation_references": conversation_references} if conversation_references else {}),
                     },
                     multitask_strategy=body.multitask_strategy,

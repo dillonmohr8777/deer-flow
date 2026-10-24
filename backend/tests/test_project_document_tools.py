@@ -18,7 +18,7 @@ from types import SimpleNamespace
 import pytest
 
 from deerflow.projects.documents import add_staged_document, converted_markdown_path, ensure_converted_markdown, original_file_path, stage_document_bytes
-from deerflow.projects.tools import _list_project_documents_impl, _read_project_document_impl
+from deerflow.projects.tools import _list_project_documents_impl, _read_project_document_impl, _verify_quote_impl
 from deerflow.projects.trash import make_purge_file_remover
 from deerflow.runtime.context_keys import PROJECT_CONTEXT_KEY
 
@@ -59,6 +59,67 @@ async def _shelve(env, *, name: str, data: bytes, doc_sha: str | None = None, pr
     row, created = result
     assert created
     return row
+
+
+async def test_client_shelf_access_checks_current_host_authority_for_all_three_reads(env):
+    from deerflow.projects.access import ClientProjectReadAccess
+    from deerflow.runtime.context_keys import CLIENT_PROJECT_ACCESS_CONTEXT_KEY
+
+    content = "Qualified lead means a verified booking in the supplied report."
+    row = await _shelve(env, name="client-report.txt", data=content.encode())
+    runtime = _runtime(project_id=env.project["id"])
+    runtime.context[PROJECT_CONTEXT_KEY]["client_id"] = "client-a"
+    allowed = True
+
+    async def authorize():
+        if not allowed:
+            raise ValueError("Assignment or project link revoked")
+
+    runtime.context[CLIENT_PROJECT_ACCESS_CONTEXT_KEY] = ClientProjectReadAccess(env.project["id"], "client-a", authorize)
+    assert json.loads(await _list_project_documents_impl(runtime, offset=0, limit=10))["total"] == 1
+    assert json.loads(await _read_project_document_impl(runtime, document_id=row["id"], offset=0, limit=500))["content"] == content
+    assert json.loads(await _verify_quote_impl(runtime, document_id=row["id"], quote=content))["found"] is True
+    allowed = False
+    results = [await _list_project_documents_impl(runtime, offset=0, limit=10), await _read_project_document_impl(runtime, document_id=row["id"], offset=0, limit=500), await _verify_quote_impl(runtime, document_id=row["id"], quote=content)]
+    assert all("error" in json.loads(result) and content not in result and row["id"] not in result for result in results)
+
+
+async def test_client_shelf_read_does_not_return_content_revoked_during_file_io(env, monkeypatch):
+    import deerflow.projects.tools as tools
+    from deerflow.projects.access import ClientProjectReadAccess
+    from deerflow.runtime.context_keys import CLIENT_PROJECT_ACCESS_CONTEXT_KEY
+
+    content = "Private synthetic account evidence must not reach the model after revocation."
+    row = await _shelve(env, name="client-report.txt", data=content.encode())
+    runtime = _runtime(project_id=env.project["id"])
+    runtime.context[PROJECT_CONTEXT_KEY]["client_id"] = "client-a"
+    allowed = True
+
+    async def authorize():
+        if not allowed:
+            raise ValueError("Revoked while content read was pending")
+
+    read = tools.read_document_text_window
+
+    async def revoke_after_read(*args, **kwargs):
+        nonlocal allowed
+        text = await read(*args, **kwargs)
+        allowed = False
+        return text
+
+    runtime.context[CLIENT_PROJECT_ACCESS_CONTEXT_KEY] = ClientProjectReadAccess(env.project["id"], "client-a", authorize)
+    monkeypatch.setattr(tools, "read_document_text_window", revoke_after_read)
+    result = await _read_project_document_impl(runtime, document_id=row["id"], offset=0, limit=500)
+    assert "error" in json.loads(result) and content not in result
+
+
+async def test_serialized_client_shelf_marker_cannot_authorize_a_read(env):
+    from deerflow.runtime.context_keys import CLIENT_PROJECT_ACCESS_CONTEXT_KEY
+
+    row = await _shelve(env, name="source.txt", data=b"This is synthetic client-private evidence.")
+    runtime = _runtime(project_id=env.project["id"])
+    runtime.context[CLIENT_PROJECT_ACCESS_CONTEXT_KEY] = {"project_id": env.project["id"], "client_id": "client-a", "authorized": True}
+    assert "error" in json.loads(await _read_project_document_impl(runtime, document_id=row["id"], offset=0, limit=500))
 
 
 class TestListProjectDocuments:

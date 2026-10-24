@@ -55,6 +55,7 @@ from deerflow.runtime.checkpoint_state import (
 )
 from deerflow.runtime.context_keys import (
     CHECKPOINT_AGENT_NAME_METADATA_KEY,
+    CLIENT_PROJECT_ACCESS_CONTEXT_KEY,
     CURRENT_RUN_PRE_EXISTING_MESSAGE_IDS_KEY,
     DEFAULT_AGENT_NAME_METADATA_VALUE,
     PROJECT_CONTEXT_KEY,
@@ -204,6 +205,7 @@ def _release_run_scoped_references(
         OWNED_CHILDREN_CONTEXT_KEY,
         CURRENT_RUN_PRE_EXISTING_MESSAGE_IDS_KEY,
         CONVERSATION_READER_CONTEXT_KEY,
+        CLIENT_PROJECT_ACCESS_CONTEXT_KEY,
         MOMENTUM_SDK_CONTEXT_KEY,
         WSL_DIAGNOSTICS_CONTEXT_KEY,
     }
@@ -230,6 +232,7 @@ def _release_run_scoped_references(
         if isinstance(configurable, dict):
             configurable.pop("__pregel_runtime", None)
             configurable.pop(CONVERSATION_READER_CONTEXT_KEY, None)
+            configurable.pop(CLIENT_PROJECT_ACCESS_CONTEXT_KEY, None)
             configurable.pop(MOMENTUM_SDK_CONTEXT_KEY, None)
             configurable.pop(WSL_DIAGNOSTICS_CONTEXT_KEY, None)
             configurable.pop(OWNED_CHILDREN_CONTEXT_KEY, None)
@@ -541,6 +544,7 @@ _SERVER_OWNED_RUNTIME_CONTEXT_KEYS: Final[frozenset[str]] = (
             # admission (spec §7.1); a caller-supplied value in
             # ``config['context']`` must never be merged (§12).
             PROJECT_CONTEXT_KEY,
+            CLIENT_PROJECT_ACCESS_CONTEXT_KEY,
             KNOWLEDGE_SCOPE_RUNTIME_KEY,
             AUTHENTICATED_CONTEXT_MARKER_KEY,
             PRIVATE_MCP_SESSION_CONTEXT_KEY,
@@ -561,6 +565,7 @@ def _build_runtime_context(
     conversation_reader: Any | None = None,
     momentum_sdk_reviewer: Any | None = None,
     wsl_diagnostics: Any | None = None,
+    client_project_access: Any | None = None,
 ) -> dict[str, Any]:
     """Build the dict that becomes ``ToolRuntime.context`` for the run.
 
@@ -596,6 +601,8 @@ def _build_runtime_context(
         runtime_ctx[CONVERSATION_READER_CONTEXT_KEY] = conversation_reader
     if wsl_diagnostics is not None:
         runtime_ctx[WSL_DIAGNOSTICS_CONTEXT_KEY] = wsl_diagnostics
+    if client_project_access is not None:
+        runtime_ctx[CLIENT_PROJECT_ACCESS_CONTEXT_KEY] = client_project_access
     if task_store is not None:
         from deerflow_extension_api import EXTENSION_TASK_STORE_KEY
 
@@ -681,6 +688,7 @@ class RunContext:
     conversation_reader: Any | None = field(default=None)
     momentum_sdk_reviewer: Any | None = field(default=None)
     wsl_diagnostics: Any | None = field(default=None)
+    client_project_access: Any | None = field(default=None)
 
 
 def _install_runtime_context(config: dict, runtime_context: dict[str, Any]) -> None:
@@ -689,6 +697,7 @@ def _install_runtime_context(config: dict, runtime_context: dict[str, Any]) -> N
     configurable = config.get("configurable")
     if isinstance(configurable, dict):
         configurable.pop(CONVERSATION_READER_CONTEXT_KEY, None)
+        configurable.pop(CLIENT_PROJECT_ACCESS_CONTEXT_KEY, None)
         configurable.pop(MOMENTUM_SDK_CONTEXT_KEY, None)
         configurable.pop(WSL_DIAGNOSTICS_CONTEXT_KEY, None)
         configurable.pop(OWNED_CHILDREN_CONTEXT_KEY, None)
@@ -1173,6 +1182,7 @@ async def run_agent(
             ctx.conversation_reader,
             ctx.momentum_sdk_reviewer,
             ctx.wsl_diagnostics,
+            ctx.client_project_access,
         )
         runtime_ctx[OWNED_CHILDREN_CONTEXT_KEY] = owned_children
         _pin_authenticated_identity_context(config, runtime_ctx)
@@ -1251,6 +1261,12 @@ async def run_agent(
             # get_available_tools(), which may block on MCP cache
             # initialization — it must not stall the calling event loop
             # (issue #5172).
+            if ctx.client_project_access is not None:
+                from deerflow.projects.access import matching_client_project_access
+
+                if matching_client_project_access(runtime_ctx) is not ctx.client_project_access:
+                    raise ValueError("Client project access requires its host-bound project snapshot")
+                await ctx.client_project_access.authorize()
             agent = _agent_graph(await run_assembly(agent_factory, **agent_factory_kwargs))
 
         # ``resolve_config_user_id`` needs the capability marker while the
