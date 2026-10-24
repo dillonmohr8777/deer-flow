@@ -10,6 +10,12 @@ The upstream DeerFlow history stays in [CHANGELOG.md](../CHANGELOG.md).
 
 ## [Unreleased]
 
+## [momobot-prod-20261023-6425b821] - 2026-10-23
+
+### Fixed
+
+- fix: enforce owner-scoped Composio approval handoffs (#293)
+
 ## [momobot-prod-20261023-ff8263f9] - 2026-10-23
 
 ### Changed
