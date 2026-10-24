@@ -10,6 +10,17 @@ The upstream DeerFlow history stays in [CHANGELOG.md](../CHANGELOG.md).
 
 ## [Unreleased]
 
+## [momobot-prod-20261024-dc420255] - 2026-10-24
+
+### Changed
+
+- Guided connect UI, Oct 24 (#300)
+- Add actor-bound guided Composio connect backend (#299)
+
+### Security
+
+- Preserve MomoBot security boundaries, Oct 24 (#301)
+
 ## [momobot-prod-20261023-ff8263f9] - 2026-10-23
 
 ### Changed
