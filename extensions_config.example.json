@@ -2,6 +2,7 @@
   "composioMe": {
     "enabled": false,
     "project_key_env": "COMPOSIO_API_KEY",
+    "connect": {"enabled": false, "callback_url": null, "authorization_origins": ["https://app.composio.dev"], "auth_configs": {}, "ttl_seconds": 600},
     "toolkits": ["gmail", "googlecalendar", "googledrive", "googlesheets", "googledocs", "slack", "hubspot", "googleads", "google_analytics", "google_search_console", "metaads", "fireflies", "canva", "composio_search"]
   },
   "middlewares": [],

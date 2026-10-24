@@ -10,6 +10,15 @@ handoffs reuse only the proposer's existing session under A2 owner authority.
 Keep session references in protected actor KV and URLs/headers transient. All 3xx
 and non-POST MCP requests are refused; native project/origin/account proof remains.
 
+Guided connect additionally requires disabled-by-default `composioMe.connect`,
+fixed HTTPS callback/auth origins and exact auth-config IDs. Browser routes use
+a separate host origin; per-handle HttpOnly nonce cookies and protected KV CAS
+bind actor/org/expiry/account before provider lookup. Only host preflight of one
+verified auth-required tool with zero own accounts grants one guarded retry;
+never infer no-execution from errors or replay a workflow. Tool metadata lookup
+requires Tools:Read in addition to the B scopes. Connection receipts follow
+the run-event contract; URLs/provider auth data never enter model/thread output.
+
 Composio approval handoffs keep the signed-in decider unchanged. Scope one
 server-owned authority to the immutable action and active proposer; select only
 that proposer's current operator `user_auth` grant and recheck it at the final

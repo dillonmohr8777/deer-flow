@@ -28,6 +28,7 @@ from deerflow.config.extensions_config import ExtensionsConfig
 from deerflow.factcheck import Evidence, check_for_filing, draft_text, verify_draft
 from deerflow.persistence.approvals.corrections import ClientCorrectionRepository
 from deerflow.persistence.organizations.delegation import OrganizationDelegationRepository
+from deerflow.persistence.organizations.model import OrganizationRow
 from deerflow.persistence.organizations.resolution import active_organization_for_user
 from deerflow.runtime.user_context import resolve_organization_id
 
@@ -45,6 +46,23 @@ router = APIRouter(prefix="/api/approvals", tags=["approvals"], dependencies=[De
 
 LOOP_FILING_SCOPE = "approvals:propose"
 ActionStatus = Literal["pending", "approved", "rejected", "executed", "failed"]
+
+
+class ApprovalCapabilities(BaseModel):
+    approve: bool = False
+    reject: bool = False
+    edit: bool = False
+    reason: str | None = None
+
+
+class ApprovalProposer(BaseModel):
+    user_id: str
+    display_name: str
+
+
+class ApprovalWorkspace(BaseModel):
+    id: str
+    name: str
 
 
 class ApprovalResponse(BaseModel):
@@ -66,6 +84,9 @@ class ApprovalResponse(BaseModel):
     error: str | None = None
     created_at: str
     updated_at: str
+    capabilities: ApprovalCapabilities = Field(default_factory=ApprovalCapabilities)
+    proposer: ApprovalProposer | None = None
+    workspace: ApprovalWorkspace | None = None
 
 
 class ApprovalListResponse(BaseModel):
@@ -101,10 +122,38 @@ def _not_found() -> HTTPException:
     return HTTPException(status_code=404, detail="Approval not found")
 
 
-def _out(row: dict) -> ApprovalResponse:
+async def _out(row: dict, request: Request) -> ApprovalResponse:
     out = {k: row.get(k) for k in ApprovalResponse.model_fields}
     if out["fact_check"]:  # stored run evidence is for re-checks only, not for the page
         out["fact_check"] = {k: v for k, v in out["fact_check"].items() if k != "evidence"}
+    repo = get_pending_action_repo(request)
+    actor = str((await get_current_user_from_request(request)).id)
+    pending = row["status"] == "pending"
+    caps = ApprovalCapabilities(reason=None if pending else "Action already decided")
+    async with repo.session_factory() as session:
+        workspace = await session.get(OrganizationRow, row["organization_id"])
+    out["workspace"] = ApprovalWorkspace(id=workspace.id, name=workspace.name) if workspace else None
+    out["proposer"] = None
+    if row["action_type"] == "composio_tool_call":
+        own = actor == row["user_id"]
+        out["proposer"] = ApprovalProposer(user_id=row["user_id"], display_name="You" if own else "Team member " + row["user_id"][:8])
+        if pending:
+            caps.approve = await repo.get_composio_for_approval(row["id"]) is not None
+            caps.reject = caps.approve if own else await repo.get_composio_for_org(row["id"]) is not None
+            if row["payload"]["server_name"] == "composio-me" and (await asyncio.to_thread(ExtensionsConfig.from_file)).composio_me.enabled:
+                from app.gateway.auth_disabled import AUTH_SOURCE_SESSION
+
+                caps.approve = caps.approve and getattr(request.state, "auth_source", None) == AUTH_SOURCE_SESSION
+            caps.reason = None if caps.approve else "Only an eligible proposer or active workspace owner can approve"
+    elif pending:
+        reviewer = await _is_active_org_admin(actor)
+        caps.approve = caps.reject = caps.edit = reviewer
+        caps.reason = None if reviewer else "An active organization owner or admin must review this action"
+    auth = getattr(request.state, "auth", None)
+    if pending and (auth is None or not auth.has_permission("approvals", "write")):
+        caps.approve = caps.reject = caps.edit = False
+        caps.reason = "Approval write permission is required"
+    out["capabilities"] = caps
     return ApprovalResponse(**out)
 
 
@@ -126,7 +175,7 @@ async def list_approvals(request: Request, status: ActionStatus | None = None, l
     own = await repo.list(status=status, limit=limit)
     oversight = await repo.list_composio_for_org(status=status, limit=limit)
     rows = sorted({r["id"]: r for r in [*own, *oversight]}.values(), key=lambda r: r["created_at"], reverse=True)[:limit]
-    return ApprovalListResponse(approvals=[_out(r) for r in rows])
+    return ApprovalListResponse(approvals=[await _out(r, request) for r in rows])
 
 
 @router.post("/propose", response_model=ApprovalResponse, status_code=201)
@@ -151,7 +200,7 @@ async def file_loop_action(body: LoopFilingRequest, request: Request) -> Approva
     except InvalidPayloadError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     await _audit(request, "approvals.proposed", str(request.state.actor_user_id), row["id"], "success", {"action_type": body.action_type, "client": body.client})
-    return _out(row)
+    return await _out(row, request)
 
 
 @router.get("/{action_id}", response_model=ApprovalResponse)
@@ -161,7 +210,7 @@ async def get_approval(action_id: str, request: Request) -> ApprovalResponse:
     row = await repo.get(action_id) or await repo.get_composio_for_org(action_id)
     if row is None:
         raise _not_found()
-    return _out(row)
+    return await _out(row, request)
 
 
 @router.patch("/{action_id}", response_model=ApprovalResponse)
@@ -169,15 +218,18 @@ async def get_approval(action_id: str, request: Request) -> ApprovalResponse:
 async def edit_approval(action_id: str, body: ApprovalEditRequest, request: Request) -> ApprovalResponse:
     await _require_reviewer(request)
     repo = get_pending_action_repo(request)
-    if await repo.get(action_id) is None:
+    current = await repo.get(action_id)
+    if current is None:
         raise _not_found()
+    if current["action_type"] == "composio_tool_call":
+        raise HTTPException(422, "Composio actions are immutable")
     try:
         row = await repo.edit(action_id, title=body.title, target=body.target, payload=body.payload)
     except InvalidPayloadError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     if row is None:
         raise HTTPException(status_code=409, detail="Only a pending action can be edited")
-    return _out(row)
+    return await _out(row, request)
 
 
 async def _recheck_if_edited(repo, row: dict) -> None:
@@ -246,7 +298,7 @@ async def approve_action(action_id: str, request: Request) -> ApprovalResponse:
                 outcome = await execute_approved(approved)
             settled = await repo.record_composio_outcome(action_id, status=outcome.status, result=outcome.detail, error=outcome.error)
             await _audit(request, "approvals.executed", authority.decider, action_id, "success" if outcome.status != "failed" else "failure", {**details, "status": outcome.status, "error": outcome.error})
-            return _out(settled or {**approved, "execution_result": {"state": "outcome_unknown"}, "error": "Composio outcome could not be settled; reconcile before any new proposal"})
+            return await _out(settled or {**approved, "execution_result": {"state": "outcome_unknown"}, "error": "Composio outcome could not be settled; reconcile before any new proposal"}, request)
     reviewer = await _require_reviewer(request)
     await _recheck_if_edited(repo, current)
     approved = await repo.decide(action_id, approve=True, decided_by=reviewer)
@@ -257,7 +309,7 @@ async def approve_action(action_id: str, request: Request) -> ApprovalResponse:
     outcome = await execute_approved(approved)
     settled = await repo.record_outcome(action_id, status=outcome.status, result=outcome.detail, error=outcome.error)
     await _audit(request, "approvals.executed", reviewer, action_id, "success" if outcome.status != "failed" else "failure", {"status": outcome.status, "error": outcome.error})
-    return _out(settled or approved)
+    return await _out(settled or approved, request)
 
 
 @router.post("/{action_id}/reject", response_model=ApprovalResponse)
@@ -280,4 +332,4 @@ async def reject_action(action_id: str, request: Request) -> ApprovalResponse:
         raise HTTPException(status_code=409, detail="This action was already decided")
     details = {"decided_by": reviewer, "proposer_user_id": rejected["user_id"], "organization_id": rejected["organization_id"], "action_id": action_id} if rejected["action_type"] == "composio_tool_call" else None
     await _audit(request, "approvals.rejected", reviewer, action_id, "success", details)
-    return _out(rejected)
+    return await _out(rejected, request)

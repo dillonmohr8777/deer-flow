@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from deerflow.persistence.models.run_event import RunEventRow
 from deerflow.runtime.events.message_identity import message_identity
-from deerflow.runtime.events.store.base import RunEventStore
+from deerflow.runtime.events.store.base import RunEventStore, matches_content_identity, validate_content_identity
 from deerflow.runtime.user_context import AUTO, _AutoSentinel, get_current_user, resolve_user_id
 from deerflow.utils.time import coerce_iso
 
@@ -255,6 +255,7 @@ class DbRunEventStore(RunEventStore):
         content="",
         metadata=None,
         created_at=None,
+        content_identity=None,
     ):
         """Idempotently insert a run-scoped singleton event.
 
@@ -264,12 +265,15 @@ class DbRunEventStore(RunEventStore):
         Terminal delivery receipts use this method on both the worker and
         recovery paths; ordinary event types remain append-only.
         """
+        validate_content_identity(content, content_identity)
         content, metadata = self._truncate_trace(category, content, metadata)
         db_content, metadata = self._content_to_db(content, metadata)
         user_id = self._user_id_from_context()
         async with self._get_write_lock(thread_id):
             async with self._sf() as session:
                 async with session.begin():
+                    if content_identity is not None and session.get_bind().dialect.name == "sqlite":
+                        await session.execute(text("BEGIN IMMEDIATE"))
                     max_seq = await self._max_seq_for_thread(session, thread_id)
                     stmt = (
                         select(RunEventRow)
@@ -279,9 +283,10 @@ class DbRunEventStore(RunEventStore):
                             RunEventRow.event_type == event_type,
                         )
                         .order_by(RunEventRow.seq.asc())
-                        .limit(1)
                     )
-                    existing = await session.scalar(stmt)
+                    existing = (
+                        await session.scalar(stmt.limit(1)) if content_identity is None else next((row for row in (await session.scalars(stmt)).all() if matches_content_identity(self._row_to_dict(row)["content"], content_identity)), None)
+                    )
                     if existing is not None:
                         return self._row_to_dict(existing), False
                     row = RunEventRow(

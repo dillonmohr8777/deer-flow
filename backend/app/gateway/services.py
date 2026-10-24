@@ -15,6 +15,7 @@ import re
 import threading
 from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
+from copy import copy
 from dataclasses import replace
 from types import SimpleNamespace
 from typing import Any
@@ -231,6 +232,20 @@ async def _ensure_thread_metadata(
     """
     thread_store = run_ctx.thread_store
     existing = await thread_store.get(record.thread_id)
+    if isinstance(existing, dict) and existing.get("upload_reserved") is True:
+        from deerflow.persistence.thread_meta import THREAD_PROJECT_METADATA_KEY
+
+        existing_metadata = existing.get("metadata") or {}
+        metadata = {key: value for key, value in {**existing_metadata, **(record.metadata or {})}.items() if key not in (DEERFLOW_TRACE_METADATA_KEY, THREAD_PROJECT_METADATA_KEY, "_deerflow_upload_reservation")}
+        project_id = existing_metadata.get(THREAD_PROJECT_METADATA_KEY)
+        await thread_store.create(
+            record.thread_id,
+            assistant_id=record.assistant_id,
+            metadata=metadata,
+            project_id=project_id,
+            finalize_upload=True,
+        )
+        return
     if existing is None:
         if require_existing_thread:
             raise LookupError(f"Thread {record.thread_id} was deleted during run admission")
@@ -244,7 +259,7 @@ async def _ensure_thread_metadata(
             # membership key: run admission never modifies project membership —
             # the column is written only by POST /api/threads and
             # /threads/{id}/move — so the key must not persist either.
-            if key not in (DEERFLOW_TRACE_METADATA_KEY, THREAD_PROJECT_METADATA_KEY)
+            if key not in (DEERFLOW_TRACE_METADATA_KEY, THREAD_PROJECT_METADATA_KEY, "_deerflow_upload_reservation")
         }
         await thread_store.create(
             record.thread_id,
@@ -486,6 +501,12 @@ def strip_server_owned_state_metadata(values: Mapping[str, Any]) -> dict[str, An
     return stripped
 
 
+def _strip_upload_reservation(metadata):
+    if not isinstance(metadata, dict):
+        return metadata
+    return {key: value for key, value in metadata.items() if key != "_deerflow_upload_reservation"}
+
+
 def normalize_input(raw_input: dict[str, Any] | None, *, trusted_internal: bool = False) -> dict[str, Any]:
     """Convert LangGraph Platform input format to LangChain state dict.
 
@@ -525,10 +546,12 @@ def normalize_input(raw_input: dict[str, Any] | None, *, trusted_internal: bool 
     if raw_input is None:
         return {}
     result = raw_input
+    if isinstance(raw_input.get("metadata"), dict):
+        result = {**result, "metadata": _strip_upload_reservation(raw_input["metadata"])}
     messages = raw_input.get("messages")
     if messages is not None:
         converted = _normalize_input_messages(messages, location="input.messages", trusted_internal=trusted_internal)
-        result = {**raw_input, "messages": converted}
+        result = {**result, "messages": converted}
     if not trusted_internal:
         delegations = result.get("delegations")
         if isinstance(delegations, list):
@@ -551,6 +574,8 @@ def _canonical_run_record_input(
     if not isinstance(graph_input, dict):
         return raw_input
     canonical = dict(raw_input or {})
+    if isinstance(canonical.get("metadata"), dict):
+        canonical["metadata"] = _strip_upload_reservation(canonical["metadata"])
     messages = graph_input.get("messages")
     if isinstance(messages, list):
         canonical["messages"] = [message.model_dump(mode="json") if isinstance(message, BaseMessage) else message for message in messages]
@@ -1823,6 +1848,7 @@ async def start_run(
     *,
     idempotency_key: str | None = None,
     require_existing_thread: bool = False,
+    composio_retry=None,
 ) -> RunRecord:
     """Create a RunRecord and launch the background agent task.
 
@@ -1846,6 +1872,12 @@ async def start_run(
     # multitask_strategy="reject" and are unaffected. Requests without a
     # stamped auth context (internal/test compositions) skip the gate.
     require_cancel_permission_if(request, body.multitask_strategy != "reject")
+
+    # Upload ownership is store-controlled, never caller-supplied run/state data.
+    body = copy(body)
+    body.metadata = _strip_upload_reservation(body.metadata)
+    if isinstance(body.config, dict) and "metadata" in body.config:
+        body.config = {**body.config, "metadata": _strip_upload_reservation(body.config["metadata"])}
 
     try:
         validate_thread_id(thread_id)
@@ -1913,7 +1945,15 @@ async def start_run(
         # Validate even when resume takes precedence, so ignored input cannot
         # appear to have been admitted or persist as unchecked run audit data.
         normalized_input = normalize_input(body.input, trusted_internal=is_internal_caller)
-        agent_factory = resolve_agent_factory(body.assistant_id)
+        if composio_retry is not None:
+            from deerflow.mcp.composio_sessions import ComposioRetry
+
+            if not isinstance(composio_retry, ComposioRetry) or body.input != composio_retry.input():
+                raise HTTPException(403, "Invalid Composio retry authority")
+            await composio_retry.verify(thread_id)
+            agent_factory = composio_retry.factory
+        else:
+            agent_factory = resolve_agent_factory(body.assistant_id)
         command = getattr(body, "command", None)
         if command and command.get("resume") is not None:
             graph_input = Command(resume=command["resume"])
@@ -2239,6 +2279,8 @@ async def start_run(
                 # cannot both succeed across Gateway workers.
                 if require_existing_thread and not await thread_access_allowed():
                     raise HTTPException(status_code=404, detail=f"Thread {thread_id} not found")
+                if composio_retry is not None:
+                    await composio_retry.verify(thread_id)
                 record = await run_mgr.create_or_reject(
                     thread_id,
                     body.assistant_id,

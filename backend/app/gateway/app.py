@@ -32,6 +32,7 @@ from app.gateway.routers import (
     client_portal,
     clients,
     command_center,
+    composio_connect,
     console,
     cost_router,
     features,
@@ -1391,6 +1392,7 @@ This gateway provides runtime endpoints for agent runs plus custom endpoints for
 
     # First-party integrations API is mounted at /api/integrations
     app.include_router(integrations.router)
+    app.include_router(composio_connect.router)
 
     # Read-only RAGFlow catalog for chat knowledge-scope selection.
     app.include_router(knowledge.router)
