@@ -35,7 +35,11 @@ const record = {
 };
 const respond = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status });
-const teammate = { user_id: "staff-2", email: "staff2@synthetic.invalid", role: "account_manager" };
+const teammate = {
+  user_id: "staff-2",
+  email: "staff2@synthetic.invalid",
+  role: "account_manager",
+};
 const directory = {
   schema: "work_plan_participants.v1",
   source: { thread_id: scope.requestId },
@@ -53,7 +57,9 @@ describe("work plan participant directory", () => {
   test("fetches the independent scoped page and encodes only limit/cursor", async () => {
     const signal = new AbortController().signal;
     mockedFetch.mockResolvedValueOnce(respond(directory));
-    expect(await getWorkPlanParticipants({ ...scope, signal, cursor: "prior+/=" })).toEqual(directory);
+    expect(
+      await getWorkPlanParticipants({ ...scope, signal, cursor: "prior+/=" }),
+    ).toEqual(directory);
     expect(mockedFetch).toHaveBeenCalledWith(
       "/backend/api/client-portal/threads/request%2F1/work-plan/participants?limit=50&cursor=prior%2B%2F%3D",
       {
@@ -66,9 +72,18 @@ describe("work plan participant directory", () => {
   });
 
   test("accepts eligible saved people outside the page and terminal bounded pages", async () => {
-    const body = { ...directory, items: [], selected_items: [teammate], limit: 100, has_more: false, next_cursor: null };
+    const body = {
+      ...directory,
+      items: [],
+      selected_items: [teammate],
+      limit: 100,
+      has_more: false,
+      next_cursor: null,
+    };
     mockedFetch.mockResolvedValueOnce(respond(body));
-    expect(await getWorkPlanParticipants({ ...scope, limit: 100 })).toEqual(body);
+    expect(await getWorkPlanParticipants({ ...scope, limit: 100 })).toEqual(
+      body,
+    );
   });
 
   test("rejects malformed, leaking, duplicate, over-limit and mismatched source pages", async () => {
@@ -82,9 +97,22 @@ describe("work plan participant directory", () => {
       { items: [{ ...teammate, email: "a".repeat(321) }] },
       { items: [teammate, teammate] },
       { selected_items: [teammate, teammate] },
-      { selected_items: [teammate, { ...teammate, user_id: "3" }, { ...teammate, user_id: "4" }] },
-      { selected_items: [{ ...teammate, email: "different@synthetic.invalid" }] },
-      { items: Array.from({ length: 51 }, (_, index) => ({ ...teammate, user_id: String(index) })) },
+      {
+        selected_items: [
+          teammate,
+          { ...teammate, user_id: "3" },
+          { ...teammate, user_id: "4" },
+        ],
+      },
+      {
+        selected_items: [{ ...teammate, email: "different@synthetic.invalid" }],
+      },
+      {
+        items: Array.from({ length: 51 }, (_, index) => ({
+          ...teammate,
+          user_id: String(index),
+        })),
+      },
       { limit: 100 },
       { has_more: false },
       { next_cursor: null },
@@ -93,23 +121,37 @@ describe("work plan participant directory", () => {
       { extra: "private" },
     ]) {
       mockedFetch.mockResolvedValueOnce(respond({ ...directory, ...patch }));
-      await expect(getWorkPlanParticipants(scope)).rejects.toThrow("invalid teammate directory");
+      await expect(getWorkPlanParticipants(scope)).rejects.toThrow(
+        "invalid teammate directory",
+      );
     }
     mockedFetch.mockResolvedValueOnce(new Response("not-json"));
-    await expect(getWorkPlanParticipants(scope)).rejects.toThrow("invalid teammate directory");
+    await expect(getWorkPlanParticipants(scope)).rejects.toThrow(
+      "invalid teammate directory",
+    );
     mockedFetch.mockResolvedValueOnce(respond(directory));
-    await expect(getWorkPlanParticipants({ ...scope, cursor: directory.next_cursor })).rejects.toThrow("invalid teammate directory");
+    await expect(
+      getWorkPlanParticipants({ ...scope, cursor: directory.next_cursor }),
+    ).rejects.toThrow("invalid teammate directory");
   });
 
   test("bounds page inputs before fetching and never retries directory errors", async () => {
     for (const limit of [0, 101, 1.5, NaN])
-      await expect(getWorkPlanParticipants({ ...scope, limit })).rejects.toThrow("Invalid teammate page request");
+      await expect(
+        getWorkPlanParticipants({ ...scope, limit }),
+      ).rejects.toThrow("Invalid teammate page request");
     for (const cursor of ["", "a".repeat(513)])
-      await expect(getWorkPlanParticipants({ ...scope, cursor })).rejects.toThrow("Invalid teammate page request");
+      await expect(
+        getWorkPlanParticipants({ ...scope, cursor }),
+      ).rejects.toThrow("Invalid teammate page request");
     expect(mockedFetch).not.toHaveBeenCalled();
     for (const status of [404, 503]) {
-      mockedFetch.mockResolvedValueOnce(respond({ detail: "private details" }, status));
-      await expect(getWorkPlanParticipants(scope)).rejects.toThrow(`Could not load eligible teammates (${status})`);
+      mockedFetch.mockResolvedValueOnce(
+        respond({ detail: "private details" }, status),
+      );
+      await expect(getWorkPlanParticipants(scope)).rejects.toThrow(
+        `Could not load eligible teammates (${status})`,
+      );
     }
     expect(mockedFetch).toHaveBeenCalledTimes(2);
   });
@@ -120,7 +162,9 @@ describe("work plan participant directory", () => {
       controller.abort();
       return respond(directory);
     });
-    await expect(getWorkPlanParticipants({ ...scope, signal: controller.signal })).rejects.toHaveProperty("name", "AbortError");
+    await expect(
+      getWorkPlanParticipants({ ...scope, signal: controller.signal }),
+    ).rejects.toHaveProperty("name", "AbortError");
   });
 });
 

@@ -8,7 +8,9 @@ for (const width of [390, 768, 1440]) {
   }) => {
     await page.setViewportSize({ width, height: 1000 });
     const externalRequests: string[] = [];
-    const origin = new URL(String(test.info().project.use.baseURL ?? "http://localhost:3000")).origin;
+    const origin = new URL(
+      String(test.info().project.use.baseURL ?? "http://localhost:3000"),
+    ).origin;
     await page.route("**/*", (route) => {
       if (new URL(route.request().url()).origin !== origin) {
         externalRequests.push(route.request().url());
@@ -29,7 +31,11 @@ for (const width of [390, 768, 1440]) {
     let nextPageAttempts = 0;
     const teammates = [
       { user_id: "default", email: "default@test.local", role: "owner" },
-      { user_id: "synthetic-teammate", email: "teammate@synthetic.invalid", role: "account_manager" },
+      {
+        user_id: "synthetic-teammate",
+        email: "teammate@synthetic.invalid",
+        role: "account_manager",
+      },
     ];
     const row = (id: string) => ({
       id,
@@ -108,7 +114,9 @@ for (const width of [390, 768, 1440]) {
       const id = path.split("/")[2]!;
       if (path.endsWith("/work-plan/participants")) {
         expect(request.method()).toBe("GET");
-        expect(request.headers()["x-portal-workspace"]).toBe("synthetic-workspace");
+        expect(request.headers()["x-portal-workspace"]).toBe(
+          "synthetic-workspace",
+        );
         expect(url.searchParams.get("limit")).toBe("50");
         const cursor = url.searchParams.get("cursor");
         if (cursor !== null) {
@@ -122,7 +130,11 @@ for (const width of [390, 768, 1440]) {
             schema: "work_plan_participants.v1",
             source: { thread_id: id },
             items: cursor === null ? [teammates[0]] : [teammates[1]],
-            selected_items: teammates.filter((item) => item.user_id === stored?.assignee_user_id || item.user_id === stored?.verifier_user_id),
+            selected_items: teammates.filter(
+              (item) =>
+                item.user_id === stored?.assignee_user_id ||
+                item.user_id === stored?.verifier_user_id,
+            ),
             limit: 50,
             has_more: cursor === null,
             next_cursor: cursor === null ? "synthetic-next+/=" : null,
@@ -177,14 +189,30 @@ for (const width of [390, 768, 1440]) {
     await editor
       .getByRole("combobox", { name: "Verifier", exact: true })
       .selectOption("default");
-    await editor.getByRole("button", { name: "Load more teammates", exact: true }).click();
-    await expect(editor.getByRole("alert")).toContainText("eligibility could not be checked");
-    await expect(editor.getByRole("textbox", { name: "Outcome", exact: true })).toHaveValue("Prepare the synthetic review package");
-    await expect(editor.getByRole("combobox", { name: "Owner", exact: true })).toHaveValue("default");
-    await editor.getByRole("button", { name: "Retry teammates", exact: true }).click();
-    await expect(editor.getByRole("button", { name: "Retry teammates", exact: true })).toHaveCount(0);
-    await editor.getByRole("combobox", { name: "Owner", exact: true }).selectOption("synthetic-teammate");
-    await expect(editor.getByRole("combobox", { name: "Owner", exact: true })).toHaveValue("synthetic-teammate");
+    await editor
+      .getByRole("button", { name: "Load more teammates", exact: true })
+      .click();
+    await expect(editor.getByRole("alert")).toContainText(
+      "eligibility could not be checked",
+    );
+    await expect(
+      editor.getByRole("textbox", { name: "Outcome", exact: true }),
+    ).toHaveValue("Prepare the synthetic review package");
+    await expect(
+      editor.getByRole("combobox", { name: "Owner", exact: true }),
+    ).toHaveValue("default");
+    await editor
+      .getByRole("button", { name: "Retry teammates", exact: true })
+      .click();
+    await expect(
+      editor.getByRole("button", { name: "Retry teammates", exact: true }),
+    ).toHaveCount(0);
+    await editor
+      .getByRole("combobox", { name: "Owner", exact: true })
+      .selectOption("synthetic-teammate");
+    await expect(
+      editor.getByRole("combobox", { name: "Owner", exact: true }),
+    ).toHaveValue("synthetic-teammate");
     await editor
       .getByLabel("Due date", { exact: true })
       .fill("2026-11-02T09:30");
