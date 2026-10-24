@@ -1290,19 +1290,22 @@ class DeerFlowClient:
         """
         from deerflow.agents.memory import get_memory_manager
 
-        return get_memory_manager().get_memory(user_id=get_effective_user_id())
+        scope_args = self._memory_scope_args()
+        return get_memory_manager().get_memory(**scope_args)
 
     def export_memory(self) -> dict:
         """Export current memory data for backup or transfer."""
         from deerflow.agents.memory import get_memory_manager
 
-        return get_memory_manager().get_memory(user_id=get_effective_user_id())
+        scope_args = self._memory_scope_args()
+        return get_memory_manager().get_memory(**scope_args)
 
     def import_memory(self, memory_data: dict) -> dict:
         """Import and persist full memory data."""
         from deerflow.agents.memory import get_memory_manager
 
-        return get_memory_manager().import_memory(memory_data, user_id=get_effective_user_id())
+        scope_args = self._memory_scope_args()
+        return get_memory_manager().import_memory(memory_data, **scope_args)
 
     def get_model(self, name: str) -> dict | None:
         """Get a specific model's configuration by name.
@@ -1505,6 +1508,17 @@ class DeerFlowClient:
     # Public API — memory management
     # ------------------------------------------------------------------
 
+    def _memory_scope_args(self) -> dict:
+        if self._agent_name != "momobot-max":
+            return {"user_id": get_effective_user_id()}
+        from deerflow.agents.memory.scope import private_memory_scope
+        from deerflow.runtime.user_context import get_current_user, get_storage_context
+
+        scope = private_memory_scope(get_current_user(), get_storage_context(), agent_name=self._agent_name)
+        if scope is None:
+            raise PermissionError("Max memory management requires a trusted staff actor and workspace")
+        return {"user_id": scope.user_id, "agent_name": scope.agent_name}
+
     def reload_memory(self) -> dict:
         """Reload memory data from file, forcing cache invalidation.
 
@@ -1518,14 +1532,14 @@ class DeerFlowClient:
         """
         from deerflow.agents.memory import get_memory_manager
 
+        scope_args = self._memory_scope_args()
         manager = get_memory_manager()
-        user_id = get_effective_user_id()
         try:
-            return manager.reload_memory(user_id=user_id)
+            return manager.reload_memory(**scope_args)
         except NotImplementedError:
             pass  # no reload concept; fall back to current memory below
         try:
-            return manager.get_memory(user_id=user_id)
+            return manager.get_memory(**scope_args)
         except NotImplementedError:
             raise NotImplementedError(f"reload_memory not supported by memory backend {type(manager).__name__}: implements neither reload_memory nor get_memory") from None
 
@@ -1533,14 +1547,16 @@ class DeerFlowClient:
         """Clear all persisted memory data."""
         from deerflow.agents.memory import get_memory_manager
 
-        return get_memory_manager().clear_memory(user_id=get_effective_user_id())
+        scope_args = self._memory_scope_args()
+        return get_memory_manager().clear_memory(**scope_args)
 
     def create_memory_fact(self, content: str, category: str = "context", confidence: float = 0.5) -> dict:
         """Create a single fact manually."""
         from deerflow.agents.memory import get_memory_manager
 
+        scope_args = self._memory_scope_args()
         manager = get_memory_manager()
-        memory_data, fact_id = manager.create_fact(content=content, category=category, confidence=confidence, user_id=get_effective_user_id())
+        memory_data, fact_id = manager.create_fact(content=content, category=category, confidence=confidence, **scope_args)
         if fact_id is None:
             raise ValueError("Fact was not stored because the configured memory.max_facts capacity policy evicted it")
         return memory_data
@@ -1549,8 +1565,9 @@ class DeerFlowClient:
         """Delete a single fact from memory by fact id."""
         from deerflow.agents.memory import get_memory_manager
 
+        scope_args = self._memory_scope_args()
         manager = get_memory_manager()
-        return manager.delete_fact(fact_id, user_id=get_effective_user_id())
+        return manager.delete_fact(fact_id, **scope_args)
 
     def update_memory_fact(
         self,
@@ -1562,13 +1579,14 @@ class DeerFlowClient:
         """Update a single fact manually, preserving omitted fields."""
         from deerflow.agents.memory import get_memory_manager
 
+        scope_args = self._memory_scope_args()
         manager = get_memory_manager()
         return manager.update_fact(
             fact_id=fact_id,
             content=content,
             category=category,
             confidence=confidence,
-            user_id=get_effective_user_id(),
+            **scope_args,
         )
 
     def get_memory_config(self) -> dict:

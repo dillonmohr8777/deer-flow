@@ -1,5 +1,6 @@
 """Synthetic delegated internal caller; no real credentials or storage."""
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -22,6 +23,8 @@ def test_memory_clear_requires_delete_scope(monkeypatch, scope, expected):
     monkeypatch.setattr("app.gateway.auth_middleware.is_valid_internal_auth_token", lambda token: token == "synthetic-internal")
     monkeypatch.setattr("app.gateway.auth_middleware._resolve_internal_delegation", AsyncMock(return_value=delegation))
     monkeypatch.setattr("app.gateway.authz._get_route_authorization_config", lambda: AuthorizationConfig())
+    monkeypatch.setattr(memory, "_momo_memory_enabled", lambda: True)
+    monkeypatch.setattr("app.gateway.services.resolve_trusted_internal_owner_for_attribution", AsyncMock(return_value=SimpleNamespace(id="audit-user", system_role="user")))
     manager = MagicMock()
     manager.clear_memory.return_value = {}
     monkeypatch.setattr(memory, "get_memory_manager", lambda: manager)

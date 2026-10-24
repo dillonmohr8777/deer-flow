@@ -11,8 +11,8 @@ Covers, through the real memory router mounted behind the real
 AuthMiddleware (real membership checks, real organization resolution):
 
 - org A cannot read, write, delete, or clear org B's memory.
-- a shared workspace's memory is shared by its active co-members and hidden
-  from outsiders (fails closed, not empty-but-200).
+- a shared workspace's memory stays private to each actor and hidden from
+  outsiders (fails closed, not empty-but-200).
 - a revoked member loses access on their next request.
 
 Plus two lower-level locks on the files this lane owns:
@@ -60,7 +60,12 @@ from deerflow.agents.memory.backends.deermem.deermem.config import DeerMemConfig
 from deerflow.agents.memory.backends.deermem.deermem.core.paths import memory_file_path
 from deerflow.agents.memory.backends.deermem.deermem.core.queue import MemoryUpdateQueue
 from deerflow.persistence.organizations.model import OrganizationMemberRow
-from deerflow.runtime.user_context import get_effective_user_id
+from deerflow.runtime.user_context import get_effective_user_id, get_storage_context
+
+
+@pytest.fixture(autouse=True)
+def _synthetic_momo_mode(monkeypatch):
+    monkeypatch.setattr(memory, "_momo_memory_enabled", lambda: True)
 
 
 @asynccontextmanager
@@ -146,11 +151,15 @@ async def test_org_b_clear_does_not_touch_org_a_memory(org_world, tmp_path, monk
 
 
 @pytest.mark.asyncio
-async def test_shared_workspace_memory_visible_to_comembers_hidden_from_outsiders(org_world, tmp_path, monkeypatch):  # noqa: F811 (pytest fixture imported above)
+async def test_shared_workspace_memory_private_to_each_member_hidden_from_outsiders(org_world, tmp_path, monkeypatch):  # noqa: F811 (pytest fixture imported above)
     async with _memory_client(monkeypatch, tmp_path) as client:
         # a (owner) and c (admin) are both active members of shared workspace S.
-        fact_s = await _create_fact(client, USER_A, ORG_S, "shared workspace context")
-        assert fact_s in await _facts_by_id(client, USER_C, ORG_S)
+        fact_s = await _create_fact(client, USER_A, ORG_S, "owner private memory")
+        fact_c = await _create_fact(client, USER_C, ORG_S, "member private memory")
+        assert fact_s in await _facts_by_id(client, USER_A, ORG_S)
+        assert fact_s not in await _facts_by_id(client, USER_C, ORG_S)
+        assert fact_c in await _facts_by_id(client, USER_C, ORG_S)
+        assert fact_c not in await _facts_by_id(client, USER_A, ORG_S)
 
         # b is not a member of S: selecting S must fail closed, never return data.
         outsider_response = await client.get("/api/memory", headers=auth_headers(USER_B, ORG_S))
@@ -224,8 +233,8 @@ def test_deermem_shared_fallback_unreachable_when_strict_user_scope(tmp_path):
 class _FakeRequest:
     """Minimal stand-in for the bits _resolve_memory_user_id reads."""
 
-    def __init__(self) -> None:
-        self.state = SimpleNamespace(user=SimpleNamespace(system_role="user"))
+    def __init__(self, actor) -> None:
+        self.state = SimpleNamespace(user=SimpleNamespace(id=actor, system_role="user"))
         self.headers: dict[str, str] = {}
 
 
@@ -240,8 +249,9 @@ class _FakeRequest:
 )
 def test_router_resolves_concrete_storage_principal_per_organization(actor, organization_id, expected_storage_user):
     with acting_as(actor, organization_id):
-        resolved = memory._resolve_memory_user_id(_FakeRequest())
-    assert resolved == expected_storage_user
+        resolved = memory._resolve_memory_user_id(_FakeRequest(actor))
+        assert resolved == memory._private_memory_scope(SimpleNamespace(id=actor, system_role="user"), get_storage_context()).user_id
+    assert resolved and resolved != expected_storage_user
 
 
 # -- Lane 0 phase 2: header-only internal calls ---------------------------------
