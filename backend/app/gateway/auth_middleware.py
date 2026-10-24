@@ -10,6 +10,7 @@ Fine-grained permission checks remain in authz.py decorators.
 """
 
 import logging
+import re
 from collections.abc import Callable
 
 from fastapi import HTTPException, Request, Response
@@ -177,7 +178,8 @@ def _workspace_selection_for_request(request: Request, auth_source: str) -> str 
     if auth_source != AUTH_SOURCE_SESSION:
         return None
     path = get_request_route_path(request)
-    if not path.startswith(_PAT_MANAGEMENT_PREFIX) and any(path.startswith(prefix) for prefix in _WORKSPACE_AUTH_EXEMPT_PREFIXES):
+    composio_path = path in {"/api/integrations/connect", "/api/integrations/callback", "/api/integrations/status"} or re.fullmatch(r"/api/integrations/connect/[A-Za-z0-9_-]{24}/open", path) is not None
+    if not path.startswith(_PAT_MANAGEMENT_PREFIX) and not composio_path and any(path.startswith(prefix) for prefix in _WORKSPACE_AUTH_EXEMPT_PREFIXES):
         return None
     selected = request.cookies.get(WORKSPACE_COOKIE_NAME)
     return selected.strip() if selected and selected.strip() else None

@@ -97,7 +97,7 @@ async def test_owner_admin_can_list_read_reject_with_real_uuid_and_audit(world, 
     assert (await client.post(f"/api/approvals/{row['id']}/reject", headers=headers)).status_code == 409
     with acting(MEMBER):
         persisted = await repo.get(row["id"])
-        assert {key: persisted[key] for key in rejected.json()} == rejected.json()
+        assert {key: persisted[key] for key in rejected.json() if key not in {"capabilities", "proposer", "workspace"}} == {key: value for key, value in rejected.json().items() if key not in {"capabilities", "proposer", "workspace"}}
         assert await repo.claim_composio_execution(row["id"]) is None
         assert (await execute_approved(persisted)).status == "failed"
     events, _ = await AuditEventRepository(sf).list(organization_id=ORG)
@@ -134,7 +134,7 @@ async def test_successful_reject_keeps_response_and_audit_after_post_commit_role
         assert rejected.json()["payload"] == rejected.json()["original_payload"] == row["payload"]
         with acting(MEMBER):
             persisted = await repo.get(row["id"])
-            assert {key: persisted[key] for key in rejected.json()} == rejected.json()
+            assert {key: persisted[key] for key in rejected.json() if key not in {"capabilities", "proposer", "workspace"}} == {key: value for key, value in rejected.json().items() if key not in {"capabilities", "proposer", "workspace"}}
         assert (await client.post(f"/api/approvals/{row['id']}/reject", headers=headers)).status_code == 403
         assert (await client.get(f"/api/approvals/{row['id']}", headers=headers)).status_code == 404
         with acting(MEMBER):

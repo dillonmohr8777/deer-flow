@@ -13,6 +13,7 @@ from contextlib import contextmanager
 from datetime import date, datetime, time
 from pathlib import Path
 from typing import Any, Literal
+from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -399,12 +400,46 @@ COMPOSIO_ME_TOOLKITS = (
 )
 
 
+class ComposioConnectConfig(BaseModel):
+    """Fixed operator policy; never caller-selected OAuth destinations."""
+
+    enabled: bool = False
+    callback_url: str | None = None
+    authorization_origins: list[str] = Field(default_factory=lambda: ["https://app.composio.dev"])
+    auth_configs: dict[str, str] = Field(default_factory=dict)
+    ttl_seconds: int = Field(default=600, ge=60, le=900)
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("callback_url", "authorization_origins")
+    @classmethod
+    def _destinations(cls, value, info):
+        values = value if isinstance(value, list) else [value]
+        for item in values:
+            if item is None:
+                continue
+            parsed = urlsplit(item)
+            expected_path = "/api/integrations/callback" if info.field_name == "callback_url" else ""
+            if parsed.scheme != "https" or not parsed.hostname or parsed.netloc != parsed.hostname or parsed.query or parsed.fragment or parsed.path != expected_path or "*" in item or any(ord(char) < 33 for char in item):
+                raise ValueError("Composio connect requires fixed HTTPS destinations")
+        return value
+
+    @field_validator("auth_configs")
+    @classmethod
+    def _auth_configs(cls, value):
+        import re
+
+        if any(toolkit not in COMPOSIO_ME_TOOLKITS or not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", identifier) for toolkit, identifier in value.items()):
+            raise ValueError("Invalid Composio auth-config policy")
+        return value
+
+
 class ComposioMeConfig(BaseModel):
     """Operator policy only; credentials and actor sessions never belong here."""
 
     enabled: bool = False
     project_key_env: str = Field(default="COMPOSIO_API_KEY", pattern=r"^[A-Za-z_][A-Za-z0-9_]*$")
     toolkits: list[str] = Field(default_factory=lambda: list(COMPOSIO_ME_TOOLKITS), min_length=1)
+    connect: ComposioConnectConfig = Field(default_factory=ComposioConnectConfig)
     model_config = ConfigDict(extra="forbid")
 
     @field_validator("project_key_env")

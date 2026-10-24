@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import hmac
 import json
 import logging
 import os
 import re
+import secrets
+import time
 from collections.abc import Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar, Token
@@ -94,6 +98,9 @@ class SessionReference:
 
 _run_context: ContextVar[ComposioContext | None] = ContextVar("composio_run_context", default=None)
 _approval_context: ContextVar[ComposioContext | None] = ContextVar("composio_approval_context", default=None)
+_browser_context: ContextVar[ComposioContext | None] = ContextVar("composio_browser_context", default=None)
+_retry_execution = ContextVar("composio_retry_execution", default=False)
+_RETRY_SEAL = object()
 
 
 def _uuid(value: object) -> str | None:
@@ -166,6 +173,26 @@ def composio_approval_origin(actor_user_id: str, organization_id: str):
         yield
     finally:
         reset_composio_approval_origin(token)
+
+
+@contextmanager
+def composio_browser_origin():
+    """Gateway-only, after the actual request auth_source is checked as session."""
+    scope = _authenticated_context()
+    if scope is None:
+        raise ComposioSessionError("composio_origin_denied")
+    token = _browser_context.set(scope)
+    try:
+        yield
+    finally:
+        _browser_context.reset(token)
+
+
+def current_browser_context():
+    bound = _browser_context.get()
+    if bound is None or bound != _authenticated_context():
+        raise ComposioSessionError("composio_origin_denied")
+    return bound
 
 
 def current_composio_context(runtime: Any = None, *, approval: bool = False) -> ComposioContext:
@@ -279,9 +306,9 @@ def _mcp_http_client(**kwargs):
     return httpx.AsyncClient(**kwargs)
 
 
-async def _resolve_transport(runtime: Any, config: ExtensionsConfig, *, repository=None, http_client=None, action=None, allow_create=True):
-    scope = current_composio_context(runtime, approval=action is not None)
-    if action is None and runtime is None:
+async def _resolve_transport(runtime: Any, config: ExtensionsConfig, *, repository=None, http_client=None, action=None, allow_create=True, browser=False):
+    scope = current_browser_context() if browser else current_composio_context(runtime, approval=action is not None)
+    if action is None and runtime is None and not browser:
         raise ComposioSessionError("composio_origin_denied")
     repo = repository or _repository()
     actor = scope.actor_user_id
@@ -292,7 +319,7 @@ async def _resolve_transport(runtime: Any, config: ExtensionsConfig, *, reposito
         allow_create = False
 
     async def authorize():
-        current_composio_context(runtime, approval=action is not None)
+        current_browser_context() if browser else current_composio_context(runtime, approval=action is not None)
         await _require_staff(scope.actor_user_id, scope, repo.sessions)
         await _require_staff(actor, scope, repo.sessions)
         if action is not None:
@@ -316,7 +343,10 @@ async def _resolve_transport(runtime: Any, config: ExtensionsConfig, *, reposito
             try:
 
                 async def create(client):
-                    return await _json_request(client, "POST", SESSION_PATH, key, authorize, json={"user_id": f"momobot-{actor}", "toolkits": {"enable": policy.toolkits}})
+                    body = {"user_id": f"momobot-{actor}", "toolkits": {"enable": policy.toolkits}}
+                    if policy.connect.enabled and policy.connect.auth_configs:
+                        body["auth_configs"] = policy.connect.auth_configs
+                    return await _json_request(client, "POST", SESSION_PATH, key, authorize, json=body)
 
                 if http_client is None:
                     async with _api_client() as client:
@@ -349,6 +379,8 @@ async def _resolve_transport(runtime: Any, config: ExtensionsConfig, *, reposito
     else:
         data = await lookup(http_client)
     endpoint = _endpoint(data, session_id, actor, policy.toolkits)
+    if policy.connect.enabled and any(data["config"].get("auth_configs", {}).get(toolkit) != identifier for toolkit, identifier in policy.connect.auth_configs.items()):
+        raise ComposioSessionError("composio_session_policy_mismatch")
     return SessionReference(actor, session_id), endpoint, key
 
 
@@ -356,6 +388,353 @@ async def resolve_actor_session(runtime: Any, config: ExtensionsConfig, *, repos
     """Minimal internal reference contract for future actor-bound connect routes."""
     reference, _, _ = await _resolve_transport(runtime, config, repository=repository, http_client=http_client)
     return reference
+
+
+class ConnectManager:
+    """Actor-owned OAuth attempts in protected KV; unknown writes remain held."""
+
+    def __init__(self, config, *, runtime=None, repository=None):
+        self.config, self.runtime, self.repo = config, runtime, repository or _repository()
+
+    async def authorize(self):
+        scope = current_browser_context() if self.runtime is None else current_composio_context(self.runtime)
+        await _require_staff(scope.actor_user_id, scope, self.repo.sessions)
+        current = await asyncio.to_thread(ExtensionsConfig.from_file)
+        if current.composio_me != self.config.composio_me:
+            raise ComposioSessionError("composio_policy_changed")
+        if not self.config.composio_me.enabled or not self.config.composio_me.connect.enabled:
+            raise ComposioSessionError("connect_disabled")
+        if legacy_actor(self.config, scope.actor_user_id):
+            raise ComposioSessionError("legacy_connection_managed_separately")
+        return scope
+
+    def unavailable(self, toolkit):
+        if toolkit not in self.config.composio_me.toolkits:
+            return "toolkit_not_allowed"
+        if toolkit == "metaads":
+            return "owner_setup_required_managed_oauth_unavailable"
+        if toolkit == "fireflies":
+            return "owner_setup_required_api_key"
+        if toolkit == "composio_search":
+            return "no_account_required"
+        policy = self.config.composio_me.connect
+        if not policy.callback_url or toolkit not in policy.auth_configs or not policy.authorization_origins:
+            return "owner_setup_required"
+        return None
+
+    async def request(self, method, path, **kwargs):
+        await self.authorize()
+        key = os.getenv(self.config.composio_me.project_key_env)
+        if not key or illegal_header_value_reason(key):
+            raise ComposioSessionError("connect_project_key_unavailable")
+        async with _api_client() as client:
+            return await _json_request(client, method, path, key, self.authorize, **kwargs)
+
+    def account_valid(self, account, scope, toolkit, account_id=None):
+        if not isinstance(account, dict) or any(not isinstance(account.get(key), dict) for key in ("toolkit", "auth_config", "experimental")):
+            return False
+        return (
+            isinstance(account, dict)
+            and isinstance(account.get("id"), str)
+            and bool(_SESSION_ID.fullmatch(account["id"]))
+            and (account_id is None or account["id"] == account_id)
+            and account.get("user_id") == f"momobot-{scope.actor_user_id}"
+            and account.get("toolkit", {}).get("slug") == toolkit
+            and account.get("status") == "ACTIVE"
+            and account.get("is_disabled") is False
+            and account.get("auth_config", {}).get("is_disabled") is False
+            and account.get("auth_config", {}).get("id") == self.config.composio_me.connect.auth_configs.get(toolkit)
+            and account.get("experimental", {}).get("account_type") == "PRIVATE"
+        )
+
+    async def accounts(self, toolkit):
+        scope = await self.authorize()
+        data = await self.request(
+            "GET",
+            "/api/v3.1/connected_accounts",
+            params={"user_ids": [f"momobot-{scope.actor_user_id}"], "toolkit_slugs": [toolkit], "auth_config_ids": [self.config.composio_me.connect.auth_configs[toolkit]], "statuses": ["ACTIVE"], "account_type": "PRIVATE", "limit": 100},
+        )
+        items = data.get("items")
+        if not isinstance(items, list) or data.get("next_cursor") or any(not self.account_valid(account, scope, toolkit) for account in items):
+            raise ComposioSessionError("connection_verification_failed")
+        if len(items) > 1:
+            raise ComposioSessionError("connection_selection_required")
+        return items
+
+    async def status(self):
+        scope = await self.authorize()
+        rows = []
+        for toolkit in self.config.composio_me.toolkits:
+            reason = self.unavailable(toolkit)
+            connected = False
+            if reason is None:
+                try:
+                    connected = bool(await self.accounts(toolkit))
+                    slot = await self.repo.get_key(scope.actor_user_id, self.slot_key(scope, toolkit))
+                    if not connected and slot is not None:
+                        attempt = await self.repo.get_key(scope.actor_user_id, self.attempt_key(slot["handle"]))
+                        if slot.get("state") != "ready" or not isinstance(attempt, dict) or attempt.get("state") != "ready" or attempt.get("nonce") != slot.get("nonce"):
+                            reason = "connect_attempt_held"
+                except ComposioSessionError:
+                    reason = "connection_verification_unavailable"
+            rows.append({"toolkit": toolkit, "connected": connected, "connectable": reason is None and not connected, "reason": reason})
+        return rows
+
+    @staticmethod
+    def slot_key(scope, toolkit):
+        return "__cs_" + hashlib.sha256(f"{scope.organization_id}:{toolkit}".encode()).hexdigest()[:24]
+
+    @staticmethod
+    def attempt_key(handle):
+        if not isinstance(handle, str) or not re.fullmatch(r"[A-Za-z0-9_-]{24}", handle):
+            raise ComposioSessionError("connect_attempt_not_found")
+        return "__c_" + handle
+
+    async def attempt(self, handle, *, nonce=None, account_id=None):
+        scope = await self.authorize()
+        value = await self.repo.get_key(scope.actor_user_id, self.attempt_key(handle))
+        if not isinstance(value, dict) or value.get("organization_id") != scope.organization_id or value.get("storage_user_id") != scope.storage_user_id or value.get("handle") != handle or value.get("expires_at", 0) <= time.time():
+            raise ComposioSessionError("connect_attempt_not_found")
+        if self.unavailable(value.get("toolkit")) or value.get("auth_config_id") != self.config.composio_me.connect.auth_configs.get(value["toolkit"]):
+            raise ComposioSessionError("connect_policy_changed")
+        if nonce is not None and (not isinstance(nonce, str) or not hmac.compare_digest(nonce, value["nonce"])):
+            raise ComposioSessionError("connect_nonce_denied")
+        if account_id is not None and account_id != value.get("connected_account_id"):
+            raise ComposioSessionError("connect_account_denied")
+        return scope, value
+
+    def redirect(self, value):
+        try:
+            parsed = urlsplit(value)
+            valid = (
+                parsed.scheme == "https"
+                and parsed.netloc == parsed.hostname
+                and f"https://{parsed.hostname}" in self.config.composio_me.connect.authorization_origins
+                and bool(parsed.path)
+                and not parsed.fragment
+                and not any(ord(char) < 33 or ord(char) == 127 for char in value)
+            )
+        except (ValueError, TypeError):
+            valid = False
+        if not valid:
+            raise ComposioSessionError("connect_redirect_denied")
+        return value
+
+    async def create(self, toolkit, *, intent=None):
+        scope = await self.authorize()
+        if intent is not None:
+            from deerflow.mcp.composio_approval_guard import validate_composio_payload
+
+            if not isinstance(intent, dict) or not intent.get("no_execution") or (intent.get("thread_id"), intent.get("run_id"), intent.get("toolkit")) != (scope.thread_id, scope.run_id, toolkit) or not scope.thread_id or not scope.run_id:
+                raise ComposioSessionError("connect_retry_denied")
+            validate_composio_payload(SERVER_NAME, {"server_name": SERVER_NAME, "tool_name": intent["tool_name"], "arguments": intent["arguments"], "tool_call_id": intent["tool_call_id"]})
+        reason = self.unavailable(toolkit)
+        if reason:
+            raise ComposioSessionError(reason)
+        if await self.accounts(toolkit):
+            raise ComposioSessionError("already_connected")
+        slot = self.slot_key(scope, toolkit)
+        existing = await self.repo.get_key(scope.actor_user_id, slot)
+        if isinstance(existing, dict):
+            current_attempt = await self.repo.get_key(scope.actor_user_id, self.attempt_key(existing["handle"]))
+            if not isinstance(current_attempt, dict) or current_attempt.get("state") != "ready" or current_attempt.get("nonce") != existing.get("nonce"):
+                raise ComposioSessionError("connect_attempt_held")
+            if existing.get("state") == "ready" and existing.get("expires_at", 0) > time.time():
+                if intent is not None and existing.get("intent") != intent:
+                    raise ComposioSessionError("connect_attempt_in_progress")
+                return self.public(existing)
+            if existing.get("state") != "ready":
+                raise ComposioSessionError("connect_attempt_held")
+        handle, nonce = secrets.token_urlsafe(18), secrets.token_urlsafe(32)
+        value = {
+            "state": "creating",
+            "nonce": nonce,
+            "handle": handle,
+            "actor_user_id": scope.actor_user_id,
+            "organization_id": scope.organization_id,
+            "storage_user_id": scope.storage_user_id,
+            "toolkit": toolkit,
+            "auth_config_id": self.config.composio_me.connect.auth_configs[toolkit],
+            "expires_at": time.time() + self.config.composio_me.connect.ttl_seconds,
+            "intent": intent,
+        }
+        won = await self.repo.transition_key(scope.actor_user_id, slot, existing["nonce"], "ready", value) if existing else await self.repo.reserve_key(scope.actor_user_id, slot, value)
+        if not won:
+            raise ComposioSessionError("connect_attempt_held")
+        if not await self.repo.reserve_key(scope.actor_user_id, self.attempt_key(handle), value):
+            raise ComposioSessionError("connect_attempt_held")
+        try:
+            reference, _, _ = await _resolve_transport(self.runtime, self.config, repository=self.repo, browser=self.runtime is None)
+            callback = self.config.composio_me.connect.callback_url + "?handle=" + handle
+            result = await self.request("POST", f"{SESSION_PATH}/{reference.session_id}/link", json={"toolkit": toolkit, "callback_url": callback})
+            account_id = result.get("connected_account_id")
+            if not isinstance(account_id, str) or not _SESSION_ID.fullmatch(account_id) or result.get("experimental", {}).get("account_type") != "PRIVATE":
+                raise ComposioSessionError("connect_link_invalid")
+            ready = {**value, "state": "ready", "connected_account_id": account_id, "redirect_url": self.redirect(result.get("redirect_url"))}
+            if not await self.repo.finish_reserved_key(scope.actor_user_id, self.attempt_key(handle), nonce, ready) or not await self.repo.finish_reserved_key(scope.actor_user_id, slot, nonce, ready):
+                raise ComposioSessionError("connect_attempt_held")
+            return self.public(ready)
+        except Exception:
+            held = {**value, "state": "uncertain"}
+            await self.repo.finish_reserved_key(scope.actor_user_id, self.attempt_key(handle), nonce, held)
+            await self.repo.finish_reserved_key(scope.actor_user_id, slot, nonce, held)
+            raise ComposioSessionError("connect_attempt_held") from None
+
+    @staticmethod
+    def public(value):
+        from datetime import UTC, datetime
+
+        return {"handle": value["handle"], "toolkit": value["toolkit"], "expires_at": datetime.fromtimestamp(value["expires_at"], UTC).isoformat()}
+
+    async def open(self, handle):
+        scope, value = await self.attempt(handle)
+        if value["state"] != "ready" or not await self.repo.transition_key(scope.actor_user_id, self.attempt_key(handle), value["nonce"], "ready", {**value, "state": "opened"}):
+            raise ComposioSessionError("connect_open_consumed")
+        return self.redirect(value["redirect_url"]), value["nonce"]
+
+    async def callback(self, handle, nonce, account_id):
+        if not isinstance(nonce, str) or not re.fullmatch(r"[A-Za-z0-9_-]{43}", nonce):
+            raise ComposioSessionError("connect_nonce_denied")
+        scope, value = await self.attempt(handle, nonce=nonce, account_id=account_id)
+        if value.get("auth_config_id") != self.config.composio_me.connect.auth_configs.get(value["toolkit"]):
+            raise ComposioSessionError("connection_verification_failed")
+        if value["state"] in {"complete", "connected"}:
+            return value
+        if value["state"] != "opened" or not await self.repo.transition_key(scope.actor_user_id, self.attempt_key(handle), value["nonce"], "opened", {**value, "state": "verifying"}):
+            raise ComposioSessionError("connect_attempt_held")
+        try:
+            data = await self.request("GET", "/api/v3.1/connected_accounts/" + account_id)
+            if not self.account_valid(data, scope, value["toolkit"], account_id):
+                raise ComposioSessionError("connection_verification_failed")
+            accounts = await self.accounts(value["toolkit"])
+            if len(accounts) != 1 or accounts[0]["id"] != account_id:
+                raise ComposioSessionError("connection_verification_failed")
+            await self.attempt(handle, nonce=nonce, account_id=account_id)
+            connected = {**value, "state": "connected", "redirect_url": None}
+            if not await self.repo.transition_key(scope.actor_user_id, self.attempt_key(handle), value["nonce"], "verifying", connected):
+                raise ComposioSessionError("connect_attempt_held")
+            return connected
+        except Exception:
+            await self.repo.transition_key(scope.actor_user_id, self.attempt_key(handle), value["nonce"], "verifying", {**value, "state": "uncertain", "redirect_url": None})
+            raise ComposioSessionError("connection_verification_failed") from None
+
+    async def claim_dispatch(self, value):
+        scope, _ = await self.attempt(value["handle"], nonce=value["nonce"], account_id=value["connected_account_id"])
+        return await self.repo.transition_key(scope.actor_user_id, self.attempt_key(value["handle"]), value["nonce"], "connected", {**value, "state": "dispatching"})
+
+    async def settle_dispatch(self, value, reply):
+        scope, _ = await self.attempt(value["handle"], nonce=value["nonce"], account_id=value["connected_account_id"])
+        if not await self.repo.transition_key(scope.actor_user_id, self.attempt_key(value["handle"]), value["nonce"], "dispatching", {**value, "state": "complete", "reply": reply}):
+            raise ComposioSessionError("connect_attempt_held")
+
+    async def preflight(self, tool_name, arguments):
+        """A local no-execution failure, never an inferred provider error/replay."""
+        if tool_name != "COMPOSIO_MULTI_EXECUTE_TOOL" or not isinstance(arguments, dict) or not isinstance(arguments.get("tools"), list) or len(arguments["tools"]) != 1:
+            return None
+        from deerflow.mcp.composio_approval_guard import validate_composio_payload
+
+        scope = await self.authorize()
+        call_id = getattr(self.runtime, "tool_call_id", None)
+        inner = arguments["tools"][0]
+        slug = inner.get("tool_slug") if isinstance(inner, dict) else None
+        if not call_id or not isinstance(slug, str) or not re.fullmatch(r"[A-Z][A-Z0-9_]{1,127}", slug):
+            return None
+        # Exact reviewed public actions, not a name-prefix auth inference.
+        if slug in {"COMPOSIO_SEARCH_WEB", "COMPOSIO_SEARCH_NEWS", "COMPOSIO_SEARCH_TRENDS", "COMPOSIO_SEARCH_GOOGLE_MAPS", "COMPOSIO_SEARCH_EXA_SIMILARLINK", "COMPOSIO_SEARCH_NPPESNPI_LOOKUP"}:
+            return None
+        validate_composio_payload(SERVER_NAME, {"server_name": SERVER_NAME, "tool_name": tool_name, "arguments": arguments, "tool_call_id": call_id})
+        try:
+            definition = await self.request("GET", "/api/v3.1/tools/" + slug)
+        except ComposioSessionError:
+            raise ComposioSessionError("connect_tool_metadata_unavailable") from None
+        toolkit = definition["toolkit"].get("slug") if isinstance(definition.get("toolkit"), dict) else None
+        if definition.get("slug") != slug or definition.get("no_auth") is not False or toolkit not in self.config.composio_me.toolkits or self.unavailable(toolkit):
+            return None
+        if await self.accounts(toolkit):
+            return None
+        intent = {"thread_id": scope.thread_id, "run_id": scope.run_id, "tool_call_id": call_id, "tool_name": tool_name, "arguments": arguments, "toolkit": toolkit, "no_execution": True}
+        attempt = await self.create(toolkit, intent=intent)
+        return {"status": "no_connected_account", "no_execution": True, "connect": {"handle": attempt["handle"], "toolkit": toolkit}}
+
+
+@dataclass(frozen=True, repr=False)
+class ComposioRetry:
+    handle: str
+    nonce: str
+    actor_user_id: str
+    organization_id: str
+    storage_user_id: str
+    intent: dict
+    seal: object
+
+    @classmethod
+    def from_attempt(cls, value):
+        return cls(value["handle"], value["nonce"], value["actor_user_id"], value["organization_id"], value["storage_user_id"], json.loads(json.dumps(value["intent"])), _RETRY_SEAL)
+
+    async def verify(self, thread_id, *, runtime=None):
+        if self.seal is not _RETRY_SEAL or not self.intent.get("no_execution") or self.intent.get("thread_id") != thread_id:
+            raise ComposioSessionError("connect_retry_denied")
+        scope = current_composio_context(runtime) if runtime is not None else current_browser_context()
+        if (scope.actor_user_id, scope.organization_id, scope.storage_user_id) != (self.actor_user_id, self.organization_id, self.storage_user_id):
+            raise ComposioSessionError("connect_retry_denied")
+        repo = _repository()
+        await _require_staff(scope.actor_user_id, scope, repo.sessions)
+        config = await asyncio.to_thread(ExtensionsConfig.from_file)
+        _, value = await ConnectManager(config, runtime=runtime, repository=repo).attempt(self.handle, nonce=self.nonce)
+        if (
+            not isinstance(value, dict)
+            or value.get("state") not in {"dispatching", "complete"}
+            or value.get("nonce") != self.nonce
+            or value.get("intent") != self.intent
+            or value.get("organization_id") != self.organization_id
+            or value.get("expires_at", 0) <= time.time()
+        ):
+            raise ComposioSessionError("connect_retry_denied")
+        if value["state"] == "complete":
+            submitted = value.get("reply", {}).get("retry", {})
+            if runtime is None or submitted.get("state") != "submitted" or submitted.get("run_id") != scope.run_id:
+                raise ComposioSessionError("connect_retry_denied")
+
+    def input(self):
+        return {"messages": [{"type": "ai", "content": "", "tool_calls": [{"name": ENVELOPE_TOOL_NAME, "args": {"tool_name": self.intent["tool_name"], "arguments": self.intent["arguments"]}, "id": self.intent["tool_call_id"]}]}]}
+
+    def factory(self, *, config, app_config=None):
+        from langgraph.graph import END, START, StateGraph
+        from langgraph.prebuilt import ToolNode
+
+        from deerflow.agents.thread_state import get_thread_state_schema
+        from deerflow.runtime.checkpoint_mode import INTERNAL_CHECKPOINT_MODE_KEY
+
+        scope = current_composio_context()
+        if self.seal is not _RETRY_SEAL or (scope.actor_user_id, scope.organization_id, scope.storage_user_id, scope.thread_id) != (self.actor_user_id, self.organization_id, self.storage_user_id, self.intent["thread_id"]):
+            raise ComposioSessionError("connect_retry_denied")
+        tools = composio_tools(config.get("context"), ExtensionsConfig.from_file())
+        if len(tools) != 1:
+            raise ComposioSessionError("connect_retry_denied")
+
+        async def exact_call(tool_name: RouterToolName, arguments: dict[str, Any] | None = None, runtime: Runtime = None):
+            from deerflow.mcp.composio_approval_guard import validate_composio_payload
+
+            if tool_name != self.intent["tool_name"] or arguments != self.intent["arguments"]:
+                raise ComposioSessionError("connect_retry_denied")
+            validate_composio_payload(SERVER_NAME, {"server_name": SERVER_NAME, "tool_name": tool_name, "arguments": arguments, "tool_call_id": getattr(runtime, "tool_call_id", None)})
+            await self.verify(self.intent["thread_id"], runtime=runtime)
+            scope = current_composio_context(runtime)
+            if not await _repository().reserve_key(self.actor_user_id, "__ce_" + self.handle, {"state": "claimed", "nonce": self.nonce, "run_id": scope.run_id}):
+                raise ComposioSessionError("connect_retry_consumed")
+            token = _retry_execution.set(True)
+            try:
+                return await tools[0].coroutine(tool_name=tool_name, arguments=arguments, runtime=runtime)
+            finally:
+                _retry_execution.reset(token)
+
+        tool = StructuredTool.from_function(name=ENVELOPE_TOOL_NAME, description="Retry one verified connection-blocked call", coroutine=exact_call, response_format="content_and_artifact")
+        schema = get_thread_state_schema((config.get("configurable") or {}).get(INTERNAL_CHECKPOINT_MODE_KEY, "full"))
+        builder = StateGraph(schema)
+        builder.add_node("tools", ToolNode([tool], handle_tool_errors=False))
+        builder.add_edge(START, "tools")
+        builder.add_edge("tools", END)
+        return builder.compile()
 
 
 async def _reject_redirect(response: httpx.Response) -> None:
@@ -491,7 +870,7 @@ def _structural_schema(schema: object, *, secret: str | None = None) -> dict:
 
 
 def _safe_result(result, config):
-    # C will replace connection URLs with actor-bound opaque handles.
+    # Guided-connect cards come from host preflight; provider links stay private.
     serialized = json.dumps(result, default=lambda value: value.model_dump() if hasattr(value, "model_dump") else str(value))
     key = os.getenv(config.composio_me.project_key_env)
     if len(serialized) > 131072:
@@ -620,7 +999,15 @@ def composio_tools(run_context: object, config: ExtensionsConfig) -> list[Struct
             raise ComposioSessionError("composio_tool_denied")
         current_composio_context(runtime)
         try:
+            if arguments is not None:
+                from deerflow.mcp.composio_approval_guard import validate_composio_payload
+
+                validate_composio_payload(SERVER_NAME, {"server_name": SERVER_NAME, "tool_name": tool_name, "arguments": arguments, "tool_call_id": getattr(runtime, "tool_call_id", None)})
             current_config = await asyncio.to_thread(ExtensionsConfig.from_file)
+            if arguments is not None and current_config.composio_me.connect.enabled and not _retry_execution.get():
+                blocked = await ConnectManager(current_config, runtime=runtime).preflight(tool_name, arguments)
+                if blocked is not None:
+                    return blocked, None
             tool = await load_current_composio_tool(tool_name, runtime, current_config)
             if arguments is None:
                 schema = tool.args_schema
@@ -638,7 +1025,7 @@ def composio_tools(run_context: object, config: ExtensionsConfig) -> list[Struct
         tag_mcp_tool(
             StructuredTool.from_function(
                 name=ENVELOPE_TOOL_NAME,
-                description="Use your own Composio connection. Omit arguments to inspect the selected router tool's input schema; pass a JSON object to invoke it. Writes require approval. Connection setup is unavailable here.",
+                description="Your Composio connection. Omit arguments to inspect current input schema; pass a JSON object to invoke. Writes require approval. Connection prompts use opaque browser handles when enabled.",
                 coroutine=call,
                 response_format="content_and_artifact",
             ),

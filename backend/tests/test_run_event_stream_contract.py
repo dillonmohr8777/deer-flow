@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import asyncio
 import json
 from pathlib import Path
 from uuid import uuid4
@@ -131,6 +132,70 @@ def test_contract_and_runtime_catalog_have_the_same_fixed_events():
 
     assert RunEventRow.__table__.c.event_type.type.length == RUN_EVENT_TYPE_MAX_LENGTH
     assert RunEventRow.__table__.c.category.type.length == RUN_EVENT_CATEGORY_MAX_LENGTH
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("backend", ["memory", "jsonl", "database"])
+async def test_connection_identity_fence_distinct_handles_and_late_event_restart(backend, tmp_path):
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+    from deerflow.persistence.models.run_event import RunEventRow
+    from deerflow.runtime.events.store.db import DbRunEventStore
+    from deerflow.runtime.events.store.jsonl import JsonlRunEventStore
+
+    engine = None
+    if backend == "memory":
+        store = MemoryRunEventStore()
+
+        def restart():
+            return store
+    elif backend == "jsonl":
+
+        def restart():
+            return JsonlRunEventStore(base_dir=tmp_path / "connection-events")
+
+        store = restart()
+    else:
+        engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path}/connections.db")
+        async with engine.begin() as connection:
+            await connection.run_sync(RunEventRow.__table__.create)
+        sessions = async_sessionmaker(engine, expire_on_commit=False)
+
+        def restart():
+            return DbRunEventStore(sessions)
+
+        store = restart()
+    try:
+        end = await store.put(thread_id="thread", run_id="source", event_type="run.end", category="outputs", content={}, metadata={"status": "success"})
+
+        async def put(handle):
+            return await store.put_if_absent(
+                thread_id="thread",
+                run_id="source",
+                event_type="composio.connected",
+                category="connection",
+                content={"handle": handle, "toolkit": "gmail", "source_run_id": "source", "tool_call_id": "call"},
+                content_identity={"handle": handle},
+            )
+
+        same = await asyncio.gather(*(put("a" * 24) for _ in range(6)))
+        assert sum(created for _, created in same) == 1
+        distinct = await put("b" * 24)
+        assert distinct[1]
+        restored = restart()
+        existing, created = await restored.put_if_absent(thread_id="thread", run_id="source", event_type="composio.connected", category="connection", content={"handle": "a" * 24}, content_identity={"handle": "a" * 24})
+        assert not created and existing["content"]["handle"] == "a" * 24
+        legacy, created = await restored.put_if_absent(thread_id="thread", run_id="source", event_type="composio.connected", category="connection", content={"handle": "ignored"})
+        assert not created and legacy["content"]["handle"] == "a" * 24
+        events = await restored.list_events("thread", "source", event_types=["composio.connected"])
+        assert len(events) == 2 and all(event["seq"] > end["seq"] for event in events)
+        for event in events:
+            _assert_fixed_event_valid(event, persisted=True)
+        with pytest.raises(ValueError):
+            await restored.put_if_absent(thread_id="thread", run_id="source", event_type="composio.connected", category="connection", content={"handle": "a"}, content_identity={"handle": "different"})
+    finally:
+        if engine is not None:
+            await engine.dispose()
 
 
 @pytest.mark.parametrize(

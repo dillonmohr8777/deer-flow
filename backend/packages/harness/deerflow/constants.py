@@ -75,3 +75,5 @@ RUN_EVENT_CATEGORY_MAX_LENGTH = 16
 # event identity also lives here rather than in the runtime event catalog.
 WORKSPACE_CHANGES_EVENT_TYPE = "workspace_changes"
 WORKSPACE_CHANGES_EVENT_CATEGORY = "workspace"
+COMPOSIO_CONNECTED_EVENT_TYPE = "composio.connected"
+COMPOSIO_CONNECTED_EVENT_CATEGORY = "connection"

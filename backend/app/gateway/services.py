@@ -15,6 +15,7 @@ import re
 import threading
 from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
+from copy import copy
 from dataclasses import replace
 from types import SimpleNamespace
 from typing import Any
@@ -500,6 +501,12 @@ def strip_server_owned_state_metadata(values: Mapping[str, Any]) -> dict[str, An
     return stripped
 
 
+def _strip_upload_reservation(metadata):
+    if not isinstance(metadata, dict):
+        return metadata
+    return {key: value for key, value in metadata.items() if key != "_deerflow_upload_reservation"}
+
+
 def normalize_input(raw_input: dict[str, Any] | None, *, trusted_internal: bool = False) -> dict[str, Any]:
     """Convert LangGraph Platform input format to LangChain state dict.
 
@@ -539,10 +546,12 @@ def normalize_input(raw_input: dict[str, Any] | None, *, trusted_internal: bool 
     if raw_input is None:
         return {}
     result = raw_input
+    if isinstance(raw_input.get("metadata"), dict):
+        result = {**result, "metadata": _strip_upload_reservation(raw_input["metadata"])}
     messages = raw_input.get("messages")
     if messages is not None:
         converted = _normalize_input_messages(messages, location="input.messages", trusted_internal=trusted_internal)
-        result = {**raw_input, "messages": converted}
+        result = {**result, "messages": converted}
     if not trusted_internal:
         delegations = result.get("delegations")
         if isinstance(delegations, list):
@@ -565,6 +574,8 @@ def _canonical_run_record_input(
     if not isinstance(graph_input, dict):
         return raw_input
     canonical = dict(raw_input or {})
+    if isinstance(canonical.get("metadata"), dict):
+        canonical["metadata"] = _strip_upload_reservation(canonical["metadata"])
     messages = graph_input.get("messages")
     if isinstance(messages, list):
         canonical["messages"] = [message.model_dump(mode="json") if isinstance(message, BaseMessage) else message for message in messages]
@@ -1837,6 +1848,7 @@ async def start_run(
     *,
     idempotency_key: str | None = None,
     require_existing_thread: bool = False,
+    composio_retry=None,
 ) -> RunRecord:
     """Create a RunRecord and launch the background agent task.
 
@@ -1860,6 +1872,12 @@ async def start_run(
     # multitask_strategy="reject" and are unaffected. Requests without a
     # stamped auth context (internal/test compositions) skip the gate.
     require_cancel_permission_if(request, body.multitask_strategy != "reject")
+
+    # Upload ownership is store-controlled, never caller-supplied run/state data.
+    body = copy(body)
+    body.metadata = _strip_upload_reservation(body.metadata)
+    if isinstance(body.config, dict) and "metadata" in body.config:
+        body.config = {**body.config, "metadata": _strip_upload_reservation(body.config["metadata"])}
 
     try:
         validate_thread_id(thread_id)
@@ -1927,7 +1945,15 @@ async def start_run(
         # Validate even when resume takes precedence, so ignored input cannot
         # appear to have been admitted or persist as unchecked run audit data.
         normalized_input = normalize_input(body.input, trusted_internal=is_internal_caller)
-        agent_factory = resolve_agent_factory(body.assistant_id)
+        if composio_retry is not None:
+            from deerflow.mcp.composio_sessions import ComposioRetry
+
+            if not isinstance(composio_retry, ComposioRetry) or body.input != composio_retry.input():
+                raise HTTPException(403, "Invalid Composio retry authority")
+            await composio_retry.verify(thread_id)
+            agent_factory = composio_retry.factory
+        else:
+            agent_factory = resolve_agent_factory(body.assistant_id)
         command = getattr(body, "command", None)
         if command and command.get("resume") is not None:
             graph_input = Command(resume=command["resume"])
@@ -2236,6 +2262,7 @@ async def start_run(
                 interrupt_before=body.interrupt_before,
                 interrupt_after=body.interrupt_after,
                 knowledge_scope=admitted_knowledge_scope,
+                **({"_allow_goal_continuation": False} if composio_retry is not None else {}),
             )
 
         try:
@@ -2265,6 +2292,8 @@ async def start_run(
                     except (ThreadOwnershipConflictError, IntegrityError):
                         if not await run_ctx.thread_store.check_access(thread_id, content_user_id, require_existing=True):
                             raise HTTPException(status_code=404, detail=f"Thread {thread_id} not found") from None
+                if composio_retry is not None:
+                    await composio_retry.verify(thread_id)
                 record = await run_mgr.create_or_reject(
                     thread_id,
                     body.assistant_id,
