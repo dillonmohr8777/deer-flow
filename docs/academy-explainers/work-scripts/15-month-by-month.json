@@ -1,0 +1,62 @@
+{
+  "title": "Make AI your operating driver month by month",
+  "slug": "work-15-month-by-month",
+  "description": "Growth lesson for everyone, Months 1 to 3 and monthly review. One reliable role workflow with a baseline, then team context and handoffs with permissions, then a measured queue with a proposed exception inbox. Each month compares real time, real cost and accepted work and retires what fails. Humans keep consequential decisions.",
+  "chapters": [
+    {
+      "title": "AI as your operating driver",
+      "narration": "AI becomes a real operating driver when it runs parts of your normal week reliably, and you can prove it. This plan takes three months and then repeats as a monthly review. Each month you measure real time, real cost, and accepted work, and you retire anything that fails. AI helps drive the daily work. People keep the consequential decisions, every time.",
+      "visual": "Monthly loop diagram with measure, compare, keep or retire, and a human decision point marked at each cycle."
+    },
+    {
+      "title": "Month one: one reliable workflow",
+      "narration": "Month one: pick one weekly job in your Momentum role. Use a client report, shoot handoff, SEO check, content brief, or CRM cleanup proposal. Measure how long the job takes before AI help, then request a draft in Momo and measure again. Keep the same scope for both attempts. A baseline only helps when you recorded it before the change and can compare like with like.",
+      "visual": "Baseline log with the workflow name, minutes before AI help, and minutes for the draft run, each recorded in its own column."
+    },
+    {
+      "title": "Month one exercise and acceptance",
+      "narration": "Your month one exercise: complete the same task by hand and with an AI draft, then compare the results. Ask a teammate experienced in that Momentum role to check both against the source. They mark each accepted or returned and explain corrections. Count only accepted work when comparing minutes. A fast draft that needs a full rewrite has not saved the team time.",
+      "visual": "Acceptance record with the reviewer's accepted or returned mark beside each draft and the log note."
+    },
+    {
+      "title": "Month two: context and handoffs",
+      "narration": "Month two connects context and team handoffs. The workflow now needs a shared brief, the six handoff fields, and a saved chat each person can reopen. Permissions come first. Access comes from the correct workspace and the server access list, not from naming a client in a message. Each person should use only the sources their role is cleared for, and the team checks that clearance by hand. The model reaches only what a verified connected tool and client scope allow. If a team member lacks access, the handoff stops and the gap goes in the log.",
+      "visual": "Team handoff map with the shared brief at the center, role-specific source access listed, and a stopped handoff marked where access is missing."
+    },
+    {
+      "title": "Month two exercise and handoff time",
+      "narration": "Your month two exercise: hand one workflow from a team member to another through a saved chat, with all six fields filled in. The receiving person resumes it on another surface and records the time it took to pick up. A middle manager or team lead judges it. They check that the receiver needed no extra questions and that the approval step was clear. Record the handoff time and the number of questions asked.",
+      "visual": "Handoff log with sender, receiver, pickup time, number of questions asked, and the approval step confirmation."
+    },
+    {
+      "title": "Month three: a measured queue",
+      "narration": "Month three uses the team's existing work queue to track reviewed workflows. Each record names the job, owner, approver, last accepted draft, and measured time. Link the run and source files. Put a missing source or failed check on that record, with a next action. Keep a short review sheet alongside it if needed. That sheet supports the existing queue; it does not create a competing place to assign work.",
+      "visual": "Queue table with one row per reviewed workflow, plus a separate manual exception list and a dashed proposed inbox placeholder."
+    },
+    {
+      "title": "Month three exercise and retirement",
+      "narration": "Your month three exercise: put three reviewed workflows in the queue and run each for one full week. The acceptance check belongs to an outside reviewer, such as a finance lead or a developer who reads the sources. They mark each draft accepted or returned. Compare accepted drafts against the minutes you recorded. A workflow that saves no time or gets returned often goes on the retire list.",
+      "visual": "Three-row queue comparison with accepted counts, returned counts, minutes, and a retire list column."
+    },
+    {
+      "title": "The monthly review",
+      "narration": "Every month after that, run the same review. Compare real time, real cost, and accepted work for each workflow against last month. Cost comes from the invoices or usage records you can actually see, not from estimates. If a workflow's accepted work dropped or its cost rose without a matching time saving, retire it or rework it. Keep the review short, and write one decision per workflow.",
+      "visual": "Monthly review sheet comparing this month and last month for each workflow, with one decision cell per row."
+    },
+    {
+      "title": "Each role's part in the plan",
+      "narration": "Leadership sets the target and signs the monthly review. Account, project, sales, operations and customer success leads manage handoffs. Editing, design, web, SEO, paid media, content and CRM specialists own accepted work in their area. Admin and VA teammates keep records and next actions clear. Analysts check time and cost. Developers maintain connections and run history. Nobody hands a consequential decision to the model. The review names a person accountable for each workflow.",
+      "visual": "Role responsibility grid with owner, manager, specialist, analyst, and developer rows and a human decision marker in each."
+    },
+    {
+      "title": "The proof you keep",
+      "narration": "Here's the proof you keep. A monthly sheet with one row per workflow: owner, approver, minutes before and after, accepted drafts, returned drafts, cost from real records, and decision. Nothing on that sheet is an estimate you made up to look good. If a number is missing, the row says missing. A plan that reports honest gaps is more useful than one that looks finished.",
+      "visual": "Monthly sheet template with each column labeled and one cell showing the word missing in place of an unavailable number."
+    },
+    {
+      "title": "Try this in Momo",
+      "narration": "Try this in Momo. Input: one workflow from your role, its month one baseline minutes, and its last accepted draft with the source list. Ask MomoBot to draft this month's comparison row, then check each number against your records. External acceptance check: a reviewer outside your team confirms the numbers match the records and signs off on keep or retire.",
+      "visual": "Input bundle with the baseline minutes, accepted draft, and source list beside a drafted comparison row and reviewer sign-off box."
+    }
+  ]
+}

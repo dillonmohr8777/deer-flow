@@ -1,0 +1,62 @@
+{
+  "title": "SEO, local search, GBP, AEO and GEO",
+  "slug": "work-09-seo-local-ai",
+  "description": "Source-backed audit for Sample Dental Group using Search Console dates, crawl evidence, GBP consistency, logged AI answers, evidence rows and ranked fixes, with read-only sources only.",
+  "chapters": [
+    {
+      "title": "Who this is for",
+      "narration": "This lesson is for SEO directors, SEO managers, technical SEO specialists, local SEO and GBP specialists, web developers who also do SEO, and account managers who carry SEO work. Our synthetic client is Sample Dental Group. You will build a source-backed audit with ranked fixes. Every finding must point to a source row, and the audit never promises a ranking or a citation.",
+      "visual": "Audit header in the run files naming Sample Dental Group as the synthetic client and listing each role section with its owner."
+    },
+    {
+      "title": "Source inventory",
+      "narration": "Start with the source inventory. List each provider the audit may read, such as Search Console, the business profile, the crawl export and the answer log. Read-only connections must be verified and scoped to Sample Dental Group before any read happens. If a source is not connected, its row says missing, not zero. A missing number is an honest gap, and a zero would be a false finding.",
+      "visual": "Source inventory table with one row per provider showing connected, scoped or missing status, and no zero values in any missing row."
+    },
+    {
+      "title": "Search Console dates",
+      "narration": "Next, set the Search Console window. Pick two comparable periods, such as the most recent complete weeks and the same weeks a year earlier, and check that the property actually covers both. Search Console data arrives with a delay, so the window must end on a date the export really contains. Technical SEO, you record the exact dates in the audit header so anyone can rerun the pull.",
+      "visual": "Search Console export with two date windows labeled in the audit header, and the timezone line visible above the table."
+    },
+    {
+      "title": "Crawl evidence",
+      "narration": "Next, read the crawl export. Technical SEO specialists, sort for status codes, noindex tags, canonical targets and pages missing from the sitemap. Record the count and the example URLs for each issue, and mark anything the export cannot see as missing. Web developers with SEO, you check whether the same pages render their titles and headings in the live HTML, not only in a preview.",
+      "visual": "Crawl export filtered to status codes and noindex, with issue counts and example URLs recorded in a table below the filter."
+    },
+    {
+      "title": "GBP consistency",
+      "narration": "Now compare the business profile against the website footer and the directory listings in the source list. Local SEO and GBP specialists, check the business name, street address, phone number, hours and primary category, one field at a time. Any mismatch goes into the table with both values side by side. Do not fix a listing from this lesson. Listing edits are owner actions, and they wait for approval.",
+      "visual": "Side-by-side table of name, address, phone, hours and category across profile, site footer and directory rows, with mismatches highlighted."
+    },
+    {
+      "title": "Measured AI answers",
+      "narration": "Next, measure AI answers as a log, not a guess. Write a fixed set of local questions, such as which dental practice near a town offers a given service. Record each answer with the date, the location setting and whether Sample Dental Group is named. If no answer checking tool is verified for this client, the log says missing. One answer is a snapshot, so repeat the set later before you claim any pattern.",
+      "visual": "Answer log table with columns for question, date, location setting, answer text and whether the practice is named, with repeat runs in separate rows."
+    },
+    {
+      "title": "Evidence rows",
+      "narration": "Every finding now needs an evidence row. Each row names the source, the date window, the exact field or URL, and the observed value. SEO managers, you own this table and reject any claim that lacks a row. Account managers with SEO, you can read the table, but you do not add rows from memory. A finding without a source is written as an open question.",
+      "visual": "Evidence table where each finding links to a source row, with unsupported items moved to a separate open question section."
+    },
+    {
+      "title": "Ranked fixes",
+      "narration": "Now rank the fixes. Score each by evidence strength, likely effect and effort, and keep the reasoning in a short note beside the score. Do not use the score as a forecast. The SEO director reviews the top five, and web developers with SEO take on-page items such as titles and headings, while local SEO specialists take listing items. Each fix ends with an owner, a due date and a link back to its evidence row.",
+      "visual": "Ranked fix list showing evidence strength, effort, owner, due date and a link to each evidence row."
+    },
+    {
+      "title": "Judge acceptance",
+      "narration": "SEO directors and managers, judge the audit before it leaves the team. Ask whether each claim has a row, whether any zero is real, and whether a missing source is labeled missing. Check that no sentence promises a ranking, a citation or traffic. If a claim fails one of those tests, the audit goes back with the failing row marked. Passing this check means the evidence is sound, not that results are guaranteed.",
+      "visual": "Review checklist on the audit with the three tests listed, and one returned row marked for correction with a note attached."
+    },
+    {
+      "title": "Client summary and approval",
+      "narration": "The account manager with SEO drafts the client summary from the ranked list, with the date windows stated. Sending it to the client is an external send, so it waits for human approval in the approvals queue. This lesson does not send anything, and reading the example never authorizes a send. The summary names what is missing as clearly as what was found.",
+      "visual": "Client summary draft in the run files, with the approval request shown as pending in the approvals queue and no send recorded."
+    },
+    {
+      "title": "Try this in Momo",
+      "narration": "Try this in Momo. Your input is the Sample Dental Group audit inputs for one window: the Search Console export with its dates, the crawl export, the business profile export and the answer log, with any missing source marked. Your external acceptance check is a person with owner access opening the live Search Console and business profile for the same dates and confirming the audit values match.",
+      "visual": "Audit table placed beside the owner's own Search Console performance view and business profile for the same dates, with the matching fields marked."
+    }
+  ]
+}

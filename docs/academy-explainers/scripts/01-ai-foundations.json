@@ -1,0 +1,57 @@
+{
+  "title": "AI Foundations: Give the Model Something Useful to Work With",
+  "slug": "ai-foundations",
+  "description": "Understand models, prompts, context, tools, memory, and verification through a practical grocery planning walkthrough.",
+  "chapters": [
+    {
+      "title": "Start with a real task",
+      "narration": "When I use AI, I start with a job I can actually judge. Today, let's plan groceries for three dinners. I want meals I can cook after work, a shopping list, and a way to check the result. That gives us something concrete to build together. You do not need technical language for this. You need a clear task, a few useful facts, and enough attention to notice when the answer needs work.",
+      "visual": "Large grocery notepad. Three dinner slots, a shopping basket, and a checkmark column. Highlight: TASK → FACTS → CHECK."
+    },
+    {
+      "title": "What the model does",
+      "narration": "The model is the part that generates the response. It has learned patterns from training and uses the information available in this conversation to produce an answer. I think of it as a very capable drafting partner. It can explain, organize, compare, and suggest. It can also confidently connect things that do not belong together. A smooth sentence is evidence that it can write smoothly. Whether that sentence is true is a separate question.",
+      "visual": "Diagram: training patterns + current conversation → MODEL → draft answer. Put separate badges under output: fluent and verified. Verified stays unchecked."
+    },
+    {
+      "title": "Build a useful prompt",
+      "narration": "A prompt is simply what I ask it to do. Watch how I make this one useful. Plan three dinners for two people. Keep the total grocery budget under sixty dollars. Each dinner should take about thirty minutes. We avoid peanuts. Return the meals, a combined shopping list, and any assumptions. Now the model has an outcome, constraints, and a format. I have also given myself several specific things to check when the answer arrives.",
+      "visual": "Prompt assembles line by line. Colored labels: outcome, constraints, format, assumptions. Final card shows the complete three-dinner request."
+    },
+    {
+      "title": "Context changes the answer",
+      "narration": "Context is the information the model has available while answering. For groceries, that includes my request, earlier messages, and any pantry list I provide. Suppose I already have rice, onions, and canned tomatoes. Adding that list can change both the recipes and the shopping total. If I leave it out, the model cannot reliably account for it. I put important facts near the task and keep them clear enough that another person could follow them.",
+      "visual": "Pantry shelf with rice, onions, tomatoes feeds into the prompt. Shopping list removes duplicate pantry purchases. Label: available context influences the answer."
+    },
+    {
+      "title": "Separate facts from assumptions",
+      "narration": "Here is where I slow down. The model suggests a forty eight dollar shopping list. Where did those prices come from? If it has no current store information, that number may be an estimate. I ask it to label estimated prices and list the quantities behind them. Two people need different amounts than six. One can of tomatoes differs from one case. Making assumptions visible gives me a useful place to correct the plan.",
+      "visual": "Shopping receipt: item, quantity, estimated price. Highlight an unlabeled total, then add ESTIMATE. Zoom into can versus case and two servings versus six."
+    },
+    {
+      "title": "Tools connect to outside information",
+      "narration": "A tool lets an AI system do something beyond generating text, when that tool is actually connected and permitted. It might read a file, search a source, or calculate a total. Access depends on the system I am using. I never assume a tool exists just because the model describes one. For our grocery task, a calculator can add prices I supply. Current store prices would need a suitable current source and a check.",
+      "visual": "Model connects to three sockets: file, calculator, current source. Only calculator is connected. Add supplied prices → sum. Keep unavailable sockets visibly disconnected."
+    },
+    {
+      "title": "Memory needs a clear home",
+      "narration": "Memory means information retained for later use, but systems handle it differently. A fact in this chat may be available here without being saved for another conversation. If I want my peanut restriction remembered, I check whether this system offers a memory feature and what it actually saved. For something important, I keep my own short preference note too. Remembering a preference and having permission to act on it are also two separate things.",
+      "visual": "Two containers: this conversation and saved preferences. An arrow only appears after an explicit save. Preference card: avoid peanuts. Separate permission switch stays off."
+    },
+    {
+      "title": "Improve the draft with feedback",
+      "narration": "Now I review the meal plan. Dinner two needs forty five minutes, and the list includes a peanut sauce. I do not start over with a vague complaint. I point to the two failures. Replace dinner two with a thirty minute option, remove peanuts throughout, and regenerate the combined list. Then I check those changes. Clear feedback narrows the repair. I also scan the remaining meals, because fixing one line does not guarantee the whole answer is correct.",
+      "visual": "Meal plan with two marked errors. Feedback bubble names both. Revised dinner and sauce replace them. Final scan travels across all three meal cards."
+    },
+    {
+      "title": "Verify the parts that matter",
+      "narration": "Verification is checking a claim against something outside the model's confidence. I add the listed prices myself, compare quantities with the recipes, and read ingredient labels for the peanut restriction. If an allergy is involved, a generated plan does not replace those package checks. I also check the cooking steps against the promised time. The amount of checking should match the consequence of an error. A dinner suggestion and an important health decision deserve different levels of care.",
+      "visual": "Four checks beside the grocery plan: arithmetic, quantities, package labels, cooking time. Show a real label icon and calculator, separate from the model answer."
+    },
+    {
+      "title": "Use the complete loop",
+      "narration": "Here is the workflow I want you to take away. Give the model a specific job. Supply the context it needs. Ask for assumptions when facts are missing. Use connected tools deliberately. Check important claims, then give focused feedback. Finally, save the useful result somewhere you can find it. For our example, that is a meal plan and a checked shopping list. AI becomes much more useful when I stay involved in defining what a good answer means.",
+      "visual": "Full loop: define → provide context → draft → inspect → revise → save. Finish on the checked three-dinner plan and consolidated shopping list."
+    }
+  ]
+}
