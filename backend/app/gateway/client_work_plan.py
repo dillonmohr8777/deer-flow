@@ -2,20 +2,31 @@
 
 from __future__ import annotations
 
+import base64
+import hashlib
 import json
+import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Annotated, Literal
 
 from fastapi import HTTPException
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
-from sqlalchemy import select, update
+from sqlalchemy import and_, or_, select, update
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import aliased
 
+from app.gateway.client_boundary import CLIENT_ROLE
 from deerflow.persistence.board.model import BoardPortalRow, BoardThreadRow
+from deerflow.persistence.clients.model import ClientAssignmentRow, ClientRow
+from deerflow.persistence.organizations.model import OrganizationMemberRow, OrganizationRow
+from deerflow.persistence.user.model import UserRow
 
 RecordId = Annotated[str, Field(min_length=1, max_length=64)]
 MAX_PLAN_BYTES = 8000
+DEFAULT_PARTICIPANT_LIMIT = 50
+MAX_PARTICIPANT_LIMIT = 100
+MAX_PARTICIPANT_CURSOR = 512
 
 
 @dataclass(frozen=True)
@@ -128,14 +139,122 @@ async def _scoped(session, *, actor_id, organization_id, thread_id, scope: Bound
             from app.gateway.client_context import _staff_project
 
             await _staff_project(session, actor_id=actor_id, organization_id=organization_id, client_id=scope.client_id, project_id=scope.project_id, storage_user_id=scope.storage_user_id)
-        for participant in _participant_choices(portal, actor_id):
-            await _staff_client(session, actor_id=participant, organization_id=organization_id, client_id=scope.client_id)
     return pair
 
 
-def _participant_choices(portal, actor_id):
-    plan = portal.work_plan or {}
-    return sorted({actor_id, plan.get("assignee_user_id"), plan.get("verifier_user_id")} - {None})
+def _participant_scope(actor_id, organization_id, client_id, thread_id):
+    value = json.dumps([actor_id, organization_id, client_id, thread_id], separators=(",", ":"), ensure_ascii=True)
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def _encode_participant_cursor(after, *, scope):
+    value = json.dumps({"v": 1, "scope": scope, "after": after}, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
+    return base64.urlsafe_b64encode(value).rstrip(b"=").decode("ascii")
+
+
+def _decode_participant_cursor(cursor, *, scope):
+    def invalid():
+        raise HTTPException(422, "Invalid work-plan participant cursor")
+
+    if not isinstance(cursor, str) or len(cursor) > MAX_PARTICIPANT_CURSOR or re.fullmatch(r"[A-Za-z0-9_-]{1,512}", cursor) is None:
+        invalid()
+    try:
+        raw = base64.urlsafe_b64decode(cursor + "=" * (-len(cursor) % 4))
+        payload = json.loads(raw)
+    except (ValueError, UnicodeDecodeError):
+        invalid()
+    if (
+        not isinstance(payload, dict)
+        or set(payload) != {"v", "scope", "after"}
+        or type(payload["v"]) is not int
+        or payload["v"] != 1
+        or payload["scope"] != scope
+        or not isinstance(payload["after"], str)
+        or not payload["after"]
+        or len(payload["after"]) > 64
+        or _encode_participant_cursor(payload["after"], scope=scope) != cursor
+    ):
+        invalid()
+    return payload["after"]
+
+
+def _eligible_participant_query(*, organization_id, client_id):
+    workspace = aliased(OrganizationRow)
+    agency = aliased(OrganizationRow)
+    contact = (
+        select(ClientAssignmentRow.user_id)
+        .where(
+            ClientAssignmentRow.organization_id == organization_id,
+            ClientAssignmentRow.user_id == UserRow.id,
+            ClientAssignmentRow.role == "client_contact",
+        )
+        .exists()
+    )
+    account_manager = (
+        select(ClientAssignmentRow.user_id)
+        .where(
+            ClientAssignmentRow.client_id == client_id,
+            ClientAssignmentRow.user_id == UserRow.id,
+            ClientAssignmentRow.organization_id == ClientRow.organization_id,
+            ClientAssignmentRow.role == "account_manager",
+        )
+        .exists()
+    )
+    return (
+        select(UserRow.id, UserRow.email, OrganizationMemberRow.role)
+        .select_from(UserRow)
+        .join(OrganizationMemberRow, and_(OrganizationMemberRow.user_id == UserRow.id, OrganizationMemberRow.organization_id == organization_id))
+        .join(workspace, workspace.id == organization_id)
+        .join(ClientRow, ClientRow.id == client_id)
+        .join(agency, agency.id == ClientRow.organization_id)
+        .where(
+            UserRow.disabled_at.is_(None),
+            UserRow.system_role != CLIENT_ROLE,
+            OrganizationMemberRow.status == "active",
+            OrganizationMemberRow.role.in_(("owner", "admin", "member")),
+            workspace.status == "active",
+            ClientRow.status == "active",
+            agency.status == "active",
+            agency.customer_client_id.is_(None),
+            or_(
+                and_(workspace.customer_client_id.is_(None), ClientRow.organization_id == workspace.id),
+                and_(workspace.customer_client_id == ClientRow.id, ClientRow.organization_id != workspace.id),
+            ),
+            ~contact,
+            or_(OrganizationMemberRow.role.in_(("owner", "admin")), and_(OrganizationMemberRow.role == "member", account_manager)),
+        )
+    )
+
+
+def _participant_item(row):
+    return {"user_id": row.id, "email": row.email, "role": row.role if row.role in {"owner", "admin"} else "account_manager"}
+
+
+async def _participant_page(session, *, actor_id, organization_id, client_id, thread_id, portal, limit, cursor):
+    scope = _participant_scope(actor_id, organization_id, client_id, thread_id)
+    after = _decode_participant_cursor(cursor, scope=scope) if cursor is not None else None
+    query = _eligible_participant_query(organization_id=organization_id, client_id=client_id)
+    if after is not None:
+        query = query.where(UserRow.id > after)
+    rows = (await session.execute(query.order_by(UserRow.id).limit(limit + 1))).all()
+    page = rows[:limit]
+    has_more = len(rows) > limit
+    plan = portal.work_plan if isinstance(portal.work_plan, dict) else {}
+    selected_ids = sorted({value for value in (plan.get("assignee_user_id"), plan.get("verifier_user_id")) if isinstance(value, str) and 0 < len(value) <= 64})
+    selected_rows = []
+    if selected_ids:
+        selected_rows = (await session.execute(_eligible_participant_query(organization_id=organization_id, client_id=client_id).where(UserRow.id.in_(selected_ids)).order_by(UserRow.id))).all()
+    selected = [_participant_item(row) for row in selected_rows]
+    return {
+        "schema": "work_plan_participants.v1",
+        "source": {"thread_id": thread_id},
+        "plan_revision": portal.work_plan_revision,
+        "items": [_participant_item(row) for row in page],
+        "selected_items": selected,
+        "limit": limit,
+        "has_more": has_more,
+        "next_cursor": _encode_participant_cursor(page[-1].id, scope=scope) if has_more else None,
+    }
 
 
 def work_plan_projection(portal):
@@ -154,16 +273,46 @@ def work_plan_projection(portal):
     }
 
 
-async def read_work_plan(*, actor_id, organization_id, thread_id, scope: BoundWorkPlanScope | None = None):
+async def read_work_plan(*, actor_id, organization_id, thread_id, scope: BoundWorkPlanScope | None = None, participants_cursor=None, include_participants=False):
     try:
         async with _factory()() as session:
             _, portal = await _scoped(session, actor_id=actor_id, organization_id=organization_id, thread_id=thread_id, scope=scope)
             result = work_plan_projection(portal)
-            if scope is not None:
-                result["participant_user_ids"] = _participant_choices(portal, actor_id)
+            if include_participants and scope is not None:
+                result["current_actor_user_id"] = actor_id
+                result["participants"] = await _participant_page(
+                    session,
+                    actor_id=actor_id,
+                    organization_id=organization_id,
+                    client_id=scope.client_id,
+                    thread_id=thread_id,
+                    portal=portal,
+                    limit=DEFAULT_PARTICIPANT_LIMIT,
+                    cursor=participants_cursor,
+                )
             return result
     except SQLAlchemyError:
         raise HTTPException(503, "Internal work plan could not be read") from None
+
+
+async def read_work_plan_participants(*, actor_id, organization_id, thread_id, limit=DEFAULT_PARTICIPANT_LIMIT, cursor=None):
+    if not 1 <= limit <= MAX_PARTICIPANT_LIMIT:
+        raise HTTPException(422, "Work-plan participant limit must be between 1 and 100")
+    try:
+        async with _factory()() as session:
+            thread, portal = await _scoped(session, actor_id=actor_id, organization_id=organization_id, thread_id=thread_id)
+            return await _participant_page(
+                session,
+                actor_id=actor_id,
+                organization_id=organization_id,
+                client_id=thread.client_id,
+                thread_id=thread_id,
+                portal=portal,
+                limit=limit,
+                cursor=cursor,
+            )
+    except SQLAlchemyError:
+        raise HTTPException(503, "Work-plan participants could not be read") from None
 
 
 async def save_work_plan(*, actor_id, organization_id, thread_id, body: WorkPlanUpdate, scope: BoundWorkPlanScope | None = None):
@@ -184,11 +333,9 @@ async def save_work_plan(*, actor_id, organization_id, thread_id, body: WorkPlan
             locked = await session.execute(update(BoardPortalRow).where(BoardPortalRow.thread_id == thread_id, BoardPortalRow.organization_id == organization_id).values(revision=BoardPortalRow.revision))
             if locked.rowcount != 1:
                 raise HTTPException(404, "Internal work plan not found")
-            thread, current_portal = await _scoped(session, actor_id=actor_id, organization_id=organization_id, thread_id=thread_id, scope=scope)
+            thread, _ = await _scoped(session, actor_id=actor_id, organization_id=organization_id, thread_id=thread_id, scope=scope)
             for participant in {body.plan.assignee_user_id, body.plan.verifier_user_id} - {None}:
                 await _staff_client(session, actor_id=participant, organization_id=organization_id, client_id=thread.client_id)
-                if scope is not None and participant not in _participant_choices(current_portal, actor_id):
-                    raise HTTPException(404, "Internal work plan participant is unavailable")
             dependencies = body.plan.dependency_thread_ids
             if dependencies:
                 found = set(
@@ -259,11 +406,11 @@ def bind_work_plan_access(*, request, actor_id, organization_id, storage_user_id
     scope = BoundWorkPlanScope(selected_scope["client_id"], chat_id, storage_user_id, selected_scope["project_id"])
     identity = {"actor_id": actor_id, "organization_id": organization_id, "thread_id": request_id, "scope": scope}
 
-    async def read():
+    async def read(participants_cursor=None):
         try:
             if not identity_matches():
                 raise HTTPException(404, "Bound internal work plan not found")
-            return await read_work_plan(**identity)
+            return await read_work_plan(**identity, participants_cursor=participants_cursor, include_participants=True)
         except HTTPException as exc:
             return {"status": exc.status_code, "error": exc.detail}
 

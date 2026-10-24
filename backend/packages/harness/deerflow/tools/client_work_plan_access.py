@@ -19,7 +19,7 @@ class ClientWorkPlanAccess:
     chat_id: str
     run_id: str
     authorize: Callable[[], Awaitable[None]] = field(repr=False)
-    read: Callable[[], Awaitable[dict[str, Any]]] = field(repr=False)
+    read: Callable[[str | None], Awaitable[dict[str, Any]]] = field(repr=False)
     update: Callable[[int, dict], Awaitable[dict[str, Any]]] = field(repr=False)
 
 

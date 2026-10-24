@@ -255,4 +255,9 @@ Customer migration, private legacy visibility, staff context, portal `/work` and
 Portal plan tools bind only the authenticated staff Max run's existing request,
 independently of project selection. Carry `client_work_plan_access` through
 `RunContext`, never serialized config; retain live and locked scope rechecks and
-the shared HTTP actual-actor audit. They record plans only, without dispatch.
+the shared HTTP actual-actor audit. The sibling participant route lists only
+currently eligible same-client owner/admin and account-manager identities; its
+bounded request-bound cursor grants no access. Bound tool reads can continue
+the same page without accepting identity or scope inputs. Revoked saved
+participants do not block reads or repair, while saves recheck each submitted
+participant under the write lock. Plans record work only; they do not dispatch.
