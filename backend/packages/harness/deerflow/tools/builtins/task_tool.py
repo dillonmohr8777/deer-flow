@@ -913,6 +913,11 @@ async def task_tool(
     if run_extensions is not None:
         available_tools_kwargs["extensions"] = run_extensions
     tools = await run_assembly(get_available_tools, **available_tools_kwargs)
+    # Hold the child to the parent's explicit tool_names ceiling; the executor
+    # then intersects it with the subagent's own allowlist. None = no ceiling.
+    parent_tool_names = metadata.get("tool_names")
+    if parent_tool_names is not None:
+        tools = [t for t in tools if t.name in set(parent_tool_names)]
 
     # Withhold the owner-private Agent Room tools from a subagent dispatched
     # on a channel run. ``get_available_tools`` above has no channel

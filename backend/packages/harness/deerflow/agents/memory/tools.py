@@ -21,6 +21,7 @@ import logging
 
 from langchain.tools import tool
 
+from deerflow.agents.memory.admission import memory_access_allowed
 from deerflow.agents.memory.manager import get_memory_manager
 from deerflow.runtime.user_context import resolve_runtime_user_id
 from deerflow.tools.types import Runtime
@@ -69,6 +70,8 @@ def memory_search_tool(
         JSON string with "results" (list of fact objects) and "count".
         Each fact has id, content, category, confidence, createdAt, and source.
     """
+    if not memory_access_allowed(runtime):
+        return json.dumps({"error": "Workspace memory is unavailable for client accounts"})
     agent_name, user_id = _resolve_scope(runtime)
     try:
         results = get_memory_manager().search(
@@ -110,6 +113,8 @@ def memory_add_tool(
         JSON string with "fact_id" and "status": "added".
         On duplicate content, returns "error" with explanation.
     """
+    if not memory_access_allowed(runtime):
+        return json.dumps({"error": "Workspace memory is unavailable for client accounts"})
     agent_name, user_id = _resolve_scope(runtime)
     try:
         normalized_content = content.strip()
@@ -182,6 +187,8 @@ def memory_update_tool(
         JSON string with "fact_id" and "status": "updated".
         On invalid fact_id, returns "error" with explanation.
     """
+    if not memory_access_allowed(runtime):
+        return json.dumps({"error": "Workspace memory is unavailable for client accounts"})
     agent_name, user_id = _resolve_scope(runtime)
     try:
         manager = get_memory_manager()
@@ -220,6 +227,8 @@ def memory_delete_tool(runtime: Runtime, fact_id: str) -> str:
         JSON string with "fact_id" and "status": "deleted".
         On invalid fact_id, returns "error" with explanation.
     """
+    if not memory_access_allowed(runtime):
+        return json.dumps({"error": "Workspace memory is unavailable for client accounts"})
     agent_name, user_id = _resolve_scope(runtime)
     try:
         manager = get_memory_manager()

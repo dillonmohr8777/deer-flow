@@ -58,6 +58,7 @@ from langchain.agents.middleware.types import ModelCallResult, ModelRequest, Mod
 from langchain_core.messages import HumanMessage, RemoveMessage, SystemMessage
 from langgraph.runtime import Runtime
 
+from deerflow.agents.memory.admission import memory_access_allowed
 from deerflow.projects.context import build_project_context_message, is_project_context_message, pinned_project_snapshot, project_context_insertion_index, render_documents_block, render_evidence_citation_instructions, render_project_block
 from deerflow.runtime.context_keys import CURRENT_RUN_PRE_EXISTING_MESSAGE_IDS_KEY
 from deerflow.runtime.user_context import resolve_runtime_user_id
@@ -435,7 +436,7 @@ class DynamicContextMiddleware(AgentMiddleware):
         """
         from deerflow.agents.lead_agent.prompt import _get_memory_context
 
-        injection_enabled = self._memory_enabled and (self._app_config.memory.injection_enabled if self._app_config else True)
+        injection_enabled = self._memory_enabled and memory_access_allowed(runtime) and (self._app_config.memory.injection_enabled if self._app_config else True)
         memory_context = (
             _get_memory_context(
                 self._agent_name,
@@ -456,9 +457,9 @@ class DynamicContextMiddleware(AgentMiddleware):
     def _build_date_update_reminder(self) -> str:
         return _format_current_date_reminder(_format_current_date())
 
-    def _disabled_memory_removals(self, messages: list) -> list[RemoveMessage]:
+    def _disabled_memory_removals(self, messages: list, runtime: Runtime | None = None) -> list[RemoveMessage]:
         """Remove only frozen memory messages owned by this middleware."""
-        if self._memory_enabled:
+        if self._memory_enabled and memory_access_allowed(runtime):
             return []
 
         removals: list[RemoveMessage] = []
@@ -468,11 +469,11 @@ class DynamicContextMiddleware(AgentMiddleware):
                 removals.append(RemoveMessage(id=message_id))
         return removals
 
-    def _read_failures_are_fatal(self, *, allow_io: bool = True) -> bool | None:
+    def _read_failures_are_fatal(self, *, allow_io: bool = True, runtime: Runtime | None = None) -> bool | None:
         from deerflow.agents.memory import memory_read_failures_are_fatal
         from deerflow.config.memory_config import get_memory_config
 
-        if not self._memory_enabled:
+        if not self._memory_enabled or not memory_access_allowed(runtime):
             return False
         if self._app_config is None and not allow_io:
             return None  # get_memory_config() may reload config.yaml from disk.
@@ -556,7 +557,7 @@ class DynamicContextMiddleware(AgentMiddleware):
         messages = list(state.get("messages", []))
         if not messages:
             return None
-        memory_removals = self._disabled_memory_removals(messages)
+        memory_removals = self._disabled_memory_removals(messages, runtime)
 
         current_date = _format_current_date()
         last_date = _last_injected_date(messages)
@@ -616,17 +617,17 @@ class DynamicContextMiddleware(AgentMiddleware):
         # coupled to the time-boxed date/memory injection worker. Even if that
         # worker times out, stale recalled memory must be gone before the next
         # model call.
-        memory_removals = self._disabled_memory_removals(list(state.get("messages", [])))
+        memory_removals = self._disabled_memory_removals(list(state.get("messages", [])), runtime)
         # The warm path uses only this call's config and already-loaded class.
         # Cold discovery/config reload shares the injection's bounded worker,
         # never a second executor job after the timeout. Keep this value local:
         # a late worker must not overwrite another run's timeout policy.
-        read_failures_are_fatal = self._read_failures_are_fatal(allow_io=False)
+        read_failures_are_fatal = self._read_failures_are_fatal(allow_io=False, runtime=runtime)
 
         def inject_with_policy():
             nonlocal read_failures_are_fatal
             if read_failures_are_fatal is None:
-                read_failures_are_fatal = self._read_failures_are_fatal()
+                read_failures_are_fatal = self._read_failures_are_fatal(runtime=runtime)
             return self._inject(state, runtime)
 
         # _inject() performs synchronous file I/O (memory JSON loading) and
@@ -693,7 +694,7 @@ class DynamicContextMiddleware(AgentMiddleware):
         memory messages, and the run must not record a memory identity for
         one (upstream's ``_record_effective_memory`` gate, preserved here).
         """
-        if not self._memory_enabled:
+        if not self._memory_enabled or not memory_access_allowed(runtime):
             return None
         context = getattr(runtime, "context", None)
         raw_pre_existing_ids = context.get(CURRENT_RUN_PRE_EXISTING_MESSAGE_IDS_KEY) if isinstance(context, dict) else None
