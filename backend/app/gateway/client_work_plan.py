@@ -248,6 +248,7 @@ async def _participant_page(session, *, actor_id, organization_id, client_id, th
     return {
         "schema": "work_plan_participants.v1",
         "source": {"thread_id": thread_id},
+        "plan_revision": portal.work_plan_revision,
         "items": [_participant_item(row) for row in page],
         "selected_items": selected,
         "limit": limit,

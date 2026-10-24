@@ -152,7 +152,9 @@ Results are ordered by user ID and use a validated request-bound keyset cursor,
 with a default page of 50 and a hard maximum of 100. Saved owner/verifier IDs
 appear in `selected_items` only while currently eligible, including when they
 are outside the current page. Directory results suggest assignment; the locked
-save path still rechecks every submitted non-null participant.
+save path still rechecks every submitted non-null participant. The response's
+`plan_revision` comes from the same portal row as `selected_items`, so clients
+can tell whether that selection snapshot describes their current plan revision.
 
 The dedicated staff GET returns source row, revision, actual recording actor
 and timestamp. Authorized `/context` includes compact per-request plan status
@@ -175,13 +177,13 @@ receive no capability. Existing role authorization still narrows the tool list.
 
 Tools take no actor, organization, client, request, chat or run identity. The
 read returns the server-stamped current actor ID and the first bounded
-participants page; `participants_cursor` can continue that page sequence without
-adding identity or scope inputs. Every call checks the authenticated
-actor/storage identity and current staff access, exact request/chat/client/
-workspace binding and selected project, if any. A revoked saved participant
-does not block authorized reads or repair. Saves repeat scope checks under the
-existing plan write lock and independently recheck each submitted non-null
-participant.
+participants page, including its matching `plan_revision`; `participants_cursor`
+can continue that page sequence without adding identity or scope inputs. Every
+call checks the authenticated actor/storage identity and current staff access,
+exact request/chat/client/workspace binding and selected project, if any. A
+revoked saved participant does not block authorized reads or repair. Saves
+repeat scope checks under the existing plan write lock and independently
+recheck each submitted non-null participant.
 
 Updates require an explicit `expected_revision`, reuse HTTP validation and CAS,
 and return a 409 conflict without automatic overwrite. HTTP and tool saves share
