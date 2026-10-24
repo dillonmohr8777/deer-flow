@@ -9,6 +9,7 @@ to take the user id from a header so cross-user isolation can be exercised.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import Any
 
@@ -23,7 +24,7 @@ from app.gateway.routers import projects
 from deerflow.persistence.engine import close_engine, get_session_factory, init_engine
 from deerflow.persistence.projects import ProjectRepository
 from deerflow.persistence.thread_meta import THREAD_ARCHIVED_METADATA_KEY, THREAD_PROJECT_METADATA_KEY, ThreadMetaRepository
-from deerflow.runtime.user_context import reset_current_user, set_current_user
+from deerflow.runtime.user_context import WorkspaceStorageContext, reset_current_user, reset_storage_context, set_current_user, set_storage_context
 
 _STUB_PERMISSIONS: list[str] = [
     Permissions.THREADS_READ,
@@ -39,6 +40,9 @@ _STUB_PERMISSIONS: list[str] = [
 
 _USER_HEADER = "x-test-user"
 _PERMISSIONS_HEADER = "x-test-permissions"
+_ORGANIZATION_HEADER = "x-test-organization"
+_STORAGE_USER_HEADER = "x-test-storage-user"
+_ORGANIZATION_ROLE_HEADER = "x-test-organization-role"
 
 
 class _StubAuthMiddleware(BaseHTTPMiddleware):
@@ -55,15 +59,37 @@ class _StubAuthMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next: Any) -> Response:
         user_id = request.headers.get(_USER_HEADER, "user-a")
+        organization_id = request.headers.get(_ORGANIZATION_HEADER)
+        storage_user_id = request.headers.get(_STORAGE_USER_HEADER, user_id)
+        organization_role = request.headers.get(_ORGANIZATION_ROLE_HEADER)
         user = SimpleNamespace(id=user_id, system_role="user")
         request.state.user = user
         permissions_header = request.headers.get(_PERMISSIONS_HEADER)
         permissions = permissions_header.split(",") if permissions_header else list(_STUB_PERMISSIONS)
-        request.state.auth = AuthContext(user=user, permissions=permissions)
+        request.state.auth = AuthContext(
+            user=user,
+            permissions=permissions,
+            organization_id=organization_id,
+            actor_user_id=user_id,
+            storage_user_id=storage_user_id,
+            organization_role=organization_role,
+        )
         token = set_current_user(user)
+        storage_token = None
+        if organization_id:
+            storage_token = set_storage_context(
+                WorkspaceStorageContext(
+                    actor_user_id=user_id,
+                    organization_id=organization_id,
+                    storage_user_id=storage_user_id,
+                    role=organization_role,
+                )
+            )
         try:
             return await call_next(request)
         finally:
+            if storage_token is not None:
+                reset_storage_context(storage_token)
             reset_current_user(token)
 
 
@@ -85,6 +111,87 @@ def _build_projects_app(tmp_path, *, project_repo: Any = "default") -> FastAPI:
 
 def _as_user(user_id: str) -> dict[str, str]:
     return {_USER_HEADER: user_id}
+
+
+def _as_workspace(user_id: str, organization_id: str, role: str, *, storage_user_id: str | None = None) -> dict[str, str]:
+    return {
+        _USER_HEADER: user_id,
+        _ORGANIZATION_HEADER: organization_id,
+        _STORAGE_USER_HEADER: storage_user_id or user_id,
+        _ORGANIZATION_ROLE_HEADER: role,
+    }
+
+
+def _seed_client_binding_world() -> dict[str, str]:
+    """Create isolated agency, customer-bound and unbound workspace fixtures."""
+    from deerflow.persistence.clients.model import ClientAssignmentRow, ClientRow
+    from deerflow.persistence.organizations.identity import private_organization_id
+    from deerflow.persistence.organizations.model import OrganizationMemberRow, OrganizationRow
+    from deerflow.persistence.user.model import UserRow
+
+    agency_storage = "binding-agency-storage"
+    foreign_storage = "binding-foreign-storage"
+    customer_storage = "binding-customer-storage"
+    unbound_storage = "binding-unbound-storage"
+    agency_org = private_organization_id(agency_storage)
+    foreign_org = private_organization_id(foreign_storage)
+    customer_org = private_organization_id(customer_storage)
+    unbound_org = private_organization_id(unbound_storage)
+    now = datetime.now(UTC)
+
+    async def seed() -> None:
+        async with get_session_factory()() as session:
+            session.add_all(
+                [
+                    UserRow(id=user_id, email=f"{user_id}@example.test", password_hash=None, system_role="user", needs_setup=False, token_version=0, created_at=now)
+                    for user_id in (agency_storage, "binding-am", "binding-contact-owner", foreign_storage, "binding-customer-owner", "binding-unbound-owner")
+                ]
+            )
+            session.add_all(
+                [
+                    OrganizationRow(id=agency_org, slug="binding-agency", name="Binding agency", status="active"),
+                    OrganizationRow(id=foreign_org, slug="binding-foreign", name="Foreign agency", status="active"),
+                    OrganizationRow(id=customer_org, slug="binding-customer", name="Bound customer", status="active", storage_user_id=customer_storage, customer_client_id="client-a"),
+                    OrganizationRow(id=unbound_org, slug="binding-unbound", name="Unbound workspace", status="active", storage_user_id=unbound_storage),
+                ]
+            )
+            session.add_all(
+                [
+                    OrganizationMemberRow(organization_id=agency_org, user_id=agency_storage, role="owner", status="active"),
+                    OrganizationMemberRow(organization_id=agency_org, user_id="binding-am", role="member", status="active"),
+                    OrganizationMemberRow(organization_id=agency_org, user_id="binding-contact-owner", role="owner", status="active"),
+                    OrganizationMemberRow(organization_id=foreign_org, user_id=foreign_storage, role="owner", status="active"),
+                    OrganizationMemberRow(organization_id=customer_org, user_id="binding-customer-owner", role="owner", status="active"),
+                    OrganizationMemberRow(organization_id=unbound_org, user_id="binding-unbound-owner", role="owner", status="active"),
+                ]
+            )
+            session.add_all(
+                [
+                    ClientRow(id="client-a", organization_id=agency_org, display_name="Acme"),
+                    ClientRow(id="client-b", organization_id=agency_org, display_name="Acme"),
+                    ClientRow(id="inactive-client", organization_id=agency_org, display_name="Acme", status="inactive"),
+                    ClientRow(id="foreign-client", organization_id=foreign_org, display_name="Acme"),
+                ]
+            )
+            session.add_all(
+                [
+                    ClientAssignmentRow(client_id="client-a", user_id="binding-am", organization_id=agency_org, role="account_manager"),
+                    ClientAssignmentRow(client_id="client-a", user_id="binding-contact-owner", organization_id=agency_org, role="client_contact"),
+                ]
+            )
+            await session.commit()
+
+    anyio.run(seed)
+    return {
+        "agency_org": agency_org,
+        "foreign_org": foreign_org,
+        "customer_org": customer_org,
+        "customer_storage": customer_storage,
+        "unbound_org": unbound_org,
+        "unbound_storage": unbound_storage,
+        "agency_storage": agency_storage,
+        "foreign_storage": foreign_storage,
+    }
 
 
 def _seed_thread(app: FastAPI, thread_id: str, *, user_id: str, project_id: str | None = None, metadata: dict | None = None) -> dict:
@@ -135,6 +242,102 @@ def test_create_list_get_project(tmp_path):
         fetched = client.get(f"/api/projects/{project['id']}")
         assert fetched.status_code == 200
         assert fetched.json()["id"] == project["id"]
+
+
+def test_active_workspace_admin_can_bind_exact_client_and_clear_or_preserve_it(tmp_path):
+    app = _build_projects_app(tmp_path)
+    world = _seed_client_binding_world()
+    agency_admin = _as_workspace(world["agency_storage"], world["agency_org"], "owner")
+    agency_member = _as_workspace("binding-am", world["agency_org"], "member", storage_user_id=world["agency_storage"])
+
+    with TestClient(app) as client:
+        # Explicit null on create has the same unbound meaning as omission and
+        # does not change ordinary project-creation authority.
+        unbound = client.post("/api/projects", json={"name": "Unbound", "client_id": None}, headers=agency_member)
+        assert unbound.status_code == 201, unbound.text
+        assert unbound.json()["client_id"] is None
+
+        bound = client.post("/api/projects", json={"name": "Bound", "client_id": "client-a"}, headers=agency_admin)
+        assert bound.status_code == 201, bound.text
+        assert bound.json()["client_id"] == "client-a"
+
+        duplicate_name = client.post("/api/projects", json={"name": "Exact ID"}, headers=agency_admin).json()
+        linked_second = client.patch(f"/api/projects/{duplicate_name['id']}", json={"client_id": "client-b"}, headers=agency_admin)
+        assert linked_second.status_code == 200, linked_second.text
+        assert linked_second.json()["client_id"] == "client-b"
+
+        # An ordinary staff member can read a binding only through the
+        # existing project ACL; the binding adds no read permission.
+        readable = client.get(f"/api/projects/{bound.json()['id']}", headers=agency_member)
+        assert readable.status_code == 200
+        assert readable.json()["client_id"] == "client-a"
+
+        preserved = client.patch(f"/api/projects/{bound.json()['id']}", json={"name": "Renamed"}, headers=agency_admin)
+        assert preserved.status_code == 200
+        assert preserved.json()["client_id"] == "client-a"
+        cleared = client.patch(f"/api/projects/{bound.json()['id']}", json={"client_id": None}, headers=agency_admin)
+        assert cleared.status_code == 200
+        assert cleared.json()["client_id"] is None
+
+
+def test_ordinary_account_manager_and_client_contact_cannot_bind_project(tmp_path):
+    app = _build_projects_app(tmp_path)
+    world = _seed_client_binding_world()
+    agency_admin = _as_workspace(world["agency_storage"], world["agency_org"], "owner")
+    account_manager = _as_workspace("binding-am", world["agency_org"], "member", storage_user_id=world["agency_storage"])
+    client_contact_owner = _as_workspace("binding-contact-owner", world["agency_org"], "owner", storage_user_id=world["agency_storage"])
+
+    with TestClient(app) as client:
+        project = client.post("/api/projects", json={"name": "Protected"}, headers=agency_admin).json()
+
+        denied_am = client.patch(f"/api/projects/{project['id']}", json={"client_id": "client-a"}, headers=account_manager)
+        assert denied_am.status_code == 403
+
+        denied_contact = client.patch(f"/api/projects/{project['id']}", json={"client_id": "client-a"}, headers=client_contact_owner)
+        assert denied_contact.status_code == 404
+
+        unchanged = client.get(f"/api/projects/{project['id']}", headers=agency_admin)
+        assert unchanged.status_code == 200
+        assert unchanged.json()["client_id"] is None
+
+
+def test_binding_rejects_foreign_inactive_unbound_wrong_and_cross_org_projects(tmp_path):
+    app = _build_projects_app(tmp_path)
+    world = _seed_client_binding_world()
+    agency_admin = _as_workspace(world["agency_storage"], world["agency_org"], "owner")
+    foreign_admin = _as_workspace(world["foreign_storage"], world["foreign_org"], "owner")
+    customer_admin = _as_workspace("binding-customer-owner", world["customer_org"], "owner", storage_user_id=world["customer_storage"])
+    unbound_admin = _as_workspace("binding-unbound-owner", world["unbound_org"], "owner", storage_user_id=world["unbound_storage"])
+
+    with TestClient(app) as client:
+        project = client.post("/api/projects", json={"name": "Agency project"}, headers=agency_admin).json()
+        for invalid_client_id in ("foreign-client", "inactive-client", "Acme"):
+            response = client.patch(f"/api/projects/{project['id']}", json={"client_id": invalid_client_id}, headers=agency_admin)
+            assert response.status_code == 404, response.text
+
+        unbound_project = client.post("/api/projects", json={"name": "Unbound workspace project"}, headers=unbound_admin).json()
+        unbound_link = client.patch(f"/api/projects/{unbound_project['id']}", json={"client_id": "client-a"}, headers=unbound_admin)
+        assert unbound_link.status_code == 404
+
+        customer_project = client.post("/api/projects", json={"name": "Customer project"}, headers=customer_admin).json()
+        wrong_customer_link = client.patch(f"/api/projects/{customer_project['id']}", json={"client_id": "client-b"}, headers=customer_admin)
+        assert wrong_customer_link.status_code == 404
+        exact_customer_link = client.patch(f"/api/projects/{customer_project['id']}", json={"client_id": "client-a"}, headers=customer_admin)
+        assert exact_customer_link.status_code == 200, exact_customer_link.text
+        assert exact_customer_link.json()["client_id"] == "client-a"
+
+        # Same-name clients remain separate by stable ID.
+        exact_same_name_link = client.patch(f"/api/projects/{project['id']}", json={"client_id": "client-b"}, headers=agency_admin)
+        assert exact_same_name_link.status_code == 200
+        assert exact_same_name_link.json()["client_id"] == "client-b"
+
+        # A foreign organization cannot observe or mutate the agency project,
+        # even when its own client ID is supplied in the request.
+        cross_org = client.patch(f"/api/projects/{project['id']}", json={"client_id": "foreign-client"}, headers=foreign_admin)
+        assert cross_org.status_code == 404
+        still_bound = client.get(f"/api/projects/{project['id']}", headers=agency_admin)
+        assert still_bound.status_code == 200
+        assert still_bound.json()["client_id"] == "client-b"
 
 
 def test_get_patch_delete_foreign_project_returns_404(tmp_path):

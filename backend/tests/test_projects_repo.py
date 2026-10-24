@@ -18,11 +18,13 @@ async def repo(tmp_path):
 class TestProjectRepository:
     @pytest.mark.anyio
     async def test_create_and_get(self, repo):
-        row = await repo.create(name="Infra overhaul", user_id="u1")
+        row = await repo.create(name="Infra overhaul", client_id="client-a", user_id="u1")
         assert row["status"] == "active"
         assert row["instructions"] == ""
+        assert row["client_id"] == "client-a"
         fetched = await repo.get(row["id"], user_id="u1")
         assert fetched is not None and fetched["name"] == "Infra overhaul"
+        assert fetched["client_id"] == "client-a"
 
     @pytest.mark.anyio
     async def test_get_is_fail_closed_for_foreign_user(self, repo):
@@ -48,6 +50,16 @@ class TestProjectRepository:
         assert updated is not None
         assert updated["name"] == "new" and updated["instructions"] == "ctx"
         assert updated["presentation"] == {"icon": "folder"}
+
+    @pytest.mark.anyio
+    async def test_patch_omitted_client_id_preserves_binding_and_null_clears_it(self, repo):
+        row = await repo.create(name="bound", client_id="client-a", user_id="u1")
+
+        renamed = await repo.patch(row["id"], name="renamed", user_id="u1")
+        assert renamed is not None and renamed["client_id"] == "client-a"
+
+        unbound = await repo.patch(row["id"], client_id=None, user_id="u1")
+        assert unbound is not None and unbound["client_id"] is None
 
     @pytest.mark.anyio
     async def test_patch_foreign_is_none(self, repo):
