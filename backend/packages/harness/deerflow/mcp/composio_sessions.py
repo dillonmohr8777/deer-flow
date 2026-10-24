@@ -12,7 +12,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar, Token
 from dataclasses import dataclass
 from typing import Any, Literal
-from urllib.parse import urlsplit
+from urllib.parse import parse_qsl, unquote, urlsplit
 from uuid import UUID, uuid4
 
 import httpx
@@ -497,19 +497,87 @@ def _safe_result(result, config):
     if len(serialized) > 131072:
         return {"status": "connection_setup_unavailable"}, None
 
-    def unsafe(value):
-        return (key and key in value) or re.search(r"https?://[^\s\"<>]*(?:composio\.dev|[?&](?:[^=&]*token|code|state|[^=&]*key|signature)=)", value, re.IGNORECASE)
+    connection_links = []
 
-    def sanitize(value):
+    def field_scope(name, connection):
+        field = re.sub(r"[^a-z]", "", name.lower())
+        container = field in {"connection", "connections", "connectionsetup", "connect", "auth", "authentication", "oauth"}
+        link = container or field in {
+            "authurl",
+            "authuri",
+            "authenticationurl",
+            "authenticationuri",
+            "authorizationurl",
+            "authorizationuri",
+            "oauthurl",
+            "oauthuri",
+            "connecturl",
+            "connecturi",
+            "connectionurl",
+            "connectionuri",
+            "consenturl",
+            "consenturi",
+        }
+        link = link or (connection and field in {"url", "uri", "href", "link", "redirect", "redirecturl", "redirecturi", "callbackurl", "callbackuri"})
+        return connection or container, link
+
+    def collect_connection_links(value, *, connection=False, connection_url=False):
+        # Classify explicit connection links before aliases in other fields.
         if isinstance(value, dict):
-            return {name: ("[redacted]" if re.sub(r"[^a-z]", "", name.lower()) in {"headers", "authorization", "apikey", "projectkey", "accesstoken", "refreshtoken"} else sanitize(item)) for name, item in value.items() if not unsafe(name)}
+            for name, item in value.items():
+                if connection:
+                    connection_links.extend(re.findall(r"https?://[^\s\"<>]+", name, re.IGNORECASE))
+                child, link = field_scope(name, connection)
+                collect_connection_links(item, connection=child, connection_url=link)
+        elif isinstance(value, list):
+            for item in value:
+                collect_connection_links(item, connection=connection, connection_url=connection_url)
+        elif isinstance(value, str) and connection_url:
+            connection_links.extend(re.findall(r"https?://[^\s\"<>]+", value, re.IGNORECASE))
+
+    def credential_parameters(component):
+        for name, _ in parse_qsl(unquote(component)):
+            name = re.sub(r"[^a-z0-9]", "", name.lower())
+            if name.endswith(("token", "key")) or name in {"code", "state", "signature", "password", "passwd", "secret", "clientsecret", "session", "sessionid", "authorization"}:
+                return True
+        return False
+
+    def unsafe(value, *, connection_url=False):
+        if (key and key in value) or any(link in value for link in connection_links):
+            return True
+        for url in re.findall(r"https?://[^\s\"<>]+", value, re.IGNORECASE):
+            try:
+                parsed = urlsplit(url)
+                host = (parsed.hostname or "").lower().rstrip(".")
+                session_url = (host == "composio.dev" or host.endswith(".composio.dev")) and parsed.path.startswith(("/tool_router/", "/api/v3.1/tool_router/session", "/v3/mcp/"))
+                if connection_url or not host or parsed.username is not None or parsed.password is not None or session_url or credential_parameters(parsed.query) or credential_parameters(parsed.fragment):
+                    return True
+            except ValueError:
+                return True
+        return False
+
+    def sanitize(value, *, connection=False, connection_url=False):
+        if isinstance(value, dict):
+            result = {}
+            for name, item in value.items():
+                if unsafe(name, connection_url=connection):
+                    continue
+                field = re.sub(r"[^a-z]", "", name.lower())
+                if field in {"headers", "authorization", "apikey", "projectkey", "accesstoken", "refreshtoken"}:
+                    result[name] = "[redacted]"
+                    continue
+                child, link = field_scope(name, connection)
+                result[name] = sanitize(item, connection=child, connection_url=link)
+            return result
         if isinstance(value, list):
-            return [sanitize(item) for item in value]
-        if isinstance(value, str) and unsafe(value):
+            return [sanitize(item, connection=connection, connection_url=connection_url) for item in value]
+        if isinstance(value, str) and unsafe(value, connection_url=connection_url):
             return "[connection setup unavailable]"
         return value
 
-    sanitized = sanitize(json.loads(serialized))
+    decoded = json.loads(serialized)
+    collect_connection_links(decoded)
+    sanitized = sanitize(decoded)
     return tuple(sanitized) if isinstance(result, tuple) else sanitized
 
 

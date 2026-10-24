@@ -207,7 +207,7 @@ def upstream(policy, monkeypatch):
 
                         assert str(get_current_user().id) == request.runtime.context["actor_user_id"]
                         state.calls.append((owner, request))
-                        return {"owner": owner}
+                        return state.result if hasattr(state, "result") else {"owner": owner}
 
                     chain = [*self.interceptors]
                     if state.interceptor:
@@ -757,8 +757,58 @@ def test_result_redaction_preserves_safe_tool_metadata(policy):
     )
     safe = _safe_result(result, policy)
     assert safe[0]["tool"] == "GMAIL_LIST_LABELS"
-    assert "https://" not in str(safe) and "synthetic-project-key" not in str(safe)
+    assert safe[0]["logo"] == "https://logos.composio.dev/gmail"
+    assert "synthetic-project-key" not in str(safe)
     assert "trs_secret" not in str(safe)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("tool_name", ["COMPOSIO_SEARCH_TOOLS", "COMPOSIO_GET_TOOL_SCHEMAS"])
+async def test_envelope_redacts_credential_urls_but_preserves_public_links(repo, policy, upstream, tool_name):
+    from deerflow.mcp.composio_sessions import composio_tools
+
+    credential_urls = [
+        "https://oauth.example.invalid/callback#access_token=SYNTHETIC_ACCESS_TOKEN",
+        "https://oauth.example.invalid/callback#ACCESS%5FToken=SYNTHETIC_ENCODED_TOKEN",
+        "https://oauth.example.invalid/callback#/callback?refresh_token=SYNTHETIC_ROUTED_TOKEN",
+        "https://oauth.example.invalid/callback#id_token%3DSYNTHETIC_ENCODED_FRAGMENT",
+        "https://SYNTHETIC_USER:SYNTHETIC_PASSWORD@oauth.example.invalid/connect",
+        "https://SYNTHETIC_USERNAME@oauth.example.invalid/connect",
+        "https://:SYNTHETIC_PASSWORD_ONLY@oauth.example.invalid/connect",
+        "https://oauth.example.invalid/connect?access_token=SYNTHETIC_QUERY_TOKEN",
+        "https://oauth.example.invalid/connect?%61pi%5Fkey=SYNTHETIC_QUERY_KEY",
+        "https://backend.composio.dev/tool_router/v3/trs_synthetic/mcp",
+    ]
+    public_urls = [
+        "https://research.example.invalid/paper?q=connection#results",
+        "https://docs.example.invalid/oauth#access_token",
+        "https://docs.composio.dev/reference/authenticating-to-composio/project-api-key-permissions",
+        "https://public.example.invalid/connect/SYNTHETIC_PUBLIC_PATH",
+    ]
+    connect_url = "https://connect.example.invalid/connect/SYNTHETIC_BEARER_HANDLE"
+    auth_url = "https://identity.example.invalid/authorize/SYNTHETIC_AUTH_HANDLE"
+    upstream.result = {
+        connect_url: "connection alias before its semantic field",
+        "alias": "Follow " + auth_url,
+        "metadata": [{"nested": ["Follow " + url], url: "field-name"} for url in credential_urls],
+        "connection": {"redirect_url": connect_url, connect_url: "field-name", "docs_url": public_urls[1]},
+        "authorization_url": auth_url,
+        "citations": public_urls,
+        public_urls[0]: "public field-name",
+        "tool": "GMAIL_LIST_LABELS",
+    }
+    with actor(A) as runtime:
+        wrapper = composio_tools(runtime.context, policy)[0]
+        content, artifact = await wrapper.coroutine(tool_name=tool_name, arguments={}, runtime=runtime)
+    rendered = json.dumps((content, artifact))
+    for url in credential_urls + [connect_url, auth_url]:
+        assert url not in rendered
+    assert "SYNTHETIC_ACCESS_TOKEN" not in rendered and "SYNTHETIC_PASSWORD" not in rendered
+    assert content["citations"] == public_urls
+    assert content["connection"]["docs_url"] == public_urls[1]
+    assert content[public_urls[0]] == "public field-name"
+    assert content["tool"] == "GMAIL_LIST_LABELS" and artifact is None
+    assert len(upstream.calls) == 1 and upstream.calls[0][1].name == tool_name
 
 
 @pytest.mark.parametrize("schema", [{"properties": {"synthetic-project-key": {"type": "string"}}}, {"$ref": "#/$defs/synthetic-project-key"}])
