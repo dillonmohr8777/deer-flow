@@ -1,5 +1,15 @@
 ### MCP System (`packages/harness/deerflow/mcp/`)
 
+`composioMe` is disabled by default. Its ENV-NAME-only project credential defaults
+to `COMPOSIO_API_KEY`; no user-key fallback. The neutral `composio-me_call` tool
+resolves a verified current actor on every invocation, including schema reads.
+Exact user/exec/admin tool allowlists use `composio-me_call`; other MCP policy
+restrictions remain additional gates.
+Worker session-origin binding is separate from private Brain scope. Approved
+handoffs reuse only the proposer's existing session under A2 owner authority.
+Keep session references in protected actor KV and URLs/headers transient. All 3xx
+and non-POST MCP requests are refused; native project/origin/account proof remains.
+
 Composio approval handoffs keep the signed-in decider unchanged. Scope one
 server-owned authority to the immutable action and active proposer; select only
 that proposer's current operator `user_auth` grant and recheck it at the final

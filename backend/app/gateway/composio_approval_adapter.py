@@ -28,6 +28,10 @@ async def _current_tool(action: dict[str, Any]):
     await authority.verify()
     config = await asyncio.to_thread(ExtensionsConfig.from_file)
     name = action["payload"]["server_name"]
+    if name == "composio-me" and config.composio_me.enabled:
+        from deerflow.mcp.composio_sessions import load_current_composio_tool
+
+        return await load_current_composio_tool(action["payload"]["tool_name"], None, config, action=action)
     server = authority.server
     require_private_mcp_access(server)
     # Logical server selection only: no connection URL or credentials in the row.

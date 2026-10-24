@@ -226,7 +226,7 @@ def get_private_mcp_tools(extensions_config) -> list[BaseTool]:
     return _with_private_tools([], extensions_config=extensions_config)
 
 
-def get_cached_mcp_tools() -> list[BaseTool]:
+def get_cached_mcp_tools(*, run_context=None, extensions_config=None) -> list[BaseTool]:
     """Get cached MCP tools with lazy initialization.
 
     If tools are not initialized, automatically initializes them.
@@ -255,7 +255,15 @@ def get_cached_mcp_tools() -> list[BaseTool]:
         if retired_pool is not None:
             retired_pool.close_all_sync()
         if public_tools is not None:
-            return _with_private_tools(public_tools)
+            from deerflow.config.extensions_config import ExtensionsConfig
+            from deerflow.mcp.composio_sessions import STAFF_ROLES, composio_tools
+            from deerflow.runtime.user_context import get_current_user
+            from deerflow.tools.mcp_metadata import get_mcp_source
+
+            config = extensions_config or ExtensionsConfig.from_file()
+            role = getattr(get_current_user(), "system_role", None)
+            visible = [tool for tool in public_tools if not (get_mcp_source(tool) or {}).get("server_name", "").startswith("composio-") or role in STAFF_ROLES]
+            return [*_with_private_tools(visible), *composio_tools(run_context, config)]
 
         logger.info("MCP tools not initialized, performing lazy initialization...")
         try:

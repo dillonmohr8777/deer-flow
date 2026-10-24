@@ -116,6 +116,7 @@ def get_available_tools(
     *,
     mcp_plugins: list[str] | None = None,
     private_mcp_config: Any | None = None,
+    run_context: Any | None = None,
     include_upload_tool: bool = True,
     include_conversation_reader: bool = False,
     include_momentum_sdk: bool = False,
@@ -290,8 +291,8 @@ def get_available_tools(
                 from deerflow.mcp.cache import get_cached_mcp_tools
 
                 extensions_config = ExtensionsConfig.from_file()
-                if extensions_config.get_enabled_mcp_servers():
-                    mcp_tools = get_cached_mcp_tools()
+                if extensions_config.get_enabled_mcp_servers() or extensions_config.composio_me.enabled:
+                    mcp_tools = get_cached_mcp_tools(run_context=run_context, extensions_config=extensions_config) if extensions_config.composio_me.enabled else get_cached_mcp_tools()
                     if mcp_tools:
                         logger.info(f"Using {len(mcp_tools)} cached MCP tool(s)")
 
