@@ -7,6 +7,7 @@ import { useState, useSyncExternalStore } from "react";
 
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ConnectCards } from "@/components/workspace/connections/connect-cards";
 import { pageStyles } from "@/components/workspace/page-body";
 import { WorkspaceSidebarTrigger } from "@/components/workspace/workspace-sidebar-trigger";
 import { useI18n } from "@/core/i18n/hooks";
@@ -87,6 +88,10 @@ export function CapabilityCenter() {
               />
             </div>
           </header>
+          {/* Personal accounts first; renders nothing when the server has none. */}
+          <div className="mb-8 max-w-3xl empty:hidden">
+            <ConnectCards />
+          </div>
           {/* Every trigger owns a real panel: aria-controls on the selected
               tab must resolve, or axe flags aria-valid-attr-value. */}
           <Tabs value={tab} onValueChange={changeTab} className="gap-0">
