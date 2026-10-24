@@ -37,6 +37,13 @@ logger = logging.getLogger(__name__)
 ProjectStatus = Literal["active", "archived"]
 
 
+class _UnsetClientId:
+    __slots__ = ()
+
+
+_UNSET_CLIENT_ID = _UnsetClientId()
+
+
 class ProjectNotAssignableError(ValueError):
     """Raised when a thread cannot be assigned to a project.
 
@@ -64,6 +71,7 @@ class ProjectRepository:
         self,
         *,
         name: str,
+        client_id: str | None = None,
         instructions: str = "",
         presentation: dict | None = None,
         user_id: str | None | _AutoSentinel = AUTO,
@@ -74,6 +82,7 @@ class ProjectRepository:
             id=uuid.uuid4().hex,
             user_id=resolved_user_id,
             name=name,
+            client_id=client_id,
             instructions=instructions,
             presentation=presentation or {},
             status="active",
@@ -124,6 +133,7 @@ class ProjectRepository:
         project_id: str,
         *,
         name: str | None = None,
+        client_id: str | None | _UnsetClientId = _UNSET_CLIENT_ID,
         instructions: str | None = None,
         presentation: dict | None = None,
         user_id: str | None | _AutoSentinel = AUTO,
@@ -136,6 +146,8 @@ class ProjectRepository:
                 return None
             if name is not None:
                 row.name = name
+            if not isinstance(client_id, _UnsetClientId):
+                row.client_id = client_id
             if instructions is not None:
                 row.instructions = instructions
             if presentation is not None:

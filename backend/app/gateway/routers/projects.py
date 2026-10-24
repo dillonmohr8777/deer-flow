@@ -24,6 +24,7 @@ ProjectStatus = Literal["active", "archived"]
 class ProjectResponse(BaseModel):
     id: str
     name: str
+    client_id: str | None = None
     instructions: str
     presentation: dict
     status: str
@@ -33,12 +34,14 @@ class ProjectResponse(BaseModel):
 
 class ProjectCreateRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=128)
+    client_id: str | None = Field(default=None, description="Optional canonical client link; omitted or null creates an unbound project.")
     instructions: str = ""
     presentation: dict = Field(default_factory=dict)
 
 
 class ProjectPatchRequest(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=128)
+    client_id: str | None = Field(default=None, description="An explicit null clears the binding; omission preserves it.")
     instructions: str | None = None
     presentation: dict | None = None
 
@@ -81,12 +84,35 @@ def _to_response(row: dict) -> ProjectResponse:
     return ProjectResponse(
         id=row["id"],
         name=row["name"],
+        client_id=row.get("client_id"),
         instructions=row.get("instructions", ""),
         presentation=row.get("presentation") or {},
         status=row["status"],
         created_at=row.get("created_at", ""),
         updated_at=row.get("updated_at", ""),
     )
+
+
+async def _require_project_binding_authority(request: Request, client_id: str | None) -> None:
+    """Require an active workspace owner/admin and, when linking, staff access to the exact client."""
+    auth = get_auth_context(request)
+    actor_id = getattr(auth, "actor_user_id", None)
+    organization_id = getattr(auth, "organization_id", None)
+    from deerflow.runtime.user_context import resolve_organization_id
+
+    if not actor_id or not organization_id or resolve_organization_id() != organization_id:
+        raise HTTPException(status_code=403, detail="An active workspace owner or admin is required to change a project client binding.")
+
+    # Re-read active membership from the database; neither a global admin role nor
+    # an auth snapshot from another workspace grants this metadata mutation.
+    from app.gateway.routers.clients import _is_active_org_admin
+
+    if not await _is_active_org_admin(str(actor_id)):
+        raise HTTPException(status_code=403, detail="Only an active workspace owner or admin can change a project client binding.")
+    if client_id is not None:
+        from app.gateway.client_context import require_staff_client
+
+        await require_staff_client(actor_id=str(actor_id), organization_id=str(organization_id), client_id=client_id)
 
 
 def _not_found() -> HTTPException:
@@ -119,9 +145,11 @@ def _validate_instructions_length(instructions: str | None) -> None:
 @require_permission("projects", "write")
 async def create_project(body: ProjectCreateRequest, request: Request) -> ProjectResponse:
     _validate_instructions_length(body.instructions)
+    if body.client_id is not None:
+        await _require_project_binding_authority(request, body.client_id)
     repo = get_project_repo(request)
     await _check_projects_max_entitlement(request, repo)
-    return _to_response(await repo.create(name=body.name, instructions=body.instructions, presentation=body.presentation))
+    return _to_response(await repo.create(name=body.name, client_id=body.client_id, instructions=body.instructions, presentation=body.presentation))
 
 
 async def _check_projects_max_entitlement(request: Request, repo: Any) -> None:
@@ -184,7 +212,17 @@ async def get_project(project_id: str, request: Request) -> ProjectResponse:
 @require_permission("projects", "write")
 async def patch_project(project_id: str, body: ProjectPatchRequest, request: Request) -> ProjectResponse:
     _validate_instructions_length(body.instructions)
-    row = await get_project_repo(request).patch(project_id, name=body.name, instructions=body.instructions, presentation=body.presentation)
+    repo = get_project_repo(request)
+    binding_requested = "client_id" in body.model_fields_set
+    if binding_requested:
+        # Preserve project ACL behavior before evaluating the new binding field.
+        if await repo.get(project_id) is None:
+            raise _not_found()
+        await _require_project_binding_authority(request, body.client_id)
+    patch_fields: dict[str, Any] = {"name": body.name, "instructions": body.instructions, "presentation": body.presentation}
+    if binding_requested:
+        patch_fields["client_id"] = body.client_id
+    row = await repo.patch(project_id, **patch_fields)
     if row is None:
         raise _not_found()
     return _to_response(row)
