@@ -51,6 +51,20 @@ After publication the conversation is immutable in this first slice; follow-up w
 
 Customer workspace migration is explicit (`POST /api/client-portal/customer-workspaces/migrations`): global + agency admin, one exact source client-contact assignment and one shared client membership. Move the assignment and deactivate source membership atomically; never attribute shared history to a person. Private legacy thread visibility requires exact actor ownership and the server-selected private storage/org; creator scope still holds for shared storage.
 
+## Frontend inbox context
+
+Client inbox (`/workspace/inbox`) staff context consumes the PR316
+`client_operating_context.v1` projection only. Include the exact user, workspace,
+client and optional request in query identity, pass `X-Portal-Workspace` and
+AbortSignal, and reject mismatched response scope. The staff client filter uses
+the endpoint's bounded recent requests, with explicit limits and unavailable
+domains. Client contacts filter their current portal page and never request or
+render staff context. Keep history text plain and attachment descriptors inert.
+Key the whole inbox session by user/workspace so compose inputs, submission keys,
+drafts and selection reset together; fence mutation/download callbacks after
+unmount. Existing links do not create new access or start work. DOM regressions
+live in `tests/unit/components/workspace/client-inbox.dom.test.tsx`.
+
 ## Verification and rollout
 
 Staff may read `GET /api/client-portal/clients/{client_id}/context`, optionally

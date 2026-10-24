@@ -69,6 +69,16 @@ the current role, including an unresolved role, focus the allowed Appearance fal
 Agent lists show loading during initial feature discovery and hide cached agents
 when the Agents API is disabled.
 
+The Client inbox lets staff filter an exact client's recent portal requests and
+read their stored operating context, request history and source timestamps.
+Goals, CRM, campaign performance, meetings and delivery priorities show as
+unavailable when the context endpoint has no dedicated source. The view links
+to existing work conversations, run history, approvals and Board. Context reads
+do not start work or grant access to private notes, contacts or tools. Client
+contacts retain their portal view, with filtering limited to the current page.
+Changing users or workspaces clears local forms and selections and ignores late
+responses from the previous session.
+
 Agent prompts include up to 8 KiB of UTF-8 from the effective user's `USER.md`
 profile. Larger profiles are truncated at a valid UTF-8 boundary with a visible
 marker; profile content remains HTML-escaped and is omitted in public channels.
