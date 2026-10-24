@@ -79,6 +79,11 @@ contacts retain their portal view, with filtering limited to the current page.
 Changing users or workspaces clears local forms and selections and ignores late
 responses from the previous session.
 
+Before starting staff work, choose one active project explicitly linked to the
+request's client, or choose **No project**. Saved project choices are fixed once
+bound or started, and switching requests clears an unfinished choice. Read or
+work conflicts stay visible as errors. See the [portal contract](backend/docs/CLIENT_PORTAL.md).
+
 Agent prompts include up to 8 KiB of UTF-8 from the effective user's `USER.md`
 profile. Larger profiles are truncated at a valid UTF-8 boundary with a visible
 marker; profile content remains HTML-escaped and is omitted in public channels.

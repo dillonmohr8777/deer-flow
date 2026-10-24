@@ -394,7 +394,7 @@ composer and phone-only sidebar scope; do not modify generated UI primitives or
 desktop density. `tests/e2e/agent-room.spec.ts` covers readback, failed-post draft
 retention, the private gate and 390/768/1440 geometry with mocked APIs.
 
-Client inbox context rules: [CLIENT_PORTAL.md](../backend/docs/CLIENT_PORTAL.md).
+Client inbox/work rules: [CLIENT_PORTAL.md](../backend/docs/CLIENT_PORTAL.md).
 
 ## Approvals inbox (`/workspace/approvals`)
 
