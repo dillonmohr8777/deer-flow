@@ -10,6 +10,12 @@ The upstream DeerFlow history stays in [CHANGELOG.md](../CHANGELOG.md).
 
 ## [Unreleased]
 
+## [momobot-prod-20261024-1fde6c1a] - 2026-10-24
+
+### Changed
+
+- Preserve thread ownership until uploads and attachments drain (#298)
+
 ## [momobot-prod-20261023-ff8263f9] - 2026-10-23
 
 ### Changed
