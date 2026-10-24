@@ -9,6 +9,7 @@ import asyncio
 import importlib
 import sys
 import threading
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
@@ -80,6 +81,16 @@ async def test_actual_services_timeout_keeps_metadata_cleanup_owned(monkeypatch,
             end = AsyncMock(wraps=original_end)
             app.state.stream_bridge.publish_end = end
             app.state.run_manager._on_unstarted_limit = end
+            completed = []
+            real_context = services.get_run_context
+
+            async def completion(actual):
+                assert actual is record and metadata_drained.is_set()
+                assert actual.status == RunStatus.error and (await run_store.get(actual.run_id))["status"] == "error"
+                assert actual.finalizing and end.await_count == 0
+                completed.append(actual)
+
+            monkeypatch.setattr(services, "get_run_context", lambda request: replace(real_context(request), on_run_completed=completion))
             request = SimpleNamespace(headers={}, state=SimpleNamespace(), app=app)
             body = RunCreateRequest(input={"messages": [{"role": "user", "content": "synthetic service preflight check"}]})
             record = await services.start_run(body, "independent-metadata-drain", request)
@@ -124,6 +135,7 @@ async def test_actual_services_timeout_keeps_metadata_cleanup_owned(monkeypatch,
             assert (await run_store.get(record.run_id))["status"] == "error"
             assert record.stop_reason == "prestart_wait_timeout"
             end.assert_awaited_once_with(record.run_id)
+            assert completed == [record]
             replacement = await peer.create_or_reject(record.thread_id)
             await peer.cancel(replacement.run_id)
             await peer.stop_run_limit(replacement.run_id)
@@ -273,3 +285,93 @@ async def test_interrupt_during_actual_child_cleanup_still_finishes_worker(monke
             sys.modules.pop("deerflow.subagents.executor", None)
         else:
             sys.modules["deerflow.subagents.executor"] = previous
+
+
+# Promoted independent v2 public-stop regression; probe SHA256 f2b83c424419402cfe7f0ee36dcef1464278eff7dcf4750fab0ff722ea46bd39.
+@pytest.mark.asyncio
+@pytest.mark.parametrize("action", ["interrupt", "rollback"])
+async def test_user_stop_then_host_cancel_during_actual_metadata_drain_finishes(monkeypatch, action):
+    from app.gateway import services
+    from app.gateway.deps import langgraph_runtime
+    from app.gateway.run_models import RunCreateRequest
+
+    entered, cleaning, release, drained = [asyncio.Event() for _ in range(4)]
+    metadata_tasks = []
+
+    async def metadata(*args, **kwargs):
+        metadata_tasks.append(asyncio.current_task())
+        entered.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            cleaning.set()
+            await release.wait()
+            drained.set()
+
+    config = AppConfig.model_validate({"sandbox": {"use": "deerflow.sandbox.local:LocalSandboxProvider"}, "database": {"backend": "memory"}, "run": {"prestart_wait_seconds": 30, "execution_timeout_seconds": 30}})
+    factory = Mock(side_effect=AssertionError("stopped metadata must not build graph"))
+    monkeypatch.setattr(services, "_ensure_thread_metadata", metadata)
+    monkeypatch.setattr(services, "resolve_agent_factory", lambda *args, **kwargs: factory)
+    set_app_config(config)
+    try:
+        app = FastAPI()
+        async with langgraph_runtime(app, config):
+            manager = app.state.run_manager
+            original_end = app.state.stream_bridge.publish_end
+            end = AsyncMock(wraps=original_end)
+            app.state.stream_bridge.publish_end = end
+            manager._on_unstarted_limit = end
+            completed = []
+            real_context = services.get_run_context
+
+            async def completion(actual):
+                expected = RunStatus.interrupted if action == "interrupt" else RunStatus.error
+                assert actual is record and drained.is_set()
+                assert actual.status == expected and (await app.state.run_store.get(actual.run_id))["status"] == expected.value
+                assert actual.finalizing and end.await_count == 0
+                completed.append(actual)
+
+            monkeypatch.setattr(services, "get_run_context", lambda request: replace(real_context(request), on_run_completed=completion))
+            request = SimpleNamespace(headers={}, state=SimpleNamespace(), app=app)
+            record = await services.start_run(RunCreateRequest(input={"messages": [{"role": "user", "content": "synthetic user stop preflight"}]}), "independent-user-metadata-" + action, request)
+            try:
+                await asyncio.wait_for(entered.wait(), 5)
+                await manager.cancel(record.run_id, action=action)
+                await asyncio.wait_for(cleaning.wait(), 5)
+                record.task.cancel("first-host-cancel")
+                await asyncio.sleep(0)
+                record.task.cancel("second-host-cancel")
+                for _ in range(10):
+                    await asyncio.sleep(0)
+                before = {
+                    "worker_done": record.task.done(),
+                    "metadata_drained": drained.is_set(),
+                    "status": record.status.value,
+                    "stored_status": (await app.state.run_store.get(record.run_id))["status"],
+                    "first_cause": record.abort_action,
+                    "finalizing": record.finalizing,
+                    "end_count": end.await_count,
+                }
+                assert not record.task.done() and not drained.is_set() and before["stored_status"] == "pending" and record.finalizing and end.await_count == 0, before
+            finally:
+                release.set()
+                await asyncio.gather(*metadata_tasks, return_exceptions=True)
+                await asyncio.wait_for(asyncio.gather(record.task, return_exceptions=True), 5)
+            after = {
+                "worker_entered": record.worker_entered,
+                "worker_done": record.task.done(),
+                "worker_cancelled": record.task.cancelled(),
+                "metadata_drained": drained.is_set(),
+                "status": record.status.value,
+                "stored_status": (await app.state.run_store.get(record.run_id))["status"],
+                "first_cause": record.abort_action,
+                "finalizing": record.finalizing,
+                "end_count": end.await_count,
+            }
+            expected = "interrupted" if action == "interrupt" else "error"
+            assert drained.is_set() and after["stored_status"] == expected and not record.finalizing and end.await_count == 1, after
+            assert record.abort_action == action
+            assert completed == [record]
+            factory.assert_not_called()
+    finally:
+        reset_app_config()

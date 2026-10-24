@@ -368,7 +368,13 @@ class RunManager:
             if remaining is not None and remaining <= 0:
                 await self._expire_run_limit(record)
 
-    def create_worker_task(self, record: RunRecord, worker: Coroutine[Any, Any, None]) -> asyncio.Task:
+    def create_worker_task(
+        self,
+        record: RunRecord,
+        worker: Coroutine[Any, Any, None],
+        *,
+        on_unstarted_completed: Callable[[RunRecord], Awaitable[None]] | None = None,
+    ) -> asyncio.Task:
         """Attach without yielding; own cancellation before run_agent's guard starts."""
         entered = False
 
@@ -378,9 +384,17 @@ class RunManager:
             try:
                 await worker
             except asyncio.CancelledError:
-                if record.worker_entered or record.abort_action not in LIMIT_ACTIONS:
+                if (
+                    record.worker_entered
+                    or record.operation_kind != ThreadOperationKind.run
+                    or record.ownership_lost
+                    or self._runs.get(record.run_id) is not record
+                    or record.stop_reason == "cleanup_unconfirmed"
+                    or not record.abort_event.is_set()
+                    or record.abort_action not in ("interrupt", "rollback", *LIMIT_ACTIONS)
+                ):
                     raise
-                await await_drained(self._finish_unstarted_limit(record, preflight_drained=True))
+                await self._finish_unstarted_run(record, preflight_drained=True, on_completed=on_unstarted_completed)
 
         guard = guarded()
         try:
@@ -436,22 +450,68 @@ class RunManager:
             record.stop_reason = "cleanup_unconfirmed"
             record.error = "Owned execution cleanup is unconfirmed; operator repair is required"
 
-    async def _finish_unstarted_limit(self, record: RunRecord, *, preflight_drained: bool = False) -> None:
-        # No execution task may remain before this path releases durable admission.
-        if record.worker_entered or (not preflight_drained and record.task is not None and not record.task.done()) or record.abort_action not in LIMIT_ACTIONS:
-            return
-        if record.limit_finalization_started:
+    async def _finish_unstarted_run(
+        self,
+        record: RunRecord,
+        *,
+        preflight_drained: bool = False,
+        on_completed: Callable[[RunRecord], Awaitable[None]] | None = None,
+    ) -> None:
+        # Only the actual local RUN owner can attest preflight cleanup. Unknown
+        # cleanup/non-RUN holds and historical/store-only rows stay untouched.
+        if (
+            self._runs.get(record.run_id) is not record
+            or record.worker_entered
+            or record.ownership_lost
+            or record.operation_kind != ThreadOperationKind.run
+            or not record.abort_event.is_set()
+            or record.abort_action not in ("interrupt", "rollback", *LIMIT_ACTIONS)
+            or record.stop_reason == "cleanup_unconfirmed"
+            or (not preflight_drained and record.task is not None and not record.task.done())
+            or record.limit_finalization_started
+        ):
             return
         record.limit_finalization_started = True
-        status = RunStatus.error if record.abort_action == "prestart_timeout" else RunStatus.timeout
-        await self.set_status(record.run_id, status, error=record.error, stop_reason=record.stop_reason, persist=False)
-        await self.record_limit_error(record)
-        await self._ensure_delivery_receipt(record)
-        if not await self.persist_current_status(record.run_id):
-            raise RuntimeError(f"Run {record.run_id} pre-start terminal persistence is unconfirmed")
-        await self.set_finalizing(record.run_id, False)
-        if self._on_unstarted_limit is not None:
-            await self.publish_end_once(record.run_id, self._on_unstarted_limit)
+        callback_active = asyncio.Event()
+        # Reuse the worker's proven join/callback-tail cancellation contract.
+        # This local import runs after construction, never during module setup.
+        from .worker import _await_task_stop_after_host_cancellation, _defer_finalization_interrupt
+
+        async def finish() -> None:
+            if record.status in (RunStatus.pending, RunStatus.running):
+                status = {
+                    "interrupt": RunStatus.interrupted,
+                    "rollback": RunStatus.error,
+                    "prestart_timeout": RunStatus.error,
+                    "execution_timeout": RunStatus.timeout,
+                }[record.abort_action]
+                error = "Rolled back by user" if record.abort_action == "rollback" else record.error
+                await self.set_status(record.run_id, status, error=error, stop_reason=record.stop_reason, persist=False)
+            await self.record_limit_error(record)  # Normal stops are not limit errors.
+            await self._ensure_delivery_receipt(record)
+            if not await self.persist_current_status(record.run_id):
+                raise RuntimeError(f"Run {record.run_id} pre-start terminal persistence is unconfirmed")
+            deferred: BaseException | None = None
+            if on_completed is not None:
+                callback_active.set()
+                try:
+                    await on_completed(record)
+                except Exception:
+                    logger.warning("Unstarted run completion hook failed for %s (non-fatal)", record.run_id, exc_info=True)
+                except BaseException as exc:
+                    deferred = _defer_finalization_interrupt(deferred, exc)
+                finally:
+                    callback_active.clear()
+            await self.set_finalizing(record.run_id, False)
+            if self._on_unstarted_limit is not None:
+                await self.publish_end_once(record.run_id, self._on_unstarted_limit)
+            if deferred is not None:
+                raise deferred
+
+        finalizer = asyncio.create_task(finish(), name=f"run-unstarted-finalize-{record.run_id}")
+        interrupt = await _await_task_stop_after_host_cancellation(finalizer, None, interruptible_callback=callback_active)
+        if interrupt is not None:
+            raise interrupt
 
     async def _expire_run_limit(self, record: RunRecord) -> None:
         async with record.start_lock:
@@ -489,12 +549,12 @@ class RunManager:
 
                         def close_unstarted(done: asyncio.Task) -> None:
                             if not record.worker_entered:
-                                cleanup = asyncio.create_task(self._finish_unstarted_limit(record), name=f"run-limit-unstarted-{record.run_id}")
+                                cleanup = asyncio.create_task(self._finish_unstarted_run(record), name=f"run-limit-unstarted-{record.run_id}")
                                 cleanup.add_done_callback(lambda completed: completed.exception() if not completed.cancelled() else None)
 
                         task.add_done_callback(close_unstarted)
             if task is None or task.done():
-                await self._finish_unstarted_limit(record)
+                await self._finish_unstarted_run(record)
 
     def _index_run_locked(self, record: RunRecord) -> None:
         """Register *record* in the thread index. Caller must hold ``self._lock``."""

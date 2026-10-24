@@ -60,6 +60,13 @@ through child, sandbox and task-stop cleanup, final status, callback and END.
 Host cancellation cannot abandon that owned cleanup. The existing completion
 callback tail remains cancellable after final status commits; its interruption
 still reaches the final END and local cleanup.
+If host cancellation interrupts metadata preflight after a public interrupt or
+rollback, the same owned preflight guard finishes that first cause after the
+metadata child drains. It persists `interrupted` or rollback `error`, calls the
+existing completion hook once with the same real final record, then publishes
+one END. This path never constructs the graph or restores a checkpoint for work
+that never started. Unknown cleanup holds, non-run operations and historical
+store-only rows are not finalized by this owner-only path.
 Ordinary children mark actual cleanup entry separately from public result state;
 their sandbox/task-stop cleanup is also shielded and joined across the entry
 race. No cancelled Future or outer awaiter substitutes for actual completion.
