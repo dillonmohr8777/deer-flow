@@ -3228,6 +3228,10 @@ def test_start_run_pins_the_resolved_project_context(_stub_app_config):
             async def get(self, thread_id, **kwargs):
                 return {"thread_id": thread_id, "user_id": "u1", "metadata": {"deerflow_project_id": "p-1"}}
 
+            async def create(self, thread_id, *, preserve_existing=False):
+                # Atomic preserve-existing create returns this member row unchanged.
+                return await self.get(thread_id)
+
             async def check_access(self, thread_id, user_id, **kwargs):
                 return True
 
@@ -3288,8 +3292,21 @@ def test_start_run_project_resolution_failure_degrades_to_unassigned(_stub_app_c
         request, _run_store, _thread_store = _make_start_run_persistence_context()
 
         class _BoomThreadStore:
+            def __init__(self):
+                self.record = None
+                self.read_failed = False
+
             async def get(self, thread_id, **kwargs):
-                raise RuntimeError("database is down")
+                if not self.read_failed:
+                    self.read_failed = True
+                    raise RuntimeError("database is down")
+                return self.record
+
+            async def create(self, thread_id, *, preserve_existing=False):
+                # Project resolution injects one read failure; atomic create succeeds.
+                if self.record is None:
+                    self.record = {"thread_id": thread_id, "user_id": "u1", "metadata": {}}
+                return {**self.record, "metadata": dict(self.record["metadata"])}
 
             async def check_access(self, thread_id, user_id, **kwargs):
                 return True

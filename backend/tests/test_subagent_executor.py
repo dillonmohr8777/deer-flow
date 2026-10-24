@@ -43,6 +43,7 @@ _MOCKED_MODULE_NAMES = [
     "deerflow.agents.middlewares",
     "deerflow.agents.middlewares.thread_data_middleware",
     "deerflow.sandbox",
+    "deerflow.sandbox.native_startup",
     "deerflow.sandbox.middleware",
     "deerflow.sandbox.security",
     "deerflow.models",
@@ -106,6 +107,24 @@ def _setup_executor_classes():
     # Set up mocks
     for name in _MOCKED_MODULE_NAMES:
         sys.modules[name] = MagicMock()
+    sandbox_package = sys.modules["deerflow.sandbox"]
+    sandbox_package.__path__ = []
+    native_startup_module = ModuleType("deerflow.sandbox.native_startup")
+
+    def configure_native_lazy_startup(
+        middlewares,
+        tools,
+        *,
+        available_skills,
+        deferred_names,
+        has_extension_middlewares,
+    ):
+        # Inert constructor fixtures stay on the regular sandbox path.
+        return False
+
+    native_startup_module.configure_native_lazy_startup = configure_native_lazy_startup
+    sandbox_package.native_startup = native_startup_module
+    sys.modules["deerflow.sandbox.native_startup"] = native_startup_module
     storage_module = ModuleType("deerflow.skills.storage")
     storage_module.get_or_new_skill_storage = lambda **kwargs: SimpleNamespace(load_skills=lambda *, enabled_only: [])
     storage_module.get_or_new_user_skill_storage = lambda user_id, **kwargs: SimpleNamespace(load_skills=lambda *, enabled_only: [])
