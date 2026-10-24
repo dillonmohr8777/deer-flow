@@ -206,7 +206,8 @@ function PlanForm({
     record.plan?.assignee_user_id,
     record.plan?.verifier_user_id,
   ])
-    if (id && eligibilityConfirmed && !selected.has(id)) participants.delete(id);
+    if (id && eligibilityConfirmed && !selected.has(id))
+      participants.delete(id);
   const active = useRef(true);
   const write = useRef<AbortController | null>(null);
   useEffect(() => {
@@ -358,14 +359,13 @@ function PlanForm({
         {directory.isFetching && (
           <p role="status">Loading eligible teammates…</p>
         )}
-        {(directory.error ||
-          (directory.data && !directoryRevisionMatches)) && (
+        {(directory.error ?? (directory.data && !directoryRevisionMatches)) && (
           <div className="space-y-2">
             <p role="alert">
               {directory.error?.message ??
                 "The teammate snapshot does not match the loaded plan revision."}{" "}
-              Your selections and edits are retained;
-              eligibility could not be checked.
+              Your selections and edits are retained; eligibility could not be
+              checked.
             </p>
             <Button
               type="button"
