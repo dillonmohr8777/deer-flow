@@ -162,6 +162,22 @@ process. Offline migration checks are not production recovery proof.
 
 ### Selected client project evidence
 
+The staff inbox asks for an explicit work project or **No project** before the
+first work action. It lists only active projects returned by the existing
+authorized Projects API whose `client_id` exactly matches the request. Names
+never establish a link and nothing is preselected. Choosing a project sends
+`{project_id}` to `/work`; choosing no project sends the existing empty payload.
+
+The UI reads the work chat through the existing authorized thread API to recover
+`metadata.deerflow_project_id`. A saved project binding or durable `work_run_id`
+freezes the choice, including started work with no project. A chat allocated
+before admission, with neither a binding nor a run, stays editable. An unavailable
+or mismatched thread read blocks selection changes and work admission in the UI.
+User, workspace and request changes discard the local choice and abort old reads.
+Work errors, including 409, remain errors and refresh the stored detail/binding;
+they never become a success or automatically retry. Existing backend checks stay
+authoritative. No new server marker or permission grant is added.
+
 Staff may send `{"project_id":"<exact project id>"}` to `/work`; omitting the
 body keeps the existing path. Selection requires an active project owned by
 the selected workspace's storage principal and organization, with its explicit

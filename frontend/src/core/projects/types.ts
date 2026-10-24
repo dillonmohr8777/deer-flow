@@ -8,6 +8,7 @@ export type ProjectPresentation = {
 export type Project = {
   id: string;
   name: string;
+  client_id?: string | null;
   instructions: string;
   presentation: ProjectPresentation;
   status: ProjectStatus;

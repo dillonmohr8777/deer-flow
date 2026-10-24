@@ -18,6 +18,8 @@ import { getBackendBaseURL } from "@/core/config";
 import { isStaticWebsiteOnly } from "@/core/static-mode";
 
 import { ClientContextPanel, type ClientContext } from "./client-context-panel";
+import { InternalWorkPlan } from "./internal-work-plan";
+import { WorkProjectPicker } from "./work-project-picker";
 
 type DraftAttachment = { name: string; content: string };
 type Message = {
@@ -249,8 +251,17 @@ function InboxSession({
       }
       await queryClient.invalidateQueries({ queryKey: key });
     },
-    onError: (failure) => {
-      if (active.current) setError(failure.message);
+    onError: (failure, variables) => {
+      if (!active.current) return;
+      setError(failure.message);
+      if (variables.path.endsWith("/work")) {
+        void queryClient.invalidateQueries({
+          queryKey: [...key, "detail", selected],
+        });
+        void queryClient.invalidateQueries({
+          queryKey: [...key, "work-project"],
+        });
+      }
     },
   });
   const send = async () => {
@@ -554,6 +565,30 @@ function InboxSession({
                           review the result.
                         </p>
                       )}
+                      {current.can_draft &&
+                        !current.publish_receipt &&
+                        workspace &&
+                        userId && (
+                          <WorkProjectPicker
+                            key={current.id}
+                            userId={userId}
+                            workspace={workspace}
+                            clientId={current.client_id}
+                            requestId={current.id}
+                            workChatId={current.work_chat_id}
+                            workRunId={current.work_run_id}
+                            disabled={busy}
+                            onStart={(projectId) =>
+                              action.mutate({
+                                path: `/threads/${selected}/work`,
+                                payload:
+                                  projectId === null
+                                    ? {}
+                                    : { project_id: projectId },
+                              })
+                            }
+                          />
+                        )}
                       <div className="mb-5 flex flex-wrap gap-2">
                         {!current.can_draft && (
                           <Button
@@ -567,20 +602,6 @@ function InboxSession({
                             }
                           >
                             Talk to your Momo
-                          </Button>
-                        )}
-                        {current.can_draft && !current.publish_receipt && (
-                          <Button
-                            variant="outline"
-                            disabled={busy}
-                            onClick={() =>
-                              action.mutate({
-                                path: `/threads/${selected}/work`,
-                                payload: {},
-                              })
-                            }
-                          >
-                            Ask Momo to work
                           </Button>
                         )}
                         {current.can_draft && current.work_chat_id && (
@@ -623,6 +644,23 @@ function InboxSession({
                           </li>
                         ))}
                       </ol>
+                      {current.can_draft && workspace && userId && (
+                        <InternalWorkPlan
+                          userId={userId}
+                          workspace={workspace}
+                          clientId={current.client_id}
+                          requestId={current.id}
+                          requests={
+                            context.data?.client.id === current.client_id &&
+                            context.data.current_request?.id === current.id
+                              ? context.data.requests.items
+                              : []
+                          }
+                          requestsLoading={context.isFetching}
+                          requestsError={context.error?.message}
+                          hasMoreRequests={context.data?.requests.has_more}
+                        />
+                      )}
                       {current.can_draft && !current.publish_receipt && (
                         <div className="mt-6 space-y-3 border-t pt-4">
                           <h3 className="font-medium">Internal reply draft</h3>
