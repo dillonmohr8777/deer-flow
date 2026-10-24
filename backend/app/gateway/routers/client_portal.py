@@ -21,7 +21,7 @@ from sqlalchemy.exc import IntegrityError
 from app.gateway.approval_adapters import register_adapter
 from app.gateway.client_boundary import CLIENT_ROLE
 from app.gateway.client_context import bind_staff_work_project, client_operating_context, require_staff_client, require_staff_project
-from app.gateway.client_work_plan import WorkPlanUpdate, read_work_plan, save_audited_work_plan
+from app.gateway.client_work_plan import WorkPlanUpdate, read_work_plan, read_work_plan_participants, save_audited_work_plan
 from app.gateway.deps import audit_actor_id, get_current_user_from_request, record_audit_event
 from app.gateway.invitation_policy import fresh_customer_assignments, validate_customer_workspace
 from app.gateway.routers.clients import _is_active_org_admin
@@ -435,6 +435,15 @@ async def get_internal_work_plan(thread_id: ThreadId, request: Request, response
     if external:
         raise _missing()
     return await read_work_plan(actor_id=actor, organization_id=org, thread_id=thread_id)
+
+
+@router.get("/threads/{thread_id}/work-plan/participants")
+async def get_internal_work_plan_participants(thread_id: ThreadId, request: Request, response: Response, limit: int = Query(default=50, ge=1, le=100), cursor: str | None = None):
+    response.headers["Cache-Control"] = "no-store"
+    actor, org, _, external = await _identity(request)
+    if external:
+        raise _missing()
+    return await read_work_plan_participants(actor_id=actor, organization_id=org, thread_id=thread_id, limit=limit, cursor=cursor)
 
 
 @router.put("/threads/{thread_id}/work-plan")

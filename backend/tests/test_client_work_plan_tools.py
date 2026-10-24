@@ -8,10 +8,10 @@ from unittest.mock import AsyncMock
 
 import pytest
 import pytest_asyncio
-from langchain_core.messages import AIMessage, ToolMessage
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langgraph.graph import END, MessagesState, StateGraph
 from langgraph.prebuilt import ToolNode
-from org_isolation_fixtures import org_world_pooled  # noqa: F401
+from org_isolation_fixtures import ORG_A, ORG_S, org_world_pooled  # noqa: F401
 from pydantic import ValidationError
 from sqlalchemy import func, select
 from test_client_portal import BASE, CUSTOMER_ORG, CUSTOMER_STORAGE, USER_A, USER_B, USER_C, _compose, _http, _work_plan, auth_headers, project_work_world, world  # noqa: F401
@@ -19,7 +19,7 @@ from test_client_portal import BASE, CUSTOMER_ORG, CUSTOMER_STORAGE, USER_A, USE
 from app.gateway import services
 from deerflow.persistence.approvals.model import PendingActionRow
 from deerflow.persistence.audit_events import AuditEventRepository
-from deerflow.persistence.board.model import BoardPortalRow, BoardThreadRow
+from deerflow.persistence.board.model import BoardMessageRow, BoardPortalRow, BoardThreadRow
 from deerflow.persistence.clients.model import ClientAssignmentRow, ClientRow
 from deerflow.persistence.organizations.model import OrganizationMemberRow, OrganizationRow
 from deerflow.persistence.run.model import RunRow
@@ -56,7 +56,9 @@ async def tool_world(project_work_world, monkeypatch):  # noqa: F811
         _append_client_work_plan_tools_if_bound(tools, context)
 
         async def scripted(state):
-            outputs = [message for message in state["messages"] if isinstance(message, ToolMessage)]
+            messages = state["messages"]
+            latest_user = max((index for index, message in enumerate(messages) if isinstance(message, HumanMessage)), default=-1)
+            outputs = [message for message in messages[latest_user + 1 :] if isinstance(message, ToolMessage)]
             if outputs:
                 w.results.append(json.loads(outputs[-1].content))
             index = len(outputs)
@@ -92,6 +94,31 @@ async def _start(w, client, *, project=None):
     return created["id"], record
 
 
+async def _add_directory_user(w, user_id, *, email=None, membership_role="member", membership_status="active", organization_id=CUSTOMER_ORG, system_role="user", disabled_at=None, assignment=None):
+    now = datetime.now(UTC)
+    async with w.sf() as session, session.begin():
+        session.add(UserRow(id=user_id, email=email or f"{user_id}@example.test", password_hash=None, system_role=system_role, needs_setup=False, token_version=0, disabled_at=disabled_at, created_at=now))
+        session.add(OrganizationMemberRow(organization_id=organization_id, user_id=user_id, role=membership_role, status=membership_status))
+        if assignment is not None:
+            client_id, assignment_org, assignment_role = assignment
+            session.add(ClientAssignmentRow(client_id=client_id, user_id=user_id, organization_id=assignment_org, role=assignment_role))
+
+
+async def _run_tool_commands(w, client, thread_id, commands):
+    w.script = commands
+    w.results = []
+    response = await client.post(
+        f"/api/threads/{thread_id}/runs",
+        headers=auth_headers(USER_C, CUSTOMER_ORG),
+        json={"assistant_id": "momobot-max", "input": {"messages": [{"role": "user", "content": "Continue the recorded plan"}]}},
+    )
+    assert response.status_code == 200, response.text
+    record = w.app.state.run_manager._runs[response.json()["run_id"]]
+    await record.task
+    assert record.status.value == "success", record.error
+    return record, list(w.results)
+
+
 def _runtime(access, **changes):
     return SimpleNamespace(
         context={
@@ -111,7 +138,9 @@ def _runtime(access, **changes):
 @pytest.mark.parametrize("project", [None, "project-a"])
 async def test_gateway_tool_reads_updates_conflicts_audits_and_keeps_drafts_independent(tool_world, project):
     w = tool_world
-    plan = _work_plan(verifier_user_id=None, status="reported_complete", evidence_refs=[{"kind": "source", "reference": "https://source.invalid/untrusted"}, {"kind": "delivery", "reference": "file:///private/untrusted"}])["plan"]
+    plan = _work_plan(
+        assignee_user_id=USER_A, verifier_user_id=None, status="reported_complete", evidence_refs=[{"kind": "source", "reference": "https://source.invalid/untrusted"}, {"kind": "delivery", "reference": "file:///private/untrusted"}]
+    )["plan"]
     w.script = [
         ("read_client_work_plan", {}),
         ("update_client_work_plan", {"expected_revision": 0, "plan": plan}),
@@ -121,8 +150,14 @@ async def test_gateway_tool_reads_updates_conflicts_audits_and_keeps_drafts_inde
     async with _http(w.app) as client:
         request_id, record = await _start(w, client, project=project)
         first, saved, conflict, live = w.results
-        assert first["revision"] == 0 and first["participant_user_ids"] == [USER_C]
+        first_page = first["participants"]
+        assert first["revision"] == 0 and first["current_actor_user_id"] == USER_C
+        assert {item["user_id"] for item in first_page["items"]} == {USER_A, USER_C}
+        assert first_page["selected_items"] == []
+        assert set(first_page["items"][0]) == {"user_id", "email", "role"}
         assert saved["revision"] == live["revision"] == 1 and live["plan"] == saved["plan"]
+        assert saved["plan"]["assignee_user_id"] == USER_A
+        assert live["participants"]["selected_items"] == [{"user_id": USER_A, "email": "user-a@example.com", "role": "owner"}]
         assert saved["verification"] == "staff_recorded_unverified" and conflict["status"] == 409
         assert saved["recorded_by_user_id"] == USER_C and saved["source"]["id"] == request_id
         async with w.sf() as session:
@@ -235,19 +270,185 @@ async def test_actual_tool_reuses_http_plan_validation(tool_world, change):
     assert tool_error in {404, 422}
 
 
-async def test_saved_participants_are_revalidated_and_no_directory_is_invented(tool_world):
+async def test_revoked_saved_participant_does_not_block_tool_read_or_repair(tool_world):
     w = tool_world
+    w.script = []
+    async with _http(w.app) as client:
+        request_id, record = await _start(w, client)
+        draft = await client.post(f"{BASE}/{request_id}/draft", headers=auth_headers(USER_C, CUSTOMER_ORG), json={"body": "Keep this human draft", "expected_revision": 0})
+        assert draft.status_code == 200, draft.text
+        async with w.sf() as session:
+            draft_id = (await session.get(BoardPortalRow, request_id)).draft_id
+        saved = await client.put(f"{BASE}/{request_id}/work-plan", headers=auth_headers(USER_C, CUSTOMER_ORG), json=_work_plan(assignee_user_id=USER_C, verifier_user_id=USER_A))
+        assert saved.status_code == 200
+        async with w.sf() as session, session.begin():
+            (await session.get(OrganizationMemberRow, (CUSTOMER_ORG, USER_A))).status = "inactive"
+        repair_plan = _work_plan(assignee_user_id=None, verifier_user_id=None)["plan"]
+        _, results = await _run_tool_commands(
+            w,
+            client,
+            record.thread_id,
+            [
+                ("read_client_work_plan", {}),
+                ("update_client_work_plan", {"expected_revision": 1, "plan": repair_plan}),
+                ("read_client_work_plan", {}),
+            ],
+        )
+        read, repaired, after = results
+        assert read["current_actor_user_id"] == USER_C and read["plan"]["verifier_user_id"] == USER_A
+        assert read["participants"]["selected_items"] == [{"user_id": USER_C, "email": "user-c@example.com", "role": "account_manager"}]
+        assert "user-a@example.com" not in json.dumps(read)
+        assert repaired["revision"] == 2 and repaired["plan"]["verifier_user_id"] is None
+        assert after["revision"] == 2 and after["participants"]["selected_items"] == []
+        live = (await client.get(f"{BASE}/{request_id}/work-plan", headers=auth_headers(USER_C, CUSTOMER_ORG))).json()
+        assert "participants" not in live and "current_actor_user_id" not in live
+        async with w.sf() as session:
+            portal = await session.get(BoardPortalRow, request_id)
+            message = await session.get(BoardMessageRow, portal.draft_id)
+            assert (portal.work_plan_revision, portal.revision, portal.draft_id) == (2, 1, draft_id)
+            assert message.body == "Keep this human draft"
+
+
+async def test_gateway_participant_directory_filters_scope_and_tool_assigns_new_eligible_owner(tool_world):
+    w = tool_world
+    await _add_directory_user(w, "contact-candidate", assignment=("client-a", CUSTOMER_ORG, "client_contact"))
+    await _add_directory_user(w, "disabled-candidate", disabled_at=datetime.now(UTC), assignment=("client-a", ORG_S, "account_manager"))
+    await _add_directory_user(w, "inactive-candidate", membership_status="inactive", assignment=("client-a", ORG_S, "account_manager"))
+    await _add_directory_user(w, "foreign-candidate", membership_role="admin", organization_id=ORG_A)
+    await _add_directory_user(w, "client-role-candidate", membership_role="admin", system_role="client")
+    await _add_directory_user(w, "unassigned-candidate")
+    await _add_directory_user(w, "other-client-candidate", assignment=("client-b", ORG_S, "account_manager"))
+    await _add_directory_user(w, "contributor-candidate", assignment=("client-a", ORG_S, "contributor"))
+    await _add_directory_user(w, "invalid-member-role-candidate", membership_role="contributor", assignment=("client-a", ORG_S, "account_manager"))
+    plan = _work_plan(assignee_user_id=USER_A, verifier_user_id=None)["plan"]
+    w.script = [
+        ("read_client_work_plan", {}),
+        ("update_client_work_plan", {"expected_revision": 0, "plan": plan}),
+        ("read_client_work_plan", {}),
+    ]
     async with _http(w.app) as client:
         request_id, _ = await _start(w, client)
-        saved = await client.put(f"{BASE}/{request_id}/work-plan", headers=auth_headers(USER_C, CUSTOMER_ORG), json=_work_plan())
-        assert saved.status_code == 200
-    runtime = _runtime(w.capabilities[0])
-    result = json.loads(await read_client_work_plan.coroutine(runtime))
-    assert result["participant_user_ids"] == sorted([USER_A, USER_C])
+        first, saved, _ = w.results
+        assert first["current_actor_user_id"] == USER_C
+        assert {item["user_id"] for item in first["participants"]["items"]} == {USER_A, USER_C}
+        assert {item["role"] for item in first["participants"]["items"]} == {"owner", "account_manager"}
+        assert saved["plan"]["assignee_user_id"] == USER_A
+        directory = await client.get(f"{BASE}/{request_id}/work-plan/participants", headers=auth_headers(USER_C, CUSTOMER_ORG))
+        assert directory.status_code == 200, directory.text
+        assert directory.headers["cache-control"] == "no-store"
+        page = directory.json()
+        assert set(page) == {"schema", "source", "items", "selected_items", "limit", "has_more", "next_cursor"}
+        assert page["schema"] == "work_plan_participants.v1" and page["source"] == {"thread_id": request_id}
+        assert page["selected_items"] == [{"user_id": USER_A, "email": "user-a@example.com", "role": "owner"}]
+        assert {item["user_id"] for item in page["items"]} == {USER_A, USER_C}
+        assert all(set(item) == {"user_id", "email", "role"} for item in page["items"] + page["selected_items"])
+        for hidden in (
+            USER_B,
+            "contact-candidate",
+            "disabled-candidate",
+            "inactive-candidate",
+            "foreign-candidate",
+            "client-role-candidate",
+            "unassigned-candidate",
+            "other-client-candidate",
+            "contributor-candidate",
+            "invalid-member-role-candidate",
+        ):
+            assert hidden not in directory.text
+
+
+async def test_revoked_listed_participant_cannot_be_saved_and_preserves_plan_and_human_draft(tool_world):
+    w = tool_world
+    w.script = []
+    async with _http(w.app) as client:
+        request_id, _ = await _start(w, client)
+        staff = auth_headers(USER_C, CUSTOMER_ORG)
+        directory = await client.get(f"{BASE}/{request_id}/work-plan/participants", headers=staff)
+        assert directory.status_code == 200 and USER_A in {item["user_id"] for item in directory.json()["items"]}
+        draft = await client.post(f"{BASE}/{request_id}/draft", headers=staff, json={"body": "Keep this human draft", "expected_revision": 0})
+        assert draft.status_code == 200, draft.text
+        async with w.sf() as session:
+            draft_id = (await session.get(BoardPortalRow, request_id)).draft_id
+        async with w.sf() as session, session.begin():
+            (await session.get(OrganizationMemberRow, (CUSTOMER_ORG, USER_A))).status = "inactive"
+        after_revoke = await client.get(f"{BASE}/{request_id}/work-plan/participants", headers=staff)
+        assert after_revoke.status_code == 200 and USER_A not in {item["user_id"] for item in after_revoke.json()["items"]}
+        denied = await client.put(f"{BASE}/{request_id}/work-plan", headers=staff, json=_work_plan(assignee_user_id=USER_A, verifier_user_id=None))
+        assert denied.status_code == 404, denied.text
+        plan = await client.get(f"{BASE}/{request_id}/work-plan", headers=staff)
+        assert plan.status_code == 200 and plan.json()["revision"] == 0 and plan.json()["plan"] is None
+        async with w.sf() as session:
+            portal = await session.get(BoardPortalRow, request_id)
+            message = await session.get(BoardMessageRow, portal.draft_id)
+            assert (portal.work_plan_revision, portal.revision, portal.draft_id) == (0, 1, draft_id)
+            assert message.body == "Keep this human draft"
+        events, _ = await w.app.state.audit_repo.list(organization_id=CUSTOMER_ORG, action_prefix="client_portal.work_plan.saved")
+        assert events == []
+
+
+async def test_participant_directory_and_tool_paging_are_bounded_deterministic_and_request_bound(tool_world):
+    w = tool_world
+    now = datetime.now(UTC)
     async with w.sf() as session, session.begin():
-        (await session.get(OrganizationMemberRow, (CUSTOMER_ORG, USER_A))).status = "inactive"
-    assert json.loads(await read_client_work_plan.coroutine(runtime))["status"] == 404
-    assert json.loads(await update_client_work_plan.coroutine(1, _work_plan(verifier_user_id=None)["plan"], runtime))["status"] == 404
+        for index in range(104):
+            user_id = f"staff-{index:03d}"
+            session.add(UserRow(id=user_id, email=f"{user_id}@example.test", password_hash=None, system_role="user", needs_setup=False, token_version=0, created_at=now))
+            session.add(OrganizationMemberRow(organization_id=CUSTOMER_ORG, user_id=user_id, role="admin", status="active"))
+        session.add(UserRow(id="zz-selected", email="selected@example.test", password_hash=None, system_role="user", needs_setup=False, token_version=0, created_at=now))
+        session.add(OrganizationMemberRow(organization_id=CUSTOMER_ORG, user_id="zz-selected", role="admin", status="active"))
+    w.script = [("read_client_work_plan", {})]
+    async with _http(w.app) as client:
+        request_id, record = await _start(w, client)
+        model_first = w.results[0]["participants"]
+        assert model_first["limit"] == 50 and len(model_first["items"]) == 50 and model_first["has_more"]
+        assert model_first["next_cursor"] and len(model_first["next_cursor"]) <= 512
+        payload = _work_plan(assignee_user_id="zz-selected", verifier_user_id=USER_C)
+        saved = await client.put(f"{BASE}/{request_id}/work-plan", headers=auth_headers(USER_C, CUSTOMER_ORG), json=payload)
+        assert saved.status_code == 200, saved.text
+        path = f"{BASE}/{request_id}/work-plan/participants"
+        first = await client.get(path, headers=auth_headers(USER_C, CUSTOMER_ORG), params={"limit": 100})
+        assert first.status_code == 200, first.text
+        first_page = first.json()
+        assert first_page["limit"] == 100 and len(first_page["items"]) == 100 and first_page["has_more"]
+        first_ids = [item["user_id"] for item in first_page["items"]]
+        assert "zz-selected" not in first_ids
+        assert first_page["selected_items"] == [
+            {"user_id": USER_C, "email": "user-c@example.com", "role": "account_manager"},
+            {"user_id": "zz-selected", "email": "selected@example.test", "role": "admin"},
+        ]
+        second = await client.get(path, headers=auth_headers(USER_C, CUSTOMER_ORG), params={"limit": 100, "cursor": first_page["next_cursor"]})
+        assert second.status_code == 200, second.text
+        second_page = second.json()
+        all_ids = first_ids + [item["user_id"] for item in second_page["items"]]
+        assert len(all_ids) == 107 and all_ids == sorted(all_ids) and len(set(all_ids)) == len(all_ids)
+        assert not second_page["has_more"] and second_page["next_cursor"] is None
+        default = await client.get(path, headers=auth_headers(USER_C, CUSTOMER_ORG))
+        assert default.status_code == 200 and default.json()["limit"] == 50 and len(default.json()["items"]) == 50
+        assert default.json()["next_cursor"] and len(default.json()["next_cursor"]) <= 512
+        malformed = await client.get(path, headers=auth_headers(USER_C, CUSTOMER_ORG), params={"cursor": "not opaque"})
+        assert malformed.status_code == 422 and malformed.json()["detail"] == "Invalid work-plan participant cursor"
+        assert "not opaque" not in malformed.text
+        too_large = await client.get(path, headers=auth_headers(USER_C, CUSTOMER_ORG), params={"limit": 101})
+        assert too_large.status_code == 422
+        record_only = await client.get(f"{BASE}/{request_id}/work-plan", headers=auth_headers(USER_C, CUSTOMER_ORG))
+        assert record_only.status_code == 200 and record_only.json()["plan"] == saved.json()["plan"]
+        direct = json.loads(await read_client_work_plan.coroutine(_runtime(w.capabilities[0]), model_first["next_cursor"]))
+        assert direct["plan"] == saved.json()["plan"]
+        _, tool_results = await _run_tool_commands(w, client, record.thread_id, [("read_client_work_plan", {"participants_cursor": model_first["next_cursor"]})])
+        resumed_direct = json.loads(await read_client_work_plan.coroutine(_runtime(w.capabilities[-1]), model_first["next_cursor"]))
+        assert resumed_direct["plan"] == saved.json()["plan"], {"resumed_direct": resumed_direct, "request_id": request_id, "capability": w.capabilities[-1]}
+        tool_page = tool_results[0]["participants"]
+        assert w.capabilities[-1].request_id == request_id and tool_page["source"]["thread_id"] == request_id
+        assert tool_results[0]["plan"] == saved.json()["plan"], {"result": tool_results[0], "request_id": request_id, "capability_request_id": w.capabilities[-1].request_id}
+        assert len(tool_page["items"]) == 50 and tool_page["has_more"]
+        assert {item["user_id"] for item in tool_page["selected_items"]} == {USER_C, "zz-selected"}, tool_results[0]
+        assert "selected@example.test" in json.dumps(tool_page["selected_items"])
+        assert record_only.status_code == 200 and "participants" not in record_only.json() and "current_actor_user_id" not in record_only.json()
+        other = await client.post(BASE, headers=auth_headers(USER_B, CUSTOMER_ORG), json={"client_id": "client-a", "submission_key": "participant-cursor-other", "subject": "Other request", "body": "Synthetic request"})
+        assert other.status_code == 200, other.text
+        foreign = await client.get(f"{BASE}/{other.json()['id']}/work-plan/participants", headers=auth_headers(USER_C, CUSTOMER_ORG), params={"limit": 100, "cursor": first_page["next_cursor"]})
+        assert foreign.status_code == 422 and foreign.json()["detail"] == "Invalid work-plan participant cursor"
+        assert first_page["next_cursor"] not in foreign.text
 
 
 async def test_worker_only_hydrates_host_capability_and_cleans_both_config_carriers():
@@ -268,8 +469,11 @@ async def test_worker_only_hydrates_host_capability_and_cleans_both_config_carri
 
 
 async def test_schema_accepts_no_model_identity_and_requires_strict_explicit_revision():
-    assert set(read_client_work_plan.tool_call_schema.model_fields) == set()
+    assert set(read_client_work_plan.tool_call_schema.model_fields) == {"participants_cursor"}
+    assert read_client_work_plan.tool_call_schema.model_fields["participants_cursor"].default is None
     assert set(update_client_work_plan.tool_call_schema.model_fields) == {"expected_revision", "plan"}
+    with pytest.raises(ValidationError):
+        read_client_work_plan.args_schema.model_validate({"actor_id": USER_A})
     for args in ({"plan": {}}, {"expected_revision": "0", "plan": {}}, {"expected_revision": True, "plan": {}}, {"expected_revision": 0, "plan": {}, "actor_id": USER_A}, {"expected_revision": 0, "plan": {}, "request_id": "other"}):
         with pytest.raises(ValidationError) as error:
             update_client_work_plan.args_schema.model_validate(args)
