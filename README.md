@@ -1913,6 +1913,19 @@ and the [request contract](backend/docs/API.md#referencing-a-previous-conversati
 
 ### Long-Term Memory
 
+Momo staff memory is private to the authenticated person, active workspace,
+role and agent when `momobot_max.enabled` is on. Portal client work also requires its server-validated client
+binding. Switching clients or people reloads frozen memory and keeps earlier
+conversation history out of the new memory scope. Settings manages the same
+person's unbound private Max memory; the Max Python SDK uses that same scope.
+Verified delegated owners retain access;
+an owner header or request-supplied client ID cannot select a memory bucket.
+Existing mixed workspace memory stays retained and is not imported automatically.
+Any curation/migration needs separate owner review. Shared procedures continue
+through existing workspace profiles, projects and SOPs. Unproven Max identity
+skips recall/capture with a warning; manual compaction lacking scope provenance
+skips its optional memory flush. Generic DeerFlow memory behavior is unchanged.
+
 `memory.model_name` selects a host `models[]` profile for DeerMem extraction,
 including its endpoint and provider restrictions. Null retains the app default;
 it does not follow the chat run's model. An explicit `memory.backend_config.model`
