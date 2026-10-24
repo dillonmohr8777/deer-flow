@@ -191,6 +191,158 @@ def test_gateway_marker_required_and_authorized_agent_cannot_be_changed():
     assert resolve_memory_scope(Runtime(context=trusted), "another-agent") is None
 
 
+def test_hydrated_host_denial_cannot_recall_capture_or_use_tools(monkeypatch, memory):
+    from deerflow.agents.memory import tools
+    from deerflow.runtime.runs.worker import _build_runtime_context
+
+    context = {
+        AUTHENTICATED_CONTEXT_MARKER_KEY: AUTHENTICATED_CONTEXT_MARKER,
+        "actor_user_id": "am-a",
+        "storage_user_id": "agency",
+        "organization_id": "org-a",
+        "organization_role": "member",
+        "agent_name": "researcher",
+    }
+    context[STAFF_MEMORY_SCOPE_KEY] = staff_memory_scope(context, agent_name="researcher")
+    rt = Runtime(context=_build_runtime_context("denied-thread", "run", context))
+    memory.values["agency"] = "FOREIGN_LEGACY_SENTINEL"
+    monkeypatch.setattr(tools, "get_memory_manager", lambda: pytest.fail("Denied scope reached a memory tool backend"))
+    messages = run([HumanMessage(id="denied", content="Recall")], rt, agent="researcher")
+    assert not any("FOREIGN_LEGACY_SENTINEL" in m.content for m in messages)
+    capture.MemoryMiddleware("researcher", memory_config=MemoryConfig()).after_agent({"messages": messages + [AIMessage(content="Saved")]}, rt)
+    assert memory.writes == []
+    assert "error" in tools.memory_search_tool.func(rt, "foreign")
+    assert STAFF_MEMORY_SCOPE_KEY in rt.context and rt.context[STAFF_MEMORY_SCOPE_KEY] is None
+    forged = _build_runtime_context("forged", "run", {STAFF_MEMORY_SCOPE_KEY: None, "agent_name": "researcher"})
+    assert STAFF_MEMORY_SCOPE_KEY not in forged
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("async_path", [False, True])
+@pytest.mark.parametrize("boundary_in_tail", [False, True])
+async def test_real_compaction_flush_respects_original_scope_chronology(memory, monkeypatch, async_path, boundary_in_tail):
+    from deerflow.agents.memory import summarization_hook
+    from deerflow.agents.middlewares.summarization_middleware import DeerFlowSummarizationMiddleware
+
+    rt = runtime(client="B")
+    new = run([HumanMessage(id="own", content="OWN_SCOPED_TURN")], rt)
+    old = [HumanMessage(id="old", content="FOREIGN_PRE_SCOPE"), AIMessage(id="old-ai", content="FOREIGN_ANSWER")]
+    own_answer = AIMessage(id="own-ai", content="OWN_SCOPED_ANSWER")
+    latest = [HumanMessage(id="latest", content="Latest request"), AIMessage(id="latest-ai", content="Latest answer")]
+    messages = [*old, *new, own_answer, *latest]
+    events = []
+    monkeypatch.setattr(summarization_hook, "get_memory_manager", lambda: memory)
+    monkeypatch.setattr(summarization_hook, "get_memory_config", lambda: MemoryConfig())
+    model = MagicMock()
+    model.invoke.return_value = SimpleNamespace(text="Synthetic summary")
+    model.ainvoke = AsyncMock(return_value=SimpleNamespace(text="Synthetic summary"))
+    model.with_config.return_value = model
+    middleware = DeerFlowSummarizationMiddleware(
+        model=model, trigger=("messages", 2), keep=("messages", len(new) + 3 if boundary_in_tail else 2), token_counter=len, before_summarization=[events.append, summarization_hook.memory_flush_hook]
+    )
+    state = {"messages": messages}
+    result = await middleware.acompact_state(state, rt, force=True) if async_path else middleware.compact_state(state, rt, force=True)
+    assert result is not None
+    assert all(not isinstance(m, SystemMessage) and not dynamic.is_dynamic_context_reminder(m) for m in events[0].messages_to_summarize)
+    if boundary_in_tail:
+        assert memory.writes == []
+    else:
+        assert len(memory.writes) == 1
+        key, text = memory.writes[0]
+        assert key == resolve_memory_scope(rt, "momobot-max").user_id
+        assert "OWN_SCOPED_TURN" in text and "OWN_SCOPED_ANSWER" in text
+        assert "FOREIGN" not in text and "Latest request" not in text
+    # The memory hook must not change compaction's preserved message order.
+    assert list(result.preserved_messages) == list(events[0].preserved_messages)
+
+
+def test_agent_delete_cancels_only_its_storage_owners_scoped_pending_work(tmp_path, monkeypatch, memory):
+    from app.gateway.routers import agents
+    from deerflow.agents.memory.backends.deermem.deer_mem import DeerMem
+
+    manager = DeerMem(backend_config={"storage_path": str(tmp_path), "token_counting": "char"})
+    monkeypatch.setattr(manager._queue, "_schedule_timer", lambda *_: None)
+    monkeypatch.setattr(capture, "get_memory_manager", lambda: manager)
+    cases = [runtime(agent="researcher"), runtime("am-b", agent="researcher"), runtime("am-c", agent="researcher", storage="other-workspace"), runtime(agent="other-agent")]
+
+    def enqueue(rt, marker):
+        agent = rt.context["agent_name"]
+        messages = run([HumanMessage(id=marker, content="Please remember this scoped preference")], rt, agent=agent)
+        capture.MemoryMiddleware(agent, memory_config=MemoryConfig()).after_agent({"messages": messages + [AIMessage(content="I will remember it")]}, rt)
+
+    for i, rt in enumerate(cases):
+        enqueue(rt, f"pending-{i}")
+    assert manager._queue.pending_count == 4
+    remaining_keys = {resolve_memory_scope(rt, rt.context["agent_name"]).user_id for rt in cases[2:]}
+    store = MagicMock()
+
+    def delete(*args, **kwargs):
+        enqueue(cases[0], "mid-delete")
+        return "deleted"
+
+    store.delete.side_effect = delete
+    monkeypatch.setattr(agents, "get_agent_store", lambda: store)
+    monkeypatch.setattr(agents, "get_memory_manager", lambda: manager)
+    assert agents._delete_agent_with_memory_cancel("researcher", "agency") == "deleted"
+    assert {context.user_id for context in manager._queue._items} == remaining_keys
+    assert {context.storage_owner_user_id for context in manager._queue._items} == {"agency", "other-workspace"}
+
+
+@pytest.mark.asyncio
+async def test_legacy_keyword_free_backend_still_captures_sync_async_and_flush(memory, monkeypatch):
+    from deerflow.agents.memory.manager import MemoryManager
+
+    calls = []
+
+    class Legacy(MemoryManager):
+        def add(self, thread_id, messages, *, agent_name=None, user_id=None, trace_id=None):
+            calls.append((agent_name, user_id))
+
+        def get_context(self, user_id, *, agent_name=None, thread_id=None):
+            return ""
+
+        @classmethod
+        def from_config(cls, backend_config, *, mode="middleware", **host_hooks):
+            return cls(backend_config=backend_config or {}, mode=mode)
+
+    manager = Legacy()
+    monkeypatch.setattr(capture, "get_memory_manager", lambda: manager)
+    rt = runtime(client="B")
+    messages = run([HumanMessage(id="legacy-api", content="Please remember my private preference")], rt)
+    messages.append(AIMessage(content="Saved"))
+    middleware = capture.MemoryMiddleware("momobot-max", memory_config=MemoryConfig())
+    middleware.after_agent({"messages": messages}, rt)
+    await middleware.aafter_agent({"messages": messages}, rt)
+    key = resolve_memory_scope(rt, "momobot-max").user_id
+    manager.add_nowait("t", messages, agent_name="momobot-max", user_id=key, storage_owner_user_id="agency")
+    assert calls == [("momobot-max", key)] * 3
+
+
+@pytest.mark.asyncio
+async def test_onboarding_seeds_only_authenticated_private_max_scope(monkeypatch):
+    from app.gateway.people_profiles import PersonProfile
+    from app.gateway.routers import onboarding
+    from deerflow.runtime.user_context import WorkspaceStorageContext, reset_storage_context, set_storage_context
+
+    monkeypatch.setattr(onboarding, "_momo_memory_enabled", lambda: True)
+    manager = MagicMock()
+    manager.create_fact.return_value = ({}, "seed")
+    monkeypatch.setattr("deerflow.agents.memory.get_memory_manager", lambda: manager)
+    storage_token = set_storage_context(WorkspaceStorageContext("am-a", "org-a", "agency", "member"))
+    user = SimpleNamespace(id="am-a", system_role="user")
+    try:
+        await onboarding._seed_memory("am-a", PersonProfile(), "AM", "Paid", [], "", {}, user=user)
+        call = manager.create_fact.call_args
+        assert call.kwargs["user_id"] == resolve_memory_scope(runtime(), "momobot-max").user_id
+        assert call.kwargs["agent_name"] == "momobot-max"
+        manager.reset_mock()
+        await onboarding._seed_memory("am-b", PersonProfile(), "AM", "Paid", [], "", {}, user=user)
+        await onboarding._seed_memory("am-a", PersonProfile(), "AM", "Paid", [], "", {})
+        manager.create_fact.assert_not_called()
+    finally:
+        reset_storage_context(storage_token)
+
+
 def test_agent_server_uses_authenticated_private_actor_ignoring_body_ids(memory):
     rt = SimpleNamespace(
         server_info=SimpleNamespace(user=SimpleNamespace(identity="trusted-am", system_role="user")),

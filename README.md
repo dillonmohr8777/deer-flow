@@ -1925,6 +1925,9 @@ Any curation/migration needs separate owner review. Shared procedures continue
 through existing workspace profiles, projects and SOPs. Unproven Max identity
 skips recall/capture with a warning; manual compaction lacking scope provenance
 skips its optional memory flush. Generic DeerFlow memory behavior is unchanged.
+Staff onboarding seeds private Max memory when the actor/workspace is verified.
+Agent deletion cancels matching pending extraction, while persisted scoped facts
+remain retained; same-name reuse can recover those facts until explicitly cleared.
 
 `memory.model_name` selects a host `models[]` profile for DeerMem extraction,
 including its endpoint and provider restrictions. Null retains the app default;
