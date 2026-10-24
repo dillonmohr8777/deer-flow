@@ -233,6 +233,10 @@ class SubagentBatchService:
             # ordinary (non-batch) subagent gate: a channel run resolves the
             # runtime actor to the channel's bound owner regardless of which
             # external person actually triggered it.
+            # Parent's explicit tool_names ceiling, mirroring task_tool.
+            parent_tool_names = spec.get("tool_names")
+            if parent_tool_names is not None:
+                tools = [t for t in tools if t.name in set(parent_tool_names)]
             channel_name = spec.get("channel_name")
             if channel_name:
                 from deerflow.tools.builtins.agent_room_tool import AGENT_ROOM_TOOL_NAMES

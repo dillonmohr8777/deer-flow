@@ -15,6 +15,7 @@ three-state semantics (see :mod:`deerflow.runtime.user_context`):
 from __future__ import annotations
 
 import abc
+from pathlib import Path
 from typing import Any, ClassVar, Final
 
 from deerflow.runtime.user_context import AUTO, _AutoSentinel
@@ -29,6 +30,12 @@ THREAD_ARCHIVED_METADATA_KEY = "deerflow_archived"
 # ``frontend/src/core/threads/utils.ts`` and
 # ``frontend/tests/e2e/utils/mock-api.ts``.
 THREAD_PROJECT_METADATA_KEY = "deerflow_project_id"
+THREAD_UPLOAD_RESERVATION_METADATA_KEY = "_deerflow_upload_reservation"
+
+
+def thread_metadata(metadata: dict | None) -> dict:
+    """Keep the upload reservation out of caller metadata and public projections."""
+    return {key: value for key, value in (metadata or {}).items() if key != THREAD_UPLOAD_RESERVATION_METADATA_KEY}
 
 
 class _ProjectFilterUnset:
@@ -53,7 +60,34 @@ class InvalidMetadataFilterError(ValueError):
 
 
 class ThreadOwnershipConflictError(Exception):
-    """Raised when create would overwrite a thread owned by another user."""
+    """Raised when create would claim a thread or files outside the caller's ownership."""
+
+
+def _thread_data_path_exists(path: Path) -> bool:
+    try:
+        path.lstat()
+    except FileNotFoundError:
+        return False
+    return True
+
+
+async def has_unowned_thread_data(thread_id: str, user_id: str | None) -> bool:
+    """Unknown thread directories cannot establish ownership of a missing row."""
+    from deerflow.config.paths import get_paths
+    from deerflow.utils.file_io import run_file_io
+
+    paths = get_paths()
+    for owner in (user_id, None) if user_id is not None else (None,):
+        try:
+            root = paths.thread_dir(thread_id, user_id=owner)
+        except ValueError:
+            if owner is None:
+                raise
+            # Logical channel owners may not be filesystem principals.
+            continue
+        if await run_file_io(_thread_data_path_exists, root):
+            return True
+    return False
 
 
 class ThreadMetaStore(abc.ABC):
@@ -67,10 +101,19 @@ class ThreadMetaStore(abc.ABC):
         display_name: str | None = None,
         metadata: dict | None = None,
         project_id: str | None = None,
+        preserve_existing: bool = False,
+        finalize_upload: bool = False,
     ) -> dict:
         """Create a thread row; when ``project_id`` is set, validate the
         project inside the insert transaction and raise
-        ``ProjectNotAssignableError`` on failure (no partial row)."""
+        ``ProjectNotAssignableError`` on failure (no partial row).
+
+        ``preserve_existing`` reserves upload ownership: return a visible owned
+        row unchanged, or create one atomically before any upload writes.
+        ``finalize_upload`` applies ordinary creation fields only to a reservation;
+        an already-finalized owned row is returned unchanged on concurrent retries.
+        Missing rows with pre-existing thread data raise ThreadOwnershipConflictError.
+        """
 
     @abc.abstractmethod
     async def claim_unowned(self, thread_id: str, owner: str) -> bool:

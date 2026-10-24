@@ -143,7 +143,10 @@ class FakeLoc:
     async def count(self):
         return int(any(k in self.sel for k in self.page.present))
 
-    async def fill(self, value):
+    async def element_handle(self, timeout):
+        return self
+
+    async def fill(self, value, **kwargs):
         self.page.filled.append(value)
         if self.page.redirect_after_fill:
             self.page.url = "https://evil.example.net/"
@@ -177,6 +180,29 @@ def allowed(page):
 
 
 class FillTests(unittest.TestCase):
+    def test_redirect_during_secret_resolution_receives_no_value(self):
+        page = FakePage({"input[type=password]"})
+
+        async def redirected_secret(name):
+            page.url = "https://evil.example.net/"
+            return await fake_secret(name)
+
+        with self.assertRaises(PermissionError):
+            asyncio.run(broker_mod.fill_login(page, redirected_secret, allowed))
+        self.assertEqual(page.filled, [])
+
+    def test_failed_or_cancelled_submit_clears_typed_password(self):
+        for failure in (TimeoutError("synthetic timeout"), asyncio.CancelledError()):
+            with self.subTest(failure=type(failure).__name__):
+                page = FakePage({"[type=email]", "input[type=password]"})
+
+                async def failed_press(field, key):
+                    raise failure
+
+                with patch.object(FakeLoc, "press", failed_press), self.assertRaises(type(failure)):
+                    asyncio.run(broker_mod.fill_login(page, fake_secret, allowed))
+                self.assertEqual(page.filled, ["v:username", "v:password", ""])
+
     def test_redirect_after_username_stops_before_password(self):
         page = FakePage({"[type=email]", "input[type=password]"}, redirect_after_fill=True)
         with self.assertRaises(PermissionError):
@@ -186,12 +212,12 @@ class FillTests(unittest.TestCase):
     def test_code_field_without_2fa_words_gets_no_otp(self):
         page = FakePage({"[type=email]", "input[type=password]"}, after_submit={"[name*=code i]"}, text="welcome back")
         self.assertEqual(asyncio.run(broker_mod.fill_login(page, fake_secret, allowed)), "submitted")
-        self.assertEqual(page.filled, ["v:username", "v:password"])
+        self.assertEqual(page.filled, ["v:username", "v:password", ""])
 
     def test_real_2fa_prompt_gets_the_otp(self):
         page = FakePage({"[type=email]", "input[type=password]"}, after_submit={"[autocomplete=one-time-code]"}, text="Enter the 6-digit verification code")
         self.assertEqual(asyncio.run(broker_mod.fill_login(page, fake_secret, allowed)), "submitted")
-        self.assertEqual(page.filled, ["v:username", "v:password", "v:one-time password"])
+        self.assertEqual(page.filled, ["v:username", "v:password", "v:one-time password", "", ""])
 
     def test_failed_login_clears_the_password_field(self):
         page = FakePage({"[type=email]", "input[type=password]"}, after_submit={"[type=email]", "input[type=password]"})

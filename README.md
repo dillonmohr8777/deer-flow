@@ -616,6 +616,25 @@ collision-resistant directory-safe user IDs before accessing DeerFlow storage.
 The default DeerFlow service topology remains the Gateway-embedded runtime
 described above.
 
+Gateway uploads can precede chat creation. The first upload durably reserves the
+thread's workspace storage and client actor before writing files; a later create
+by that actor completes the normal metadata, assistant, project and checkpoint
+setup. A first stateless run reserves ownership before admission and completes
+that setup with its admitted assistant and metadata. Staff conversations retain
+workspace sharing. Another client actor or a different private workspace receives
+404 for that reserved id. Existing thread directories without a metadata row
+remain inaccessible: their owner cannot be inferred, and new uploads, thread
+creation, goals and run admission cannot adopt their files.
+
+Uploads and project-document attachments hold exclusive thread admission through
+staging, file ingestion and cleanup. Attachments recheck the existing target after
+admission and cannot recreate a deleted or newly foreign thread.
+An overlapping upload, run or deletion returns 409; retry after the current
+operation finishes. Uncertain uploads remain held even after their worker lease
+expires, so an older file worker cannot publish into a replacement thread.
+Only the original drained writer releases that hold. After a crash, an operator
+must verify the writer has stopped before repair; expiry alone is not proof.
+
 Gateway runs automatically enforce native delivery for artifacts created or modified under `/mnt/user-data/outputs`: `present_files` must present at least one output produced by the current run, and the terminal `run.delivery` receipt must be durably recorded. Virtual artifact paths are resolved within the same authenticated user and thread scope that produced the output before the output-directory boundary is validated. Runs that do not produce output artifacts keep ordinary conversational behavior.
 
 DeerFlow's built-in custom events are available through both LangGraph streaming interfaces: native clients can continue subscribing to `stream_mode="custom"`, while callback-based integrations can consume the same payloads as `on_custom_event` records from `astream_events(version="v2")`. The callback event name matches the payload's `type` field.

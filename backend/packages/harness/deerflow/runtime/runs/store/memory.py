@@ -69,6 +69,8 @@ class MemoryRunStore(RunStore):
     ):
         now = datetime.now(UTC).isoformat()
         existing = self._runs.get(run_id)
+        if operation_kind == "upload_write" or (existing is not None and existing.get("operation_kind") == "upload_write"):
+            raise ValueError("Upload reservations require atomic admission and owner-qualified release")
         self._runs[run_id] = {
             "run_id": run_id,
             "thread_id": thread_id,
@@ -183,7 +185,7 @@ class MemoryRunStore(RunStore):
 
     async def update_status(self, run_id, status, *, error=None, stop_reason=None):
         run = self._runs.get(run_id)
-        if run is None:
+        if run is None or run.get("operation_kind") == "upload_write":
             return False
         # Guard: only transition rows that are still active. ``interrupted``
         # is included for the rollback path (``interrupted → error`` finalize).
@@ -200,7 +202,7 @@ class MemoryRunStore(RunStore):
 
     async def start_run(self, run_id) -> bool:
         run = self._runs.get(run_id)
-        if run is None or run["status"] != "pending":
+        if run is None or run["status"] != "pending" or run.get("operation_kind") == "upload_write":
             return False
         run["status"] = "running"
         run["updated_at"] = datetime.now(UTC).isoformat()
@@ -214,9 +216,20 @@ class MemoryRunStore(RunStore):
             self._mark_changed(self._runs[run_id])
 
     async def delete(self, run_id, *, user_id=None):
+        if (self._runs.get(run_id) or {}).get("operation_kind") == "upload_write":
+            return
         run = self._runs.pop(run_id, None)
         if run is not None:
             self._unindex_run(run_id, run["thread_id"])
+
+    async def release_upload_operation(self, run_id: str, *, user_id: str | None, owner_worker_id: str) -> bool:
+        run = self._runs.get(run_id)
+        if run is None or (run.get("user_id"), run.get("owner_worker_id"), run.get("operation_kind"), run.get("status")) != (user_id, owner_worker_id, "upload_write", "pending"):
+            return False
+        # No await separates the check and removal in this single-loop backend.
+        self._runs.pop(run_id)
+        self._unindex_run(run_id, run["thread_id"])
+        return True
 
     async def delete_by_thread(self, thread_id: str, *, user_id=None) -> int:
         """Delete a thread's historical runs, keeping internal operation rows.
@@ -239,7 +252,7 @@ class MemoryRunStore(RunStore):
 
     async def update_run_completion(self, run_id, *, status, **kwargs):
         run = self._runs.get(run_id)
-        if run is None:
+        if run is None or run.get("operation_kind") == "upload_write":
             return False
         current_status = run.get("status")
         allowed_sources = {"pending", "running", status}
@@ -270,7 +283,7 @@ class MemoryRunStore(RunStore):
 
     async def list_inflight(self, *, before=None):
         now = before or datetime.now(UTC).isoformat()
-        results = [r for r in self._runs.values() if r["status"] in ("pending", "running") and r["created_at"] <= now]
+        results = [r for r in self._runs.values() if r.get("operation_kind") != "upload_write" and r["status"] in ("pending", "running") and r["created_at"] <= now]
         results.sort(key=lambda r: r["created_at"])
         return results
 
@@ -371,7 +384,7 @@ class MemoryRunStore(RunStore):
         if action not in ("interrupt", "rollback"):
             raise ValueError(f"Unsupported cancellation action: {action}")
         run = self._runs.get(run_id)
-        if run is None or run["status"] not in ("pending", "running"):
+        if run is None or run["status"] not in ("pending", "running") or run.get("operation_kind") == "upload_write":
             return None
         if run.get("cancel_action") is None:
             run["cancel_action"] = action
@@ -389,7 +402,7 @@ class MemoryRunStore(RunStore):
         stop_reason: str | None = None,
     ) -> StatusFinalization:
         run = self._runs.get(run_id)
-        if run is None:
+        if run is None or run.get("operation_kind") == "upload_write":
             return StatusFinalization(finalized=False)
         if run.get("cancel_action") is not None:
             return StatusFinalization(
@@ -418,7 +431,7 @@ class MemoryRunStore(RunStore):
         from deerflow.utils.time import is_lease_expired
 
         run = self._runs.get(run_id)
-        if run is None:
+        if run is None or run.get("operation_kind") == "upload_write":
             return False
         if run["status"] not in ("pending", "running"):
             return False
@@ -443,6 +456,8 @@ class MemoryRunStore(RunStore):
         cutoff = datetime.now(UTC) - timedelta(seconds=grace_seconds)
         results = []
         for r in self._runs.values():
+            if r.get("operation_kind") == "upload_write":
+                continue
             if r["status"] not in ("pending", "running"):
                 continue
             created_at = r.get("created_at", "")
@@ -525,6 +540,8 @@ class MemoryRunStore(RunStore):
                     continue
                 if r["status"] not in ("pending", "running"):
                     continue
+                if r.get("operation_kind") == "upload_write":
+                    raise ConflictError(f"Thread {thread_id} has an upload awaiting its original writer")
                 lease_expired = False
                 existing_lease = r.get("lease_expires_at")
                 if existing_lease is not None:

@@ -2279,6 +2279,18 @@ async def start_run(
                 # cannot both succeed across Gateway workers.
                 if require_existing_thread and not await thread_access_allowed():
                     raise HTTPException(status_code=404, detail=f"Thread {thread_id} not found")
+                if not require_existing_thread:
+                    from sqlalchemy.exc import IntegrityError
+
+                    from deerflow.persistence.thread_meta.base import ThreadOwnershipConflictError
+
+                    try:
+                        # Commit ownership before admission; a cached missing-row
+                        # access check cannot authorize a later foreign upload.
+                        await run_ctx.thread_store.create(thread_id, preserve_existing=True)
+                    except (ThreadOwnershipConflictError, IntegrityError):
+                        if not await run_ctx.thread_store.check_access(thread_id, content_user_id, require_existing=True):
+                            raise HTTPException(status_code=404, detail=f"Thread {thread_id} not found") from None
                 if composio_retry is not None:
                     await composio_retry.verify(thread_id)
                 record = await run_mgr.create_or_reject(

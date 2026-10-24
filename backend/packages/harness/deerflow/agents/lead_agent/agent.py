@@ -1099,6 +1099,9 @@ def _assemble_lead_agent(config: RunnableConfig, *, app_config: AppConfig) -> Le
             "is_plan_mode": is_plan_mode,
             "subagent_enabled": subagent_enabled,
             "tool_groups": agent_config.tool_groups if agent_config else None,
+            # Server-owned tool ceiling for delegated children (task/batch_task).
+            # Always written, so a caller-supplied value never survives.
+            "tool_names": list(tool_names) if tool_names is not None else None,
             "mcp_plugins": getattr(agent_config, "mcp_plugins", None),
             "available_skills": sorted(available_skills) if available_skills is not None else None,
             "allowed_subagents": list(allowed_subagents) if allowed_subagents is not None else None,

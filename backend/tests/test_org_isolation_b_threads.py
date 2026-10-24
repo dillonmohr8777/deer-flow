@@ -322,13 +322,13 @@ async def test_artifact_and_upload_files_stay_in_the_storage_principals_bucket(w
     shared = await world.request(USER_C, "GET", f"/api/threads/{T_S}/artifacts/{REPORT}", org=ORG_S)
     assert (shared.status_code, shared.text) == (200, "report for thread-s")
 
-    # Upload-before-create writes into the caller's bucket only, and another caller's listing
-    # of the same unused id is their own (empty) bucket.
+    # Upload-before-create reserves ownership before writing; the id then denies
+    # another private caller even though their own bucket contains no files.
     uploaded = await world.request(USER_A, "POST", "/api/threads/thread-unborn/uploads", {"files": {"files": ("draft.txt", b"a draft")}})
     assert uploaded.status_code == 200, uploaded.text
     assert (world.paths.sandbox_uploads_dir("thread-unborn", user_id=USER_A) / "draft.txt").read_bytes() == b"a draft"
     listing = await world.request(USER_B, "GET", "/api/threads/thread-unborn/uploads/list")
-    assert (listing.status_code, listing.json()["files"]) == (200, [])
+    assert listing.status_code == 404
     assert not world.paths.thread_dir("thread-unborn", user_id=USER_B).exists()
 
 

@@ -231,6 +231,7 @@ async def submit_native_batch(
         "parent_model": metadata.get("subagent_model_name") or metadata.get("model_name"),
         "tool_groups": metadata.get("tool_groups"),
         "mcp_plugins": metadata.get("mcp_plugins"),
+        "tool_names": metadata.get("tool_names"),
         "user_role": context.get("user_role"),
         "oauth_provider": context.get("oauth_provider"),
         "oauth_id": context.get("oauth_id"),

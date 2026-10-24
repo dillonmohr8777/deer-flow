@@ -13,7 +13,17 @@ from typing import Any
 from langgraph.store.base import BaseStore
 
 from deerflow.persistence.json_compat import json_value_matches
-from deerflow.persistence.thread_meta.base import PROJECT_FILTER_UNSET, THREAD_ARCHIVED_METADATA_KEY, THREAD_PINNED_METADATA_KEY, ThreadMetaStore, ThreadOwnershipConflictError, _ProjectFilterUnset
+from deerflow.persistence.thread_meta.base import (
+    PROJECT_FILTER_UNSET,
+    THREAD_ARCHIVED_METADATA_KEY,
+    THREAD_PINNED_METADATA_KEY,
+    THREAD_UPLOAD_RESERVATION_METADATA_KEY,
+    ThreadMetaStore,
+    ThreadOwnershipConflictError,
+    _ProjectFilterUnset,
+    has_unowned_thread_data,
+    thread_metadata,
+)
 from deerflow.persistence.thread_meta.sql import _own_private_legacy, _private_actor_storage
 from deerflow.runtime.keyed_lock import AsyncKeyedLockTable
 from deerflow.runtime.user_context import AUTO, _AutoSentinel, resolve_user_id
@@ -70,6 +80,8 @@ class MemoryThreadMetaStore(ThreadMetaStore):
         display_name: str | None = None,
         metadata: dict | None = None,
         project_id: str | None = None,
+        preserve_existing: bool = False,
+        finalize_upload: bool = False,
     ) -> dict:
         # Memory mode has no projects backend in Phase 1. Fail closed exactly
         # like the SQL store does for a missing/foreign/archived project: a
@@ -89,22 +101,38 @@ class MemoryThreadMetaStore(ThreadMetaStore):
             client_actor = await _client_actor_id()
             if existing is not None and client_actor is not None and existing.value.get("client_actor_id") != client_actor and not _own_private_legacy(client_actor, existing.value.get("user_id"), existing.value.get("client_actor_id")):
                 raise ThreadOwnershipConflictError(thread_id)
+            if existing is not None and preserve_existing:
+                if existing.value.get("user_id") is None:
+                    raise ThreadOwnershipConflictError(thread_id)
+                return self._public_record(existing.value)
+            if existing is None and await has_unowned_thread_data(thread_id, resolved_user_id):
+                raise ThreadOwnershipConflictError(thread_id)
             now = now_iso()
+            incarnation = (existing.value.get("incarnation") if existing is not None else None) or uuid.uuid4().hex
+            clean_metadata = thread_metadata(metadata)
+            if preserve_existing:
+                clean_metadata[THREAD_UPLOAD_RESERVATION_METADATA_KEY] = incarnation
+            finalizing = existing is not None and existing.value.get("incarnation") is not None and (existing.value.get("metadata") or {}).get(THREAD_UPLOAD_RESERVATION_METADATA_KEY) == existing.value["incarnation"]
+            if existing is not None and finalize_upload and not finalizing:
+                if existing.value.get("user_id") is None:
+                    raise ThreadOwnershipConflictError(thread_id)
+                return self._public_record(existing.value)
+            finalizing = finalizing and finalize_upload
             record: dict[str, Any] = {
                 "thread_id": thread_id,
-                "client_actor_id": client_actor,
-                "incarnation": (existing.value.get("incarnation") if existing is not None else None) or uuid.uuid4().hex,
+                "client_actor_id": existing.value.get("client_actor_id") if finalizing else client_actor,
+                "incarnation": incarnation,
                 "assistant_id": assistant_id,
-                "user_id": resolved_user_id,
-                "display_name": display_name,
-                "status": "idle",
-                "metadata": metadata or {},
-                "values": {},
-                "created_at": now,
+                "user_id": existing.value.get("user_id") if finalizing else resolved_user_id,
+                "display_name": existing.value.get("display_name") if finalizing and display_name is None else display_name,
+                "status": existing.value.get("status", "idle") if finalizing else "idle",
+                "metadata": clean_metadata,
+                "values": existing.value.get("values", {}) if finalizing else {},
+                "created_at": existing.value.get("created_at", now) if finalizing else now,
                 "updated_at": now,
             }
             await self._store.aput(THREADS_NS, thread_id, record)
-            return record
+            return self._public_record(record)
 
     async def claim_unowned(self, thread_id: str, owner: str) -> bool:
         if await _client_actor_id() is not None:
@@ -124,7 +152,8 @@ class MemoryThreadMetaStore(ThreadMetaStore):
         return False
 
     async def get(self, thread_id: str, *, user_id: str | None | _AutoSentinel = AUTO) -> dict | None:
-        return await self._get_owned_record(thread_id, user_id, "MemoryThreadMetaStore.get")
+        record = await self._get_owned_record(thread_id, user_id, "MemoryThreadMetaStore.get")
+        return self._public_record(record) if record is not None else None
 
     async def search(
         self,
@@ -185,7 +214,7 @@ class MemoryThreadMetaStore(ThreadMetaStore):
     async def check_access(self, thread_id: str, user_id: str, *, require_existing: bool = False) -> bool:
         item = await self._store.aget(THREADS_NS, thread_id)
         if item is None:
-            return not require_existing
+            return not require_existing and not await has_unowned_thread_data(thread_id, user_id)
         # Ownerless legacy records fail closed for every caller, as in the SQL store.
         record = await self._get_owned_record(thread_id, user_id, "MemoryThreadMetaStore.check_access")
         return record is not None and record.get("user_id") is not None
@@ -225,7 +254,7 @@ class MemoryThreadMetaStore(ThreadMetaStore):
             if record is None:
                 return
             merged = dict(record.get("metadata") or {})
-            merged.update(metadata)
+            merged.update(thread_metadata(metadata))
             record["metadata"] = merged
             if touch:
                 record["updated_at"] = now_iso()
@@ -248,6 +277,13 @@ class MemoryThreadMetaStore(ThreadMetaStore):
             await self._store.adelete(THREADS_NS, thread_id)
 
     @staticmethod
+    def _public_record(record: dict) -> dict:
+        result = dict(record)
+        result["upload_reserved"] = record.get("incarnation") is not None and (record.get("metadata") or {}).get(THREAD_UPLOAD_RESERVATION_METADATA_KEY) == record["incarnation"]
+        result["metadata"] = thread_metadata(record.get("metadata"))
+        return result
+
+    @staticmethod
     def _item_to_dict(item) -> dict[str, Any]:
         """Convert a Store SearchItem to the dict format expected by callers."""
         val = item.value
@@ -258,7 +294,7 @@ class MemoryThreadMetaStore(ThreadMetaStore):
             "user_id": val.get("user_id"),
             "display_name": val.get("display_name"),
             "status": val.get("status", "idle"),
-            "metadata": val.get("metadata", {}),
+            "metadata": thread_metadata(val.get("metadata")),
             # ``coerce_iso`` heals legacy unix-second values written by
             # earlier Gateway versions that called ``str(time.time())``.
             "created_at": coerce_iso(val.get("created_at", "")),
