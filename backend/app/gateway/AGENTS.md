@@ -1,22 +1,19 @@
 ### Gateway API (`app/gateway/`)
 
-HTTP uploads and project-document attachment copies use the durable `upload_write`
-reservation through drained staging/ingestion/cleanup. The attachment route repeats
-existing-thread ownership after admission. Lease expiry is never permission to
-retire this kind; see runtime upload admission/repair and persistence contracts.
+Read [upload](../../docs/UPLOAD_OWNERSHIP.md).
 
-The default-disabled `wsl_bridge` is a separate diagnostic exchange, never an
-executor. Its thread routes bind actual actor/org/thread plus storage identity;
-only delegated internal callers or the existing SSH operator CLI may ingest a
-validated receipt. Preserve the full digest, SQLite process-writer fence,
-uncertain holds, bounded output and fixed-name attachment under the existing
-durable `artifact_write` reservation. GET and imports have no write/startup side
-effects. See [WSL diagnostic contract](../../docs/WSL_DIAGNOSTIC_BRIDGE.md).
+`wsl_bridge` is default-disabled, a separate diagnostic exchange, never an
+executor. Thread routes bind actual actor/org/thread and storage identity;
+only delegated internal callers or existing SSH operator CLI may ingest
+validated receipts. Preserve full digest, SQLite process-writer fence, uncertain
+holds, bounded output, and fixed-name attachment under existing durable
+`artifact_write` reservation. GET/imports have no write/startup side effects. See
+[WSL guide](../../docs/WSL_DIAGNOSTIC_BRIDGE.md).
 
-`public_news_channel` is internal runtime context only. Forward it through the
-authenticated internal channel boundary so assembly applies the managed public
-tool/privacy ceiling, and strip it from external request config. Direct assembly
-tests alone do not prove this boundary or sandbox-free Slack execution.
+`public_news_channel` is internal runtime context only. Forward it via the
+authenticated internal channel boundary so assembly applies managed public
+tool/privacy ceiling; strip it from external request config. Direct assembly
+tests alone prove neither the boundary nor sandbox-free Slack execution.
 
 Read [security](../../docs/SECURITY_HARDENING.md).
 
