@@ -10,6 +10,16 @@ The upstream DeerFlow history stays in [CHANGELOG.md](../CHANGELOG.md).
 
 ## [Unreleased]
 
+## [momobot-prod-20261024-5c144f5b] - 2026-10-24
+
+### Changed
+
+- Keep client-portal drafts proportional to the request (#310)
+
+### Fixed
+
+- Repair baseline gateway and subagent test fixtures (#308)
+
 ## [momobot-prod-20261023-ff8263f9] - 2026-10-23
 
 ### Changed
