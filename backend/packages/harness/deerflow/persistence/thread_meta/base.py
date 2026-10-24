@@ -78,7 +78,14 @@ async def has_unowned_thread_data(thread_id: str, user_id: str | None) -> bool:
 
     paths = get_paths()
     for owner in (user_id, None) if user_id is not None else (None,):
-        if await run_file_io(_thread_data_path_exists, paths.thread_dir(thread_id, user_id=owner)):
+        try:
+            root = paths.thread_dir(thread_id, user_id=owner)
+        except ValueError:
+            if owner is None:
+                raise
+            # Logical channel owners may not be filesystem principals.
+            continue
+        if await run_file_io(_thread_data_path_exists, root):
             return True
     return False
 

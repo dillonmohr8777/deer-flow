@@ -56,6 +56,11 @@ unscoped thread root already exists, including uploads, outputs, workspace,
 staging, empty directories, and symlinks. Do not inspect bytes to infer an
 owner, relabel ownerless rows, or move/delete unknown uploads.
 
+Logical channel owners can be invalid filesystem principals (for example,
+`feishu:owner-777`). Skip only that owner's unrepresentable scoped root; still
+check the legacy root and propagate invalid thread IDs. Do not normalize the
+owner into a guessed storage bucket.
+
 Replace every old upload writer before client uploads resume, or an old process
 can still create rowless files. The native release owner inventories existing
 rowless thread paths read-only, retains them as blocked unknown-owner data, and
