@@ -48,9 +48,20 @@ export type Approval = {
   executed_at: string | null;
   execution_result: Record<string, unknown> | null;
   fact_check?: FactCheck | null;
+  /** What the signed-in viewer may do with this row; absent on older servers. */
+  capabilities?: ApprovalCapabilities;
+  proposer?: { user_id: string; display_name: string } | null;
+  workspace?: { id: string; name: string } | null;
   error: string | null;
   created_at: string;
   updated_at: string;
+};
+
+export type ApprovalCapabilities = {
+  approve: boolean;
+  reject: boolean;
+  edit: boolean;
+  reason: string | null;
 };
 
 export type ApprovalEdit = {
