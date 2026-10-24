@@ -33,6 +33,14 @@ def _binding(config: ExtensionsConfig, action: dict) -> McpServerConfig:
     return server.model_copy(update={"user_auth": auth.model_copy(update={"users": {action["user_id"]: credential}})}, deep=True)
 
 
+async def _current_binding(config: ExtensionsConfig, action: dict) -> McpServerConfig:
+    if action["payload"]["server_name"] == "composio-me" and config.composio_me.enabled:
+        from deerflow.mcp.composio_sessions import resolve_approval_server
+
+        return await resolve_approval_server(action, config)
+    return _binding(config, action)
+
+
 @dataclass(frozen=True, repr=False)
 class ComposioApprovalAuthority:
     action_id: str
@@ -53,7 +61,7 @@ class ComposioApprovalAuthority:
             raise ToolException("Composio approval authority is no longer valid.")
         try:
             config = await asyncio.to_thread(ExtensionsConfig.from_file)
-            server = _binding(config, current)
+            server = await _current_binding(config, current)
         except Exception:
             raise ToolException("Composio proposer connection is unavailable.") from None
         if server != self.server:
@@ -76,6 +84,8 @@ class ComposioApprovalAuthority:
 
     def headers(self) -> dict[str, str]:
         auth = self.server.user_auth
+        if self.server_name == "composio-me" and auth is None:
+            return dict(self.server.headers)
         return apply_header_overrides(self.server.headers, {auth.header: auth.users[self.proposer]}, spellings=header_spellings(self.server.headers))
 
 
@@ -99,7 +109,7 @@ async def prepare_composio_authority(action: dict, repository: PendingActionRepo
         raise ToolException("Composio approval payload changed.")
     try:
         config = await asyncio.to_thread(ExtensionsConfig.from_file)
-        server = _binding(config, current)
+        server = await _current_binding(config, current)
     except Exception:
         raise ToolException("Composio proposer connection is unavailable.") from None
     require_private_mcp_access(server)

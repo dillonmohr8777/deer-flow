@@ -1,4 +1,9 @@
 {
+  "composioMe": {
+    "enabled": false,
+    "project_key_env": "COMPOSIO_API_KEY",
+    "toolkits": ["gmail", "googlecalendar", "googledrive", "googlesheets", "googledocs", "slack", "hubspot", "googleads", "google_analytics", "google_search_console", "metaads", "fireflies", "canva", "composio_search"]
+  },
   "middlewares": [],
   "mcpInterceptors": [
     "my_package.mcp.auth:build_auth_interceptor"

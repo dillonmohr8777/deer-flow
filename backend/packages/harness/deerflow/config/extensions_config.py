@@ -381,6 +381,47 @@ class ConfiguredMiddlewareSpec(BaseModel):
         return coerced
 
 
+COMPOSIO_ME_TOOLKITS = (
+    "gmail",
+    "googlecalendar",
+    "googledrive",
+    "googlesheets",
+    "googledocs",
+    "slack",
+    "hubspot",
+    "googleads",
+    "google_analytics",
+    "google_search_console",
+    "metaads",
+    "fireflies",
+    "canva",
+    "composio_search",
+)
+
+
+class ComposioMeConfig(BaseModel):
+    """Operator policy only; credentials and actor sessions never belong here."""
+
+    enabled: bool = False
+    project_key_env: str = Field(default="COMPOSIO_API_KEY", pattern=r"^[A-Za-z_][A-Za-z0-9_]*$")
+    toolkits: list[str] = Field(default_factory=lambda: list(COMPOSIO_ME_TOOLKITS), min_length=1)
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("project_key_env")
+    @classmethod
+    def _project_key_only(cls, value: str) -> str:
+        if value.upper() == "COMPOSIO_USER_API_KEY":
+            raise ValueError("Composio sessions require a project-key environment reference")
+        return value
+
+    @field_validator("toolkits")
+    @classmethod
+    def _allow_toolkits(cls, value: list[str]) -> list[str]:
+        if len(value) != len(set(value)) or any(toolkit not in COMPOSIO_ME_TOOLKITS for toolkit in value):
+            raise ValueError("Composio toolkit policy must be a unique subset of the supported toolkits")
+        return value
+
+
 class ExtensionsConfig(BaseModel):
     """Unified configuration for MCP servers and skills."""
 
@@ -398,6 +439,7 @@ class ExtensionsConfig(BaseModel):
         description="Map of MCP server name to configuration",
         alias="mcpServers",
     )
+    composio_me: ComposioMeConfig = Field(default_factory=ComposioMeConfig, alias="composioMe")
     skills: dict[str, SkillStateConfig] = Field(
         default_factory=dict,
         description="Map of skill name to state configuration",

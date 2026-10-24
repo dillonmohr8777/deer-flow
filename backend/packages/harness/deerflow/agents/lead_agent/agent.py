@@ -1139,7 +1139,7 @@ def _assemble_lead_agent(config: RunnableConfig, *, app_config: AppConfig) -> Le
             container_base_path=container_base_path,
         )
         chat_model = create_chat_model(name=model_name, thinking_enabled=thinking_enabled, app_config=resolved_app_config, attach_tracing=False)
-        raw_tools = get_available_tools(model_name=model_name, subagent_enabled=subagent_enabled, app_config=resolved_app_config, chat_model=chat_model) + [setup_agent]
+        raw_tools = get_available_tools(model_name=model_name, subagent_enabled=subagent_enabled, run_context=cfg, app_config=resolved_app_config, chat_model=chat_model) + [setup_agent]
         configured_tools = raw_tools
         # See the channel-run gate below (the non-bootstrap branch): the
         # bootstrap flow must withhold the Agent Room tools too, or a bound
@@ -1290,6 +1290,7 @@ def _assemble_lead_agent(config: RunnableConfig, *, app_config: AppConfig) -> Le
         groups=agent_config.tool_groups if agent_config else None,
         mcp_plugins=mcp_plugins,
         private_mcp_config=private_mcp_config,
+        run_context=cfg,
         subagent_enabled=subagent_enabled,
         include_conversation_reader=callable(cfg.get(CONVERSATION_READER_CONTEXT_KEY)) and not bool(cfg.get("is_subagent")),
         include_momentum_sdk=callable(cfg.get(MOMENTUM_SDK_CONTEXT_KEY)) and not bool(cfg.get("is_subagent")),

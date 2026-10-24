@@ -9,7 +9,9 @@ adapter, so a double click or two reviewers can never send twice.
 
 from __future__ import annotations
 
+import asyncio
 import logging
+from contextlib import nullcontext
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -22,6 +24,7 @@ from app.gateway.deps import get_current_user_from_request, get_pending_action_r
 from app.gateway.internal_auth import get_trusted_internal_owner_user_id
 from app.gateway.routers.clients import _is_active_org_admin
 from deerflow.approvals import InvalidPayloadError
+from deerflow.config.extensions_config import ExtensionsConfig
 from deerflow.factcheck import Evidence, check_for_filing, draft_text, verify_draft
 from deerflow.persistence.approvals.corrections import ClientCorrectionRepository
 from deerflow.persistence.organizations.delegation import OrganizationDelegationRepository
@@ -216,25 +219,34 @@ async def approve_action(action_id: str, request: Request) -> ApprovalResponse:
                 organization = await active_organization_for_user(session, reviewer, resolve_organization_id())
             if organization is None or organization.role != "owner":
                 raise HTTPException(403, "Only the active workspace owner can approve another member's Composio action")
-        current = await repo.get_composio_for_approval(action_id)
-        if current is None:
-            raise _not_found()
-        if current["status"] != "pending":
-            raise HTTPException(409, "This action was already decided")
-        try:
-            authority = await prepare_composio_authority(current, repo)
-        except ToolException:
-            raise HTTPException(409, "The proposing actor or their Composio connection is unavailable") from None
-        approved = await repo.decide_composio(action_id, approve=True)
-        if approved is None:
-            raise HTTPException(409, "This action was already decided")
-        details = {"decided_by": authority.decider, "proposer_user_id": authority.proposer, "organization_id": authority.organization, "action_id": action_id}
-        await _audit(request, "approvals.approved", authority.decider, action_id, "success", details)
-        with bind_composio_authority(authority):
-            outcome = await execute_approved(approved)
-        settled = await repo.record_composio_outcome(action_id, status=outcome.status, result=outcome.detail, error=outcome.error)
-        await _audit(request, "approvals.executed", authority.decider, action_id, "success" if outcome.status != "failed" else "failure", {**details, "status": outcome.status, "error": outcome.error})
-        return _out(settled or {**approved, "execution_result": {"state": "outcome_unknown"}, "error": "Composio outcome could not be settled; reconcile before any new proposal"})
+        origin = nullcontext()
+        if current["payload"]["server_name"] == "composio-me" and (await asyncio.to_thread(ExtensionsConfig.from_file)).composio_me.enabled:
+            from app.gateway.auth_disabled import AUTH_SOURCE_SESSION
+            from deerflow.mcp.composio_sessions import composio_approval_origin
+
+            if getattr(request.state, "auth_source", None) != AUTH_SOURCE_SESSION:
+                raise HTTPException(403, "Composio sessions require an authenticated browser session")
+            origin = composio_approval_origin(reviewer, resolve_organization_id())
+        with origin:
+            current = await repo.get_composio_for_approval(action_id)
+            if current is None:
+                raise _not_found()
+            if current["status"] != "pending":
+                raise HTTPException(409, "This action was already decided")
+            try:
+                authority = await prepare_composio_authority(current, repo)
+            except ToolException:
+                raise HTTPException(409, "The proposing actor or their Composio connection is unavailable") from None
+            approved = await repo.decide_composio(action_id, approve=True)
+            if approved is None:
+                raise HTTPException(409, "This action was already decided")
+            details = {"decided_by": authority.decider, "proposer_user_id": authority.proposer, "organization_id": authority.organization, "action_id": action_id}
+            await _audit(request, "approvals.approved", authority.decider, action_id, "success", details)
+            with bind_composio_authority(authority):
+                outcome = await execute_approved(approved)
+            settled = await repo.record_composio_outcome(action_id, status=outcome.status, result=outcome.detail, error=outcome.error)
+            await _audit(request, "approvals.executed", authority.decider, action_id, "success" if outcome.status != "failed" else "failure", {**details, "status": outcome.status, "error": outcome.error})
+            return _out(settled or {**approved, "execution_result": {"state": "outcome_unknown"}, "error": "Composio outcome could not be settled; reconcile before any new proposal"})
     reviewer = await _require_reviewer(request)
     await _recheck_if_edited(repo, current)
     approved = await repo.decide(action_id, approve=True, decided_by=reviewer)

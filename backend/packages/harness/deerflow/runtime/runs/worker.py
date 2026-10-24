@@ -982,9 +982,11 @@ async def run_agent(
             logger.info("Run %s was cancelled", run_id)
 
     # MCP assembly depends on repositories; load it after cold bootstrap.
+    from deerflow.mcp.composio_sessions import bind_composio_context, reset_composio_context
     from deerflow.mcp.private_scope import bind_private_mcp_context, reset_private_mcp_context
 
     private_mcp_token = bind_private_mcp_context(config.get("context"))
+    composio_token = bind_composio_context(config.get("context"), thread_id=thread_id, run_id=run_id)
     try:
         normalized_stream_modes = normalize_stream_modes(stream_modes)
         requested_modes: set[str] = set(normalized_stream_modes)
@@ -1528,6 +1530,7 @@ async def run_agent(
             )
 
     finally:
+        reset_composio_context(composio_token)
         reset_private_mcp_context(private_mcp_token)
         try:
             if record.ownership_lost:
