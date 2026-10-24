@@ -7,7 +7,7 @@ import httpx
 import pytest
 from fastapi import FastAPI
 from org_isolation_fixtures import ORG_A, ORG_B, ORG_S, USER_A, USER_B, USER_C, acting_as, auth_headers, org_world  # noqa: F401
-from sqlalchemy import func, select, update
+from sqlalchemy import delete, func, select, update
 from test_org_isolation_b_threads import world  # noqa: F401
 
 from app.gateway.auth_middleware import AuthMiddleware
@@ -117,6 +117,87 @@ async def test_bound_customer_assigned_member_reads_and_drafts_but_only_owner_pu
         published = await client.post(path + "/publish", headers=owner, json=publish)
         assert published.status_code == 200, published.text
         assert (await client.get(path, headers=contact)).json()["messages"][-1]["body"] == "Synthetic internal draft"
+
+
+async def test_bound_customer_draft_audit_keeps_authenticated_actor_and_storage_author_separate(org_world):  # noqa: F811
+    await _seed_bound_customer(org_world)
+    contact, member = (auth_headers(user, CUSTOMER_ORG) for user in (USER_B, USER_C))
+    app = _app(org_world)
+    async with _http(app) as client:
+        created = await _compose(client, contact)
+        path = f"{BASE}/{created['id']}"
+        async with org_world() as session, session.begin():
+            portal = await session.get(BoardPortalRow, created["id"])
+            portal.work_chat_id = "synthetic-work-thread"
+            portal.work_run_id = "synthetic-work-run"
+
+        forged = await client.post(
+            path + "/draft",
+            headers=member,
+            json={"expected_revision": 0, "body": "Must not save", "actor_user_id": USER_A, "storage_user_id": USER_A},
+        )
+        assert forged.status_code == 422
+        assert await app.state.audit_repo.list(organization_id=CUSTOMER_ORG, action_prefix="client_portal.draft.saved") == ([], None)
+
+        saved = await client.post(
+            path + "/draft",
+            headers=member,
+            json={
+                "expected_revision": 0,
+                "body": "Synthetic private draft body",
+                "attachments": [{"name": "staff-note.txt", "content": "Synthetic private attachment content"}],
+            },
+        )
+        assert saved.status_code == 200, saved.text
+
+        events, _ = await app.state.audit_repo.list(organization_id=CUSTOMER_ORG, action_prefix="client_portal.draft.saved")
+        assert len(events) == 1
+        event = events[0]
+        assert event["actor_user_id"] == USER_C
+        assert event["organization_id"] == CUSTOMER_ORG
+        assert event["action"] == "client_portal.draft.saved" and event["outcome"] == "success"
+        assert event["target_type"] == "client_portal_thread" and event["target_id"] == created["id"]
+
+        async with org_world() as session:
+            portal = await session.get(BoardPortalRow, created["id"])
+            draft = await session.get(BoardMessageRow, portal.draft_id)
+            pending = await session.get(PendingActionRow, portal.approval_id)
+            assert portal.revision == 1 and draft is not None and pending is not None
+            assert draft.author_kind == "momo" and draft.author_user_id is None
+            assert pending.user_id == CUSTOMER_STORAGE
+            assert pending.thread_id == "synthetic-work-thread" and pending.run_id == "synthetic-work-run"
+            draft_count = await session.scalar(
+                select(func.count()).select_from(BoardMessageRow).where(BoardMessageRow.thread_id == created["id"], BoardMessageRow.author_kind == "momo")
+            )
+            pending_count = await session.scalar(select(func.count()).select_from(PendingActionRow).where(PendingActionRow.target == created["id"]))
+
+        assert event["details"] == {
+            "source": "client_portal",
+            "storage_user_id": CUSTOMER_STORAGE,
+            "work_thread_id": "synthetic-work-thread",
+            "run_id": "synthetic-work-run",
+            "draft_id": draft.id,
+            "revision": 1,
+        }
+        assert "Synthetic private draft body" not in str(event["details"])
+        assert "Synthetic private attachment content" not in str(event["details"])
+
+        denied_client = await client.post(path + "/draft", headers=contact, json={"expected_revision": 1, "body": "Client cannot draft"})
+        assert denied_client.status_code == 403
+        async with org_world() as session, session.begin():
+            await session.execute(delete(ClientAssignmentRow).where(ClientAssignmentRow.client_id == "client-a", ClientAssignmentRow.user_id == USER_C, ClientAssignmentRow.role == "account_manager"))
+        denied_unassigned = await client.post(path + "/draft", headers=member, json={"expected_revision": 1, "body": "Unassigned member cannot draft"})
+        assert denied_unassigned.status_code == 404
+
+        after_events, _ = await app.state.audit_repo.list(organization_id=CUSTOMER_ORG, action_prefix="client_portal.draft.saved")
+        assert [row["id"] for row in after_events] == [event["id"]]
+        async with org_world() as session:
+            portal = await session.get(BoardPortalRow, created["id"])
+            assert portal.revision == 1
+            assert await session.scalar(
+                select(func.count()).select_from(BoardMessageRow).where(BoardMessageRow.thread_id == created["id"], BoardMessageRow.author_kind == "momo")
+            ) == draft_count == 1
+            assert await session.scalar(select(func.count()).select_from(PendingActionRow).where(PendingActionRow.target == created["id"])) == pending_count == 1
 
 
 async def test_bound_customer_assigned_member_cannot_compose_or_create_client_visible_rows(org_world):  # noqa: F811
