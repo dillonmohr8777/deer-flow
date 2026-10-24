@@ -22,16 +22,28 @@ hydration and changed manager defaults do not extend those values. Local timers
 translate the persisted UTC deadline to monotonic time once per phase. UTC clock
 synchronization remains necessary when reading persisted times on another host.
 
-Memory storage has a separate private `run_limits` field. SQL stores a tagged
-array containing original kwargs and timing in the existing `kwargs_json`
-column. Legacy/API kwargs are objects, so no caller key collides with that
-envelope. Store projections unwrap it before returning kwargs. User metadata
-remains unchanged and queryable; no control enters thread/checkpoint metadata.
-No migration is required. Old object-shaped rows have no captured timing and
-retain ordinary orphan recovery. Limit-capable stores keep the existing
-`start_run(run_id)` signature; optional timing arguments do not add abstract
-methods. Unsupported custom stores reject enabled admission explicitly, and
-retain their old protocol when both operator limits are disabled.
+Memory storage has a separate private `run_limits` field. SQL stores the same
+host-owned capture in nullable `runs.run_limits_json`. `kwargs_json` remains the
+original object and public metadata retains its original values. Neither field
+can replace the private capture; snapshots preserve the admission column even
+when callers omit timing, spoof it in metadata/kwargs, or use disabled defaults.
+No control enters thread/checkpoint metadata. Old rows have no captured timing
+and retain ordinary orphan recovery. Limit-capable stores keep the existing
+`start_run(run_id)` signature; unsupported custom stores reject enabled admission
+explicitly and keep their old protocol when both operator limits are disabled.
+
+This one additive nullable JSON column is an explicit exception to the normal
+Alembic revision rule. After successful ordinary bootstrap, its existing lock
+owns an idempotent helper that adds the column or rejects incompatible shape.
+The helper changes no revision, index, constraint, default, existing data or
+unknown-revision allowlist. The known `0052_board_portal` stamp stays readable
+by the accepted rollback images. Fresh databases get the same nullable shape
+from the ORM. Actual accepted `dc420` bootstrap and repositories must read new
+histories with exact original kwargs, write metadata/kwargs without clearing
+private captures, and insert rows the new reader can consume. The matching
+`1fde` bootstrap/decoder bytes are pinned in the source receipt. Code rollback
+still requires draining all active work and unknown cleanup holds before old
+writers start; disabling limits changes future admission only.
 
 The supervisor starts at admission, including when no worker attaches. It
 bounds the prior-finalization barrier and pending preflight separately from

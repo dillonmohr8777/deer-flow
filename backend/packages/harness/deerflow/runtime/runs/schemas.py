@@ -6,7 +6,6 @@ from typing import Any
 
 LIMIT_ACTIONS = ("prestart_timeout", "execution_timeout")
 HOLD_ACTIONS = (*LIMIT_ACTIONS, "cleanup_hold")
-RUN_STORAGE_TAG = "__deerflow_run_storage_v1__"
 
 
 def start_run_timing(timing: dict[str, Any] | None, now: datetime) -> dict[str, Any] | None:
@@ -22,17 +21,6 @@ def timing_deadline(timing: dict[str, Any] | None, *, pending: bool) -> datetime
         return None
     value = timing.get("prestart_deadline_at" if pending else "execution_deadline_at")
     return datetime.fromisoformat(value).astimezone(UTC) if value else None
-
-
-def pack_run_kwargs(kwargs: dict, timing: dict | None) -> dict | list:
-    # Legacy/API kwargs are objects. An array envelope cannot collide with a user key.
-    return [RUN_STORAGE_TAG, kwargs, timing] if timing is not None else kwargs
-
-
-def unpack_run_kwargs(value: dict | list) -> tuple[dict, dict | None]:
-    if isinstance(value, list) and len(value) == 3 and value[0] == RUN_STORAGE_TAG and isinstance(value[1], dict) and isinstance(value[2], dict):
-        return value[1], value[2]
-    return value, None
 
 
 def execution_deadline_expired(row: dict[str, Any], now: datetime) -> bool:

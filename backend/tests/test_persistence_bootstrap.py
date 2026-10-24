@@ -514,6 +514,17 @@ async def test_create_all_and_alembic_upgrade_produce_same_schema(tmp_path: Path
         fresh_tables = await _reflect_columns(fresh)
         upgraded_tables = await _reflect_columns(upgraded)
 
+        # Only the explicitly reviewed rollback column lives outside Alembic:
+        # old images must still recognise the unchanged revision stamp. Pin
+        # that one exception before exercising the actual locked bootstrap
+        # helper; do not hide any other ORM/revision mismatch.
+        assert set(fresh_tables) == set(upgraded_tables)
+        differences = {table: (set(fresh_tables[table]) - set(upgraded_tables[table]), set(upgraded_tables[table]) - set(fresh_tables[table])) for table in fresh_tables if set(fresh_tables[table]) != set(upgraded_tables[table])}
+        assert differences == {"runs": ({"run_limits_json"}, set())}
+        await bootstrap_schema(upgraded, backend="sqlite")
+        assert await _alembic_version(upgraded) == HEAD
+        upgraded_tables = await _reflect_columns(upgraded)
+
         # Same set of tables. A mismatch here means either ``Base.metadata``
         # has gained/lost a table without a matching revision, or a revision
         # creates/drops a table without a matching model change.

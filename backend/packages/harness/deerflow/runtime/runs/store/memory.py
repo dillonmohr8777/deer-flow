@@ -87,7 +87,7 @@ class MemoryRunStore(RunStore):
             "multitask_strategy": multitask_strategy,
             "metadata": metadata or {},
             "kwargs": kwargs or {},
-            "run_limits": deepcopy(existing.get("run_limits") if existing and existing.get("run_limits") is not None else run_limits),
+            "run_limits": deepcopy(existing.get("run_limits") if existing else run_limits),
             "error": error,
             "stop_reason": stop_reason,
             "created_at": created_at or now,

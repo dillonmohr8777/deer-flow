@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from deerflow.persistence.organizations.resolution import organization_for_write, organization_from_owned_parent
 from deerflow.persistence.run.model import RunChangeClockRow, RunRow
 from deerflow.persistence.thread_meta.model import ThreadMetaRow
-from deerflow.runtime.runs.schemas import HOLD_ACTIONS, RUN_STORAGE_TAG, execution_deadline_expired, pack_run_kwargs, start_run_timing, timing_deadline, unpack_run_kwargs
+from deerflow.runtime.runs.schemas import HOLD_ACTIONS, execution_deadline_expired, start_run_timing, timing_deadline
 from deerflow.runtime.runs.store.base import (
     LeaseRenewal,
     RunIdempotencyConflict,
@@ -37,9 +37,8 @@ def _lease_expired_or_null(lease_col, cutoff: datetime):
 
 def _execution_deadline_reclaimable():
     # A committed clock fences an expired execution even if its timeout claim failed.
-    tag = RunRow.kwargs_json[0].as_string()
-    deadline = RunRow.kwargs_json[2]["execution_deadline_at"].as_string()
-    return or_(RunRow.operation_kind != "run", RunRow.status != "running", tag.is_(None), tag != RUN_STORAGE_TAG, deadline.is_(None), deadline > datetime.now(UTC).isoformat())
+    deadline = RunRow.run_limits_json["execution_deadline_at"].as_string()
+    return or_(RunRow.operation_kind != "run", RunRow.status != "running", deadline.is_(None), deadline > datetime.now(UTC).isoformat())
 
 
 def _in_active_organization() -> tuple:
@@ -132,7 +131,8 @@ class RunRepository(RunStore):
         d = row.to_dict()
         # Remap JSON columns to match RunStore interface
         d["metadata"] = d.pop("metadata_json", {})
-        d["kwargs"], d["run_limits"] = unpack_run_kwargs(d.pop("kwargs_json", {}) or {})
+        d["kwargs"] = d.pop("kwargs_json", {}) or {}
+        d["run_limits"] = d.pop("run_limits_json", None)
         # Convert datetime to ISO string for consistency with MemoryRunStore.
         # SQLite drops tzinfo on read despite ``DateTime(timezone=True)`` —
         # ``coerce_iso`` normalizes naive datetimes as UTC.
@@ -185,7 +185,8 @@ class RunRepository(RunStore):
             "operation_kind": operation_kind,
             "multitask_strategy": multitask_strategy,
             "metadata_json": self._safe_json(metadata) or {},
-            "kwargs_json": pack_run_kwargs(self._safe_json(kwargs) or {}, run_limits),
+            "kwargs_json": self._safe_json(kwargs) or {},
+            "run_limits_json": self._safe_json(run_limits) if operation_kind == "run" else None,
             "error": error,
             "stop_reason": stop_reason,
             "follow_up_to_run_id": follow_up_to_run_id,
@@ -204,9 +205,9 @@ class RunRepository(RunStore):
             else:
                 if row.operation_kind == "upload_write":
                     raise ValueError("An upload reservation cannot be replaced by a run snapshot")
-                _, captured_timing = unpack_run_kwargs(row.kwargs_json or {})
-                if captured_timing is not None:
-                    values["kwargs_json"] = pack_run_kwargs(self._safe_json(kwargs) or {}, captured_timing)
+                # Snapshots, including stale or disabled-policy callers, never
+                # replace the policy captured by the admission transaction.
+                values.pop("run_limits_json")
                 for key, value in values.items():
                     setattr(row, key, value)
                 # A legacy parent proves no organization. Do not erase a valid
@@ -371,7 +372,7 @@ class RunRepository(RunStore):
             if row is None or row.status != "pending" or row.operation_kind == "upload_write" or row.cancel_action is not None:
                 return False
             now = datetime.now(UTC)
-            kwargs, timing = unpack_run_kwargs(row.kwargs_json or {})
+            timing = row.run_limits_json
             deadline = timing_deadline(timing, pending=True)
             if deadline is not None and now >= deadline:
                 return False
@@ -383,7 +384,7 @@ class RunRepository(RunStore):
                     RunRow.cancel_action.is_(None),
                     RunRow.operation_kind != "upload_write",
                 )
-                .values(status="running", updated_at=now, change_seq=change_seq, kwargs_json=pack_run_kwargs(kwargs, start_run_timing(timing, now)))
+                .values(status="running", updated_at=now, change_seq=change_seq, run_limits_json=start_run_timing(timing, now))
             )
             await session.commit()
             return result.rowcount != 0
@@ -942,7 +943,8 @@ class RunRepository(RunStore):
             "operation_kind": operation_kind,
             "multitask_strategy": multitask_strategy,
             "metadata_json": self._safe_json(metadata) or {},
-            "kwargs_json": pack_run_kwargs(self._safe_json(kwargs) or {}, run_limits if operation_kind == "run" else None),
+            "kwargs_json": self._safe_json(kwargs) or {},
+            "run_limits_json": self._safe_json(run_limits) if operation_kind == "run" else None,
             "owner_worker_id": owner_worker_id,
             "lease_expires_at": lease_dt,
             "idempotency_key": idempotency_key,

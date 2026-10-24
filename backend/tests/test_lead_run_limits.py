@@ -73,6 +73,82 @@ async def test_captured_policy_start_once_reload_and_metadata(limit_store):
         await manager.stop_run_limit(record.run_id)
 
 
+@pytest.mark.anyio
+async def test_snapshot_cannot_retrofit_policy_onto_legacy_row(limit_store):
+    await limit_store.put("legacy", thread_id="legacy", kwargs={"original": True})
+    await limit_store.put("legacy", thread_id="legacy", run_limits={"execution_timeout_seconds": 999})
+    assert (await limit_store.get("legacy"))["run_limits"] is None
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("shape", ["TEXT", "JSON NOT NULL", "JSON DEFAULT '{}' "])
+async def test_run_limit_schema_helper_rejects_drift(tmp_path, shape):
+    from sqlalchemy import text
+    from sqlalchemy.ext.asyncio import create_async_engine
+
+    from deerflow.persistence.run.schema import ensure_run_limits_column
+
+    engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'drift.db'}")
+    try:
+        async with engine.begin() as connection:
+            await connection.execute(text(f"CREATE TABLE runs (run_limits_json {shape})"))
+            with pytest.raises(RuntimeError, match="nullable JSON without a server default"):
+                await connection.run_sync(ensure_run_limits_column)
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.anyio
+async def test_cancelled_run_limit_ddl_keeps_bootstrap_lock_until_commit(tmp_path, monkeypatch):
+    from sqlalchemy import text
+    from sqlalchemy.ext.asyncio import create_async_engine
+    from sqlalchemy.util import await_only
+
+    from deerflow.persistence.bootstrap import bootstrap_schema
+    from deerflow.persistence.run import schema
+
+    engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'ddl-drain.db'}")
+    entered, release = asyncio.Event(), asyncio.Event()
+    first = second = None
+    original = schema.ensure_run_limits_column
+    calls = 0
+
+    def held_after_actual_ddl(connection):
+        nonlocal calls
+        original(connection)
+        calls += 1
+        if calls == 1:
+            entered.set()
+            await_only(release.wait())
+
+    try:
+        await bootstrap_schema(engine, backend="sqlite")
+        async with engine.begin() as connection:
+            await connection.execute(text("ALTER TABLE runs DROP COLUMN run_limits_json"))
+        monkeypatch.setattr(schema, "ensure_run_limits_column", held_after_actual_ddl)
+        first = asyncio.create_task(bootstrap_schema(engine, backend="sqlite"))
+        await asyncio.wait_for(entered.wait(), 5)
+        first.cancel()
+        await asyncio.sleep(0)
+        first.cancel()
+        second = asyncio.create_task(bootstrap_schema(engine, backend="sqlite"))
+        for _ in range(10):
+            await asyncio.sleep(0)
+        assert not first.done() and not second.done() and calls == 1
+        release.set()
+        with pytest.raises(asyncio.CancelledError):
+            await first
+        await asyncio.wait_for(second, 5)
+        assert calls == 2
+        async with engine.connect() as connection:
+            assert (await connection.execute(text("SELECT version_num FROM alembic_version"))).scalar_one() == "0052_board_portal"
+            await connection.execute(text("SELECT run_limits_json FROM runs"))
+    finally:
+        release.set()
+        await asyncio.gather(*(task for task in (first, second) if task is not None), return_exceptions=True)
+        await engine.dispose()
+
+
 def bridge():
     return SimpleNamespace(publish=AsyncMock(), publish_end=AsyncMock(), cleanup=AsyncMock())
 

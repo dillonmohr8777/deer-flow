@@ -7,8 +7,11 @@ Combines two ideas:
    faithfully across SQLite and Postgres dialects (JSON vs JSONB, server
    defaults, index/FK names, type affinity) without anyone having to hand-keep
    a mirror baseline in sync with the models.
-2. **Alembic owns every change from baseline onward.** Any new ORM column /
-   table / index must ship as a revision under ``migrations/versions/``.
+2. **Alembic owns baseline changes.** The sole reviewed exception is the
+   nullable ``runs.run_limits_json`` column: accepted rollback images reject a
+   newer revision, but safely ignore this column. Its locked, shape-checked
+   helper runs after ordinary bootstrap without changing the known stamp.
+   See ``docs/LEAD_RUN_LIMITS.md``; all other additions require a revision.
 
 Three-branch decision (see ``_decide_state``)
 ---------------------------------------------
@@ -699,5 +702,16 @@ async def bootstrap_schema(engine: AsyncEngine, *, backend: str, postgres_schema
 
         else:  # pragma: no cover -- defensive
             raise RuntimeError(f"bootstrap: unhandled decision {decision!r}")
+
+        # A deliberately bounded rollback exception: do not advance Alembic or
+        # broaden unknown-revision acceptance for this private nullable column.
+        # Drain DDL before returning the bootstrap lock/connection on cancellation.
+        async def ensure_run_limits() -> None:
+            from deerflow.persistence.run.schema import ensure_run_limits_column
+
+            async with engine.begin() as conn:
+                await conn.run_sync(ensure_run_limits_column)
+
+        await await_drained(ensure_run_limits())
 
     logger.info("bootstrap: complete (backend=%s)", backend)
