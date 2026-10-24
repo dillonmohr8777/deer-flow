@@ -114,7 +114,7 @@ class _MockManager:
 def _install_manager(monkeypatch, manager):
     manager._drop_fact_ops()
     monkeypatch.setattr("deerflow.agents.memory.tools.get_memory_manager", lambda: manager)
-    monkeypatch.setattr("deerflow.agents.memory.tools.resolve_runtime_user_id", lambda runtime: "test-user")
+    monkeypatch.setattr("deerflow.runtime.user_context.resolve_runtime_user_id", lambda runtime: "test-user")
     return manager
 
 
@@ -254,9 +254,9 @@ class TestMemoryAddTool:
         runtime = SimpleNamespace(context={"agent_name": "code-agent"})
         # resolve_runtime_user_id is monkeypatched to "test-user" by _install_manager;
         # override here to assert the runtime channel flows through.
-        import deerflow.agents.memory.tools as tools_mod
+        import deerflow.runtime.user_context as user_context
 
-        tools_mod.resolve_runtime_user_id = lambda r: "runtime-user"
+        monkeypatch.setattr(user_context, "resolve_runtime_user_id", lambda r: "runtime-user")
 
         result_json = memory_add_tool.func(runtime, "User prefers dark mode")
         result = json.loads(result_json)

@@ -37,6 +37,7 @@ from langgraph.checkpoint.base import empty_checkpoint
 from langgraph.types import Overwrite
 
 from deerflow.agents.goal_state import GoalEvaluation, GoalState
+from deerflow.agents.memory.scope import STAFF_MEMORY_SCOPE_KEY, MemoryScope
 from deerflow.agents.middlewares.input_sanitization_middleware import neutralize_untrusted_tags
 from deerflow.config.app_config import AppConfig
 from deerflow.config.database_config import CheckpointChannelMode
@@ -208,6 +209,7 @@ def _release_run_scoped_references(
         CLIENT_PROJECT_ACCESS_CONTEXT_KEY,
         MOMENTUM_SDK_CONTEXT_KEY,
         WSL_DIAGNOSTICS_CONTEXT_KEY,
+        STAFF_MEMORY_SCOPE_KEY,
     }
     try:
         from deerflow.extensions import EXTENSION_SNAPSHOT_CONTEXT_KEY
@@ -236,6 +238,7 @@ def _release_run_scoped_references(
             configurable.pop(MOMENTUM_SDK_CONTEXT_KEY, None)
             configurable.pop(WSL_DIAGNOSTICS_CONTEXT_KEY, None)
             configurable.pop(OWNED_CHILDREN_CONTEXT_KEY, None)
+            configurable.pop(STAFF_MEMORY_SCOPE_KEY, None)
         context = runnable_config.get("context")
         if isinstance(context, dict):
             for key in internal_context_keys:
@@ -548,6 +551,7 @@ _SERVER_OWNED_RUNTIME_CONTEXT_KEYS: Final[frozenset[str]] = (
             KNOWLEDGE_SCOPE_RUNTIME_KEY,
             AUTHENTICATED_CONTEXT_MARKER_KEY,
             PRIVATE_MCP_SESSION_CONTEXT_KEY,
+            STAFF_MEMORY_SCOPE_KEY,
         }
     )
     | WORKSPACE_IDENTITY_CONTEXT_KEYS
@@ -593,6 +597,10 @@ def _build_runtime_context(
                 value = caller_context.get(key)
                 if value is not None:
                     runtime_ctx[key] = value
+            if STAFF_MEMORY_SCOPE_KEY in caller_context:
+                scope = caller_context[STAFF_MEMORY_SCOPE_KEY]
+                # An authenticated host denial must not downgrade to legacy memory.
+                runtime_ctx[STAFF_MEMORY_SCOPE_KEY] = scope if isinstance(scope, MemoryScope) else None
     if app_config is not None:
         runtime_ctx["app_config"] = app_config
     if momentum_sdk_reviewer is not None:
@@ -701,6 +709,7 @@ def _install_runtime_context(config: dict, runtime_context: dict[str, Any]) -> N
         configurable.pop(MOMENTUM_SDK_CONTEXT_KEY, None)
         configurable.pop(WSL_DIAGNOSTICS_CONTEXT_KEY, None)
         configurable.pop(OWNED_CHILDREN_CONTEXT_KEY, None)
+        configurable.pop(STAFF_MEMORY_SCOPE_KEY, None)
     existing_context = config.get("context")
     if isinstance(existing_context, dict):
         existing_context.setdefault("thread_id", runtime_context["thread_id"])
