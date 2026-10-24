@@ -68,6 +68,8 @@ class ConversationContext:
     # so a flush cannot drop a pending normal update's un-extracted tail. See
     # ``_enqueue_locked``'s match-key + backpressure handling.
     bypass_watermark: bool = False
+    # Physical agent-config owner, independent of the isolated memory key.
+    storage_owner_user_id: str | None = None
 
 
 class MemoryUpdateQueue:
@@ -101,6 +103,7 @@ class MemoryUpdateQueue:
         user_id: str | None = None,
         trace_id: str | None = None,
         signals: frozenset[str] | None = None,
+        storage_owner_user_id: str | None = None,
     ) -> None:
         """Add a conversation to the update queue.
 
@@ -126,6 +129,7 @@ class MemoryUpdateQueue:
                 trace_id=trace_id,
                 signals=frozenset(signals) if signals else frozenset(),
                 bypass_watermark=False,
+                storage_owner_user_id=storage_owner_user_id,
             )
             self._reset_timer()
 
@@ -139,6 +143,7 @@ class MemoryUpdateQueue:
         user_id: str | None = None,
         trace_id: str | None = None,
         signals: frozenset[str] | None = None,
+        storage_owner_user_id: str | None = None,
     ) -> None:
         """Add a conversation and start processing immediately in the background."""
         with self._lock:
@@ -150,6 +155,7 @@ class MemoryUpdateQueue:
                 trace_id=trace_id,
                 signals=frozenset(signals) if signals else frozenset(),
                 bypass_watermark=True,
+                storage_owner_user_id=storage_owner_user_id,
             )
             self._schedule_timer(0)
 
@@ -165,6 +171,7 @@ class MemoryUpdateQueue:
         trace_id: str | None,
         signals: frozenset[str],
         bypass_watermark: bool = False,
+        storage_owner_user_id: str | None = None,
     ) -> ConversationContext:
         key = queue_key(thread_id, user_id, agent_name)
         # Emergency (bypass) and normal updates coexist: the match key includes
@@ -197,6 +204,7 @@ class MemoryUpdateQueue:
             trace_id=trace_id,
             signals=merged_signals,
             bypass_watermark=bypass_watermark,
+            storage_owner_user_id=storage_owner_user_id or (existing.storage_owner_user_id if existing else None),
         )
         if existing is not None:
             self._items = [c for c in self._items if not (queue_key(c.thread_id, c.user_id, c.agent_name) == key and c.bypass_watermark == bypass_watermark)]
@@ -406,6 +414,7 @@ class MemoryUpdateQueue:
         *,
         user_id: str | None = None,
         all_agents: bool = False,
+        storage_owner_user_id: str | None = None,
     ) -> int:
         """Drop pending contexts for a scope without processing them.
 
@@ -424,6 +433,8 @@ class MemoryUpdateQueue:
             all_agents: When True, ignore ``agent_name`` and cancel every agent
                 bucket in the matched user scope (used by ``clear_memory`` with
                 ``agent_name=None``).
+            storage_owner_user_id: Host lifecycle selector for one physical
+                agent owner; matches retained trusted metadata instead of user_id.
 
         Returns:
             Number of pending contexts removed.
@@ -436,6 +447,8 @@ class MemoryUpdateQueue:
                 # only (None == None), never "every user".
                 if not all_agents and context.agent_name != agent_name:
                     return True
+                if storage_owner_user_id is not None:
+                    return context.storage_owner_user_id != storage_owner_user_id
                 return context.user_id != user_id
 
             self._items = [context for context in self._items if _keep(context)]

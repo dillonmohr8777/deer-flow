@@ -597,9 +597,10 @@ def _build_runtime_context(
                 value = caller_context.get(key)
                 if value is not None:
                     runtime_ctx[key] = value
-            scope = caller_context.get(STAFF_MEMORY_SCOPE_KEY)
-            if isinstance(scope, MemoryScope):
-                runtime_ctx[STAFF_MEMORY_SCOPE_KEY] = scope
+            if STAFF_MEMORY_SCOPE_KEY in caller_context:
+                scope = caller_context[STAFF_MEMORY_SCOPE_KEY]
+                # An authenticated host denial must not downgrade to legacy memory.
+                runtime_ctx[STAFF_MEMORY_SCOPE_KEY] = scope if isinstance(scope, MemoryScope) else None
     if app_config is not None:
         runtime_ctx["app_config"] = app_config
     if momentum_sdk_reviewer is not None:
