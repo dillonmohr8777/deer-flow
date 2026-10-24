@@ -251,3 +251,13 @@ replay. Three requests at $0.03 each. Details/tests: [WORKFLOWS.md](../../docs/W
 `app/momobot_brand.py` and `routers/momobot_brand.py` serve the private About copy and Agents lineup from `momobot_brand.content_dir` (never committed; `scripts/stage_momobot_brand.sh` fills it). Prices leave only when agents.json has `show_pricing: true`; assets come from an allowlisted subfolder set with a resolve-inside-root check. Slack `/momobot about` and "@bot what is MomoBot" read the same folder.
 
 Customer workspace migration is explicit (`POST /api/client-portal/customer-workspaces/migrations`): global + agency admin, one exact source client-contact assignment and one shared client membership. Move the assignment and deactivate source membership atomically; never attribute shared history to a person. See [CLIENT_PORTAL.md](../../docs/CLIENT_PORTAL.md). Private legacy thread visibility requires exact actor ownership and the server-selected private storage/org; creator scope still holds for shared storage.
+
+Staff client operating context (`GET /api/client-portal/clients/{id}/context`,
+optional `thread_id`) uses `client_context.py` to require active staff membership
+and an exact canonical-agency AM assignment, or local owner/admin authority.
+The bounded read-only projection contains only same-workspace, same-client
+portal requests and selected-request history; it never opens private Brain,
+raw roster notes, project shelves or live integrations. `/work` uses this
+source-qualified evidence and returns existing durable work on retry.
+`services.start_run` rechecks actual `BoardPortal.work_chat_id` bindings on each
+admission; neither a chat-name prefix nor client-supplied context is authority.

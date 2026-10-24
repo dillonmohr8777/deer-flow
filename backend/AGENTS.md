@@ -438,13 +438,19 @@ of a bound customer workspace when their `account_manager` assignment names the
 bound active canonical client and belongs to that client's agency organization.
 They may list/read requests, start internal work and save drafts; assignment
 alone grants no approval or publication authority, which remains with that
-workspace's owner/admin. The server-owned work prompt marks replies as internal
-drafts, calls for current authoritative sources for legal/compliance claims,
-prohibits CAN-SPAM exemption inferences from a professional relationship or
-absence of an offer, and leaves unresolved classifications or requirements for
-qualified human review. This guidance does not verify output or grant sender
-authority. Client-contact behavior and the unbound agency-workspace path are
-unchanged. Tests: `tests/test_client_portal.py`.
+workspace's owner/admin. Staff `GET /clients/{client_id}/context` projects only
+that workspace's exact client identity, portal request summaries and a bounded
+selected-request timeline, preserving source IDs, author kind, visibility and
+timestamps. Raw client notes, private Brain, company history and sandbox file
+grants are excluded; unavailable CRM, campaigns, goals, meetings and delivery
+sources are explicit. `/work` uses that evidence instead of the first message
+alone, keeps internal review/publication rules and proportional research, and
+marks recommended actions separately from completed work. Staff context/work
+requires active owner/admin membership or exact canonical-agency AM assignment
+plus active staff membership. Every server-bound work-chat run admission
+rechecks that authorization; caller context cannot grant it. Existing durable
+work is reused on retry. See `docs/CLIENT_PORTAL.md`. Tests:
+`tests/test_client_portal.py`.
 
 ## Fact checker (`verify_claims`)
 
