@@ -1,8 +1,8 @@
 """Approvals inbox API: review, edit, approve or reject actions agents proposed.
 
-Reads are owner-scoped, with same-org Composio read/reject oversight for active
-organization owners/admins (a foreign row is a 404). Edit/approve/reject need an active
-organization owner/admin, since approving is what releases an outbound action.
+Reads are owner-scoped, with same-org Composio oversight for active owners/admins.
+Active staff may decide their own Composio proposals; other outbound actions
+and edits retain the organization reviewer requirement. A foreign row is a 404.
 Only the caller that wins the pending->approved compare-and-set runs the
 adapter, so a double click or two reviewers can never send twice.
 """
@@ -13,6 +13,7 @@ import logging
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from langchain_core.tools import ToolException
 from pydantic import BaseModel, Field
 
 from app.gateway.approval_adapters import execute_approved
@@ -24,6 +25,7 @@ from deerflow.approvals import InvalidPayloadError
 from deerflow.factcheck import Evidence, check_for_filing, draft_text, verify_draft
 from deerflow.persistence.approvals.corrections import ClientCorrectionRepository
 from deerflow.persistence.organizations.delegation import OrganizationDelegationRepository
+from deerflow.persistence.organizations.resolution import active_organization_for_user
 from deerflow.runtime.user_context import resolve_organization_id
 
 logger = logging.getLogger(__name__)
@@ -201,11 +203,39 @@ async def _record_correction(repo, approved: dict, reviewer: str) -> None:
 @router.post("/{action_id}/approve", response_model=ApprovalResponse)
 @require_permission("approvals", "write")
 async def approve_action(action_id: str, request: Request) -> ApprovalResponse:
-    reviewer = await _require_reviewer(request)
     repo = get_pending_action_repo(request)
-    current = await repo.get(action_id)
+    current = await repo.get(action_id) or await repo.get_composio_for_org(action_id)
     if current is None:
         raise _not_found()
+    if current["action_type"] == "composio_tool_call":
+        from deerflow.mcp.composio_approval_authority import bind_composio_authority, prepare_composio_authority
+
+        reviewer = str((await get_current_user_from_request(request)).id)
+        if current["user_id"] != reviewer:
+            async with repo.session_factory() as session:
+                organization = await active_organization_for_user(session, reviewer, resolve_organization_id())
+            if organization is None or organization.role != "owner":
+                raise HTTPException(403, "Only the active workspace owner can approve another member's Composio action")
+        current = await repo.get_composio_for_approval(action_id)
+        if current is None:
+            raise _not_found()
+        if current["status"] != "pending":
+            raise HTTPException(409, "This action was already decided")
+        try:
+            authority = await prepare_composio_authority(current, repo)
+        except ToolException:
+            raise HTTPException(409, "The proposing actor or their Composio connection is unavailable") from None
+        approved = await repo.decide_composio(action_id, approve=True)
+        if approved is None:
+            raise HTTPException(409, "This action was already decided")
+        details = {"decided_by": authority.decider, "proposer_user_id": authority.proposer, "organization_id": authority.organization, "action_id": action_id}
+        await _audit(request, "approvals.approved", authority.decider, action_id, "success", details)
+        with bind_composio_authority(authority):
+            outcome = await execute_approved(approved)
+        settled = await repo.record_composio_outcome(action_id, status=outcome.status, result=outcome.detail, error=outcome.error)
+        await _audit(request, "approvals.executed", authority.decider, action_id, "success" if outcome.status != "failed" else "failure", {**details, "status": outcome.status, "error": outcome.error})
+        return _out(settled or {**approved, "execution_result": {"state": "outcome_unknown"}, "error": "Composio outcome could not be settled; reconcile before any new proposal"})
+    reviewer = await _require_reviewer(request)
     await _recheck_if_edited(repo, current)
     approved = await repo.decide(action_id, approve=True, decided_by=reviewer)
     if approved is None:
@@ -221,13 +251,21 @@ async def approve_action(action_id: str, request: Request) -> ApprovalResponse:
 @router.post("/{action_id}/reject", response_model=ApprovalResponse)
 @require_permission("approvals", "write")
 async def reject_action(action_id: str, request: Request) -> ApprovalResponse:
-    reviewer = await _require_reviewer(request)
     repo = get_pending_action_repo(request)
     own = await repo.get(action_id)
-    if own is None and await repo.get_composio_for_org(action_id) is None:
+    if own is not None and own["action_type"] == "composio_tool_call":
+        reviewer = str((await get_current_user_from_request(request)).id)
+        rejected = await repo.decide_composio(action_id, approve=False)
+    else:
+        reviewer = await _require_reviewer(request)
+        current = own or await repo.get_composio_for_org(action_id)
+        if current is None:
+            raise _not_found()
+        rejected = await repo.decide(action_id, approve=False, decided_by=reviewer) if own is not None else await repo.reject_composio_for_org(action_id)
+    if own is None and rejected is None and await repo.get_composio_for_org(action_id) is None:
         raise _not_found()
-    rejected = await repo.decide(action_id, approve=False, decided_by=reviewer) if own is not None else await repo.reject_composio_for_org(action_id)
     if rejected is None:
         raise HTTPException(status_code=409, detail="This action was already decided")
-    await _audit(request, "approvals.rejected", reviewer, action_id, "success", None)
+    details = {"decided_by": reviewer, "proposer_user_id": rejected["user_id"], "organization_id": rejected["organization_id"], "action_id": action_id} if rejected["action_type"] == "composio_tool_call" else None
+    await _audit(request, "approvals.rejected", reviewer, action_id, "success", details)
     return _out(rejected)

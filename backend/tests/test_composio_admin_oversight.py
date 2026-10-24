@@ -149,11 +149,11 @@ async def test_successful_reject_keeps_response_and_audit_after_post_commit_role
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("reviewer", [OWNER, ADMIN])
-async def test_cross_member_approve_edit_stay_hidden(world, reviewer):
+async def test_cross_member_approve_requires_proposer_binding_and_edit_stays_hidden(world, reviewer):
     _, repo, client = world
     row = await propose(repo)
     headers = auth_headers(reviewer, ORG)
-    assert (await client.post(f"/api/approvals/{row['id']}/approve", headers=headers)).status_code == 404
+    assert (await client.post(f"/api/approvals/{row['id']}/approve", headers=headers)).status_code == (409 if reviewer == OWNER else 403)
     assert (await client.patch(f"/api/approvals/{row['id']}", json={"title": "Changed"}, headers=headers)).status_code == 404
     with acting(MEMBER):
         assert await repo.get(row["id"]) == row
@@ -167,8 +167,8 @@ async def test_ordinary_member_has_actor_only_visibility_and_no_cross_mutations(
     headers = auth_headers(MEMBER, ORG)
     assert [r["id"] for r in (await client.get("/api/approvals", headers=headers)).json()["approvals"]] == [own["id"]]
     assert (await client.get(f"/api/approvals/{foreign['id']}", headers=headers)).status_code == 404
-    for choice in ("approve", "reject"):
-        assert (await client.post(f"/api/approvals/{foreign['id']}/{choice}", headers=headers)).status_code == 403
+    assert (await client.post(f"/api/approvals/{foreign['id']}/approve", headers=headers)).status_code == 404
+    assert (await client.post(f"/api/approvals/{foreign['id']}/reject", headers=headers)).status_code == 403
     assert (await client.patch(f"/api/approvals/{foreign['id']}", json={"title": "Changed"}, headers=headers)).status_code == 403
 
 
