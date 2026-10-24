@@ -22,6 +22,10 @@ Backend-specific tests use `backend/tests/test_<backend>_memory_backend.py`.
 
 #### Identity and isolation
 
+Client accounts cannot read or change shared workspace memory through middleware,
+compaction, frozen checkpoints, or explicit tools. Use the shared admission check
+with the authenticated account role, not the organization membership role.
+
 Resolve users with `resolve_runtime_user_id(runtime)` in middleware and tools.
 This keeps Gateway and standalone LangGraph runs in the same user scope.
 

@@ -1,5 +1,6 @@
 """Client/staff memory admission on the embedded Gateway's authenticated context."""
 
+import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
@@ -9,7 +10,8 @@ from langgraph.graph.message import add_messages
 from langgraph.runtime import Runtime
 
 from app.gateway.services import inject_authenticated_user_context
-from deerflow.agents.memory import summarization_hook
+from deerflow.agents.memory import admission, summarization_hook
+from deerflow.agents.memory import tools as memory_tools
 from deerflow.agents.memory.backends.deermem.deer_mem import DeerMem
 from deerflow.agents.memory.backends.deermem.deermem.core.storage import create_empty_memory
 from deerflow.agents.middlewares import memory_middleware
@@ -43,6 +45,38 @@ def _runtime(role, workspace="synthetic-workspace"):
     runtime = Runtime(context=context)
     assert getattr(runtime, "server_info", None) is None
     return runtime
+
+
+@pytest.mark.parametrize("role", ["client", "ambient-client", "admin", "exec"])
+@pytest.mark.parametrize(
+    ("tool_name", "arguments", "operation"),
+    [
+        ("memory_search_tool", {"query": "synthetic"}, "search"),
+        ("memory_add_tool", {"content": "synthetic preference"}, "create_fact"),
+        ("memory_update_tool", {"fact_id": "synthetic-fact", "content": "updated"}, "update_fact"),
+        ("memory_delete_tool", {"fact_id": "synthetic-fact"}, "delete_fact"),
+    ],
+)
+def test_explicit_memory_tools_obey_server_role(monkeypatch, role, tool_name, arguments, operation):
+    runtime = _runtime("admin" if role == "ambient-client" else role)
+    runtime.context["agent_name"] = "momobot-max"
+    if role == "ambient-client":
+        monkeypatch.setattr(admission, "get_current_user", lambda: SimpleNamespace(system_role="client"))
+    manager = SimpleNamespace(search=Mock(return_value=[]), get_memory=Mock(return_value={"facts": []}), create_fact=Mock(return_value=({}, "synthetic-fact")), update_fact=Mock(), delete_fact=Mock())
+    get_manager = Mock(return_value=manager)
+    monkeypatch.setattr(memory_tools, "get_memory_manager", get_manager)
+
+    result = json.loads(getattr(memory_tools, tool_name).func(runtime, **arguments))
+
+    if role in {"client", "ambient-client"}:
+        assert "error" in result
+        get_manager.assert_not_called()
+    else:
+        assert "error" not in result
+        operation_mock = getattr(manager, operation)
+        operation_mock.assert_called_once()
+        assert operation_mock.call_args.kwargs["user_id"] == "synthetic-workspace"
+        assert operation_mock.call_args.kwargs["agent_name"] == "momobot-max"
 
 
 @pytest.mark.parametrize(
