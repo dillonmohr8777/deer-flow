@@ -49,6 +49,7 @@ from deerflow.agents.thread_state import THREAD_STATE_REDUCER_FIELDS
 from deerflow.config.paths import Paths, get_paths
 from deerflow.config.summarization_config import ContextSize
 from deerflow.persistence.thread_meta import PROJECT_FILTER_UNSET, THREAD_ARCHIVED_METADATA_KEY, THREAD_PINNED_METADATA_KEY, THREAD_PROJECT_METADATA_KEY, ThreadOwnershipConflictError
+from deerflow.persistence.thread_meta.base import THREAD_UPLOAD_RESERVATION_METADATA_KEY
 from deerflow.runtime import ThreadOperationKind, serialize_channel_values_for_api
 from deerflow.runtime.checkpoint_mode import CheckpointModeMismatchError, CheckpointModeReconfigurationError
 from deerflow.runtime.checkpoint_state import graph_reducer_channels, graph_state_schema, graph_writable_channels
@@ -114,7 +115,7 @@ def _checkpoint_mode_http_error(exc: Exception, thread_id: str) -> HTTPException
 # owner identity through the API surface. Defense-in-depth — the
 # row-level invariant is still ``threads_meta.user_id`` populated from
 # the auth contextvar; this list closes the metadata-blob echo gap.
-_SERVER_RESERVED_METADATA_KEYS: frozenset[str] = frozenset({"owner_id", "user_id", THREAD_PROJECT_METADATA_KEY})
+_SERVER_RESERVED_METADATA_KEYS: frozenset[str] = frozenset({"owner_id", "user_id", THREAD_PROJECT_METADATA_KEY, THREAD_UPLOAD_RESERVATION_METADATA_KEY})
 _SIDECAR_METADATA_KEY = "deerflow_sidecar"
 _BRANCH_METADATA_KEY = "deerflow_branch"
 _BRANCH_TITLE_SEQUENCE_METADATA_KEY = "branch_title_sequence"
@@ -697,11 +698,15 @@ async def _ensure_thread_for_goal(thread_id: str, request: Request) -> None:
             if unscoped_record.get("user_id") != thread_owner_user_id:
                 await thread_store.update_owner(thread_id, thread_owner_user_id, user_id=None)
             record = await thread_store.get(thread_id, **thread_owner_kwargs)
-    if record is None:
-        if checkpoint_exists:
+    if record is None or record.get("upload_reserved") is True:
+        if record is None and checkpoint_exists:
             raise HTTPException(status_code=404, detail=f"Thread {thread_id} not found")
         try:
-            await thread_store.create(thread_id, metadata={}, **thread_owner_kwargs)
+            if record is not None:
+                thread_owner_kwargs.update(finalize_upload=True, assistant_id=record.get("assistant_id"), project_id=(record.get("metadata") or {}).get(THREAD_PROJECT_METADATA_KEY))
+            await thread_store.create(thread_id, metadata=(record.get("metadata") or {}) if record is not None else {}, **thread_owner_kwargs)
+        except ThreadOwnershipConflictError:
+            raise HTTPException(status_code=404, detail=f"Thread {thread_id} not found") from None
         except Exception:
             logger.exception("Failed to create thread_meta for goal thread %s", sanitize_log_param(thread_id))
             raise HTTPException(status_code=500, detail="Failed to create thread") from None
@@ -883,15 +888,18 @@ async def create_thread(body: ThreadCreateRequest, request: Request) -> ThreadRe
     # Idempotency: return existing record when already present
     checkpoint_exists = await _has_checkpoint(checkpointer, thread_id)
     existing_record = await thread_store.get(thread_id, **thread_owner_kwargs)
-    if existing_record is not None:
+    if existing_record is not None and (existing_record.get("upload_reserved") is not True or checkpoint_exists or existing_record.get("status", "idle") != "idle"):
+        # Once a goal/run has started, creation retries cannot reset its fields.
         return _existing_thread_response(thread_id, existing_record)
-    if checkpoint_exists:
+    if existing_record is None and checkpoint_exists:
         raise HTTPException(status_code=404, detail="Thread not found")
 
     # Write thread_meta so the thread appears in /threads/search immediately
     from deerflow.persistence.projects import ProjectNotAssignableError
 
     try:
+        if existing_record is not None:
+            thread_owner_kwargs["finalize_upload"] = True
         created_record = await thread_store.create(
             thread_id,
             assistant_id=getattr(body, "assistant_id", None),
@@ -936,7 +944,8 @@ async def create_thread(body: ThreadCreateRequest, request: Request) -> ThreadRe
             **body.metadata,
             "created_at": now,
         }
-        await checkpointer.aput(config, empty_checkpoint(), ckpt_metadata, {})
+        if not checkpoint_exists and not await _has_checkpoint(checkpointer, thread_id):
+            await checkpointer.aput(config, empty_checkpoint(), ckpt_metadata, {})
     except Exception:
         logger.exception("Failed to create checkpoint for thread %s", sanitize_log_param(thread_id))
         raise HTTPException(status_code=500, detail="Failed to create thread")

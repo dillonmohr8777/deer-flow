@@ -18,6 +18,13 @@ from app.gateway.routers import uploads
 from deerflow.sandbox.lease import get_sandbox_lease_manager
 
 
+@pytest.fixture(autouse=True)
+def _stub_upload_ownership_reservation(monkeypatch):
+    # These ingestion/path unit tests have no real auth/store/checkpointer.
+    # Real reservation and ownership are exercised by test_client_file_role_isolation.
+    monkeypatch.setattr(uploads, "_reserve_upload_thread", AsyncMock())
+
+
 class ChunkedUpload:
     def __init__(self, filename: str, chunks: list[bytes]):
         self.filename = filename

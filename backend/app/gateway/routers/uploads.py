@@ -11,12 +11,14 @@ from typing import BinaryIO
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from pydantic import BaseModel, Field
+from sqlalchemy.exc import IntegrityError
 
 from app.gateway.authz import require_permission, try_acquire_sandbox_for_request
-from app.gateway.deps import get_config
+from app.gateway.deps import get_checkpointer, get_config, get_thread_store
 from app.gateway.upload_ingestion import ThreadUploadIngestionService, UnsafeFilenameError, UnsafeUploadDestinationError
 from deerflow.config.app_config import AppConfig
 from deerflow.config.paths import get_paths
+from deerflow.persistence.thread_meta import ThreadOwnershipConflictError
 from deerflow.runtime.user_context import get_effective_user_id
 from deerflow.sandbox.sandbox_provider import SandboxProvider, get_sandbox_provider
 from deerflow.uploads.manager import (
@@ -344,10 +346,22 @@ def _auto_convert_documents_enabled(app_config: AppConfig) -> bool:
         return False
 
 
+async def _reserve_upload_thread(thread_id: str, request: Request) -> None:
+    store = get_thread_store(request)
+    # A rowless checkpoint is unknown legacy data, never a new chat to adopt.
+    checkpoint = await get_checkpointer(request).aget_tuple({"configurable": {"thread_id": thread_id, "checkpoint_ns": ""}})
+    if checkpoint is not None and await store.get(thread_id) is None:
+        raise HTTPException(status_code=404, detail="Thread not found")
+    try:
+        await store.create(thread_id, preserve_existing=True)
+    except (IntegrityError, ThreadOwnershipConflictError):
+        # A concurrent insert can commit its row/files after our missing-row read.
+        if not await store.check_access(thread_id, get_effective_user_id(), require_existing=True):
+            raise HTTPException(status_code=404, detail="Thread not found") from None
+
+
 @router.post("", response_model=UploadResponse)
-# Upload-before-create (with GET /limits and /list) is the one thread surface open to a
-# row-less id: new chats attach files before the thread exists, and every read or write
-# stays in the caller's own storage bucket. Ownerless and foreign rows still answer 404.
+# New chats reserve durable actor ownership before opening the upload directory.
 @require_permission("threads", "write", owner_check=True, require_existing=False)
 async def upload_files(
     thread_id: ThreadId,
@@ -372,6 +386,8 @@ async def upload_files(
     limits = _get_upload_limits(config)
     if len(files) > limits.max_files:
         raise HTTPException(status_code=413, detail=f"Too many files: maximum is {limits.max_files}")
+
+    await _reserve_upload_thread(thread_id, request)
 
     # Setup runs INSIDE the cleanup scope: open() can acquire the sandbox
     # request lease and then raise (e.g. the acquired lease yields no

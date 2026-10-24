@@ -13,6 +13,33 @@ Alembic stamp/upgrade workers started inside `bootstrap_schema()` remain owned b
 
 # Organization isolation (M3)
 
+Thread upload ownership is reserved in the existing metadata row before ingestion
+opens any directory. `create(preserve_existing=True)` returns visible owned rows
+unchanged; SQL primary-key arbitration (SQLite's write transaction; PostgreSQL's
+unique insert) prevents another actor from taking a missing id. Memory uses its
+existing per-thread lock and remains a single-process backend. A later
+`create(finalize_upload=True)` applies normal creation fields only to a visible
+reservation, preserving owner, incarnation and files; concurrent retries return
+an already-finalized row unchanged. The internal metadata reservation value is
+bound to the server-generated incarnation, stripped from caller metadata and all
+store metadata projections, and never belongs in HTTP/checkpoint/LLM metadata.
+Stateless runs reserve the same ownership before durable run admission; checking
+only before validation lets an upload win while admission yields. The first run
+finalizes the reservation with admitted metadata/assistant and its existing
+validated project, while ordinary existing threads remain unchanged.
+
+Missing-row access and creation fail closed if either the scoped or old unscoped
+thread root already exists, including uploads, outputs, workspace, staging, empty
+directories and symlinks.
+Do not inspect bytes to infer an owner, relabel ownerless rows, or move/delete
+unknown uploads. Rollout must replace every old upload writer before client
+uploads resume; otherwise an old process can still create rowless files. The
+native release owner must inventory existing rowless thread paths read-only,
+retain them as blocked unknown-owner data, and investigate attribution separately.
+No automatic migration or quarantine mutation is authorized by this source fix.
+Rollback must retain the rows/files and hold client upload traffic while any
+vulnerable writer remains; reverting source alone reopens the original bug.
+
 `approvals/sql.py` keeps ordinary actor/storage scope unchanged. Its separate
 Composio oversight methods revalidate current actor/context and active-org
 owner/admin membership for list/read/reject only, always filtering the literal

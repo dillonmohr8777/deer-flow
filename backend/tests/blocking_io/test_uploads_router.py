@@ -6,6 +6,7 @@ import asyncio
 from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 from _router_auth_helpers import call_unwrapped
@@ -16,6 +17,12 @@ from deerflow.runtime.user_context import get_effective_user_id
 from deerflow.uploads.manager import ensure_uploads_dir, get_uploads_dir
 
 pytestmark = pytest.mark.asyncio
+
+
+@pytest.fixture(autouse=True)
+def _stub_upload_ownership_reservation(monkeypatch):
+    # Direct ingestion timing probes have no HTTP auth or thread store.
+    monkeypatch.setattr(uploads, "_reserve_upload_thread", AsyncMock())
 
 
 class _SandboxRecorder:
