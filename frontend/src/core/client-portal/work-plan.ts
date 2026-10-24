@@ -90,6 +90,98 @@ export type WorkPlanRecord = z.infer<typeof recordSchema>;
 
 type Scope = { workspace: string; requestId: string; signal?: AbortSignal };
 
+const participantSchema = z
+  .object({
+    user_id: recordId,
+    email: boundedText("Account email", 320),
+    role: z.enum(["owner", "admin", "account_manager"]),
+  })
+  .strict();
+const participantsSchema = z
+  .object({
+    schema: z.literal("work_plan_participants.v1"),
+    source: z.object({ thread_id: recordId }).strict(),
+    plan_revision: z.number().int().min(0).max(2147483647),
+    items: z.array(participantSchema).max(100),
+    selected_items: z.array(participantSchema).max(2),
+    limit: z.number().int().min(1).max(100),
+    has_more: z.boolean(),
+    next_cursor: z.string().min(1).max(512).nullable(),
+  })
+  .strict()
+  .superRefine((page, context) => {
+    if (
+      page.items.length > page.limit ||
+      new Set(page.items.map((item) => item.user_id)).size !==
+        page.items.length ||
+      new Set(page.selected_items.map((item) => item.user_id)).size !==
+        page.selected_items.length ||
+      page.has_more !== (page.next_cursor !== null) ||
+      (page.has_more && page.items.length === 0) ||
+      page.selected_items.some((selected) =>
+        page.items.some(
+          (item) =>
+            item.user_id === selected.user_id &&
+            (item.email !== selected.email || item.role !== selected.role),
+        ),
+      )
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "Invalid participant page.",
+      });
+    }
+  });
+
+export type WorkPlanParticipant = z.infer<typeof participantSchema>;
+export type WorkPlanParticipants = z.infer<typeof participantsSchema>;
+
+export async function getWorkPlanParticipants({
+  workspace,
+  requestId,
+  signal,
+  cursor = null,
+  limit = 50,
+}: Scope & {
+  cursor?: string | null;
+  limit?: number;
+}): Promise<WorkPlanParticipants> {
+  if (
+    !Number.isInteger(limit) ||
+    limit < 1 ||
+    limit > 100 ||
+    (cursor !== null && (cursor.length === 0 || cursor.length > 512))
+  ) {
+    throw new Error("Invalid teammate page request.");
+  }
+  const search = new URLSearchParams({ limit: String(limit) });
+  if (cursor !== null) search.set("cursor", cursor);
+  const response = await fetch(
+    `${getBackendBaseURL()}/api/client-portal/threads/${encodeURIComponent(requestId)}/work-plan/participants?${search}`,
+    {
+      method: "GET",
+      headers: { "X-Portal-Workspace": workspace },
+      cache: "no-store",
+      signal,
+    },
+  );
+  const body: unknown = await response.json().catch(() => null);
+  signal?.throwIfAborted();
+  if (!response.ok) {
+    throw new Error(`Could not load eligible teammates (${response.status}).`);
+  }
+  const parsed = participantsSchema.safeParse(body);
+  if (
+    !parsed.success ||
+    parsed.data.source.thread_id !== requestId ||
+    parsed.data.limit !== limit ||
+    (cursor !== null && parsed.data.next_cursor === cursor)
+  ) {
+    throw new Error("The server returned an invalid teammate directory.");
+  }
+  return parsed.data;
+}
+
 export function validateWorkPlan(plan: WorkPlan, requestId: string): void {
   const parsed = planSchema.safeParse(plan);
   if (!parsed.success)

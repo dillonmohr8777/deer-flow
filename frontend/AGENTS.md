@@ -396,6 +396,21 @@ retention, the private gate and 390/768/1440 geometry with mocked APIs.
 
 Client inbox/work rules: [CLIENT_PORTAL.md](../backend/docs/CLIENT_PORTAL.md).
 
+The work-plan participant directory is a separate, strict sibling GET under the
+request's `/work-plan/participants`, with `X-Portal-Workspace`, limit 50/max 100 and
+opaque cursor paging. Never merge it into `WorkPlanRecord` or the PUT payload.
+Query keys and the existing editor remount fence include actor, workspace,
+client and request; consumed AbortSignals and query cancellation discard late
+scope/page responses. Paging/retry must keep the local plan mounted and dirty.
+Render only supplied account email/role; selected_items confirms saved people
+outside the page. Missing saved IDs remain visibly unavailable and repairable;
+only interpret that absence when required directory `plan_revision` matches the
+local record revision and the query is neither pending nor failed. Different
+snapshot revisions offer retry and preserve fields as unconfirmed. Keep the
+existing record-revision query key for save/reload refresh. No profile reads,
+invented names, automatic link fetches or access grants. Synthetic browser QA in
+`client-inbox-work-plan.spec.ts` covers paging/retry, CAS and 390/768/1440 geometry.
+
 ## Approvals inbox (`/workspace/approvals`)
 
 List/detail page over `GET/PATCH/POST /api/approvals` (`src/core/approvals/`, `src/components/workspace/approvals/`). It reuses the Board's two-pane layout module. Edits save through `PATCH` and Approve is disabled while the form is dirty, so what is approved is always what was saved. Slack and email get typed fields; ad changes and other types edit as JSON. Keys the form does not show are preserved on save.

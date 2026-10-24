@@ -184,6 +184,19 @@ fixtures cannot trigger a paid provider call. Responsive checks cover 390, 768
 and 1440px, 44px controls, focus and reduced motion. Fixture QA does not establish
 physical iPhone installation or live provider acceptance.
 
+## Internal work-plan teammates
+
+Staff can choose the work-plan owner and verifier from currently eligible
+teammates for the selected client request. Choices show existing account email,
+role, and a self annotation. Load more teammates and Retry teammates preserve
+unsaved edits. A saved person outside the current page remains identifiable when
+the directory confirms eligibility; unavailable saved selections can be cleared
+or replaced. A directory failure preserves selections without declaring anyone
+ineligible. A directory snapshot from a different saved-plan revision also leaves
+eligibility unconfirmed and offers retry; it cannot establish that an older saved
+selection is unavailable. Saving rechecks eligibility on the server and retains
+the existing revision conflict behavior.
+
 ## License
 
 MIT License. See [LICENSE](../LICENSE) for details.
