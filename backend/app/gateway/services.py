@@ -1925,7 +1925,18 @@ async def start_run(
         if sandbox_config.use != "deerflow.community.aio_sandbox:AioSandboxProvider" or sandbox_config.network.mode == "open":
             raise HTTPException(status_code=503, detail="Shared workspace tools require the isolated workspace sandbox")
 
+    portal_work_bound = False
+
     async def thread_access_allowed() -> bool:
+        nonlocal portal_work_bound
+
+        from app.gateway.client_context import require_portal_work_access
+        from deerflow.runtime.user_context import resolve_organization_id
+
+        # Staff work belongs to its server-bound portal client, not merely the
+        # shared storage principal. Recheck on initial admission and the
+        # existing post-preparation access check, including replay/resume.
+        portal_work_bound = await require_portal_work_access(actor_id=actor_user_id, organization_id=resolve_organization_id(), chat_id=thread_id)
         if user is None:
             if not require_existing_thread:
                 return True
@@ -2278,7 +2289,7 @@ async def start_run(
                 # delete route holds a durable thread-operation reservation,
                 # so after this point either the run or the delete wins; they
                 # cannot both succeed across Gateway workers.
-                if require_existing_thread and not await thread_access_allowed():
+                if (require_existing_thread or portal_work_bound) and not await thread_access_allowed():
                     raise HTTPException(status_code=404, detail=f"Thread {thread_id} not found")
                 if not require_existing_thread:
                     from sqlalchemy.exc import IntegrityError

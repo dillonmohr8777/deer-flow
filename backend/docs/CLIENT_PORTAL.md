@@ -47,7 +47,46 @@ Each saved draft has a new immutable message id, revision and PendingAction orig
 
 After publication the conversation is immutable in this first slice; follow-up work is a new request. Attachments are small UTF-8 text deliverables, not arbitrary uploads or external URLs. Existing chat outputs stay behind the ordinary authorized thread/artifact APIs; staff work refs never appear in a client projection. SQL and memory thread stores bind customer chats to the server-owned creator; list/direct/mutations/access checks exclude staff and other-client chats even in a shared storage bucket.
 
+## Workspace migration and legacy visibility
+
+Customer workspace migration is explicit (`POST /api/client-portal/customer-workspaces/migrations`): global + agency admin, one exact source client-contact assignment and one shared client membership. Move the assignment and deactivate source membership atomically; never attribute shared history to a person. Private legacy thread visibility requires exact actor ownership and the server-selected private storage/org; creator scope still holds for shared storage.
+
 ## Verification and rollout
+
+Staff may read `GET /api/client-portal/clients/{client_id}/context`, optionally
+selecting `thread_id`. It requires the same selected workspace header as the
+inbox. An active owner/admin of that workspace, or an active staff member with
+the exact canonical agency `account_manager` assignment, can read it. Client
+contacts, inactive or foreign assignments and contributor-only membership
+cannot use this endpoint or start staff work.
+
+The `client_operating_context.v1` response contains `workspace_id`, a minimal
+`client` identity with source timestamp, bounded `requests.items` plus
+`has_more`, and an optional `current_request` with `timeline` and draft IDs and
+revision. Timeline entries preserve message ID, author kind, internal/published
+visibility, source timestamp and bounded body. Limits and truncation are
+explicit: at most 25 request summaries, 40 messages and 24,000 body characters;
+the original and newest messages survive truncation. Attachment descriptors
+identify portal deliverables only: no attachment body or sandbox file grant is
+included. Raw notes, contact identities, other-client and private chat history,
+private Brain and project shelves are excluded.
+
+The response's `domains` and `freshness` distinguish this stored portal evidence
+from missing dedicated goal, CRM, campaign, meeting and delivery sources. A
+request may supply such facts; that is not proof of a connected provider or
+complete account history. Read failures are errors rather than empty evidence.
+`/work` uses this server-derived context, preserving source references and
+marking the text as untrusted evidence. It supports requested internal account
+deliverables as well as copy, keeps publication under owner/admin review and
+does not claim a suggested task was assigned. A retry returns its original
+durable run; continuation/run admission rechecks the actual server portal
+binding and current staff authorization. This foundation does not establish
+connected workflows or full AM readiness.
+
+The initial `/work` input is a stored snapshot. A later normal chat turn does
+not automatically refresh portal messages added after that snapshot. Staff can
+read the context endpoint again, but this slice adds no live-context middleware
+or per-turn retrieval tool.
 
 - Backend: `cd backend && uv run pytest tests/test_customer_workspace_invitations.py tests/test_workspace_invitations.py tests/test_oidc_callback_invite_join.py tests/test_client_portal.py tests/test_client_route_boundary.py tests/test_board_router.py tests/test_org_isolation_b_threads.py tests/test_org_isolation_g_memory.py tests/test_momobot_max.py -q`.
 - Frontend: `cd frontend && pnpm exec eslint src/components/workspace/inbox/client-inbox.tsx src/app/workspace/inbox/page.tsx src/components/workspace/workspace-nav-chat-list.tsx src/core/auth/roles.ts src/core/approvals/types.ts src/components/workspace/approvals/approvals-data.ts src/components/workspace/approvals/approvals.tsx tests/e2e/client-inbox.spec.ts && pnpm typecheck && pnpm build`.
