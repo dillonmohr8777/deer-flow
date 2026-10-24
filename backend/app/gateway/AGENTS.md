@@ -250,4 +250,4 @@ replay. Three requests at $0.03 each. Details/tests: [WORKFLOWS.md](../../docs/W
 
 `app/momobot_brand.py` and `routers/momobot_brand.py` serve the private About copy and Agents lineup from `momobot_brand.content_dir` (never committed; `scripts/stage_momobot_brand.sh` fills it). Prices leave only when agents.json has `show_pricing: true`; assets come from an allowlisted subfolder set with a resolve-inside-root check. Slack `/momobot about` and "@bot what is MomoBot" read the same folder.
 
-Customer workspace migration, private legacy thread visibility, staff client context (`client_context.py`) and portal `/work` admission: see [CLIENT_PORTAL.md](../../docs/CLIENT_PORTAL.md).
+Customer migration, private legacy visibility, staff context, portal `/work` and internal work-plan authorization/CAS/audit (`client_work_plan.py`): see [CLIENT_PORTAL.md](../../docs/CLIENT_PORTAL.md).
