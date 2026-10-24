@@ -394,6 +394,20 @@ composer and phone-only sidebar scope; do not modify generated UI primitives or
 desktop density. `tests/e2e/agent-room.spec.ts` covers readback, failed-post draft
 retention, the private gate and 390/768/1440 geometry with mocked APIs.
 
+## Client inbox context (`/workspace/inbox`)
+
+Client inbox (`/workspace/inbox`) staff context consumes the PR316
+`client_operating_context.v1` projection only. Include the exact user, workspace,
+client and optional request in query identity, pass `X-Portal-Workspace` and
+AbortSignal, and reject mismatched response scope. The staff client filter uses
+the endpoint's bounded recent requests, with explicit limits and unavailable
+domains. Client contacts filter their current portal page and never request or
+render staff context. Keep history text plain and attachment descriptors inert.
+Key the whole inbox session by user/workspace so compose inputs, submission keys,
+drafts and selection reset together; fence mutation/download callbacks after
+unmount. Existing links do not create new access or start work. DOM regressions
+live in `tests/unit/components/workspace/client-inbox.dom.test.tsx`.
+
 ## Approvals inbox (`/workspace/approvals`)
 
 List/detail page over `GET/PATCH/POST /api/approvals` (`src/core/approvals/`, `src/components/workspace/approvals/`). It reuses the Board's two-pane layout module. Edits save through `PATCH` and Approve is disabled while the form is dirty, so what is approved is always what was saved. Slack and email get typed fields; ad changes and other types edit as JSON. Keys the form does not show are preserved on save.
