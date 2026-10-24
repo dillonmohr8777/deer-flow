@@ -160,6 +160,8 @@ class RunRepository(RunStore):
         commit from turning the retry into a primary-key failure.
         """
         resolved_user_id = resolve_user_id(user_id, method_name="RunRepository.put")
+        if operation_kind == "upload_write":
+            raise ValueError("Upload reservations require atomic thread admission")
         now = datetime.now(UTC)
         created = datetime.fromisoformat(created_at) if created_at else now
         lease_dt = datetime.fromisoformat(lease_expires_at) if lease_expires_at else None
@@ -189,6 +191,8 @@ class RunRepository(RunStore):
             if row is None:
                 session.add(RunRow(run_id=run_id, created_at=created, organization_id=organization_id, **values))
             else:
+                if row.operation_kind == "upload_write":
+                    raise ValueError("An upload reservation cannot be replaced by a run snapshot")
                 for key, value in values.items():
                     setattr(row, key, value)
                 # A legacy parent proves no organization. Do not erase a valid
@@ -341,7 +345,7 @@ class RunRepository(RunStore):
         # completed run) cannot be overwritten by a late writer.
         async with self._sf() as session:
             values["change_seq"] = await self._next_change_seq(session)
-            result = await session.execute(update(RunRow).where(RunRow.run_id == run_id, RunRow.status.in_(("pending", "running", "interrupted"))).values(**values))
+            result = await session.execute(update(RunRow).where(RunRow.run_id == run_id, RunRow.operation_kind != "upload_write", RunRow.status.in_(("pending", "running", "interrupted"))).values(**values))
             await session.commit()
             return result.rowcount != 0
 
@@ -354,6 +358,7 @@ class RunRepository(RunStore):
                 .where(
                     RunRow.run_id == run_id,
                     RunRow.status == "pending",
+                    RunRow.operation_kind != "upload_write",
                 )
                 .values(status="running", updated_at=datetime.now(UTC), change_seq=change_seq)
             )
@@ -381,11 +386,11 @@ class RunRepository(RunStore):
         user_id: str | None | _AutoSentinel = AUTO,
     ):
         resolved_user_id = resolve_user_id(user_id, method_name="RunRepository.delete")
+        conditions = [RunRow.run_id == run_id, RunRow.operation_kind != "upload_write", *_in_active_organization()]
+        if resolved_user_id is not None:
+            conditions.append(RunRow.user_id == resolved_user_id)
         async with self._sf() as session:
-            row = await session.get(RunRow, run_id)
-            if not _visible(row, resolved_user_id):
-                return
-            await session.delete(row)
+            await session.execute(delete(RunRow).where(*conditions))
             await session.commit()
 
     async def delete_by_thread(
@@ -431,6 +436,22 @@ class RunRepository(RunStore):
         """Release a reservation using its captured owner, not request context."""
         await self.delete(run_id, user_id=user_id)
 
+    async def release_upload_operation(self, run_id: str, *, user_id: str | None, owner_worker_id: str) -> bool:
+        # The operation id and original worker remain authoritative after expiry;
+        # no generic path may reassign or retire this kind while file work drains.
+        async with self._sf() as session:
+            result = await session.execute(
+                delete(RunRow).where(
+                    RunRow.run_id == run_id,
+                    RunRow.user_id == user_id,
+                    RunRow.owner_worker_id == owner_worker_id,
+                    RunRow.operation_kind == "upload_write",
+                    RunRow.status == "pending",
+                )
+            )
+            await session.commit()
+            return result.rowcount == 1
+
     async def list_pending(self, *, before=None):
         if before is None:
             before_dt = datetime.now(UTC)
@@ -456,6 +477,7 @@ class RunRepository(RunStore):
             .where(
                 RunRow.status.in_(("pending", "running")),
                 RunRow.created_at <= before_dt,
+                RunRow.operation_kind != "upload_write",
             )
             .order_by(RunRow.created_at.asc())
         )
@@ -517,6 +539,7 @@ class RunRepository(RunStore):
                 .where(
                     RunRow.run_id == run_id,
                     RunRow.status.in_(tuple(allowed_sources)),
+                    RunRow.operation_kind != "upload_write",
                 )
                 .values(**values)
             )
@@ -722,6 +745,7 @@ class RunRepository(RunStore):
                 .where(
                     RunRow.run_id == run_id,
                     RunRow.status.in_(("pending", "running")),
+                    RunRow.operation_kind != "upload_write",
                 )
                 .values(
                     cancel_action=case(
@@ -767,6 +791,7 @@ class RunRepository(RunStore):
                     RunRow.run_id == run_id,
                     RunRow.status.in_(("pending", "running")),
                     RunRow.cancel_action.is_(None),
+                    RunRow.operation_kind != "upload_write",
                 )
                 .values(**values)
                 .returning(RunRow.run_id)
@@ -807,6 +832,7 @@ class RunRepository(RunStore):
                     RunRow.run_id == run_id,
                     RunRow.status.in_(("pending", "running")),
                     _lease_expired_or_null(RunRow.lease_expires_at, cutoff),
+                    RunRow.operation_kind != "upload_write",
                 )
                 .values(**values)
             )
@@ -832,6 +858,7 @@ class RunRepository(RunStore):
                 RunRow.status.in_(("pending", "running")),
                 RunRow.created_at <= before_dt,
                 _lease_expired_or_null(RunRow.lease_expires_at, cutoff),
+                RunRow.operation_kind != "upload_write",
             )
             .order_by(RunRow.created_at.asc())
         )
@@ -915,6 +942,8 @@ class RunRepository(RunStore):
                 )
                 result = await session.execute(stmt)
                 for row in result.scalars():
+                    if row.operation_kind == "upload_write":
+                        raise ConflictError(f"Thread {thread_id} has an upload awaiting its original writer")
                     lease_expired = False
                     if row.lease_expires_at is not None:
                         # SQLite drops tzinfo on read despite

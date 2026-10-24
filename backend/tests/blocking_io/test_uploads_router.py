@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import asynccontextmanager
 from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
@@ -23,6 +24,12 @@ pytestmark = pytest.mark.asyncio
 def _stub_upload_ownership_reservation(monkeypatch):
     # Direct ingestion timing probes have no HTTP auth or thread store.
     monkeypatch.setattr(uploads, "_reserve_upload_thread", AsyncMock())
+    monkeypatch.setattr(uploads, "reserve_upload_write", _allow_upload_write)
+
+
+@asynccontextmanager
+async def _allow_upload_write(*_args, **_kwargs):
+    yield
 
 
 class _SandboxRecorder:

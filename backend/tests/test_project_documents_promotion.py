@@ -32,8 +32,10 @@ from app.gateway.routers import project_documents, project_thread_files, project
 from deerflow.config.paths import get_paths
 from deerflow.persistence.engine import close_engine, get_session_factory, init_engine
 from deerflow.persistence.projects import ProjectDocumentRepository, ProjectRepository
+from deerflow.persistence.run import RunRepository
 from deerflow.persistence.thread_meta import ThreadMetaRepository
 from deerflow.projects.documents import original_file_path
+from deerflow.runtime import ConflictError, RunManager, ThreadOperationKind
 from deerflow.runtime.user_context import reset_current_user, set_current_user
 
 _STUB_PERMISSIONS: list[str] = [
@@ -75,6 +77,7 @@ def _build_app(tmp_path, *, uploads_config: dict | None = None) -> FastAPI:
     app.state.project_repo = ProjectRepository(sf)
     app.state.project_document_repo = ProjectDocumentRepository(sf)
     app.state.thread_store = ThreadMetaRepository(sf)
+    app.state.run_manager = RunManager(store=RunRepository(sf))
     cfg = MagicMock()
     cfg.uploads = uploads_config or {}
     app.dependency_overrides[get_config] = lambda: cfg
@@ -771,10 +774,8 @@ class TestAttachUniqueNaming:
 
 
 class TestAttachAtomicReservation:
-    """Destination claims are reserved atomically (O_EXCL) with next-suffix
-    retries: two CONCURRENT same-name ingestions into one thread land as
-    ``name.ext`` + ``name_1.ext`` with both byte streams intact — the later
-    commit can never overwrite the earlier one."""
+    """Overlapping attachments conflict; a retry preserves distinct source bytes
+    and unique original/converted names without overwriting earlier files."""
 
     def test_concurrent_attach_same_name_lands_two_intact_files(self, tmp_path):
         app = _build_app(tmp_path)
@@ -785,31 +786,36 @@ class TestAttachAtomicReservation:
             second = _upload(client, pid, "race.txt", b"second-bytes").json()["document"]
             _seed_thread(app, "thread-1")
 
-            # Both sessions seed from the SAME pre-race listing before either
-            # can reserve, so both claim "race.txt"; the O_EXCL reservation
-            # serializes them and the loser retries as "race_1.txt".
+            # The second HTTP writer must retry after the first finishes.
             real_list = uploads.list_files_in_dir
-            seeded = threading.Barrier(2)
+            seeded = threading.Event()
+            proceed = threading.Event()
 
             def gated_list(directory):
                 listing = real_list(directory)
-                seeded.wait(timeout=15)
+                if not seeded.is_set():
+                    seeded.set()
+                    assert proceed.wait(15), "synthetic attachment barrier was not released"
                 return listing
 
             responses: dict[str, Any] = {}
 
-            def do_attach(key: str, doc_id: str) -> None:
-                responses[key] = _attach(client, pid, doc_id, "thread-1")
+            def do_attach() -> None:
+                responses["a"] = _attach(client, pid, first["id"], "thread-1")
 
             with patch.object(uploads, "list_files_in_dir", gated_list):
-                threads = [threading.Thread(target=do_attach, args=(key, doc["id"])) for key, doc in (("a", first), ("b", second))]
-                for thread in threads:
-                    thread.start()
-                for thread in threads:
-                    thread.join(timeout=30)
-
-            assert all(not thread.is_alive() for thread in threads)
-            assert {r.status_code for r in responses.values()} == {200}
+                first_thread = threading.Thread(target=do_attach)
+                first_thread.start()
+                try:
+                    assert seeded.wait(10)
+                    assert _attach(client, pid, second["id"], "thread-1").status_code == 409
+                finally:
+                    proceed.set()
+                    first_thread.join(timeout=20)
+            assert not first_thread.is_alive()
+            assert responses["a"].status_code == 200
+            responses["b"] = _attach(client, pid, second["id"], "thread-1")
+            assert responses["b"].status_code == 200
             assert sorted(r.json()["filename"] for r in responses.values()) == ["race.txt", "race_1.txt"]
             contents = {path.name: path.read_bytes() for path in _thread_uploads("thread-1").iterdir()}
             assert sorted(contents) == ["race.txt", "race_1.txt"]
@@ -835,27 +841,34 @@ class TestAttachAtomicReservation:
             _seed_thread(app, "thread-1")
 
             real_list = uploads.list_files_in_dir
-            seeded = threading.Barrier(2)
+            seeded = threading.Event()
+            proceed = threading.Event()
 
             def gated_list(directory):
                 listing = real_list(directory)
-                seeded.wait(timeout=15)
+                if not seeded.is_set():
+                    seeded.set()
+                    assert proceed.wait(15), "synthetic attachment barrier was not released"
                 return listing
 
             responses: dict[str, Any] = {}
 
-            def do_attach(key: str, doc_id: str) -> None:
-                responses[key] = _attach(client, pid, doc_id, "thread-1")
+            def do_attach() -> None:
+                responses["a"] = _attach(client, pid, first["id"], "thread-1")
 
             with patch.object(uploads, "list_files_in_dir", gated_list):
-                threads = [threading.Thread(target=do_attach, args=(key, doc["id"])) for key, doc in (("a", first), ("b", second))]
-                for thread in threads:
-                    thread.start()
-                for thread in threads:
-                    thread.join(timeout=30)
-
-            assert all(not thread.is_alive() for thread in threads)
-            assert {r.status_code for r in responses.values()} == {200}
+                first_thread = threading.Thread(target=do_attach)
+                first_thread.start()
+                try:
+                    assert seeded.wait(10)
+                    assert _attach(client, pid, second["id"], "thread-1").status_code == 409
+                finally:
+                    proceed.set()
+                    first_thread.join(timeout=20)
+            assert not first_thread.is_alive()
+            assert responses["a"].status_code == 200
+            responses["b"] = _attach(client, pid, second["id"], "thread-1")
+            assert responses["b"].status_code == 200
             contents = {path.name: path.read_bytes() for path in _thread_uploads("thread-1").iterdir()}
             assert sorted(contents) == ["report.md", "report.pdf", "report_1.md", "report_1.pdf"]
             assert sorted(contents[name] for name in ("report.pdf", "report_1.pdf")) == sorted([b"first-pdf", b"second-pdf"])
@@ -951,3 +964,73 @@ class TestAttachVsPurgeSerialization:
             # The attach's staged copy completed before purge could unlink:
             # the thread received the full bytes, never a partial file.
             assert (_thread_uploads("thread-1") / "race.txt").read_bytes() == b"race bytes"
+
+
+def test_attach_holds_target_thread_admission_until_its_copy_drains(tmp_path, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+
+    app = _build_app(tmp_path)
+    copy_started = threading.Event()
+    finish_copy = threading.Event()
+    original = project_documents.stage_document_copy_for_attach
+
+    async def paused_copy(*args, **kwargs):
+        staged = await original(*args, **kwargs)
+        copy_started.set()
+        assert await anyio.to_thread.run_sync(finish_copy.wait, 15), "synthetic copy barrier was not released"
+        return staged
+
+    async def try_delete_admission():
+        token = set_current_user(SimpleNamespace(id=_USER))
+        try:
+            async with app.state.run_manager.reserve_thread_operation("thread-1", kind=ThreadOperationKind.delete, user_id=_USER):
+                pass
+        finally:
+            reset_current_user(token)
+
+    monkeypatch.setattr(project_documents, "stage_document_copy_for_attach", paused_copy)
+    provider = _remote_provider()[0]
+    lease = SandboxRequestLease(sandbox=None, sandbox_id=None, denied=True, owner_id="synthetic-project-copy", provider=provider)
+    with (
+        TestClient(app) as client,
+        patch.object(uploads, "get_sandbox_provider", return_value=provider),
+        patch.object(uploads, "try_acquire_sandbox_for_request", AsyncMock(return_value=lease)),
+    ):
+        pid = _create_project(client)["id"]
+        document = _upload(client, pid, "held-copy.txt", b"synthetic-held-copy").json()["document"]
+        _seed_thread(app, "thread-1")
+        with ThreadPoolExecutor(max_workers=1) as workers:
+            future = workers.submit(_attach, client, pid, document["id"], "thread-1")
+            try:
+                assert copy_started.wait(10)
+                with pytest.raises(ConflictError):
+                    client.portal.call(try_delete_admission)
+            finally:
+                finish_copy.set()
+            response = future.result(timeout=15)
+        assert response.status_code == 200, response.text
+        assert (_thread_uploads("thread-1") / response.json()["filename"]).read_bytes() == b"synthetic-held-copy"
+        client.portal.call(try_delete_admission)
+
+
+def test_attach_rechecks_existing_target_after_durable_admission(tmp_path, monkeypatch):
+    from contextlib import asynccontextmanager
+
+    app = _build_app(tmp_path)
+    original = project_documents.reserve_upload_write
+
+    @asynccontextmanager
+    async def remove_target_before_admission(thread_id, request):
+        # Model a deletion after the route's initial check, before its reservation.
+        await app.state.thread_store.delete(thread_id)
+        async with original(thread_id, request):
+            yield
+
+    with TestClient(app) as client:
+        pid = _create_project(client)["id"]
+        document = _upload(client, pid, "late-copy.txt", b"synthetic-late-copy").json()["document"]
+        _seed_thread(app, "thread-1")
+        monkeypatch.setattr(project_documents, "reserve_upload_write", remove_target_before_admission)
+        response = _attach(client, pid, document["id"], "thread-1")
+        assert response.status_code == 404, response.text
+        assert not _thread_uploads("thread-1").exists()

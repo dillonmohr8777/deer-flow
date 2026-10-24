@@ -13,6 +13,13 @@ Alembic stamp/upgrade workers started inside `bootstrap_schema()` remain owned b
 
 # Organization isolation (M3)
 
+`run/sql.py` and the memory run store keep `upload_write` reservations pending
+across generic cancellation, expiry, takeover and orphan scans. Only the atomic
+`release_upload_operation` predicate (operation id, storage owner, original
+worker, held kind, pending status) may remove one after file work drains.
+Generic snapshots/status/completion/delete paths cannot retire or reassign it.
+Do not infer a safe repair from an expired lease; verify the old writer stopped.
+
 Thread upload ownership is reserved in the existing metadata row before ingestion
 opens any directory. `create(preserve_existing=True)` returns visible owned rows
 unchanged; SQL primary-key arbitration (SQLite's write transaction; PostgreSQL's

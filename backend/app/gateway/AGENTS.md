@@ -1,5 +1,10 @@
 ### Gateway API (`app/gateway/`)
 
+HTTP uploads and project-document attachment copies use the durable `upload_write`
+reservation through drained staging/ingestion/cleanup. The attachment route repeats
+existing-thread ownership after admission. Lease expiry is never permission to
+retire this kind; see runtime upload admission/repair and persistence contracts.
+
 The default-disabled `wsl_bridge` is a separate diagnostic exchange, never an
 executor. Its thread routes bind actual actor/org/thread plus storage identity;
 only delegated internal callers or the existing SSH operator CLI may ingest a

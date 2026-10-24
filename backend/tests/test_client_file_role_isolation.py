@@ -1,14 +1,16 @@
 """Exercise client file authorization through the real Gateway and SQL thread store."""
 
 import asyncio
-from datetime import UTC, datetime
+import threading
+from contextlib import asynccontextmanager
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
 from langgraph.store.memory import InMemoryStore
 from org_isolation_fixtures import ORG_S, STORAGE_S, USER_A, USER_B, USER_C, auth_headers
 from org_isolation_fixtures import org_world_pooled as org_world  # noqa: F401
-from sqlalchemy import update
+from sqlalchemy import select, update
 from test_client_portal import BASE as PORTAL_BASE
 from test_client_portal import CUSTOMER_ORG, CUSTOMER_STORAGE, _seed_bound_customer
 from test_org_isolation_b_threads import (
@@ -18,16 +20,19 @@ from test_org_isolation_b_threads import (
 
 from app.gateway import services
 from app.gateway.deps import get_config
-from app.gateway.routers import client_portal
+from app.gateway.routers import client_portal, uploads
 from deerflow.config.app_config import AppConfig, set_app_config
+from deerflow.config.run_ownership_config import RunOwnershipConfig
 from deerflow.persistence.clients.model import ClientAssignmentRow
 from deerflow.persistence.organizations.identity import private_organization_id, private_organization_slug
 from deerflow.persistence.organizations.model import OrganizationMemberRow, OrganizationRow
 from deerflow.persistence.projects.model import ProjectRow
+from deerflow.persistence.run import RunRepository, RunRow
 from deerflow.persistence.thread_meta.base import THREAD_UPLOAD_RESERVATION_METADATA_KEY
 from deerflow.persistence.thread_meta.memory import MemoryThreadMetaStore
 from deerflow.persistence.thread_meta.model import ThreadMetaRow
 from deerflow.persistence.user.model import UserRow
+from deerflow.runtime import ConflictError, RunManager, ThreadOperationKind
 from deerflow.runtime.user_context import get_effective_actor_user_id
 
 pytestmark = pytest.mark.asyncio
@@ -328,7 +333,7 @@ async def test_concurrent_client_uploads_reserve_one_actor_without_resetting_thr
 
     actors = (USER_B, PEER_ACTOR)
     responses = await asyncio.gather(*(upload(actor, f"{index}.txt", f"actor-{index}".encode()) for index, actor in enumerate(actors)))
-    assert sorted(response.status_code for response in responses) == [200, 404], [(response.status_code, response.text) for response in responses]
+    assert sum(response.status_code == 200 for response in responses) == 1 and all(response.status_code in {200, 404, 409} for response in responses), [(response.status_code, response.text) for response in responses]
     winner = next(index for index, response in enumerate(responses) if response.status_code == 200)
     actor = actors[winner]
     directory = world.paths.sandbox_uploads_dir(thread_id, user_id=CUSTOMER_STORAGE)
@@ -338,7 +343,12 @@ async def test_concurrent_client_uploads_reserve_one_actor_without_resetting_thr
     assert creations[0].json() == creations[1].json()
     before = creations[0].json()
     own_responses = await asyncio.gather(upload(actor, "next-a.txt", b"a"), upload(actor, "next-b.txt", b"b"))
-    assert [response.status_code for response in own_responses] == [200, 200]
+    for response, filename, content in zip(own_responses, ("next-a.txt", "next-b.txt"), (b"a", b"b"), strict=True):
+        assert response.status_code in {200, 409}, response.text
+        if response.status_code == 409:
+            retried_upload = await upload(actor, filename, content)
+            assert retried_upload.status_code == 200, retried_upload.text
+    assert {path.name: path.read_bytes() for path in directory.iterdir()} == {f"{winner}.txt": f"actor-{winner}".encode(), "next-a.txt": b"a", "next-b.txt": b"b"}
     after = await world.request(actor, "POST", "/api/threads", {"thread_id": thread_id}, org=CUSTOMER_ORG)
     assert after.json() == before
     peer = await world.request(actors[1 - winner], "POST", "/api/threads", {"thread_id": thread_id}, org=CUSTOMER_ORG)
@@ -572,3 +582,236 @@ async def test_legacy_thread_data_cannot_be_claimed_or_served(world, monkeypatch
     assert claimed.status_code == 404 and read.status_code == 404 and sentinel not in read.content, (claimed.status_code, read.status_code, read.content)
     assert await world.app.state.thread_store.get(thread_id, user_id=None) is None
     assert path.read_bytes() == sentinel
+
+
+async def test_inflight_upload_blocks_delete_and_recreation_until_files_are_finished(world, monkeypatch):  # noqa: F811
+    await _seed_client_file_world(world.sf)
+    await _install_db_backed_test_auth(world, monkeypatch)
+    thread_id = "client-inflight-upload-delete-recreate"
+    payload = b"synthetic-original-actor-inflight-upload"
+    reserved = asyncio.Event()
+    proceed = asyncio.Event()
+    original_reservation = uploads._reserve_upload_thread
+
+    async def pause_after_real_reservation(candidate, request):
+        await original_reservation(candidate, request)
+        if candidate == thread_id:
+            reserved.set()
+            await asyncio.wait_for(proceed.wait(), timeout=20)
+
+    monkeypatch.setattr(uploads, "_reserve_upload_thread", pause_after_real_reservation)
+    pending = asyncio.create_task(
+        world.request(
+            USER_B,
+            "POST",
+            f"/api/threads/{thread_id}/uploads",
+            {"files": [("files", ("actor-a-private.txt", payload, "text/plain")), ("files", ("second.txt", b"second-original-file", "text/plain"))]},
+            org=CUSTOMER_ORG,
+        )
+    )
+    try:
+        await asyncio.wait_for(reserved.wait(), timeout=10)
+        async with world.sf() as session:
+            row = await session.get(ThreadMetaRow, thread_id)
+            incarnation = row.incarnation
+            assert (row.user_id, row.organization_id, row.client_actor_id) == (CUSTOMER_STORAGE, CUSTOMER_ORG, USER_B)
+            active_operations = len((await session.scalars(select(RunRow).where(RunRow.thread_id == thread_id, RunRow.operation_kind != "run"))).all())
+        assert not world.paths.thread_dir(thread_id, user_id=CUSTOMER_STORAGE).exists()
+        other_manager = RunManager(store=RunRepository(world.sf), worker_id="synthetic-other-gateway")
+        with pytest.raises(ConflictError):
+            async with other_manager.reserve_thread_operation(thread_id, kind=ThreadOperationKind.delete, user_id=CUSTOMER_STORAGE):
+                pytest.fail("A second manager bypassed the durable upload reservation")
+        with pytest.raises(ConflictError):
+            await other_manager.create_or_reject(thread_id, user_id=CUSTOMER_STORAGE, multitask_strategy="interrupt")
+        deleted = await world.request(USER_B, "DELETE", f"/api/threads/{thread_id}", org=CUSTOMER_ORG)
+        claimed = await world.request(PEER_ACTOR, "POST", "/api/threads", {"thread_id": thread_id}, org=CUSTOMER_ORG)
+    finally:
+        proceed.set()
+        uploaded = await asyncio.wait_for(pending, timeout=15)
+    peer_read = await world.request(PEER_ACTOR, "GET", f"/api/threads/{thread_id}/artifacts/mnt/user-data/uploads/actor-a-private.txt", org=CUSTOMER_ORG)
+    original_read = await world.request(USER_B, "GET", f"/api/threads/{thread_id}/artifacts/mnt/user-data/uploads/actor-a-private.txt", org=CUSTOMER_ORG)
+    listing = await world.request(USER_B, "GET", f"/api/threads/{thread_id}/uploads/list", org=CUSTOMER_ORG)
+    assert (deleted.status_code, claimed.status_code, uploaded.status_code, peer_read.status_code, original_read.status_code, original_read.content, listing.status_code, active_operations) == (409, 404, 200, 404, 200, payload, 200, 1), (
+        deleted.status_code,
+        claimed.status_code,
+        uploaded.status_code,
+        peer_read.status_code,
+        peer_read.content,
+        original_read.status_code,
+        active_operations,
+    )
+    assert {item["filename"] for item in listing.json()["files"]} == {"actor-a-private.txt", "second.txt"}
+    async with world.sf() as session:
+        row = await session.get(ThreadMetaRow, thread_id)
+        assert row.client_actor_id == USER_B and row.incarnation == incarnation
+        assert (await session.scalars(select(RunRow).where(RunRow.thread_id == thread_id, RunRow.operation_kind != "run"))).all() == []
+    later_delete = await world.request(USER_B, "DELETE", f"/api/threads/{thread_id}", org=CUSTOMER_ORG)
+    assert later_delete.status_code == 200, later_delete.text
+    assert not world.paths.thread_dir(thread_id, user_id=CUSTOMER_STORAGE).exists()
+    recreated = await world.request(PEER_ACTOR, "POST", "/api/threads", {"thread_id": thread_id}, org=CUSTOMER_ORG)
+    assert recreated.status_code == 200, recreated.text
+    async with world.sf() as session:
+        row = await session.get(ThreadMetaRow, thread_id)
+        assert row.client_actor_id == PEER_ACTOR and row.incarnation != incarnation
+    assert (await world.request(PEER_ACTOR, "GET", f"/api/threads/{thread_id}/artifacts/mnt/user-data/uploads/actor-a-private.txt", org=CUSTOMER_ORG)).status_code == 404
+    assert (await world.request(PEER_ACTOR, "GET", f"/api/threads/{thread_id}/uploads/list", org=CUSTOMER_ORG)).json()["files"] == []
+
+
+async def test_rejected_upload_holds_admission_through_cleanup_and_releases_it(world, monkeypatch):  # noqa: F811
+    await _seed_client_file_world(world.sf)
+    await _install_db_backed_test_auth(world, monkeypatch)
+    thread_id = "client-upload-rejected-cleanup"
+    kept = await world.request(USER_B, "POST", f"/api/threads/{thread_id}/uploads", {"files": {"files": ("keep.txt", b"existing-owned-file", "text/plain")}}, org=CUSTOMER_ORG)
+    assert kept.status_code == 200, kept.text
+    world.app.dependency_overrides[get_config] = lambda: AppConfig.model_validate({"sandbox": {"use": "deerflow.sandbox.local:LocalSandboxProvider"}, "uploads": {"max_file_size": 2}})
+    cleanup_started = threading.Event()
+    finish_cleanup = threading.Event()
+    original_cleanup = uploads._cleanup_uploaded_paths
+
+    def paused_cleanup(paths):
+        cleanup_started.set()
+        assert finish_cleanup.wait(20), "test cleanup barrier was not released"
+        original_cleanup(paths)
+
+    monkeypatch.setattr(uploads, "_cleanup_uploaded_paths", paused_cleanup)
+    pending = asyncio.create_task(world.request(USER_B, "POST", f"/api/threads/{thread_id}/uploads", {"files": [("files", ("temporary.txt", b"x", "text/plain")), ("files", ("oversize.txt", b"oversize", "text/plain"))]}, org=CUSTOMER_ORG))
+    try:
+        assert await asyncio.to_thread(cleanup_started.wait, 10)
+        during_cleanup = await world.request(USER_B, "DELETE", f"/api/threads/{thread_id}", org=CUSTOMER_ORG)
+        assert during_cleanup.status_code == 409, during_cleanup.text
+        async with world.sf() as session:
+            assert len((await session.scalars(select(RunRow).where(RunRow.thread_id == thread_id, RunRow.operation_kind != "run"))).all()) == 1
+    finally:
+        finish_cleanup.set()
+        rejected = await asyncio.wait_for(pending, timeout=15)
+    assert rejected.status_code == 413, rejected.text
+    directory = world.paths.sandbox_uploads_dir(thread_id, user_id=CUSTOMER_STORAGE)
+    assert {path.name: path.read_bytes() for path in directory.iterdir()} == {"keep.txt": b"existing-owned-file"}
+    async with world.sf() as session:
+        assert (await session.scalars(select(RunRow).where(RunRow.thread_id == thread_id, RunRow.operation_kind != "run"))).all() == []
+    deleted = await world.request(USER_B, "DELETE", f"/api/threads/{thread_id}", org=CUSTOMER_ORG)
+    assert deleted.status_code == 200, deleted.text
+
+
+async def test_cancelled_upload_drains_file_work_before_releasing_durable_admission(world, monkeypatch):  # noqa: F811
+    await _seed_client_file_world(world.sf)
+    await _install_db_backed_test_auth(world, monkeypatch)
+    thread_id = "client-upload-cancellation-drain"
+    payload = b"synthetic-cancelled-owned-upload"
+    write_started = threading.Event()
+    finish_write = threading.Event()
+    released = asyncio.Event()
+    holder = None
+    original_write = uploads._write_upload_chunk
+    original_reservation = uploads.reserve_upload_write
+
+    def paused_write(upload_temp, chunk):
+        write_started.set()
+        assert finish_write.wait(20), "test file worker barrier was not released"
+        original_write(upload_temp, chunk)
+
+    @asynccontextmanager
+    async def observed_reservation(candidate, request):
+        nonlocal holder
+        holder = asyncio.current_task()
+        try:
+            async with original_reservation(candidate, request):
+                yield
+        finally:
+            released.set()
+
+    monkeypatch.setattr(uploads, "_write_upload_chunk", paused_write)
+    monkeypatch.setattr(uploads, "reserve_upload_write", observed_reservation)
+    pending = asyncio.create_task(world.request(USER_B, "POST", f"/api/threads/{thread_id}/uploads", {"files": {"files": ("source.txt", payload, "text/plain")}}, org=CUSTOMER_ORG))
+    try:
+        assert await asyncio.to_thread(write_started.wait, 10)
+        assert holder is not None
+        holder.cancel()
+        await asyncio.sleep(0)
+        holder.cancel()
+        await asyncio.sleep(0)
+        assert not released.is_set()
+        blocked_delete = await world.request(USER_B, "DELETE", f"/api/threads/{thread_id}", org=CUSTOMER_ORG)
+        assert blocked_delete.status_code == 409, blocked_delete.text
+        blocked_claim = await world.request(PEER_ACTOR, "POST", "/api/threads", {"thread_id": thread_id}, org=CUSTOMER_ORG)
+        assert blocked_claim.status_code == 404, blocked_claim.text
+        async with world.sf() as session:
+            assert len((await session.scalars(select(RunRow).where(RunRow.thread_id == thread_id, RunRow.operation_kind != "run"))).all()) == 1
+    finally:
+        finish_write.set()
+        await asyncio.wait_for(released.wait(), timeout=15)
+        await asyncio.wait_for(asyncio.gather(pending, return_exceptions=True), timeout=15)
+    assert (world.paths.sandbox_uploads_dir(thread_id, user_id=CUSTOMER_STORAGE) / "source.txt").read_bytes() == payload
+    async with world.sf() as session:
+        assert (await session.scalars(select(RunRow).where(RunRow.thread_id == thread_id, RunRow.operation_kind != "run"))).all() == []
+    deleted = await world.request(USER_B, "DELETE", f"/api/threads/{thread_id}", org=CUSTOMER_ORG)
+    assert deleted.status_code == 200, deleted.text
+    recreated = await world.request(PEER_ACTOR, "POST", "/api/threads", {"thread_id": thread_id}, org=CUSTOMER_ORG)
+    assert recreated.status_code == 200, recreated.text
+    peer_read = await world.request(PEER_ACTOR, "GET", f"/api/threads/{thread_id}/artifacts/mnt/user-data/uploads/source.txt", org=CUSTOMER_ORG)
+    assert peer_read.status_code == 404
+
+
+async def test_expired_upload_stays_held_while_old_file_worker_drains(world, monkeypatch):  # noqa: F811
+    await _seed_client_file_world(world.sf)
+    await _install_db_backed_test_auth(world, monkeypatch)
+    ownership = RunOwnershipConfig(heartbeat_enabled=True, lease_seconds=30, grace_seconds=0)
+    first_manager = RunManager(store=RunRepository(world.sf), worker_id="synthetic-upload-owner", run_ownership_config=ownership)
+    second_manager = RunManager(store=RunRepository(world.sf), worker_id="synthetic-upload-peer", run_ownership_config=ownership)
+    world.app.state.run_manager = first_manager
+    thread_id = "client-expired-upload-held"
+    payload = b"synthetic-expired-old-owner-private-upload"
+    prepare_started = threading.Event()
+    finish_prepare = threading.Event()
+    original_prepare = uploads._prepare_upload_destination
+
+    def paused_prepare(directory, filename):
+        if filename == "actor-a-private.txt":
+            prepare_started.set()
+            assert finish_prepare.wait(25), "test expired-upload barrier was not released"
+        return original_prepare(directory, filename)
+
+    monkeypatch.setattr(uploads, "_prepare_upload_destination", paused_prepare)
+    pending = asyncio.create_task(world.request(USER_B, "POST", f"/api/threads/{thread_id}/uploads", {"files": {"files": ("actor-a-private.txt", payload, "text/plain")}}, org=CUSTOMER_ORG))
+    try:
+        assert await asyncio.to_thread(prepare_started.wait, 10)
+        expired = datetime.now(UTC) - timedelta(hours=1)
+        async with world.sf() as session, session.begin():
+            operation = (await session.scalars(select(RunRow).where(RunRow.thread_id == thread_id, RunRow.operation_kind != "run"))).one()
+            operation_id = operation.run_id
+            operation.lease_expires_at = expired
+            original_incarnation = (await session.get(ThreadMetaRow, thread_id)).incarnation
+        first_manager._runs[operation_id].lease_expires_at = expired.isoformat()
+        recovered = await second_manager.reconcile_orphaned_inflight_runs(error="Synthetic expired-upload probe")
+        await first_manager._renew_leases()
+        world.app.state.run_manager = second_manager
+        deleted = await world.request(USER_B, "DELETE", f"/api/threads/{thread_id}", org=CUSTOMER_ORG)
+        claimed = await world.request(PEER_ACTOR, "POST", "/api/threads", {"thread_id": thread_id}, org=CUSTOMER_ORG)
+        # On the vulnerable schedule a legitimate peer upload recreates its own
+        # directory, which the old offloaded prepare would otherwise reuse.
+        if deleted.status_code == 200 and claimed.status_code == 200:
+            peer_upload = await world.request(PEER_ACTOR, "POST", f"/api/threads/{thread_id}/uploads", {"files": {"files": ("peer.txt", b"peer-new-incarnation")}}, org=CUSTOMER_ORG)
+            assert peer_upload.status_code == 200, peer_upload.text
+    finally:
+        finish_prepare.set()
+        uploaded = await asyncio.wait_for(pending, timeout=15)
+    peer_read = await world.request(PEER_ACTOR, "GET", f"/api/threads/{thread_id}/artifacts/mnt/user-data/uploads/actor-a-private.txt", org=CUSTOMER_ORG)
+    original_read = await world.request(USER_B, "GET", f"/api/threads/{thread_id}/artifacts/mnt/user-data/uploads/actor-a-private.txt", org=CUSTOMER_ORG)
+    assert (len(recovered), deleted.status_code, claimed.status_code, peer_read.status_code, original_read.status_code, original_read.content) == (0, 409, 404, 404, 200, payload), (
+        len(recovered),
+        deleted.status_code,
+        claimed.status_code,
+        uploaded.status_code,
+        peer_read.status_code,
+        peer_read.content,
+        original_read.status_code,
+    )
+    async with world.sf() as session:
+        row = await session.get(ThreadMetaRow, thread_id)
+        assert row.client_actor_id == USER_B and row.incarnation == original_incarnation
+        assert await session.get(RunRow, operation_id) is None
+    later_delete = await world.request(USER_B, "DELETE", f"/api/threads/{thread_id}", org=CUSTOMER_ORG)
+    assert later_delete.status_code == 200, later_delete.text
+    recreated = await world.request(PEER_ACTOR, "POST", "/api/threads", {"thread_id": thread_id}, org=CUSTOMER_ORG)
+    assert recreated.status_code == 200, recreated.text
+    assert (await world.request(PEER_ACTOR, "GET", f"/api/threads/{thread_id}/artifacts/mnt/user-data/uploads/actor-a-private.txt", org=CUSTOMER_ORG)).status_code == 404

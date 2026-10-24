@@ -1,3 +1,15 @@
+### Upload admission and repair
+
+HTTP uploads use the durable `upload_write` thread operation. Unlike renewable
+run/artifact leases, it stays pending across expiry, cancellation and orphan
+recovery until the original file worker drains. Generic store mutations cannot
+retire it. `release_upload_operation` checks operation id, storage owner,
+original worker, kind and pending status atomically; unsupported stores deny
+admission/release. A crashed or unconfirmed writer leaves a repair hold. Never
+clear that hold merely because its lease expired; verify no old file worker can
+still publish before operator repair. Upload requests drain ingestion and
+cleanup before releasing admission; normal run/artifact recovery stays unchanged.
+
 ### Stream Bridge Heartbeats
 
 Memory and Redis bridges keep the startup-only `stream_bridge.heartbeat_interval_seconds` default on the instance; explicit `subscribe(..., heartbeat_interval=...)` overrides it per subscription. Provider context managers own cache/bridge backends through exit: drain `aclose()` / `close()` across caller cancellation before propagating cancellation.
