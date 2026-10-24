@@ -10,6 +10,7 @@ from langgraph.config import get_config
 from langgraph.runtime import Runtime
 
 from deerflow.agents.memory import get_memory_manager
+from deerflow.agents.memory.admission import memory_access_allowed
 from deerflow.config.memory_config import get_memory_config
 from deerflow.runtime.user_context import resolve_runtime_user_id
 from deerflow.trace_context import DEERFLOW_TRACE_METADATA_KEY, resolve_trace_id
@@ -52,6 +53,8 @@ class MemoryMiddleware(AgentMiddleware[MemoryMiddlewareState]):
 
     def _resolve_add_args(self, state: MemoryMiddlewareState, runtime: Runtime) -> tuple[str, list, str, str] | None:
         """Resolve one write request without invoking the manager."""
+        if not memory_access_allowed(runtime):
+            return None
         config = self._memory_config or get_memory_config()
         if not config.enabled:
             return None

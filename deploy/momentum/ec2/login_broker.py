@@ -70,38 +70,53 @@ async def fill_login(page, secret, allowed) -> str:
     """Username (one or two steps), password, then the 1Password OTP code on a real 2FA prompt.
     allowed(page) is re-checked before EVERY fill: a redirect between steps must not receive a value."""
 
+    sensitive_fields = []
+
     async def put(field, name):
         if not allowed(page):
             raise PermissionError("page left the item's website")
-        await field.fill(await secret(name))
+        # Bind before the vault await so navigation cannot retarget a locator to another document.
+        element = await field.element_handle(timeout=5000)
+        if element is None:
+            raise LookupError("login field unavailable")
+        value = await secret(name)
+        if not allowed(page):
+            raise PermissionError("page left the item's website")
+        if name != "username":
+            sensitive_fields.append(element)
+        await element.fill(value)
+        return element
 
-    password = await _visible(page, PASS, 4000)
-    user = await _visible(page, USER, 1000)
-    if user is not None:
-        await put(user, "username")
+    try:
+        password = await _visible(page, PASS, 4000)
+        user = await _visible(page, USER, 1000)
+        if user is not None:
+            user = await put(user, "username")
+            if password is None:
+                await user.press("Enter")
+                password = await _visible(page, PASS, 12000)
         if password is None:
-            await user.press("Enter")
-            password = await _visible(page, PASS, 12000)
-    if password is None:
-        return "login_form_not_found"
-    await put(password, "password")
-    await password.press("Enter")
-    await page.wait_for_timeout(3000)
-    text = (await page.locator("body").inner_text(timeout=5000)).lower()
-    if await _visible(page, PASS, 500) is None and any(w in text for w in OTP_WORDS):
-        otp = await _visible(page, OTP, 5000)
-        if otp is not None:
-            try:
-                await put(otp, "one-time password?attribute=otp")
-            except LookupError:
-                return "needs_2fa"
-            await otp.press("Enter")
-            await page.wait_for_timeout(3000)
-    still = await _visible(page, PASS, 500)
-    if still is not None:
-        await still.fill("")  # never leave a typed password in the page for a later snapshot
-        return "password_form_still_visible"
-    return "submitted"
+            return "login_form_not_found"
+        password = await put(password, "password")
+        await password.press("Enter")
+        await page.wait_for_timeout(3000)
+        text = (await page.locator("body").inner_text(timeout=5000)).lower()
+        if await _visible(page, PASS, 500) is None and any(w in text for w in OTP_WORDS):
+            otp = await _visible(page, OTP, 5000)
+            if otp is not None:
+                try:
+                    otp = await put(otp, "one-time password?attribute=otp")
+                except LookupError:
+                    return "needs_2fa"
+                await otp.press("Enter")
+                await page.wait_for_timeout(3000)
+        if await _visible(page, PASS, 500) is not None:
+            return "password_form_still_visible"
+        return "submitted"
+    finally:
+        for field in sensitive_fields:
+            with contextlib.suppress(Exception):
+                await field.fill("", timeout=1000)
 
 
 class Broker:
