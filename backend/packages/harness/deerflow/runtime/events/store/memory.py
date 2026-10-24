@@ -10,7 +10,7 @@ import bisect
 from datetime import UTC, datetime
 
 from deerflow.runtime.events.message_identity import message_identity
-from deerflow.runtime.events.store.base import RunEventStore
+from deerflow.runtime.events.store.base import RunEventStore, matches_content_identity, validate_content_identity
 from deerflow.runtime.user_context import AUTO, _AutoSentinel
 
 
@@ -104,11 +104,13 @@ class MemoryRunEventStore(RunEventStore):
         content="",
         metadata=None,
         created_at=None,
+        content_identity=None,
     ):
         # No await occurs between the lookup and append, so this is atomic for
         # the backend's documented single-event-loop concurrency model.
+        validate_content_identity(content, content_identity)
         for event in self._events_by_run.get(thread_id, {}).get(run_id, []):
-            if event["event_type"] == event_type:
+            if event["event_type"] == event_type and matches_content_identity(event["content"], content_identity):
                 return event, False
         return (
             self._put_one(

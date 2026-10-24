@@ -206,6 +206,13 @@ function ApprovalDetail({ approval }: { approval: Approval }) {
     rejectMutation.isPending;
   const error =
     editMutation.error ?? approveMutation.error ?? rejectMutation.error;
+  // Older servers omit capabilities; keep their previous all-allowed behavior.
+  const can = approval.capabilities ?? {
+    approve: true,
+    reject: true,
+    edit: true,
+    reason: null,
+  };
 
   return (
     <div className={boardStyles.threadDetail} data-testid="approval-detail">
@@ -214,8 +221,11 @@ function ApprovalDetail({ approval }: { approval: Approval }) {
           <h2>{approval.title || TYPE_LABEL[approval.action_type]}</h2>
           <p className={boardStyles.muted}>
             {TYPE_LABEL[approval.action_type]} &middot;{" "}
-            {approval.agent_name ?? "Agent"} &middot;{" "}
-            {new Date(approval.created_at).toLocaleString()}
+            {approval.proposer?.display_name ?? approval.agent_name ?? "Agent"}
+            {approval.workspace ? (
+              <> &middot; {approval.workspace.name}</>
+            ) : null}{" "}
+            &middot; {new Date(approval.created_at).toLocaleString()}
           </p>
           {approval.thread_id ? (
             <Link
@@ -244,7 +254,7 @@ function ApprovalDetail({ approval }: { approval: Approval }) {
         <Input
           id="approval-target"
           value={target}
-          disabled={!pending}
+          disabled={!pending || !can.edit}
           onChange={(event) => setTarget(event.target.value)}
         />
       </div>
@@ -263,7 +273,7 @@ function ApprovalDetail({ approval }: { approval: Approval }) {
                 id={`approval-${field.key}`}
                 rows={6}
                 value={values[field.key] ?? ""}
-                disabled={!pending}
+                disabled={!pending || !can.edit}
                 onChange={(event) =>
                   setValues((prev) => ({
                     ...prev,
@@ -275,7 +285,7 @@ function ApprovalDetail({ approval }: { approval: Approval }) {
               <Input
                 id={`approval-${field.key}`}
                 value={values[field.key] ?? ""}
-                disabled={!pending}
+                disabled={!pending || !can.edit}
                 onChange={(event) =>
                   setValues((prev) => ({
                     ...prev,
@@ -296,7 +306,7 @@ function ApprovalDetail({ approval }: { approval: Approval }) {
             className={styles.mono}
             rows={8}
             value={json}
-            disabled={!pending}
+            disabled={!pending || !can.edit}
             onChange={(event) => setJson(event.target.value)}
           />
           {parseError ? (
@@ -349,7 +359,7 @@ function ApprovalDetail({ approval }: { approval: Approval }) {
         <div className={styles.actions} aria-label="Review actions">
           <Button
             variant="outline"
-            disabled={!dirty || !parsed || busy}
+            disabled={!can.edit || !dirty || !parsed || busy}
             onClick={() =>
               parsed &&
               editMutation.mutate({
@@ -361,7 +371,7 @@ function ApprovalDetail({ approval }: { approval: Approval }) {
             {editMutation.isPending ? "Saving..." : "Save edits"}
           </Button>
           <Button
-            disabled={dirty || busy}
+            disabled={!can.approve || dirty || busy}
             title={dirty ? "Save your edits first" : undefined}
             onClick={() => approveMutation.mutate({ id: approval.id })}
           >
@@ -369,12 +379,16 @@ function ApprovalDetail({ approval }: { approval: Approval }) {
           </Button>
           <Button
             variant="outline"
-            disabled={busy}
+            disabled={!can.reject || busy}
             onClick={() => rejectMutation.mutate({ id: approval.id })}
           >
             {rejectMutation.isPending ? "Rejecting..." : "Reject"}
           </Button>
-          {dirty ? (
+          {!can.approve && can.reason ? (
+            <p className={boardStyles.muted} role="note">
+              {can.reason}
+            </p>
+          ) : dirty ? (
             <p className={boardStyles.muted}>
               Save your edits before approving.
             </p>

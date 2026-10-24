@@ -28,13 +28,17 @@ class UserPreferencesRepository:
             return (await session.scalar(statement)) is not None
 
     async def finish_reserved_key(self, user_id: str, key: str, nonce: str, value: dict) -> bool:
+        return await self.transition_key(user_id, key, nonce, "creating", value)
+
+    async def transition_key(self, user_id: str, key: str, nonce: str, state: str, value: dict) -> bool:
+        """Atomic actor-key state/nonce fence, including across worker processes."""
         async with self.sessions() as session, session.begin():
             statement = (
                 update(UserPreferenceRow)
                 .where(
                     UserPreferenceRow.user_id == user_id,
                     UserPreferenceRow.key == key,
-                    UserPreferenceRow.value["state"].as_string() == "creating",
+                    UserPreferenceRow.value["state"].as_string() == state,
                     UserPreferenceRow.value["nonce"].as_string() == nonce,
                 )
                 .values(value=value)

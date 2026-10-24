@@ -18,6 +18,10 @@ rs.mock("next/dynamic", () => ({
     },
 }));
 
+// Personal connections have their own tests; keep this page test offline.
+rs.mock("@/components/workspace/connections/connect-cards", () => ({
+  ConnectCards: () => null,
+}));
 rs.mock("@/components/workspace/workspace-sidebar-trigger", () => ({
   WorkspaceSidebarTrigger: () => null,
 }));

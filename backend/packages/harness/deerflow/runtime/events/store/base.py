@@ -24,6 +24,20 @@ class IncompleteMessageRunLookupError(RuntimeError):
     """Raised when a store cannot prove that a targeted lookup is complete."""
 
 
+def validate_content_identity(content, identity):
+    if identity is not None and (
+        not isinstance(identity, dict)
+        or len(identity) != 1
+        or not isinstance(content, dict)
+        or any(not isinstance(key, str) or not isinstance(value, str) or not 1 <= len(key) <= 32 or not 1 <= len(value) <= 128 or content.get(key) != value for key, value in identity.items())
+    ):
+        raise ValueError("Event content identity must match one bounded string field")
+
+
+def matches_content_identity(content, identity):
+    return identity is None or (isinstance(content, dict) and all(content.get(key) == value for key, value in identity.items()))
+
+
 def normalize_message_ids(message_ids: set[str]) -> set[str]:
     """Return the non-empty string IDs that can participate in a lookup."""
     return {message_id for message_id in message_ids if isinstance(message_id, str) and message_id}
@@ -90,6 +104,7 @@ class RunEventStore(abc.ABC):
         content: str | dict = "",
         metadata: dict | None = None,
         created_at: str | None = None,
+        content_identity: dict[str, str] | None = None,
     ) -> tuple[dict, bool]:
         """Write one event unless this run already has the same event type.
 
@@ -97,6 +112,9 @@ class RunEventStore(abc.ABC):
         thread. Returns ``(record, created)``. This is the durability primitive
         used by terminal run receipts, whose recovery path may safely retry
         after a worker crash.
+
+        Optional content_identity also fences one bounded content field. None
+        preserves the original run/event singleton semantics exactly.
         """
 
     @abc.abstractmethod

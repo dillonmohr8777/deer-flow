@@ -37,7 +37,7 @@ from pathlib import Path
 from typing import Any
 
 from deerflow.runtime.events.message_identity import message_identity
-from deerflow.runtime.events.store.base import RunEventStore, match_ai_message_run_id, normalize_message_ids
+from deerflow.runtime.events.store.base import RunEventStore, match_ai_message_run_id, matches_content_identity, normalize_message_ids, validate_content_identity
 from deerflow.runtime.user_context import AUTO, _AutoSentinel
 from deerflow.utils.thread_id import validate_thread_id
 
@@ -237,11 +237,14 @@ class JsonlRunEventStore(RunEventStore):
         content="",
         metadata=None,
         created_at=None,
+        content_identity=None,
     ):
+        validate_content_identity(content, content_identity)
+
         async def mutate():
             existing = await asyncio.to_thread(self._read_run_events, thread_id, run_id)
             for event in existing:
-                if event.get("event_type") == event_type:
+                if event.get("event_type") == event_type and matches_content_identity(event.get("content"), content_identity):
                     return event, False
             await self._ensure_seq_loaded(thread_id)
             record = {

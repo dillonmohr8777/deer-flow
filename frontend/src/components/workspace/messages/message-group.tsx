@@ -31,6 +31,7 @@ import {
   resolveArtifactURL,
 } from "@/core/artifacts/utils";
 import { useI18n } from "@/core/i18n/hooks";
+import { parseConnectHint, toolkitLabel } from "@/core/integrations/composio";
 import { formatTokenCount } from "@/core/messages/usage";
 import type { TokenDebugStep } from "@/core/messages/usage-model";
 import {
@@ -44,6 +45,7 @@ import { cn } from "@/lib/utils";
 
 import { useArtifacts } from "../artifacts";
 import { useMaybeBrowserView } from "../browser-view";
+import { ConnectButton } from "../connections/connect-cards";
 import { FlipDisplay } from "../flip-display";
 import { Tooltip } from "../tooltip";
 
@@ -1020,12 +1022,28 @@ function ToolCall({
   } else {
     const description: string | undefined = (args as { description: string })
       ?.description;
+    const connectHint = resultMessage
+      ? parseConnectHint(extractTextFromMessage(resultMessage))
+      : null;
     return (
       <ChainOfThoughtStep
         key={id}
         label={resolveLabel(description ?? t.toolCalls.useTool(name))}
         icon={WrenchIcon}
       >
+        {connectHint && (
+          <div className="py-2">
+            <p className="text-muted-foreground mb-2 text-sm">
+              MomoBot needs your {toolkitLabel(connectHint.toolkit)} account for
+              this step. Nothing ran yet.
+            </p>
+            <ConnectButton
+              toolkit={connectHint.toolkit}
+              handle={connectHint.handle}
+              threadId={threadId}
+            />
+          </div>
+        )}
         {showDetails && (
           <ToolCallDetails
             name={name}

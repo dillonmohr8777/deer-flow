@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, rs } from "@rstest/core";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   cleanup,
   fireEvent,
@@ -15,9 +16,11 @@ import { I18nProvider } from "@/core/i18n/context";
 
 function Gate() {
   return (
-    <I18nProvider initialLocale="en-US">
-      <FirstLoginGate />
-    </I18nProvider>
+    <QueryClientProvider client={new QueryClient()}>
+      <I18nProvider initialLocale="en-US">
+        <FirstLoginGate />
+      </I18nProvider>
+    </QueryClientProvider>
   );
 }
 
@@ -81,11 +84,15 @@ function calls(): Call[] {
   }));
 }
 
-function serve(state: OnboardingState) {
+function serve(state: OnboardingState, toolkits?: unknown[]) {
   let current = state;
   mocks.fetch.mockImplementation(
     async (path: string, init: RequestInit | undefined) => {
       const method = init?.method ?? "GET";
+      if (path.endsWith("/api/integrations/status")) {
+        // Servers without personal connections answer 404.
+        return toolkits ? json({ toolkits }) : json({}, 404);
+      }
       if (path.endsWith("/tools")) {
         current = {
           ...current,
@@ -220,6 +227,51 @@ describe("first-login onboarding", () => {
     render(<Gate />);
     expect(await screen.findByText("Connect your tools")).toBeTruthy();
     expect(screen.getByText("Ready for everyone")).toBeTruthy();
+  });
+
+  it("offers a real Connect for tools with a personal connection", async () => {
+    serve(
+      {
+        ...BASE,
+        profile_saved: true,
+        tools_saved: true,
+        connections: [
+          { id: "gmail", label: "Gmail", status: "pending", available: true },
+          {
+            id: "google_calendar",
+            label: "Google Calendar",
+            status: "pending",
+            available: true,
+          },
+          {
+            id: "notion",
+            label: "Notion",
+            status: "pending",
+            available: false,
+          },
+        ],
+      },
+      [
+        { toolkit: "gmail", connected: false, connectable: true, reason: null },
+        {
+          toolkit: "googlecalendar",
+          connected: true,
+          connectable: false,
+          reason: null,
+        },
+      ],
+    );
+    render(<Gate />);
+    expect(
+      await screen.findByRole("button", { name: "Connect Gmail" }),
+    ).toBeTruthy();
+    const gmailRow = screen.getByText("Gmail").closest("li")!;
+    expect(gmailRow.textContent).not.toContain("Request access");
+    const calendarRow = screen.getByText("Google Calendar").closest("li")!;
+    expect(calendarRow.textContent).toContain("Connected");
+    // Tools without a personal connection keep the request path.
+    const notionRow = screen.getByText("Notion").closest("li")!;
+    expect(notionRow.textContent).toContain("Request access");
   });
 
   it("keeps the old chooser for clients and finished accounts", async () => {

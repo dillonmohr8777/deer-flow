@@ -68,9 +68,28 @@
     "middleware": "Middleware state-change audit evidence.",
     "context": "Identity-only evidence about effective hidden context.",
     "subagent": "Subagent lifecycle and persisted step evidence.",
-    "workspace": "Run-scoped workspace and output file-change evidence."
+    "workspace": "Run-scoped workspace and output file-change evidence.",
+    "connection": "Server-verified actor-owned connection receipt; not a model message."
   },
   "events": [
+    {
+      "event_type": "composio.connected",
+      "category": "connection",
+      "producer": "thread_runs._dispatch_composio_connection after account verification",
+      "content_schema": {
+        "type": "object",
+        "required": ["handle", "toolkit", "source_run_id", "tool_call_id"],
+        "properties": {
+          "handle": {"type": "string", "pattern": "^[A-Za-z0-9_-]{24}$"},
+          "toolkit": {"type": "string", "minLength": 1},
+          "source_run_id": {"type": "string", "minLength": 1},
+          "tool_call_id": {"type": "string", "minLength": 1}
+        },
+        "additionalProperties": false
+      },
+      "metadata_schema": {"type": "object", "additionalProperties": true},
+      "storage_semantics": {"identity": "put_if_absent with content_identity.handle; distinct attempts from one source run remain distinct", "late_visibility": "Appended to the source run even after run.end; read through its normal owner-scoped /events API, not a closed SSE stream or model-message projection"}
+    },
     {
       "event_type": "run.start",
       "category": "trace",

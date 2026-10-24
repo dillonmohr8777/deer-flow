@@ -8,12 +8,18 @@ import { isClientUser } from "@/core/auth/roles";
 import { connectChannelProvider } from "@/core/channels/api";
 import { getBackendBaseURL } from "@/core/config";
 import { useI18n } from "@/core/i18n/hooks";
+import {
+  sameToolkit,
+  useToolkitStatus,
+  type ToolkitStatus,
+} from "@/core/integrations/composio";
 import { useLocalSettings } from "@/core/settings";
 import { isStaticWebsiteOnly } from "@/core/static-mode";
 import { cn } from "@/lib/utils";
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
 
+import { ConnectButton } from "./connections/connect-cards";
 import { ExperienceModeChooser } from "./experience-mode-chooser";
 
 type ToolState = {
@@ -129,6 +135,10 @@ export function OnboardingFlow({
   const [error, setError] = useState<string | null>(null);
   const [slackCode, setSlackCode] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  // Per-person connections, when this server offers them (null otherwise).
+  const { data: toolkits } = useToolkitStatus();
+  const toolkitFor = (id: string): ToolkitStatus | undefined =>
+    toolkits?.find((row) => sameToolkit(row.toolkit, id));
   const needle = query.trim().toLowerCase();
   // Pinned common tools stay first; the rest of the catalog is grouped.
   const groups = new Map<string, CatalogEntry[]>();
@@ -340,67 +350,74 @@ export function OnboardingFlow({
           <div className="grid gap-3">
             <p className="text-muted-foreground text-sm">{copy.connectHint}</p>
             <ul className="grid gap-2">
-              {state.connections.map((tool) => (
-                <li
-                  key={tool.id}
-                  className="flex min-h-11 flex-wrap items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm"
-                >
-                  <span className="font-medium">{tool.label}</span>
-                  <span className="flex flex-wrap items-center gap-2">
-                    {tool.status === "connected" || tool.status === "shared" ? (
-                      <span>
-                        {tool.status === "connected"
-                          ? copy.connected
-                          : copy.shared}
-                      </span>
-                    ) : (
-                      <>
-                        {!tool.available && (
-                          <span className="text-muted-foreground text-xs">
-                            {copy.comingSoon}
-                          </span>
-                        )}
-                        {tool.id === "slack" && (
-                          <button
-                            type="button"
-                            disabled={busy}
-                            onClick={() => void linkSlack()}
-                            className="min-h-9 rounded-md border px-2"
-                          >
-                            {copy.linkSlack}
-                          </button>
-                        )}
-                        {tool.status === "requested" ? (
-                          <span>{copy.requested}</span>
-                        ) : (
-                          <button
-                            type="button"
-                            disabled={busy}
-                            onClick={() => void record(tool.id, "requested")}
-                            className="min-h-9 rounded-md border px-2"
-                          >
-                            {copy.request}
-                          </button>
-                        )}
-                        {tool.status === "skipped" ? (
-                          <span className="text-muted-foreground">
-                            {copy.skipped}
-                          </span>
-                        ) : (
-                          <button
-                            type="button"
-                            disabled={busy}
-                            onClick={() => void record(tool.id, "skipped")}
-                            className="text-muted-foreground min-h-9 px-2 underline-offset-4 hover:underline"
-                          >
-                            {copy.skip}
-                          </button>
-                        )}
-                      </>
-                    )}
-                  </span>
-                </li>
-              ))}
+              {state.connections.map((tool) => {
+                const own = toolkitFor(tool.id);
+                return (
+                  <li
+                    key={tool.id}
+                    className="flex min-h-11 flex-wrap items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm"
+                  >
+                    <span className="font-medium">{tool.label}</span>
+                    <span className="flex flex-wrap items-center gap-2">
+                      {tool.status === "connected" ||
+                      tool.status === "shared" ||
+                      own?.connected ? (
+                        <span>
+                          {tool.status === "shared"
+                            ? copy.shared
+                            : copy.connected}
+                        </span>
+                      ) : own?.connectable ? (
+                        <ConnectButton toolkit={own.toolkit} />
+                      ) : (
+                        <>
+                          {!tool.available && (
+                            <span className="text-muted-foreground text-xs">
+                              {copy.comingSoon}
+                            </span>
+                          )}
+                          {tool.id === "slack" && (
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() => void linkSlack()}
+                              className="min-h-9 rounded-md border px-2"
+                            >
+                              {copy.linkSlack}
+                            </button>
+                          )}
+                          {tool.status === "requested" ? (
+                            <span>{copy.requested}</span>
+                          ) : (
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() => void record(tool.id, "requested")}
+                              className="min-h-9 rounded-md border px-2"
+                            >
+                              {copy.request}
+                            </button>
+                          )}
+                          {tool.status === "skipped" ? (
+                            <span className="text-muted-foreground">
+                              {copy.skipped}
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() => void record(tool.id, "skipped")}
+                              className="text-muted-foreground min-h-9 px-2 underline-offset-4 hover:underline"
+                            >
+                              {copy.skip}
+                            </button>
+                          )}
+                        </>
+                      )}
+                    </span>
+                  </li>
+                );
+              })}
             </ul>
             {slackCode && (
               <p role="status" className="rounded-md border p-3 text-sm">

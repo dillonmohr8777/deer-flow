@@ -9,6 +9,21 @@ The machine-readable contract is
 categories live in `deerflow.runtime.events.catalog`; conformance tests require
 the runtime catalog and JSON contract to match exactly.
 
+`composio.connected` (`category=connection`) is a server-verified connection
+receipt containing only `handle`, `toolkit`, `source_run_id`, and `tool_call_id`.
+It may be appended after the source run's `run.end`. Native UI clients restore
+it with the ordinary owner-scoped
+`GET /api/threads/{thread_id}/runs/{source_run_id}/events` API after the callback;
+it is not delivered through a previously closed SSE stream or inserted as a
+model-authored message. The receipt precedes admission of at most one exact,
+guarded tool retry. `put_if_absent(content_identity={"handle": handle})` dedupes
+that attempt while allowing different toolkit attempts from the same source run.
+Omitting `content_identity` preserves existing run/event singleton semantics.
+Memory/JSONL retain their documented single-process concurrency scope; database
+identity writes serialize via PostgreSQL's existing thread fence or SQLite's
+`BEGIN IMMEDIATE`. A crash after a dispatch claim stays held and never replays
+the tool automatically.
+
 ## Record Envelope
 
 Every persisted event has these required fields:

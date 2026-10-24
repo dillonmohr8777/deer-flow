@@ -47,7 +47,7 @@ from app.gateway.conversation_reader import (
 from app.gateway.conversation_reader import (
     scan_visible_thread_messages as _scan_visible_thread_messages,
 )
-from app.gateway.deps import get_current_user, get_entitlement_repo, get_feedback_repo, get_run_event_store, get_run_manager, get_run_store, get_stream_bridge, record_audit_event
+from app.gateway.deps import get_current_user, get_entitlement_repo, get_feedback_repo, get_run_event_store, get_run_manager, get_run_store, get_stream_bridge, get_thread_store, record_audit_event
 from app.gateway.internal_auth import INTERNAL_SYSTEM_ROLE, get_trusted_internal_owner_user_id
 from app.gateway.pagination import trim_run_message_page
 from app.gateway.run_models import RunCreateRequest
@@ -990,6 +990,42 @@ async def create_run(
         idempotency_key=_scope_http_run_idempotency_key(request, thread_id, idempotency_key),
     )
     return _record_to_response(record)
+
+
+async def complete_composio_connection(request: Request, attempt: dict):
+    """Only a verified, durably claimed attempt can enter this admission path."""
+    return await _dispatch_composio_connection(thread_id=attempt["intent"]["thread_id"], request=request, attempt=attempt)
+
+
+@require_permission("runs", "create", owner_check=True, require_existing=True)
+@require_entitlement("runs.create")
+async def _dispatch_composio_connection(thread_id: str, request: Request, attempt: dict):
+    from app.gateway.auth_disabled import AUTH_SOURCE_SESSION
+    from deerflow.mcp.composio_sessions import ComposioRetry
+    from deerflow.runtime.events.catalog import COMPOSIO_CONNECTED_EVENT
+
+    if getattr(request.state, "auth_source", None) != AUTH_SOURCE_SESSION:
+        raise HTTPException(403, "A browser session is required")
+    retry = ComposioRetry.from_attempt(attempt)
+    await retry.verify(thread_id)
+    storage = attempt["storage_user_id"]
+    thread = await get_thread_store(request).get(thread_id, user_id=storage)
+    if not isinstance(thread, dict) or thread.get("user_id") != storage or any((thread.get("metadata") or {}).get(key) for key in ("channel_name", "channel_id", "is_internal")):
+        raise HTTPException(404, "Private source thread is unavailable")
+    source = await get_run_manager(request).get(attempt["intent"]["run_id"], user_id=storage)
+    if source is None or source.thread_id != thread_id or source.user_id != storage:
+        raise HTTPException(404, "Source run is unavailable")
+    content = {"handle": attempt["handle"], "toolkit": attempt["toolkit"], "source_run_id": source.run_id, "tool_call_id": attempt["intent"]["tool_call_id"]}
+    event, _created = await get_run_event_store(request).put_if_absent(
+        thread_id=thread_id, run_id=source.run_id, event_type=COMPOSIO_CONNECTED_EVENT.event_type, category=COMPOSIO_CONNECTED_EVENT.category, content=content, content_identity={"handle": attempt["handle"]}
+    )
+    if event["content"] != content:
+        raise HTTPException(409, "Connection event identity changed")
+    body = RunCreateRequest(
+        assistant_id=source.assistant_id, input=retry.input(), metadata={"composio_connect_handle": attempt["handle"], "source_run_id": source.run_id, "original_tool_call_id": attempt["intent"]["tool_call_id"]}, on_disconnect="continue"
+    )
+    record = await start_run(body, thread_id, request, idempotency_key=_scope_http_run_idempotency_key(request, thread_id, "composio-connect:" + attempt["handle"]), require_existing_thread=True, composio_retry=retry)
+    return {"state": "submitted", "run_id": record.run_id, "source_run_id": source.run_id, "tool_call_id": attempt["intent"]["tool_call_id"]}
 
 
 @router.post("/{thread_id}/runs/stream")
