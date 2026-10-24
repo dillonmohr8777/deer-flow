@@ -10,6 +10,16 @@ The upstream DeerFlow history stays in [CHANGELOG.md](../CHANGELOG.md).
 
 ## [Unreleased]
 
+## [momobot-prod-20261024-a2ae200a] - 2026-10-24
+
+### Changed
+
+- MomoBot changelog momobot-prod-20261024-5c144f5b, Oct 24 (#311)
+
+### Security
+
+- Attribute client-portal draft saves to the authenticated staff actor (#312)
+
 ## [momobot-prod-20261024-5c144f5b] - 2026-10-24
 
 ### Changed
