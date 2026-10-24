@@ -322,12 +322,12 @@ async def test_abefore_agent_policy_resolution_failure_does_not_replace_timeout(
     if slow_policy:
         original_policy = mw._read_failures_are_fatal
 
-        def delayed_policy(*, allow_io=True):
+        def delayed_policy(*, allow_io=True, runtime=None):
             if not allow_io:
                 return None
             # Exercise a cold worker still resolving policy after the 10ms timeout.
             threading.Event().wait(0.05)
-            return original_policy(allow_io=allow_io)
+            return original_policy(allow_io=allow_io, runtime=runtime)
 
         monkeypatch.setattr(mw, "_read_failures_are_fatal", delayed_policy)
 
