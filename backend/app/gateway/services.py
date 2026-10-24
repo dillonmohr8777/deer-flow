@@ -2262,6 +2262,7 @@ async def start_run(
                 interrupt_before=body.interrupt_before,
                 interrupt_after=body.interrupt_after,
                 knowledge_scope=admitted_knowledge_scope,
+                **({"_allow_goal_continuation": False} if composio_retry is not None else {}),
             )
 
         try:

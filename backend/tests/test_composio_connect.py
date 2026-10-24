@@ -145,8 +145,10 @@ async def retry_world(connect_world, monkeypatch):
         await app.state.run_event_store.put(thread_id="thread", run_id="run", event_type="run.end", category="outputs", content={}, metadata={"status": "success"})
     state.admissions = []
     state.results = []
+    state.worker_modes = []
 
     async def execute_graph(bridge, run_manager, record, *, agent_factory, graph_input, config, **kwargs):
+        state.worker_modes.append(kwargs.get("_allow_goal_continuation", True))
         # Exercise the real admission's opaque markers, exact graph and guards;
         # the general worker lifecycle itself is already covered by the B suite.
         token = bind_composio_context(config["context"], thread_id=record.thread_id, run_id=record.run_id)
@@ -577,12 +579,18 @@ async def test_serialized_retry_authority_never_selects_retry_factory_and_metada
     response = await client.post(
         "/api/threads/thread/runs",
         headers=headers(client),
-        json={"input": {"messages": [{"type": "ai", "content": "Harmless"}], "metadata": reserved}, "metadata": reserved, "context": {"composio_retry": forged}, "config": {"context": {"composio_retry": forged}, "metadata": reserved}},
+        json={
+            "input": {"messages": [{"type": "ai", "content": "Harmless"}], "metadata": reserved},
+            "metadata": {**reserved, "_allow_goal_continuation": False},
+            "context": {"composio_retry": forged, "_allow_goal_continuation": False},
+            "config": {"context": {"composio_retry": forged, "_allow_goal_continuation": False}, "metadata": reserved},
+        },
     )
     assert response.status_code == 200, response.text
     admitted = await client._transport.app.state.run_manager.get(response.json()["run_id"], user_id=STORAGE)
     await asyncio.wait_for(admitted.task, 5)
     assert factories == ["ordinary"] and state.requests == [] and state.mcp.calls == []
+    assert state.worker_modes == [True]
     assert "_deerflow_upload_reservation" not in admitted.metadata
     assert admitted.kwargs["input"]["metadata"] == {"safe": "kept"}
     assert admitted.kwargs["config"]["metadata"] == {"safe": "kept"}
@@ -603,11 +611,12 @@ async def main():
     print('ready',flush=True)
     await asyncio.to_thread(sys.stdin.readline)
     won=await UserPreferencesRepository(sessions).transition_key(sys.argv[2],'__c_cross_process','synthetic-nonce','opened',{'state':'verifying','nonce':'synthetic-nonce'})
+    execution=await UserPreferencesRepository(sessions).reserve_key(sys.argv[2],'__ce_'+'a'*24,{'state':'claimed','run_id':'run','nonce':'synthetic-nonce'})
     _,created=await DbRunEventStore(sessions).put_if_absent(
         thread_id='cross-thread',run_id='source',event_type='composio.connected',category='connection',
         content={'handle':'a'*24,'toolkit':'gmail','source_run_id':'source','tool_call_id':'call'},
         content_identity={'handle':'a'*24})
-    print(json.dumps({'claim':won,'event':created}),flush=True)
+    print(json.dumps({'claim':won,'execution':execution,'event':created}),flush=True)
     await engine.dispose()
 asyncio.run(main())
 """
@@ -629,6 +638,7 @@ asyncio.run(main())
 
     values = await asyncio.to_thread(race)
     assert sum(value["claim"] for value in values) == 1
+    assert sum(value["execution"] for value in values) == 1
     assert sum(value["event"] for value in values) == 1
 
 
@@ -643,3 +653,140 @@ async def test_original_credential_arguments_rejected_before_connect_io_or_stora
         await composio_tools(runtime.context, config)[0].coroutine(tool_name="COMPOSIO_MULTI_EXECUTE_TOOL", arguments={"tools": [{"tool_slug": "GMAIL_FETCH_EMAILS", "arguments": secret_args}]}, runtime=runtime)
     assert state.requests == [] and state.mcp.calls == [] and not await repo.get(A)
     assert "SYNTHETIC_FORBIDDEN" not in caplog.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("stage", ["open", "callback"])
+async def test_current_toolkit_revocation_blocks_existing_attempt_before_io(connect_world, stage):
+    state, repo, client, config = connect_world
+    created = await client.post("/api/integrations/connect", headers=headers(client), json={"toolkit": "gmail"})
+    handle = created.json()["handle"]
+    if stage == "callback":
+        assert (await client.get(f"/api/integrations/connect/{handle}/open", headers=headers(client))).status_code == 302
+    config.composio_me.toolkits = ["slack"]  # The old Gmail auth-config remains configured.
+    state.connected = True
+    state.requests.clear()
+    result = (
+        await client.get(f"/api/integrations/connect/{handle}/open", headers=headers(client)) if stage == "open" else await client.get("/api/integrations/callback", params=callback_params(handle), headers=headers(client, handle=handle))
+    )
+    assert result.status_code == 409 and "location" not in result.headers
+    assert state.requests == [] and state.mcp.calls == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("variant", ["batch", "public", "search", "schemas"])
+async def test_all_argument_shapes_reject_credentials_before_session_state(connect_world, variant, caplog):
+    from deerflow.mcp.composio_sessions import ComposioSessionError, composio_tools
+
+    state, repo, client, config = connect_world
+    secret = {"headers": {"Authorization": "SYNTHETIC_BOUNDARY_FORBIDDEN"}}
+    if variant == "batch":
+        name, arguments = "COMPOSIO_MULTI_EXECUTE_TOOL", {"tools": [{"tool_slug": "GMAIL_FETCH_EMAILS", "arguments": secret}, {"tool_slug": "GMAIL_LIST_LABELS", "arguments": {}}]}
+    elif variant == "public":
+        name, arguments = "COMPOSIO_MULTI_EXECUTE_TOOL", {"tools": [{"tool_slug": "COMPOSIO_SEARCH_WEB", "arguments": secret}]}
+    elif variant == "search":
+        name, arguments = "COMPOSIO_SEARCH_TOOLS", {"queries": [{"use_case": "synthetic"}], **secret}
+    else:
+        name, arguments = "COMPOSIO_GET_TOOL_SCHEMAS", {"tool_slugs": ["GMAIL_FETCH_EMAILS"], **secret}
+    with actor(A) as runtime, pytest.raises(ComposioSessionError, match="call_failed"):
+        await composio_tools(runtime.context, config)[0].coroutine(tool_name=name, arguments=arguments, runtime=runtime)
+    assert state.requests == [] and state.mcp.calls == [] and not await repo.get(A)
+    assert "SYNTHETIC_BOUNDARY_FORBIDDEN" not in caplog.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("checkpoint_mode", ["full", "delta"])
+@pytest.mark.parametrize("write", [False, True])
+@pytest.mark.parametrize("failure", [None, "timeout", "cancel"])
+async def test_real_worker_retry_preserves_goal_without_model_and_cannot_reenter(retry_world, monkeypatch, checkpoint_mode, write, failure):
+    from contextvars import copy_context
+
+    from langchain_core.messages import AIMessage, HumanMessage
+    from langgraph.graph import END, START, StateGraph
+
+    from app.gateway import services
+    from deerflow.agents.thread_state import get_thread_state_schema
+    from deerflow.mcp.composio_sessions import ComposioRetry, ComposioSessionError, composio_tools
+    from deerflow.runtime.goal import GoalEvaluation, build_goal_state, read_thread_goal
+    from deerflow.runtime.runs import worker
+
+    state, repo, client, config = retry_world
+    app = client._transport.app
+    app.state.checkpoint_channel_mode = checkpoint_mode
+    monkeypatch.setattr(services, "run_agent", worker.run_agent)
+    reached, captured = [], []
+
+    def model(**kwargs):
+        reached.append("model")
+        return object()
+
+    async def evaluate(*args, **kwargs):
+        reached.append("evaluate")
+        done = reached.count("evaluate") > 1
+        return GoalEvaluation(satisfied=done, blocker="none" if done else "goal_not_met_yet", reason="Synthetic", evidence_summary="No provider")
+
+    monkeypatch.setattr(worker, "create_goal_evaluator_model", model)
+    monkeypatch.setattr(worker, "evaluate_goal_completion", evaluate)
+    entered = asyncio.Event()
+    if failure:
+
+        async def uncertain(request, handler):
+            await handler(request)
+            if failure == "cancel":
+                entered.set()
+                await asyncio.Future()  # The host cancels the actual worker after entry.
+            raise httpx.ReadTimeout("Synthetic unknown outcome")
+
+        state.mcp.interceptor = uncertain
+    factory = ComposioRetry.factory
+
+    def capture(self, *, config, app_config=None):
+        graph = factory(self, config=config, app_config=app_config)
+        saved = {**config, "configurable": {**config.get("configurable", {})}, "context": {**config["context"]}}
+        captured.append((self, graph, saved, copy_context()))
+        return graph
+
+    monkeypatch.setattr(ComposioRetry, "factory", capture)
+    goal = build_goal_state("Finish the synthetic task", max_continuations=2)
+    seed = StateGraph(get_thread_state_schema(checkpoint_mode))
+    seed.add_node("seed", lambda state: {})
+    seed.add_edge(START, "seed")
+    seed.add_edge("seed", END)
+    await seed.compile(checkpointer=app.state.checkpointer).ainvoke(
+        {"messages": [HumanMessage(content="Please finish this task."), AIMessage(content="Connect Gmail so I can continue.")], "goal": goal}, {"configurable": {"thread_id": "thread", "checkpoint_ns": ""}}
+    )
+    with actor(A):
+        await app.state.run_event_store.put(thread_id="thread", run_id="run", event_type="human_message", category="message", content="Please finish this task.")
+    with actor(A) as runtime:
+        arguments = {"tools": [{"tool_slug": "GMAIL_SEND_EMAIL" if write else "GMAIL_LIST_LABELS", "arguments": {"body": "Exact synthetic draft"} if write else {}}]}
+        card, _ = await composio_tools(runtime.context, config)[0].coroutine(tool_name="COMPOSIO_MULTI_EXECUTE_TOOL", arguments=arguments, runtime=runtime)
+    handle = card["connect"]["handle"]
+    assert (await client.get(f"/api/integrations/connect/{handle}/open", headers=headers(client))).status_code == 302
+    state.connected = True
+    reply = await client.get("/api/integrations/callback", params=callback_params(handle), headers=headers(client, handle=handle))
+    assert reply.status_code == 200 and reply.json()["retry"]["state"] == "submitted", reply.text
+    admitted = await app.state.run_manager.get(reply.json()["retry"]["run_id"], user_id=STORAGE)
+    if failure == "cancel" and not write:
+        await asyncio.wait_for(entered.wait(), 5)
+        admitted.task.cancel()
+    await asyncio.wait_for(admitted.task, 15)
+    assert admitted.status.value == ("success" if failure is None or write else "interrupted" if failure == "cancel" else "error") and reached == []
+    assert await read_thread_goal(app.state.checkpointer, "thread") == goal
+    assert len(state.mcp.calls) == int(not write)
+    consumed = await repo.get_key(A, "__ce_" + handle)
+    assert consumed["state"] == "claimed" and consumed["run_id"] == admitted.run_id
+    from deerflow.persistence.approvals import PendingActionRepository
+
+    with actor(A):
+        pending = await PendingActionRepository(repo.sessions).list()
+    assert len(pending) == int(write)
+    if write:
+        assert pending[0]["status"] == "pending" and pending[0]["payload"]["arguments"] == arguments
+    cap, graph, saved, execution_context = captured[0]
+    with pytest.raises(ComposioSessionError, match="connect_retry_consumed"):
+        await asyncio.create_task(graph.ainvoke(cap.input(), saved, context=saved["context"]), context=execution_context)
+    assert len(state.mcp.calls) == int(not write)
+    assert await read_thread_goal(app.state.checkpointer, "thread") == goal
+    count = len(state.requests)
+    duplicate = await client.get("/api/integrations/callback", params=callback_params(handle), headers=headers(client, handle=handle))
+    assert duplicate.json() == reply.json() and len(state.requests) == count

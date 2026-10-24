@@ -495,6 +495,8 @@ class ConnectManager:
         value = await self.repo.get_key(scope.actor_user_id, self.attempt_key(handle))
         if not isinstance(value, dict) or value.get("organization_id") != scope.organization_id or value.get("storage_user_id") != scope.storage_user_id or value.get("handle") != handle or value.get("expires_at", 0) <= time.time():
             raise ComposioSessionError("connect_attempt_not_found")
+        if self.unavailable(value.get("toolkit")) or value.get("auth_config_id") != self.config.composio_me.connect.auth_configs.get(value["toolkit"]):
+            raise ComposioSessionError("connect_policy_changed")
         if nonce is not None and (not isinstance(nonce, str) or not hmac.compare_digest(nonce, value["nonce"])):
             raise ComposioSessionError("connect_nonce_denied")
         if account_id is not None and account_id != value.get("connected_account_id"):
@@ -607,6 +609,7 @@ class ConnectManager:
             accounts = await self.accounts(value["toolkit"])
             if len(accounts) != 1 or accounts[0]["id"] != account_id:
                 raise ComposioSessionError("connection_verification_failed")
+            await self.attempt(handle, nonce=nonce, account_id=account_id)
             connected = {**value, "state": "connected", "redirect_url": None}
             if not await self.repo.transition_key(scope.actor_user_id, self.attempt_key(handle), value["nonce"], "verifying", connected):
                 raise ComposioSessionError("connect_attempt_held")
@@ -616,11 +619,11 @@ class ConnectManager:
             raise ComposioSessionError("connection_verification_failed") from None
 
     async def claim_dispatch(self, value):
-        scope = await self.authorize()
+        scope, _ = await self.attempt(value["handle"], nonce=value["nonce"], account_id=value["connected_account_id"])
         return await self.repo.transition_key(scope.actor_user_id, self.attempt_key(value["handle"]), value["nonce"], "connected", {**value, "state": "dispatching"})
 
     async def settle_dispatch(self, value, reply):
-        scope = await self.authorize()
+        scope, _ = await self.attempt(value["handle"], nonce=value["nonce"], account_id=value["connected_account_id"])
         if not await self.repo.transition_key(scope.actor_user_id, self.attempt_key(value["handle"]), value["nonce"], "dispatching", {**value, "state": "complete", "reply": reply}):
             raise ComposioSessionError("connect_attempt_held")
 
@@ -677,8 +680,7 @@ class ComposioRetry:
         repo = _repository()
         await _require_staff(scope.actor_user_id, scope, repo.sessions)
         config = await asyncio.to_thread(ExtensionsConfig.from_file)
-        await ConnectManager(config, runtime=runtime, repository=repo).authorize()
-        value = await repo.get_key(scope.actor_user_id, ConnectManager.attempt_key(self.handle))
+        _, value = await ConnectManager(config, runtime=runtime, repository=repo).attempt(self.handle, nonce=self.nonce)
         if (
             not isinstance(value, dict)
             or value.get("state") not in {"dispatching", "complete"}
@@ -711,9 +713,15 @@ class ComposioRetry:
             raise ComposioSessionError("connect_retry_denied")
 
         async def exact_call(tool_name: RouterToolName, arguments: dict[str, Any] | None = None, runtime: Runtime = None):
-            await self.verify(self.intent["thread_id"], runtime=runtime)
+            from deerflow.mcp.composio_approval_guard import validate_composio_payload
+
             if tool_name != self.intent["tool_name"] or arguments != self.intent["arguments"]:
                 raise ComposioSessionError("connect_retry_denied")
+            validate_composio_payload(SERVER_NAME, {"server_name": SERVER_NAME, "tool_name": tool_name, "arguments": arguments, "tool_call_id": getattr(runtime, "tool_call_id", None)})
+            await self.verify(self.intent["thread_id"], runtime=runtime)
+            scope = current_composio_context(runtime)
+            if not await _repository().reserve_key(self.actor_user_id, "__ce_" + self.handle, {"state": "claimed", "nonce": self.nonce, "run_id": scope.run_id}):
+                raise ComposioSessionError("connect_retry_consumed")
             token = _retry_execution.set(True)
             try:
                 return await tools[0].coroutine(tool_name=tool_name, arguments=arguments, runtime=runtime)
@@ -991,6 +999,10 @@ def composio_tools(run_context: object, config: ExtensionsConfig) -> list[Struct
             raise ComposioSessionError("composio_tool_denied")
         current_composio_context(runtime)
         try:
+            if arguments is not None:
+                from deerflow.mcp.composio_approval_guard import validate_composio_payload
+
+                validate_composio_payload(SERVER_NAME, {"server_name": SERVER_NAME, "tool_name": tool_name, "arguments": arguments, "tool_call_id": getattr(runtime, "tool_call_id", None)})
             current_config = await asyncio.to_thread(ExtensionsConfig.from_file)
             if arguments is not None and current_config.composio_me.connect.enabled and not _retry_execution.get():
                 blocked = await ConnectManager(current_config, runtime=runtime).preflight(tool_name, arguments)

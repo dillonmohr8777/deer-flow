@@ -18,6 +18,9 @@ verified auth-required tool with zero own accounts grants one guarded retry;
 never infer no-execution from errors or replay a workflow. Tool metadata lookup
 requires Tools:Read in addition to the B scopes. Connection receipts follow
 the run-event contract; URLs/provider auth data never enter model/thread output.
+Verified retries alone set the host-only worker no-goal mode; never accept it
+from serialized inputs. Preserve the prior goal and reserve protected `__ce_`
+execution authority once immediately before guarded dispatch, with no refund.
 
 Composio approval handoffs keep the signed-in decider unchanged. Scope one
 server-owned authority to the immutable action and active proposer; select only
