@@ -9,9 +9,11 @@ Postgres bootstrap owns its session-scoped advisory lock until `pg_advisory_unlo
 
 When `database.postgres_schema` is configured, both async ORM connections and the synchronous SQLAlchemy connections used by DB-backed custom agents and managed subagents must use the same `search_path`; preserve this invariant when adding another persistence entry point.
 
-Alembic stamp/upgrade workers started inside `bootstrap_schema()` remain owned by the bootstrap critical section until the worker finishes. Drain those `asyncio.to_thread()` calls across host cancellation before releasing the in-process SQLite bootstrap lock or PostgreSQL advisory lock; otherwise another bootstrap can overlap a still-running migration worker.
+`bootstrap_schema()` owns its Alembic stamp/upgrade workers through completion. Drain their `asyncio.to_thread()` calls across host cancellation before releasing the in-process SQLite bootstrap lock or PostgreSQL advisory lock; otherwise another bootstrap can overlap the still-running migration worker.
 
 # Organization isolation (M3)
+
+Read [upload](../../../../docs/UPLOAD_OWNERSHIP.md).
 
 `approvals/sql.py` keeps ordinary actor/storage scope unchanged. Its separate
 Composio oversight methods revalidate current actor/context and active-org

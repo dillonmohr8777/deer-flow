@@ -23,7 +23,7 @@ from pydantic import BaseModel
 
 from app.gateway.authz import require_permission
 from app.gateway.deps import get_config, get_project_document_repo, get_project_repo, get_thread_store
-from app.gateway.routers.uploads import DEFAULT_MAX_FILE_SIZE, UPLOAD_CHUNK_SIZE, _get_upload_limit
+from app.gateway.routers.uploads import DEFAULT_MAX_FILE_SIZE, UPLOAD_CHUNK_SIZE, _get_upload_limit, reserve_upload_write
 from app.gateway.upload_ingestion import ThreadUploadIngestionService, UnsafeFilenameError, UnsafeUploadDestinationError
 from deerflow.config.app_config import AppConfig
 from deerflow.config.paths import Paths, get_paths
@@ -39,9 +39,10 @@ from deerflow.projects.documents import (
     stage_document_copy_for_attach,
     validate_shelf_filename,
 )
+from deerflow.runtime import ConflictError
 from deerflow.runtime.user_context import get_effective_user_id
 from deerflow.uploads.manager import normalize_filename
-from deerflow.utils.file_io import run_file_io
+from deerflow.utils.file_io import await_drained, run_file_io
 from deerflow.utils.text_detection import _is_active_content_mime_type, is_text_file_by_content
 from deerflow.utils.thread_id import ThreadId
 
@@ -359,6 +360,18 @@ async def attach_project_document_to_thread(
     owner check above, ``require_existing``); the response is returned only
     after ingestion succeeds.
     """
+    try:
+        async with reserve_upload_write(thread_id, request):
+            # The route's earlier owner check can become stale before admission.
+            if not await get_thread_store(request).check_access(thread_id, get_effective_user_id(), require_existing=True):
+                raise _not_found()
+            return await await_drained(_attach_project_document_owned(project_id, document_id, thread_id, request, config))
+    except ConflictError:
+        raise HTTPException(status_code=409, detail="Thread has unfinished work. Retry the attachment when it is available.") from None
+
+
+async def _attach_project_document_owned(project_id: str, document_id: str, thread_id: str, request: Request, config: AppConfig) -> AttachDocumentResponse:
+    """Keep the target reservation until staged copy, ingestion and cleanup drain."""
     await _require_project(request, project_id)
     repo = get_project_document_repo(request)
     user_id = get_effective_user_id()

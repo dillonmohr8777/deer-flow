@@ -231,6 +231,20 @@ async def _ensure_thread_metadata(
     """
     thread_store = run_ctx.thread_store
     existing = await thread_store.get(record.thread_id)
+    if isinstance(existing, dict) and existing.get("upload_reserved") is True:
+        from deerflow.persistence.thread_meta import THREAD_PROJECT_METADATA_KEY
+
+        existing_metadata = existing.get("metadata") or {}
+        metadata = {key: value for key, value in {**existing_metadata, **(record.metadata or {})}.items() if key not in (DEERFLOW_TRACE_METADATA_KEY, THREAD_PROJECT_METADATA_KEY, "_deerflow_upload_reservation")}
+        project_id = existing_metadata.get(THREAD_PROJECT_METADATA_KEY)
+        await thread_store.create(
+            record.thread_id,
+            assistant_id=record.assistant_id,
+            metadata=metadata,
+            project_id=project_id,
+            finalize_upload=True,
+        )
+        return
     if existing is None:
         if require_existing_thread:
             raise LookupError(f"Thread {record.thread_id} was deleted during run admission")
@@ -244,7 +258,7 @@ async def _ensure_thread_metadata(
             # membership key: run admission never modifies project membership —
             # the column is written only by POST /api/threads and
             # /threads/{id}/move — so the key must not persist either.
-            if key not in (DEERFLOW_TRACE_METADATA_KEY, THREAD_PROJECT_METADATA_KEY)
+            if key not in (DEERFLOW_TRACE_METADATA_KEY, THREAD_PROJECT_METADATA_KEY, "_deerflow_upload_reservation")
         }
         await thread_store.create(
             record.thread_id,
@@ -2239,6 +2253,18 @@ async def start_run(
                 # cannot both succeed across Gateway workers.
                 if require_existing_thread and not await thread_access_allowed():
                     raise HTTPException(status_code=404, detail=f"Thread {thread_id} not found")
+                if not require_existing_thread:
+                    from sqlalchemy.exc import IntegrityError
+
+                    from deerflow.persistence.thread_meta.base import ThreadOwnershipConflictError
+
+                    try:
+                        # Commit ownership before admission; a cached missing-row
+                        # access check cannot authorize a later foreign upload.
+                        await run_ctx.thread_store.create(thread_id, preserve_existing=True)
+                    except (ThreadOwnershipConflictError, IntegrityError):
+                        if not await run_ctx.thread_store.check_access(thread_id, content_user_id, require_existing=True):
+                            raise HTTPException(status_code=404, detail=f"Thread {thread_id} not found") from None
                 record = await run_mgr.create_or_reject(
                     thread_id,
                     body.assistant_id,
