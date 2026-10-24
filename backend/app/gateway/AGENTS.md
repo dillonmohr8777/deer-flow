@@ -251,3 +251,8 @@ replay. Three requests at $0.03 each. Details/tests: [WORKFLOWS.md](../../docs/W
 `app/momobot_brand.py` and `routers/momobot_brand.py` serve the private About copy and Agents lineup from `momobot_brand.content_dir` (never committed; `scripts/stage_momobot_brand.sh` fills it). Prices leave only when agents.json has `show_pricing: true`; assets come from an allowlisted subfolder set with a resolve-inside-root check. Slack `/momobot about` and "@bot what is MomoBot" read the same folder.
 
 Customer migration, private legacy visibility, staff context, portal `/work` and internal work-plan authorization/CAS/audit (`client_work_plan.py`): see [CLIENT_PORTAL.md](../../docs/CLIENT_PORTAL.md).
+
+Portal plan tools bind only the authenticated staff Max run's existing request,
+independently of project selection. Carry `client_work_plan_access` through
+`RunContext`, never serialized config; retain live and locked scope rechecks and
+the shared HTTP actual-actor audit. They record plans only, without dispatch.

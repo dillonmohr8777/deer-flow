@@ -21,7 +21,7 @@ from sqlalchemy.exc import IntegrityError
 from app.gateway.approval_adapters import register_adapter
 from app.gateway.client_boundary import CLIENT_ROLE
 from app.gateway.client_context import bind_staff_work_project, client_operating_context, require_staff_client, require_staff_project
-from app.gateway.client_work_plan import WorkPlanUpdate, read_work_plan, save_work_plan
+from app.gateway.client_work_plan import WorkPlanUpdate, read_work_plan, save_audited_work_plan
 from app.gateway.deps import audit_actor_id, get_current_user_from_request, record_audit_event
 from app.gateway.invitation_policy import fresh_customer_assignments, validate_customer_workspace
 from app.gateway.routers.clients import _is_active_org_admin
@@ -443,18 +443,7 @@ async def put_internal_work_plan(thread_id: ThreadId, body: WorkPlanUpdate, requ
     actor, org, _, external = await _identity(request)
     if external:
         raise _missing()
-    result, client_id = await save_work_plan(actor_id=actor, organization_id=org, thread_id=thread_id, body=body)
-    await record_audit_event(
-        request,
-        action="client_portal.work_plan.saved",
-        outcome="success",
-        actor_user_id=audit_actor_id(request),
-        organization_id=org,
-        target_type="client_portal_thread",
-        target_id=thread_id,
-        details={"source": "client_portal", "storage_user_id": get_effective_user_id(), "client_id": client_id, "revision": result["revision"]},
-    )
-    return result
+    return await save_audited_work_plan(request=request, actor_id=actor, organization_id=org, thread_id=thread_id, body=body, storage_user_id=get_effective_user_id())
 
 
 def _snapshot(thread_id, revision, draft):
