@@ -226,6 +226,21 @@ export function WorkspaceNavChatList() {
               </SidebarMenuButton>
             </SidebarMenuItem>
           )}
+          {/* Everyone on the team approves their own sends here; the server decides who may approve or reject each item. */}
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              isActive={pathname === "/workspace/approvals"}
+              asChild
+            >
+              <Link
+                className="text-muted-foreground"
+                href="/workspace/approvals"
+              >
+                <ShieldCheck />
+                <span>Approvals</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
         </SidebarMenu>
         <ExperienceModeSwitch />
       </SidebarGroup>
@@ -276,20 +291,6 @@ export function WorkspaceNavChatList() {
                 )}
               </SidebarMenuItem>
             )}
-            <SidebarMenuItem>
-              <SidebarMenuButton
-                isActive={pathname === "/workspace/approvals"}
-                asChild
-              >
-                <Link
-                  className="text-muted-foreground"
-                  href="/workspace/approvals"
-                >
-                  <ShieldCheck />
-                  <span>Approvals</span>
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
             {internalEnabled && (
               <SidebarMenuItem>
                 <SidebarMenuButton

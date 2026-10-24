@@ -186,15 +186,13 @@ describe("the internal sidebar", () => {
         "/workspace/agents/momobot-max/chats/new",
         "/workspace/scheduled-tasks",
         "/workspace/chats",
+        // Oct 24: everyone on the team approves their own sends here.
+        "/workspace/approvals",
       ]) {
         expect(links, href).toContain(href);
       }
-      // Oct 22: approvals, the Command Center and agents sit in the admin group.
-      for (const href of [
-        "/workspace/approvals",
-        "/workspace/command-center",
-        "/workspace/agents",
-      ]) {
+      // Oct 22: the Command Center and agents sit in the admin group.
+      for (const href of ["/workspace/command-center", "/workspace/agents"]) {
         if (role === "admin") expect(links, href).toContain(href);
         else expect(links, href).not.toContain(href);
       }
