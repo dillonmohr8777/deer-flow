@@ -10,6 +10,7 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 
+from app.gateway.client_boundary import CLIENT_ROLE
 from deerflow.persistence.board.model import BoardMessageRow, BoardPortalRow, BoardThreadRow
 from deerflow.persistence.clients.model import ClientAssignmentRow, ClientRow
 from deerflow.persistence.organizations.model import OrganizationMemberRow, OrganizationRow
@@ -45,7 +46,7 @@ async def _staff_client(session, *, actor_id, organization_id, client_id):
     user = (await session.execute(select(UserRow.system_role).where(UserRow.id == actor_id, UserRow.disabled_at.is_(None)))).first()
     org = await session.get(OrganizationRow, organization_id)
     member = await session.get(OrganizationMemberRow, (organization_id, actor_id))
-    if user is None or user.system_role == "client" or org is None or org.status != "active" or member is None or member.status != "active" or member.role not in {"owner", "admin", "member"}:
+    if user is None or user.system_role == CLIENT_ROLE or org is None or org.status != "active" or member is None or member.status != "active" or member.role not in {"owner", "admin", "member"}:
         raise _missing()
     contact = await session.scalar(select(ClientAssignmentRow.client_id).where(ClientAssignmentRow.organization_id == organization_id, ClientAssignmentRow.user_id == actor_id, ClientAssignmentRow.role == "client_contact").limit(1))
     if contact is not None:

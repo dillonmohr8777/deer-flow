@@ -522,9 +522,7 @@ async def test_uuid_client_actor_can_list_get_and_run_bound_customer_agents_thro
     from deerflow.runtime.user_context import WorkspaceStorageContext, reset_current_user, reset_storage_context, set_current_user, set_storage_context
 
     user_token = set_current_user(user)
-    storage_token = set_storage_context(
-        WorkspaceStorageContext(actor_user_id=actor_id, organization_id=organization_id, storage_user_id=actor_id, role="client")
-    )
+    storage_token = set_storage_context(WorkspaceStorageContext(actor_user_id=actor_id, organization_id=organization_id, storage_user_id=actor_id, role="client"))
     try:
         store = get_agent_store()
         for name, tag in (
