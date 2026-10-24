@@ -499,6 +499,21 @@ def _safe_result(result, config):
 
     connection_links = []
 
+    def embedded_json(value, json_depth):
+        if not value.lstrip().startswith(("{", "[")):
+            return None
+        try:
+            decoded = json.loads(value)
+        except ValueError:
+            return None
+        except RecursionError:
+            raise ComposioSessionError("composio_result_unavailable") from None
+        if isinstance(decoded, (dict, list)):
+            if json_depth >= 8:
+                raise ComposioSessionError("composio_result_unavailable")
+            return decoded
+        return None
+
     def field_scope(name, connection):
         field = re.sub(r"[^a-z]", "", name.lower())
         container = field in {"connection", "connections", "connectionsetup", "connect", "auth", "authentication", "oauth"}
@@ -521,19 +536,23 @@ def _safe_result(result, config):
         link = link or (connection and field in {"url", "uri", "href", "link", "redirect", "redirecturl", "redirecturi", "callbackurl", "callbackuri"})
         return connection or container, link
 
-    def collect_connection_links(value, *, connection=False, connection_url=False):
+    def collect_connection_links(value, *, connection=False, connection_url=False, json_depth=0):
         # Classify explicit connection links before aliases in other fields.
         if isinstance(value, dict):
             for name, item in value.items():
                 if connection:
                     connection_links.extend(re.findall(r"https?://[^\s\"<>]+", name, re.IGNORECASE))
                 child, link = field_scope(name, connection)
-                collect_connection_links(item, connection=child, connection_url=link)
+                collect_connection_links(item, connection=child, connection_url=link, json_depth=json_depth)
         elif isinstance(value, list):
             for item in value:
-                collect_connection_links(item, connection=connection, connection_url=connection_url)
-        elif isinstance(value, str) and connection_url:
-            connection_links.extend(re.findall(r"https?://[^\s\"<>]+", value, re.IGNORECASE))
+                collect_connection_links(item, connection=connection, connection_url=connection_url, json_depth=json_depth)
+        elif isinstance(value, str):
+            decoded = embedded_json(value, json_depth)
+            if decoded is not None:
+                collect_connection_links(decoded, connection=connection, connection_url=connection_url, json_depth=json_depth + 1)
+            elif connection_url:
+                connection_links.extend(re.findall(r"https?://[^\s\"<>]+", value, re.IGNORECASE))
 
     def credential_parameters(component):
         for name, _ in parse_qsl(unquote(component)):
@@ -556,7 +575,7 @@ def _safe_result(result, config):
                 return True
         return False
 
-    def sanitize(value, *, connection=False, connection_url=False):
+    def sanitize(value, *, connection=False, connection_url=False, json_depth=0):
         if isinstance(value, dict):
             result = {}
             for name, item in value.items():
@@ -567,12 +586,16 @@ def _safe_result(result, config):
                     result[name] = "[redacted]"
                     continue
                 child, link = field_scope(name, connection)
-                result[name] = sanitize(item, connection=child, connection_url=link)
+                result[name] = sanitize(item, connection=child, connection_url=link, json_depth=json_depth)
             return result
         if isinstance(value, list):
-            return [sanitize(item, connection=connection, connection_url=connection_url) for item in value]
-        if isinstance(value, str) and unsafe(value, connection_url=connection_url):
-            return "[connection setup unavailable]"
+            return [sanitize(item, connection=connection, connection_url=connection_url, json_depth=json_depth) for item in value]
+        if isinstance(value, str):
+            decoded = embedded_json(value, json_depth)
+            if decoded is not None:
+                return json.dumps(sanitize(decoded, connection=connection, connection_url=connection_url, json_depth=json_depth + 1), ensure_ascii=False)
+            value = re.sub(r"https?://[^\s\"<>]+", lambda match: "[connection setup unavailable]" if unsafe(match[0], connection_url=connection_url) else match[0], value, flags=re.IGNORECASE)
+            return value.replace(key, "[redacted]") if key else value
         return value
 
     decoded = json.loads(serialized)

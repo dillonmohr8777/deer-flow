@@ -213,6 +213,10 @@ def upstream(policy, monkeypatch):
                     if state.interceptor:
                         chain.insert(-1, state.interceptor)
                     result = await compose_tool_interceptors(chain, execute)(MCPToolCallRequest(server_name=server_name, name=_name, args=arguments, runtime=runtime))
+                    if getattr(state, "convert_result", False):
+                        from langchain_mcp_adapters.tools import _convert_call_tool_result
+
+                        return _convert_call_tool_result(result)
                     return (result.structuredContent if isinstance(result, CallToolResult) else result), None
 
                 schema = {
@@ -809,6 +813,70 @@ async def test_envelope_redacts_credential_urls_but_preserves_public_links(repo,
     assert content[public_urls[0]] == "public field-name"
     assert content["tool"] == "GMAIL_LIST_LABELS" and artifact is None
     assert len(upstream.calls) == 1 and upstream.calls[0][1].name == tool_name
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("tool_name", ["COMPOSIO_SEARCH_TOOLS", "COMPOSIO_GET_TOOL_SCHEMAS"])
+async def test_installed_adapter_json_text_redacts_aliases_across_guarded_envelope(repo, policy, upstream, tool_name):
+    from mcp.types import CallToolResult, TextContent
+
+    from deerflow.mcp.composio_sessions import composio_tools
+
+    connect_url = "https://connect.example.invalid/connect/SYNTHETIC_EMBEDDED_BEARER"
+    auth_url = "https://identity.example.invalid/authorize/SYNTHETIC_EMBEDDED_AUTH"
+    nested_url = "https://identity.example.invalid/consent/SYNTHETIC_NESTED_AUTH"
+    public_url = "https://public.example.invalid/connect/SYNTHETIC_PUBLIC_PATH"
+    docs_url = "https://docs.composio.dev/reference/authenticating-to-composio/project-api-key-permissions"
+    payload = {
+        connect_url: "alias before semantic field",
+        "alias": "Follow " + auth_url,
+        "connection": {"redirect_url": connect_url},
+        "authorization_url": auth_url,
+        "nested_json": json.dumps({"authorization_url": nested_url, "docs": docs_url}),
+        "citations": [public_url, docs_url],
+    }
+    upstream.convert_result = True
+    upstream.result = CallToolResult(
+        content=[
+            TextContent(type="text", text=f"Useful research: {docs_url}. Connect alias: {connect_url} Nested alias: {nested_url}"),
+            TextContent(type="text", text=json.dumps(payload)),
+            TextContent(type="text", text="Ordinary prose and a public link: " + public_url),
+        ],
+        structuredContent={"alias": auth_url, connect_url: "artifact alias", "docs": docs_url},
+    )
+    with actor(A) as runtime:
+        result = await composio_tools(runtime.context, policy)[0].coroutine(tool_name=tool_name, arguments={}, runtime=runtime)
+    assert isinstance(result, tuple) and len(result) == 2
+    content, artifact = result
+    assert isinstance(content, list) and len(content) == 3
+    assert all(block["type"] == "text" and isinstance(block["text"], str) for block in content)
+    rendered = json.dumps(result)
+    assert all(url not in rendered for url in (connect_url, auth_url, nested_url))
+    decoded = json.loads(content[1]["text"])
+    assert decoded["citations"] == [public_url, docs_url]
+    assert json.loads(decoded["nested_json"])["docs"] == docs_url
+    assert "Useful research:" in content[0]["text"] and docs_url in content[0]["text"]
+    assert content[2]["text"] == "Ordinary prose and a public link: " + public_url
+    assert artifact["structured_content"]["docs"] == docs_url
+    assert len(upstream.calls) == 1 and upstream.calls[0][1].name == tool_name
+
+
+def test_result_sanitizer_preserves_plain_response_representations(policy):
+    from deerflow.mcp.composio_sessions import _safe_result
+
+    prose = "Useful research: https://docs.example.invalid/topic#results"
+    for result in (prose, [prose], (prose, None), ([{"type": "text", "text": prose}], None)):
+        assert _safe_result(result, policy) == result
+
+
+def test_embedded_json_classification_has_a_fail_closed_layer_bound(policy):
+    from deerflow.mcp.composio_sessions import ComposioSessionError, _safe_result
+
+    value = {"authorization_url": "https://identity.example.invalid/authorize/SYNTHETIC_DEEP_AUTH"}
+    for _ in range(9):
+        value = {"nested": json.dumps(value)}
+    with pytest.raises(ComposioSessionError, match="result_unavailable"):
+        _safe_result((value, None), policy)
 
 
 @pytest.mark.parametrize("schema", [{"properties": {"synthetic-project-key": {"type": "string"}}}, {"$ref": "#/$defs/synthetic-project-key"}])
