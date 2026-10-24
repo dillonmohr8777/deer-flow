@@ -13,6 +13,7 @@ All routes require a real authenticated active workspace membership. Mutations u
 | `POST /threads` | `{client_id,submission_key,subject,body}`. Unique workspace/actor/key; identical retry returns same conversation, changed payload 409 |
 | `GET /threads/{id}` | Published messages only for clients; staff also see immutable drafts, approval and work refs |
 | `GET /threads/{id}/work-plan` | Exact authorized staff only; current recorded internal plan and independent revision; no-store |
+| `GET /threads/{id}/work-plan/participants?limit=50&cursor=` | Exact authorized staff only; bounded current owner/admin and exact-client account-manager choices, plus currently eligible saved selections; no-store |
 | `PUT /threads/{id}/work-plan` | Exact authorized staff `{expected_revision,plan}`; records internal planning with CAS and actual-actor audit; no execution |
 | `POST /threads/{id}/draft` | Staff `{expected_revision,body,attachments:[{name,content}]}`. CAS revision; creates immutable draft and real pending approval. Existing pending approval superseded |
 | `POST /threads/{id}/publish` | Owner/admin `{approval_id,expected_revision}`. Existing approval executor publishes exact original snapshot once, returns durable receipt |
@@ -144,6 +145,15 @@ The assigned verifier is a recorded participant, not evidence they reviewed it.
 The API does not dispatch a worker/model, schedule, send, publish, approve or
 update the canonical client queue. Existing approval rules still apply.
 
+The sibling participants route resolves the requested portal thread and its
+client from the authenticated workspace. It returns only existing account
+email, record ID and eligible role; it reads no profile or contact fields.
+Results are ordered by user ID and use a validated request-bound keyset cursor,
+with a default page of 50 and a hard maximum of 100. Saved owner/verifier IDs
+appear in `selected_items` only while currently eligible, including when they
+are outside the current page. Directory results suggest assignment; the locked
+save path still rechecks every submitted non-null participant.
+
 The dedicated staff GET returns source row, revision, actual recording actor
 and timestamp. Authorized `/context` includes compact per-request plan status
 and the full selected-request plan; initial `/work` therefore receives the
@@ -163,13 +173,15 @@ grant it. The worker checks it before assembly and removes it at termination.
 Ordinary/private chats, contacts, other agents, channels, bootstrap and subagents
 receive no capability. Existing role authorization still narrows the tool list.
 
-Tools take no actor, organization, client, request, chat or run identity. Every
-call checks the authenticated actor/storage identity and current staff access,
-exact request/chat/client/workspace binding and selected project, if any. Saves
-repeat these checks under the existing plan write lock. Choices include only
-the current actor and live-authorized saved assignee/verifier IDs; a revoked
-saved participant fails closed, with no teammate-directory lookup. The HTTP UI
-can separately reconcile a saved participant.
+Tools take no actor, organization, client, request, chat or run identity. The
+read returns the server-stamped current actor ID and the first bounded
+participants page; `participants_cursor` can continue that page sequence without
+adding identity or scope inputs. Every call checks the authenticated
+actor/storage identity and current staff access, exact request/chat/client/
+workspace binding and selected project, if any. A revoked saved participant
+does not block authorized reads or repair. Saves repeat scope checks under the
+existing plan write lock and independently recheck each submitted non-null
+participant.
 
 Updates require an explicit `expected_revision`, reuse HTTP validation and CAS,
 and return a 409 conflict without automatic overwrite. HTTP and tool saves share
