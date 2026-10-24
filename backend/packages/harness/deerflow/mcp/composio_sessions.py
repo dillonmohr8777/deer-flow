@@ -272,7 +272,7 @@ def _endpoint(data: object, session_id: str, actor: str, toolkits: list[str]) ->
             and not parsed.password
             and not parsed.fragment
             and not parsed.query
-            and parsed.path == f"/tool_router/v3/{session_id}/mcp"
+            and parsed.path in {f"/tool_router/v3/{session_id}/mcp", f"/tool_router/{session_id}/mcp"}
             and not any(ord(char) < 33 or ord(char) == 127 for char in endpoint)
         )
     except ValueError:

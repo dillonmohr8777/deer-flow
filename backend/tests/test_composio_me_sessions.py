@@ -437,14 +437,20 @@ async def test_dynamic_approval_rejects_non_session_origin_before_decision(world
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("change", ["wrong_owner", "wrong_id", "wrong_toolkits", "foreign_origin", "userinfo", "fragment", "query", "port"])
-async def test_stored_lookup_never_replaces_or_forwards_unverified_endpoint(repo, policy, upstream, change):
+@pytest.mark.parametrize("endpoint_shape", ["versioned", "unversioned"])
+@pytest.mark.parametrize(
+    "change",
+    ["wrong_owner", "wrong_id", "wrong_toolkits", "foreign_origin", "userinfo", "fragment", "query", "port", "wrong_session_path", "encoded_separator", "encoded_session", "extra_path"],
+)
+async def test_stored_lookup_never_replaces_or_forwards_unverified_endpoint(repo, policy, upstream, endpoint_shape, change):
     from langchain_core.tools import ToolException
 
     from deerflow.mcp import composio_sessions as sessions
 
     await repo.reserve_key(A, sessions.SESSION_KEY, {"state": "ready", "session_id": "trs_saved"})
     upstream.owners["trs_saved"] = A
+
+    path = f"/tool_router/{'v3/' if endpoint_shape == 'versioned' else ''}trs_saved/mcp"
 
     def mutate(body):
         if change == "wrong_owner":
@@ -455,11 +461,15 @@ async def test_stored_lookup_never_replaces_or_forwards_unverified_endpoint(repo
             body["config"]["toolkits"]["enabled"] = ["gmail", "slack"]
         else:
             body["mcp"]["url"] = {
-                "foreign_origin": "https://app.composio.dev/tool_router/v3/trs_saved/mcp",
-                "userinfo": "https://secret@backend.composio.dev/tool_router/v3/trs_saved/mcp",
-                "fragment": "https://backend.composio.dev/tool_router/v3/trs_saved/mcp#secret",
-                "query": "https://backend.composio.dev/tool_router/v3/trs_saved/mcp?token=secret",
-                "port": "https://backend.composio.dev:8443/tool_router/v3/trs_saved/mcp",
+                "foreign_origin": f"https://app.composio.dev{path}",
+                "userinfo": f"https://secret@backend.composio.dev{path}",
+                "fragment": f"https://backend.composio.dev{path}#secret",
+                "query": f"https://backend.composio.dev{path}?token=secret",
+                "port": f"https://backend.composio.dev:8443{path}",
+                "wrong_session_path": f"https://backend.composio.dev/tool_router/{'v3/' if endpoint_shape == 'versioned' else ''}trs_other/mcp",
+                "encoded_separator": f"https://backend.composio.dev/tool_router{'/v3' if endpoint_shape == 'versioned' else ''}%2ftrs_saved/mcp",
+                "encoded_session": f"https://backend.composio.dev/tool_router/{'v3/' if endpoint_shape == 'versioned' else ''}trs%5fsaved/mcp",
+                "extra_path": f"https://backend.composio.dev{path}/extra",
             }[change]
         return body
 
@@ -471,6 +481,25 @@ async def test_stored_lookup_never_replaces_or_forwards_unverified_endpoint(repo
     assert len(upstream.requests) == 2 and all(request.method == "GET" for request in upstream.requests)
     assert upstream.discoveries == []
     assert (await repo.get(A))[sessions.SESSION_KEY]["session_id"] == "trs_saved"
+
+
+@pytest.mark.asyncio
+async def test_actual_unversioned_endpoint_is_preserved_across_create_and_reload(repo, policy, upstream):
+    from deerflow.mcp import composio_sessions as sessions
+
+    session_id = "trs_11111111"
+    endpoint = f"https://backend.composio.dev/tool_router/{session_id}/mcp"
+    upstream.mutate = lambda body: {**body, "mcp": {"type": "http", "url": endpoint}}
+    with actor(A) as runtime:
+        created = await sessions._resolve_transport(runtime, policy, repository=repo)
+        reloaded = await sessions._resolve_transport(runtime, policy, repository=repo)
+
+    assert created[0] == reloaded[0]
+    assert created[1] == reloaded[1] == endpoint
+    assert [request.method for request in upstream.requests] == ["POST", "GET", "GET"]
+    stored = (await repo.get(A))[sessions.SESSION_KEY]
+    assert stored == {"state": "ready", "session_id": session_id}
+    assert endpoint not in str(stored) and "synthetic-project-key" not in str(stored)
 
 
 @pytest.mark.asyncio
@@ -581,8 +610,9 @@ async def test_worker_binds_original_server_session_scope_and_resets(repo, sourc
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("endpoint_shape", ["versioned", "unversioned"])
 @pytest.mark.parametrize("stage,failure", [("success", None), ("discovery", "redirect"), ("invocation", "redirect"), ("discovery", "timeout"), ("invocation", "timeout")])
-async def test_real_sdk_post_only_lifecycle_redirect_rejection_and_log_redaction(repo, policy, upstream, monkeypatch, caplog, stage, failure):
+async def test_real_sdk_post_only_lifecycle_redirect_rejection_and_log_redaction(repo, policy, upstream, monkeypatch, caplog, endpoint_shape, stage, failure):
     import logging
 
     from langchain_core.tools import ToolException
@@ -590,6 +620,9 @@ async def test_real_sdk_post_only_lifecycle_redirect_rejection_and_log_redaction
     from deerflow.mcp import composio_sessions as sessions
 
     monkeypatch.setattr("langchain_mcp_adapters.client.MultiServerMCPClient", RealMcpClient)
+    endpoint = f"https://backend.composio.dev/tool_router/{'v3/' if endpoint_shape == 'versioned' else ''}trs_11111111/mcp"
+    if endpoint_shape == "unversioned":
+        upstream.mutate = lambda body: {**body, "mcp": {"type": "http", "url": endpoint}}
     caplog.set_level(logging.INFO)
     forwarded = []
     failed = []
@@ -629,7 +662,7 @@ async def test_real_sdk_post_only_lifecycle_redirect_rejection_and_log_redaction
             assert "synthetic result" in str(result)
     assert forwarded and all(path.endswith("/mcp") for path, _ in forwarded)
     assert all(method != "tools/call" for _, method in forwarded) if stage == "discovery" else True
-    endpoint = "https://backend.composio.dev/tool_router/v3/trs_11111111/mcp"
+    assert all(path == endpoint for path, _ in forwarded)
     assert endpoint not in caplog.text and "synthetic-project-key" not in caplog.text
     if failure:
         assert "Composio" in caplog.text
@@ -754,8 +787,10 @@ def test_result_redaction_preserves_safe_tool_metadata(policy):
             "logo": "https://logos.composio.dev/gmail",
             "headers": {"x-api-key": "synthetic-project-key"},
             "nested": ["https://backend.composio.dev/tool_router/v3/trs_secret/mcp"],
+            "actual_nested": ["https://backend.composio.dev/tool_router/trs_actual_secret/mcp"],
             "synthetic-project-key": "unsafe field name",
             "https://backend.composio.dev/tool_router/v3/trs_secret/mcp": "unsafe field name",
+            "https://backend.composio.dev/tool_router/trs_actual_secret/mcp": "unsafe field name",
         },
         None,
     )
@@ -763,7 +798,7 @@ def test_result_redaction_preserves_safe_tool_metadata(policy):
     assert safe[0]["tool"] == "GMAIL_LIST_LABELS"
     assert safe[0]["logo"] == "https://logos.composio.dev/gmail"
     assert "synthetic-project-key" not in str(safe)
-    assert "trs_secret" not in str(safe)
+    assert "trs_secret" not in str(safe) and "trs_actual_secret" not in str(safe)
 
 
 @pytest.mark.asyncio
@@ -782,6 +817,7 @@ async def test_envelope_redacts_credential_urls_but_preserves_public_links(repo,
         "https://oauth.example.invalid/connect?access_token=SYNTHETIC_QUERY_TOKEN",
         "https://oauth.example.invalid/connect?%61pi%5Fkey=SYNTHETIC_QUERY_KEY",
         "https://backend.composio.dev/tool_router/v3/trs_synthetic/mcp",
+        "https://backend.composio.dev/tool_router/trs_synthetic/mcp",
     ]
     public_urls = [
         "https://research.example.invalid/paper?q=connection#results",
