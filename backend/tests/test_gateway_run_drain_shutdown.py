@@ -26,6 +26,7 @@ import operator
 from contextlib import asynccontextmanager, suppress
 from types import SimpleNamespace
 from typing import Annotated, TypedDict
+from unittest.mock import AsyncMock
 
 import pytest
 from langgraph.checkpoint.memory import InMemorySaver
@@ -172,7 +173,7 @@ async def test_langgraph_runtime_drains_runs_before_closing_checkpointer(monkeyp
     @asynccontextmanager
     async def fake_stream_bridge(_config):
         try:
-            yield object()
+            yield SimpleNamespace(publish_end=AsyncMock())
         finally:
             events.append("stream_bridge_closed")
 

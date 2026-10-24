@@ -7,8 +7,9 @@ import logging
 import socket
 import sqlite3
 import uuid
-from collections.abc import AsyncIterator, Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable, Coroutine
 from contextlib import asynccontextmanager
+from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
@@ -21,7 +22,7 @@ from deerflow.utils.file_io import await_drained
 from deerflow.utils.time import is_lease_expired
 from deerflow.utils.time import now_iso as _now_iso
 
-from .schemas import DisconnectMode, RunStatus, ThreadOperationKind
+from .schemas import HOLD_ACTIONS, LIMIT_ACTIONS, DisconnectMode, RunStatus, ThreadOperationKind, start_run_timing, timing_deadline
 from .store.base import (
     EditReplayVisibility,
     RunIdempotencyConflict,
@@ -32,6 +33,7 @@ from .store.base import (
 )
 
 if TYPE_CHECKING:
+    from deerflow.config.run_config import RunConfig
     from deerflow.config.run_ownership_config import RunOwnershipConfig
     from deerflow.runtime.events.store.base import RunEventStore
 
@@ -230,6 +232,15 @@ class RunRecord:
     # True only on the caller that recovered an existing idempotent admission;
     # that caller must not attach a second worker to the durable run.
     idempotency_reused: bool = False
+    # Private server state, separate from public metadata/kwargs.
+    run_limits: dict[str, Any] | None = field(default=None, repr=False)
+    worker_entered: bool = field(default=False, repr=False)
+    end_published: bool = field(default=False, repr=False)
+    limit_error_published: bool = field(default=False, repr=False)
+    limit_finalization_started: bool = field(default=False, repr=False)
+    limit_changed: asyncio.Event = field(default_factory=asyncio.Event, repr=False)
+    limit_clocks: dict[str, float] = field(default_factory=dict, repr=False)
+    staged_status: RunStatus | None = field(default=None, repr=False)
 
 
 class RunStartOutcome(StrEnum):
@@ -263,6 +274,8 @@ class RunManager:
         run_ownership_config: RunOwnershipConfig | None = None,
         event_store: RunEventStore | None = None,
         on_orphans_recovered: OrphanRecoveryCallback | None = None,
+        run_config: RunConfig | None = None,
+        on_unstarted_limit: Callable[[str], Awaitable[None]] | None = None,
     ) -> None:
         self._runs: dict[str, RunRecord] = {}
         # Secondary index: thread_id -> insertion-ordered run_id set (a dict is
@@ -280,6 +293,208 @@ class RunManager:
         self._heartbeat_task: asyncio.Task | None = None
         self._heartbeat_stop: asyncio.Event | None = None
         self._orphan_recovery_task: asyncio.Task[None] | None = None
+        from deerflow.config.run_config import RunConfig
+
+        self._run_config = run_config or RunConfig()
+        self._on_unstarted_limit = on_unstarted_limit
+        self._limit_tasks: dict[str, asyncio.Task] = {}
+
+    def _capture_run_limits(self, now: str, kind: ThreadOperationKind = ThreadOperationKind.run) -> dict | None:
+        if kind != ThreadOperationKind.run:
+            return None
+        policy = self._run_config
+        enabled = policy.execution_timeout_seconds is not None or policy.prestart_wait_seconds is not None
+        if self._store is not None and not getattr(self._store, "supports_run_limits", False):
+            if enabled:
+                raise RunStartupError("RunStore cannot persist run limits; upgrade it or explicitly disable both operator limits")
+            return None
+        admitted = datetime.fromisoformat(now)
+        return {
+            **policy.model_dump(),
+            "admitted_at": now,
+            "prestart_deadline_at": (admitted + timedelta(seconds=policy.prestart_wait_seconds)).isoformat() if policy.prestart_wait_seconds else None,
+            "started_at": None,
+            "execution_deadline_at": None,
+        }
+
+    def _remaining_limit(self, record: RunRecord) -> float | None:
+        deadline = timing_deadline(record.run_limits, pending=record.status == RunStatus.pending)
+        if deadline is None:
+            return None
+        key = deadline.isoformat()
+        loop = asyncio.get_running_loop()
+        # Translate persisted UTC to a monotonic deadline once, never on heartbeat.
+        if key not in record.limit_clocks:
+            record.limit_clocks[key] = loop.time() + max(0.0, (deadline - datetime.now(UTC)).total_seconds())
+        return record.limit_clocks[key] - loop.time()
+
+    def _watch_run_limits(self, record: RunRecord) -> None:
+        if record.run_limits is None or not any(record.run_limits.get(key) for key in ("prestart_wait_seconds", "execution_timeout_seconds")):
+            return
+
+        async def watch() -> None:
+            while record.status in (RunStatus.pending, RunStatus.running) and not record.abort_event.is_set():
+                record.limit_changed.clear()
+                remaining = self._remaining_limit(record)
+                if remaining is not None and remaining <= 0:
+                    await self._expire_run_limit(record)
+                    return
+                try:
+                    await asyncio.wait_for(record.limit_changed.wait(), timeout=remaining)
+                except TimeoutError:
+                    continue
+
+        task = asyncio.create_task(watch(), name=f"run-limit-{record.run_id}")
+        self._limit_tasks[record.run_id] = task
+
+        def finished(done: asyncio.Task) -> None:
+            if self._limit_tasks.get(record.run_id) is done:
+                self._limit_tasks.pop(record.run_id, None)
+            if not done.cancelled() and done.exception() is not None:
+                logger.error("Run limit supervisor failed for %s", record.run_id, exc_info=done.exception())
+
+        task.add_done_callback(finished)
+
+    async def stop_run_limit(self, run_id: str) -> None:
+        task = self._limit_tasks.pop(run_id, None)
+        if task is not None and task is not asyncio.current_task():
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+
+    async def expire_limit_if_due(self, run_id: str) -> None:
+        record = self._runs.get(run_id)
+        if record is not None and not record.abort_event.is_set():
+            remaining = self._remaining_limit(record)
+            if remaining is not None and remaining <= 0:
+                await self._expire_run_limit(record)
+
+    def create_worker_task(self, record: RunRecord, worker: Coroutine[Any, Any, None]) -> asyncio.Task:
+        """Attach without yielding; own cancellation before run_agent's guard starts."""
+        entered = False
+
+        async def guarded() -> None:
+            nonlocal entered
+            entered = True
+            try:
+                await worker
+            except asyncio.CancelledError:
+                if record.worker_entered or record.abort_action not in LIMIT_ACTIONS:
+                    raise
+                await self._finish_unstarted_limit(record, preflight_drained=True)
+
+        guard = guarded()
+        try:
+            task = asyncio.create_task(guard)
+        except BaseException:
+            guard.close()
+            raise
+
+        def close_unentered(done: asyncio.Task) -> None:
+            if not entered:
+                worker.close()
+
+        task.add_done_callback(close_unentered)
+        record.task = task
+        return task
+
+    async def publish_end_once(self, run_id: str, publish: Callable[[str], Awaitable[None]]) -> None:
+        async with self._lock:
+            record = self._runs.get(run_id)
+            if record is not None and record.end_published:
+                return
+            # Claim before await; a failed backend publication must not duplicate END.
+            if record is not None:
+                record.end_published = True
+        await publish(run_id)
+
+    async def record_limit_error(self, record: RunRecord, event_store: RunEventStore | None = None) -> None:
+        if record.limit_error_published or record.abort_action not in LIMIT_ACTIONS or record.ownership_lost:
+            return
+        event_store = self._event_store or event_store
+        if event_store is not None:
+            await event_store.put(
+                thread_id=record.thread_id,
+                run_id=record.run_id,
+                event_type="run.error",
+                category="error",
+                content=record.error or "Run limit expired",
+                metadata={"stop_reason": record.stop_reason, "error_type": "RunLimitExceeded"},
+            )
+        record.limit_error_published = True
+
+    async def hold_cleanup(self, record: RunRecord) -> None:
+        """Keep unconfirmed owned cleanup active; no lease-based repair is safe."""
+        winner = None
+        if self._store is not None:
+            _, winner = await self._request_durable_cancel(record.run_id, action="cleanup_hold")
+        record.abort_action = winner or (record.abort_action if record.abort_event.is_set() else "cleanup_hold")
+        record.abort_event.set()
+        record.limit_changed.set()
+        record.finalizing = True
+        record.staged_status = None
+        if record.abort_action not in LIMIT_ACTIONS:
+            record.stop_reason = "cleanup_unconfirmed"
+            record.error = "Owned execution cleanup is unconfirmed; operator repair is required"
+
+    async def _finish_unstarted_limit(self, record: RunRecord, *, preflight_drained: bool = False) -> None:
+        # No execution task may remain before this path releases durable admission.
+        if record.worker_entered or (not preflight_drained and record.task is not None and not record.task.done()) or record.abort_action not in LIMIT_ACTIONS:
+            return
+        if record.limit_finalization_started:
+            return
+        record.limit_finalization_started = True
+        status = RunStatus.error if record.abort_action == "prestart_timeout" else RunStatus.timeout
+        await self.set_status(record.run_id, status, error=record.error, stop_reason=record.stop_reason, persist=False)
+        await self.record_limit_error(record)
+        await self._ensure_delivery_receipt(record)
+        if not await self.persist_current_status(record.run_id):
+            raise RuntimeError(f"Run {record.run_id} pre-start terminal persistence is unconfirmed")
+        await self.set_finalizing(record.run_id, False)
+        if self._on_unstarted_limit is not None:
+            await self.publish_end_once(record.run_id, self._on_unstarted_limit)
+
+    async def _expire_run_limit(self, record: RunRecord) -> None:
+        async with record.start_lock:
+            if record.abort_event.is_set() or record.status not in (RunStatus.pending, RunStatus.running) or record.ownership_lost:
+                return
+            remaining = self._remaining_limit(record)
+            if remaining is None or remaining > 0:
+                return
+            action = "prestart_timeout" if record.status == RunStatus.pending else "execution_timeout"
+            if self._store is not None:
+                outcome, winner = await self._request_durable_cancel(record.run_id, action=action)
+                if outcome == CancelOutcome.not_cancellable:
+                    return
+                if winner is not None:
+                    action = winner
+            if action not in LIMIT_ACTIONS:
+                await self._signal_local_cancel(record.run_id, action=action)
+                return
+            async with self._lock:
+                if record.abort_event.is_set() or record.status not in (RunStatus.pending, RunStatus.running):
+                    return
+                record.abort_action = action
+                record.abort_event.set()
+                record.limit_changed.set()
+                was_finalizing = record.finalizing
+                record.finalizing = record.task is not None and not record.task.done()
+                if action in LIMIT_ACTIONS:
+                    record.stop_reason = "prestart_wait_timeout" if action == "prestart_timeout" else "execution_timeout"
+                    record.error = "Run expired before execution started" if action == "prestart_timeout" else "Run execution deadline exceeded"
+                task = record.task
+                if task is not None and not task.done():
+                    if not was_finalizing:
+                        task.cancel()
+                    if not record.worker_entered:
+
+                        def close_unstarted(done: asyncio.Task) -> None:
+                            if not record.worker_entered:
+                                cleanup = asyncio.create_task(self._finish_unstarted_limit(record), name=f"run-limit-unstarted-{record.run_id}")
+                                cleanup.add_done_callback(lambda completed: completed.exception() if not completed.cancelled() else None)
+
+                        task.add_done_callback(close_unstarted)
+            if task is None or task.done():
+                await self._finish_unstarted_limit(record)
 
     def _index_run_locked(self, record: RunRecord) -> None:
         """Register *record* in the thread index. Caller must hold ``self._lock``."""
@@ -330,6 +545,8 @@ class RunManager:
         }
         if record.user_id is not None:
             payload["user_id"] = record.user_id
+        if record.run_limits is not None:
+            payload["run_limits"] = deepcopy(record.run_limits)
         if record.stop_reason is not None:
             payload["stop_reason"] = record.stop_reason
         return payload
@@ -506,6 +723,7 @@ class RunManager:
             lease_expires_at=row.get("lease_expires_at"),
             stop_reason=row.get("stop_reason"),
             idempotency_key=row.get("idempotency_key"),
+            run_limits=deepcopy(row.get("run_limits")),
         )
 
     async def update_run_completion(self, run_id: str, **kwargs) -> None:
@@ -641,7 +859,9 @@ class RunManager:
             updated_at=now,
             owner_worker_id=self._worker_id,
             lease_expires_at=lease_expires_at,
+            run_limits=self._capture_run_limits(now),
         )
+        self._remaining_limit(record)
         async with self._lock:
             self._runs[run_id] = record
             self._index_run_locked(record)
@@ -658,6 +878,7 @@ class RunManager:
                     self._runs.pop(run_id, None)
                     self._unindex_run_locked(run_id, record.thread_id)
         logger.info("Run created: run_id=%s thread_id=%s", run_id, thread_id)
+        self._watch_run_limits(record)
         return record
 
     async def get(
@@ -900,6 +1121,10 @@ class RunManager:
         if record.operation_kind == ThreadOperationKind.upload_write:
             return RunStartOutcome.cancelled
 
+        if record.status == RunStatus.pending and (remaining := self._remaining_limit(record)) is not None and remaining <= 0:
+            await self._expire_run_limit(record)
+            return RunStartOutcome.cancelled
+
         async with record.start_lock:
             async with self._lock:
                 if record.abort_event.is_set() or record.status != RunStatus.pending:
@@ -915,12 +1140,43 @@ class RunManager:
                 except Exception as exc:
                     raise RunStartupError(f"Failed to start run {run_id}: {exc}") from exc
                 if updated is False:
+                    stored = await self._store.get(run_id, user_id=record.user_id)
+                    deadline = timing_deadline(record.run_limits, pending=True)
+                    if stored is not None and stored.get("status") == "pending" and deadline is not None and datetime.now(UTC) >= deadline:
+                        _, winner = await self._request_durable_cancel(run_id, action="prestart_timeout")
+                        async with self._lock:
+                            if not record.abort_event.is_set():
+                                record.abort_action = winner or "prestart_timeout"
+                                record.stop_reason = "prestart_wait_timeout"
+                                record.error = "Run expired before execution started"
+                                record.abort_event.set()
+                                record.limit_changed.set()
+                        return RunStartOutcome.cancelled
                     async with self._lock:
                         if record.status == RunStatus.pending:
+                            if stored is not None and stored.get("cancel_action") is not None:
+                                record.abort_action = stored["cancel_action"]
                             record.status = RunStatus.interrupted
                             record.abort_event.set()
+                            record.limit_changed.set()
                             record.updated_at = _now_iso()
                     return RunStartOutcome.cancelled
+
+                stored = await self._store.get(run_id, user_id=record.user_id)
+                if record.run_limits is not None:
+                    timing = stored.get("run_limits") if stored is not None else None
+                    try:
+                        immutable = ("execution_timeout_seconds", "prestart_wait_seconds", "admitted_at", "prestart_deadline_at")
+                        if not isinstance(timing, dict) or any(timing.get(key) != record.run_limits.get(key) for key in immutable):
+                            raise ValueError("Captured run policy changed")
+                        started_at = datetime.fromisoformat(timing["started_at"])
+                        seconds = record.run_limits["execution_timeout_seconds"]
+                        expected = started_at + timedelta(seconds=seconds) if seconds else None
+                        if started_at.tzinfo is None or timing_deadline(timing, pending=False) != expected:
+                            raise ValueError("Execution timing was not stamped atomically")
+                    except (KeyError, TypeError, ValueError, OverflowError):
+                        raise RunStartupError("RunStore did not confirm immutable persisted execution timing") from None
+                    record.run_limits = deepcopy(timing)
 
             async with self._lock:
                 if record.abort_event.is_set() or record.status != RunStatus.pending:
@@ -929,6 +1185,10 @@ class RunManager:
                     restore_stop_reason = record.stop_reason
                 else:
                     record.status = RunStatus.running
+                    if self._store is None:
+                        record.run_limits = start_run_timing(record.run_limits, datetime.now(UTC))
+                    self._remaining_limit(record)
+                    record.limit_changed.set()
                     record.updated_at = _now_iso()
                     logger.info("Run %s -> %s", run_id, RunStatus.running.value)
                     return RunStartOutcome.started
@@ -951,6 +1211,7 @@ class RunManager:
             record.status = RunStatus.error
             record.error = error
             record.abort_event.set()
+            record.limit_changed.set()
             record.updated_at = _now_iso()
 
         await self._persist_status(record, RunStatus.error, error=error)
@@ -999,6 +1260,7 @@ class RunManager:
         error: str | None = None,
         stop_reason: str | None = None,
         persist: bool = True,
+        stage: bool = False,
     ) -> None:
         """Transition a run to a new status."""
         async with self._lock:
@@ -1015,13 +1277,18 @@ class RunManager:
                     run_id,
                 )
                 return
-            record.status = status
+            if stage:
+                record.staged_status = status
+            else:
+                record.status = status
+                record.staged_status = None
+            record.limit_changed.set()
             record.updated_at = _now_iso()
             if error is not None:
                 record.error = error
             if stop_reason is not None:
                 record.stop_reason = stop_reason
-        if persist:
+        if persist and not stage:
             persisted = await self._persist_status(record, status, error=error, stop_reason=stop_reason)
             if not persisted and self.heartbeat_enabled and status == RunStatus.success and not record.ownership_lost:
                 await self._mark_ownership_lost(
@@ -1060,15 +1327,24 @@ class RunManager:
         error: str | None = None,
         stop_reason: str | None = None,
         persist: bool = True,
+        stage: bool = False,
     ) -> str | None:
         """Set a terminal status unless a durable cancellation won first."""
-        if not persist or not self.heartbeat_enabled or self._store is None:
+        record = self._runs.get(run_id)
+        if record is not None and status == RunStatus.success and record.status in (RunStatus.pending, RunStatus.running):
+            remaining = self._remaining_limit(record)
+            if remaining is not None and remaining <= 0:
+                await self._expire_run_limit(record)
+                if record.abort_event.is_set():
+                    return record.abort_action
+        if stage or not persist or not self.heartbeat_enabled or self._store is None:
             await self.set_status(
                 run_id,
                 status,
                 error=error,
                 stop_reason=stop_reason,
                 persist=persist,
+                stage=stage,
             )
             return None
 
@@ -1100,6 +1376,7 @@ class RunManager:
                 if record is not None:
                     record.abort_action = result.cancel_action
                     record.abort_event.set()
+                    record.limit_changed.set()
             return result.cancel_action
 
         await self.set_status(
@@ -1108,6 +1385,7 @@ class RunManager:
             error=error,
             stop_reason=stop_reason,
             persist=not result.finalized,
+            stage=stage,
         )
         return None
 
@@ -1305,6 +1583,10 @@ class RunManager:
 
             record.abort_action = action
             record.abort_event.set()
+            record.limit_changed.set()
+            if action in LIMIT_ACTIONS:
+                record.stop_reason = "prestart_wait_timeout" if action == "prestart_timeout" else "execution_timeout"
+                record.error = "Run expired before execution started" if action == "prestart_timeout" else "Run execution deadline exceeded"
             task_active = record.task is not None and not record.task.done()
             record.finalizing = task_active
             if task_active and record.status == RunStatus.running:
@@ -1371,6 +1653,10 @@ class RunManager:
             elif outcome != CancelOutcome.lease_valid_elsewhere:
                 return outcome
 
+        if record is not None and action in HOLD_ACTIONS:
+            await self._signal_local_cancel(run_id, action=action)
+            return CancelOutcome.cancelled
+
         async with self._lock:
             record = self._runs.get(run_id)
             if record is not None:
@@ -1380,6 +1666,7 @@ class RunManager:
                     return CancelOutcome.cancelled if durable_cancel_won else CancelOutcome.not_cancellable
                 record.abort_action = action
                 record.abort_event.set()
+                record.limit_changed.set()
                 task_active = record.task is not None and not record.task.done()
                 record.finalizing = task_active
                 if task_active and record.status == RunStatus.running:
@@ -1643,7 +1930,9 @@ class RunManager:
             owner_worker_id=self._worker_id,
             lease_expires_at=lease_expires_at,
             idempotency_key=idempotency_key,
+            run_limits=self._capture_run_limits(now, operation_kind),
         )
+        self._remaining_limit(record)
 
         async with self._lock:
             if idempotency_key is not None:
@@ -1708,6 +1997,8 @@ class RunManager:
                     }
                     if idempotency_key is not None:
                         create_kwargs["idempotency_key"] = idempotency_key
+                    if record.run_limits is not None:
+                        create_kwargs["run_limits"] = deepcopy(record.run_limits)
                     try:
                         await self._call_store_with_retry(
                             "create_thread_operation_atomic",
@@ -1740,6 +2031,8 @@ class RunManager:
                     }
                     if idempotency_key is not None:
                         create_kwargs["idempotency_key"] = idempotency_key
+                    if record.run_limits is not None:
+                        create_kwargs["run_limits"] = deepcopy(record.run_limits)
                     # Interrupt / rollback: store-side claim + insert in one
                     # transaction. Retry on IntegrityError in case another
                     # worker races us between our SELECT FOR UPDATE and INSERT.
@@ -1781,6 +2074,7 @@ class RunManager:
                         continue
                     r.abort_action = multitask_strategy
                     r.abort_event.set()
+                    r.limit_changed.set()
                     task_active = r.task is not None and not r.task.done()
                     r.finalizing = task_active
                     if task_active:
@@ -1815,6 +2109,7 @@ class RunManager:
             raise
 
         logger.info("Run created: run_id=%s thread_id=%s", run_id, thread_id)
+        self._watch_run_limits(record)
         return record
 
     @asynccontextmanager
@@ -1999,10 +2294,14 @@ class RunManager:
         if delay > 0:
             await asyncio.sleep(delay)
         async with self._lock:
+            record = self._runs.get(run_id)
+            if record is not None and record.abort_action in HOLD_ACTIONS and (record.finalizing or record.status in (RunStatus.pending, RunStatus.running)):
+                return
             record = self._runs.pop(run_id, None)
             if record is not None:
                 self._unindex_run_locked(run_id, record.thread_id)
         logger.debug("Run record %s cleaned up", run_id)
+        await self.stop_run_limit(run_id)
 
     # ------------------------------------------------------------------
     # Lease heartbeat
@@ -2075,6 +2374,7 @@ class RunManager:
                 return True
             record.ownership_lost = True
             record.abort_event.set()
+            record.limit_changed.set()
             record.status = RunStatus.error
             record.error = reason
             record.updated_at = _now_iso()
@@ -2377,12 +2677,17 @@ class RunManager:
         async with self._lock:
             inflight = [record for record in self._runs.values() if record.status in (RunStatus.pending, RunStatus.running) and record.task is not None and not record.task.done()]
             for record in inflight:
+                if record.abort_event.is_set():
+                    continue
                 record.abort_action = "interrupt"
                 record.abort_event.set()
+                record.limit_changed.set()
                 record.task.cancel()  # type: ignore[union-attr]  # filtered above
                 # Status is decided AFTER the drain (below), not here: a run that
                 # completes on its own during the drain must keep its real status.
 
+        for run_id in list(self._limit_tasks):
+            await self.stop_run_limit(run_id)
         await self.stop_heartbeat(timeout=max(0.0, deadline - loop.time()))
 
         if not inflight:
@@ -2399,6 +2704,9 @@ class RunManager:
         async with self._lock:
             for record in inflight:
                 task = record.task
+                if record.abort_action in HOLD_ACTIONS:
+                    # An unconfirmed timeout cleanup remains held, even on shutdown.
+                    continue
                 if task not in pending and not task.cancelled():
                     # Completed on its own — retrieve any surfaced exception so it
                     # is not reported as "never retrieved", and keep its status.

@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from deerflow.persistence.organizations.resolution import organization_for_write, organization_from_owned_parent
 from deerflow.persistence.run.model import RunChangeClockRow, RunRow
 from deerflow.persistence.thread_meta.model import ThreadMetaRow
+from deerflow.runtime.runs.schemas import HOLD_ACTIONS, RUN_STORAGE_TAG, execution_deadline_expired, pack_run_kwargs, start_run_timing, timing_deadline, unpack_run_kwargs
 from deerflow.runtime.runs.store.base import (
     LeaseRenewal,
     RunIdempotencyConflict,
@@ -32,6 +33,13 @@ from deerflow.utils.time import coerce_iso
 def _lease_expired_or_null(lease_col, cutoff: datetime):
     """SQLAlchemy filter: True when the lease is NULL or has expired past *cutoff*."""
     return or_(lease_col.is_(None), lease_col < cutoff)
+
+
+def _execution_deadline_reclaimable():
+    # A committed clock fences an expired execution even if its timeout claim failed.
+    tag = RunRow.kwargs_json[0].as_string()
+    deadline = RunRow.kwargs_json[2]["execution_deadline_at"].as_string()
+    return or_(RunRow.operation_kind != "run", RunRow.status != "running", tag.is_(None), tag != RUN_STORAGE_TAG, deadline.is_(None), deadline > datetime.now(UTC).isoformat())
 
 
 def _in_active_organization() -> tuple:
@@ -60,6 +68,8 @@ def _organization_for_run(thread: ThreadMetaRow | None, user_id: str | None) -> 
 
 
 class RunRepository(RunStore):
+    supports_run_limits = True
+
     def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
         self._sf = session_factory
 
@@ -122,7 +132,7 @@ class RunRepository(RunStore):
         d = row.to_dict()
         # Remap JSON columns to match RunStore interface
         d["metadata"] = d.pop("metadata_json", {})
-        d["kwargs"] = d.pop("kwargs_json", {})
+        d["kwargs"], d["run_limits"] = unpack_run_kwargs(d.pop("kwargs_json", {}) or {})
         # Convert datetime to ISO string for consistency with MemoryRunStore.
         # SQLite drops tzinfo on read despite ``DateTime(timezone=True)`` —
         # ``coerce_iso`` normalizes naive datetimes as UTC.
@@ -152,6 +162,7 @@ class RunRepository(RunStore):
         owner_worker_id: str | None = None,
         lease_expires_at: str | None = None,
         idempotency_key: str | None = None,
+        run_limits: dict[str, Any] | None = None,
     ):
         """Insert or update a run row.
 
@@ -174,7 +185,7 @@ class RunRepository(RunStore):
             "operation_kind": operation_kind,
             "multitask_strategy": multitask_strategy,
             "metadata_json": self._safe_json(metadata) or {},
-            "kwargs_json": self._safe_json(kwargs) or {},
+            "kwargs_json": pack_run_kwargs(self._safe_json(kwargs) or {}, run_limits),
             "error": error,
             "stop_reason": stop_reason,
             "follow_up_to_run_id": follow_up_to_run_id,
@@ -193,6 +204,9 @@ class RunRepository(RunStore):
             else:
                 if row.operation_kind == "upload_write":
                     raise ValueError("An upload reservation cannot be replaced by a run snapshot")
+                _, captured_timing = unpack_run_kwargs(row.kwargs_json or {})
+                if captured_timing is not None:
+                    values["kwargs_json"] = pack_run_kwargs(self._safe_json(kwargs) or {}, captured_timing)
                 for key, value in values.items():
                     setattr(row, key, value)
                 # A legacy parent proves no organization. Do not erase a valid
@@ -353,14 +367,23 @@ class RunRepository(RunStore):
         """Start only a still-pending run; cancelled rows must not be resurrected."""
         async with self._sf() as session:
             change_seq = await self._next_change_seq(session)
+            row = (await session.execute(select(RunRow).where(RunRow.run_id == run_id).with_for_update())).scalar_one_or_none()
+            if row is None or row.status != "pending" or row.operation_kind == "upload_write" or row.cancel_action is not None:
+                return False
+            now = datetime.now(UTC)
+            kwargs, timing = unpack_run_kwargs(row.kwargs_json or {})
+            deadline = timing_deadline(timing, pending=True)
+            if deadline is not None and now >= deadline:
+                return False
             result = await session.execute(
                 update(RunRow)
                 .where(
                     RunRow.run_id == run_id,
                     RunRow.status == "pending",
+                    RunRow.cancel_action.is_(None),
                     RunRow.operation_kind != "upload_write",
                 )
-                .values(status="running", updated_at=datetime.now(UTC), change_seq=change_seq)
+                .values(status="running", updated_at=now, change_seq=change_seq, kwargs_json=pack_run_kwargs(kwargs, start_run_timing(timing, now)))
             )
             await session.commit()
             return result.rowcount != 0
@@ -735,7 +758,7 @@ class RunRepository(RunStore):
 
     async def request_cancel(self, run_id: str, *, action: str) -> str | None:
         """Atomically persist the first cancellation action on an active run."""
-        if action not in ("interrupt", "rollback"):
+        if action not in ("interrupt", "rollback", *HOLD_ACTIONS):
             raise ValueError(f"Unsupported cancellation action: {action}")
         now = datetime.now(UTC)
         async with self._sf() as session:
@@ -745,7 +768,7 @@ class RunRepository(RunStore):
                 .where(
                     RunRow.run_id == run_id,
                     RunRow.status.in_(("pending", "running")),
-                    RunRow.operation_kind != "upload_write",
+                    RunRow.operation_kind == "run" if action in HOLD_ACTIONS else RunRow.operation_kind != "upload_write",
                 )
                 .values(
                     cancel_action=case(
@@ -832,6 +855,8 @@ class RunRepository(RunStore):
                     RunRow.run_id == run_id,
                     RunRow.status.in_(("pending", "running")),
                     _lease_expired_or_null(RunRow.lease_expires_at, cutoff),
+                    or_(RunRow.cancel_action.is_(None), RunRow.cancel_action.not_in(HOLD_ACTIONS)),
+                    _execution_deadline_reclaimable(),
                     RunRow.operation_kind != "upload_write",
                 )
                 .values(**values)
@@ -858,6 +883,8 @@ class RunRepository(RunStore):
                 RunRow.status.in_(("pending", "running")),
                 RunRow.created_at <= before_dt,
                 _lease_expired_or_null(RunRow.lease_expires_at, cutoff),
+                or_(RunRow.cancel_action.is_(None), RunRow.cancel_action.not_in(HOLD_ACTIONS)),
+                _execution_deadline_reclaimable(),
                 RunRow.operation_kind != "upload_write",
             )
             .order_by(RunRow.created_at.asc())
@@ -883,6 +910,7 @@ class RunRepository(RunStore):
         created_at: str | None = None,
         grace_seconds: int = 10,
         idempotency_key: str | None = None,
+        run_limits: dict[str, Any] | None = None,
     ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
         """Atomically create a run with cross-process thread-uniqueness.
 
@@ -914,7 +942,7 @@ class RunRepository(RunStore):
             "operation_kind": operation_kind,
             "multitask_strategy": multitask_strategy,
             "metadata_json": self._safe_json(metadata) or {},
-            "kwargs_json": self._safe_json(kwargs) or {},
+            "kwargs_json": pack_run_kwargs(self._safe_json(kwargs) or {}, run_limits if operation_kind == "run" else None),
             "owner_worker_id": owner_worker_id,
             "lease_expires_at": lease_dt,
             "idempotency_key": idempotency_key,
@@ -942,6 +970,8 @@ class RunRepository(RunStore):
                 )
                 result = await session.execute(stmt)
                 for row in result.scalars():
+                    if row.cancel_action in HOLD_ACTIONS or execution_deadline_expired(self._row_to_dict(row), datetime.now(UTC)):
+                        raise ConflictError(f"Thread {thread_id} has timeout cleanup awaiting its original worker")
                     if row.operation_kind == "upload_write":
                         raise ConflictError(f"Thread {thread_id} has an upload awaiting its original writer")
                     lease_expired = False

@@ -20,7 +20,7 @@
 # ============================================================================
 # Bump this number when the config schema changes.
 # Run `make config-upgrade` to merge new fields into your local config.yaml.
-config_version: 48
+config_version: 49
 
 # Optional per-model request pacing (inside a models[] entry):
 # request_admission:
@@ -2753,6 +2753,12 @@ mcp_tasks:
 # If renewal cannot be confirmed before lease_seconds expires, it cancels the
 # local run and suppresses durable finalization; grace_seconds only delays when
 # a peer may reclaim the expired row.
+
+run:
+  # Startup-only operator limits for normal RunManager-backed lead runs.
+  # null or <= 0 disables either limit for rollback; requests cannot override it.
+  execution_timeout_seconds: 2700
+  prestart_wait_seconds: 300
 
 run_ownership:
   lease_seconds: 30           # Seconds before a run lease expires if not renewed.

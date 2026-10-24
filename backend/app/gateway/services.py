@@ -2315,7 +2315,7 @@ async def start_run(
                     # worker so a pending cancellation can bypass stalled
                     # thread-store IO and still reach run_agent's startup
                     # barrier / stream finalization.
-                    record.task = asyncio.create_task(worker)
+                    record.task = run_mgr.create_worker_task(record, worker)
                 except Exception as exc:
                     worker.close()
                     await run_mgr.fail_start_if_pending(

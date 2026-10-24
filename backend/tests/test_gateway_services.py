@@ -4323,8 +4323,8 @@ async def test_run_agent_full_mode_rejects_delta_before_graph_invocation():
         CHECKPOINT_MODE_METADATA_KEY,
         INTERNAL_CHECKPOINT_MODE_KEY,
     )
-    from deerflow.runtime.runs.manager import RunRecord, RunStartOutcome
-    from deerflow.runtime.runs.schemas import DisconnectMode, RunStatus
+    from deerflow.runtime.runs.manager import RunManager
+    from deerflow.runtime.runs.schemas import RunStatus
     from deerflow.runtime.runs.worker import RunContext, run_agent
 
     checkpointer = AsyncMock()
@@ -4337,26 +4337,9 @@ async def test_run_agent_full_mode_rejects_delta_before_graph_invocation():
         publish_end=AsyncMock(),
         cleanup=AsyncMock(),
     )
-    set_status = AsyncMock()
-
-    async def set_status_if_not_cancelled(*args, **kwargs):
-        await set_status(*args, **kwargs)
-        return None
-
-    run_manager = SimpleNamespace(
-        try_start=AsyncMock(return_value=RunStartOutcome.started),
-        wait_for_prior_finalizing=AsyncMock(),
-        set_status=set_status,
-        set_status_if_not_cancelled=AsyncMock(side_effect=set_status_if_not_cancelled),
-        cleanup=AsyncMock(),
-    )
-    record = RunRecord(
-        run_id="run-checkpoint-mode",
-        thread_id="thread-delta",
-        assistant_id="lead-agent",
-        status=RunStatus.pending,
-        on_disconnect=DisconnectMode.cancel,
-    )
+    run_manager = RunManager()
+    record = await run_manager.create("thread-delta", "lead-agent")
+    run_manager.set_status = AsyncMock(wraps=run_manager.set_status)
     record.abort_event = asyncio.Event()
     agent_factory = MagicMock()
     config = {
@@ -4387,6 +4370,9 @@ async def test_run_agent_full_mode_rejects_delta_before_graph_invocation():
         record.run_id,
         RunStatus.error,
         error="Thread requires delta mode; materialize and convert its checkpoints before using full mode.",
+        stop_reason=None,
+        persist=False,
+        stage=True,
     )
 
 
@@ -4397,8 +4383,8 @@ async def test_run_agent_full_mode_checks_selected_checkpoint_before_graph():
     from unittest.mock import AsyncMock, MagicMock, call
 
     from deerflow.runtime.checkpoint_mode import CHECKPOINT_MODE_METADATA_KEY
-    from deerflow.runtime.runs.manager import RunRecord, RunStartOutcome
-    from deerflow.runtime.runs.schemas import DisconnectMode, RunStatus
+    from deerflow.runtime.runs.manager import RunManager
+    from deerflow.runtime.runs.schemas import RunStatus
     from deerflow.runtime.runs.worker import RunContext, run_agent
 
     checkpointer = AsyncMock()
@@ -4417,26 +4403,9 @@ async def test_run_agent_full_mode_checks_selected_checkpoint_before_graph():
         publish_end=AsyncMock(),
         cleanup=AsyncMock(),
     )
-    set_status = AsyncMock()
-
-    async def set_status_if_not_cancelled(*args, **kwargs):
-        await set_status(*args, **kwargs)
-        return None
-
-    run_manager = SimpleNamespace(
-        try_start=AsyncMock(return_value=RunStartOutcome.started),
-        wait_for_prior_finalizing=AsyncMock(),
-        set_status=set_status,
-        set_status_if_not_cancelled=AsyncMock(side_effect=set_status_if_not_cancelled),
-        cleanup=AsyncMock(),
-    )
-    record = RunRecord(
-        run_id="run-selected-checkpoint-mode",
-        thread_id="thread-selected-delta",
-        assistant_id="lead-agent",
-        status=RunStatus.pending,
-        on_disconnect=DisconnectMode.cancel,
-    )
+    run_manager = RunManager()
+    record = await run_manager.create("thread-selected-delta", "lead-agent")
+    run_manager.set_status = AsyncMock(wraps=run_manager.set_status)
     record.abort_event = asyncio.Event()
     agent_factory = MagicMock()
     selected_config = {
@@ -4486,6 +4455,9 @@ async def test_run_agent_full_mode_checks_selected_checkpoint_before_graph():
         record.run_id,
         RunStatus.error,
         error="Thread requires delta mode; materialize and convert its checkpoints before using full mode.",
+        stop_reason=None,
+        persist=False,
+        stage=True,
     )
 
 

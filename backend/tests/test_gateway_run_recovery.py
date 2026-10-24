@@ -41,11 +41,15 @@ class _FakeRunManager:
         run_ownership_config=None,
         event_store=None,
         on_orphans_recovered=None,
+        run_config=None,
+        on_unstarted_limit=None,
     ):
         self.store = store
         self.run_ownership_config = run_ownership_config
         self.event_store = event_store
         self.on_orphans_recovered = on_orphans_recovered
+        self.run_config = run_config
+        self.on_unstarted_limit = on_unstarted_limit
         self.reconcile_calls: list[dict] = []
         self.list_by_thread_calls: list[dict] = []
         self.shutdown_calls: int = 0
@@ -252,6 +256,8 @@ async def test_sqlite_runtime_reconciles_orphaned_runs_on_startup(monkeypatch):
     await anyio.sleep(0)
 
     assert len(_FakeRunManager.instances) == 1
+    assert _FakeRunManager.instances[0].run_config is None  # Legacy operator config uses manager defaults.
+    assert _FakeRunManager.instances[0].on_unstarted_limit == stream_bridge.publish_end
     assert _FakeRunManager.instances[0].reconcile_calls
     assert _FakeRunManager.instances[0].reconcile_calls[0]["error"]
     assert _FakeRunManager.instances[0].reconcile_calls[0]["stop_reason"] == runtime_module.ORPHAN_RECOVERY_STOP_REASON

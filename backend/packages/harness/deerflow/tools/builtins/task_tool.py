@@ -23,6 +23,7 @@ from deerflow.community.ragflow.sources import cited_source_artifact
 from deerflow.config import get_app_config
 from deerflow.extensions import resolve_run_extensions
 from deerflow.knowledge_scope import KNOWLEDGE_SCOPE_RUNTIME_KEY, execution_scope
+from deerflow.runtime.runs.owned_children import OWNED_CHILDREN_CONTEXT_KEY, OwnedRunChildren
 from deerflow.runtime.user_context import resolve_runtime_user_id
 from deerflow.sandbox.security import LOCAL_BASH_SUBAGENT_DISABLED_MESSAGE, is_host_bash_allowed
 from deerflow.subagents import SubagentExecutor, get_available_subagent_names, get_subagent_config
@@ -988,7 +989,11 @@ async def task_tool(
 
     # Keep the provider tool-call ID for stream/message correlation, but use a
     # server-generated execution ID for process-wide background task control.
-    execution_id = executor.execute_async(prompt, task_id=tool_call_id)
+    owned_children = parent_context.get(OWNED_CHILDREN_CONTEXT_KEY) if isinstance(parent_context, dict) else None
+    if isinstance(owned_children, OwnedRunChildren):
+        execution_id = executor.execute_async(prompt, task_id=tool_call_id, owned_children=owned_children)
+    else:
+        execution_id = executor.execute_async(prompt, task_id=tool_call_id)
 
     # Poll for task completion in backend (removes need for LLM to poll)
     poll_count = 0

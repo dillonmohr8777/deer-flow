@@ -110,6 +110,10 @@ def run_is_before_cursor(
 
 
 class RunStore(abc.ABC):
+    # Opt-in contract: atomic timing, first-cause timeout/cleanup claims and
+    # takeover fencing until original-worker drain. Legacy stores can disable limits.
+    supports_run_limits = False
+
     async def list_changed(
         self,
         *,
@@ -141,6 +145,7 @@ class RunStore(abc.ABC):
         owner_worker_id: str | None = None,
         lease_expires_at: str | None = None,
         idempotency_key: str | None = None,
+        run_limits: dict[str, Any] | None = None,
     ) -> None:
         pass
 
@@ -217,7 +222,9 @@ class RunStore(abc.ABC):
     async def start_run(self, run_id: str) -> bool:
         """Atomically transition a pending run to running.
 
-        Returns ``False`` when the row is missing or no longer pending.
+        Limit-capable stores stamp started_at/deadline atomically from captured
+        policy, and reject an expired pre-start deadline. Repeats never extend it.
+        Returns ``False`` when missing, no longer pending, or pre-start expired.
         """
         pass
 
@@ -437,6 +444,7 @@ class RunStore(abc.ABC):
         created_at: str | None = None,
         grace_seconds: int = 10,
         idempotency_key: str | None = None,
+        run_limits: dict[str, Any] | None = None,
     ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
         """Atomically create an active thread operation with cross-process uniqueness.
 
@@ -448,6 +456,8 @@ class RunStore(abc.ABC):
         Returns ``(new_run_dict, claimed_run_dicts)``.
         Raises ``IntegrityError`` on conflict for ``reject`` strategy.
         """
+        if run_limits is not None:
+            raise NotImplementedError("Legacy run stores cannot persist run limits; disable both operator limits or upgrade the store")
         legacy_impl = type(self).create_run_atomic
         if legacy_impl is RunStore.create_run_atomic:
             raise NotImplementedError("RunStore must implement create_thread_operation_atomic() or create_run_atomic()")

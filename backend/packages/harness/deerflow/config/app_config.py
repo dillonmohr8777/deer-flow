@@ -39,6 +39,7 @@ from deerflow.config.projects_config import ProjectsConfig
 from deerflow.config.read_before_write_config import ReadBeforeWriteConfig
 from deerflow.config.reload_boundary import format_field_description
 from deerflow.config.roster_config import RosterConfig
+from deerflow.config.run_config import RunConfig
 from deerflow.config.run_events_config import RunEventsConfig
 from deerflow.config.run_ownership_config import RunOwnershipConfig
 from deerflow.config.runtime_paths import existing_project_file
@@ -392,6 +393,7 @@ class AppConfig(BaseModel):
             field_doc="Stream bridge connecting agent workers to SSE endpoints.",
         ),
     )
+    run: RunConfig = Field(default_factory=RunConfig, description=format_field_description("run"))
     run_ownership: RunOwnershipConfig = Field(
         default_factory=RunOwnershipConfig,
         description=format_field_description(
