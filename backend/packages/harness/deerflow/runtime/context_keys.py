@@ -20,6 +20,7 @@ PROJECT_CONTEXT_KEY: Final[str] = "__deerflow_project_context"
 
 # A nonserializable host capability, never a request/config/checkpoint grant.
 CLIENT_PROJECT_ACCESS_CONTEXT_KEY: Final[str] = "__deerflow_client_project_access"
+CLIENT_WORK_PLAN_ACCESS_CONTEXT_KEY: Final[str] = "__deerflow_client_work_plan_access"
 
 
 def checkpoint_agent_binding_metadata(metadata: object) -> dict[str, str]:

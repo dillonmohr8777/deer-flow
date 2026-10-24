@@ -81,7 +81,7 @@ from deerflow.runtime.checkpoint_mode import (
     inject_checkpoint_mode,
 )
 from deerflow.runtime.checkpoint_state import graph_state_schema
-from deerflow.runtime.context_keys import CLIENT_PROJECT_ACCESS_CONTEXT_KEY, PROJECT_CONTEXT_KEY
+from deerflow.runtime.context_keys import CLIENT_PROJECT_ACCESS_CONTEXT_KEY, CLIENT_WORK_PLAN_ACCESS_CONTEXT_KEY, PROJECT_CONTEXT_KEY
 from deerflow.runtime.cost_router import CostRouterRefusal, admit_run
 from deerflow.runtime.events.message_identity import MESSAGE_SEQ_KEY
 from deerflow.runtime.goal import goal_thread_lock
@@ -645,6 +645,7 @@ _SERVER_OWNED_RUNTIME_CONTEXT_KEYS: frozenset[str] = (
             # never survive in either run-config section.
             PROJECT_CONTEXT_KEY,
             CLIENT_PROJECT_ACCESS_CONTEXT_KEY,
+            CLIENT_WORK_PLAN_ACCESS_CONTEXT_KEY,
             KNOWLEDGE_SCOPE_KEY,
             KNOWLEDGE_SCOPE_RUNTIME_KEY,
             AUTHENTICATED_CONTEXT_MARKER_KEY,
@@ -1096,6 +1097,7 @@ def build_run_config(
             configurable = {"thread_id": thread_id}
             configurable.update(request_config.get("configurable") or {})
             configurable.pop(CLIENT_PROJECT_ACCESS_CONTEXT_KEY, None)
+            configurable.pop(CLIENT_WORK_PLAN_ACCESS_CONTEXT_KEY, None)
             configurable["thread_id"] = thread_id
             config["configurable"] = configurable
         for k, v in request_config.items():
@@ -2282,11 +2284,25 @@ async def start_run(
                 run_id=record.run_id,
                 internal_owner_user=internal_owner_user,
             )
+            plan_access = None
+            effective_context = {**config.get("configurable", {}), **config.get("context", {})}
+            if (
+                portal_work_scope is not None
+                and effective_context.get("agent_name") == "momobot-max"
+                and effective_context.get("user_role") in {"user", "exec", "admin"}
+                and not any(effective_context.get(key) for key in ("is_subagent", "is_bootstrap", "channel_name"))
+            ):
+                from app.gateway.client_work_plan import bind_work_plan_access
+                from deerflow.runtime.user_context import resolve_organization_id
+
+                plan_access = bind_work_plan_access(
+                    request=request, actor_id=actor_user_id, organization_id=resolve_organization_id(), storage_user_id=content_user_id, selected_scope=portal_work_scope, chat_id=record.thread_id, run_id=record.run_id
+                )
             await run_agent(
                 bridge,
                 run_mgr,
                 record,
-                ctx=replace(run_ctx, wsl_diagnostics=wsl_diagnostics),
+                ctx=replace(run_ctx, wsl_diagnostics=wsl_diagnostics, client_work_plan_access=plan_access),
                 agent_factory=agent_factory,
                 graph_input=graph_input,
                 config=config,
@@ -2332,6 +2348,7 @@ async def start_run(
                     for section in ("context", "configurable"):
                         if isinstance(run_record_config.get(section), dict):
                             run_record_config[section].pop(CLIENT_PROJECT_ACCESS_CONTEXT_KEY, None)
+                            run_record_config[section].pop(CLIENT_WORK_PLAN_ACCESS_CONTEXT_KEY, None)
                 record = await run_mgr.create_or_reject(
                     thread_id,
                     body.assistant_id,
