@@ -337,7 +337,7 @@ async def test_gateway_participant_directory_filters_scope_and_tool_assigns_new_
         assert directory.status_code == 200, directory.text
         assert directory.headers["cache-control"] == "no-store"
         page = directory.json()
-        assert set(page) == {"schema", "source", "items", "selected_items", "limit", "has_more", "next_cursor"}
+        assert set(page) == {"schema", "source", "plan_revision", "items", "selected_items", "limit", "has_more", "next_cursor"}
         assert page["schema"] == "work_plan_participants.v1" and page["source"] == {"thread_id": request_id}
         assert page["selected_items"] == [{"user_id": USER_A, "email": "user-a@example.com", "role": "owner"}]
         assert {item["user_id"] for item in page["items"]} == {USER_A, USER_C}
@@ -403,12 +403,19 @@ async def test_participant_directory_and_tool_paging_are_bounded_deterministic_a
         assert model_first["limit"] == 50 and len(model_first["items"]) == 50 and model_first["has_more"]
         assert model_first["next_cursor"] and len(model_first["next_cursor"]) <= 512
         payload = _work_plan(assignee_user_id="zz-selected", verifier_user_id=USER_C)
+        path = f"{BASE}/{request_id}/work-plan/participants"
+        before_save = await client.get(path, headers=auth_headers(USER_C, CUSTOMER_ORG), params={"limit": 100})
         saved = await client.put(f"{BASE}/{request_id}/work-plan", headers=auth_headers(USER_C, CUSTOMER_ORG), json=payload)
         assert saved.status_code == 200, saved.text
-        path = f"{BASE}/{request_id}/work-plan/participants"
         first = await client.get(path, headers=auth_headers(USER_C, CUSTOMER_ORG), params={"limit": 100})
-        assert first.status_code == 200, first.text
         first_page = first.json()
+        assert (
+            before_save.status_code,
+            before_save.json()["plan_revision"],
+            first.status_code,
+            first_page["plan_revision"],
+            saved.json()["revision"],
+        ) == (200, 0, 200, 1, 1)
         assert first_page["limit"] == 100 and len(first_page["items"]) == 100 and first_page["has_more"]
         first_ids = [item["user_id"] for item in first_page["items"]]
         assert "zz-selected" not in first_ids
@@ -440,6 +447,7 @@ async def test_participant_directory_and_tool_paging_are_bounded_deterministic_a
         tool_page = tool_results[0]["participants"]
         assert w.capabilities[-1].request_id == request_id and tool_page["source"]["thread_id"] == request_id
         assert tool_results[0]["plan"] == saved.json()["plan"], {"result": tool_results[0], "request_id": request_id, "capability_request_id": w.capabilities[-1].request_id}
+        assert tool_page["plan_revision"] == tool_results[0]["revision"] == saved.json()["revision"] == 1
         assert len(tool_page["items"]) == 50 and tool_page["has_more"]
         assert {item["user_id"] for item in tool_page["selected_items"]} == {USER_C, "zz-selected"}, tool_results[0]
         assert "selected@example.test" in json.dumps(tool_page["selected_items"])
