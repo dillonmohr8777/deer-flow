@@ -151,7 +151,39 @@ recorded current plan as untrusted evidence. The separate missing delivery/CRM
 integration markers remain missing. Later ordinary chat turns still do not
 refresh that initial snapshot automatically. Contact list/detail/messages and
 ordinary Board list/detail/messages omit all plan fields and references.
-This backend API adds no model write tool or work-plan editor UI.
+The API does not itself add a work-plan editor UI.
+
+### Bound internal work-plan tools
+
+Authenticated staff MomoBot Max runs on an existing server-bound portal work
+chat receive `read_client_work_plan` and `update_client_work_plan`, including
+when no project is selected. The Gateway carries an immutable capability only
+through `RunContext`; caller context/config, run kwargs and checkpoints cannot
+grant it. The worker checks it before assembly and removes it at termination.
+Ordinary/private chats, contacts, other agents, channels, bootstrap and subagents
+receive no capability. Existing role authorization still narrows the tool list.
+
+Tools take no actor, organization, client, request, chat or run identity. Every
+call checks the authenticated actor/storage identity and current staff access,
+exact request/chat/client/workspace binding and selected project, if any. Saves
+repeat these checks under the existing plan write lock. Choices include only
+the current actor and live-authorized saved assignee/verifier IDs; a revoked
+saved participant fails closed, with no teammate-directory lookup. The HTTP UI
+can separately reconcile a saved participant.
+
+Updates require an explicit `expected_revision`, reuse HTTP validation and CAS,
+and return a 409 conflict without automatic overwrite. HTTP and tool saves share
+the existing save-then-best-effort audit contract, attributed to the actual
+authenticated human with storage identity recorded separately and plan text
+omitted. Plan revisions remain independent of human reply drafts. Tool writes
+only record internal plans: they cannot start work, save a draft, approve, send,
+publish, schedule or write a queue. Source/delivery strings are untrusted and
+are never fetched by these tools. A recorded `reported_complete` state remains
+`staff_recorded_unverified`, with no execution, approval or revenue proof.
+
+Offline acceptance: `tests/test_client_work_plan_tools.py` exercises actual
+authenticated Gateway admission, worker hydration and framework tool invocation
+against disposable SQL, including live revocation and concurrent UI/tool edits.
 
 Migration `0053_board_work_plan` follows `0052_board_portal` and adds nullable
 plan/recording metadata plus an independent revision defaulting to zero.
