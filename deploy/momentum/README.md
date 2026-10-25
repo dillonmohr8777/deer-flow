@@ -36,6 +36,7 @@ The source mount must remain writable so SQLite can create or update WAL shared-
 sidecars. The snapshot script opens each source database with `mode=ro`, includes
 uncheckpointed committed WAL rows through SQLite's online backup API, and excludes
 source sidecars from the archive. The script bind mount remains read-only.
+The Lightsail/EC2 nightly entry point uses the same source-mount rule.
 
 ## Restore rehearsal (verified 2026-09-22)
 

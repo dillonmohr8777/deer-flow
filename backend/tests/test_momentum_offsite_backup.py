@@ -246,6 +246,18 @@ def test_snapshot_source_mount_allows_wal_shared_memory(monkeypatch, tmp_path):
     assert any("target=/tmp/backup.py,readonly" in mount for mount in mounts)
 
 
+def test_lightsail_snapshot_source_mount_allows_wal_shared_memory():
+    import shlex
+
+    script = (REPO_ROOT / "deploy/momentum/lightsail/backup.sh").read_text(encoding="utf-8")
+    snapshot = next(line for line in script.replace("\\\n", "").splitlines() if line.startswith("docker run") and "/tmp/backup.py" in line)
+    args = shlex.split(snapshot)
+    mounts = [args[i + 1] for i, arg in enumerate(args) if arg == "--mount"]
+    assert "type=volume,source=${PROJECT}_gateway-data,target=/source" in mounts
+    assert not any("target=/source," in mount for mount in mounts)
+    assert any("target=/tmp/backup.py,readonly" in mount for mount in mounts)
+
+
 def test_online_snapshot_includes_uncheckpointed_wal(monkeypatch, tmp_path):
     import runpy
     import sqlite3
