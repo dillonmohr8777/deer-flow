@@ -58,6 +58,21 @@ class SlackOrigin(BaseModel):
     connection: str | None = Field(default=None, max_length=64)
 
 
+class WorkspaceSpec(BaseModel):
+    environment_id: str = Field(pattern=r"^[a-z][a-z0-9-]{1,62}$")
+    command: list[str] = Field(min_length=1, max_length=32)
+    timeout_seconds: int = Field(default=300, ge=1, le=3600)
+    client_path: str | None = Field(default=None, min_length=1, max_length=4096)
+
+    @model_validator(mode="after")
+    def validate_workspace(self) -> WorkspaceSpec:
+        if any(not part or len(part) > 8192 for part in self.command):
+            raise ValueError("Workspace command contains an invalid argument")
+        if self.client_path is not None and (not self.client_path.startswith("/") or ".." in self.client_path.split("/")):
+            raise ValueError("Workspace client path must be absolute and traversal-free")
+        return self
+
+
 class FleetBatchSubmit(BaseModel):
     thread_id: str = Field(min_length=1, max_length=64)
     title: str = Field(min_length=1, max_length=256)
@@ -71,12 +86,18 @@ class FleetBatchSubmit(BaseModel):
     effort: Literal["low", "medium", "high"] = "high"
     project: Project | None = None
     source_ref: str | None = Field(default=None, min_length=1, max_length=256, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:/-]*$")
+    workspace: WorkspaceSpec | None = None
     client_id: str | None = Field(default=None, min_length=1, max_length=96, pattern=r"^[a-z0-9][a-z0-9-]{0,95}$")
     requester: str | None = Field(default=None, min_length=1, max_length=64, pattern=r"^[A-Z0-9]+$")  # Slack user id, desktop lane only
     slack_origin: SlackOrigin | None = None  # desktop lane only
 
     @model_validator(mode="after")
     def validate_project_binding(self) -> FleetBatchSubmit:
+        if self.workspace is not None:
+            if self.max_running_items is not None and self.max_running_items > 3:
+                raise ValueError("Linux workspaces preserve the three-worker ceiling")
+            if self.workspace.client_path is not None and self.client_id is None:
+                raise ValueError("A workspace client mount requires an admitted client ID")
         if self.lane == DESKTOP_LANE:
             if self.client_id is None or self.requester is None or self.project is not None or self.source_ref is not None:
                 raise ValueError("Desktop jobs require client_id and requester, and take no project")
@@ -192,6 +213,7 @@ def claimed_view(item: dict[str, Any], *, lease_expires_at: str) -> dict[str, An
         "max_tokens": spec.get("max_tokens"),
         "effort": spec.get("effort"),
         "project": spec.get("project"),
+        "workspace": spec.get("workspace"),
         "client_id": spec.get("client_id"),
         "requester": spec.get("requester"),
         "approval_state": spec.get("approval_state", "none"),
@@ -261,6 +283,7 @@ async def submit_fleet_batch(request: Request, body: FleetBatchSubmit) -> dict[s
                 "data_class": body.data_class,
                 "effort": body.effort,
                 "max_tokens": 4096 if body.lane == "ultrafast" and body.max_tokens is None else body.max_tokens,
+                **({"workspace": body.workspace.model_dump(exclude_none=True)} if body.workspace else {}),
                 **({"project": body.project, "source_ref": body.source_ref, "output_policy": "draft-only"} if body.project else {}),
                 **({"client_id": body.client_id} if body.client_id else {}),
                 **({"requester": body.requester, "approval_state": "pending", "output_policy": "draft-only"} if body.lane == DESKTOP_LANE else {}),

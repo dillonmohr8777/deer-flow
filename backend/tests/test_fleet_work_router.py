@@ -143,3 +143,15 @@ async def test_renew_running_and_release_pass_the_lease_owner_through() -> None:
     released = await fleet_work.release_work.__wrapped__(item_id="item-1", request=request, body=fleet_work.ReleaseRequest(lease_owner="w-sonnet-03", error="host stopping"))
     assert released == {"ok": True}
     assert repo.requeue_item_after_admission_failure.await_args.kwargs == {"lease_owner": "w-sonnet-03", "error": "host stopping", "now": repo.requeue_item_after_admission_failure.await_args.kwargs["now"]}
+
+
+def test_workspace_submission_is_bounded_and_exposed_only_in_claimed_view() -> None:
+    workspace = fleet_work.WorkspaceSpec(environment_id="pilot-001", command=["python3", "-c", "print('synthetic')"], timeout_seconds=30)
+    with pytest.raises(ValueError, match="three-worker"):
+        fleet_work.FleetBatchSubmit(thread_id="t", title="T", lane="haiku", data_class="synthetic", items=[{"key": "a", "prompt": "x"}], submission_key="s", workspace=workspace, max_running_items=4)
+    body = fleet_work.FleetBatchSubmit(thread_id="t", title="T", lane="haiku", data_class="synthetic", items=[{"key": "a", "prompt": "x"}], submission_key="s", workspace=workspace, max_running_items=3)
+    item = _claimed_item(batch={"id": "batch-1", "max_attempts": 2, "execution_spec": {"executor": "fleet", "lane": "haiku", "data_class": "synthetic", "workspace": body.workspace.model_dump()}})
+    claimed = fleet_work.claimed_view(item, lease_expires_at="soon")
+    assert claimed["workspace"]["environment_id"] == "pilot-001"
+    assert claimed["workspace"]["command"] == ["python3", "-c", "print('synthetic')"]
+    assert claimed["output_policy"] == "draft-only"

@@ -1,0 +1,9 @@
+{
+  "enabled": false,
+  "base_url": "https://example.invalid/v1",
+  "model": "deepseek-flash",
+  "credential_reference": "replace-with-credential-reference",
+  "verification": "blocked_until_rotated_credential_and_1password_connection",
+  "shared_service": true,
+  "bake_into_workspaces": false
+}

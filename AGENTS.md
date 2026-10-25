@@ -258,3 +258,8 @@ The offline backend suite includes actual isolated framework handoffs. Its CI
 shards install the frozen sibling worker environments and Node builds before
 pytest; preserve the real availability, relay and cleanup assertions. Worker
 installation does not enable paid adapters or change native guard admission.
+
+`fleet/workspaces/` contains the stopped-by-default Linux COW lifecycle paired
+with the host runner. Keep its base free of client data, models and credentials,
+preserve canonical job dedupe and the three-worker ceiling, and run its offline
+checks with `backend/tests/test_momo_workspaces.py`.
