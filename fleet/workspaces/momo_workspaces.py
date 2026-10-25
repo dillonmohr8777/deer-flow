@@ -92,7 +92,7 @@ class Orb(Command):
 
 
 class Manager:
-    def __init__(self, root: Path, image: str = DEFAULT_IMAGE, docker: Docker | None = None, orb: Orb | None = None, min_free_bytes: int = 8 * 1024**3, platform: str | None = None):
+    def __init__(self, root: Path, image: str = DEFAULT_IMAGE, docker: Docker | None = None, orb: Orb | None = None, min_free_bytes: int = 8 * 1024**3, platform: str | None = None, client_roots: dict[str, str | Path] | None = None):
         if platform is not None and platform not in {"linux/arm64", "linux/amd64"}:
             raise WorkspaceError("unsupported_workspace_platform")
         self.root = root
@@ -101,6 +101,8 @@ class Manager:
         self.docker = docker or Docker()
         self.orb = orb or Orb()
         self.min_free_bytes = min_free_bytes
+        self.client_roots = {valid_id(client): Path(path) for client, path in (client_roots or {}).items()}
+        self._retained_slots: dict[str, tuple[int, int]] = {}
         self.environments = root / "environments"
         self.jobs = root / "jobs"
         self.slots = root / "slots"
@@ -117,14 +119,29 @@ class Manager:
         finally:
             os.close(descriptor)
 
+    def _slot_job_status(self, job_id: str) -> str:
+        if not ID.fullmatch(job_id):
+            return "unknown"
+        try:
+            return json.loads((self.jobs / f"{job_id}.json").read_text(encoding="utf-8")).get("status", "unknown")
+        except FileNotFoundError:
+            return "stopped"
+        except (OSError, ValueError, AttributeError):
+            return "unknown"
+
     @contextmanager
-    def worker_slot(self, job_id: str):
+    def worker_slot(self, job_id: str, *, retain_on_exit: list[str] | None = None):
         acquired = None
         for index in range(3):
             path = self.slots / f"worker-{index}.lock"
             descriptor = os.open(path, os.O_RDWR | os.O_CREAT, 0o600)
             try:
                 fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                os.lseek(descriptor, 0, os.SEEK_SET)
+                previous = os.read(descriptor, 129).decode(errors="replace").strip()
+                if previous and previous != job_id and self._slot_job_status(previous) in {"running", "cleanup_pending", "unknown"}:
+                    os.close(descriptor)
+                    continue
                 acquired = (index, descriptor)
                 break
             except BlockingIOError:
@@ -134,11 +151,29 @@ class Manager:
         index, descriptor = acquired
         try:
             os.ftruncate(descriptor, 0)
+            os.lseek(descriptor, 0, os.SEEK_SET)
             os.write(descriptor, f"{job_id}\n".encode())
             os.fsync(descriptor)
             yield index
         finally:
-            os.close(descriptor)
+            if retain_on_exit:
+                self._retained_slots[retain_on_exit[0]] = (index, descriptor)
+            else:
+                os.close(descriptor)
+
+    @contextmanager
+    def job_slot(self, env_id: str, job_id: str, retain_on_exit: list[str]):
+        retained = self._retained_slots.get(env_id)
+        if retained is not None:
+            yield retained[0]
+            return
+        with self.worker_slot(job_id, retain_on_exit=retain_on_exit) as index:
+            yield index
+
+    def _release_retained_slot(self, env_id: str) -> None:
+        retained = self._retained_slots.pop(env_id, None)
+        if retained is not None:
+            os.close(retained[1])
 
     def env_dir(self, env_id: str) -> Path:
         return self.environments / valid_id(env_id, environment=True)
@@ -229,9 +264,27 @@ class Manager:
     def volume(self, env_id: str) -> str:
         return f"momobot-ws-{valid_id(env_id, environment=True)}-data"
 
+    def client_mount(self, client_id: str, client_path: Path) -> Path:
+        configured = self.client_roots.get(client_id)
+        if configured is None:
+            raise WorkspaceError("client_root_not_configured")
+        if not configured.is_absolute() or not client_path.is_absolute():
+            raise WorkspaceError("client_path_not_absolute")
+        try:
+            root = configured.resolve(strict=True)
+            resolved = client_path.resolve(strict=True)
+        except (OSError, RuntimeError):
+            raise WorkspaceError("client_path_unavailable") from None
+        if not root.is_dir() or not resolved.is_dir():
+            raise WorkspaceError("client_path_not_directory")
+        if not resolved.is_relative_to(root):
+            raise WorkspaceError("client_path_outside_admitted_root")
+        return resolved
+
     def create(self, env_id: str, client_id: str, client_path: Path | None = None) -> dict:
         valid_id(env_id, environment=True)
         valid_id(client_id)
+        resolved = self.client_mount(client_id, client_path) if client_path is not None else None
         self.assert_free_headroom()
         base = self.base()
         with self.lock(self.env_dir(env_id) / ".create.lock"):
@@ -268,10 +321,7 @@ class Manager:
                 "--mount",
                 f"type=volume,src={volume},dst=/mnt/data",
             ]
-            if client_path is not None:
-                resolved = client_path.resolve(strict=True)
-                if not resolved.is_dir():
-                    raise WorkspaceError("client_path_not_directory")
+            if resolved is not None:
                 args.extend(["--mount", f"type=bind,src={resolved},dst=/mnt/client,readonly"])
             args.extend([self.image, "sleep", "infinity"])
             container_id = self.docker.call(*args)
@@ -296,6 +346,7 @@ class Manager:
     def start(self, env_id: str) -> dict:
         record = self.env_record(env_id)
         self.inspect(env_id)
+        self.assert_free_headroom()
         started = time.monotonic()
         self.docker.call("start", self.container(env_id))
         record.update(state="running", updated_at=now(), last_start_seconds=round(time.monotonic() - started, 3))
@@ -309,6 +360,7 @@ class Manager:
         self.docker.call("stop", "--time", "10", self.container(env_id))
         record.update(state="stopped", updated_at=now(), last_stop_seconds=round(time.monotonic() - started, 3))
         atomic_json(self.env_dir(env_id) / "environment.json", record)
+        self._release_retained_slot(env_id)
         return record
 
     def status(self) -> list[dict]:
@@ -359,56 +411,107 @@ class Manager:
                 return {**current, "duplicate_suppressed": True}
             if current.get("status") == "running":
                 return {**current, "duplicate_suppressed": True, "execution_unchanged": True}
-            existing = {**current, "status": "pending", "updated_at": now()}
-            atomic_json(job_path, existing)
-        with self.lock(self.env_dir(env_id) / ".job.lock"), self.worker_slot(job_id):
+            if current.get("status") != "cleanup_pending":
+                existing = {**current, "status": "pending", "updated_at": now()}
+                atomic_json(job_path, existing)
+        retention = []
+        with self.lock(self.env_dir(env_id) / ".job.lock"), self.job_slot(env_id, job_id, retention):
             current = json.loads(job_path.read_text(encoding="utf-8"))
             if current.get("status") == "completed":
                 return {**current, "duplicate_suppressed": True}
-            current.pop("error", None)
-            current.pop("finished_at", None)
-            current.update(status="running", started_at=now(), updated_at=now())
-            atomic_json(job_path, current)
-            staged_payload = self.env_dir(env_id) / "job.json"
-            atomic_json(staged_payload, payload)
-            staged_payload.chmod(0o644)
-            try:
-                self.docker.call("cp", str(staged_payload), f"{self.container(env_id)}:/mnt/data/job.json")
-                self.start(env_id)
-                output = self.docker.call(
-                    "exec",
-                    "--env",
-                    f"MOMO_JOB_ID={job_id}",
-                    "--env",
-                    f"MOMO_CLIENT_ID={client_id}",
-                    self.container(env_id),
-                    "python3",
-                    "/opt/momobot/job_runner.py",
-                    "/mnt/data/job.json",
-                )
-                current.update(status="completed", finished_at=now(), updated_at=now(), runner_output=json.loads(output.splitlines()[-1]))
-            except Exception as error:
-                current.update(status="failed", finished_at=now(), updated_at=now(), error=str(error)[:500])
+            if current.get("status") == "running":
+                return {**current, "duplicate_suppressed": True, "execution_unchanged": True}
+            command_error = None
+            if current.get("status") != "cleanup_pending":
+                current.pop("error", None)
+                current.pop("finished_at", None)
+                current.pop("command_status", None)
+                current.pop("cleanup_error", None)
+                current.update(status="running", started_at=now(), updated_at=now())
                 atomic_json(job_path, current)
-                raise
-            finally:
+                staged_payload = self.env_dir(env_id) / "job.json"
+                atomic_json(staged_payload, payload)
+                staged_payload.chmod(0o644)
                 try:
-                    self.stop(env_id)
-                except WorkspaceError:
-                    pass
+                    self.docker.call("cp", str(staged_payload), f"{self.container(env_id)}:/mnt/data/job.json")
+                    self.start(env_id)
+                    output = self.docker.call(
+                        "exec",
+                        "--env",
+                        f"MOMO_JOB_ID={job_id}",
+                        "--env",
+                        f"MOMO_CLIENT_ID={client_id}",
+                        self.container(env_id),
+                        "python3",
+                        "/opt/momobot/job_runner.py",
+                        "/mnt/data/job.json",
+                    )
+                    command_status = "completed"
+                    current.update(command_status=command_status, runner_output=json.loads(output.splitlines()[-1]))
+                except Exception as error:
+                    command_error = error
+                    command_status = "failed"
+                    current.update(command_status=command_status, error=str(error)[:500])
+                current.update(status="cleanup_pending", updated_at=now())
+                atomic_json(job_path, current)
+            try:
+                self.stop(env_id)
+            except Exception as error:
+                retention.append(env_id)
+                current.update(status="cleanup_pending", cleanup_error=str(error)[:500], updated_at=now())
+                atomic_json(job_path, current)
+                if command_error is not None:
+                    raise command_error
+                raise
+            final_status = {"completed": "completed", "failed": "failed"}.get(current.get("command_status"), "pending")
+            current.pop("cleanup_error", None)
+            if final_status == "pending":
+                current.pop("finished_at", None)
+                current.update(status="pending", recovered_at=now(), updated_at=now())
+            else:
+                current.update(status=final_status, finished_at=now(), updated_at=now())
             atomic_json(job_path, current)
+            if command_error is not None:
+                raise command_error
+            if final_status == "failed":
+                raise WorkspaceError(current.get("error", "workspace_job_failed"))
             return current
 
-    def recover(self) -> list[dict]:
-        recovered = []
-        for path in sorted(self.jobs.glob("*.json")):
+    def recover(self, env_id: str, job_id: str) -> list[dict]:
+        valid_id(env_id, environment=True)
+        valid_id(job_id)
+        path = self.jobs / f"{job_id}.json"
+        try:
             current = json.loads(path.read_text(encoding="utf-8"))
-            if current.get("status") == "running":
-                self.stop(current["env_id"])
-                current.update(status="pending", recovered_at=now(), updated_at=now())
-                atomic_json(path, current)
-                recovered.append(current)
-        return recovered
+        except (OSError, ValueError):
+            raise WorkspaceError("job_not_found") from None
+        if current.get("job_id") != job_id or current.get("env_id") != env_id:
+            raise WorkspaceError("recovery_scope_mismatch")
+        try:
+            with self.lock(self.env_dir(env_id) / ".job.lock", blocking=False):
+                current = json.loads(path.read_text(encoding="utf-8"))
+                if current.get("job_id") != job_id or current.get("env_id") != env_id:
+                    raise WorkspaceError("recovery_scope_mismatch")
+                if current.get("status") not in {"running", "cleanup_pending"}:
+                    return [current]
+                retention = []
+                with self.job_slot(env_id, job_id, retention):
+                    try:
+                        self.stop(env_id)
+                    except Exception as error:
+                        retention.append(env_id)
+                        current.update(status="cleanup_pending", command_status=current.get("command_status", "interrupted"), cleanup_error=str(error)[:500], updated_at=now())
+                        atomic_json(path, current)
+                        raise
+                    final_status = "completed" if current.get("command_status") == "completed" else "pending"
+                    current.pop("cleanup_error", None)
+                    if final_status == "pending":
+                        current.pop("finished_at", None)
+                    current.update(status=final_status, recovered_at=now(), updated_at=now())
+                    atomic_json(path, current)
+                    return [current]
+        except BlockingIOError:
+            return []
 
     def save(self, env_id: str) -> dict:
         record = self.env_record(env_id)
@@ -484,6 +587,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--root", type=Path, default=Path.home() / ".local/state/momobot-linux-workspaces")
     parser.add_argument("--image", default=DEFAULT_IMAGE)
     parser.add_argument("--platform", choices=("linux/arm64", "linux/amd64"))
+    parser.add_argument("--client-root", action="append", default=[], metavar="CLIENT_ID=PATH")
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("build")
     create = commands.add_parser("create")
@@ -502,10 +606,18 @@ def main(argv: list[str] | None = None) -> int:
     job.add_argument("env_id")
     job.add_argument("payload")
     commands.add_parser("status")
-    commands.add_parser("recover")
+    recover = commands.add_parser("recover")
+    recover.add_argument("env_id")
+    recover.add_argument("job_id")
     commands.add_parser("measure")
     args = parser.parse_args(argv)
-    manager = Manager(args.root, args.image, platform=args.platform)
+    client_roots = {}
+    for value in args.client_root:
+        client_id, separator, path = value.partition("=")
+        if not separator or not path or client_id in client_roots:
+            raise WorkspaceError("invalid_client_root")
+        client_roots[valid_id(client_id)] = Path(path)
+    manager = Manager(args.root, args.image, platform=args.platform, client_roots=client_roots)
     if args.command == "build":
         result = manager.build()
     elif args.command == "create":
@@ -519,7 +631,7 @@ def main(argv: list[str] | None = None) -> int:
     elif args.command == "status":
         result = manager.status()
     elif args.command == "recover":
-        result = manager.recover()
+        result = manager.recover(args.env_id, args.job_id)
     elif args.command == "measure":
         result = manager.measure()
     else:

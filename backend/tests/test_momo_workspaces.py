@@ -67,6 +67,7 @@ class FakeOrb:
 @pytest.fixture
 def manager(tmp_path):
     manager = workspaces.Manager(tmp_path / "state", docker=FakeDocker(), orb=FakeOrb(), min_free_bytes=0)
+    manager.client_roots = {"synthetic-client": tmp_path / "client"}
     workspaces.atomic_json(manager.root / "base.json", {"image_id": "sha256:base", "architecture": "arm64", "golden_volume": "momobot-ws-golden-test"})
     return manager
 
@@ -164,7 +165,7 @@ def test_failure_stops_environment_and_recovery_requeues_without_running(manager
     current = json.loads((manager.jobs / "job-1.json").read_text())
     current["status"] = "running"
     (manager.jobs / "job-1.json").write_text(json.dumps(current))
-    recovered = manager.recover()
+    recovered = manager.recover("pilot-001", "job-1")
     assert recovered[0]["status"] == "pending"
     assert manager.docker.running is False
     manager.docker.call = original
@@ -196,3 +197,83 @@ def test_measure_reports_zero_dormant_workers(manager):
     assert result["active_owned_workers"] == 0
     assert result["saved_owned_environments"] == 1
     assert result["docker_stats"] == []
+
+
+def test_client_mount_requires_trusted_root_and_resolved_containment(manager, tmp_path):
+    admitted = tmp_path / "client"
+    outsider = tmp_path / "outsider"
+    admitted.mkdir()
+    outsider.mkdir()
+    with pytest.raises(workspaces.WorkspaceError, match="client_path_outside_admitted_root"):
+        manager.create("pilot-001", "synthetic-client", outsider)
+    escape = admitted / "escape"
+    escape.symlink_to(outsider, target_is_directory=True)
+    with pytest.raises(workspaces.WorkspaceError, match="client_path_outside_admitted_root"):
+        manager.create("pilot-002", "synthetic-client", escape)
+    manager.client_roots = {}
+    with pytest.raises(workspaces.WorkspaceError, match="client_root_not_configured"):
+        manager.create("pilot-003", "synthetic-client", admitted)
+    assert manager.orb.calls == []
+
+
+def test_stop_failure_retains_capacity_and_cleanup_retry_does_not_replay(manager):
+    manager.create("pilot-001", "synthetic-client")
+    original = manager.docker.call
+
+    def fail_stop(*args, capture=True):
+        if args[0] == "stop":
+            raise workspaces.WorkspaceError("synthetic_stop_failure")
+        return original(*args, capture=capture)
+
+    manager.docker.call = fail_stop
+    with pytest.raises(workspaces.WorkspaceError, match="synthetic_stop_failure"):
+        manager.job("pilot-001", payload())
+    current = json.loads((manager.jobs / "job-1.json").read_text())
+    assert current["status"] == "cleanup_pending"
+    assert current["command_status"] == "completed"
+    assert manager.docker.running is True
+    with manager.worker_slot("other-1"), manager.worker_slot("other-2"):
+        with pytest.raises(workspaces.WorkspaceError, match="worker_limit_3"):
+            with manager.worker_slot("other-3"):
+                pass
+    manager._release_retained_slot("pilot-001")
+    restarted = workspaces.Manager(manager.root, docker=manager.docker, orb=manager.orb, min_free_bytes=0)
+    with restarted.worker_slot("other-1"), restarted.worker_slot("other-2"):
+        with pytest.raises(workspaces.WorkspaceError, match="worker_limit_3"):
+            with restarted.worker_slot("other-3"):
+                pass
+    manager.docker.call = original
+    resumed = restarted.job("pilot-001", payload())
+    assert resumed["status"] == "completed"
+    assert manager.docker.running is False
+    assert len([call for call in manager.docker.calls if call[0] == "exec"]) == 1
+    with restarted.worker_slot("other-1"), restarted.worker_slot("other-2"), restarted.worker_slot("other-3"):
+        pass
+
+
+def test_reused_environment_enforces_disk_floor_without_consuming_work(manager, monkeypatch):
+    manager.create("pilot-001", "synthetic-client")
+    manager.min_free_bytes = 1
+    stat = type("Stat", (), {"f_bavail": 0, "f_frsize": 4096})()
+    monkeypatch.setattr(workspaces.os, "statvfs", lambda _path: stat)
+    with pytest.raises(workspaces.WorkspaceError, match="disk_headroom_below_1"):
+        manager.job("pilot-001", payload())
+    assert not [call for call in manager.docker.calls if call[0] == "exec"]
+    manager.min_free_bytes = 0
+    assert manager.job("pilot-001", payload())["status"] == "completed"
+
+
+def test_recovery_respects_live_job_lock(manager):
+    manager.create("pilot-001", "synthetic-client")
+    manager.job("pilot-001", payload())
+    path = manager.jobs / "job-1.json"
+    current = json.loads(path.read_text())
+    current["status"] = "running"
+    current.pop("command_status", None)
+    workspaces.atomic_json(path, current)
+    stop_calls = len([call for call in manager.docker.calls if call[0] == "stop"])
+    with manager.lock(manager.env_dir("pilot-001") / ".job.lock"):
+        assert manager.recover("pilot-001", "job-1") == []
+        assert json.loads(path.read_text())["status"] == "running"
+        assert len([call for call in manager.docker.calls if call[0] == "stop"]) == stop_calls
+    assert manager.recover("pilot-001", "job-1")[0]["status"] == "pending"
