@@ -131,29 +131,34 @@ class Manager:
 
     @contextmanager
     def worker_slot(self, job_id: str, *, retain_on_exit: list[str] | None = None):
-        acquired = None
-        for index in range(3):
-            path = self.slots / f"worker-{index}.lock"
-            descriptor = os.open(path, os.O_RDWR | os.O_CREAT, 0o600)
-            try:
-                fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                os.lseek(descriptor, 0, os.SEEK_SET)
-                previous = os.read(descriptor, 129).decode(errors="replace").strip()
-                if previous and previous != job_id and self._slot_job_status(previous) in {"running", "cleanup_pending", "unknown"}:
+        with self.lock(self.slots / ".admission.lock"):
+            acquired = None
+            for index in range(3):
+                path = self.slots / f"worker-{index}.lock"
+                descriptor = os.open(path, os.O_RDWR | os.O_CREAT, 0o600)
+                try:
+                    fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    os.lseek(descriptor, 0, os.SEEK_SET)
+                    previous = os.read(descriptor, 129).decode(errors="replace").strip()
+                    if previous and previous != job_id and self._slot_job_status(previous) in {"running", "cleanup_pending", "unknown"}:
+                        os.close(descriptor)
+                        continue
+                    acquired = (index, descriptor)
+                    break
+                except BlockingIOError:
                     os.close(descriptor)
-                    continue
-                acquired = (index, descriptor)
-                break
-            except BlockingIOError:
+            if acquired is None:
+                raise WorkspaceError("worker_limit_3")
+            index, descriptor = acquired
+            try:
+                os.ftruncate(descriptor, 0)
+                os.lseek(descriptor, 0, os.SEEK_SET)
+                os.write(descriptor, f"{job_id}\n".encode())
+                os.fsync(descriptor)
+            except BaseException:
                 os.close(descriptor)
-        if acquired is None:
-            raise WorkspaceError("worker_limit_3")
-        index, descriptor = acquired
+                raise
         try:
-            os.ftruncate(descriptor, 0)
-            os.lseek(descriptor, 0, os.SEEK_SET)
-            os.write(descriptor, f"{job_id}\n".encode())
-            os.fsync(descriptor)
             yield index
         finally:
             if retain_on_exit:
@@ -163,11 +168,17 @@ class Manager:
 
     @contextmanager
     def job_slot(self, env_id: str, job_id: str, retain_on_exit: list[str]):
+        # The caller holds the environment execution lock across this durable owner check.
+        for path in self.jobs.glob("*.json"):
+            current = json.loads(path.read_text(encoding="utf-8"))
+            if current.get("env_id") == env_id and current.get("job_id") != job_id and current.get("status") in {"running", "cleanup_pending"}:
+                raise WorkspaceError("environment_cleanup_pending")
         retained = self._retained_slots.get(env_id)
         if retained is not None:
             owner = os.pread(retained[1], 129, 0).decode(errors="replace").strip()
-            if owner != job_id:
-                if self._slot_job_status(owner) in {"running", "cleanup_pending", "unknown"}:
+            status = self._slot_job_status(owner)
+            if owner != job_id or status not in {"running", "cleanup_pending", "unknown"}:
+                if status in {"running", "cleanup_pending", "unknown"}:
                     raise WorkspaceError("environment_cleanup_pending")
                 self._release_retained_slot(env_id)
             else:
@@ -178,33 +189,35 @@ class Manager:
 
     @contextmanager
     def cleanup_slot(self, job_id: str):
-        reservations = []
-        try:
-            for index in range(3):
-                path = self.slots / f"worker-{index}.lock"
-                try:
-                    descriptor = os.open(path, os.O_RDWR)
-                except FileNotFoundError:
-                    continue
-                owner = os.pread(descriptor, 129, 0).decode(errors="replace").strip()
-                if owner != job_id:
+        # Admission opens, locks and rewrites slot generations only inside this fence.
+        with self.lock(self.slots / ".admission.lock"):
+            reservations = []
+            try:
+                for index in range(3):
+                    path = self.slots / f"worker-{index}.lock"
+                    try:
+                        descriptor = os.open(path, os.O_RDWR)
+                    except FileNotFoundError:
+                        continue
+                    owner = os.pread(descriptor, 129, 0).decode(errors="replace").strip()
+                    if owner != job_id:
+                        os.close(descriptor)
+                        continue
+                    stat = os.fstat(descriptor)
+                    reservations.append((path, descriptor, stat.st_dev, stat.st_ino))
+                if not reservations:
+                    raise WorkspaceError("worker_reservation_not_found")
+                yield
+                for path, descriptor, device, inode in reservations:
+                    try:
+                        current = os.stat(path)
+                    except FileNotFoundError:
+                        continue
+                    if (current.st_dev, current.st_ino) == (device, inode):
+                        path.unlink()
+            finally:
+                for _, descriptor, _, _ in reservations:
                     os.close(descriptor)
-                    continue
-                stat = os.fstat(descriptor)
-                reservations.append((path, descriptor, stat.st_dev, stat.st_ino))
-            if not reservations:
-                raise WorkspaceError("worker_reservation_not_found")
-            yield
-            for path, descriptor, device, inode in reservations:
-                try:
-                    current = os.stat(path)
-                except FileNotFoundError:
-                    continue
-                if (current.st_dev, current.st_ino) == (device, inode):
-                    path.unlink()
-        finally:
-            for _, descriptor, _, _ in reservations:
-                os.close(descriptor)
 
     def _release_retained_slot(self, env_id: str) -> None:
         retained = self._retained_slots.pop(env_id, None)
@@ -530,13 +543,13 @@ class Manager:
                     raise WorkspaceError("recovery_scope_mismatch")
                 if current.get("status") not in {"running", "cleanup_pending"}:
                     return [current]
+                try:
+                    self.stop(env_id)
+                except Exception as error:
+                    current.update(status="cleanup_pending", command_status=current.get("command_status", "interrupted"), cleanup_error=str(error)[:500], updated_at=now())
+                    atomic_json(path, current)
+                    raise
                 with self.cleanup_slot(job_id):
-                    try:
-                        self.stop(env_id)
-                    except Exception as error:
-                        current.update(status="cleanup_pending", command_status=current.get("command_status", "interrupted"), cleanup_error=str(error)[:500], updated_at=now())
-                        atomic_json(path, current)
-                        raise
                     final_status = "completed" if current.get("command_status") == "completed" else "pending"
                     current.pop("cleanup_error", None)
                     if final_status == "pending":

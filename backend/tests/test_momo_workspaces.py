@@ -383,3 +383,217 @@ print(json.dumps({"status": result[0]["status"], "calls": docker.calls}))
         with pytest.raises(workspaces.WorkspaceError, match="worker_limit_3"):
             with restarted.worker_slot("after-limit"):
                 pass
+
+
+# Each child loads this file's doubles, but executes the real Manager against shared state.
+def workspace_child(manager, env_id, job_id, *, probe=False):
+    import os
+    import subprocess
+    import sys
+
+    child = r"""
+import fcntl
+import importlib.util
+import json
+import os
+import sys
+from pathlib import Path
+spec = importlib.util.spec_from_file_location("workspace_test_double", sys.argv[1])
+tests = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(tests)
+root, env_id, job_id, probe = sys.argv[2:]
+if probe == "yes":
+    fd = os.open(Path(root) / "slots/.admission.lock", os.O_RDWR | os.O_CREAT, 0o600)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        print(json.dumps({"fence": "open"}), flush=True)
+    except BlockingIOError:
+        print(json.dumps({"fence": "held"}), flush=True)
+    finally:
+        os.close(fd)
+    assert sys.stdin.readline() == "admit\n"
+class Docker(tests.FakeDocker):
+    def call(self, *args, capture=True):
+        if args[0] == "exec":
+            print(json.dumps({"phase": "exec"}), flush=True)
+            assert sys.stdin.readline() == "release\n"
+        return super().call(*args, capture=capture)
+docker = Docker()
+manager = tests.workspaces.Manager(Path(root), docker=docker, min_free_bytes=0)
+try:
+    result = manager.job(env_id, tests.payload(job_id))
+    status = result["status"]
+except tests.workspaces.WorkspaceError as error:
+    status = str(error)
+print(json.dumps({"status": status, "calls": docker.calls}), flush=True)
+"""
+    return subprocess.Popen(
+        [sys.executable, "-c", child, str(Path(__file__).resolve()), str(manager.root), env_id, job_id, "yes" if probe else "no"],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        env={"PATH": os.environ.get("PATH", ""), "PYTHONDONTWRITEBYTECODE": "1"},
+    )
+
+
+def child_message(child):
+    import select
+
+    assert select.select([child.stdout], [], [], 10)[0], "child barrier timed out"
+    line = child.stdout.readline()
+    assert line, child.stderr.read()
+    return json.loads(line)
+
+
+def test_recovery_release_fences_real_process_admission(manager, monkeypatch):
+    manager.create("pilot-old", "synthetic-client")
+    original_call = manager.docker.call
+
+    def fail_stop(*args, capture=True):
+        if args[0] == "stop":
+            raise workspaces.WorkspaceError("stop_failed")
+        return original_call(*args, capture=capture)
+
+    manager.docker.call = fail_stop
+    with pytest.raises(workspaces.WorkspaceError, match="stop_failed"):
+        manager.job("pilot-old", payload("old-job"))
+    manager.docker.call = original_call
+    for index in range(4):
+        manager.create(f"pilot-new-{index}", "synthetic-client")
+    children = []
+    entered = []
+    fence = []
+    original_unlink = Path.unlink
+
+    def at_unlink(path, *args, **kwargs):
+        if path == manager.slots / "worker-0.lock":
+            child = workspace_child(manager, "pilot-new-0", "new-job-0", probe=True)
+            children.append(child)
+            fence.append(child_message(child)["fence"])
+            child.stdin.write("admit\n")
+            child.stdin.flush()
+            if fence[-1] == "open":
+                entered.append(child_message(child))
+        return original_unlink(path, *args, **kwargs)
+
+    try:
+        with monkeypatch.context() as patch:
+            patch.setattr(Path, "unlink", at_unlink)
+            assert manager.recover("pilot-old", "old-job")[0]["status"] == "completed"
+        if fence == ["held"]:
+            entered.append(child_message(children[0]))
+        for index in range(1, 4):
+            child = workspace_child(manager, f"pilot-new-{index}", f"new-job-{index}")
+            children.append(child)
+            message = child_message(child)
+            if message.get("phase") == "exec":
+                entered.append(message)
+            else:
+                assert message["status"] == "worker_limit_3"
+        running = [json.loads(path.read_text()) for path in manager.jobs.glob("new-job-*.json")]
+        assert sum(row["status"] == "running" for row in running) == len(entered) == 3
+        assert fence == ["held"]
+    finally:
+        for child in children:
+            _, stderr = child.communicate("release\n", timeout=10)
+            assert child.returncode == 0, stderr
+
+
+def test_fresh_process_rejects_durable_environment_cleanup_owner(manager):
+    import os
+
+    manager.create("pilot-001", "synthetic-client")
+    original = manager.docker.call
+
+    def fail_stop(*args, capture=True):
+        if args[0] == "stop":
+            raise workspaces.WorkspaceError("stop_failed")
+        return original(*args, capture=capture)
+
+    manager.docker.call = fail_stop
+    with pytest.raises(workspaces.WorkspaceError, match="stop_failed"):
+        manager.job("pilot-001", payload("old-job"))
+    descriptor = manager._retained_slots["pilot-001"][1]
+    before = os.fstat(descriptor)
+    child = workspace_child(manager, "pilot-001", "fresh-job")
+    try:
+        result = child_message(child)
+    finally:
+        child.communicate("release\n", timeout=10)
+    assert result == {"status": "environment_cleanup_pending", "calls": []}
+    assert (os.fstat(descriptor).st_dev, os.fstat(descriptor).st_ino) == (before.st_dev, before.st_ino)
+    assert json.loads((manager.jobs / "old-job.json").read_text())["status"] == "cleanup_pending"
+    manager.docker.call = original
+    assert manager.recover("pilot-001", "old-job")[0]["status"] == "completed"
+    with manager.worker_slot("free-0"), manager.worker_slot("free-1"), manager.worker_slot("free-2"):
+        pass
+
+
+def test_independent_cleanup_keeps_lock_and_retired_descriptor_invariants(manager):
+    import os
+    import subprocess
+    import sys
+
+    original = manager.docker.call
+
+    def fail_stop(*args, capture=True):
+        if args[0] == "stop":
+            raise workspaces.WorkspaceError("stop_failed")
+        return original(*args, capture=capture)
+
+    manager.docker.call = fail_stop
+    for index in range(3):
+        manager.create(f"pilot-{index:03d}", "synthetic-client")
+        with pytest.raises(workspaces.WorkspaceError, match="stop_failed"):
+            manager.job(f"pilot-{index:03d}", payload(f"blocked-{index}"))
+    manager.docker.call = original
+    descriptors = [value[1] for value in manager._retained_slots.values()]
+    child = r"""
+import importlib.util
+import json
+import sys
+from pathlib import Path
+spec = importlib.util.spec_from_file_location("workspace_test_double", sys.argv[1])
+tests = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(tests)
+docker = tests.FakeDocker()
+manager = tests.workspaces.Manager(Path(sys.argv[2]), docker=docker, min_free_bytes=0)
+print(json.dumps({"result": manager.recover(sys.argv[3], sys.argv[4]), "calls": docker.calls}))
+"""
+
+    def recover(index):
+        result = subprocess.run([sys.executable, "-c", child, str(Path(__file__).resolve()), str(manager.root), f"pilot-{index:03d}", f"blocked-{index}"], capture_output=True, text=True, timeout=10, check=True)
+        return json.loads(result.stdout)
+
+    with manager.lock(manager.env_dir("pilot-000") / ".job.lock"):
+        assert recover(0) == {"result": [], "calls": []}
+    path = manager.jobs / "blocked-0.json"
+    current = json.loads(path.read_text())
+    current["command_status"] = "failed"
+    workspaces.atomic_json(path, current)
+    assert recover(0)["result"][0]["status"] == "pending"
+    assert all(os.fstat(descriptor) for descriptor in descriptors)
+    fresh = workspaces.Manager(manager.root, min_free_bytes=0)
+    with fresh.worker_slot("only-free"):
+        with pytest.raises(workspaces.WorkspaceError, match="worker_limit_3"):
+            with fresh.worker_slot("fourth"):
+                pass
+
+    def check_exec_capacity(*args, capture=True):
+        if args[0] == "exec":
+            with pytest.raises(workspaces.WorkspaceError, match="worker_limit_3"):
+                with fresh.worker_slot("fourth"):
+                    pass
+        return original(*args, capture=capture)
+
+    manager.docker.call = check_exec_capacity
+    assert manager.job("pilot-000", payload("blocked-0"))["status"] == "completed"
+    manager.docker.call = original
+    for index in (1, 2):
+        assert recover(index)["result"][0]["status"] == "completed"
+    for instance in (manager, fresh):
+        with instance.worker_slot("free-0"), instance.worker_slot("free-1"), instance.worker_slot("free-2"):
+            pass
+    for env_id in list(manager._retained_slots):
+        manager._release_retained_slot(env_id)
