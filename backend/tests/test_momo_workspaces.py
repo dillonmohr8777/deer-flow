@@ -277,3 +277,109 @@ def test_recovery_respects_live_job_lock(manager):
         assert json.loads(path.read_text())["status"] == "running"
         assert len([call for call in manager.docker.calls if call[0] == "stop"]) == stop_calls
     assert manager.recover("pilot-001", "job-1")[0]["status"] == "pending"
+
+
+def test_retained_cleanup_rejects_different_job_until_exact_cleanup(manager):
+    manager.create("pilot-001", "synthetic-client")
+    original = manager.docker.call
+
+    def fail_stop(*args, capture=True):
+        if args[0] == "stop":
+            raise workspaces.WorkspaceError("synthetic_stop_failure")
+        return original(*args, capture=capture)
+
+    manager.docker.call = fail_stop
+    with pytest.raises(workspaces.WorkspaceError, match="synthetic_stop_failure"):
+        manager.job("pilot-001", payload("old-job"))
+    manager.docker.call = original
+    with pytest.raises(workspaces.WorkspaceError, match="environment_cleanup_pending"):
+        manager.job("pilot-001", payload("new-job"))
+    assert len([call for call in manager.docker.calls if call[0] == "exec"]) == 1
+    assert json.loads((manager.jobs / "old-job.json").read_text())["status"] == "cleanup_pending"
+    assert json.loads((manager.jobs / "new-job.json").read_text())["status"] == "pending"
+    recovered = manager.recover("pilot-001", "old-job")
+    assert recovered[0]["status"] == "completed"
+    assert len([call for call in manager.docker.calls if call[0] == "exec"]) == 1
+    assert manager.job("pilot-001", payload("new-job"))["status"] == "completed"
+    assert len([call for call in manager.docker.calls if call[0] == "exec"]) == 2
+    with manager.worker_slot("other-1"), manager.worker_slot("other-2"), manager.worker_slot("other-3"):
+        pass
+
+
+def test_independent_recovery_reuses_exact_reservation_without_extra_capacity(manager):
+    import subprocess
+    import sys
+
+    original = manager.docker.call
+
+    def fail_stop(*args, capture=True):
+        if args[0] == "stop":
+            raise workspaces.WorkspaceError("synthetic_stop_failure")
+        return original(*args, capture=capture)
+
+    manager.docker.call = fail_stop
+    for index in range(3):
+        env_id = f"pilot-{index:03d}"
+        manager.create(env_id, "synthetic-client")
+        with pytest.raises(workspaces.WorkspaceError, match="synthetic_stop_failure"):
+            manager.job(env_id, payload(f"blocked-{index}"))
+    manager.docker.call = original
+    assert len(manager._retained_slots) == 3
+    child = r"""
+import importlib.util
+import json
+import sys
+from pathlib import Path
+
+source, root, env_id, job_id, outcome = sys.argv[1:]
+spec = importlib.util.spec_from_file_location("momo_workspaces_recovery", source)
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+
+
+class RecoveryDocker:
+    def __init__(self):
+        self.calls = []
+
+    def call(self, *args, capture=True):
+        self.calls.append(args)
+        if args[0] == "inspect":
+            env_id = args[1].removeprefix("momo-ws-")
+            return json.dumps([{"Config": {"Labels": {module.MANAGED: "true", module.ENV_LABEL: env_id}}}])
+        if args[0] == "stop":
+            if outcome == "fail":
+                raise module.WorkspaceError("synthetic_recovery_stop_failure")
+            return args[2]
+        raise AssertionError(args)
+
+
+docker = RecoveryDocker()
+manager = module.Manager(Path(root), docker=docker, min_free_bytes=0)
+result = manager.recover(env_id, job_id)
+print(json.dumps({"status": result[0]["status"], "calls": docker.calls}))
+"""
+
+    def recover(env_id, job_id, outcome="ok"):
+        return subprocess.run(
+            [sys.executable, "-c", child, str(SOURCE), str(manager.root), env_id, job_id, outcome],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+
+    recovered = recover("pilot-000", "blocked-0")
+    assert recovered.returncode == 0, recovered.stderr
+    result = json.loads(recovered.stdout)
+    assert result["status"] == "completed"
+    assert result["calls"] == [["inspect", "momo-ws-pilot-000"], ["stop", "--time", "10", "momo-ws-pilot-000"]]
+    failed = recover("pilot-001", "blocked-1", "fail")
+    assert failed.returncode != 0
+    assert "synthetic_recovery_stop_failure" in failed.stderr
+    assert json.loads((manager.jobs / "blocked-1.json").read_text())["status"] == "cleanup_pending"
+    assert len(manager._retained_slots) == 3
+    restarted = workspaces.Manager(manager.root, docker=manager.docker, orb=manager.orb, min_free_bytes=0)
+    with restarted.worker_slot("after-recovery"):
+        with pytest.raises(workspaces.WorkspaceError, match="worker_limit_3"):
+            with restarted.worker_slot("after-limit"):
+                pass

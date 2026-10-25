@@ -165,10 +165,46 @@ class Manager:
     def job_slot(self, env_id: str, job_id: str, retain_on_exit: list[str]):
         retained = self._retained_slots.get(env_id)
         if retained is not None:
-            yield retained[0]
-            return
+            owner = os.pread(retained[1], 129, 0).decode(errors="replace").strip()
+            if owner != job_id:
+                if self._slot_job_status(owner) in {"running", "cleanup_pending", "unknown"}:
+                    raise WorkspaceError("environment_cleanup_pending")
+                self._release_retained_slot(env_id)
+            else:
+                yield retained[0]
+                return
         with self.worker_slot(job_id, retain_on_exit=retain_on_exit) as index:
             yield index
+
+    @contextmanager
+    def cleanup_slot(self, job_id: str):
+        reservations = []
+        try:
+            for index in range(3):
+                path = self.slots / f"worker-{index}.lock"
+                try:
+                    descriptor = os.open(path, os.O_RDWR)
+                except FileNotFoundError:
+                    continue
+                owner = os.pread(descriptor, 129, 0).decode(errors="replace").strip()
+                if owner != job_id:
+                    os.close(descriptor)
+                    continue
+                stat = os.fstat(descriptor)
+                reservations.append((path, descriptor, stat.st_dev, stat.st_ino))
+            if not reservations:
+                raise WorkspaceError("worker_reservation_not_found")
+            yield
+            for path, descriptor, device, inode in reservations:
+                try:
+                    current = os.stat(path)
+                except FileNotFoundError:
+                    continue
+                if (current.st_dev, current.st_ino) == (device, inode):
+                    path.unlink()
+        finally:
+            for _, descriptor, _, _ in reservations:
+                os.close(descriptor)
 
     def _release_retained_slot(self, env_id: str) -> None:
         retained = self._retained_slots.pop(env_id, None)
@@ -494,12 +530,10 @@ class Manager:
                     raise WorkspaceError("recovery_scope_mismatch")
                 if current.get("status") not in {"running", "cleanup_pending"}:
                     return [current]
-                retention = []
-                with self.job_slot(env_id, job_id, retention):
+                with self.cleanup_slot(job_id):
                     try:
                         self.stop(env_id)
                     except Exception as error:
-                        retention.append(env_id)
                         current.update(status="cleanup_pending", command_status=current.get("command_status", "interrupted"), cleanup_error=str(error)[:500], updated_at=now())
                         atomic_json(path, current)
                         raise
