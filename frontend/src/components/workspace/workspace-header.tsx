@@ -10,8 +10,9 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { BrandMotionToggle } from "@/components/workspace/command-center/workspace-appearance";
+import { useAgents } from "@/core/agents/hooks";
 import { useIsClient } from "@/core/auth/AuthProvider";
-import { CLIENT_NEW_CHAT_PATH } from "@/core/auth/roles";
+import { CLIENT_NEW_CHAT_PATH, clientNewChatPath } from "@/core/auth/roles";
 import { useI18n } from "@/core/i18n/hooks";
 import { env } from "@/env";
 import { cn } from "@/lib/utils";
@@ -23,12 +24,13 @@ export function WorkspaceHeader({ className }: { className?: string }) {
   const { t } = useI18n();
   const isSidebarExpanded = useSidebarExpanded();
   const pathname = usePathname();
-  // A client has no Command Center, and every new chat is with MomoBot Max.
   const isClient = useIsClient();
-  const homePath = isClient
+  const { agents, isLoading } = useAgents();
+  const clientPath = isLoading
     ? CLIENT_NEW_CHAT_PATH
-    : "/workspace/command-center";
-  const newChatPath = isClient ? CLIENT_NEW_CHAT_PATH : "/workspace/chats/new";
+    : clientNewChatPath(agents);
+  const homePath = isClient ? clientPath : "/workspace/command-center";
+  const newChatPath = isClient ? clientPath : "/workspace/chats/new";
   const sidebarIsCollapsed = !isSidebarExpanded;
   return (
     <>

@@ -80,6 +80,17 @@ afterEach(() => {
 });
 
 describe("login MFA step", () => {
+  it("provides mobile AutoFill hints", () => {
+    rs.spyOn(globalThis, "fetch").mockImplementation(routeFetch({}));
+    render(<LoginPage />);
+    expect(screen.getByLabelText("Email").getAttribute("autocomplete")).toBe(
+      "email",
+    );
+    expect(screen.getByLabelText("Password").getAttribute("autocomplete")).toBe(
+      "current-password",
+    );
+  });
+
   it("shows the MFA step instead of redirecting when login/local returns mfa_required", async () => {
     const loginLocal = rs.fn(() =>
       jsonResponse({ mfa_required: true, challenge: "challenge-123" }),
@@ -97,7 +108,11 @@ describe("login MFA step", () => {
         name: "Two-factor verification",
       }),
     ).toBeTruthy();
-    expect(screen.getByPlaceholderText("123456")).toBeTruthy();
+    expect(
+      screen
+        .getByLabelText("Two-factor verification")
+        .getAttribute("autocomplete"),
+    ).toBe("one-time-code");
     expect(mocks.push).not.toHaveBeenCalled();
   });
 

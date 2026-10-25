@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -58,20 +58,79 @@ export function Approvals() {
   );
 }
 
+function isCompactLayout() {
+  return window.matchMedia?.("(max-width: 63.999rem)").matches ?? false;
+}
+
+function captureListScroll(list: HTMLElement | null) {
+  let element = list;
+  while (element) {
+    const overflowY = window.getComputedStyle(element).overflowY;
+    if (overflowY === "auto" || overflowY === "scroll") {
+      return { element, top: element.scrollTop };
+    }
+    element = element.parentElement;
+  }
+  return {
+    element: document.scrollingElement,
+    top: document.scrollingElement?.scrollTop ?? 0,
+  };
+}
+
 export function ApprovalsBody() {
   const [statusFilter, setStatusFilter] = useState<ApprovalStatus | "all">(
     "pending",
   );
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [mobileView, setMobileView] = useState<"list" | "detail">("list");
+  const listRef = useRef<HTMLDivElement>(null);
+  const detailRef = useRef<HTMLDivElement>(null);
+  const listScrollRef = useRef<ReturnType<typeof captureListScroll>>({
+    element: null,
+    top: 0,
+  });
+  const restoreListFocusRef = useRef(false);
   const approvals = useApprovals(
     statusFilter === "all" ? undefined : statusFilter,
   );
   const rows = useMemo(() => approvals.data ?? [], [approvals.data]);
   const selected = rows.find((row) => row.id === selectedId) ?? null;
+  const selectedApprovalId = selected?.id;
+  const visibleMobileView = selected ? mobileView : "list";
 
   useEffect(() => {
     if (selectedId && !selected) setSelectedId(null);
   }, [selectedId, selected]);
+
+  useEffect(() => {
+    if (mobileView !== "detail" || !selectedApprovalId || !isCompactLayout())
+      return;
+    detailRef.current?.focus();
+  }, [mobileView, selectedApprovalId]);
+
+  useEffect(() => {
+    if (mobileView !== "list" || !restoreListFocusRef.current) return;
+    restoreListFocusRef.current = false;
+    listRef.current
+      ?.querySelector<HTMLButtonElement>('[aria-current="true"]')
+      ?.focus({ preventScroll: true });
+    if (listScrollRef.current.element) {
+      listScrollRef.current.element.scrollTop = listScrollRef.current.top;
+    }
+  }, [mobileView]);
+
+  const selectApproval = (id: string) => {
+    if (isCompactLayout()) {
+      listScrollRef.current = captureListScroll(listRef.current);
+      setMobileView("detail");
+    }
+    setSelectedId(id);
+  };
+
+  const backToList = () => {
+    restoreListFocusRef.current = true;
+    setMobileView("list");
+  };
 
   return (
     <div className={boardStyles.frame} data-testid="approvals">
@@ -90,8 +149,12 @@ export function ApprovalsBody() {
         onChange={setStatusFilter}
         options={STATUS_FILTERS}
       />
-      <div className={boardStyles.layout}>
-        <div className={boardStyles.list} aria-label="Proposed actions">
+      <div className={boardStyles.layout} data-mobile-view={visibleMobileView}>
+        <div
+          ref={listRef}
+          className={boardStyles.list}
+          aria-label="Proposed actions"
+        >
           {approvals.isError ? (
             <ErrorState
               message="Couldn't load approvals."
@@ -122,7 +185,7 @@ export function ApprovalsBody() {
                     type="button"
                     className={boardStyles.threadRow}
                     aria-current={row.id === selectedId}
-                    onClick={() => setSelectedId(row.id)}
+                    onClick={() => selectApproval(row.id)}
                   >
                     <span className={boardStyles.threadSubject}>
                       {row.title || TYPE_LABEL[row.action_type]}
@@ -145,9 +208,25 @@ export function ApprovalsBody() {
             </ul>
           )}
         </div>
-        <div className={boardStyles.detail}>
+        <div
+          ref={detailRef}
+          className={boardStyles.detail}
+          role="region"
+          aria-label="Approval detail"
+          tabIndex={-1}
+        >
           {selected ? (
-            <ApprovalDetail key={selected.id} approval={selected} />
+            <>
+              <Button
+                variant="ghost"
+                size="sm"
+                className={boardStyles.mobileBack}
+                onClick={backToList}
+              >
+                Back to proposed actions
+              </Button>
+              <ApprovalDetail key={selected.id} approval={selected} />
+            </>
           ) : (
             <EmptyState momo="qa" title="Pick an action">
               Select an item to read, edit and approve or reject it.
