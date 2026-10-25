@@ -21,8 +21,9 @@ trap cleanup EXIT
 
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
 docker volume create "$SNAP" >/dev/null
+# SQLite mode=ro may create WAL shared-memory files; match offsite_backup.py.
 docker run --rm --network none \
-  --mount "type=volume,source=${PROJECT}_gateway-data,target=/source,readonly" \
+  --mount "type=volume,source=${PROJECT}_gateway-data,target=/source" \
   --mount "type=volume,source=$SNAP,target=/backup" \
   --mount "type=bind,source=$REPO/deploy/momentum/backup_volume.py,target=/tmp/backup.py,readonly" \
   --entrypoint python "$IMAGE" /tmp/backup.py >/dev/null
