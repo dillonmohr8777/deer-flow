@@ -65,7 +65,40 @@ describe("ApprovalsBody", () => {
     mocks.approve.mockClear();
     mocks.reject.mockClear();
   });
-  afterEach(cleanup);
+  afterEach(() => {
+    cleanup();
+    rs.restoreAllMocks();
+  });
+
+  it("opens mobile detail and restores the proposal on Back", () => {
+    const media = window.matchMedia("(max-width: 63.999rem)");
+    rs.spyOn(window, "matchMedia").mockReturnValue({ ...media, matches: true });
+    render(<ApprovalsBody />);
+    const row = screen.getByRole("button", { name: /Tell the team/ });
+    fireEvent.click(row);
+    expect(document.activeElement).toBe(
+      screen.getByRole("region", { name: "Approval detail" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Back to proposed actions" }),
+    );
+    expect(document.activeElement).toBe(row);
+    expect(
+      row.closest("[data-mobile-view]")?.getAttribute("data-mobile-view"),
+    ).toBe("list");
+  });
+
+  it("keeps editor focus when the selected approval refreshes", () => {
+    const media = window.matchMedia("(max-width: 63.999rem)");
+    rs.spyOn(window, "matchMedia").mockReturnValue({ ...media, matches: true });
+    const { rerender } = render(<ApprovalsBody />);
+    fireEvent.click(screen.getByRole("button", { name: /Tell the team/ }));
+    const message = screen.getByLabelText("Message");
+    message.focus();
+    mocks.rows = [approval({ updated_at: "2026-10-05T11:00:00Z" })];
+    rerender(<ApprovalsBody />);
+    expect(document.activeElement).toBe(message);
+  });
 
   it("defaults to the pending filter and lists proposals", () => {
     render(<ApprovalsBody />);

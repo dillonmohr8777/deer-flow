@@ -74,6 +74,7 @@ function createWorker() {
 
   runInNewContext(source, {
     Request,
+    Response,
     URL,
     Map,
     self: {
@@ -315,6 +316,61 @@ describe("MomoBot public-only service worker", () => {
     await expect(
       worker.request("/api/v1/auth/me", { navigation: true }),
     ).rejects.toThrow("offline");
+  });
+
+  it("returns offline retry to the exact requested path and query without caching it", async () => {
+    const worker = createWorker();
+    worker.setFetcher(async (request) =>
+      responseFor(request.url, '<a href="/workspace">Try again</a>'),
+    );
+    await worker.lifecycle("install");
+    worker.setFetcher(async () => {
+      throw new Error("offline");
+    });
+    const response = await worker.request(
+      "/workspace/chats/private-thread?project=alpha&filter=recent",
+      { navigation: true },
+    );
+    expect(await response.text()).toContain(
+      `href="${ORIGIN}/workspace/chats/private-thread?project=alpha&amp;filter=recent"`,
+    );
+    expect(worker.writes).toHaveLength(PUBLIC_PATHS.length);
+  });
+
+  it("preserves replacement tokens in offline retry URLs", async () => {
+    const worker = createWorker();
+    worker.setFetcher(async (request) =>
+      responseFor(request.url, '<a href="/workspace">Try again</a>'),
+    );
+    await worker.lifecycle("install");
+    worker.setFetcher(async () => {
+      throw new Error("offline");
+    });
+    const response = await worker.request("/workspace/chats/demo?q=$&x=$$100", {
+      navigation: true,
+    });
+    expect(await response.text()).toBe(
+      `<a href="${ORIGIN}/workspace/chats/demo?q=$&amp;x=$$100">Try again</a>`,
+    );
+    expect(worker.writes).toHaveLength(PUBLIC_PATHS.length);
+  });
+
+  it("keeps a double-slash retry path on the app origin", async () => {
+    const worker = createWorker();
+    worker.setFetcher(async (request) =>
+      responseFor(request.url, '<a href="/workspace">Try again</a>'),
+    );
+    await worker.lifecycle("install");
+    worker.setFetcher(async () => {
+      throw new Error("offline");
+    });
+    const response = await worker.request(`${ORIGIN}//other.example/retry`, {
+      navigation: true,
+    });
+    expect(await response.text()).toContain(
+      `href="${ORIGIN}//other.example/retry"`,
+    );
+    expect(worker.writes).toHaveLength(PUBLIC_PATHS.length);
   });
 
   it("fails closed when the generic offline cache has been evicted", async () => {

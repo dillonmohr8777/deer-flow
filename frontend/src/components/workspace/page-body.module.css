@@ -318,7 +318,7 @@
 }
 
 .filter {
-  min-height: 2rem;
+  min-height: 2.75rem;
   padding: 0 0.625rem;
   border-radius: 6px;
   color: var(--muted-foreground);

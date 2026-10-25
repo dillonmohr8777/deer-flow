@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, rs } from "@rstest/core";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 
@@ -21,6 +22,8 @@ const mocks = rs.hoisted(() => ({
   openai: false,
   agents: true,
   brandKit: true,
+  agentsLoading: false,
+  agentName: "momobot-max",
 }));
 
 rs.mock("@/components/workspace/settings", () => ({
@@ -48,9 +51,23 @@ rs.mock("@/core/features", () => ({
     isLoading: false,
   }),
 }));
+rs.mock("@/core/agents/hooks", () => ({
+  useAgentsApiEnabled: () => ({ enabled: mocks.agents, isLoading: false }),
+  useAgents: () => ({
+    agents: mocks.agentsLoading
+      ? []
+      : [{ name: mocks.agentName, builtin: false }],
+    isLoading: mocks.agentsLoading,
+  }),
+}));
 rs.mock("@/core/agents", () => ({
   useAgentsApiEnabled: () => ({ enabled: mocks.agents, isLoading: false }),
-  useAgents: () => ({ agents: [{ name: "momobot-max" }], isLoading: false }),
+  useAgents: () => ({
+    agents: mocks.agentsLoading
+      ? []
+      : [{ name: mocks.agentName, builtin: false }],
+    isLoading: mocks.agentsLoading,
+  }),
 }));
 rs.mock("@/core/board", () => ({ useBoardThreads: () => ({ data: [] }) }));
 rs.mock("@/components/workspace/workspace-selector", () => ({
@@ -65,12 +82,17 @@ function user(role: User["system_role"]): User {
 }
 
 function renderAs(role: User["system_role"], children: ReactNode) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
   return render(
-    <I18nProvider initialLocale={DEFAULT_LOCALE}>
-      <AuthProvider initialUser={user(role)}>
-        <SidebarProvider>{children}</SidebarProvider>
-      </AuthProvider>
-    </I18nProvider>,
+    <QueryClientProvider client={queryClient}>
+      <I18nProvider initialLocale={DEFAULT_LOCALE}>
+        <AuthProvider initialUser={user(role)}>
+          <SidebarProvider>{children}</SidebarProvider>
+        </AuthProvider>
+      </I18nProvider>
+    </QueryClientProvider>,
   );
 }
 
@@ -89,6 +111,8 @@ beforeEach(() => {
   mocks.openai = false;
   mocks.agents = true;
   mocks.brandKit = true;
+  mocks.agentsLoading = false;
+  mocks.agentName = "momobot-max";
 });
 afterEach(cleanup);
 
@@ -165,6 +189,22 @@ describe("the client sidebar", () => {
       "/workspace/chats",
       "/daily",
     ]);
+  });
+
+  it("keeps client entry neutral until agent discovery finishes", () => {
+    mocks.agentsLoading = true;
+    const { container, unmount } = renderAs("client", <WorkspaceHeader />);
+    expect(hrefs(container)).toContain("/workspace/chats/new");
+    expect(hrefs(container)).not.toContain(
+      "/workspace/agents/momobot-max/chats/new",
+    );
+    unmount();
+    mocks.agentsLoading = false;
+    mocks.agentName = "dedicated-agent";
+    const loaded = renderAs("client", <WorkspaceHeader />);
+    expect(hrefs(loaded.container)).toContain(
+      "/workspace/agents/dedicated-agent/chats/new",
+    );
   });
 
   it("sends New chat and the logo to the chat with MomoBot Max", () => {
