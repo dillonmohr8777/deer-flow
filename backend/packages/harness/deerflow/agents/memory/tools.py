@@ -23,13 +23,13 @@ from langchain.tools import tool
 
 from deerflow.agents.memory.admission import memory_access_allowed
 from deerflow.agents.memory.manager import get_memory_manager
-from deerflow.runtime.user_context import resolve_runtime_user_id
+from deerflow.agents.memory.scope import resolve_memory_scope
 from deerflow.tools.types import Runtime
 
 logger = logging.getLogger(__name__)
 
 
-def _resolve_scope(runtime: Runtime | None = None) -> tuple[str | None, str]:
+def _resolve_scope(runtime: Runtime | None = None) -> tuple[str | None, str | None]:
     """Resolve agent_name and user_id for tool handler scope.
 
     Tool execution receives user and agent metadata through LangGraph runtime
@@ -40,7 +40,8 @@ def _resolve_scope(runtime: Runtime | None = None) -> tuple[str | None, str]:
     agent_name = None
     if isinstance(context, dict) and context.get("agent_name"):
         agent_name = str(context["agent_name"])
-    return agent_name, resolve_runtime_user_id(runtime)
+    scope = resolve_memory_scope(runtime, agent_name)
+    return agent_name, scope.user_id if scope else None
 
 
 def _memory_content_key(content: str) -> str:
@@ -73,6 +74,8 @@ def memory_search_tool(
     if not memory_access_allowed(runtime):
         return json.dumps({"error": "Workspace memory is unavailable for client accounts"})
     agent_name, user_id = _resolve_scope(runtime)
+    if user_id is None:
+        return json.dumps({"error": "Memory unavailable: trusted staff scope is missing"})
     try:
         results = get_memory_manager().search(
             query,
@@ -116,6 +119,8 @@ def memory_add_tool(
     if not memory_access_allowed(runtime):
         return json.dumps({"error": "Workspace memory is unavailable for client accounts"})
     agent_name, user_id = _resolve_scope(runtime)
+    if user_id is None:
+        return json.dumps({"error": "Memory unavailable: trusted staff scope is missing"})
     try:
         normalized_content = content.strip()
         if not normalized_content:
@@ -190,6 +195,8 @@ def memory_update_tool(
     if not memory_access_allowed(runtime):
         return json.dumps({"error": "Workspace memory is unavailable for client accounts"})
     agent_name, user_id = _resolve_scope(runtime)
+    if user_id is None:
+        return json.dumps({"error": "Memory unavailable: trusted staff scope is missing"})
     try:
         manager = get_memory_manager()
         try:
@@ -230,6 +237,8 @@ def memory_delete_tool(runtime: Runtime, fact_id: str) -> str:
     if not memory_access_allowed(runtime):
         return json.dumps({"error": "Workspace memory is unavailable for client accounts"})
     agent_name, user_id = _resolve_scope(runtime)
+    if user_id is None:
+        return json.dumps({"error": "Memory unavailable: trusted staff scope is missing"})
     try:
         manager = get_memory_manager()
         try:

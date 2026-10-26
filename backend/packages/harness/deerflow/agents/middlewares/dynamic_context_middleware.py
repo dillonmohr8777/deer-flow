@@ -59,9 +59,9 @@ from langchain_core.messages import HumanMessage, RemoveMessage, SystemMessage
 from langgraph.runtime import Runtime
 
 from deerflow.agents.memory.admission import memory_access_allowed
+from deerflow.agents.memory.scope import STAFF_MEMORY_PROVENANCE_KEY, resolve_memory_scope, trusted_scope_boundary
 from deerflow.projects.context import build_project_context_message, is_project_context_message, pinned_project_snapshot, project_context_insertion_index, render_documents_block, render_evidence_citation_instructions, render_project_block
 from deerflow.runtime.context_keys import CURRENT_RUN_PRE_EXISTING_MESSAGE_IDS_KEY
-from deerflow.runtime.user_context import resolve_runtime_user_id
 from deerflow.utils.messages import INJECTED_USER_MESSAGE_ID_SUFFIX, ORIGINAL_USER_CONTENT_KEY, strip_injected_user_message_id_suffix
 
 if TYPE_CHECKING:
@@ -436,12 +436,13 @@ class DynamicContextMiddleware(AgentMiddleware):
         """
         from deerflow.agents.lead_agent.prompt import _get_memory_context
 
-        injection_enabled = self._memory_enabled and memory_access_allowed(runtime) and (self._app_config.memory.injection_enabled if self._app_config else True)
+        scope = resolve_memory_scope(runtime, self._agent_name)
+        injection_enabled = self._memory_enabled and memory_access_allowed(runtime) and scope is not None and (self._app_config.memory.injection_enabled if self._app_config else True)
         memory_context = (
             _get_memory_context(
                 self._agent_name,
                 app_config=self._app_config,
-                user_id=resolve_runtime_user_id(runtime),
+                user_id=scope.user_id,
                 query=query,
             )
             if injection_enabled
@@ -459,21 +460,25 @@ class DynamicContextMiddleware(AgentMiddleware):
 
     def _disabled_memory_removals(self, messages: list, runtime: Runtime | None = None) -> list[RemoveMessage]:
         """Remove only frozen memory messages owned by this middleware."""
-        if self._memory_enabled and memory_access_allowed(runtime):
+        scope = resolve_memory_scope(runtime, self._agent_name)
+        enabled = self._memory_enabled and memory_access_allowed(runtime) and scope is not None
+        if enabled and not scope.isolated:
             return []
+        proven_scope = enabled and any(trusted_scope_boundary(message, scope, runtime) for message in messages)
 
         removals: list[RemoveMessage] = []
         for message in messages:
             message_id = str(message.id or "")
             if isinstance(message, HumanMessage) and message_id.endswith("__memory") and is_dynamic_context_reminder(message):
-                removals.append(RemoveMessage(id=message_id))
+                if not proven_scope or message.additional_kwargs.get(STAFF_MEMORY_PROVENANCE_KEY) != scope.user_id:
+                    removals.append(RemoveMessage(id=message_id))
         return removals
 
     def _read_failures_are_fatal(self, *, allow_io: bool = True, runtime: Runtime | None = None) -> bool | None:
         from deerflow.agents.memory import memory_read_failures_are_fatal
         from deerflow.config.memory_config import get_memory_config
 
-        if not self._memory_enabled or not memory_access_allowed(runtime):
+        if not self._memory_enabled or not memory_access_allowed(runtime) or resolve_memory_scope(runtime, self._agent_name) is None:
             return False
         if self._app_config is None and not allow_io:
             return None  # get_memory_config() may reload config.yaml from disk.
@@ -497,6 +502,7 @@ class DynamicContextMiddleware(AgentMiddleware):
         memory_content: str | None = None,
         *,
         reminder_date: str | None = None,
+        memory_scope: str | None = None,
     ) -> list[SystemMessage | HumanMessage]:
         """Return messages using the ID-swap technique.
 
@@ -522,6 +528,8 @@ class DynamicContextMiddleware(AgentMiddleware):
         }
         if reminder_date is not None:
             reminder_kwargs[_REMINDER_DATE_KEY] = reminder_date
+        if memory_scope is not None:
+            reminder_kwargs[STAFF_MEMORY_PROVENANCE_KEY] = memory_scope
         messages.append(
             SystemMessage(
                 content=reminder_content,
@@ -538,6 +546,7 @@ class DynamicContextMiddleware(AgentMiddleware):
                     additional_kwargs={
                         "hide_from_ui": True,
                         _DYNAMIC_CONTEXT_REMINDER_KEY: True,
+                        **({STAFF_MEMORY_PROVENANCE_KEY: memory_scope} if memory_scope else {}),
                         **provenance_kwargs(ContentKind.MEMORY, "dynamic_context_memory"),
                     },
                 )
@@ -558,9 +567,16 @@ class DynamicContextMiddleware(AgentMiddleware):
         if not messages:
             return None
         memory_removals = self._disabled_memory_removals(messages, runtime)
+        scope = resolve_memory_scope(runtime, self._agent_name)
+        scope_key = scope.user_id if scope is not None and scope.isolated else None
 
         current_date = _format_current_date()
         last_date = _last_injected_date(messages)
+        last_boundary = next((message for message in reversed(messages) if isinstance(message, SystemMessage) and is_dynamic_context_reminder(message) and STAFF_MEMORY_PROVENANCE_KEY in message.additional_kwargs), None)
+        scope_changed = scope_key is not None and (last_boundary is None or not trusted_scope_boundary(last_boundary, scope, runtime))
+        # A legacy frozen block has no scope proof; replace it even on the same day.
+        if scope_changed or memory_removals and scope_key:
+            last_date = None
         logger.debug(
             "DynamicContextMiddleware._inject: msg_count=%d last_date=%r current_date=%r",
             len(messages),
@@ -589,7 +605,9 @@ class DynamicContextMiddleware(AgentMiddleware):
                 memory_block is not None,
                 messages[target_idx].id,
             )
-            result_msgs = self._make_reminder_and_user_messages(messages[target_idx], date_reminder, memory_block, reminder_date=current_date)
+            result_msgs = self._make_reminder_and_user_messages(messages[target_idx], date_reminder, memory_block, reminder_date=current_date, memory_scope=scope_key)
+            if scope_key:
+                scope.boundary_ids.add(result_msgs[0].id)
             return {"messages": [*memory_removals, *result_msgs]}
 
         if last_date == current_date:
@@ -601,7 +619,9 @@ class DynamicContextMiddleware(AgentMiddleware):
         if last_human_idx is None:
             return {"messages": memory_removals} if memory_removals else None
 
-        result_msgs = self._make_reminder_and_user_messages(messages[last_human_idx], self._build_date_update_reminder(), reminder_date=current_date)
+        result_msgs = self._make_reminder_and_user_messages(messages[last_human_idx], self._build_date_update_reminder(), reminder_date=current_date, memory_scope=scope_key)
+        if scope_key:
+            scope.boundary_ids.add(result_msgs[0].id)
         logger.info("DynamicContextMiddleware: midnight crossing detected — injected date update before current turn")
         return {"messages": [*memory_removals, *result_msgs]}
 
@@ -696,6 +716,9 @@ class DynamicContextMiddleware(AgentMiddleware):
         """
         if not self._memory_enabled or not memory_access_allowed(runtime):
             return None
+        scope = resolve_memory_scope(runtime, self._agent_name)
+        if scope is None:
+            return None
         context = getattr(runtime, "context", None)
         raw_pre_existing_ids = context.get(CURRENT_RUN_PRE_EXISTING_MESSAGE_IDS_KEY) if isinstance(context, dict) else None
         pre_existing_ids = {str(message_id) for message_id in raw_pre_existing_ids if message_id} if isinstance(raw_pre_existing_ids, (frozenset, set, list, tuple)) else set()
@@ -704,6 +727,8 @@ class DynamicContextMiddleware(AgentMiddleware):
                 continue
             message_id = str(message.id or "")
             if not message_id.endswith("__memory") or not is_dynamic_context_reminder(message) or not isinstance(message.content, str):
+                continue
+            if scope.isolated and message.additional_kwargs.get(STAFF_MEMORY_PROVENANCE_KEY) != scope.user_id:
                 continue
             if message_id in pre_existing_ids or message_id == self._injected_memory_message_id:
                 return message

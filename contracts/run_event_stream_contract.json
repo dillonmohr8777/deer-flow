@@ -112,11 +112,11 @@
       "category": "outputs",
       "producer": "RunJournal.on_chain_end(parent_run_id=None)",
       "content_schema": true,
-      "content_description": "Opaque root graph outputs as supplied by LangGraph. Values nested inside the output may have backend-dependent representations when they are not directly JSON serializable.",
+      "content_description": "Root graph outputs serialized by RunJournal before storage (LangChain messages as model_dump dicts), with private staff memory (<id>__memory messages and scope keys) removed.",
       "storage_semantics": {
-        "memory": "Retains the original Python container and nested values.",
-        "jsonl": "Persists JSON with json.dumps(default=str), so nested non-JSON values are restored as strings.",
-        "database": "Persists the top-level payload as JSON text with json.dumps(default=str), then restores the JSON container on read; nested non-JSON values remain strings."
+        "memory": "Retains the serialized, scrubbed JSON-safe container.",
+        "jsonl": "Persists the serialized, scrubbed container with json.dumps(default=str); messages restore as dicts.",
+        "database": "Persists the serialized, scrubbed payload as JSON text, then restores the JSON container on read; messages restore as dicts."
       },
       "metadata_schema": {
         "type": "object",

@@ -61,6 +61,8 @@ class SummarizationEvent:
     thread_id: str | None
     agent_name: str | None
     runtime: Runtime
+    # Original chronology before partition/rescue; never reconstruct from partitions.
+    original_messages: tuple[AnyMessage, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -668,6 +670,7 @@ class DeerFlowSummarizationMiddleware(SummarizationMiddleware):
         so it can be reported distinctly from "nothing to compact"; the automatic path
         leaves it False and swallows the failure, retrying on a later triggered turn.
         """
+        original_messages = tuple(state["messages"])
         prepared = self._prepare_compaction(state, force=force)
         if prepared is None:
             return None
@@ -682,7 +685,7 @@ class DeerFlowSummarizationMiddleware(SummarizationMiddleware):
         # messages into durable memory for a summary that never materializes would
         # duplicate that work on the next attempt. Messages are still removed after
         # this returns (in _maybe_summarize), so hooks run before they are gone.
-        self._fire_hooks(messages_to_summarize, preserved_messages, runtime)
+        self._fire_hooks(messages_to_summarize, preserved_messages, runtime, original_messages=original_messages)
         self._record_compaction(
             source_content_hashes,
             summary=summary,
@@ -711,6 +714,7 @@ class DeerFlowSummarizationMiddleware(SummarizationMiddleware):
         raise_on_failure: bool = False,
     ) -> ContextCompactionResult | None:
         """Async counterpart of :meth:`compact_state` (see it for ``raise_on_failure``)."""
+        original_messages = tuple(state["messages"])
         prepared = self._prepare_compaction(state, force=force)
         if prepared is None:
             return None
@@ -728,7 +732,7 @@ class DeerFlowSummarizationMiddleware(SummarizationMiddleware):
                 raise SummaryGenerationError("summary generation failed")
             return None
         # Fire hooks only once a replacement summary exists (see compact_state).
-        self._fire_hooks(messages_to_summarize, preserved_messages, runtime)
+        self._fire_hooks(messages_to_summarize, preserved_messages, runtime, original_messages=original_messages)
         self._record_compaction(
             source_content_hashes,
             summary=summary,
@@ -814,6 +818,8 @@ class DeerFlowSummarizationMiddleware(SummarizationMiddleware):
         messages_to_summarize: list[AnyMessage],
         preserved_messages: list[AnyMessage],
         runtime: Runtime,
+        *,
+        original_messages: tuple[AnyMessage, ...] = (),
     ) -> None:
         if not self._before_summarization_hooks:
             return
@@ -824,6 +830,7 @@ class DeerFlowSummarizationMiddleware(SummarizationMiddleware):
             thread_id=_resolve_thread_id(runtime),
             agent_name=_resolve_agent_name(runtime),
             runtime=runtime,
+            original_messages=original_messages,
         )
 
         for hook in self._before_summarization_hooks:

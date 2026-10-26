@@ -11,8 +11,9 @@ from langgraph.runtime import Runtime
 
 from deerflow.agents.memory import get_memory_manager
 from deerflow.agents.memory.admission import memory_access_allowed
+from deerflow.agents.memory.manager import capture_owner_kwargs
+from deerflow.agents.memory.scope import resolve_memory_scope, scoped_capture_messages
 from deerflow.config.memory_config import get_memory_config
-from deerflow.runtime.user_context import resolve_runtime_user_id
 from deerflow.trace_context import DEERFLOW_TRACE_METADATA_KEY, resolve_trace_id
 
 if TYPE_CHECKING:
@@ -51,7 +52,7 @@ class MemoryMiddleware(AgentMiddleware[MemoryMiddlewareState]):
         self._agent_name = agent_name
         self._memory_config = memory_config
 
-    def _resolve_add_args(self, state: MemoryMiddlewareState, runtime: Runtime) -> tuple[str, list, str, str] | None:
+    def _resolve_add_args(self, state: MemoryMiddlewareState, runtime: Runtime) -> tuple[str, list, str, str, str | None] | None:
         """Resolve one write request without invoking the manager."""
         if not memory_access_allowed(runtime):
             return None
@@ -77,7 +78,13 @@ class MemoryMiddleware(AgentMiddleware[MemoryMiddlewareState]):
         # Capture user_id at enqueue time while the request context is still alive.
         # threading.Timer fires on a different thread where ContextVar values are not
         # propagated, so we must store user_id explicitly in ConversationContext.
-        user_id = resolve_runtime_user_id(runtime)
+        scope = resolve_memory_scope(runtime, self._agent_name)
+        if scope is None:
+            return None
+        user_id = scope.user_id
+        messages = scoped_capture_messages(messages, scope, runtime)
+        if not messages:
+            return None
         # The memory update fires on a threading.Timer thread that inherits no
         # ContextVars, so the id is captured here, while the request context is
         # still alive, and carried as data. The runtime context is authoritative
@@ -86,7 +93,7 @@ class MemoryMiddleware(AgentMiddleware[MemoryMiddlewareState]):
         runtime_context = runtime.context if isinstance(runtime.context, dict) else {}
         trace_id = resolve_trace_id(runtime_context.get(DEERFLOW_TRACE_METADATA_KEY))
 
-        return thread_id, messages, user_id, trace_id
+        return thread_id, messages, user_id, trace_id, scope.storage_user_id
 
     @override
     def after_agent(self, state: MemoryMiddlewareState, runtime: Runtime) -> dict | None:
@@ -94,16 +101,18 @@ class MemoryMiddleware(AgentMiddleware[MemoryMiddlewareState]):
         add_args = self._resolve_add_args(state, runtime)
         if add_args is None:
             return None
-        thread_id, messages, user_id, trace_id = add_args
+        thread_id, messages, user_id, trace_id, storage_owner_user_id = add_args
 
         # Hand raw messages to the manager; the backend filters to user + final-AI
         # turns, validates, detects correction/reinforcement, and enqueues.
-        get_memory_manager().add(
+        manager = get_memory_manager()
+        manager.add(
             thread_id,
             messages,
             agent_name=self._agent_name,
             user_id=user_id,
             trace_id=trace_id,
+            **capture_owner_kwargs(manager.add, storage_owner_user_id),
         )
 
         return None
@@ -114,7 +123,7 @@ class MemoryMiddleware(AgentMiddleware[MemoryMiddlewareState]):
         add_args = self._resolve_add_args(state, runtime)
         if add_args is None:
             return None
-        thread_id, messages, user_id, trace_id = add_args
+        thread_id, messages, user_id, trace_id, storage_owner_user_id = add_args
         manager = await asyncio.to_thread(get_memory_manager)
         await manager.aadd(
             thread_id,
@@ -122,5 +131,6 @@ class MemoryMiddleware(AgentMiddleware[MemoryMiddlewareState]):
             agent_name=self._agent_name,
             user_id=user_id,
             trace_id=trace_id,
+            **capture_owner_kwargs(manager.aadd, storage_owner_user_id),
         )
         return None

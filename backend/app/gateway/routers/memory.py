@@ -9,9 +9,11 @@ from pydantic import BaseModel, Field, field_validator
 from app.gateway.authz import resource_permission_dependency
 from app.gateway.internal_auth import get_trusted_internal_owner_user_id
 from deerflow.agents.memory import MemoryConflictError, MemoryCorruptionError, MemoryManager, get_memory_manager
+from deerflow.agents.memory.scope import MemoryScope, private_memory_scope
+from deerflow.agents.memory.scope import momo_memory_enabled as _momo_memory_enabled
 from deerflow.config.memory_config import get_memory_config
 from deerflow.config.paths import make_safe_user_id
-from deerflow.runtime.user_context import get_effective_user_id
+from deerflow.runtime.user_context import get_current_user, get_effective_user_id, get_storage_context
 
 
 async def _staff_memory_only(request: Request):
@@ -19,31 +21,62 @@ async def _staff_memory_only(request: Request):
 
     if await is_client_contact(await request_user(request)):
         raise HTTPException(403, "Client memory is available only through your private Momo conversation")
+    if _momo_memory_enabled() and get_trusted_internal_owner_user_id(request):
+        from app.gateway.services import resolve_trusted_internal_owner_for_attribution
+
+        workspace = get_storage_context()
+        if workspace is None or workspace.actor_user_id != getattr(request.state, "actor_user_id", None):
+            raise HTTPException(403, "Delegated memory requires a verified owner and workspace")
+        owner = await resolve_trusted_internal_owner_for_attribution(request, workspace.actor_user_id)
+        if owner is None or str(owner.id) != workspace.actor_user_id:
+            raise HTTPException(403, "Delegated memory owner could not be verified")
+        request.state.staff_memory_scope = _private_memory_scope(owner, workspace)
+    # Resolve (and 403) once here; routes reuse the cached args.
+    request.state.memory_scope_args = _memory_scope_args(request)
 
 
 router = APIRouter(prefix="/api", tags=["memory"], dependencies=[Depends(resource_permission_dependency("threads")), Depends(_staff_memory_only)])
 
 
 def _resolve_memory_user_id(request: Request) -> str:
-    """Resolve the memory owner for this request.
+    """Settings manage only the caller's private, unbound Max memory.
 
-    Honors the trusted internal owner header that channel workers attach when
-    acting for a connection owner, so an IM ``/memory`` command reads the bound
-    owner's memory instead of the synthetic internal user. The header is only
-    honored after ``AuthMiddleware`` validated the internal token (see
-    ``get_trusted_internal_owner_user_id``). Browser/API callers are never
-    internal, so this falls back to the normal contextvar-based effective user.
-
-    The trusted owner header carries the *raw* owner id, so sanitize it through
-    ``make_safe_user_id`` (the same normalization the channel file pipeline applies
-    via ``_safe_user_id_for_run``/``prepare_user_dir_for_raw_id``). This keeps the
-    memory bucket aligned with the owner's file/upload bucket and avoids a 500 when
-    the raw id contains characters ``_validate_user_id`` would reject.
+    Client/workspace/agent query parameters never select a namespace. An IM
+    owner header alone cannot establish the active workspace and account role.
     """
-    raw_owner = get_trusted_internal_owner_user_id(request)
-    if raw_owner:
-        return make_safe_user_id(raw_owner)
-    return get_effective_user_id()
+    owner = get_trusted_internal_owner_user_id(request)
+    if not _momo_memory_enabled():
+        return make_safe_user_id(owner) if owner else get_effective_user_id()
+    if owner:
+        scope, workspace = getattr(request.state, "staff_memory_scope", None), get_storage_context()
+        if (
+            not isinstance(scope, MemoryScope)
+            or workspace is None
+            or (scope.actor_user_id, scope.organization_id, scope.storage_user_id, scope.organization_role) != (workspace.actor_user_id, workspace.organization_id, workspace.storage_user_id, workspace.role)
+        ):
+            raise HTTPException(403, "Delegated memory requires a verified owner and workspace")
+        return scope.user_id
+    user = getattr(getattr(request, "state", None), "user", None) or get_current_user()
+    workspace = get_storage_context()
+    if user is None:
+        return get_effective_user_id()  # Generic auth-disabled DeerFlow mode.
+    scope = _private_memory_scope(user, workspace)
+    if scope is None or workspace is not None and workspace.actor_user_id != str(user.id):
+        raise HTTPException(403, "Memory management requires a trusted staff workspace")
+    return scope.user_id
+
+
+def _private_memory_scope(user: object, workspace: object | None) -> MemoryScope | None:
+    return private_memory_scope(user, workspace, agent_name="momobot-max")
+
+
+def _memory_scope_args(request: Request) -> dict:
+    state = getattr(request, "state", None)
+    cached = getattr(state, "memory_scope_args", None)
+    if isinstance(cached, dict):
+        return cached
+    user = getattr(state, "user", None) or get_current_user()
+    return {"user_id": _resolve_memory_user_id(request), **({"agent_name": "momobot-max"} if user and _momo_memory_enabled() else {})}
 
 
 class ContextSection(BaseModel):
@@ -158,7 +191,7 @@ def _unsupported_501(manager: object, label: str) -> HTTPException:
     )
 
 
-async def _get_memory_or_501(manager: MemoryManager, user_id: str, label: str) -> dict[str, Any]:
+async def _get_memory_or_501(manager: MemoryManager, scope_args: dict, label: str) -> dict[str, Any]:
     """Read the full memory doc; 501 if the backend doesn't expose one.
 
     ``get_memory`` is tier-2 (default ``raise NotImplementedError``); a minimal
@@ -169,7 +202,7 @@ async def _get_memory_or_501(manager: MemoryManager, user_id: str, label: str) -
     endpoint's verb, e.g. "get memory" / "export memory" / "reload memory").
     """
     try:
-        return await asyncio.to_thread(manager.get_memory, user_id=user_id)
+        return await asyncio.to_thread(manager.get_memory, **scope_args)
     except NotImplementedError:
         raise _unsupported_501(manager, label) from None
     except (MemoryConflictError, MemoryCorruptionError) as exc:
@@ -252,7 +285,7 @@ async def get_memory(http_request: Request) -> MemoryResponse:
         ```
     """
     manager = await asyncio.to_thread(get_memory_manager)
-    memory_data = await _get_memory_or_501(manager, _resolve_memory_user_id(http_request), "get memory")
+    memory_data = await _get_memory_or_501(manager, _memory_scope_args(http_request), "get memory")
     return MemoryResponse(**memory_data)
 
 
@@ -272,10 +305,10 @@ async def reload_memory(http_request: Request) -> MemoryResponse:
     Returns:
         The reloaded memory data.
     """
-    user_id = _resolve_memory_user_id(http_request)
+    scope_args = _memory_scope_args(http_request)
     manager = await asyncio.to_thread(get_memory_manager)
     try:
-        memory_data = await asyncio.to_thread(manager.reload_memory, user_id=user_id)
+        memory_data = await asyncio.to_thread(manager.reload_memory, **scope_args)
     except NotImplementedError:
         # Non-DeerMem backends have no reload concept; fall back to get_memory
         # (read-only refresh, so degrading is safe and still useful -- vs fact
@@ -283,7 +316,7 @@ async def reload_memory(http_request: Request) -> MemoryResponse:
         # would hide data loss). If get_memory is also unsupported (a minimal
         # backend with no full doc), surface 501 rather than a raw 500: reads
         # degrade only when there is a doc to degrade to.
-        memory_data = await _get_memory_or_501(manager, user_id, "reload memory")
+        memory_data = await _get_memory_or_501(manager, scope_args, "reload memory")
     except (MemoryConflictError, MemoryCorruptionError) as exc:
         raise _map_memory_manager_error(exc) from exc
     return MemoryResponse(**memory_data)
@@ -300,7 +333,7 @@ async def clear_memory(http_request: Request) -> MemoryResponse:
     """Clear all persisted memory data."""
     manager = await asyncio.to_thread(get_memory_manager)
     try:
-        memory_data = await asyncio.to_thread(manager.clear_memory, user_id=_resolve_memory_user_id(http_request))
+        memory_data = await asyncio.to_thread(manager.clear_memory, **_memory_scope_args(http_request))
     except NotImplementedError:
         raise _unsupported_501(manager, "clear memory") from None
     except (MemoryConflictError, MemoryCorruptionError) as exc:
@@ -327,7 +360,7 @@ async def create_memory_fact_endpoint(request: FactCreateRequest, http_request: 
             content=request.content,
             category=request.category,
             confidence=request.confidence,
-            user_id=_resolve_memory_user_id(http_request),
+            **_memory_scope_args(http_request),
         )
     except NotImplementedError:
         raise _unsupported_501(manager, "create fact") from None
@@ -355,7 +388,7 @@ async def delete_memory_fact_endpoint(fact_id: str, http_request: Request) -> Me
     """Delete a single fact from memory by fact id."""
     manager = await asyncio.to_thread(get_memory_manager)
     try:
-        memory_data = await asyncio.to_thread(manager.delete_fact, fact_id, user_id=_resolve_memory_user_id(http_request))
+        memory_data = await asyncio.to_thread(manager.delete_fact, fact_id, **_memory_scope_args(http_request))
     except NotImplementedError:
         raise _unsupported_501(manager, "delete fact") from None
     except KeyError as exc:
@@ -385,7 +418,7 @@ async def update_memory_fact_endpoint(fact_id: str, request: FactPatchRequest, h
             content=request.content,
             category=request.category,
             confidence=request.confidence,
-            user_id=_resolve_memory_user_id(http_request),
+            **_memory_scope_args(http_request),
         )
     except NotImplementedError:
         raise _unsupported_501(manager, "update fact") from None
@@ -411,7 +444,7 @@ async def update_memory_fact_endpoint(fact_id: str, request: FactPatchRequest, h
 async def export_memory(http_request: Request) -> MemoryResponse:
     """Export the current memory data."""
     manager = await asyncio.to_thread(get_memory_manager)
-    memory_data = await _get_memory_or_501(manager, _resolve_memory_user_id(http_request), "export memory")
+    memory_data = await _get_memory_or_501(manager, _memory_scope_args(http_request), "export memory")
     return MemoryResponse(**memory_data)
 
 
@@ -429,7 +462,7 @@ async def import_memory(request: MemoryResponse, http_request: Request) -> Memor
         memory_data = await asyncio.to_thread(
             manager.import_memory,
             request.model_dump(exclude_none=True),
-            user_id=_resolve_memory_user_id(http_request),
+            **_memory_scope_args(http_request),
         )
     except NotImplementedError:
         raise _unsupported_501(manager, "import memory") from None
@@ -505,7 +538,7 @@ async def get_memory_status(http_request: Request) -> MemoryStatusResponse:
     """
     config = get_memory_config()
     manager = await asyncio.to_thread(get_memory_manager)
-    memory_data = await _get_memory_or_501(manager, _resolve_memory_user_id(http_request), "get memory status")
+    memory_data = await _get_memory_or_501(manager, _memory_scope_args(http_request), "get memory status")
 
     return MemoryStatusResponse(
         config=MemoryConfigResponse(

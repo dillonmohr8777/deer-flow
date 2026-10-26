@@ -26,18 +26,62 @@ Client accounts cannot read or change shared workspace memory through middleware
 compaction, frozen checkpoints, or explicit tools. Use the shared admission check
 with the authenticated account role, not the organization membership role.
 
-Resolve users with `resolve_runtime_user_id(runtime)` in middleware and tools.
-This keeps Gateway and standalone LangGraph runs in the same user scope.
+Gateway staff memory uses `scope.py::resolve_memory_scope` in recall, passive
+capture, summarization and tools. Its typed host binding includes actor, active
+organization/storage, account and membership role, admitted agent and the
+server-validated portal client (when bound). All dimensions enter the manager's
+`user_id`, isolating user-global summaries and backend caches as well as facts.
+The namespace is a storage key only; it never becomes a provider, profile or
+authenticated user identity. Generic non-Momo callers retain their existing
+`resolve_runtime_user_id` behavior. Max without trusted identity/role proof
+skips memory with a warning. Agent Server may establish a private actor scope
+from authenticated `server_info`/reserved auth data and a matching trusted
+workspace context; ordinary context IDs cannot establish one.
+
+Dynamic Context replaces frozen memory on a scope change, including unscoped
+legacy blocks. It stamps server-created date boundaries, and capture includes
+only messages after the last trusted current-scope boundary. Gateway strips
+incoming scope provenance; persisted message IDs or current-run creation prove
+the boundary. Manual Max compaction without that proof skips optional memory
+flush; normal validated private/client runs continue recalling and capturing.
+Summarization hooks receive the original ordered source snapshot before
+partition/rescue. Memory selects its trusted span there, then intersects the
+actual removed message objects; preserved reminders cannot be concatenated
+with removed messages to manufacture chronology.
+
+Scoped capture may carry optional `storage_owner_user_id` lifecycle metadata.
+DeerMem retains it only on its existing pending queue; it never enters updater,
+model/provider authentication or storage-key selection. Agent deletion cancels
+pending work by physical storage owner plus agent before/after deletion, leaving
+other owners/agents untouched. Legacy keyword-free backends keep their call
+contract; cancellation capability is optional. Already-processing work is not
+interrupted. Persisted scoped facts are retained, so same-name agent recreation
+can reuse that owner's prior facts until explicitly cleared/curated.
 
 Server-owned `langgraph_auth_user_id` takes precedence over ordinary client identity.
 Lead-agent construction normalizes it with `make_safe_user_id`.
 Memory, custom agents, user skills, skill policy, and prompt assembly reuse that identity.
 Gateway removes client-supplied `langgraph_auth_user` and `langgraph_auth_user_id` before graph construction.
 
-Gateway memory routes use `_resolve_memory_user_id(request)`.
-Trusted IM requests can act for the connection owner.
-Other requests use `get_effective_user_id()`.
-Only `AuthMiddleware` can authorize the internal owner header.
+Gateway memory routes manage only private unbound Max memory via
+`_resolve_memory_user_id(request)`, with the same scoped key and agent as chat.
+A delegation needs the actual staff owner resolved through the existing auth
+provider and the active verified workspace; the owner header alone cannot
+select legacy agency memory. Client and namespace query parameters grant no
+scope. Auth-disabled generic DeerFlow retains its default-user behavior.
+Max's Python SDK management methods reuse the same private-scope helper and
+require authenticated host actor/workspace context before accessing a manager.
+Generic non-Momo SDK methods retain their existing storage behavior.
+Momo onboarding uses this same private Max scope only after authenticated actor
+and active-workspace proof; unproven shared seeding skips rather than writing to
+a legacy team bucket.
+
+Mixed legacy workspace memory is retained and never auto-imported into staff
+scopes. Curation and any explicit migration require separate owner review and
+verified actor/client destinations. Approved shared procedures continue through
+existing scoped USER.md, project and SOP mechanisms; passive client conversation
+capture never writes an organization procedure bucket. Private Brain admission
+and the client-owned-agent memory ceiling are separate and unchanged.
 
 No-auth mode uses `DEFAULT_USER_ID`, which is `"default"`.
 An absolute `storage_path` opts out of the default per-user root.

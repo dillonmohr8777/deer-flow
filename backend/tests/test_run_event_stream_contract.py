@@ -341,11 +341,10 @@ async def test_run_end_backend_storage_semantics_match_contract(tmp_path):
     for event in (memory_event, jsonl_event, database_event):
         _assert_fixed_event_valid(event, persisted=True)
 
-    assert isinstance(memory_event["content"]["messages"][0], AIMessage)
-    assert isinstance(jsonl_event["content"]["messages"][0], str)
-    assert isinstance(database_event["content"]["messages"][0], str)
-    assert "final answer" in jsonl_event["content"]["messages"][0]
-    assert "final answer" in database_event["content"]["messages"][0]
+    # RunJournal serializes (and scrubs private memory) before storage, so every backend agrees.
+    for event in (memory_event, jsonl_event, database_event):
+        assert event["content"]["messages"][0]["content"] == "final answer"
+        assert event["content"]["messages"][0]["type"] == "ai"
 
 
 @pytest.mark.anyio

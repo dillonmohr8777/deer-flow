@@ -10,6 +10,7 @@ Consumers: ``deerflow.runtime.runs.worker`` (SSE publishing) and
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 
@@ -117,10 +118,76 @@ def serialize_channel_values_for_api(channel_values: dict[str, Any]) -> dict[str
     that return channel values to the frontend so that ``data:``-scheme
     base64 image payloads are never sent over the wire.
     """
-    result = serialize_channel_values(channel_values)
+    result = scrub_private_memory(serialize_channel_values(channel_values))
     if isinstance(result.get("messages"), list):
         result["messages"] = strip_data_url_image_blocks(result["messages"])
     return result
+
+
+# Mirror deerflow.agents.memory.scope's STAFF_MEMORY_PROVENANCE_KEY and STAFF_MEMORY_SCOPE_KEY
+# (runtime must not import agents): the scope hash and the run's scope binding.
+_PRIVATE_SCOPE_KEYS = frozenset({"deerflow_memory_scope", "__deerflow_staff_memory_scope"})
+
+
+# Rows persisted before write-time scrubbing hold messages as str(BaseMessage), e.g.
+# content='...' additional_kwargs={...} response_metadata={} id="customer's-input__memory".
+_SCOPE_IN_TEXT = re.compile(r"""(['"]?(?:__deerflow_staff_memory_scope|deerflow_memory_scope)['"]?\s*[:=]\s*)(['"])(?:(?!\2).){0,200}\2""")  # bounded: hashes are ~74 chars
+
+
+def _is_stringified_message(text: str) -> bool:
+    return text.startswith("content=") and " additional_kwargs=" in text
+
+
+def _stringified_message_id(text: str) -> str | None:
+    """The message's own id field: the trailing ``id=<quoted>`` token, not an id quoted in its body."""
+    body = text.rstrip()
+    if not body or body[-1] not in "'\"":
+        return None
+    start = body.rfind(" id=" + body[-1])
+    return body[start + 5 : -1] if start != -1 else None
+
+
+def _redact_memory_blocks(text: str) -> str:
+    """Linear scan; an unclosed <memory> block is redacted to the end of the text."""
+    parts, index = [], 0
+    while (start := text.find("<memory>", index)) != -1:
+        parts.append(text[index:start])
+        end = text.find("</memory>", start)
+        if end == -1:
+            parts.append("<memory>[redacted]")
+            return "".join(parts)
+        parts.append("<memory>[redacted]</memory>")
+        index = end + len("</memory>")
+    parts.append(text[index:])
+    return "".join(parts)
+
+
+def redact_private_memory_text(text: str) -> str:
+    """Redact <memory> blocks and scope hashes inside free text (error strings, legacy rows)."""
+    return _SCOPE_IN_TEXT.sub(r"\1\2[redacted]\2", _redact_memory_blocks(text))
+
+
+def _is_private_memory(value: Any) -> bool:
+    if isinstance(value, str):
+        return _is_stringified_message(value) and str(_stringified_message_id(value) or "").endswith("__memory")
+    return isinstance(value, dict) and "content" in value and str(value.get("id") or "").endswith("__memory")
+
+
+def scrub_private_memory(value: Any) -> Any:
+    """Drop ``<id>__memory`` reminders and staff scope hashes from serialized output.
+
+    The memory reminder carries one staff member's private memory and the scope
+    hash names their bucket; workspace teammates can read the same thread state
+    and stream, so neither may leave the server in any stream mode or snapshot.
+    A bare memory chunk (``messages`` mode) keeps its id but loses its content.
+    """
+    if isinstance(value, list):
+        return [redact_private_memory_text(item) if isinstance(item, str) and _is_stringified_message(item) else scrub_private_memory(item) for item in value if not _is_private_memory(item)]
+    if isinstance(value, dict):
+        if _is_private_memory(value):
+            return {**value, "content": "", "additional_kwargs": {}}
+        return {key: scrub_private_memory(item) for key, item in value.items() if key not in _PRIVATE_SCOPE_KEYS}
+    return value
 
 
 def serialize_messages_tuple(obj: Any) -> Any:
@@ -140,9 +207,13 @@ def serialize(obj: Any, *, mode: str = "") -> Any:
     * everything else — recursive ``model_dump()`` / ``dict()`` fallback
     """
     if mode == "messages":
-        return serialize_messages_tuple(obj)
-    if mode == "values":
+        frame = serialize_messages_tuple(obj)
+        if isinstance(frame, list) and len(frame) == 2:
+            # Keep the [chunk, metadata] shape; a private chunk is blanked, not removed.
+            return [scrub_private_memory(frame[0]), scrub_private_memory(frame[1])]
+        return scrub_private_memory(frame)
+    if mode == "values" and isinstance(obj, dict):
         # ``values`` snapshots stream the full state to the frontend, so they
         # must drop base64 image payloads the same way the REST endpoints do.
-        return serialize_channel_values_for_api(obj) if isinstance(obj, dict) else serialize_lc_object(obj)
-    return serialize_lc_object(obj)
+        return serialize_channel_values_for_api(obj)
+    return scrub_private_memory(serialize_lc_object(obj))

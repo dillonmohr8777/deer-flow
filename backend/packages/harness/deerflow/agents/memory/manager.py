@@ -16,6 +16,7 @@ do not impede pluggability.
 
 from __future__ import annotations
 
+import functools
 import importlib
 import inspect
 import logging
@@ -61,6 +62,22 @@ def context_query_kwargs(get_context: Callable[..., str], query: str | None) -> 
     if any(parameter.kind == inspect.Parameter.VAR_KEYWORD or (parameter.name == "query" and parameter.kind in (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)) for parameter in parameters):
         return {"query": query}
     return {}
+
+
+def capture_owner_kwargs(add: Callable[..., Any], storage_owner_user_id: str | None) -> dict[str, str]:
+    """Forward trusted lifecycle metadata only to compatible capture backends."""
+    if storage_owner_user_id is None or not _accepts_storage_owner(getattr(add, "__func__", add)):
+        return {}
+    return {"storage_owner_user_id": storage_owner_user_id}
+
+
+@functools.lru_cache(maxsize=128)
+def _accepts_storage_owner(add: Callable[..., Any]) -> bool:
+    try:
+        parameters = inspect.signature(add).parameters.values()
+    except (TypeError, ValueError):
+        return False
+    return any(parameter.kind == inspect.Parameter.VAR_KEYWORD or (parameter.name == "storage_owner_user_id" and parameter.kind in (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)) for parameter in parameters)
 
 
 class MemoryCallbacks:
@@ -255,6 +272,7 @@ class MemoryManager(BaseModel):
         agent_name: str | None = None,
         user_id: str | None = None,
         trace_id: str | None = None,
+        storage_owner_user_id: str | None = None,
     ) -> None:
         """Queue a conversation for memory update (debounced, asynchronous).
 
@@ -265,6 +283,8 @@ class MemoryManager(BaseModel):
             agent_name: Per-agent bucket; ``None`` = global memory.
             user_id: Per-user bucket.
             trace_id: Request trace id captured for memory-LLM tracing.
+            storage_owner_user_id: Trusted physical agent owner for pending-work
+                cancellation only; never provider/auth identity or memory bucket.
         """
 
     @abstractmethod
@@ -311,6 +331,7 @@ class MemoryManager(BaseModel):
         *,
         agent_name: str | None = None,
         user_id: str | None = None,
+        storage_owner_user_id: str | None = None,
     ) -> None:
         """Queue a conversation for *immediate* memory update (emergency flush).
 
@@ -319,7 +340,7 @@ class MemoryManager(BaseModel):
         (backends without a debounce queue override to enqueue with nowait
         priority).
         """
-        self.add(thread_id, messages, agent_name=agent_name, user_id=user_id)
+        self.add(thread_id, messages, agent_name=agent_name, user_id=user_id, **capture_owner_kwargs(self.add, storage_owner_user_id))
 
     def search(
         self,
@@ -412,6 +433,15 @@ class MemoryManager(BaseModel):
         """Import a memory document into the bucket; return the merged result.
         Default: unsupported."""
         raise NotImplementedError(f"import_memory not supported by {type(self).__name__}")
+
+    def cancel_by_storage_owner(self, agent_name: str, *, storage_owner_user_id: str) -> int:
+        """Cancel pending scoped capture for one physical agent owner.
+
+        Optional for backends with a pending queue. Owner metadata comes from
+        trusted host capture context, never by decoding a namespace string.
+        This neither clears persisted facts nor interrupts in-flight updates.
+        """
+        return 0
 
     def export_memory(
         self,
@@ -546,8 +576,9 @@ class MemoryManager(BaseModel):
         agent_name: str | None = None,
         user_id: str | None = None,
         trace_id: str | None = None,
+        storage_owner_user_id: str | None = None,
     ) -> None:
-        return self.add(thread_id, messages, agent_name=agent_name, user_id=user_id, trace_id=trace_id)
+        return self.add(thread_id, messages, agent_name=agent_name, user_id=user_id, trace_id=trace_id, **capture_owner_kwargs(self.add, storage_owner_user_id))
 
     async def aget_context(
         self,

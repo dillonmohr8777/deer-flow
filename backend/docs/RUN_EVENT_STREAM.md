@@ -154,19 +154,16 @@ loop.
 
 ### Opaque Run Outputs
 
-`run.end.content` is the root graph output and is intentionally opaque. Its
-nested representation is not currently identical across storage backends:
+`run.end.content` is the root graph output and is intentionally opaque.
+`RunJournal` serializes every dict or list event payload before storage
+(LangChain messages become `model_dump` dicts) and removes private staff memory:
+`<id>__memory` reminder messages and the staff scope keys. The stores therefore
+agree: memory keeps the serialized container, and JSONL and the database read
+the same JSON back. The run events API also drops `__memory` messages that older
+rows stored as stringified messages.
 
-- `MemoryRunEventStore` retains the original Python container and nested
-  values.
-- `JsonlRunEventStore` and `DbRunEventStore` serialize through
-  `json.dumps(default=str)`, so nested values that are not directly JSON
-  serializable are read back as strings.
-
-Consumers may use `run.end` as completion evidence, but must not depend on
-backend-identical nested output values. Normalizing those values would be a
-separate runtime compatibility change rather than part of this current-state
-contract.
+Consumers may use `run.end` as completion evidence, but should not depend on
+the shape of nested output values.
 
 `subagents/step_events.py::subagent_run_event()` maps streamed `task_*` chunks
 to persisted events. The worker batches them through `put_batch()`:
@@ -244,9 +241,9 @@ be used by new producers.
 - `run.end.metadata.status` is only a root graph completion marker and is
   always `success`. `RunRow.status` remains authoritative for lifecycle state,
   and worker loss may leave no terminal event.
-- Nested non-JSON values in `run.end.content` have backend-dependent
-  representations: memory retains Python values, while JSONL and database
-  stores read them back as strings.
+- `run.end.content` is serialized and scrubbed of private staff memory before
+  any store sees it; rows written before that change may hold stringified
+  messages.
 - Durable batch subagent loop detection, deferred-tool promotion, and
   tool-progress transitions do not emit middleware events because those runs
   have no parent run journal.

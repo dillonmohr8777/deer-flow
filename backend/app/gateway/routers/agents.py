@@ -933,7 +933,10 @@ def _cancel_pending_memory_for_agent(name: str, user_id: str | None) -> None:
     Callers must run this off the event loop (blocking config/manager I/O).
     """
     try:
-        cancelled = get_memory_manager().cancel_by_agent(name, user_id=user_id)
+        manager = get_memory_manager()
+        cancelled = manager.cancel_by_agent(name, user_id=user_id)
+        if user_id is not None:
+            cancelled += manager.cancel_by_storage_owner(name, storage_owner_user_id=user_id)
         if cancelled:
             logger.info(
                 "Cancelled %d pending memory update(s) for agent '%s'",
