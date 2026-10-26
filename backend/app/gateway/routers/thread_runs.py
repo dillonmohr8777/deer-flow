@@ -1899,15 +1899,26 @@ async def list_run_events(
         limit=limit,
         after_seq=after_seq,
     )
-    return [
-        {
-            **event,
-            "metadata": redact_metadata_secrets(event.get("metadata")),
-        }
-        if isinstance(event, dict) and "metadata" in event
-        else event
-        for event in events
-    ]
+    return _public_run_events(events)
+
+
+def _public_run_events(events: list) -> list:
+    """Redact metadata secrets and private staff memory (the run output keeps the __memory block)."""
+    from deerflow.runtime.serialization import scrub_private_memory, serialize_lc_object
+
+    return scrub_private_memory(
+        serialize_lc_object(
+            [
+                {
+                    **event,
+                    "metadata": redact_metadata_secrets(event.get("metadata")),
+                }
+                if isinstance(event, dict) and "metadata" in event
+                else event
+                for event in events
+            ]
+        )
+    )
 
 
 @router.get("/{thread_id}/runs/{run_id}/workspace-changes")

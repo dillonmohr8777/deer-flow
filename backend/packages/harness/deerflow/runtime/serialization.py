@@ -123,8 +123,9 @@ def serialize_channel_values_for_api(channel_values: dict[str, Any]) -> dict[str
     return result
 
 
-# Mirrors deerflow.agents.memory.scope.STAFF_MEMORY_PROVENANCE_KEY (runtime must not import agents).
-_MEMORY_SCOPE_KEY = "deerflow_memory_scope"
+# Mirror deerflow.agents.memory.scope's STAFF_MEMORY_PROVENANCE_KEY and STAFF_MEMORY_SCOPE_KEY
+# (runtime must not import agents): the scope hash and the run's scope binding.
+_PRIVATE_SCOPE_KEYS = frozenset({"deerflow_memory_scope", "__deerflow_staff_memory_scope"})
 
 
 def _is_private_memory(value: Any) -> bool:
@@ -144,7 +145,7 @@ def scrub_private_memory(value: Any) -> Any:
     if isinstance(value, dict):
         if _is_private_memory(value):
             return {**value, "content": "", "additional_kwargs": {}}
-        return {key: scrub_private_memory(item) for key, item in value.items() if key != _MEMORY_SCOPE_KEY}
+        return {key: scrub_private_memory(item) for key, item in value.items() if key not in _PRIVATE_SCOPE_KEYS}
     return value
 
 
@@ -165,7 +166,11 @@ def serialize(obj: Any, *, mode: str = "") -> Any:
     * everything else — recursive ``model_dump()`` / ``dict()`` fallback
     """
     if mode == "messages":
-        return scrub_private_memory(serialize_messages_tuple(obj))
+        frame = serialize_messages_tuple(obj)
+        if isinstance(frame, list) and len(frame) == 2:
+            # Keep the [chunk, metadata] shape; a private chunk is blanked, not removed.
+            return [scrub_private_memory(frame[0]), scrub_private_memory(frame[1])]
+        return scrub_private_memory(frame)
     if mode == "values" and isinstance(obj, dict):
         # ``values`` snapshots stream the full state to the frontend, so they
         # must drop base64 image payloads the same way the REST endpoints do.

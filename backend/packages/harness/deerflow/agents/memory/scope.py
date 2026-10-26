@@ -95,8 +95,10 @@ def _matches_active_identity(scope: MemoryScope, runtime: object | None) -> bool
             return False
     user = get_current_user()
     workspace = get_storage_context()
-    if user is not None:
-        role = getattr(user, "system_role", None)
+    role = getattr(user, "system_role", None)
+    # Delegated internal runs (scheduled tasks, IM) carry the gateway's role-less
+    # storage-principal user; the actor is proven by the scope and storage context.
+    if user is not None and role is not None:
         if str(user.id) != scope.actor_user_id or (role != scope.user_role and (role != "internal" or workspace is None)):
             return False
     return workspace is None or (workspace.actor_user_id, workspace.organization_id, workspace.storage_user_id, workspace.role) == (scope.actor_user_id, scope.organization_id, scope.storage_user_id, scope.organization_role)

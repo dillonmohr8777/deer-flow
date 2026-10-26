@@ -551,3 +551,27 @@ def test_generic_http_and_sdk_keep_existing_non_momo_scope(monkeypatch):
     sdk._agent_name = "researcher"
     monkeypatch.setattr("deerflow.client.get_effective_user_id", lambda: "generic-workspace")
     assert sdk._memory_scope_args() == {"user_id": "generic-workspace"}
+
+
+def test_delegated_run_with_synthetic_storage_owner_keeps_its_scope():
+    """Scheduled and IM runs carry the gateway's role-less storage-principal user."""
+    from types import SimpleNamespace
+
+    from deerflow.agents.memory.scope import STAFF_MEMORY_SCOPE_KEY, resolve_memory_scope, staff_memory_scope
+    from deerflow.runtime.user_context import AUTHENTICATED_CONTEXT_MARKER, AUTHENTICATED_CONTEXT_MARKER_KEY, WorkspaceStorageContext, reset_current_user, reset_storage_context, set_current_user, set_storage_context
+
+    context = {AUTHENTICATED_CONTEXT_MARKER_KEY: AUTHENTICATED_CONTEXT_MARKER, "actor_user_id": "am-a", "storage_user_id": "agency", "organization_id": "org-1", "organization_role": "member", "user_role": "user"}
+    scope = staff_memory_scope(context, agent_name="momobot-max")
+    runtime = SimpleNamespace(context={STAFF_MEMORY_SCOPE_KEY: scope})
+    storage_token = set_storage_context(WorkspaceStorageContext(actor_user_id="am-a", organization_id="org-1", storage_user_id="agency", role="member"))
+    user_token = set_current_user(SimpleNamespace(id="agency"))
+    try:
+        assert resolve_memory_scope(runtime, "momobot-max") is scope
+    finally:
+        reset_current_user(user_token)
+    other_token = set_current_user(SimpleNamespace(id="am-b", system_role="user"))
+    try:
+        assert resolve_memory_scope(runtime, "momobot-max") is None
+    finally:
+        reset_current_user(other_token)
+        reset_storage_context(storage_token)

@@ -81,3 +81,37 @@ def test_api_values_hide_the_scope_hash_on_the_visible_reminder():
     out = serialize_channel_values_for_api({"messages": [reminder]})
     assert "staff-v1-abc" not in str(out)
     assert out["messages"][0]["additional_kwargs"]["dynamic_context_reminder"] is True
+
+
+def test_stream_messages_mode_keeps_the_frame_shape():
+    from deerflow.runtime import serialize
+
+    memory = HumanMessage(id="r__memory", content="ZEBRA-41", additional_kwargs={"hide_from_ui": True})
+    out = serialize((memory, {"langgraph_node": "x"}), mode="messages")
+    assert isinstance(out, list) and len(out) == 2
+    assert out[0]["id"] == "r__memory" and out[0]["content"] == ""
+    assert out[1] == {"langgraph_node": "x"}
+    ai = serialize((AIMessage(id="a", content="ok"), {}), mode="messages")
+    assert ai[0]["content"] == "ok" and ai[1] == {}
+
+
+def test_debug_and_checkpoint_output_drop_the_staff_scope_binding():
+    from deerflow.agents.memory.scope import STAFF_MEMORY_SCOPE_KEY
+    from deerflow.runtime import serialize
+
+    scope = staff_memory_scope(_context("user", "member"), agent_name="momobot-max")
+    payload = {"type": "checkpoint", "payload": {"config": {"context": {STAFF_MEMORY_SCOPE_KEY: scope, "thread_id": "t"}}}}
+    out = serialize(payload, mode="debug")
+    assert scope.user_id not in str(out) and "staff-a" not in str(out)
+    assert out["payload"]["config"]["context"] == {"thread_id": "t"}
+
+
+def test_run_events_api_drops_private_memory_from_run_output():
+    from app.gateway.routers.thread_runs import _public_run_events
+
+    memory = HumanMessage(id="r__memory", content="ZEBRA-41", additional_kwargs={STAFF_MEMORY_PROVENANCE_KEY: "staff-v1-abc"})
+    events = [{"event_type": "run.end", "content": {"messages": [HumanMessage(id="u", content="hi"), memory, AIMessage(id="a", content="ok")]}, "metadata": {"status": "success"}}]
+    out = _public_run_events(events)
+    assert "ZEBRA-41" not in str(out) and "staff-v1-abc" not in str(out)
+    assert [m["id"] for m in out[0]["content"]["messages"]] == ["u", "a"]
+    assert out[0]["metadata"] == {"status": "success"}
