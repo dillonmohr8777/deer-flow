@@ -1015,8 +1015,10 @@ def _assemble_lead_agent(config: RunnableConfig, *, app_config: AppConfig) -> Le
 
     from deerflow.projects.access import matching_client_project_access
 
-    if agent_name == MOMOBOT_MAX_NAME and tool_names is not None and cfg.get("user_role") in {"user", "exec", "admin"} and not cfg.get("is_subagent") and not cfg.get("channel_name") and matching_client_project_access(cfg) is not None:
-        tool_names = [*tool_names, "list_project_documents", "read_project_document", "verify_quote"]
+    if agent_name == MOMOBOT_MAX_NAME and tool_names is not None and cfg.get("user_role") in {"user", "exec", "admin"} and not cfg.get("is_subagent") and not cfg.get("channel_name"):
+        tool_names = [*tool_names, "propose_action"]
+        if matching_client_project_access(cfg) is not None:
+            tool_names = [*tool_names, "list_project_documents", "read_project_document", "verify_quote"]
     public_news_channel = cfg.get("public_news_channel") is True
     if public_news_channel:
         if is_bootstrap or agent_name != "ai-tech-news" or agent_config is None:
@@ -1106,7 +1108,8 @@ def _assemble_lead_agent(config: RunnableConfig, *, app_config: AppConfig) -> Le
             "tool_groups": agent_config.tool_groups if agent_config else None,
             # Server-owned tool ceiling for delegated children (task/batch_task).
             # Always written, so a caller-supplied value never survives.
-            "tool_names": list(tool_names) if tool_names is not None else None,
+            # Max proposal filing belongs to the authenticated staff lead.
+            "tool_names": [name for name in tool_names if agent_name != MOMOBOT_MAX_NAME or name != "propose_action"] if tool_names is not None else None,
             "mcp_plugins": getattr(agent_config, "mcp_plugins", None),
             "available_skills": sorted(available_skills) if available_skills is not None else None,
             "allowed_subagents": list(allowed_subagents) if allowed_subagents is not None else None,

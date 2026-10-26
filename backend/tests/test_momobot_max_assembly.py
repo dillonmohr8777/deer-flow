@@ -64,7 +64,8 @@ async def test_only_host_bound_staff_client_project_adds_shelf_reads(monkeypatch
     shelf = {"list_project_documents", "read_project_document", "verify_quote"}
     names = {tool.name for tool in captured["tools"]}
     assert names & shelf == (shelf if case in {"staff", "staff_user", "staff_exec"} else set())
-    assert {"bash", "update_agent", "propose_action", "client_mcp_tool"}.isdisjoint(names)
+    assert {"bash", "update_agent", "client_mcp_tool"}.isdisjoint(names)
+    assert ("propose_action" in names) is (role in {"user", "exec", "admin"} and case not in {"channel", "subagent"})
 
 
 class OfflineModel(BaseChatModel):
@@ -89,7 +90,7 @@ def _app_config(**extra) -> AppConfig:
     return app
 
 
-async def _assemble(monkeypatch, tmp_path, *, role: str, app: AppConfig, keys=(), context=None):
+async def _assemble(monkeypatch, tmp_path, *, role: str, app: AppConfig, keys=(), context=None, real_tools=False):
     import deerflow.tools
     from deerflow.agents.lead_agent import agent, prompt
 
@@ -121,7 +122,8 @@ async def _assemble(monkeypatch, tmp_path, *, role: str, app: AppConfig, keys=()
 
         return fake
 
-    monkeypatch.setattr(deerflow.tools, "get_available_tools", lambda **kw: [fixture_tool(n) for n in EVERY_TOOL])
+    if not real_tools:
+        monkeypatch.setattr(deerflow.tools, "get_available_tools", lambda **kw: [fixture_tool(n) for n in EVERY_TOOL])
     captured = {}
     real_create = agent.create_agent
 
@@ -144,6 +146,45 @@ async def _assemble(monkeypatch, tmp_path, *, role: str, app: AppConfig, keys=()
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("role", ["user", "exec", "admin", "client"])
+@pytest.mark.parametrize("allowed", [True, False])
+async def test_shared_workspace_max_can_propose_only_for_authorized_staff(monkeypatch, tmp_path, role, allowed):
+    from app.gateway.auth_disabled import AUTH_SOURCE_SESSION
+    from app.gateway.services import inject_authenticated_user_context
+    from deerflow.tools.builtins import propose_action
+
+    authorization = example_authorization()
+    roles = authorization["provider"]["config"]["roles"]
+    for staff in ("user", "exec"):
+        roles[staff]["models"]["allow"].append("claude-haiku-5-5-max")
+    roles[role]["tools"] = {"allow": ["present_files", "propose_action"] if allowed else ["present_files"]}
+    app = _app_config(authorization=authorization, tools=[])
+    app = AppConfig.model_validate({**app.model_dump(), "models": [*app.models, app.models[1].model_copy(update={"name": "claude-haiku-5-5-max", "model": "claude-haiku-5-5-max"})]})
+    app.momobot_max.staff_model = "claude-haiku-5-5-max"
+    user = SimpleNamespace(id="u-1", system_role=role, oauth_provider=None, oauth_id=None)
+    identity = {}
+    inject_authenticated_user_context(
+        identity,
+        SimpleNamespace(state=SimpleNamespace(user=user, auth_source=AUTH_SOURCE_SESSION, actor_user_id=user.id, storage_user_id="storage-agency", organization_id="org-agency", organization_role="member")),
+    )
+
+    created, captured = await _assemble(monkeypatch, tmp_path, role=role, app=app, keys=("c-max",), context=identity["context"], real_tools=True)
+
+    if role in {"user", "exec"}:
+        assert created["name"] == "claude-haiku-5-5-max"
+    assert (propose_action in captured["tools"]) is (allowed and role != "client")
+    assert "present_files" in {tool.name for tool in captured["tools"]}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("context", [{"user_role": None}, {"channel_name": "slack"}, {"is_subagent": True}])
+async def test_max_staff_proposal_tool_requires_a_staff_lead_run(monkeypatch, tmp_path, context):
+    _, captured = await _assemble(monkeypatch, tmp_path, role="admin", app=_app_config(), context=context)
+
+    assert "propose_action" not in {tool.name for tool in captured["tools"]}
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("role", ["client", "exec", "admin"])
 async def test_a_momobot_max_run_has_the_models_effort_delegation_and_soul(monkeypatch, tmp_path, role):
     created, captured = await _assemble(monkeypatch, tmp_path, role=role, app=_app_config(authorization=example_authorization()), keys=("c-max",))
@@ -159,8 +200,11 @@ async def test_a_momobot_max_run_has_the_models_effort_delegation_and_soul(monke
 async def test_the_tool_ceiling_holds_for_every_role_that_runs_it(monkeypatch, tmp_path, role):
     _, captured = await _assemble(monkeypatch, tmp_path, role=role, app=_app_config(authorization=example_authorization()), keys=("c-max",))
 
-    assert {t.name for t in captured["tools"]} <= set(MOMOBOT_MAX_TOOL_NAMES)
-    assert {"bash", "update_agent", "propose_action", "memory_search", "client_mcp_tool", "list_uploaded_files"}.isdisjoint(t.name for t in captured["tools"])
+    names = {t.name for t in captured["tools"]}
+    staff_tools = {"propose_action"} if role != "client" else set()
+    assert names <= set(MOMOBOT_MAX_TOOL_NAMES) | staff_tools
+    assert ("propose_action" in names) is (role != "client")
+    assert {"bash", "update_agent", "memory_search", "client_mcp_tool", "list_uploaded_files"}.isdisjoint(names)
     assert {"web_search", "web_fetch", "task", "present_files"} <= {t.name for t in captured["tools"]}
 
 

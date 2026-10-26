@@ -84,6 +84,11 @@ request's client, or choose **No project**. Saved project choices are fixed once
 bound or started, and switching requests clears an unfinished choice. Read or
 work conflicts stay visible as errors. See the [portal contract](backend/docs/CLIENT_PORTAL.md).
 
+MomoBot Max staff chats can file outbound drafts in **Approvals** when their role
+allows `propose_action`. Client contacts retain their chat tool ceiling. Email
+and other ordinary outbound drafts still require an active workspace owner or
+admin to approve them.
+
 Agent prompts include up to 8 KiB of UTF-8 from the effective user's `USER.md`
 profile. Larger profiles are truncated at a valid UTF-8 boundary with a visible
 marker; profile content remains HTML-escaped and is omitted in public channels.
