@@ -2,7 +2,8 @@
 
 This is the reviewed run-limit exception to the ordinary Alembic revision rule.
 Accepted rollback images reject any newer revision but safely ignore this column.
-Call only after successful ordinary bootstrap and while its lock is still owned.
+Call only after successful ordinary bootstrap and while its lock is still owned,
+or from the offline SQLite-to-Postgres migration script after its Alembic upgrade.
 """
 
 from sqlalchemy import JSON, Connection, inspect, text

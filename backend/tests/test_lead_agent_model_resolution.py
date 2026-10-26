@@ -792,6 +792,7 @@ def test_make_lead_agent_reads_runtime_options_from_context(monkeypatch):
         app_config=app_config,
         chat_model=result["model"],
     )
+    assert get_available_tools.call_args.kwargs["run_context"]["model_name"] == "context-model"
     assert result["model"] is not None
 
 
@@ -1721,6 +1722,7 @@ def test_empty_allowed_subagents_disables_requested_delegation(monkeypatch, mcp_
         app_config=app_config,
         chat_model=ANY,
     )
+    assert get_available_tools.call_args.kwargs["run_context"]["agent_name"] == "researcher"
     assert config["context"]["subagent_enabled"] is False
     assert config["configurable"]["subagent_enabled"] is False
     assert config["metadata"]["allowed_subagents"] == []
