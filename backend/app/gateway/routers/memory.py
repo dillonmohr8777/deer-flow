@@ -10,7 +10,7 @@ from app.gateway.authz import resource_permission_dependency
 from app.gateway.internal_auth import get_trusted_internal_owner_user_id
 from deerflow.agents.memory import MemoryConflictError, MemoryCorruptionError, MemoryManager, get_memory_manager
 from deerflow.agents.memory.scope import MemoryScope, private_memory_scope
-from deerflow.config.app_config import get_app_config
+from deerflow.agents.memory.scope import momo_memory_enabled as _momo_memory_enabled
 from deerflow.config.memory_config import get_memory_config
 from deerflow.config.paths import make_safe_user_id
 from deerflow.runtime.user_context import get_current_user, get_effective_user_id, get_storage_context
@@ -31,14 +31,11 @@ async def _staff_memory_only(request: Request):
         if owner is None or str(owner.id) != workspace.actor_user_id:
             raise HTTPException(403, "Delegated memory owner could not be verified")
         request.state.staff_memory_scope = _private_memory_scope(owner, workspace)
-    _resolve_memory_user_id(request)
+    # Resolve (and 403) once here; routes reuse the cached args.
+    request.state.memory_scope_args = _memory_scope_args(request)
 
 
 router = APIRouter(prefix="/api", tags=["memory"], dependencies=[Depends(resource_permission_dependency("threads")), Depends(_staff_memory_only)])
-
-
-def _momo_memory_enabled() -> bool:
-    return get_app_config().momobot_max.enabled
 
 
 def _resolve_memory_user_id(request: Request) -> str:
@@ -74,7 +71,11 @@ def _private_memory_scope(user: object, workspace: object | None) -> MemoryScope
 
 
 def _memory_scope_args(request: Request) -> dict:
-    user = getattr(getattr(request, "state", None), "user", None) or get_current_user()
+    state = getattr(request, "state", None)
+    cached = getattr(state, "memory_scope_args", None)
+    if isinstance(cached, dict):
+        return cached
+    user = getattr(state, "user", None) or get_current_user()
     return {"user_id": _resolve_memory_user_id(request), **({"agent_name": "momobot-max"} if user and _momo_memory_enabled() else {})}
 
 

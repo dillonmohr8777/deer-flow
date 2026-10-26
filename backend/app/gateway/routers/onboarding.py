@@ -26,6 +26,7 @@ from sqlalchemy import select
 from app.gateway.deps import get_current_user_from_request, require_admin_user
 from app.gateway.people_profiles import PersonProfile, load_own_profile
 from app.gateway.routers import user_preferences
+from deerflow.agents.memory.scope import momo_memory_enabled as _momo_memory_enabled
 from deerflow.persistence.user.model import UserPreferenceRow, UserRow
 from deerflow.persistence.user.preferences import UserPreferencesRepository
 from deerflow.runtime.user_context import get_effective_user_id, get_storage_context
@@ -214,12 +215,6 @@ def _state(owner: str, user, stored: dict) -> OnboardingState:
 
 async def _state_async(owner: str, user, stored: dict) -> OnboardingState:
     return await asyncio.to_thread(_state, owner, user, stored)
-
-
-def _momo_memory_enabled() -> bool:
-    from deerflow.config.app_config import get_app_config
-
-    return get_app_config().momobot_max.enabled
 
 
 async def _seed_memory(owner: str, profile: PersonProfile, role: str, team: str, tools: list[str], other: str, catalog: dict[str, CatalogEntry], *, user: object | None = None) -> None:

@@ -51,3 +51,33 @@ def test_other_actor_or_agent_still_gets_a_different_bucket():
     other_agent = staff_memory_scope(_context("user", "member"), agent_name="vhin-max-plus")
     other_actor = staff_memory_scope({**_context("user", "member"), "actor_user_id": "staff-b"}, agent_name="momobot-max")
     assert len({base.user_id, other_agent.user_id, other_actor.user_id}) == 3
+
+
+def test_stream_updates_mode_drops_the_private_memory_block():
+    from langchain_core.messages import SystemMessage
+
+    from deerflow.runtime import serialize
+
+    memory = HumanMessage(id="r__memory", content="ZEBRA-41", additional_kwargs={"hide_from_ui": True, STAFF_MEMORY_PROVENANCE_KEY: "staff-v1-abc"})
+    reminder = SystemMessage(id="r", content="<system-reminder>date</system-reminder>", additional_kwargs={"dynamic_context_reminder": True, STAFF_MEMORY_PROVENANCE_KEY: "staff-v1-abc"})
+    out = serialize({"DynamicContextMiddleware.before_agent": {"messages": [reminder, memory]}}, mode="updates")
+    assert "ZEBRA-41" not in str(out)
+    assert "staff-v1-abc" not in str(out)
+    assert [m["id"] for m in out["DynamicContextMiddleware.before_agent"]["messages"]] == ["r"]
+
+
+def test_stream_messages_mode_blanks_a_private_memory_chunk():
+    from deerflow.runtime import serialize
+
+    memory = HumanMessage(id="r__memory", content="ZEBRA-41", additional_kwargs={"hide_from_ui": True})
+    out = serialize((memory, {"langgraph_node": "x"}), mode="messages")
+    assert "ZEBRA-41" not in str(out)
+
+
+def test_api_values_hide_the_scope_hash_on_the_visible_reminder():
+    from langchain_core.messages import SystemMessage
+
+    reminder = SystemMessage(id="r", content="date", additional_kwargs={"dynamic_context_reminder": True, STAFF_MEMORY_PROVENANCE_KEY: "staff-v1-abc"})
+    out = serialize_channel_values_for_api({"messages": [reminder]})
+    assert "staff-v1-abc" not in str(out)
+    assert out["messages"][0]["additional_kwargs"]["dynamic_context_reminder"] is True

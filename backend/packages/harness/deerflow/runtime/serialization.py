@@ -117,14 +117,35 @@ def serialize_channel_values_for_api(channel_values: dict[str, Any]) -> dict[str
     that return channel values to the frontend so that ``data:``-scheme
     base64 image payloads are never sent over the wire.
     """
-    result = serialize_channel_values(channel_values)
+    result = scrub_private_memory(serialize_channel_values(channel_values))
     if isinstance(result.get("messages"), list):
-        # The ``<id>__memory`` reminder carries one staff member's private memory and is
-        # hidden from the UI; thread readers in the same workspace must never receive it.
-        result["messages"] = strip_data_url_image_blocks(
-            [m for m in result["messages"] if not (isinstance(m, dict) and str(m.get("id") or "").endswith("__memory"))]
-        )
+        result["messages"] = strip_data_url_image_blocks(result["messages"])
     return result
+
+
+# Mirrors deerflow.agents.memory.scope.STAFF_MEMORY_PROVENANCE_KEY (runtime must not import agents).
+_MEMORY_SCOPE_KEY = "deerflow_memory_scope"
+
+
+def _is_private_memory(value: Any) -> bool:
+    return isinstance(value, dict) and "content" in value and str(value.get("id") or "").endswith("__memory")
+
+
+def scrub_private_memory(value: Any) -> Any:
+    """Drop ``<id>__memory`` reminders and staff scope hashes from serialized output.
+
+    The memory reminder carries one staff member's private memory and the scope
+    hash names their bucket; workspace teammates can read the same thread state
+    and stream, so neither may leave the server in any stream mode or snapshot.
+    A bare memory chunk (``messages`` mode) keeps its id but loses its content.
+    """
+    if isinstance(value, list):
+        return [scrub_private_memory(item) for item in value if not _is_private_memory(item)]
+    if isinstance(value, dict):
+        if _is_private_memory(value):
+            return {**value, "content": "", "additional_kwargs": {}}
+        return {key: scrub_private_memory(item) for key, item in value.items() if key != _MEMORY_SCOPE_KEY}
+    return value
 
 
 def serialize_messages_tuple(obj: Any) -> Any:
@@ -144,9 +165,9 @@ def serialize(obj: Any, *, mode: str = "") -> Any:
     * everything else — recursive ``model_dump()`` / ``dict()`` fallback
     """
     if mode == "messages":
-        return serialize_messages_tuple(obj)
-    if mode == "values":
+        return scrub_private_memory(serialize_messages_tuple(obj))
+    if mode == "values" and isinstance(obj, dict):
         # ``values`` snapshots stream the full state to the frontend, so they
         # must drop base64 image payloads the same way the REST endpoints do.
-        return serialize_channel_values_for_api(obj) if isinstance(obj, dict) else serialize_lc_object(obj)
-    return serialize_lc_object(obj)
+        return serialize_channel_values_for_api(obj)
+    return scrub_private_memory(serialize_lc_object(obj))

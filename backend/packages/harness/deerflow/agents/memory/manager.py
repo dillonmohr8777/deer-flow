@@ -16,6 +16,7 @@ do not impede pluggability.
 
 from __future__ import annotations
 
+import functools
 import importlib
 import inspect
 import logging
@@ -65,15 +66,18 @@ def context_query_kwargs(get_context: Callable[..., str], query: str | None) -> 
 
 def capture_owner_kwargs(add: Callable[..., Any], storage_owner_user_id: str | None) -> dict[str, str]:
     """Forward trusted lifecycle metadata only to compatible capture backends."""
-    if storage_owner_user_id is None:
+    if storage_owner_user_id is None or not _accepts_storage_owner(getattr(add, "__func__", add)):
         return {}
+    return {"storage_owner_user_id": storage_owner_user_id}
+
+
+@functools.lru_cache(maxsize=128)
+def _accepts_storage_owner(add: Callable[..., Any]) -> bool:
     try:
         parameters = inspect.signature(add).parameters.values()
     except (TypeError, ValueError):
-        return {}
-    if any(parameter.kind == inspect.Parameter.VAR_KEYWORD or (parameter.name == "storage_owner_user_id" and parameter.kind in (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)) for parameter in parameters):
-        return {"storage_owner_user_id": storage_owner_user_id}
-    return {}
+        return False
+    return any(parameter.kind == inspect.Parameter.VAR_KEYWORD or (parameter.name == "storage_owner_user_id" and parameter.kind in (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)) for parameter in parameters)
 
 
 class MemoryCallbacks:

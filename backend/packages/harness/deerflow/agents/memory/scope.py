@@ -33,6 +33,13 @@ class MemoryScope:
         return self.actor_user_id is not None
 
 
+def momo_memory_enabled() -> bool:
+    """Staff memory scoping is on only when MomoBot Max is enabled."""
+    from deerflow.config.app_config import get_app_config
+
+    return get_app_config().momobot_max.enabled
+
+
 def staff_memory_scope(context: Mapping, *, agent_name: str | None, client_id: str | None = None) -> MemoryScope | None:
     """Mint only after host authentication, agent admission and client validation.
 
