@@ -10,6 +10,7 @@ import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+import pytest
 import test_batch_task_tool as batch_tool_base
 import test_momobot_max_assembly as assembly_base
 import test_subagent_batch_service as batch_service_base
@@ -26,7 +27,7 @@ from deerflow.tools.builtins.batch_task_tool import BatchTaskItem
 CHILD_TOOLS = ("web_search", "write_file", "bash", "propose_action")  # last two are outside MOMOBOT_MAX_TOOL_NAMES
 
 
-def _assembled_max_metadata(monkeypatch, tmp_path) -> dict:
+def _assembled_max_metadata(monkeypatch, tmp_path, *, role="client") -> dict:
     """Real _assemble_lead_agent for momobot-max, with a forged caller ceiling."""
     from deerflow.agents.lead_agent import agent
 
@@ -40,7 +41,8 @@ def _assembled_max_metadata(monkeypatch, tmp_path) -> dict:
 
     monkeypatch.setattr(agent, "_assemble_lead_agent", wrapped)
     app = assembly_base._app_config(authorization=assembly_base.example_authorization())
-    asyncio.run(assembly_base._assemble(monkeypatch, tmp_path, role="client", app=app, keys=("c-max",)))
+    app.momobot_max.staff_model = "claude-haiku-5-5"
+    asyncio.run(assembly_base._assemble(monkeypatch, tmp_path, role=role, app=app, keys=("c-max",)))
     return dict(seen["config"]["metadata"])
 
 
@@ -68,8 +70,9 @@ def _task_child_tools(monkeypatch, metadata: dict) -> set[str]:
     return {t.name for t in captured["tools"]}
 
 
-def test_momobot_max_task_child_keeps_the_parents_ceiling(monkeypatch, tmp_path):
-    metadata = _assembled_max_metadata(monkeypatch, tmp_path)
+@pytest.mark.parametrize("role", ["client", "user", "exec", "admin"])
+def test_momobot_max_task_child_keeps_the_parents_ceiling(monkeypatch, tmp_path, role):
+    metadata = _assembled_max_metadata(monkeypatch, tmp_path, role=role)
     assert metadata["tool_names"] is not None
     assert set(metadata["tool_names"]) <= set(MOMOBOT_MAX_TOOL_NAMES)  # server value replaced the forged None
 
@@ -84,8 +87,9 @@ def test_unset_ceiling_is_unrestricted_and_empty_ceiling_is_no_tools(monkeypatch
     assert _task_child_tools(monkeypatch, {**base, "tool_names": []}) == set()
 
 
-def test_durable_batch_child_keeps_the_parents_ceiling(monkeypatch, tmp_path):
-    metadata = _assembled_max_metadata(monkeypatch, tmp_path)
+@pytest.mark.parametrize("role", ["client", "user", "exec", "admin"])
+def test_durable_batch_child_keeps_the_parents_ceiling(monkeypatch, tmp_path, role):
+    metadata = _assembled_max_metadata(monkeypatch, tmp_path, role=role)
 
     # batch_task records the ceiling in the durable execution spec ...
     runtime = batch_tool_base._runtime()

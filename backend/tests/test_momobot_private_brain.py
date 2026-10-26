@@ -35,6 +35,7 @@ ACTOR = "synthetic-owner"
 ORG = "synthetic-private-org"
 READS = ("brain_now", "brain_client", "brain_open_items", "brain_systems")
 SNAPSHOT = {name: {"synthetic": name} for name in READS}
+STAFF_TOOLS = set(MOMOBOT_MAX_TOOL_NAMES) | {"propose_action"}
 
 
 class SyntheticModel(BaseChatModel):
@@ -212,7 +213,7 @@ async def test_private_max_reaches_real_selection_authorization_and_four_adapter
 
         policy = next(m for m in captured["middleware"] if isinstance(m, SkillToolPolicyMiddleware))
         assert names <= set(policy.release_policy_parameters()["owner_tool_names"])
-        assert actual.keys() <= set(MOMOBOT_MAX_TOOL_NAMES) | names
+        assert actual.keys() <= STAFF_TOOLS | names
         assert harness.selected == [(ACTOR, ["synthetic-brain-installation"])]
         assert config["metadata"]["mcp_plugins"] == []  # no delegation/global policy change
         for name in sorted(names):
@@ -231,7 +232,7 @@ async def test_private_max_reaches_real_selection_authorization_and_four_adapter
 def test_other_origins_keep_global_max_ceiling_and_skip_mcp_discovery(harness, origin):
     with _scope(origin=origin):
         captured, _config = harness.assemble()
-    assert {tool.name for tool in captured["tools"]} <= set(MOMOBOT_MAX_TOOL_NAMES)
+    assert {tool.name for tool in captured["tools"]} <= STAFF_TOOLS
     assert harness.selected == [(ACTOR, [])]
     assert harness.discovered == []
 
@@ -240,7 +241,7 @@ def test_other_origins_keep_global_max_ceiling_and_skip_mcp_discovery(harness, o
 def test_wrong_actor_organization_or_shared_storage_does_not_add_brain(harness, scope):
     with _scope(**scope):
         captured, _config = harness.assemble()
-    assert {tool.name for tool in captured["tools"]} <= set(MOMOBOT_MAX_TOOL_NAMES)
+    assert {tool.name for tool in captured["tools"]} <= STAFF_TOOLS
     assert harness.selected[-1][1] == []
     assert harness.discovered == []
 
@@ -259,7 +260,7 @@ def test_only_exact_enabled_private_brain_installation_is_selected(harness, stat
     harness.save()
     with _scope():
         captured, _config = harness.assemble()
-    assert {tool.name for tool in captured["tools"]} <= set(MOMOBOT_MAX_TOOL_NAMES)
+    assert {tool.name for tool in captured["tools"]} <= STAFF_TOOLS
     assert harness.discovered == []
 
 
@@ -284,7 +285,7 @@ async def test_two_concurrent_contexts_have_independent_run_local_max_tools(harn
 
     private, other = await asyncio.gather(asyncio.to_thread(run, ACTOR), asyncio.to_thread(run, "synthetic-other"))
     assert {f"brain_{name}" for name in READS} <= private
-    assert other <= set(MOMOBOT_MAX_TOOL_NAMES)
+    assert other <= STAFF_TOOLS
     assert get_builtin_agent_config("momobot-max").model_dump() == baseline
 
 
@@ -365,7 +366,7 @@ async def test_cold_private_max_starts_only_selected_brain_during_public_transpo
         actual = {tool.name: tool for tool in captured["tools"]}
         expected = {f"brain_{name}" for name in READS}
         assert expected <= actual.keys()
-        assert actual.keys() <= set(MOMOBOT_MAX_TOOL_NAMES) | expected
+        assert actual.keys() <= STAFF_TOOLS | expected
         assert len(MOMOBOT_MAX_TOOL_NAMES) == 9
         assert cache._cache_initialized is False
         assert cache._mcp_tools_cache is None
