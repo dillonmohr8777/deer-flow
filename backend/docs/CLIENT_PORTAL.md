@@ -267,3 +267,42 @@ prove connected CRM/reporting sources, or establish full AM acceptance.
 - Test company memory isolation, model/tool policy and artifacts in staging against two actual customer workspaces before onboarding real clients. No production deployment or paid model invocation is part of the offline test suite.
 
 Price/usage entitlements remain the existing run-admission policy. This slice adds no $500 billing plan, payment collection, usage increase, scheduler, external email, or Slack delivery. Those are separate product wiring, not claimed as working here.
+
+### Gateway client and roster policy
+
+Clients read/run MomoBot Max or, in Max-tier dedicated workspaces, own-bucket agents (`client_workspace_agents`, `include_legacy=False`). Keep the agent's model and config-owned Max settings; otherwise pin MomoBot Max. No shared/foreign/legacy bucket, SOUL, `check` or CRUD access.
+
+The client roster (`routers/clients.py`, `/api/clients`, migration `0034_clients`) is organization-owned: `clients` and `client_assignments` carry no `user_id`, so every route scopes on `resolve_organization_id()` alone, like `organizations`/`organization_members`. Assignments are keyed `(client_id, user_id)` and `POST .../assignments` upserts the role. Project create/patch exposes the existing nullable `projects.client_id` metadata link: a non-null link requires a current workspace owner/admin and exact authorized canonical-client scope. Explicit null clears a link on patch only for a current workspace owner/admin; omission preserves it. The link grants no project, shelf, tool or private Brain access. `POST /api/clients/import` is admin-only (`require_admin_user`, like `capabilities.py::install`) and upserts the `client-operations/registry/clients.json` roster by `registry_id` in the caller's active organization; it never deletes and never infers owners.
+
+### Private brand projection
+
+`app/momobot_brand.py` and `routers/momobot_brand.py` serve the private About copy and Agents lineup from `momobot_brand.content_dir` (never committed; `scripts/stage_momobot_brand.sh` fills it). Prices leave only when agents.json has `show_pricing: true`; assets come from an allowlisted subfolder set with a resolve-inside-root check. Slack `/momobot about` and "@bot what is MomoBot" read the same folder.
+
+### Bound plan integration rules
+
+Portal plan tools bind only the authenticated staff Max run's existing request,
+independently of project selection. Carry `client_work_plan_access` through
+`RunContext`, never serialized config; retain live and locked scope rechecks and
+the shared HTTP actual-actor audit. The sibling participant route lists only
+currently eligible same-client owner/admin and account-manager identities; its
+bounded request-bound cursor grants no access. Bound tool reads can continue
+the same page without accepting identity or scope inputs. Revoked saved
+participants do not block reads or repair, while saves recheck each submitted
+participant under the write lock. Plans record work only; they do not dispatch.
+
+### Frontend participant directory
+
+The work-plan participant directory is a separate, strict sibling GET under the
+request's `/work-plan/participants`, with `X-Portal-Workspace`, limit 50/max 100 and
+opaque cursor paging. Never merge it into `WorkPlanRecord` or the PUT payload.
+Query keys and the existing editor remount fence include actor, workspace,
+client and request; consumed AbortSignals and query cancellation discard late
+scope/page responses. Paging/retry must keep the local plan mounted and dirty.
+Render only supplied account email/role; selected_items confirms saved people
+outside the page. Missing saved IDs remain visibly unavailable and repairable;
+only interpret that absence when required directory `plan_revision` matches the
+local record revision and the query is neither pending nor failed. Different
+snapshot revisions offer retry and preserve fields as unconfirmed. Keep the
+existing record-revision query key for save/reload refresh. No profile reads,
+invented names, automatic link fetches or access grants. Synthetic browser QA in
+`client-inbox-work-plan.spec.ts` covers paging/retry, CAS and 390/768/1440 geometry.
