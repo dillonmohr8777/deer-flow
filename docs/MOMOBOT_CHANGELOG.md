@@ -10,6 +10,16 @@ The upstream DeerFlow history stays in [CHANGELOG.md](../CHANGELOG.md).
 
 ## [Unreleased]
 
+## [momobot-prod-20261026-f3e24b62] - 2026-10-26
+
+### Changed
+
+- Main test triage, Oct 26 (#338)
+
+### Fixed
+
+- MomoBot AM approvals tool fix, Oct 26 (#340)
+
 ## [momobot-prod-20261024-9f326b4c] - 2026-10-24
 
 ### Changed
