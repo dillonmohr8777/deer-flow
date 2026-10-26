@@ -115,3 +115,32 @@ def test_run_events_api_drops_private_memory_from_run_output():
     assert "ZEBRA-41" not in str(out) and "staff-v1-abc" not in str(out)
     assert [m["id"] for m in out[0]["content"]["messages"]] == ["u", "a"]
     assert out[0]["metadata"] == {"status": "success"}
+
+
+def test_persisted_run_output_is_scrubbed_before_the_store_stringifies_it():
+    """The DB and JSONL stores json.dumps(..., default=str); scrubbing after that is too late."""
+    import asyncio
+    import json
+
+    from app.gateway.routers.thread_runs import _public_run_events
+    from deerflow.runtime.events.store.memory import MemoryRunEventStore
+    from deerflow.runtime.journal import RunJournal
+
+    store = MemoryRunEventStore()
+    journal = RunJournal("r1", "t1", store, flush_threshold=100)
+    memory = HumanMessage(id="r1__memory", content="ZEBRA-41", additional_kwargs={STAFF_MEMORY_PROVENANCE_KEY: "staff-v1-abc"})
+    journal._put(event_type="run.end", category="outputs", content={"messages": [HumanMessage(id="u", content="hi"), memory, AIMessage(id="a", content="ok")]})
+    asyncio.run(journal.flush())
+    events = asyncio.run(store.list_events("t1", "r1"))
+    persisted = [json.loads(json.dumps(event, default=str)) for event in events]  # what DbRunEventStore reads back
+    assert "ZEBRA-41" not in str(persisted) and "staff-v1-abc" not in str(persisted)
+    assert [m["id"] for m in _public_run_events(persisted)[0]["content"]["messages"]] == ["u", "a"]
+
+
+def test_legacy_stringified_memory_rows_are_dropped_on_read():
+    from app.gateway.routers.thread_runs import _public_run_events
+
+    legacy = {"event_type": "run.end", "content": {"messages": [str(HumanMessage(id="u", content="hi")), str(HumanMessage(id="r0__memory", content="ZEBRA-41"))]}}
+    out = _public_run_events([legacy])
+    assert "ZEBRA-41" not in str(out)
+    assert len(out[0]["content"]["messages"]) == 1

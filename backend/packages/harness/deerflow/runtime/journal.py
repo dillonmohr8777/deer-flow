@@ -45,6 +45,7 @@ from deerflow.runtime.events.catalog import (
     RUN_ERROR_EVENT,
     RUN_START_EVENT,
 )
+from deerflow.runtime.serialization import scrub_private_memory, serialize_lc_object
 from deerflow.utils.messages import message_to_text, restore_original_human_message
 
 if TYPE_CHECKING:
@@ -753,6 +754,10 @@ class RunJournal(BaseCallbackHandler):
                 self._persist_tool_result_message(message)
 
     def _make_event(self, *, event_type: str, category: str, content: str | dict = "", metadata: dict | None = None) -> dict:
+        if isinstance(content, (dict, list)):
+            # Stores persist with json.dumps(default=str), which would stringify messages past any
+            # later scrub: serialize now and drop private staff memory before it is ever written.
+            content = scrub_private_memory(serialize_lc_object(content))
         return {
             "thread_id": self.thread_id,
             "run_id": self.run_id,

@@ -10,6 +10,7 @@ Consumers: ``deerflow.runtime.runs.worker`` (SSE publishing) and
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 
@@ -128,7 +129,13 @@ def serialize_channel_values_for_api(channel_values: dict[str, Any]) -> dict[str
 _PRIVATE_SCOPE_KEYS = frozenset({"deerflow_memory_scope", "__deerflow_staff_memory_scope"})
 
 
+# Rows persisted before write-time scrubbing hold messages stringified by json.dumps(default=str).
+_STRINGIFIED_MEMORY = re.compile(r"\bid='[^']*__memory'")
+
+
 def _is_private_memory(value: Any) -> bool:
+    if isinstance(value, str):
+        return bool(_STRINGIFIED_MEMORY.search(value))
     return isinstance(value, dict) and "content" in value and str(value.get("id") or "").endswith("__memory")
 
 
