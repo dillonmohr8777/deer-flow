@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
+from collections import Counter
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -47,6 +48,28 @@ def _digest(rows: list[tuple[str, str, str, int, str]]) -> str:
     return hashlib.sha256(payload).hexdigest()
 
 
+def _assessment(rows: list[tuple[str, str, str, int, str]]) -> dict:
+    ids = Counter(row[0] for row in rows)
+    rejected = []
+    for number, row in enumerate(rows, 1):
+        reasons = []
+        if any(not isinstance(row[i], str) or not row[i].strip() for i in (0, 1, 2, 4)):
+            reasons.append("missing_or_invalid_text")
+        if not isinstance(row[3], int) or row[3] < 0:
+            reasons.append("invalid_revenue_cents")
+        if ids[row[0]] > 1:
+            reasons.append("duplicate_source_id")
+        if reasons:
+            rejected.append({"row_number": number, "reasons": reasons})
+    return {"source_count": len(rows), "accepted_count": len(rows) - len(rejected), "rejected_count": len(rejected), "rejected": rejected}
+
+
+def assess_source(source: str | Path) -> dict:
+    """Read-only fixed-schema assessment. Report counts/reasons without customer fields."""
+    with sqlite3.connect(Path(source).resolve().as_uri() + "?mode=ro", uri=True) as source_db:
+        return _assessment(_rows(source_db))
+
+
 def _prepare_target(connection: sqlite3.Connection) -> None:
     connection.executescript(
         """
@@ -60,6 +83,8 @@ def _prepare_target(connection: sqlite3.Connection) -> None:
         );
         CREATE TABLE IF NOT EXISTS momentum_accounts_before_pilot AS
             SELECT * FROM momentum_accounts WHERE 0;
+        CREATE TABLE IF NOT EXISTS momentum_accounts_pilot_applied AS
+            SELECT * FROM momentum_accounts WHERE 0;
         CREATE TABLE IF NOT EXISTS momentum_migration_state (
             pipeline TEXT PRIMARY KEY,
             source_digest TEXT NOT NULL,
@@ -70,6 +95,16 @@ def _prepare_target(connection: sqlite3.Connection) -> None:
         );
         """
     )
+
+
+def _assert_applied(connection: sqlite3.Connection, applied_count: int) -> None:
+    applied = connection.execute("SELECT * FROM momentum_accounts_pilot_applied ORDER BY id").fetchall()
+    if len(applied) != applied_count:
+        raise ValueError("migration write evidence is missing; review legacy state before recovery")
+    for row in applied:
+        current = connection.execute("SELECT * FROM momentum_accounts WHERE id = ?", (row[0],)).fetchone()
+        if current != row:
+            raise ValueError("migrated target row changed; preserve it and reconcile forward")
 
 
 def _receipt(connection: sqlite3.Connection, source_rows: list[tuple[str, str, str, int, str]]) -> MigrationReceipt:
@@ -110,18 +145,22 @@ def run_migration(source: str | Path, target: str | Path, *, fail_after: int | N
     if fail_after is not None and fail_after < 1:
         raise ValueError("fail_after must be positive")
 
-    with sqlite3.connect(f"file:{source_path.as_posix()}?mode=ro", uri=True) as source_db:
+    with sqlite3.connect(source_path.as_uri() + "?mode=ro", uri=True) as source_db:
         source_rows = _rows(source_db)
     source_digest = _digest(source_rows)
+    if _assessment(source_rows)["rejected_count"]:
+        raise ValueError("source has rejected rows; run assess_source and review before migration")
 
     with sqlite3.connect(target_path) as target_db:
         _prepare_target(target_db)
+        target_db.execute("BEGIN IMMEDIATE")
         state = target_db.execute(
-            "SELECT source_digest, last_source_id, status FROM momentum_migration_state WHERE pipeline = ?",
+            "SELECT source_digest, last_source_id, status, applied_count FROM momentum_migration_state WHERE pipeline = ?",
             (PIPELINE,),
         ).fetchone()
         if state is None:
             target_db.execute("DELETE FROM momentum_accounts_before_pilot")
+            target_db.execute("DELETE FROM momentum_accounts_pilot_applied")
             target_db.execute("INSERT INTO momentum_accounts_before_pilot SELECT * FROM momentum_accounts")
             target_db.execute(
                 "INSERT INTO momentum_migration_state VALUES (?, ?, NULL, 'running', 0, ?)",
@@ -130,9 +169,10 @@ def run_migration(source: str | Path, target: str | Path, *, fail_after: int | N
             target_db.commit()
             last_source_id = None
         else:
-            recorded_digest, last_source_id, status = state
+            recorded_digest, last_source_id, status, applied_count = state
             if recorded_digest != source_digest:
                 raise ValueError("source changed after migration started")
+            _assert_applied(target_db, applied_count)
             if status == "complete":
                 return _receipt(target_db, source_rows)
 
@@ -140,6 +180,14 @@ def run_migration(source: str | Path, target: str | Path, *, fail_after: int | N
         for row in source_rows:
             if last_source_id is not None and row[0] <= last_source_id:
                 continue
+            if not target_db.in_transaction:
+                target_db.execute("BEGIN IMMEDIATE")
+            count = target_db.execute("SELECT applied_count FROM momentum_migration_state WHERE pipeline = ?", (PIPELINE,)).fetchone()[0]
+            _assert_applied(target_db, count)
+            before = target_db.execute("SELECT * FROM momentum_accounts_before_pilot WHERE id = ?", (row[0],)).fetchone()
+            current = target_db.execute("SELECT * FROM momentum_accounts WHERE id = ?", (row[0],)).fetchone()
+            if current != before:
+                raise ValueError("pending target row changed; preserve it and reconcile forward")
             target_db.execute(
                 """INSERT INTO momentum_accounts
                        (id, display_name, segment, revenue_cents, source_updated_at, migration_source)
@@ -152,6 +200,7 @@ def run_migration(source: str | Path, target: str | Path, *, fail_after: int | N
                        migration_source = excluded.migration_source""",
                 (*row, PIPELINE),
             )
+            target_db.execute("INSERT INTO momentum_accounts_pilot_applied VALUES (?, ?, ?, ?, ?, ?)", (*row, PIPELINE))
             target_db.execute(
                 """UPDATE momentum_migration_state
                    SET last_source_id = ?, applied_count = applied_count + 1, updated_at = ?
@@ -163,6 +212,9 @@ def run_migration(source: str | Path, target: str | Path, *, fail_after: int | N
             if fail_after is not None and applied == fail_after:
                 raise PilotInterrupted(f"synthetic interruption after {applied} rows")
 
+        if not target_db.in_transaction:
+            target_db.execute("BEGIN IMMEDIATE")
+        _assert_applied(target_db, len(source_rows))
         receipt = _receipt(target_db, source_rows)
         target_db.execute(
             "UPDATE momentum_migration_state SET status = 'complete', updated_at = ? WHERE pipeline = ?",
@@ -173,15 +225,20 @@ def run_migration(source: str | Path, target: str | Path, *, fail_after: int | N
 
 
 def rollback_migration(target: str | Path) -> int:
-    """Restore the exact pre-pilot account rows and remove the pilot checkpoint."""
+    """Undo only unchanged pilot writes; preserve later unrelated target writes."""
     with sqlite3.connect(Path(target).resolve()) as target_db:
         _prepare_target(target_db)
-        if target_db.execute("SELECT 1 FROM momentum_migration_state WHERE pipeline = ?", (PIPELINE,)).fetchone() is None:
+        target_db.execute("BEGIN IMMEDIATE")
+        state = target_db.execute("SELECT applied_count FROM momentum_migration_state WHERE pipeline = ?", (PIPELINE,)).fetchone()
+        if state is None:
             raise ValueError("no migration state to roll back")
-        target_db.execute("DELETE FROM momentum_accounts")
-        target_db.execute("INSERT INTO momentum_accounts SELECT * FROM momentum_accounts_before_pilot")
+        _assert_applied(target_db, state[0])
+        for (source_id,) in target_db.execute("SELECT id FROM momentum_accounts_pilot_applied").fetchall():
+            target_db.execute("DELETE FROM momentum_accounts WHERE id = ?", (source_id,))
+            target_db.execute("INSERT INTO momentum_accounts SELECT * FROM momentum_accounts_before_pilot WHERE id = ?", (source_id,))
         restored = target_db.execute("SELECT COUNT(*) FROM momentum_accounts").fetchone()[0]
         target_db.execute("DELETE FROM momentum_migration_state WHERE pipeline = ?", (PIPELINE,))
         target_db.execute("DELETE FROM momentum_accounts_before_pilot")
+        target_db.execute("DELETE FROM momentum_accounts_pilot_applied")
         target_db.commit()
         return restored
