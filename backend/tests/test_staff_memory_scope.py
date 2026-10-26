@@ -79,14 +79,14 @@ def run(messages, rt, *, agent="momobot-max"):
     return add_messages(messages, update["messages"]) if update else messages
 
 
-def test_global_summary_and_capture_are_private_per_actor_client_agent_role(memory):
+def test_global_summary_and_capture_are_private_per_actor_client_agent(memory):
+    # Roles gate admission but are not a partition (see test_private_memory_api_redaction).
     variants = [
         runtime(),
         runtime(client="A"),
         runtime(client="B"),
         runtime("am-b", "A"),
         runtime(client="A", agent="researcher"),
-        runtime(client="A", role="exec"),
         runtime(client="A", storage="other-workspace"),
         runtime(client="A", org="org-b"),
     ]

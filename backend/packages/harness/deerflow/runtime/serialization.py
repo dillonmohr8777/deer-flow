@@ -119,7 +119,11 @@ def serialize_channel_values_for_api(channel_values: dict[str, Any]) -> dict[str
     """
     result = serialize_channel_values(channel_values)
     if isinstance(result.get("messages"), list):
-        result["messages"] = strip_data_url_image_blocks(result["messages"])
+        # The ``<id>__memory`` reminder carries one staff member's private memory and is
+        # hidden from the UI; thread readers in the same workspace must never receive it.
+        result["messages"] = strip_data_url_image_blocks(
+            [m for m in result["messages"] if not (isinstance(m, dict) and str(m.get("id") or "").endswith("__memory"))]
+        )
     return result
 
 

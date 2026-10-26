@@ -49,7 +49,8 @@ def staff_memory_scope(context: Mapping, *, agent_name: str | None, client_id: s
         return None
     if client_id is not None and (not isinstance(client_id, str) or not client_id or not organization):
         return None
-    parts = ["staff-memory-v1", actor, organization, storage, role, organization_role, agent_name, client_id]
+    # Roles gate admission above but stay out of the key: a promotion must not rotate the bucket.
+    parts = ["staff-memory-v1", actor, organization, storage, agent_name, client_id]
     digest = hashlib.sha256(json.dumps(parts, ensure_ascii=True, separators=(",", ":")).encode()).hexdigest()
     return MemoryScope(f"staff-v1-{digest}", agent_name, actor, organization, storage, role, organization_role)
 
