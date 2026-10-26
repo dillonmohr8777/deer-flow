@@ -45,7 +45,7 @@ from deerflow.runtime.events.catalog import (
     RUN_ERROR_EVENT,
     RUN_START_EVENT,
 )
-from deerflow.runtime.serialization import scrub_private_memory, serialize_lc_object
+from deerflow.runtime.serialization import redact_private_memory_text, scrub_private_memory, serialize_lc_object
 from deerflow.utils.messages import message_to_text, restore_original_human_message
 
 if TYPE_CHECKING:
@@ -758,6 +758,8 @@ class RunJournal(BaseCallbackHandler):
             # Stores persist with json.dumps(default=str), which would stringify messages past any
             # later scrub: serialize now and drop private staff memory before it is ever written.
             content = scrub_private_memory(serialize_lc_object(content))
+        elif isinstance(content, str):
+            content = redact_private_memory_text(content)  # e.g. a provider error echoing the prompt
         return {
             "thread_id": self.thread_id,
             "run_id": self.run_id,

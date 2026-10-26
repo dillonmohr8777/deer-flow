@@ -1904,9 +1904,9 @@ async def list_run_events(
 
 def _public_run_events(events: list) -> list:
     """Redact metadata secrets and private staff memory (the run output keeps the __memory block)."""
-    from deerflow.runtime.serialization import scrub_private_memory, serialize_lc_object
+    from deerflow.runtime.serialization import redact_private_memory_text, scrub_private_memory, serialize_lc_object
 
-    return scrub_private_memory(
+    public = scrub_private_memory(
         serialize_lc_object(
             [
                 {
@@ -1919,6 +1919,8 @@ def _public_run_events(events: list) -> list:
             ]
         )
     )
+    # Older rows may hold text (error strings) persisted before write-time redaction.
+    return [{**event, "content": redact_private_memory_text(event["content"])} if isinstance(event, dict) and isinstance(event.get("content"), str) else event for event in public]
 
 
 @router.get("/{thread_id}/runs/{run_id}/workspace-changes")

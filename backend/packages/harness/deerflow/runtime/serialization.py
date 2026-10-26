@@ -129,13 +129,22 @@ def serialize_channel_values_for_api(channel_values: dict[str, Any]) -> dict[str
 _PRIVATE_SCOPE_KEYS = frozenset({"deerflow_memory_scope", "__deerflow_staff_memory_scope"})
 
 
-# Rows persisted before write-time scrubbing hold messages stringified by json.dumps(default=str).
-_STRINGIFIED_MEMORY = re.compile(r"\bid='[^']*__memory'")
+# Rows persisted before write-time scrubbing hold messages as str(BaseMessage), e.g.
+# content='...' additional_kwargs={...} response_metadata={} id="customer's-input__memory".
+_STRINGIFIED_MESSAGE = re.compile(r"^content=.*\badditional_kwargs=", re.DOTALL)
+_STRINGIFIED_MEMORY_ID = re.compile(r"""\bid=(['"])(?:(?!\1).)*__memory\1""", re.DOTALL)
+_MEMORY_BLOCK = re.compile(r"<memory>.*?</memory>", re.DOTALL)
+_SCOPE_IN_TEXT = re.compile(r"""(['"]?(?:__deerflow_staff_memory_scope|deerflow_memory_scope)['"]?\s*[:=]\s*)(['"])(?:(?!\2).)*\2""")
+
+
+def redact_private_memory_text(text: str) -> str:
+    """Redact <memory> blocks and scope hashes inside free text (error strings, legacy rows)."""
+    return _SCOPE_IN_TEXT.sub(r"\1\2[redacted]\2", _MEMORY_BLOCK.sub("<memory>[redacted]</memory>", text))
 
 
 def _is_private_memory(value: Any) -> bool:
     if isinstance(value, str):
-        return bool(_STRINGIFIED_MEMORY.search(value))
+        return bool(_STRINGIFIED_MESSAGE.match(value) and _STRINGIFIED_MEMORY_ID.search(value))
     return isinstance(value, dict) and "content" in value and str(value.get("id") or "").endswith("__memory")
 
 
@@ -148,7 +157,7 @@ def scrub_private_memory(value: Any) -> Any:
     A bare memory chunk (``messages`` mode) keeps its id but loses its content.
     """
     if isinstance(value, list):
-        return [scrub_private_memory(item) for item in value if not _is_private_memory(item)]
+        return [redact_private_memory_text(item) if isinstance(item, str) and _STRINGIFIED_MESSAGE.match(item) else scrub_private_memory(item) for item in value if not _is_private_memory(item)]
     if isinstance(value, dict):
         if _is_private_memory(value):
             return {**value, "content": "", "additional_kwargs": {}}

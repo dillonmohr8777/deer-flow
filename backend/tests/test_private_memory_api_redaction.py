@@ -144,3 +144,44 @@ def test_legacy_stringified_memory_rows_are_dropped_on_read():
     out = _public_run_events([legacy])
     assert "ZEBRA-41" not in str(out)
     assert len(out[0]["content"]["messages"]) == 1
+
+
+def test_legacy_rows_with_apostrophe_ids_and_scope_reminders_are_cleaned():
+    from langchain_core.messages import SystemMessage
+
+    from app.gateway.routers.thread_runs import _public_run_events
+
+    hidden = HumanMessage(id="customer's-input__memory", content="<memory>ZEBRA-41</memory>")
+    reminder = SystemMessage(id="r", content="date", additional_kwargs={"dynamic_context_reminder": True, STAFF_MEMORY_PROVENANCE_KEY: "staff-v1-abc"})
+    legacy = {"event_type": "run.end", "content": {"messages": [str(HumanMessage(id="u", content="hi")), str(hidden), str(reminder)]}}
+    out = _public_run_events([legacy])
+    assert "ZEBRA-41" not in str(out) and "staff-v1-abc" not in str(out)
+    assert len(out[0]["content"]["messages"]) == 2
+
+
+def test_visible_text_that_mentions_a_memory_id_is_kept():
+    from deerflow.runtime import serialize
+
+    visible = HumanMessage(id="u", content=["Please explain this literal id='cache__memory'"])
+    out = serialize({"messages": [visible]}, mode="values")
+    assert out["messages"][0]["content"] == ["Please explain this literal id='cache__memory'"]
+    updates = serialize({"node": {"messages": [visible]}}, mode="updates")
+    assert updates["node"]["messages"][0]["content"] == ["Please explain this literal id='cache__memory'"]
+
+
+def test_error_text_echoing_the_prompt_is_redacted_before_storage_and_on_read():
+    import asyncio
+
+    from app.gateway.routers.thread_runs import _public_run_events
+    from deerflow.runtime.events.store.memory import MemoryRunEventStore
+    from deerflow.runtime.journal import RunJournal
+
+    hidden = HumanMessage(id="r__memory", content="<memory>\nZEBRA-41\n</memory>", additional_kwargs={STAFF_MEMORY_PROVENANCE_KEY: "staff-v1-abc"})
+    store = MemoryRunEventStore()
+    journal = RunJournal("r2", "t2", store, flush_threshold=100)
+    journal.on_chain_error(RuntimeError(f"provider rejected prompt: {hidden!s}"), run_id=__import__("uuid").uuid4())
+    asyncio.run(journal.flush())
+    stored = asyncio.run(store.list_events("t2", "r2"))
+    assert "ZEBRA-41" not in str(stored) and "staff-v1-abc" not in str(stored)
+    legacy = [{"event_type": "run.error", "content": f"provider rejected prompt: {hidden!s}", "metadata": {}}]
+    assert "ZEBRA-41" not in str(_public_run_events(legacy)) and "staff-v1-abc" not in str(_public_run_events(legacy))
