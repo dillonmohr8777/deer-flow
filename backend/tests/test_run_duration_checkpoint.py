@@ -423,9 +423,9 @@ async def test_agent_stream_allows_graph_goal_state_access() -> None:
 async def test_successful_subsecond_run_persists_zero_duration(monkeypatch: pytest.MonkeyPatch) -> None:
     checkpointer = InMemorySaver()
     run_manager = RunManager()
+    # Real create-time stamps: finalizing progress re-stamps updated_at, so the
+    # persisted duration is the true (sub-second) record lifetime.
     record = await run_manager.create("duration-zero")
-    record.created_at = "2026-01-01T00:00:00+00:00"
-    record.updated_at = record.created_at
     bridge = SimpleNamespace(
         publish=AsyncMock(),
         publish_end=AsyncMock(),

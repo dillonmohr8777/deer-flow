@@ -2,9 +2,11 @@ import errno
 import json
 import stat
 import zipfile
+from contextlib import asynccontextmanager
 from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 from _router_auth_helpers import make_authed_test_app
@@ -331,6 +333,15 @@ def test_uploaded_skill_archive_installs_sandbox_readable_tree(monkeypatch, tmp_
     storage = UserScopedSkillStorage("default", host_path=str(skills_root))
     monkeypatch.setattr(skills_router, "_get_user_skill_storage", lambda cfg: storage)
     monkeypatch.setattr(skills_router, "get_effective_user_id", lambda: "default")
+
+    # Archive upload is setup here; upload_write admission and thread ownership
+    # are covered by test_client_file_role_isolation.
+    @asynccontextmanager
+    async def _allow_upload_write(*_args, **_kwargs):
+        yield
+
+    monkeypatch.setattr(uploads_router, "_reserve_upload_thread", AsyncMock())
+    monkeypatch.setattr(uploads_router, "reserve_upload_write", _allow_upload_write)
 
     app = make_authed_test_app(user_factory=_make_admin_user)
     app.state.config = config

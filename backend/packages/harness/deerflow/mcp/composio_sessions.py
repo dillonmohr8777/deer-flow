@@ -219,15 +219,16 @@ async def _require_staff(actor: str, scope: ComposioContext, sessions) -> None:
                 )
             )
         )
+    role = getattr(user, "system_role", None)
     if (
         user is None
         or user.disabled_at is not None
-        or user.system_role not in STAFF_ROLES
+        or role not in STAFF_ROLES
         or organization is None
         or organization.role not in {"owner", "admin", "member"}
         or storage_user_id_for_organization(organization, actor) != scope.storage_user_id
         or contact
-        or (actor == scope.actor_user_id and user.system_role != scope.role)
+        or (actor == scope.actor_user_id and role != scope.role)
     ):
         raise ComposioSessionError("composio_actor_denied")
 

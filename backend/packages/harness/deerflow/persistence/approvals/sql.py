@@ -172,10 +172,11 @@ class PendingActionRepository:
         async with self._sf() as session:
             user = await session.get(UserRow, str(actor.id))
             organization = await active_organization_for_user(session, str(actor.id), context.organization_id)
+        role = getattr(user, "system_role", None)
         if (
             user is None
             or user.disabled_at is not None
-            or user.system_role not in {"user", "exec", "admin"}
+            or role not in {"user", "exec", "admin"}
             or organization is None
             or organization.role not in {"owner", "admin", "member"}
             or storage_user_id_for_organization(organization, str(actor.id)) != context.storage_user_id

@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from deerflow.persistence.bootstrap import _MIGRATIONS_DIR, _get_alembic_config
 from deerflow.persistence.run import RunRepository
+from deerflow.persistence.run.schema import ensure_run_limits_column
 
 pytestmark = pytest.mark.asyncio
 
@@ -53,6 +54,9 @@ async def test_upgrade_exposes_legacy_runs_and_allocates_new_positions(tmp_path)
         # RunRepository maps the current ORM, which carries columns added by
         # later revisions (0026 organization_id); exercise it at head.
         await asyncio.to_thread(command.upgrade, cfg, "head")
+        # bootstrap_schema adds runs.run_limits_json outside Alembic.
+        async with engine.begin() as connection:
+            await connection.run_sync(ensure_run_limits_column)
         factory = async_sessionmaker(engine, expire_on_commit=False)
         repo = RunRepository(factory)
         legacy = await repo.list_changed(

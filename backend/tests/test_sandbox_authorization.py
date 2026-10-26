@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import sys
+from contextlib import asynccontextmanager
 from types import ModuleType, SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -359,6 +360,21 @@ def test_authorize_sandbox_calls_provider_with_correct_request(monkeypatch):
 # artifact edit) still succeeds with the sandbox sync skipped.
 
 
+def _stub_upload_reservation(monkeypatch, uploads_router):
+    """These sandbox-gate tests have no durable run store or real thread store.
+
+    Thread-ownership and upload_write admission are covered by
+    test_client_file_role_isolation; here they are allowed through.
+    """
+
+    @asynccontextmanager
+    async def _allow_upload_write(*_args, **_kwargs):
+        yield
+
+    monkeypatch.setattr(uploads_router, "_reserve_upload_thread", AsyncMock())
+    monkeypatch.setattr(uploads_router, "reserve_upload_write", _allow_upload_write)
+
+
 def _make_upload_app(monkeypatch, provider, *, fail_closed: bool = True):
     """Build a FastAPI app with the uploads router and authz enabled."""
     from _router_auth_helpers import make_authed_test_app
@@ -377,6 +393,7 @@ def _make_upload_app(monkeypatch, provider, *, fail_closed: bool = True):
         lambda config: provider,
     )
 
+    _stub_upload_reservation(monkeypatch, uploads_router)
     app = make_authed_test_app()
     app.include_router(uploads_router.router)
     app.dependency_overrides[uploads_router.get_config] = lambda: app_config
@@ -633,6 +650,7 @@ def test_upload_gate_tolerates_request_none(monkeypatch, tmp_path):
     from app.gateway.routers import uploads as uploads_router
 
     _isolated_uploads_dir(monkeypatch, tmp_path)
+    _stub_upload_reservation(monkeypatch, uploads_router)
 
     sandbox_provider = MagicMock()
     sandbox_provider.uses_thread_data_mounts = False

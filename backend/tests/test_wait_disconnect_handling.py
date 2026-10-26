@@ -181,7 +181,10 @@ class TestWaitForRunCompletion:
             )
 
             assert completed is False
-            assert record.status == RunStatus.interrupted
+            # cancel() keeps an attached worker's run active through its own
+            # cleanup; the worker (here a bare sleeper) commits the terminal status.
+            assert record.abort_event.is_set() and record.abort_action == "interrupt"
+            assert record.finalizing and record.status == RunStatus.running
             # Drain the cancelled sleeper so it does not linger past the test.
             try:
                 await asyncio.wait_for(sleeper, timeout=1.0)

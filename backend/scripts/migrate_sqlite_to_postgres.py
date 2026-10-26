@@ -44,6 +44,7 @@ from sqlalchemy.engine import URL, Engine, make_url
 import deerflow.persistence.models  # noqa: F401 -- registers ORM tables on Base.metadata
 from deerflow.persistence.base import Base
 from deerflow.persistence.bootstrap import _escape_url_for_alembic
+from deerflow.persistence.run.schema import ensure_run_limits_column
 
 logger = logging.getLogger("migrate_sqlite_to_postgres")
 
@@ -94,6 +95,14 @@ def run_alembic_upgrade(pg_url: URL) -> None:
     cfg.set_main_option("sqlalchemy.url", _escape_url_for_alembic(url.render_as_string(hide_password=False)))
     logger.info("running alembic upgrade head against target")
     alembic_command.upgrade(cfg, "head")
+    # bootstrap_schema adds this one ORM column outside Alembic (see
+    # docs/LEAD_RUN_LIMITS.md); without it the RunRow copy cannot insert.
+    engine = create_engine(pg_url)
+    try:
+        with engine.begin() as conn:
+            ensure_run_limits_column(conn)
+    finally:
+        engine.dispose()
 
 
 def clear_tables(engine: Engine) -> None:

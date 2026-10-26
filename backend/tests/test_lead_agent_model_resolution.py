@@ -780,7 +780,17 @@ def test_make_lead_agent_reads_runtime_options_from_context(monkeypatch):
         "app_config": app_config,
     }
     get_available_tools.assert_called_once_with(
-        model_name="context-model", groups=None, subagent_enabled=True, mcp_plugins=None, private_mcp_config=None, include_conversation_reader=False, include_momentum_sdk=False, app_config=app_config, chat_model=result["model"]
+        model_name="context-model",
+        groups=None,
+        subagent_enabled=True,
+        mcp_plugins=None,
+        private_mcp_config=None,
+        run_context=ANY,
+        include_conversation_reader=False,
+        include_momentum_sdk=False,
+        include_wsl_diagnostics=False,
+        app_config=app_config,
+        chat_model=result["model"],
     )
     assert result["model"] is not None
 
@@ -1703,9 +1713,11 @@ def test_empty_allowed_subagents_disables_requested_delegation(monkeypatch, mcp_
         groups=None,
         mcp_plugins=mcp_plugins,
         private_mcp_config=None,
+        run_context=ANY,
         subagent_enabled=False,
         include_conversation_reader=False,
         include_momentum_sdk=False,
+        include_wsl_diagnostics=False,
         app_config=app_config,
         chat_model=ANY,
     )
