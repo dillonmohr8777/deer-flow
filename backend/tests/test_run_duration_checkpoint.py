@@ -426,6 +426,9 @@ async def test_successful_subsecond_run_persists_zero_duration(monkeypatch: pyte
     record = await run_manager.create("duration-zero")
     record.created_at = "2026-01-01T00:00:00+00:00"
     record.updated_at = record.created_at
+    # Finalizing progress re-stamps updated_at; freeze that clock so the
+    # sub-second lifetime stays exactly zero on any runner.
+    monkeypatch.setattr("deerflow.runtime.runs.manager._now_iso", lambda: record.created_at)
     bridge = SimpleNamespace(
         publish=AsyncMock(),
         publish_end=AsyncMock(),

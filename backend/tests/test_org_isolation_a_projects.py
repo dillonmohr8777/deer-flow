@@ -30,7 +30,9 @@ from app.gateway.deps import get_config
 from app.gateway.routers import project_documents, project_thread_files, projects, trash
 from deerflow.persistence.projects import ProjectDocumentRepository, ProjectRepository
 from deerflow.persistence.projects.model import ProjectDocumentRow
+from deerflow.persistence.run import RunRepository
 from deerflow.persistence.thread_meta import ThreadMetaRepository
+from deerflow.runtime import RunManager
 
 
 def _build_app(session_factory) -> FastAPI:
@@ -40,6 +42,8 @@ def _build_app(session_factory) -> FastAPI:
     app.state.project_repo = ProjectRepository(session_factory)
     app.state.project_document_repo = ProjectDocumentRepository(session_factory)
     app.state.thread_store = ThreadMetaRepository(session_factory)
+    # Document uploads hold a durable upload_write admission on the run manager.
+    app.state.run_manager = RunManager(store=RunRepository(session_factory))
     app.include_router(projects.router)
     app.include_router(project_documents.router)
     app.include_router(project_thread_files.router)

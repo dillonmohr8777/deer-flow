@@ -21,9 +21,10 @@ HEAD = "0052_board_portal"  # later revisions chain after the repair; their tabl
 INDEXES = {"ix_audit_events_occurred_at", "ix_audit_events_action", "ix_audit_events_organization_id", "ix_audit_events_actor_user_id"}
 
 
-# Later revisions (0052) add these columns to pre-existing tables; the repair
+# Later revisions (0052) add these columns to pre-existing tables, and
+# bootstrap_schema adds runs.run_limits_json outside Alembic; the repair
 # under test must preserve everything else, so the snapshot leaves them out.
-LATER_COLUMNS = {"organizations": ("customer_client_id",), "threads_meta": ("client_actor_id",), "board_messages": ("visibility", "attachments")}
+LATER_COLUMNS = {"organizations": ("customer_client_id",), "threads_meta": ("client_actor_id",), "board_messages": ("visibility", "attachments"), "runs": ("run_limits_json",)}
 SKIP = "('audit_events','pending_actions','client_corrections','alembic_version')"
 LATER_OBJECTS = ("board_portal", "ix_threads_meta_client_actor_id", "ix_board_portal_organization_id")
 

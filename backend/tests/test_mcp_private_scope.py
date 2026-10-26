@@ -341,7 +341,7 @@ async def test_worker_binds_through_assembly_and_graph_then_resets(origin):
             raise RuntimeError("synthetic assembly failure")
         return Agent()
 
-    manager = SimpleNamespace(**{name: AsyncMock() for name in ["wait_for_prior_finalizing", "set_status", "set_status_if_not_cancelled", "update_model_name", "update_run_completion", "cleanup"]})
+    manager = SimpleNamespace(**{name: AsyncMock() for name in ["wait_for_prior_finalizing", "set_status", "set_status_if_not_cancelled", "set_finalizing", "update_model_name", "update_run_completion", "cleanup"]})
     manager.try_start = AsyncMock(return_value=RunStartOutcome.started)
     manager.has_later_run = AsyncMock(return_value=False)
     manager.has_later_started_run = AsyncMock(return_value=False)

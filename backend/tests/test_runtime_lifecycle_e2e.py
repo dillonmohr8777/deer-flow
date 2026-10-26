@@ -800,8 +800,10 @@ async def test_sse_consumer_disconnect_cancels_inflight_run():
             frames.append(frame)
 
         assert frames == []
-        assert record.abort_event.is_set()
-        assert record.status == RunStatus.interrupted
+        # cancel() keeps an attached worker's run active through its own
+        # cleanup; the worker (here a bare stub) commits the terminal status.
+        assert record.abort_event.is_set() and record.abort_action == "interrupt"
+        assert record.finalizing and record.status == RunStatus.running
         await asyncio.wait_for(worker_cancelled.wait(), timeout=1.0)
         assert record.task.cancelled()
     finally:

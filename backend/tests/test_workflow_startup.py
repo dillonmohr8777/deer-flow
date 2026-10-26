@@ -13,6 +13,7 @@ from test_workflow_native_runtime import NATIVE_OWNER, SyntheticAdapter, create,
 
 from deerflow.config.extensions_config import ExtensionsConfig
 from deerflow.config.mcp_tasks_config import McpTasksConfig
+from deerflow.config.paths import Paths
 
 pytestmark = pytest.mark.asyncio
 
@@ -65,7 +66,7 @@ async def test_gateway_lifespan_uses_shared_native_components_and_closes_workflo
     monkeypatch.setattr("app.gateway.app.auth.close_oidc_service", AsyncMock())
     monkeypatch.setattr("deerflow.community.browser_automation.get_browser_session_manager", lambda: SimpleNamespace(close_all_sessions=AsyncMock(return_value=0)))
     monkeypatch.setattr(ExtensionsConfig, "from_file", lambda: ExtensionsConfig())
-    monkeypatch.setattr("deerflow.config.paths.get_paths", lambda: SimpleNamespace(base_dir=tmp_path))
+    monkeypatch.setattr("deerflow.config.paths.get_paths", lambda: Paths(base_dir=tmp_path))
     monkeypatch.setattr("app.gateway.workflow_adapters.WorkflowModelAdapter", lambda: adapter)
     monkeypatch.setattr("app.gateway.workflow_authority.workflow_actor_authorized", AsyncMock(return_value=True))
 

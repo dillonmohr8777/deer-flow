@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from deerflow.persistence.bootstrap import _MIGRATIONS_DIR, _get_alembic_config, bootstrap_schema
 from deerflow.persistence.run import RunRepository
+from deerflow.persistence.run.schema import ensure_run_limits_column
 
 pytestmark = pytest.mark.asyncio
 PREVIOUS = "0024_project_documents"
@@ -110,11 +111,23 @@ async def test_repair_preserves_clock_and_downgrade_keeps_ancestor_schema(tmp_pa
         await asyncio.to_thread(command.downgrade, cfg, PREVIOUS)
         await _assert_schema(engine)
         # The previous application's run store must remain usable before any
-        # re-upgrade; a schema-only assertion would miss sequence resets.
-        assert await repo.start_run("existing")
+        # re-upgrade; a schema-only assertion would miss sequence resets. The
+        # current RunRow maps later columns (0026 organization_id and the
+        # bootstrap-only run_limits_json), so issue the ancestor store's start
+        # directly: one shared-clock position, then its status UPDATE.
+        async with async_sessionmaker(engine)() as session:
+            change_seq = await RunRepository._next_change_seq(session)
+            started = await session.execute(
+                sa.text("UPDATE runs SET status = 'running', change_seq = :seq WHERE run_id = 'existing' AND status = 'pending'"),
+                {"seq": change_seq},
+            )
+            await session.commit()
+        assert started.rowcount == 1
         async with engine.connect() as connection:
             assert await connection.scalar(sa.text("SELECT change_seq FROM runs WHERE run_id = 'existing'")) == 101
         await asyncio.to_thread(command.upgrade, cfg, "head")
+        async with engine.begin() as connection:
+            await connection.run_sync(ensure_run_limits_column)
         await repo.update_status("existing", "error")
         changed = await repo.list_changed(after_change_seq=100, after_run_id="", user_id="user-1", limit=10)
         assert [(row["run_id"], row["change_seq"]) for row in changed] == [("existing", 102)]

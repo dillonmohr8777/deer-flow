@@ -35,6 +35,9 @@ explicitly and keep their old protocol when both operator limits are disabled.
 This one additive nullable JSON column is an explicit exception to the normal
 Alembic revision rule. After successful ordinary bootstrap, its existing lock
 owns an idempotent helper that adds the column or rejects incompatible shape.
+The offline `scripts/migrate_sqlite_to_postgres.py` applies the same helper
+after its Alembic upgrade of an empty (or `--force`-cleared) target, where no
+Gateway runs, so the copied rows keep their captured timing.
 The helper changes no revision, index, constraint, default, existing data or
 unknown-revision allowlist. The known `0052_board_portal` stamp stays readable
 by the accepted rollback images. Fresh databases get the same nullable shape
