@@ -10,6 +10,18 @@ The upstream DeerFlow history stays in [CHANGELOG.md](../CHANGELOG.md).
 
 ## [Unreleased]
 
+## [momobot-prod-20261026-0de3c7ed] - 2026-10-26
+
+### Changed
+
+- Preserve target writes in pilot recovery, Oct 25 (#336)
+- MomoBot changelog momobot-prod-20261024-9f326b4c, Oct 24 (#325)
+
+### Fixed
+
+- Staff memory isolation with review fixes, Oct 26 (#337)
+- Restore nightly SQLite backups, Oct 25 (#334)
+
 ## [momobot-prod-20261024-9f326b4c] - 2026-10-24
 
 ### Changed
