@@ -185,3 +185,23 @@ def test_error_text_echoing_the_prompt_is_redacted_before_storage_and_on_read():
     assert "ZEBRA-41" not in str(stored) and "staff-v1-abc" not in str(stored)
     legacy = [{"event_type": "run.error", "content": f"provider rejected prompt: {hidden!s}", "metadata": {}}]
     assert "ZEBRA-41" not in str(_public_run_events(legacy)) and "staff-v1-abc" not in str(_public_run_events(legacy))
+
+
+def test_legacy_visible_message_mentioning_a_memory_id_is_kept():
+    from app.gateway.routers.thread_runs import _public_run_events
+
+    for content in ("Please explain this literal id='cache__memory'", ["Please explain this literal id='cache__memory'"]):
+        legacy = {"event_type": "run.end", "content": {"messages": [str(HumanMessage(id="u", content=content))]}}
+        assert len(_public_run_events([legacy])[0]["content"]["messages"]) == 1
+
+
+def test_memory_block_redaction_is_linear_on_unclosed_tags():
+    import time
+
+    from deerflow.runtime.serialization import redact_private_memory_text
+
+    start = time.perf_counter()
+    out = redact_private_memory_text("safe " + "<memory>" * 20000)
+    assert time.perf_counter() - start < 0.5
+    assert out.startswith("safe ") and out.count("<memory>") == 1
+    assert redact_private_memory_text("a <memory>x</memory> b <memory>tail ZEBRA-41") == "a <memory>[redacted]</memory> b <memory>[redacted]"

@@ -131,20 +131,45 @@ _PRIVATE_SCOPE_KEYS = frozenset({"deerflow_memory_scope", "__deerflow_staff_memo
 
 # Rows persisted before write-time scrubbing hold messages as str(BaseMessage), e.g.
 # content='...' additional_kwargs={...} response_metadata={} id="customer's-input__memory".
-_STRINGIFIED_MESSAGE = re.compile(r"^content=.*\badditional_kwargs=", re.DOTALL)
-_STRINGIFIED_MEMORY_ID = re.compile(r"""\bid=(['"])(?:(?!\1).)*__memory\1""", re.DOTALL)
-_MEMORY_BLOCK = re.compile(r"<memory>.*?</memory>", re.DOTALL)
-_SCOPE_IN_TEXT = re.compile(r"""(['"]?(?:__deerflow_staff_memory_scope|deerflow_memory_scope)['"]?\s*[:=]\s*)(['"])(?:(?!\2).)*\2""")
+_SCOPE_IN_TEXT = re.compile(r"""(['"]?(?:__deerflow_staff_memory_scope|deerflow_memory_scope)['"]?\s*[:=]\s*)(['"])(?:(?!\2).){0,200}\2""")  # bounded: hashes are ~74 chars
+
+
+def _is_stringified_message(text: str) -> bool:
+    return text.startswith("content=") and " additional_kwargs=" in text
+
+
+def _stringified_message_id(text: str) -> str | None:
+    """The message's own id field: the trailing ``id=<quoted>`` token, not an id quoted in its body."""
+    body = text.rstrip()
+    if not body or body[-1] not in "'\"":
+        return None
+    start = body.rfind(" id=" + body[-1])
+    return body[start + 5 : -1] if start != -1 else None
+
+
+def _redact_memory_blocks(text: str) -> str:
+    """Linear scan; an unclosed <memory> block is redacted to the end of the text."""
+    parts, index = [], 0
+    while (start := text.find("<memory>", index)) != -1:
+        parts.append(text[index:start])
+        end = text.find("</memory>", start)
+        if end == -1:
+            parts.append("<memory>[redacted]")
+            return "".join(parts)
+        parts.append("<memory>[redacted]</memory>")
+        index = end + len("</memory>")
+    parts.append(text[index:])
+    return "".join(parts)
 
 
 def redact_private_memory_text(text: str) -> str:
     """Redact <memory> blocks and scope hashes inside free text (error strings, legacy rows)."""
-    return _SCOPE_IN_TEXT.sub(r"\1\2[redacted]\2", _MEMORY_BLOCK.sub("<memory>[redacted]</memory>", text))
+    return _SCOPE_IN_TEXT.sub(r"\1\2[redacted]\2", _redact_memory_blocks(text))
 
 
 def _is_private_memory(value: Any) -> bool:
     if isinstance(value, str):
-        return bool(_STRINGIFIED_MESSAGE.match(value) and _STRINGIFIED_MEMORY_ID.search(value))
+        return _is_stringified_message(value) and str(_stringified_message_id(value) or "").endswith("__memory")
     return isinstance(value, dict) and "content" in value and str(value.get("id") or "").endswith("__memory")
 
 
@@ -157,7 +182,7 @@ def scrub_private_memory(value: Any) -> Any:
     A bare memory chunk (``messages`` mode) keeps its id but loses its content.
     """
     if isinstance(value, list):
-        return [redact_private_memory_text(item) if isinstance(item, str) and _STRINGIFIED_MESSAGE.match(item) else scrub_private_memory(item) for item in value if not _is_private_memory(item)]
+        return [redact_private_memory_text(item) if isinstance(item, str) and _is_stringified_message(item) else scrub_private_memory(item) for item in value if not _is_private_memory(item)]
     if isinstance(value, dict):
         if _is_private_memory(value):
             return {**value, "content": "", "additional_kwargs": {}}
