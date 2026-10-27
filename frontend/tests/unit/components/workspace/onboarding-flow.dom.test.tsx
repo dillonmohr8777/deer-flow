@@ -2,10 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, rs } from "@rstest/core";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   cleanup,
+  act,
   fireEvent,
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 
 import {
@@ -32,6 +34,9 @@ const mocks = rs.hoisted(() => ({
   fetch: rs.fn(),
   connectChannelProvider: rs.fn(),
   setSettings: rs.fn(),
+  selectWorkspace: rs.fn(),
+  workspaceId: null as string | null,
+  workspaceLoaded: true,
 }));
 rs.mock("@/core/auth/AuthProvider", () => ({
   useAuth: () => ({ user: mocks.user }),
@@ -44,6 +49,16 @@ rs.mock("@/core/channels/api", () => ({
 }));
 rs.mock("@/core/settings", () => ({
   useLocalSettings: () => [{}, mocks.setSettings],
+}));
+rs.mock("@/core/workspaces/hooks", () => ({
+  useWorkspaceSelection: () => ({
+    data: mocks.workspaceLoaded
+      ? { active_workspace_id: mocks.workspaceId }
+      : undefined,
+    busy: false,
+    isLoading: false,
+    selectWorkspace: mocks.selectWorkspace,
+  }),
 }));
 rs.mock("@/components/workspace/experience-mode-chooser", () => ({
   ExperienceModeChooser: () => <p>old chooser</p>,
@@ -112,10 +127,13 @@ function serve(state: OnboardingState, toolkits?: unknown[]) {
           ],
         };
       } else if (path.endsWith("/connections/gmail")) {
+        const status = JSON.parse(init?.body as string).status as
+          | "requested"
+          | "skipped";
         current = {
           ...current,
           connections: current.connections.map((tool) =>
-            tool.id === "gmail" ? { ...tool, status: "requested" } : tool,
+            tool.id === "gmail" ? { ...tool, status } : tool,
           ),
         };
       } else if (path.endsWith("/complete")) {
@@ -133,10 +151,67 @@ beforeEach(() => {
   mocks.fetch.mockReset();
   mocks.connectChannelProvider.mockReset();
   mocks.setSettings.mockReset();
+  mocks.selectWorkspace.mockReset();
+  mocks.selectWorkspace.mockResolvedValue(undefined);
+  mocks.workspaceId = null;
+  mocks.workspaceLoaded = true;
 });
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  rs.restoreAllMocks();
+});
 
 describe("first-login onboarding", () => {
+  it("holds the gate on a failed or invalid read and retries the same account", async () => {
+    serve(BASE);
+    mocks.fetch
+      .mockResolvedValueOnce(json({}, 500))
+      .mockResolvedValueOnce(json({}));
+    render(<Gate />);
+
+    await screen.findByRole("alert");
+    expect(screen.queryByText("old chooser")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    await waitFor(() => expect(mocks.fetch).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(
+        screen
+          .getByRole("button", { name: "Try again" })
+          .hasAttribute("disabled"),
+      ).toBe(false),
+    );
+    expect(screen.queryByText("old chooser")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByDisplayValue("Account manager")).toBeTruthy();
+    const init = mocks.fetch.mock.calls[2]![1] as RequestInit;
+    expect(init.headers).toMatchObject({ "X-Expected-User-Id": "alice" });
+  });
+
+  it("times out a stalled status read and permits retry", async () => {
+    const timeout = new AbortController();
+    const timeoutSpy = rs
+      .spyOn(AbortSignal, "timeout")
+      .mockReturnValue(timeout.signal);
+    serve(BASE);
+    mocks.fetch.mockImplementationOnce(
+      (_path: string, init: RequestInit) =>
+        new Promise((_resolve, reject) => {
+          init.signal?.addEventListener("abort", () =>
+            reject(new Error("aborted")),
+          );
+        }),
+    );
+    render(<Gate />);
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    expect(timeoutSpy).toHaveBeenCalledWith(15000);
+    await act(async () => timeout.abort());
+    expect(await screen.findByRole("alert")).toBeTruthy();
+    expect(screen.queryByText("old chooser")).toBeNull();
+    timeoutSpy.mockRestore();
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByDisplayValue("Account manager")).toBeTruthy();
+  });
+
   it("cannot be dismissed before role and tools are saved", async () => {
     serve(BASE);
     render(<Gate />);
@@ -229,6 +304,59 @@ describe("first-login onboarding", () => {
     expect(screen.getByText("Ready for everyone")).toBeTruthy();
   });
 
+  it("ignores completion arriving after the onboarding view unmounts", async () => {
+    const resumed: OnboardingState = {
+      ...BASE,
+      profile_saved: true,
+      tools_saved: true,
+    };
+    let resolveCompletion!: (response: Response) => void;
+    mocks.fetch.mockImplementation((path: string) => {
+      if (path.endsWith("/complete")) {
+        return new Promise((resolve) => {
+          resolveCompletion = resolve;
+        });
+      }
+      return Promise.resolve(
+        path.endsWith("/api/integrations/status")
+          ? json({}, 404)
+          : json(resumed),
+      );
+    });
+    const view = render(<Gate />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: /Finish and start/ }),
+    );
+    const call = mocks.fetch.mock.calls.find(([path]) =>
+      String(path).endsWith("/complete"),
+    )!;
+    const signal = (call[1] as RequestInit).signal!;
+    view.unmount();
+    expect(signal.aborted).toBe(true);
+    await act(async () =>
+      resolveCompletion(json({ ...resumed, required: false })),
+    );
+    expect(mocks.setSettings).not.toHaveBeenCalled();
+  });
+
+  it("does not close or select Easy when the server still requires onboarding", async () => {
+    const resumed = { ...BASE, profile_saved: true, tools_saved: true };
+    mocks.fetch.mockImplementation((path: string) =>
+      Promise.resolve(
+        path.endsWith("/api/integrations/status")
+          ? json({}, 404)
+          : json(resumed),
+      ),
+    );
+    render(<Gate />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: /Finish and start/ }),
+    );
+    expect(await screen.findByRole("alert")).toBeTruthy();
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    expect(mocks.setSettings).not.toHaveBeenCalled();
+  });
+
   it("offers a real Connect for tools with a personal connection", async () => {
     serve(
       {
@@ -267,11 +395,76 @@ describe("first-login onboarding", () => {
     ).toBeTruthy();
     const gmailRow = screen.getByText("Gmail").closest("li")!;
     expect(gmailRow.textContent).not.toContain("Request access");
+    fireEvent.click(within(gmailRow).getByRole("button", { name: "Skip" }));
+    await waitFor(() => expect(gmailRow.textContent).toContain("Skipped"));
+    expect(
+      calls().find((call) => call.path.endsWith("/connections/gmail"))?.body,
+    ).toEqual({ status: "skipped" });
+    expect(
+      within(gmailRow).getByRole("button", { name: "Connect Gmail" }),
+    ).toBeTruthy();
     const calendarRow = screen.getByText("Google Calendar").closest("li")!;
     expect(calendarRow.textContent).toContain("Connected");
     // Tools without a personal connection keep the request path.
     const notionRow = screen.getByText("Notion").closest("li")!;
     expect(notionRow.textContent).toContain("Request access");
+  });
+
+  it("hands Slack setup to the private workspace and never connects from an unknown scope", async () => {
+    const resumed = {
+      ...BASE,
+      profile_saved: true,
+      tools_saved: true,
+      connections: [
+        {
+          id: "slack",
+          label: "Slack",
+          status: "pending" as const,
+          available: true,
+        },
+      ],
+    };
+    mocks.workspaceId = "shared";
+    serve(resumed);
+    render(<Gate />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Link Slack DMs" }),
+    );
+    await waitFor(() =>
+      expect(mocks.selectWorkspace).toHaveBeenCalledWith(null),
+    );
+    expect(mocks.connectChannelProvider).not.toHaveBeenCalled();
+    cleanup();
+
+    mocks.workspaceLoaded = false;
+    render(<Gate />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Link Slack DMs" }),
+    );
+    expect(await screen.findByRole("alert")).toBeTruthy();
+    expect(mocks.connectChannelProvider).not.toHaveBeenCalled();
+  });
+
+  it("keeps a long connection list in a viewport-bounded scrollable dialog", async () => {
+    serve({
+      ...BASE,
+      profile_saved: true,
+      tools_saved: true,
+      connections: Array.from({ length: 20 }, (_, index) => ({
+        id: `tool-${index}`,
+        label: `Tool ${index}`,
+        status: "pending" as const,
+        available: false,
+      })),
+    });
+    render(<Gate />);
+    await screen.findByText("Tool 19");
+    const dialog = screen.getByRole("dialog");
+    expect(dialog.className).toContain("max-h-[calc(100dvh-2rem)]");
+    expect(dialog.className).toContain("overflow-y-auto");
+    expect(
+      within(dialog).getByRole("button", { name: /Finish and start/ }),
+    ).toBeTruthy();
   });
 
   it("keeps the old chooser for clients and finished accounts", async () => {

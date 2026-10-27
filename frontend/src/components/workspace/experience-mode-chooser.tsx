@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { fetch as apiFetch } from "@/core/api/fetcher";
 import { useAuth } from "@/core/auth/AuthProvider";
@@ -17,18 +17,29 @@ type ExperienceMode = "easy" | "medium" | "hard";
 
 const MODES: ExperienceMode[] = ["easy", "medium", "hard"];
 
-function saveExperienceMode(userId: string, mode: ExperienceMode) {
-  return apiFetch(`${getBackendBaseURL()}/api/v1/auth/preferences`, {
-    method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Expected-User-Id": userId,
+async function saveExperienceMode(
+  userId: string,
+  mode: ExperienceMode,
+  signal: AbortSignal,
+) {
+  const response = await apiFetch(
+    `${getBackendBaseURL()}/api/v1/auth/preferences`,
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Expected-User-Id": userId,
+      },
+      body: JSON.stringify({
+        experience_mode: mode,
+        mode: MODE_FOR_EXPERIENCE[mode],
+      }),
+      signal: AbortSignal.any([signal, AbortSignal.timeout(15000)]),
     },
-    body: JSON.stringify({
-      experience_mode: mode,
-      mode: MODE_FOR_EXPERIENCE[mode],
-    }),
-  }).catch(() => undefined);
+  );
+  if (!response.ok) {
+    throw new Error(`Preferences request failed: ${response.status}`);
+  }
 }
 
 /*
@@ -91,37 +102,52 @@ export function ExperienceModeChooser() {
   const [, setSettings] = useLocalSettings();
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState<ExperienceMode | null>(null);
+  const [error, setError] = useState(false);
+  const request = useRef<AbortController | null>(null);
   const userId =
     !isStaticWebsiteOnly() && user?.id !== "default" ? user?.id : undefined;
 
   useEffect(() => {
     if (!userId) return;
-    let cancelled = false;
+    const controller = new AbortController();
+    request.current = controller;
     apiFetch(`${getBackendBaseURL()}/api/v1/auth/preferences`, {
       headers: { "X-Expected-User-Id": userId },
       cache: "no-store",
+      signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15000)]),
     })
       .then((response) => (response.ok ? response.json() : null))
       .then((data: { experience_mode?: ExperienceMode | null } | null) => {
-        if (!cancelled && data && data.experience_mode == null) setOpen(true);
+        if (!controller.signal.aborted && data && data.experience_mode == null)
+          setOpen(true);
       })
       .catch(() => undefined);
     return () => {
-      cancelled = true;
+      controller.abort();
+      if (request.current === controller) request.current = null;
     };
   }, [userId]);
 
   const choose = (mode: ExperienceMode) => {
-    if (!userId || saving) return;
+    const controller = request.current;
+    if (!userId || saving || !controller || controller.signal.aborted) return;
     setSaving(mode);
-    void saveExperienceMode(userId, mode).finally(() => {
-      setSettings("context", {
-        experience_mode: mode,
-        mode: MODE_FOR_EXPERIENCE[mode],
+    setError(false);
+    void saveExperienceMode(userId, mode, controller.signal)
+      .then(() => {
+        if (controller.signal.aborted) return;
+        setSettings("context", {
+          experience_mode: mode,
+          mode: MODE_FOR_EXPERIENCE[mode],
+        });
+        setOpen(false);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setError(true);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setSaving(null);
       });
-      setSaving(null);
-      setOpen(false);
-    });
   };
 
   const cards: {
@@ -191,6 +217,11 @@ export function ExperienceModeChooser() {
             </button>
           ))}
         </div>
+        {error && (
+          <p role="alert" className="text-destructive text-center text-sm">
+            {t.settings.models.failed} {t.common.tryAgain}.
+          </p>
+        )}
         <button
           type="button"
           onClick={() => choose("medium")}

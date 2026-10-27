@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { fetch as apiFetch } from "@/core/api/fetcher";
 import { useAuth } from "@/core/auth/AuthProvider";
@@ -15,6 +15,7 @@ import {
 } from "@/core/integrations/composio";
 import { useLocalSettings } from "@/core/settings";
 import { isStaticWebsiteOnly } from "@/core/static-mode";
+import { useWorkspaceSelection } from "@/core/workspaces/hooks";
 import { cn } from "@/lib/utils";
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
@@ -55,31 +56,79 @@ export type OnboardingState = {
  * and accounts that already finished keep the old skippable chooser.
  */
 export function FirstLoginGate() {
+  const { t } = useI18n();
   const { user } = useAuth();
-  const [state, setState] = useState<OnboardingState | null>(null);
-  const [checked, setChecked] = useState(false);
+  const [result, setResult] = useState<{
+    userId: string;
+    state?: OnboardingState;
+    failed?: boolean;
+  } | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  const [retrying, setRetrying] = useState(false);
   const userId =
     !isStaticWebsiteOnly() && user?.id !== "default" ? user?.id : undefined;
   const staff = !!user && !isClientUser(user);
 
   useEffect(() => {
     if (!userId || !staff) return;
-    let cancelled = false;
-    onboardingRequest(userId, "", "GET")
-      .then((data) => !cancelled && setState(data))
-      .catch(() => undefined)
-      .finally(() => !cancelled && setChecked(true));
-    return () => {
-      cancelled = true;
-    };
-  }, [userId, staff]);
+    const controller = new AbortController();
+    onboardingRequest(userId, "", "GET", undefined, controller.signal)
+      .then((state) => {
+        if (!controller.signal.aborted) setResult({ userId, state });
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setResult({ userId, failed: true });
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setRetrying(false);
+      });
+    return () => controller.abort();
+  }, [userId, staff, attempt]);
 
-  if (!staff) return <ExperienceModeChooser />;
-  if (!checked || !userId) return null;
-  if (state?.required) {
-    return <OnboardingFlow userId={userId} initial={state} />;
+  if (!staff) return <ExperienceModeChooser key={user?.id} />;
+  if (!userId) return null;
+  if (result?.userId !== userId || result.failed) {
+    const failed = result?.userId === userId && result.failed;
+    return (
+      <Dialog open onOpenChange={() => undefined}>
+        <DialogContent
+          showCloseButton={false}
+          aria-describedby={undefined}
+          onEscapeKeyDown={(event) => event.preventDefault()}
+          onPointerDownOutside={(event) => event.preventDefault()}
+          onInteractOutside={(event) => event.preventDefault()}
+        >
+          <DialogHeader>
+            <DialogTitle>
+              {failed ? t.login.serviceUnavailableTitle : t.common.loading}
+            </DialogTitle>
+          </DialogHeader>
+          {failed && (
+            <>
+              <p role="alert">{t.settings.models.failed}</p>
+              <button
+                type="button"
+                disabled={retrying}
+                onClick={() => {
+                  setRetrying(true);
+                  setAttempt((current) => current + 1);
+                }}
+                className="bg-primary text-primary-foreground min-h-11 rounded-md font-semibold disabled:opacity-60"
+              >
+                {t.common.tryAgain}
+              </button>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+    );
   }
-  return <ExperienceModeChooser />;
+  if (result.state?.required) {
+    return (
+      <OnboardingFlow key={userId} userId={userId} initial={result.state} />
+    );
+  }
+  return <ExperienceModeChooser key={userId} />;
 }
 
 async function onboardingRequest(
@@ -87,6 +136,7 @@ async function onboardingRequest(
   path: string,
   method: string,
   body?: unknown,
+  signal?: AbortSignal,
 ): Promise<OnboardingState> {
   const response = await apiFetch(
     `${getBackendBaseURL()}/api/v1/auth/onboarding${path}`,
@@ -98,6 +148,9 @@ async function onboardingRequest(
         ...(body === undefined ? {} : { "Content-Type": "application/json" }),
       },
       body: body === undefined ? undefined : JSON.stringify(body),
+      signal: signal
+        ? AbortSignal.any([signal, AbortSignal.timeout(15000)])
+        : AbortSignal.timeout(15000),
     },
   );
   if (!response.ok) {
@@ -105,10 +158,16 @@ async function onboardingRequest(
       detail?: unknown;
     } | null;
     throw new Error(
-      typeof detail?.detail === "string" ? detail.detail : response.statusText,
+      typeof detail?.detail === "string" && detail.detail
+        ? detail.detail
+        : response.statusText || `Request failed (${response.status})`,
     );
   }
-  return response.json() as Promise<OnboardingState>;
+  const state = (await response.json()) as OnboardingState | null;
+  if (typeof state?.required !== "boolean") {
+    throw new Error("Invalid onboarding response");
+  }
+  return state;
 }
 
 export function OnboardingFlow({
@@ -135,6 +194,16 @@ export function OnboardingFlow({
   const [error, setError] = useState<string | null>(null);
   const [slackCode, setSlackCode] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const workspace = useWorkspaceSelection();
+  const request = useRef<AbortController | null>(null);
+  useEffect(() => {
+    const controller = new AbortController();
+    request.current = controller;
+    return () => {
+      controller.abort();
+      if (request.current === controller) request.current = null;
+    };
+  }, [userId]);
   // Per-person connections, when this server offers them (null otherwise).
   const { data: toolkits } = useToolkitStatus();
   const toolkitFor = (id: string): ToolkitStatus | undefined =>
@@ -148,49 +217,82 @@ export function OnboardingFlow({
     groups.set(group, [...(groups.get(group) ?? []), entry]);
   }
 
-  const run = async (action: () => Promise<void>) => {
+  const run = async (action: (signal: AbortSignal) => Promise<void>) => {
+    const controller = request.current;
+    if (!controller || controller.signal.aborted) return;
     setBusy(true);
     setError(null);
     try {
-      await action();
+      await action(controller.signal);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      if (!controller.signal.aborted)
+        setError(err instanceof Error ? err.message : String(err));
     } finally {
-      setBusy(false);
+      if (!controller.signal.aborted) setBusy(false);
     }
   };
 
   const saveProfile = () =>
-    run(async () => {
-      setState(
-        await onboardingRequest(userId, "/profile", "PUT", { role, team }),
+    run(async (signal) => {
+      const next = await onboardingRequest(
+        userId,
+        "/profile",
+        "PUT",
+        { role, team },
+        signal,
       );
+      if (signal.aborted) return;
+      setState(next);
       setStep(2);
     });
   const saveTools = () =>
-    run(async () => {
-      setState(
-        await onboardingRequest(userId, "/tools", "PUT", { tools, other }),
+    run(async (signal) => {
+      const next = await onboardingRequest(
+        userId,
+        "/tools",
+        "PUT",
+        { tools, other },
+        signal,
       );
+      if (signal.aborted) return;
+      setState(next);
       setStep(3);
     });
   const record = (tool: string, status: "requested" | "skipped") =>
-    run(async () => {
-      setState(
-        await onboardingRequest(userId, `/connections/${tool}`, "POST", {
+    run(async (signal) => {
+      const next = await onboardingRequest(
+        userId,
+        `/connections/${tool}`,
+        "POST",
+        {
           status,
-        }),
+        },
+        signal,
       );
+      if (!signal.aborted) setState(next);
     });
   const linkSlack = () =>
-    run(async () => {
+    run(async (signal) => {
+      if (!workspace.data) throw new Error(t.channels.unavailable);
+      if (workspace.data.active_workspace_id) {
+        await workspace.selectWorkspace(null);
+        return;
+      }
       // Existing binding-code flow: DM the code to MomoBot in Slack.
       const result = await connectChannelProvider("slack");
-      setSlackCode(result.instruction || result.code);
+      if (!signal.aborted) setSlackCode(result.instruction || result.code);
     });
   const finish = () =>
-    run(async () => {
-      await onboardingRequest(userId, "/complete", "POST");
+    run(async (signal) => {
+      const next = await onboardingRequest(
+        userId,
+        "/complete",
+        "POST",
+        undefined,
+        signal,
+      );
+      if (signal.aborted) return;
+      if (next.required) throw new Error(t.settings.models.failed);
       // Easy mode on its matching fast chat mode (MODE_FOR_EXPERIENCE.easy).
       setSettings("context", { experience_mode: "easy", mode: "flash" });
       setOpen(false);
@@ -207,8 +309,9 @@ export function OnboardingFlow({
     <Dialog open={open} onOpenChange={() => undefined}>
       <DialogContent
         data-treatment="paper"
-        className="sm:max-w-lg"
+        className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-lg"
         showCloseButton={false}
+        aria-describedby={undefined}
         onEscapeKeyDown={(event) => event.preventDefault()}
         onPointerDownOutside={(event) => event.preventDefault()}
         onInteractOutside={(event) => event.preventDefault()}
@@ -367,36 +470,46 @@ export function OnboardingFlow({
                             ? copy.shared
                             : copy.connected}
                         </span>
-                      ) : own?.connectable ? (
-                        <ConnectButton toolkit={own.toolkit} />
                       ) : (
                         <>
-                          {!tool.available && (
-                            <span className="text-muted-foreground text-xs">
-                              {copy.comingSoon}
-                            </span>
-                          )}
-                          {tool.id === "slack" && (
-                            <button
-                              type="button"
-                              disabled={busy}
-                              onClick={() => void linkSlack()}
-                              className="min-h-9 rounded-md border px-2"
-                            >
-                              {copy.linkSlack}
-                            </button>
-                          )}
-                          {tool.status === "requested" ? (
-                            <span>{copy.requested}</span>
+                          {own?.connectable ? (
+                            <ConnectButton toolkit={own.toolkit} />
                           ) : (
-                            <button
-                              type="button"
-                              disabled={busy}
-                              onClick={() => void record(tool.id, "requested")}
-                              className="min-h-9 rounded-md border px-2"
-                            >
-                              {copy.request}
-                            </button>
+                            <>
+                              {!tool.available && (
+                                <span className="text-muted-foreground text-xs">
+                                  {copy.comingSoon}
+                                </span>
+                              )}
+                              {tool.id === "slack" && (
+                                <button
+                                  type="button"
+                                  disabled={
+                                    busy ||
+                                    workspace.busy ||
+                                    workspace.isLoading
+                                  }
+                                  onClick={() => void linkSlack()}
+                                  className="min-h-11 rounded-md border px-2"
+                                >
+                                  {copy.linkSlack}
+                                </button>
+                              )}
+                              {tool.status === "requested" ? (
+                                <span>{copy.requested}</span>
+                              ) : (
+                                <button
+                                  type="button"
+                                  disabled={busy}
+                                  onClick={() =>
+                                    void record(tool.id, "requested")
+                                  }
+                                  className="min-h-11 rounded-md border px-2"
+                                >
+                                  {copy.request}
+                                </button>
+                              )}
+                            </>
                           )}
                           {tool.status === "skipped" ? (
                             <span className="text-muted-foreground">
@@ -407,7 +520,7 @@ export function OnboardingFlow({
                               type="button"
                               disabled={busy}
                               onClick={() => void record(tool.id, "skipped")}
-                              className="text-muted-foreground min-h-9 px-2 underline-offset-4 hover:underline"
+                              className="text-muted-foreground min-h-11 px-2 underline-offset-4 hover:underline"
                             >
                               {copy.skip}
                             </button>
