@@ -247,15 +247,20 @@ async def _seed_memory(owner: str, profile: PersonProfile, role: str, team: str,
         await asyncio.to_thread(manager.create_fact, content=content, category="context", confidence=0.9, **scope_args)
 
 
-async def _claim_completion(owner: str, stamp: str) -> bool:
-    """Insert the completion row only if absent, so a retry or second tab cannot seed twice."""
+async def _claim_completion(owner: str, stamp: str, values: dict) -> bool:
+    """Commit the completion claim and preferences together; only its winner seeds memory."""
     from sqlalchemy.dialects.postgresql import insert as pg_insert
     from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
     async with _repository().sessions() as session, session.begin():
         insert = pg_insert if session.bind.dialect.name == "postgresql" else sqlite_insert
         result = await session.execute(insert(UserPreferenceRow).values(user_id=owner, key=COMPLETED_KEY, value=stamp).on_conflict_do_nothing(index_elements=["user_id", "key"]))
-        return result.rowcount == 1
+        if result.rowcount != 1:
+            return False
+        for key, value in sorted(values.items()):
+            statement = insert(UserPreferenceRow).values(user_id=owner, key=key, value=value)
+            await session.execute(statement.on_conflict_do_update(index_elements=["user_id", "key"], set_={"value": statement.excluded.value}))
+        return True
 
 
 @router.get("", response_model=OnboardingState)
@@ -315,8 +320,6 @@ async def complete_onboarding(request: Request, x_expected_user_id: str = Header
     if not saved or not tools_step:
         raise HTTPException(409, "Finish your role and daily tools first")
     stamp = datetime.now(UTC).isoformat(timespec="seconds")
-    if not await _claim_completion(owner, stamp):
-        return await _state_async(owner, user, await _repository().get(owner))
     state = await _state_async(owner, user, stored)
     catalog = {entry.id: entry for entry in state.catalog}
     # A picked tool nobody answered is still something this person uses daily:
@@ -329,7 +332,8 @@ async def complete_onboarding(request: Request, x_expected_user_id: str = Header
         recorded["other"] = "requested"
     # Easy mode on the fast chat mode (MODE_FOR_EXPERIENCE.easy in the frontend).
     values = {CONNECTIONS_KEY: recorded, "experience_mode": "easy", "mode": "flash"}
-    await _repository().patch(owner, values)
+    if not await _claim_completion(owner, stamp, values):
+        return await _state_async(owner, user, await _repository().get(owner))
     profile = await asyncio.to_thread(load_own_profile, getattr(user, "email", None)) or PersonProfile()
     try:
         await _seed_memory(owner, profile, saved["role"], saved["team"], tools_step.get("tools", []), tools_step.get("other", ""), catalog, user=user)
