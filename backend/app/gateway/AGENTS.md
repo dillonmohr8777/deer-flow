@@ -247,7 +247,7 @@ replay. Three requests at $0.03 each. Details/tests: [WORKFLOWS.md](../../docs/W
 ### Desktop lane and Slack roster
 
 `fleet_work` persists validated workspaces in `execution_spec` and projects them
-in claims. Retain canonical mount admission, argv/path/timeout bounds,
+only in `workspace_only=true` claims. Retain canonical mount admission, argv/path/timeout bounds,
 three-worker cap (including defaults) and private-host allowlisting. Desktop
 rejects workspaces, stays roster-gated (`roster`, `app.state.roster_config`),
 single-attempt and unclaimable until org owner/admin approval (`approval_state`).

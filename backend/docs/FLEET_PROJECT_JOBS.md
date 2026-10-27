@@ -99,6 +99,13 @@ comes from the configured default. The validated workspace is stored unchanged
 projected by `/claim`; no schema migration or workspace manager is added here.
 The optional claim `batch_id` limits a host to that selected batch. Desktop
 batches reject `workspace` and retain their roster and approval path.
+Gateway claims default `workspace_only` to `false`, excluding workspace jobs
+from ordinary hosts even when a batch ID is supplied. Workspace hosts must send
+`workspace_only: true`; those claims exclude ordinary jobs. The repository applies
+this partition to the locked batch query before item promotion, limits and leases,
+using JSON extraction compatible with SQLite and PostgreSQL. Missing or JSON-null
+workspace fields are ordinary jobs. Internal repository callers that omit the
+optional filter retain their existing behavior; the executor remains `fleet`.
 `tests/test_fleet_work_claim_contract.py` proves HTTP submit, durable SQLite
 readback and delegated selected-batch claim with synthetic data. Host execution,
 mount isolation and production deployment require separate acceptance.

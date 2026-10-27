@@ -127,6 +127,7 @@ class ClaimRequest(BaseModel):
     lanes: list[Lane] = Field(min_length=1)
     limit: int = Field(default=1, ge=1, le=64)
     batch_id: str | None = Field(default=None, min_length=1, max_length=64)  # runner --batch-id selector
+    workspace_only: bool = Field(default=False, strict=True)
 
 
 class LeaseRequest(BaseModel):
@@ -345,6 +346,7 @@ async def claim_work(request: Request, body: ClaimRequest) -> dict[str, Any]:
         owner_id=trusted_owner,
         organization_id=organization_id,
         batch_id=body.batch_id,
+        workspace_only=body.workspace_only,
     )
     expires_at = (now + timedelta(seconds=config.lease_seconds)).isoformat()
     return {
