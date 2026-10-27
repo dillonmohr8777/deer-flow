@@ -202,7 +202,8 @@ describe("first-login onboarding", () => {
         }),
     );
     render(<Gate />);
-    expect(screen.getByRole("dialog")).toBeTruthy();
+    // Checking is invisible: nothing blocks the workspace while it runs.
+    expect(screen.queryByRole("dialog")).toBeNull();
     expect(timeoutSpy).toHaveBeenCalledWith(15000);
     await act(async () => timeout.abort());
     expect(await screen.findByRole("alert")).toBeTruthy();
@@ -210,6 +211,16 @@ describe("first-login onboarding", () => {
     timeoutSpy.mockRestore();
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(await screen.findByDisplayValue("Account manager")).toBeTruthy();
+  });
+
+  it("lets a failed status read be dismissed instead of locking the workspace", async () => {
+    serve(BASE);
+    mocks.fetch.mockResolvedValueOnce(json({}, 503));
+    render(<Gate />);
+    await screen.findByRole("alert");
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(mocks.fetch).toHaveBeenCalledTimes(1);
   });
 
   it("cannot be dismissed before role and tools are saved", async () => {

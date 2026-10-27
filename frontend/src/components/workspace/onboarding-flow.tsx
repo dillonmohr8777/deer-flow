@@ -65,6 +65,7 @@ export function FirstLoginGate() {
   } | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [retrying, setRetrying] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
   const userId =
     !isStaticWebsiteOnly() && user?.id !== "default" ? user?.id : undefined;
   const staff = !!user && !isClientUser(user);
@@ -87,38 +88,28 @@ export function FirstLoginGate() {
 
   if (!staff) return <ExperienceModeChooser key={user?.id} />;
   if (!userId) return null;
-  if (result?.userId !== userId || result.failed) {
-    const failed = result?.userId === userId && result.failed;
+  // Checking stays invisible; a failed check offers Retry but never locks the workspace.
+  if (result?.userId !== userId) return null;
+  if (result.failed) {
+    if (dismissed) return null;
     return (
-      <Dialog open onOpenChange={() => undefined}>
-        <DialogContent
-          showCloseButton={false}
-          aria-describedby={undefined}
-          onEscapeKeyDown={(event) => event.preventDefault()}
-          onPointerDownOutside={(event) => event.preventDefault()}
-          onInteractOutside={(event) => event.preventDefault()}
-        >
+      <Dialog open onOpenChange={(open) => !open && setDismissed(true)}>
+        <DialogContent aria-describedby={undefined}>
           <DialogHeader>
-            <DialogTitle>
-              {failed ? t.login.serviceUnavailableTitle : t.common.loading}
-            </DialogTitle>
+            <DialogTitle>{t.login.serviceUnavailableTitle}</DialogTitle>
           </DialogHeader>
-          {failed && (
-            <>
-              <p role="alert">{t.settings.models.failed}</p>
-              <button
-                type="button"
-                disabled={retrying}
-                onClick={() => {
-                  setRetrying(true);
-                  setAttempt((current) => current + 1);
-                }}
-                className="bg-primary text-primary-foreground min-h-11 rounded-md font-semibold disabled:opacity-60"
-              >
-                {t.common.tryAgain}
-              </button>
-            </>
-          )}
+          <p role="alert">{t.settings.models.failed}</p>
+          <button
+            type="button"
+            disabled={retrying}
+            onClick={() => {
+              setRetrying(true);
+              setAttempt((current) => current + 1);
+            }}
+            className="bg-primary text-primary-foreground min-h-11 rounded-md font-semibold disabled:opacity-60"
+          >
+            {t.common.tryAgain}
+          </button>
         </DialogContent>
       </Dialog>
     );
