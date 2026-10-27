@@ -27,6 +27,18 @@ The upstream DeerFlow history stays in [CHANGELOG.md](../CHANGELOG.md).
 
 - MomoBot AM approvals tool fix, Oct 26 (#340)
 
+## [momobot-prod-20261026-0de3c7ed] - 2026-10-26
+
+### Changed
+
+- Preserve target writes in pilot recovery, Oct 25 (#336)
+- MomoBot changelog momobot-prod-20261024-9f326b4c, Oct 24 (#325)
+
+### Fixed
+
+- Staff memory isolation with review fixes, Oct 26 (#337)
+- Restore nightly SQLite backups, Oct 25 (#334)
+
 ## [momobot-prod-20261024-9f326b4c] - 2026-10-24
 
 ### Changed
@@ -81,6 +93,46 @@ The upstream DeerFlow history stays in [CHANGELOG.md](../CHANGELOG.md).
 ### Fixed
 
 - Repair baseline gateway and subagent test fixtures (#308)
+
+## [momobot-prod-20261024-886a2a71] - 2026-10-24
+
+### Changed
+
+- Bound lead run waiting and execution with owned finalization (#303)
+
+## [momobot-prod-20261024-11880443] - 2026-10-24
+
+### Changed
+
+- Accept exact unversioned Composio MCP session URL (#306)
+
+### Fixed
+
+- Fix delayed policy fixture runtime compatibility (#304)
+
+## [momobot-prod-20261024-dc420255] - 2026-10-24
+
+### Changed
+
+- Guided connect UI, Oct 24 (#300)
+- Add actor-bound guided Composio connect backend (#299)
+
+### Security
+
+- Preserve MomoBot security boundaries, Oct 24 (#301)
+
+## [momobot-prod-20261024-1fde6c1a] - 2026-10-24
+
+### Changed
+
+- Preserve thread ownership until uploads and attachments drain (#298)
+
+## [momobot-prod-20261023-70bbb3a4] - 2026-10-23
+
+### Changed
+
+- Approvals in the team sidebar, Oct 24 (#296)
+- Add actor-bound Composio sessions behind disabled configuration (#295)
 
 ## [momobot-prod-20261023-ff8263f9] - 2026-10-23
 
