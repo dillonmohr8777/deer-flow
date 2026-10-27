@@ -13,7 +13,7 @@ import pytest
 import pytest_asyncio
 from fastapi import FastAPI
 from pydantic import ValidationError
-from sqlalchemy import update
+from sqlalchemy import text, update
 from test_composio_me_sessions import ORG, STORAGE, A, B, actor, auth_headers, response
 from test_composio_me_sessions import policy as policy
 from test_composio_me_sessions import repo as repo
@@ -208,8 +208,491 @@ async def opened(client):
     return handle
 
 
+async def abandoned(connect_world):
+    """An opened browser-only attempt, expired locally and by provider initiation."""
+    from deerflow.mcp.composio_sessions import ConnectManager
+
+    state, repo, client, _ = connect_world
+    handle = await opened(client)
+    key = ConnectManager.attempt_key(handle)
+    slot_key = ConnectManager.slot_key(SimpleNamespace(organization_id=ORG), "gmail")
+    attempt = {**await repo.get_key(A, key), "expires_at": time.time() - 60}
+    slot = {**await repo.get_key(A, slot_key), "expires_at": attempt["expires_at"]}
+    await repo.patch(A, {key: attempt, slot_key: slot})
+    state.account.update(status="EXPIRED", status_reason="Connection initiation did not complete within 10 minutes")
+    state.mutate = lambda value: {**value, "connected_account_id": "ca_new"} if "redirect_url" in value else value
+    state.requests.clear()
+    return SimpleNamespace(handle=handle, key=key, slot_key=slot_key, attempt=attempt, slot=slot)
+
+
 def callback_params(handle, account="ca_synthetic"):
     return {"handle": handle, "connected_account_id": account, "status": "success"}
+
+
+@pytest.mark.asyncio
+async def test_provider_confirmed_initiation_timeout_offers_fresh_browser_connect_without_replay(connect_world, caplog):
+    state, repo, client, config = connect_world
+    old = await abandoned(connect_world)
+    status = await client.get("/api/integrations/status", headers=headers(client))
+    assert status.json()["toolkits"] == [{"toolkit": "gmail", "connected": False, "connectable": True, "reason": None}]
+    assert all(request.method == "GET" for request in state.requests)
+    assert any(request.url.path.endswith("/ca_synthetic") for request in state.requests)
+    assert await repo.get_key(A, old.key) == old.attempt
+    assert await repo.get_key(A, old.slot_key) == old.slot
+
+    result = await client.post("/api/integrations/connect", json={"toolkit": "gmail"}, headers=headers(client))
+    assert result.status_code == 200, result.text
+    handle = result.json()["handle"]
+    assert handle != old.handle
+    new = await repo.get_key(A, "__c_" + handle)
+    assert new["nonce"] != old.attempt["nonce"] and new["intent"] is None
+    assert await repo.get_key(A, old.key) == {**old.attempt, "state": "expired", "redirect_url": None}
+    assert (await repo.get_key(A, old.slot_key))["handle"] == handle
+    assert len([request for request in state.requests if request.url.path.endswith("/link")]) == 1
+    assert all(request.method in {"GET", "POST"} for request in state.requests)
+    assert (await client.get(f"/api/integrations/connect/{handle}/open", headers=headers(client))).status_code == 302
+
+    state.requests.clear()
+    assert (await client.get("/api/integrations/callback", params=callback_params(old.handle), headers=headers(client, handle=old.handle))).status_code == 404
+    stale = headers(client)
+    stale["Cookie"] += "; momo_connect_" + handle + "=" + old.attempt["nonce"]
+    assert (await client.get("/api/integrations/callback", params=callback_params(handle, "ca_new"), headers=stale)).status_code == 403
+    assert state.requests == []
+
+    state.account = {**state.account, "id": "ca_new", "status": "ACTIVE", "status_reason": None}
+    state.accounts["gmail"] = state.account
+    state.connected = True
+    completed = await client.get("/api/integrations/callback", params=callback_params(handle, "ca_new"), headers=headers(client, handle=handle))
+    assert completed.status_code == 200 and completed.json()["retry"] == {"state": "not_requested"}
+    assert state.mcp.calls == []
+    assert all(secret not in result.text + status.text + completed.text + caplog.text for secret in (old.attempt["nonce"], "SYNTHETIC_LINK_TOKEN", "SYNTHETIC_DISCARD"))
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("field", ["id", "user_id", "toolkit", "auth_config", "disabled", "auth_disabled", "shared", "status", "reason", "missing_reason", "failed"])
+async def test_initiation_timeout_recovery_requires_exact_provider_identity_and_reason(connect_world, field):
+    state, repo, client, _ = connect_world
+    old = await abandoned(connect_world)
+    if field == "id":
+        state.account["id"] = "ca_foreign"
+    elif field == "user_id":
+        state.account["user_id"] = f"momobot-{B}"
+    elif field == "toolkit":
+        state.account["toolkit"] = {"slug": "slack"}
+    elif field == "auth_config":
+        state.account["auth_config"]["id"] = "ac_foreign"
+    elif field == "disabled":
+        state.account["is_disabled"] = True
+    elif field == "auth_disabled":
+        state.account["auth_config"]["is_disabled"] = True
+    elif field == "shared":
+        state.account["experimental"]["account_type"] = "SHARED"
+    elif field == "status":
+        state.account["status"] = "INITIATED"
+    elif field == "reason":
+        state.account["status_reason"] = "Refresh token expired"
+    elif field == "missing_reason":
+        state.account.pop("status_reason")
+    else:
+        state.account["status"] = "FAILED"
+    status = await client.get("/api/integrations/status", headers=headers(client))
+    assert status.json()["toolkits"][0]["connectable"] is False
+    assert (await client.post("/api/integrations/connect", json={"toolkit": "gmail"}, headers=headers(client))).status_code == 409
+    assert await repo.get_key(A, old.key) == old.attempt
+    assert await repo.get_key(A, old.slot_key) == old.slot
+    assert all(request.method == "GET" for request in state.requests)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "field",
+    [
+        "actor_user_id",
+        "organization_id",
+        "storage_user_id",
+        "toolkit",
+        "auth_config_id",
+        "nonce",
+        "connected_account_id",
+        "unexpired",
+        "slot_unexpired",
+        "slot_state",
+        "uncertain",
+        "verifying",
+        "dispatching",
+        "intent",
+        "slot_intent",
+        "boolean_expiry",
+    ],
+)
+async def test_initiation_timeout_recovery_refuses_nonmatching_or_uncertain_local_attempt(connect_world, field):
+    state, repo, client, _ = connect_world
+    old = await abandoned(connect_world)
+    attempt, slot = dict(old.attempt), dict(old.slot)
+    if field in {"actor_user_id", "organization_id", "storage_user_id", "toolkit", "auth_config_id", "nonce", "connected_account_id"}:
+        attempt[field] = "foreign"
+    elif field == "unexpired":
+        attempt["expires_at"] = time.time() + 300
+    elif field == "slot_unexpired":
+        slot["expires_at"] = time.time() + 300
+    elif field == "slot_state":
+        slot["state"] = "uncertain"
+    elif field in {"uncertain", "verifying", "dispatching"}:
+        attempt["state"] = field
+    elif field == "intent":
+        attempt["intent"] = {"no_execution": True}
+    elif field == "boolean_expiry":
+        attempt["expires_at"] = slot["expires_at"] = False
+    else:
+        slot["intent"] = {"no_execution": True}
+    await repo.patch(A, {old.key: attempt, old.slot_key: slot})
+    status = await client.get("/api/integrations/status", headers=headers(client))
+    assert status.json()["toolkits"][0]["connectable"] is False
+    assert (await client.post("/api/integrations/connect", json={"toolkit": "gmail"}, headers=headers(client))).status_code == 409
+    assert await repo.get_key(A, old.key) == attempt and await repo.get_key(A, old.slot_key) == slot
+    assert all(request.url.path == "/api/v3.1/connected_accounts" for request in state.requests)
+
+
+@pytest.mark.asyncio
+async def test_concurrent_initiation_timeout_recovery_creates_one_link(connect_world, monkeypatch):
+    from deerflow.mcp.composio_sessions import ConnectManager
+
+    state, repo, client, _ = connect_world
+    old = await abandoned(connect_world)
+    request = ConnectManager.request
+    both_read = asyncio.Event()
+    reads = 0
+
+    async def synchronized(self, method, path, **kwargs):
+        nonlocal reads
+        value = await request(self, method, path, **kwargs)
+        if path.endswith("/ca_synthetic"):
+            reads += 1
+            if reads == 2:
+                both_read.set()
+            await asyncio.wait_for(both_read.wait(), 5)
+        return value
+
+    monkeypatch.setattr(ConnectManager, "request", synchronized)
+    results = await asyncio.gather(*(client.post("/api/integrations/connect", json={"toolkit": "gmail"}, headers=headers(client)) for _ in range(2)))
+    assert sorted(result.status_code for result in results) == [200, 409]
+    assert len([request for request in state.requests if request.url.path.endswith("/link")]) == 1
+    assert await repo.get_key(A, old.key) == {**old.attempt, "state": "expired", "redirect_url": None}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("race", ["attempt", "slot", "active"])
+async def test_initiation_timeout_recovery_rechecks_state_and_fences_slot_generation(connect_world, monkeypatch, race):
+    from deerflow.mcp.composio_sessions import ConnectManager
+
+    state, repo, client, _ = connect_world
+    old = await abandoned(connect_world)
+    request = ConnectManager.request
+
+    async def changed(self, method, path, **kwargs):
+        value = await request(self, method, path, **kwargs)
+        if path.endswith("/ca_synthetic"):
+            if race == "attempt":
+                await repo.patch(A, {old.key: {**old.attempt, "state": "verifying"}})
+            elif race == "active":
+                state.account["status"] = "ACTIVE"
+                state.connected = True
+        return value
+
+    monkeypatch.setattr(ConnectManager, "request", changed)
+    if race == "slot":
+        claim = ConnectManager._claim_expired_replacement
+
+        async def newer(self, scope, slot, previous, attempt, value):
+            await repo.patch(A, {slot: {**old.slot, "state": "uncertain", "nonce": "new-generation"}})
+            return await claim(self, scope, slot, previous, attempt, value)
+
+        monkeypatch.setattr(ConnectManager, "_claim_expired_replacement", newer)
+    result = await client.post("/api/integrations/connect", json={"toolkit": "gmail"}, headers=headers(client))
+    assert result.status_code == 409
+    assert all(request.method == "GET" for request in state.requests)
+
+
+@pytest.mark.asyncio
+async def test_recovered_connection_still_rejects_duplicate_active_accounts(connect_world):
+    state, repo, client, _ = connect_world
+    old = await abandoned(connect_world)
+    result = await client.post("/api/integrations/connect", json={"toolkit": "gmail"}, headers=headers(client))
+    assert result.status_code == 200, result.text
+    handle = result.json()["handle"]
+    assert (await client.get(f"/api/integrations/connect/{handle}/open", headers=headers(client))).status_code == 302
+    state.account = {**state.account, "id": "ca_new", "status": "ACTIVE"}
+    state.accounts["gmail"] = state.account
+    state.connected = True
+    state.mutate = lambda value: {**value, "items": [state.account, {**state.account, "id": "ca_synthetic"}]} if "items" in value else value
+    completed = await client.get("/api/integrations/callback", params=callback_params(handle, "ca_new"), headers=headers(client, handle=handle))
+    assert completed.status_code == 409
+    assert state.mcp.calls == []
+    assert await repo.get_key(A, old.key) == {**old.attempt, "state": "expired", "redirect_url": None}
+    assert (await client.post("/api/integrations/connect", json={"toolkit": "gmail"}, headers=headers(client))).status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_old_attempt_cannot_reenter_after_slot_replacement_even_with_a_future_deadline(connect_world):
+    state, repo, client, _ = connect_world
+    old = await abandoned(connect_world)
+    result = await client.post("/api/integrations/connect", json={"toolkit": "gmail"}, headers=headers(client))
+    assert result.status_code == 200, result.text
+    await repo.patch(A, {old.key: {**old.attempt, "expires_at": time.time() + 300}})
+    state.requests.clear()
+    old_open = await client.get(f"/api/integrations/connect/{old.handle}/open", headers=headers(client))
+    old_callback = await client.get("/api/integrations/callback", params=callback_params(old.handle), headers=headers(client, handle=old.handle))
+    assert old_open.status_code == old_callback.status_code == 404
+    assert state.requests == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", ["unavailable", "malformed", "cancelled"])
+async def test_initiation_timeout_lookup_failure_preserves_the_hold(connect_world, monkeypatch, failure):
+    from deerflow.mcp.composio_sessions import ComposioSessionError, ConnectManager, composio_browser_origin
+
+    state, repo, client, config = connect_world
+    old = await abandoned(connect_world)
+    request = ConnectManager.request
+
+    async def failed(self, method, path, **kwargs):
+        if path.endswith("/ca_synthetic"):
+            if failure == "cancelled":
+                raise asyncio.CancelledError
+            if failure == "unavailable":
+                raise ComposioSessionError("composio_session_request_failed")
+            return {}
+        return await request(self, method, path, **kwargs)
+
+    monkeypatch.setattr(ConnectManager, "request", failed)
+    if failure == "cancelled":
+        with actor(A), composio_browser_origin(), pytest.raises(asyncio.CancelledError):
+            await ConnectManager(config).create("gmail")
+    else:
+        assert (await client.post("/api/integrations/connect", json={"toolkit": "gmail"}, headers=headers(client))).status_code == 409
+    assert await repo.get_key(A, old.key) == old.attempt and await repo.get_key(A, old.slot_key) == old.slot
+    assert all(request.method == "GET" for request in state.requests)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("with_intent", [False, True])
+async def test_worker_or_guarded_retry_cannot_recover_an_abandoned_browser_attempt(connect_world, with_intent):
+    from deerflow.mcp.composio_sessions import ComposioSessionError, ConnectManager
+
+    state, repo, client, config = connect_world
+    old = await abandoned(connect_world)
+    intent = {
+        "no_execution": True,
+        "thread_id": "thread",
+        "run_id": "run",
+        "toolkit": "gmail",
+        "tool_name": "COMPOSIO_MULTI_EXECUTE_TOOL",
+        "arguments": {"tools": [{"tool_slug": "GMAIL_LIST_LABELS", "arguments": {}}]},
+        "tool_call_id": "call",
+    }
+    with actor(A) as runtime, pytest.raises(ComposioSessionError, match="connect_attempt_held"):
+        await ConnectManager(config, runtime=runtime).create("gmail", intent=intent if with_intent else None)
+    assert await repo.get_key(A, old.key) == old.attempt and await repo.get_key(A, old.slot_key) == old.slot
+    assert all(request.url.path == "/api/v3.1/connected_accounts" for request in state.requests)
+    assert state.mcp.calls == []
+
+
+@pytest.mark.asyncio
+async def test_failed_fresh_link_after_timeout_recovery_stays_uncertain_without_replay(connect_world):
+    state, repo, client, _ = connect_world
+    old = await abandoned(connect_world)
+    state.failure = httpx.ReadTimeout("synthetic uncertain")
+    result = await client.post("/api/integrations/connect", json={"toolkit": "gmail"}, headers=headers(client))
+    assert result.status_code == 409
+    fresh = await repo.get_key(A, old.slot_key)
+    assert fresh["state"] == "uncertain" and fresh["handle"] != old.handle and fresh["intent"] is None
+    state.failure = None
+    assert (await client.post("/api/integrations/connect", json={"toolkit": "gmail"}, headers=headers(client))).status_code == 409
+    assert len([request for request in state.requests if request.url.path.endswith("/link")]) == 1
+    assert await repo.get_key(A, old.key) == {**old.attempt, "state": "expired", "redirect_url": None} and await repo.get_key(A, old.slot_key) == fresh
+
+
+@pytest.mark.asyncio
+async def test_old_callback_paused_before_claim_cannot_dispatch_after_recovery(connect_world, monkeypatch):
+    from deerflow.mcp.composio_sessions import ConnectManager
+
+    state, repo, client, _ = connect_world
+    handle = await opened(client)
+    key = ConnectManager.attempt_key(handle)
+    slot_key = ConnectManager.slot_key(SimpleNamespace(organization_id=ORG), "gmail")
+    transition = type(repo).transition_key
+    pending, release = asyncio.Event(), asyncio.Event()
+
+    async def paused(self, user_id, target, nonce, source, value):
+        if target == key and source == "opened":
+            pending.set()
+            await asyncio.wait_for(release.wait(), 5)
+        return await transition(self, user_id, target, nonce, source, value)
+
+    monkeypatch.setattr(type(repo), "transition_key", paused)
+    callback = asyncio.create_task(client.get("/api/integrations/callback", params=callback_params(handle), headers=headers(client, handle=handle)))
+    try:
+        await asyncio.wait_for(pending.wait(), 5)
+        deadline = time.time() - 60
+        await repo.patch(A, {key: {**await repo.get_key(A, key), "expires_at": deadline}, slot_key: {**await repo.get_key(A, slot_key), "expires_at": deadline}})
+        state.account.update(status="EXPIRED", status_reason="Connection initiation did not complete within 10 minutes")
+        state.mutate = lambda value: {**value, "connected_account_id": "ca_new"} if "redirect_url" in value else value
+        fresh = await client.post("/api/integrations/connect", json={"toolkit": "gmail"}, headers=headers(client))
+        assert fresh.status_code == 200, fresh.text
+        state.account["status"] = "ACTIVE"
+        state.connected = True
+        state.requests.clear()
+    finally:
+        release.set()
+        completed = await callback
+    assert completed.status_code == 409
+    assert (await repo.get_key(A, slot_key))["handle"] == fresh.json()["handle"]
+    assert state.requests == []
+    assert state.mcp.calls == []
+
+
+@pytest.mark.asyncio
+async def test_callback_entering_verification_before_expired_swap_keeps_recovery_held(connect_world, monkeypatch):
+    from deerflow.mcp import composio_sessions
+    from deerflow.mcp.composio_sessions import ConnectManager
+
+    state, repo, client, _ = connect_world
+    handle = await opened(client)
+    key = ConnectManager.attempt_key(handle)
+    attempt = await repo.get_key(A, key)
+    clock = [attempt["expires_at"] - 1]
+    monkeypatch.setattr(composio_sessions, "time", SimpleNamespace(time=lambda: clock[0]))
+    state.account.update(status="EXPIRED", status_reason="Connection initiation did not complete within 10 minutes")
+    state.requests.clear()
+    before_callback, allow_callback, at_provider, allow_provider, before_swap, allow_swap = (asyncio.Event() for _ in range(6))
+    transition, request, claim = type(repo).transition_key, ConnectManager.request, ConnectManager._claim_expired_replacement
+    claimed = False
+
+    async def paused_callback(self, user_id, target, nonce, source, value):
+        nonlocal claimed
+        if target == key and source == "opened":
+            before_callback.set()
+            await asyncio.wait_for(allow_callback.wait(), 5)
+        won = await transition(self, user_id, target, nonce, source, value)
+        if target == key and source == "opened" and won:
+            claimed = True
+        return won
+
+    async def paused_provider(self, method, path, **kwargs):
+        value = await request(self, method, path, **kwargs)
+        if path.endswith("/ca_synthetic") and claimed:
+            at_provider.set()
+            await asyncio.wait_for(allow_provider.wait(), 5)
+        return value
+
+    async def paused_swap(self, *args):
+        before_swap.set()
+        await asyncio.wait_for(allow_swap.wait(), 5)
+        return await claim(self, *args)
+
+    monkeypatch.setattr(type(repo), "transition_key", paused_callback)
+    monkeypatch.setattr(ConnectManager, "request", paused_provider)
+    monkeypatch.setattr(ConnectManager, "_claim_expired_replacement", paused_swap)
+    callback = asyncio.create_task(client.get("/api/integrations/callback", params=callback_params(handle), headers=headers(client, handle=handle)))
+    replacement = None
+    try:
+        await asyncio.wait_for(before_callback.wait(), 5)
+        clock[0] = attempt["expires_at"] + 1
+        replacement = asyncio.create_task(client.post("/api/integrations/connect", json={"toolkit": "gmail"}, headers=headers(client)))
+        await asyncio.wait_for(before_swap.wait(), 5)
+        allow_callback.set()
+        await asyncio.wait_for(at_provider.wait(), 5)
+        assert (await repo.get_key(A, key))["state"] == "verifying"
+        allow_swap.set()
+        result = await replacement
+        assert result.status_code == 409
+        assert not any(request.url.path.endswith("/link") for request in state.requests)
+    finally:
+        allow_callback.set()
+        allow_provider.set()
+        allow_swap.set()
+        await asyncio.gather(callback, *([replacement] if replacement else []), return_exceptions=True)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("winner", ["open", "replacement"])
+async def test_unopened_expired_replacement_and_open_are_atomically_fenced(connect_world, monkeypatch, winner):
+    from deerflow.mcp import composio_sessions
+    from deerflow.mcp.composio_sessions import ConnectManager
+
+    state, repo, client, _ = connect_world
+    created = await client.post("/api/integrations/connect", headers=headers(client), json={"toolkit": "gmail"})
+    handle = created.json()["handle"]
+    key = ConnectManager.attempt_key(handle)
+    attempt = await repo.get_key(A, key)
+    clock = [attempt["expires_at"] - 1]
+    monkeypatch.setattr(composio_sessions, "time", SimpleNamespace(time=lambda: clock[0]))
+    before_open, allow_open, before_swap, allow_swap = (asyncio.Event() for _ in range(4))
+    transition, claim = type(repo).transition_key, ConnectManager._claim_expired_replacement
+
+    async def paused_open(self, user_id, target, nonce, source, value):
+        if target == key and source == "ready":
+            before_open.set()
+            await asyncio.wait_for(allow_open.wait(), 5)
+        return await transition(self, user_id, target, nonce, source, value)
+
+    async def paused_swap(self, *args):
+        before_swap.set()
+        await asyncio.wait_for(allow_swap.wait(), 5)
+        return await claim(self, *args)
+
+    monkeypatch.setattr(type(repo), "transition_key", paused_open)
+    monkeypatch.setattr(ConnectManager, "_claim_expired_replacement", paused_swap)
+    opening = asyncio.create_task(client.get(f"/api/integrations/connect/{handle}/open", headers=headers(client)))
+    replacement = None
+    state.requests.clear()
+    try:
+        await asyncio.wait_for(before_open.wait(), 5)
+        clock[0] = attempt["expires_at"] + 1
+        state.account["status"] = "INITIATED"
+        replacement = asyncio.create_task(client.post("/api/integrations/connect", headers=headers(client), json={"toolkit": "gmail"}))
+        await asyncio.wait_for(before_swap.wait(), 5)
+        if winner == "open":
+            allow_open.set()
+            assert (await opening).status_code == 302
+            allow_swap.set()
+            assert (await replacement).status_code == 409
+            assert not any(request.url.path.endswith("/link") for request in state.requests)
+        else:
+            allow_swap.set()
+            assert (await replacement).status_code == 200
+            allow_open.set()
+            assert (await opening).status_code == 409
+            assert len([request for request in state.requests if request.url.path.endswith("/link")]) == 1
+    finally:
+        allow_open.set()
+        allow_swap.set()
+        await asyncio.gather(opening, *([replacement] if replacement else []), return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_expired_retirement_failure_rolls_back_slot_swap_and_allows_fresh_verified_request(connect_world):
+    state, repo, client, _ = connect_world
+    old = await abandoned(connect_world)
+    async with repo.sessions() as session, session.begin():
+        await session.execute(
+            text("""
+                CREATE TRIGGER fail_expired_retirement BEFORE UPDATE ON user_preferences
+                WHEN json_extract(OLD.value, '$.state') = 'opened'
+                 AND json_extract(NEW.value, '$.state') = 'expired'
+                BEGIN SELECT RAISE(ABORT, 'synthetic retirement failure'); END
+            """)
+        )
+    failed = await client.post("/api/integrations/connect", headers=headers(client), json={"toolkit": "gmail"})
+    assert failed.status_code == 503
+    assert await repo.get_key(A, old.key) == old.attempt
+    assert await repo.get_key(A, old.slot_key) == old.slot
+    assert all(request.method == "GET" for request in state.requests)
+    async with repo.sessions() as session, session.begin():
+        await session.execute(text("DROP TRIGGER fail_expired_retirement"))
+    fresh = await client.post("/api/integrations/connect", headers=headers(client), json={"toolkit": "gmail"})
+    assert fresh.status_code == 200, fresh.text
+    assert len([request for request in state.requests if request.url.path.endswith("/link")]) == 1
 
 
 def test_connect_operator_policy_is_disabled_and_fixed_by_default():
