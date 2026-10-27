@@ -10,6 +10,13 @@ The upstream DeerFlow history stays in [CHANGELOG.md](../CHANGELOG.md).
 
 ## [Unreleased]
 
+## [momobot-prod-20261027-0cae83ee] - 2026-10-27
+
+### Changed
+
+- Keep setup and reconnects recoverable, Oct 27 (#342)
+- MomoBot changelog momobot-prod-20261026-f3e24b62, Oct 26 (#341)
+
 ## [momobot-prod-20261026-f3e24b62] - 2026-10-26
 
 ### Changed
