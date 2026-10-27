@@ -520,7 +520,7 @@ export function OnboardingFlow({
                               type="button"
                               disabled={busy}
                               onClick={() => void record(tool.id, "skipped")}
-                              className="text-muted-foreground min-h-11 px-2 underline-offset-4 hover:underline"
+                              className="text-muted-foreground min-h-11 min-w-11 px-2 underline-offset-4 hover:underline"
                             >
                               {copy.skip}
                             </button>
