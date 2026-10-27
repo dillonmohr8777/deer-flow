@@ -10,6 +10,15 @@ The upstream DeerFlow history stays in [CHANGELOG.md](../CHANGELOG.md).
 
 ## [Unreleased]
 
+## [momobot-prod-20261027-ce874541] - 2026-10-27
+
+### Changed
+
+- MomoBot changelog momobot-prod-20261027-1b9e5913, Oct 27 (#347)
+- Backfill seven Oct 23 MomoBot changelog entries, Oct 27 (#346)
+- Backfill six MomoBot changelog entries, Oct 27 (#345)
+- Carry Linux workspace jobs through fleet dispatch, Oct 27 (#344)
+
 ## [momobot-prod-20261027-1b9e5913] - 2026-10-27
 
 ### Changed
