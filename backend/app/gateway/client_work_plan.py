@@ -355,7 +355,7 @@ async def save_work_plan(*, actor_id, organization_id, thread_id, body: WorkPlan
             )
             if changed.rowcount != 1:
                 raise HTTPException(409, "Internal work plan changed; reload before saving")
-            await session.execute(update(BoardThreadRow).where(BoardThreadRow.id == thread_id, BoardThreadRow.organization_id == organization_id).values(updated_at=now))
+            # Internal plans stay invisible to contacts: never bump the request's client-visible updated_at.
             portal = await session.get(BoardPortalRow, thread_id, populate_existing=True)
             return work_plan_projection(portal), thread.client_id
     except SQLAlchemyError:
@@ -386,7 +386,7 @@ def bind_work_plan_access(*, request, actor_id, organization_id, storage_user_id
     """Called only after authenticated portal-work admission; never from tool args."""
     from pydantic import ValidationError
 
-    from app.gateway.auth_disabled import AUTH_SOURCE_PAT, AUTH_SOURCE_SESSION
+    from app.gateway.auth_disabled import AUTH_SOURCE_SESSION
     from app.gateway.deps import audit_actor_id
     from deerflow.tools.client_work_plan_access import ClientWorkPlanAccess
 
@@ -395,7 +395,7 @@ def bind_work_plan_access(*, request, actor_id, organization_id, storage_user_id
     def identity_matches():
         return (
             auth is not None
-            and getattr(request.state, "auth_source", None) in {AUTH_SOURCE_SESSION, AUTH_SOURCE_PAT}
+            and getattr(request.state, "auth_source", None) == AUTH_SOURCE_SESSION  # PATs are barred from client-portal routes, so runs started by one get no plan tools
             and audit_actor_id(request) == actor_id
             and (auth.actor_user_id, auth.organization_id, auth.storage_user_id) == (actor_id, organization_id, storage_user_id)
         )

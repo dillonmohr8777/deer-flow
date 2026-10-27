@@ -583,3 +583,32 @@ async def test_role_authorization_can_deny_bound_tools(monkeypatch, tmp_path):
     cap = ClientWorkPlanAccess("actor", "org", "storage", "client", "request", "chat", "run", AsyncMock(), AsyncMock(), AsyncMock())
     _, captured = await assembly._assemble(monkeypatch, tmp_path, role="admin", app=assembly._app_config(authorization=authorization), context=_runtime(cap, user_role="admin").context)
     assert set(CLIENT_WORK_PLAN_TOOL_NAMES).isdisjoint(tool.name for tool in captured["tools"])
+
+
+async def test_plan_save_leaves_client_visible_request_timestamp_alone(tool_world):
+    w = tool_world
+    w.script = [("update_client_work_plan", {"expected_revision": 0, "plan": _work_plan()["plan"]})]
+    async with _http(w.app) as client:
+        request_id, _ = await _start(w, client)
+    assert w.results[0]["revision"] == 1
+    async with w.sf() as session:
+        thread = await session.get(BoardThreadRow, request_id)
+        portal = await session.get(BoardPortalRow, request_id)
+    # Contacts list and sort by updated_at, so an internal plan save must not move it.
+    assert portal.work_plan_updated_at is not None and thread.updated_at != portal.work_plan_updated_at
+
+
+async def test_pat_authenticated_runs_never_bind_work_plan_tools(monkeypatch):
+    from app.gateway import client_work_plan, deps
+    from app.gateway.auth_disabled import AUTH_SOURCE_PAT, AUTH_SOURCE_SESSION
+
+    monkeypatch.setattr(deps, "audit_actor_id", lambda request: "actor")
+    auth = SimpleNamespace(actor_user_id="actor", organization_id="org", storage_user_id="store")
+
+    def bind(source):
+        request = SimpleNamespace(state=SimpleNamespace(auth=auth, auth_source=source))
+        scope = {"thread_id": "request-1", "client_id": "client-1", "project_id": None}
+        return client_work_plan.bind_work_plan_access(request=request, actor_id="actor", organization_id="org", storage_user_id="store", selected_scope=scope, chat_id="chat-1", run_id="run-1")
+
+    assert bind(AUTH_SOURCE_PAT) is None
+    assert isinstance(bind(AUTH_SOURCE_SESSION), ClientWorkPlanAccess)

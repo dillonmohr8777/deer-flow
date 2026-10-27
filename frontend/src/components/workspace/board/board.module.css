@@ -43,6 +43,18 @@
   }
 }
 
+/* Back from detail to list exists only in the stacked phone layout. */
+.mobileBack {
+  align-self: flex-start;
+  min-height: 2.75rem;
+}
+
+@media (min-width: 64rem) {
+  .mobileBack {
+    display: none;
+  }
+}
+
 .list {
   display: flex;
   min-width: 0;
